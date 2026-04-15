@@ -50,6 +50,7 @@ type Props = {
   activeIndicators: string[];
   onCrosshairMove?: (bar: CandleBar | null) => void;
   onRangeChange?: (range: LogicalRange | null) => void;
+  onReady?: (handle: ChartHandle) => void;
 };
 
 function candleToVolColor(c: CandleBar): string {
@@ -57,7 +58,7 @@ function candleToVolColor(c: CandleBar): string {
 }
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
-  { candles, indicators, activeIndicators, onCrosshairMove, onRangeChange },
+  { candles, indicators, activeIndicators, onCrosshairMove, onRangeChange, onReady },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -224,11 +225,38 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     });
     ro.observe(containerRef.current);
 
+    // Expose handle via onReady callback (reliable alternative to ref forwarding through dynamic())
+    if (onReady) {
+      onReady({
+        syncRange: (range) => {
+          if (range) chart.timeScale().setVisibleLogicalRange(range);
+        },
+        updateLegend: () => {},
+        coordinateToPrice: (y) => {
+          const v = seriesRef.current.candle?.coordinateToPrice(y);
+          return v != null ? v : null;
+        },
+        coordinateToTime: (x) => {
+          const t = chart.timeScale().coordinateToTime(x);
+          return t != null ? String(t) : null;
+        },
+        priceToCoordinate: (price) => {
+          const v = seriesRef.current.candle?.priceToCoordinate(price);
+          return v != null ? v : null;
+        },
+        timeToCoordinate: (time) => {
+          const v = chart.timeScale().timeToCoordinate(time as Time);
+          return v != null ? v : null;
+        },
+      });
+    }
+
     return () => {
       ro.disconnect();
       chart.remove();
       chartRef.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Feed candle + volume data

@@ -85,6 +85,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [, setDrawings] = useState<Drawing[]>([]);
   const [drawnLines, setDrawnLines] = useState<DrawnLine[]>([]);
   const candleChartRef = useRef<ChartHandle>(null);
+  const chartHandleRef = useRef<ChartHandle | null>(null);
 
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
@@ -241,10 +242,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setDrawingPreview(null);
 
     // Convert pixel → price/time using chart API
-    const price1 = candleChartRef.current?.coordinateToPrice(start.y) ?? null;
-    const time1  = candleChartRef.current?.coordinateToTime(start.x) ?? null;
-    const price2 = candleChartRef.current?.coordinateToPrice(y2) ?? null;
-    const time2  = candleChartRef.current?.coordinateToTime(x2) ?? null;
+    const price1 = chartHandleRef.current?.coordinateToPrice(start.y) ?? null;
+    const time1  = chartHandleRef.current?.coordinateToTime(start.x) ?? null;
+    const price2 = chartHandleRef.current?.coordinateToPrice(y2) ?? null;
+    const time2  = chartHandleRef.current?.coordinateToTime(x2) ?? null;
 
     if (price1 == null || time1 == null || price2 == null || time2 == null) return;
 
@@ -615,8 +616,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               <svg className="absolute inset-0 w-full h-full pointer-events-none">
                 {drawnLines.map(line => {
                   const chartW = overlayRef.current?.clientWidth ?? 0;
-                  const x1 = candleChartRef.current?.timeToCoordinate(line.p1.time) ?? null;
-                  const y1 = candleChartRef.current?.priceToCoordinate(line.p1.price) ?? null;
+                  const x1 = chartHandleRef.current?.timeToCoordinate(line.p1.time) ?? null;
+                  const y1 = chartHandleRef.current?.priceToCoordinate(line.p1.price) ?? null;
                   if (x1 == null || y1 == null) return null;
 
                   if (line.tool === "Horizontal") {
@@ -632,8 +633,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     );
                   }
 
-                  const x2 = candleChartRef.current?.timeToCoordinate(line.p2.time) ?? null;
-                  const y2 = candleChartRef.current?.priceToCoordinate(line.p2.price) ?? null;
+                  const x2 = chartHandleRef.current?.timeToCoordinate(line.p2.time) ?? null;
+                  const y2 = chartHandleRef.current?.priceToCoordinate(line.p2.price) ?? null;
                   if (x2 == null || y2 == null) return null;
 
                   if (line.tool === "Fib") {
@@ -643,7 +644,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       <g key={line.id}>
                         {levels.map(lvl => {
                           const priceLvl = line.p1.price + priceRange * (1 - lvl);
-                          const yLvl = candleChartRef.current?.priceToCoordinate(priceLvl) ?? null;
+                          const yLvl = chartHandleRef.current?.priceToCoordinate(priceLvl) ?? null;
                           if (yLvl == null) return null;
                           const colors: Record<number, string> = {
                             0: "#888", 0.236: "#5b63f5", 0.382: "#26a65b",
@@ -681,6 +682,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 activeIndicators={activeIndicators}
                 onCrosshairMove={bar => setLegendBar(bar)}
                 onRangeChange={handleRangeChange}
+                onReady={handle => { chartHandleRef.current = handle; }}
               />
             )}
           </div>
