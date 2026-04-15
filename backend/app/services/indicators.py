@@ -50,6 +50,30 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> 
     return tr.ewm(alpha=1 / length, adjust=False, min_periods=length).mean()
 
 
+def ichimoku(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    tenkan: int = 9,
+    kijun: int = 26,
+    senkou_b: int = 52,
+):
+    """
+    Returns (tenkan_sen, kijun_sen, senkou_a, senkou_b, chikou_span) as five pd.Series.
+    Senkou spans are shifted forward kijun periods to align with common chart display.
+    Chikou span is close shifted back kijun periods.
+    """
+    def midpoint(n: int) -> pd.Series:
+        return (high.rolling(n, min_periods=n).max() + low.rolling(n, min_periods=n).min()) / 2
+
+    t = midpoint(tenkan)
+    k = midpoint(kijun)
+    sa = ((t + k) / 2).shift(kijun)
+    sb = midpoint(senkou_b).shift(kijun)
+    chikou = close.shift(-kijun)
+    return t, k, sa, sb, chikou
+
+
 def stochastic(
     high: pd.Series,
     low: pd.Series,

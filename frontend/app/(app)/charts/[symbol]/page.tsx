@@ -12,7 +12,7 @@ import {
   getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
-import type { IndicatorData } from "@/components/charts/CandlestickChart";
+import type { IndicatorData, IchimokuPoint } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -39,7 +39,9 @@ const INDICATOR_CONFIG = [
   { id: "vwap",   label: "VWAP",    color: "#7c6af0", bg: "#f0effb" },
   { id: "rsi",    label: "RSI",     color: "#5b63f5", bg: "#eeeffe" },
   { id: "macd",   label: "MACD",    color: "#5b63f5", bg: "#eeeffe" },
-  { id: "stoch",  label: "Stoch",   color: "#26a65b", bg: "#edfaf3" },
+  { id: "stoch",    label: "Stoch",    color: "#26a65b", bg: "#edfaf3" },
+  { id: "atr",      label: "ATR",      color: "#d97706", bg: "#fff8ec" },
+  { id: "ichimoku", label: "Ichimoku", color: "#7c6af0", bg: "#f0effb" },
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Horizontal", "Fib", "Text"] as const;
@@ -78,6 +80,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
   const [macdData, setMacdData] = useState<MACDPoint[]>([]);
   const [stochData, setStochData] = useState<StochPoint[]>([]);
+  const [atrData, setAtrData] = useState<LinePoint[]>([]);
 
   // Crosshair legend
   const [legendBar, setLegendBar] = useState<{
@@ -105,6 +108,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setRsiData([]);
     setMacdData([]);
     setStochData([]);
+    setAtrData([]);
     setIndicatorData({});
 
     const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
@@ -134,23 +138,25 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   // Fetch indicators when active set changes or data loads
   useEffect(() => {
     if (!data) return;
-    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap"].includes(i));
-    const panelInds = activeIndicators.filter(i => ["rsi", "macd", "stoch"].includes(i));
+    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap", "ichimoku"].includes(i));
+    const panelInds = activeIndicators.filter(i => ["rsi", "macd", "stoch", "atr"].includes(i));
     const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
     if (!allInds.length) return;
 
     getIndicators(symbol, allInds, timeframe).then(resp => {
       const ind = resp.indicators as Record<string, unknown[]>;
       setIndicatorData({
-        ema20:  ind.ema20  as LinePoint[] | undefined,
-        ema50:  ind.ema50  as LinePoint[] | undefined,
-        ema200: ind.ema200 as LinePoint[] | undefined,
-        vwap:   ind.vwap   as LinePoint[] | undefined,
-        bb:     ind.bb     as never,
+        ema20:    ind.ema20    as LinePoint[] | undefined,
+        ema50:    ind.ema50    as LinePoint[] | undefined,
+        ema200:   ind.ema200   as LinePoint[] | undefined,
+        vwap:     ind.vwap     as LinePoint[] | undefined,
+        bb:       ind.bb       as never,
+        ichimoku: ind.ichimoku as IchimokuPoint[] | undefined,
       });
       if (ind.rsi)   setRsiData(ind.rsi as LinePoint[]);
       if (ind.macd)  setMacdData(ind.macd as MACDPoint[]);
       if (ind.stoch) setStochData(ind.stoch as StochPoint[]);
+      if (ind.atr)   setAtrData(ind.atr as LinePoint[]);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, timeframe, data, activeIndicators.join(",")]);
@@ -250,6 +256,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const showRsi   = activeIndicators.includes("rsi");
   const showMacd  = activeIndicators.includes("macd");
   const showStoch = activeIndicators.includes("stoch");
+  const showAtr   = activeIndicators.includes("atr");
 
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f0] overflow-hidden">
@@ -613,6 +620,17 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               type="stoch"
               data={stochData}
               height={110}
+              logicalRange={logicalRange}
+              onRangeChange={handleRangeChange}
+            />
+          )}
+
+          {/* ATR panel */}
+          {showAtr && atrData.length > 0 && (
+            <IndicatorPanel
+              type="atr"
+              data={atrData}
+              height={90}
               logicalRange={logicalRange}
               onRangeChange={handleRangeChange}
             />

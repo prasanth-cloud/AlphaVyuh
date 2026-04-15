@@ -50,6 +50,73 @@ def _compute_pnl(entry_price: float, exit_price: float, quantity: int, trade_typ
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+@router.get("/analytics")
+async def get_analytics(user_id: str = Depends(get_current_user_id)):
+    """
+    Returns equity curve (cumulative P&L over time) and per-setup breakdown.
+    Used for the journal analytics panel.
+    """
+    sb = get_admin_client()
+    result = (
+        sb.table("trade_journal")
+        .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days")
+        .eq("user_id", user_id)
+        .eq("status", "closed")
+        .order("exit_date", desc=False)
+        .execute()
+    )
+    entries = result.data or []
+
+    # ── Equity curve ────────────────────────────────────────────────────────
+    equity_curve = []
+    cumulative = 0.0
+    for e in entries:
+        if e.get("pnl") is None or not e.get("exit_date"):
+            continue
+        cumulative += float(e["pnl"])
+        equity_curve.append({"date": e["exit_date"], "cumulative_pnl": round(cumulative, 2)})
+
+    # ── Per-setup breakdown ─────────────────────────────────────────────────
+    setup_map: dict = {}
+    for e in entries:
+        s = e.get("setup_type") or "Untagged"
+        pnl = float(e["pnl"]) if e.get("pnl") is not None else 0.0
+        if s not in setup_map:
+            setup_map[s] = {"trades": 0, "wins": 0, "total_pnl": 0.0}
+        setup_map[s]["trades"] += 1
+        if pnl > 0:
+            setup_map[s]["wins"] += 1
+        setup_map[s]["total_pnl"] += pnl
+
+    setup_breakdown = [
+        {
+            "setup": k,
+            "trades": v["trades"],
+            "wins": v["wins"],
+            "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] else 0,
+            "total_pnl": round(v["total_pnl"], 2),
+            "avg_pnl": round(v["total_pnl"] / v["trades"], 2) if v["trades"] else 0,
+        }
+        for k, v in setup_map.items()
+    ]
+    setup_breakdown.sort(key=lambda x: x["total_pnl"], reverse=True)
+
+    # ── Monthly P&L ─────────────────────────────────────────────────────────
+    month_map: dict = {}
+    for e in entries:
+        if not e.get("exit_date") or e.get("pnl") is None:
+            continue
+        month = e["exit_date"][:7]  # YYYY-MM
+        month_map[month] = round(month_map.get(month, 0.0) + float(e["pnl"]), 2)
+    monthly_pnl = [{"month": k, "pnl": v} for k, v in sorted(month_map.items())]
+
+    return {
+        "equity_curve": equity_curve,
+        "setup_breakdown": setup_breakdown,
+        "monthly_pnl": monthly_pnl,
+    }
+
+
 @router.get("/stats")
 async def get_stats(user_id: str = Depends(get_current_user_id)):
     sb = get_admin_client()
@@ -216,73 +283,6 @@ async def update_entry(
 
     result = sb.table("trade_journal").update(update_data).eq("id", entry_id).execute()
     return result.data[0]
-
-
-@router.get("/analytics")
-async def get_analytics(user_id: str = Depends(get_current_user_id)):
-    """
-    Returns equity curve (cumulative P&L over time) and per-setup breakdown.
-    Used for the journal analytics panel.
-    """
-    sb = get_admin_client()
-    result = (
-        sb.table("trade_journal")
-        .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days")
-        .eq("user_id", user_id)
-        .eq("status", "closed")
-        .order("exit_date", desc=False)
-        .execute()
-    )
-    entries = result.data or []
-
-    # ── Equity curve ────────────────────────────────────────────────────────
-    equity_curve = []
-    cumulative = 0.0
-    for e in entries:
-        if e.get("pnl") is None or not e.get("exit_date"):
-            continue
-        cumulative += float(e["pnl"])
-        equity_curve.append({"date": e["exit_date"], "cumulative_pnl": round(cumulative, 2)})
-
-    # ── Per-setup breakdown ─────────────────────────────────────────────────
-    setup_map: dict = {}
-    for e in entries:
-        s = e.get("setup_type") or "Untagged"
-        pnl = float(e["pnl"]) if e.get("pnl") is not None else 0.0
-        if s not in setup_map:
-            setup_map[s] = {"trades": 0, "wins": 0, "total_pnl": 0.0}
-        setup_map[s]["trades"] += 1
-        if pnl > 0:
-            setup_map[s]["wins"] += 1
-        setup_map[s]["total_pnl"] += pnl
-
-    setup_breakdown = [
-        {
-            "setup": k,
-            "trades": v["trades"],
-            "wins": v["wins"],
-            "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] else 0,
-            "total_pnl": round(v["total_pnl"], 2),
-            "avg_pnl": round(v["total_pnl"] / v["trades"], 2) if v["trades"] else 0,
-        }
-        for k, v in setup_map.items()
-    ]
-    setup_breakdown.sort(key=lambda x: x["total_pnl"], reverse=True)
-
-    # ── Monthly P&L ─────────────────────────────────────────────────────────
-    month_map: dict = {}
-    for e in entries:
-        if not e.get("exit_date") or e.get("pnl") is None:
-            continue
-        month = e["exit_date"][:7]  # YYYY-MM
-        month_map[month] = round(month_map.get(month, 0.0) + float(e["pnl"]), 2)
-    monthly_pnl = [{"month": k, "pnl": v} for k, v in sorted(month_map.items())]
-
-    return {
-        "equity_curve": equity_curve,
-        "setup_breakdown": setup_breakdown,
-        "monthly_pnl": monthly_pnl,
-    }
 
 
 @router.delete("/{entry_id}")

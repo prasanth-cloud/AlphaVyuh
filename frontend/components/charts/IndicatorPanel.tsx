@@ -40,7 +40,15 @@ type StochProps = {
   onRangeChange?: (range: LogicalRange | null) => void;
 };
 
-type Props = RSIProps | MACDProps | StochProps;
+type ATRProps = {
+  type: "atr";
+  data: LinePoint[];
+  height: number;
+  logicalRange?: LogicalRange | null;
+  onRangeChange?: (range: LogicalRange | null) => void;
+};
+
+type Props = RSIProps | MACDProps | StochProps | ATRProps;
 
 export default function IndicatorPanel(props: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,6 +106,14 @@ export default function IndicatorPanel(props: Props) {
         rsiLine.setData(
           (props as RSIProps).data.map(p => ({ time: p.time as Time, value: p.value }))
         );
+      }
+    } else if (props.type === "atr") {
+      const atrData = (props as ATRProps).data;
+      const atrLine = chart.addSeries(LineSeries, {
+        color: "#d97706", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+      });
+      if (atrData.length) {
+        atrLine.setData(atrData.map(p => ({ time: p.time as Time, value: p.value })));
       }
     } else if (props.type === "stoch") {
       const stochData = (props as StochProps).data;
@@ -182,7 +198,10 @@ export default function IndicatorPanel(props: Props) {
     syncingRef.current = false;
   }, [props.logicalRange]);
 
-  const label = props.type === "rsi" ? "RSI 14" : props.type === "stoch" ? "Stoch 14,3,3" : "MACD 12,26,9";
+  const label = props.type === "rsi" ? "RSI 14"
+    : props.type === "stoch" ? "Stoch 14,3,3"
+    : props.type === "atr" ? "ATR 14"
+    : "MACD 12,26,9";
 
   return (
     <div className="relative w-full border-t border-[#f0f0ee]" style={{ height: props.height }}>

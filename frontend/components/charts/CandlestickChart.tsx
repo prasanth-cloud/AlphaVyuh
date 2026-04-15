@@ -19,6 +19,12 @@ import type { CandleBar } from "@/lib/api";
 export type LinePoint = { time: string; value: number };
 export type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
 export type BBPoint = { time: string; upper: number | null; mid: number | null; lower: number | null };
+export type IchimokuPoint = {
+  time: string;
+  tenkan: number | null; kijun: number | null;
+  senkou_a: number | null; senkou_b: number | null;
+  chikou: number | null;
+};
 
 export type IndicatorData = {
   ema20?: LinePoint[];
@@ -26,6 +32,7 @@ export type IndicatorData = {
   ema200?: LinePoint[];
   vwap?: LinePoint[];
   bb?: BBPoint[];
+  ichimoku?: IchimokuPoint[];
 };
 
 export type ChartHandle = {
@@ -61,9 +68,15 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     bbUpper: ISeriesApi<"Line"> | null;
     bbMid: ISeriesApi<"Line"> | null;
     bbLower: ISeriesApi<"Line"> | null;
+    ichiTenkan: ISeriesApi<"Line"> | null;
+    ichiKijun: ISeriesApi<"Line"> | null;
+    ichiSenkouA: ISeriesApi<"Line"> | null;
+    ichiSenkouB: ISeriesApi<"Line"> | null;
+    ichiChikou: ISeriesApi<"Line"> | null;
   }>({
     candle: null, volume: null, ema20: null, ema50: null, ema200: null,
     vwap: null, bbUpper: null, bbMid: null, bbLower: null,
+    ichiTenkan: null, ichiKijun: null, ichiSenkouA: null, ichiSenkouB: null, ichiChikou: null,
   });
 
   useImperativeHandle(ref, () => ({
@@ -159,6 +172,23 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     });
     seriesRef.current.bbLower = chart.addSeries(LineSeries, {
       color: "#aaaaaa", lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
+    });
+
+    // Ichimoku lines
+    seriesRef.current.ichiTenkan = chart.addSeries(LineSeries, {
+      color: "#e5383b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+    });
+    seriesRef.current.ichiKijun = chart.addSeries(LineSeries, {
+      color: "#5b63f5", lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+    });
+    seriesRef.current.ichiSenkouA = chart.addSeries(LineSeries, {
+      color: "#26a65b88", lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
+    });
+    seriesRef.current.ichiSenkouB = chart.addSeries(LineSeries, {
+      color: "#e5383b88", lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
+    });
+    seriesRef.current.ichiChikou = chart.addSeries(LineSeries, {
+      color: "#d97706", lineWidth: 1, lineStyle: 3, priceLineVisible: false, lastValueVisible: false,
     });
 
     // ResizeObserver
@@ -265,6 +295,24 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       if (upper.length) s.bbUpper?.setData(upper);
       if (mid.length) s.bbMid?.setData(mid);
       if (lower.length) s.bbLower?.setData(lower);
+    }
+
+    // Ichimoku
+    const showIchi = activeIndicators.includes("ichimoku");
+    s.ichiTenkan?.applyOptions({ visible: showIchi });
+    s.ichiKijun?.applyOptions({ visible: showIchi });
+    s.ichiSenkouA?.applyOptions({ visible: showIchi });
+    s.ichiSenkouB?.applyOptions({ visible: showIchi });
+    s.ichiChikou?.applyOptions({ visible: showIchi });
+    if (showIchi && indicators.ichimoku?.length) {
+      const ichi = indicators.ichimoku;
+      const toLine = (key: keyof typeof ichi[0]) =>
+        ichi.filter(p => p[key] != null).map(p => ({ time: p.time as Time, value: p[key] as number }));
+      s.ichiTenkan?.setData(toLine("tenkan"));
+      s.ichiKijun?.setData(toLine("kijun"));
+      s.ichiSenkouA?.setData(toLine("senkou_a"));
+      s.ichiSenkouB?.setData(toLine("senkou_b"));
+      s.ichiChikou?.setData(toLine("chikou"));
     }
   }, [indicators, activeIndicators]);
 

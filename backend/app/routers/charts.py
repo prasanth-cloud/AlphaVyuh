@@ -171,6 +171,26 @@ def _compute_indicators(df: pd.DataFrame, requested: list[str]) -> dict[str, lis
                     })
             result["stoch"] = out
 
+        elif ind == "atr":
+            atr_s = ta.atr(high, low, close, 14)
+            result["atr"] = _to_list(atr_s)
+
+        elif ind == "ichimoku":
+            t_sen, k_sen, s_a, s_b, chikou = ta.ichimoku(high, low, close)
+            out = []
+            for i, dt in enumerate(dates.iloc[-tail:]):
+                idx = len(dates) - tail + i
+                def _v(s, pos=idx): return round(float(s.iloc[pos]), 4) if pos < len(s) and pd.notna(s.iloc[pos]) else None
+                out.append({
+                    "time": str(dt),
+                    "tenkan": _v(t_sen),
+                    "kijun":  _v(k_sen),
+                    "senkou_a": _v(s_a),
+                    "senkou_b": _v(s_b),
+                    "chikou": _v(chikou),
+                })
+            result["ichimoku"] = out
+
     return result
 
 
