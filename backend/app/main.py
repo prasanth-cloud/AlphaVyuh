@@ -18,11 +18,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://localhost:3001",
         settings.frontend_url,
-        "https://*.vercel.app",
         "https://alphavyuh.vercel.app",
         "https://alphavyuh.in",
     ],
+    # Covers all *.vercel.app preview + production deployments
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
