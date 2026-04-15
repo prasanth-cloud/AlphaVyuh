@@ -2,10 +2,48 @@ import { createClient } from "./supabase";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
-async function authHeaders(): Promise<HeadersInit> {
+// Module-level token cache with a ready-promise so callers wait for
+// onAuthStateChange(INITIAL_SESSION) instead of racing against it.
+let _token: string | null = null;
+let _readyResolve: () => void = () => {};
+// SSR: resolve immediately (no window, no auth events)
+const _ready: Promise<void> =
+  typeof window !== "undefined"
+    ? new Promise<void>((r) => { _readyResolve = r; })
+    : Promise.resolve();
+
+if (typeof window !== "undefined") {
+  const _sb = createClient();
+  // onAuthStateChange fires synchronously with INITIAL_SESSION on first call
+  // if a session is already stored (cookies / localStorage).
+  _sb.auth.onAuthStateChange((_event, session) => {
+    _token = session?.access_token ?? null;
+    _readyResolve(); // unblock any waiting getToken() calls
+  });
+}
+
+async function getToken(): Promise<string> {
+  // Wait for the first onAuthStateChange event (max 4 s to avoid infinite hang)
+  await Promise.race([_ready, new Promise<void>((r) => setTimeout(r, 4000))]);
+
+  if (_token) return _token;
+
+  // Fallback: direct session read (handles edge cases where the event never fired)
   const supabase = createClient();
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token ?? "";
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    _token = session.access_token;
+    return _token;
+  }
+
+  // Last resort: force a token refresh
+  const { data } = await supabase.auth.refreshSession();
+  _token = data.session?.access_token ?? null;
+  return _token ?? "";
+}
+
+async function authHeaders(): Promise<HeadersInit> {
+  const token = await getToken();
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 }
 
@@ -503,4 +541,72 @@ export async function updateJournalEntry(id: string, update: UpdateJournalEntry)
 export async function deleteJournalEntry(id: string): Promise<void> {
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/journal/${id}`, { method: "DELETE", headers });
+}
+
+export type JournalAnalytics = {
+  equity_curve: { date: string; cumulative_pnl: number }[];
+  setup_breakdown: {
+    setup: string;
+    trades: number;
+    wins: number;
+    win_rate: number;
+    total_pnl: number;
+    avg_pnl: number;
+  }[];
+  monthly_pnl: { month: string; pnl: number }[];
+};
+
+export async function getJournalAnalytics(): Promise<JournalAnalytics> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
+  if (!res.ok) return { equity_curve: [], setup_breakdown: [], monthly_pnl: [] };
+  return res.json();
+}
+
+// ── Payments ──────────────────────────────────────────────────────────────────
+
+export type PlanStatus = {
+  plan: string;
+  expires_at: string | null;
+  active: boolean;
+};
+
+export async function getPlanStatus(): Promise<PlanStatus> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/payments/status`, { headers });
+  if (!res.ok) return { plan: "free", expires_at: null, active: false };
+  return res.json();
+}
+
+export async function createPaymentOrder(plan: "pro" | "elite"): Promise<{
+  order_id: string;
+  amount: number;
+  currency: string;
+  plan: string;
+  label: string;
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/payments/create-order`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ plan }),
+  });
+  if (!res.ok) throw new Error("Failed to create payment order");
+  return res.json();
+}
+
+export async function verifyPayment(data: {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  plan: string;
+}): Promise<{ status: string; plan: string; expires_at: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/payments/verify`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Payment verification failed");
+  return res.json();
 }

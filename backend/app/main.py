@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import charts, ingest, journal, scanner, stocks, users, waitlist, watchlist
+from app.routers import charts, ingest, journal, payments, scanner, stocks, users, waitlist, watchlist
 from app.services.supabase import settings
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(charts.router)
 app.include_router(journal.router)
+app.include_router(payments.router)
 
 _scheduler: AsyncIOScheduler | None = None
 

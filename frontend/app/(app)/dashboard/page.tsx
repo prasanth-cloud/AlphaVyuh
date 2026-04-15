@@ -23,7 +23,7 @@ function NavLink({ href, label, active }: { href: string; label: string; active?
 export default function DashboardPage() {
   const [market, setMarket] = useState<MarketSummary | null>(null);
   const [userName, setUserName] = useState("Trader");
-  const [plan, setPlan] = useState("free");
+  const [plan] = useState("free");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -137,9 +137,12 @@ export default function DashboardPage() {
           <NavLink href="/journal" label="Journal" />
         </div>
         <div className="ml-auto flex items-center gap-2.5">
-          <span className="text-[11px] font-semibold bg-[#eeeffe] text-[#5b63f5] px-2 py-0.5 rounded-full uppercase">
+          <Link
+            href="/settings/billing"
+            className="text-[11px] font-semibold bg-[#eeeffe] text-[#5b63f5] px-2 py-0.5 rounded-full uppercase hover:bg-[#dddefe] transition-colors"
+          >
             {plan}
-          </span>
+          </Link>
           <div className="w-[30px] h-[30px] rounded-full bg-[#f2f2f0] border border-[#e2e2df] flex items-center justify-center text-[11px] font-semibold text-[#555]">
             {firstName[0]?.toUpperCase()}
           </div>

@@ -10,8 +10,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) {
         router.replace("/login");
       } else {
         setChecking(false);

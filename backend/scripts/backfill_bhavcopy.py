@@ -126,88 +126,127 @@ def _upsert_ohlcv(client, df: pd.DataFrame, trade_date: date):
     return len(rows)
 
 
-def _compute_and_update_indicators(client):
-    """Fetch all history per symbol in memory, compute indicators, bulk update."""
-    print("\nPhase 2: Computing indicators for all symbols...")
-    sym_res = client.table("stock_universe").select("symbol").eq("is_active", True).execute()
-    symbols = [r["symbol"] for r in (sym_res.data or [])]
-    print(f"  {len(symbols)} symbols to process")
+def _fetch_all_symbols(client) -> list[str]:
+    """Fetch all active symbols, paginating past the 1000-row Supabase default."""
+    symbols = []
+    offset = 0
+    while True:
+        res = client.table("stock_universe") \
+            .select("symbol") \
+            .eq("is_active", True) \
+            .range(offset, offset + 999) \
+            .execute()
+        if not res.data:
+            break
+        symbols.extend(r["symbol"] for r in res.data)
+        if len(res.data) < 1000:
+            break
+        offset += 1000
+    return symbols
 
-    done = 0
-    for symbol in symbols:
+
+def _compute_and_update_indicators(client):
+    """
+    Fast batch approach:
+      1. Fetch 252 rows for up to 50 symbols at once (one big query per batch).
+      2. Compute all indicators in pandas — zero extra HTTP calls.
+      3. One UPDATE per symbol (latest date only) — the sidebar only shows the latest row.
+
+    3285 symbols / 50 per batch = ~66 fetch calls + 3285 update calls ≈ 10-15 minutes.
+    """
+    print("\nPhase 2: Computing indicators for all symbols...")
+    symbols = _fetch_all_symbols(client)
+    total = len(symbols)
+    print(f"  {total} symbols to process")
+
+    BATCH = 50   # symbols fetched per query
+    done = failed = 0
+    start = time.time()
+
+    for batch_start in range(0, total, BATCH):
+        sym_batch = symbols[batch_start:batch_start + BATCH]
+
+        # Recreate client every 500 symbols to avoid connection pool exhaustion
+        if batch_start > 0 and batch_start % 500 == 0:
+            client = get_admin_client()
+
         try:
-            hist = client.table("daily_ohlcv") \
-                .select("id, trade_date, open, high, low, close, volume, prev_close") \
-                .eq("symbol", symbol) \
-                .order("trade_date", desc=False) \
-                .limit(300) \
-                .execute()
-            if not hist.data or len(hist.data) < 2:
+            # Fetch up to 252 rows per symbol in one query (50 syms × 252 rows = 12600 max)
+            all_rows: list[dict] = []
+            offset = 0
+            while True:
+                chunk = client.table("daily_ohlcv") \
+                    .select("symbol, trade_date, open, high, low, close, volume") \
+                    .in_("symbol", sym_batch) \
+                    .order("trade_date", desc=False) \
+                    .range(offset, offset + 999) \
+                    .execute()
+                if not chunk.data:
+                    break
+                all_rows.extend(chunk.data)
+                if len(chunk.data) < 1000:
+                    break
+                offset += 1000
+
+            if not all_rows:
                 continue
 
-            hdf = pd.DataFrame(hist.data)
+            hdf = pd.DataFrame(all_rows)
             for col in ["open", "high", "low", "close", "volume"]:
-                hdf[col] = pd.to_numeric(hdf[col])
-            n = len(hdf)
-            close_s = hdf["close"]
-            high_s  = hdf["high"]
-            low_s   = hdf["low"]
-            vol_s   = hdf["volume"]
-
-            # Compute indicator series for the full history
-            rsi_s    = ta.rsi(close_s, 14)             if n >= 15  else None
-            ema20_s  = ta.ema(close_s, 20)             if n >= 20  else None
-            ema50_s  = ta.ema(close_s, 50)             if n >= 50  else None
-            ema200_s = ta.ema(close_s, 200)            if n >= 200 else None
-            atr_s    = ta.atr(high_s, low_s, close_s, 14) if n >= 15 else None
-
-            updates = []
-            for i, row in hdf.iterrows():
-                ind: dict = {}
-                pos = hdf.index.get_loc(i)
-
-                # prev_close
-                if pos > 0:
-                    ind["prev_close"] = _safe_float(hdf["close"].iloc[pos - 1])
-
-                # 52W window
-                w_start = max(0, pos - 251)
-                ind["week_52_high"] = _safe_float(hdf["high"].iloc[w_start:pos+1].max())
-                ind["week_52_low"]  = _safe_float(hdf["low"].iloc[w_start:pos+1].min())
-
-                # avg volume (exclude today)
-                if pos > 0:
-                    v_slice = vol_s.iloc[max(0, pos-20):pos]
-                    ind["avg_volume_20d"] = _safe_int(v_slice.mean())
-
-                if rsi_s is not None and pos < len(rsi_s):
-                    ind["rsi_14"] = _safe_float(rsi_s.iloc[pos])
-                if ema20_s is not None and pos < len(ema20_s):
-                    ind["ema_20"] = _safe_float(ema20_s.iloc[pos])
-                if ema50_s is not None and pos < len(ema50_s):
-                    ind["ema_50"] = _safe_float(ema50_s.iloc[pos])
-                if ema200_s is not None and pos < len(ema200_s):
-                    ind["ema_200"] = _safe_float(ema200_s.iloc[pos])
-                if atr_s is not None and pos < len(atr_s):
-                    ind["atr_14"] = _safe_float(atr_s.iloc[pos])
-
-                updates.append((row["trade_date"], ind))
-
-            # Bulk update this symbol's indicators
-            for td, ind in updates:
-                if ind:
-                    client.table("daily_ohlcv").update(ind) \
-                        .eq("symbol", symbol).eq("trade_date", td).execute()
-
-            done += 1
-            if done % 100 == 0:
-                print(f"  {done}/{len(symbols)} symbols done")
+                hdf[col] = pd.to_numeric(hdf[col], errors="coerce")
+            hdf["trade_date"] = pd.to_datetime(hdf["trade_date"])
+            hdf.sort_values(["symbol", "trade_date"], inplace=True)
 
         except Exception as e:
-            print(f"  indicator error {symbol}: {e}")
+            print(f"  fetch error batch {batch_start}: {e}")
+            failed += len(sym_batch)
+            client = get_admin_client()
             continue
 
-    print(f"  Indicator computation complete: {done}/{len(symbols)} symbols updated")
+        for symbol, grp in hdf.groupby("symbol", sort=False):
+            try:
+                grp = grp.tail(252).reset_index(drop=True)
+                n = len(grp)
+                if n < 2:
+                    continue
+
+                close_s = grp["close"]
+                high_s  = grp["high"]
+                low_s   = grp["low"]
+                vol_s   = grp["volume"]
+
+                ind: dict = {}
+                ind["prev_close"]     = _safe_float(close_s.iloc[-2])
+                ind["week_52_high"]   = _safe_float(high_s.max())
+                ind["week_52_low"]    = _safe_float(low_s.min())
+                ind["avg_volume_20d"] = _safe_int(vol_s.iloc[:-1].tail(20).mean())
+
+                if n >= 15:
+                    ind["rsi_14"] = _safe_float(ta.rsi(close_s, 14).iloc[-1])
+                    ind["atr_14"] = _safe_float(ta.atr(high_s, low_s, close_s, 14).iloc[-1])
+                if n >= 20:
+                    ind["ema_20"] = _safe_float(ta.ema(close_s, 20).iloc[-1])
+                if n >= 50:
+                    ind["ema_50"] = _safe_float(ta.ema(close_s, 50).iloc[-1])
+                if n >= 200:
+                    ind["ema_200"] = _safe_float(ta.ema(close_s, 200).iloc[-1])
+
+                latest_date = str(grp["trade_date"].iloc[-1].date())
+                client.table("daily_ohlcv").update(ind) \
+                    .eq("symbol", symbol).eq("trade_date", latest_date).execute()
+
+                done += 1
+            except Exception as e:
+                print(f"  indicator error {symbol}: {e}")
+                failed += 1
+
+        if (batch_start + BATCH) % 500 < BATCH:
+            elapsed = time.time() - start
+            rate = done / elapsed if elapsed > 0 else 0
+            remaining = (total - batch_start - BATCH) / rate if rate > 0 else 0
+            print(f"  {done}/{total} done  |  {remaining/60:.1f} min remaining")
+
+    print(f"  Indicator computation complete: {done}/{total} updated, {failed} failed")
 
 
 async def backfill(days_back: int = 300, indicators_only: bool = False):

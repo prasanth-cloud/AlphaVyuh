@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str
     frontend_url: str = "http://localhost:3000"
     ingest_service_key: str = ""
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_webhook_secret: str = ""
 
     class Config:
         env_file = ".env"

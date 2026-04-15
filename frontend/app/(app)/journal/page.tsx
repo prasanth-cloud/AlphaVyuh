@@ -5,12 +5,13 @@ import Link from "next/link";
 import {
   getJournalEntries,
   getJournalStats,
+  getJournalAnalytics,
   createJournalEntry,
   updateJournalEntry,
   deleteJournalEntry,
   searchSymbols,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "@/lib/api";
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 
@@ -79,10 +80,50 @@ const SETUP_TYPES = ["Breakout", "Pullback", "Reversal", "Momentum", "Other"];
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type PanelMode = "add" | "close" | "view" | null;
+type Tab = "trades" | "analytics";
+
+// ── Equity Curve SVG ──────────────────────────────────────────────────────────
+
+function EquityCurve({ data }: { data: { date: string; cumulative_pnl: number }[] }) {
+  if (data.length < 2) return (
+    <div className="h-[160px] flex items-center justify-center text-[12px] text-[#ccc]">
+      Close at least 2 trades to see equity curve
+    </div>
+  );
+  const W = 600, H = 140, PAD = 8;
+  const vals = data.map((d) => d.cumulative_pnl);
+  const min = Math.min(0, ...vals);
+  const max = Math.max(0, ...vals);
+  const range = max - min || 1;
+  const pts = data.map((d, i) => {
+    const x = PAD + (i / (data.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((d.cumulative_pnl - min) / range) * (H - PAD * 2);
+    return `${x},${y}`;
+  });
+  const zeroY = H - PAD - ((0 - min) / range) * (H - PAD * 2);
+  const last = vals[vals.length - 1];
+  const color = last >= 0 ? "#26a65b" : "#e5383b";
+  const fillPts = `${PAD},${zeroY} ${pts.join(" ")} ${W - PAD},${zeroY}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[160px]" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="eq-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="#e2e2df" strokeWidth="1" />
+      <polygon points={fillPts} fill="url(#eq-grad)" />
+      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function JournalPage() {
+  const [tab, setTab] = useState<Tab>("trades");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [stats, setStats] = useState<JournalStats | null>(null);
+  const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<"all" | "open" | "closed">("all");
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
@@ -115,9 +156,10 @@ export default function JournalPage() {
     setLoading(true);
     try {
       const params = filterStatus === "all" ? {} : { status: filterStatus };
-      const [e, s] = await Promise.all([getJournalEntries(params), getJournalStats()]);
+      const [e, s, a] = await Promise.all([getJournalEntries(params), getJournalStats(), getJournalAnalytics()]);
       setEntries(e.entries);
       setStats(s);
+      setAnalytics(a);
     } catch {
       // ignore
     } finally {
@@ -292,8 +334,108 @@ export default function JournalPage() {
         ))}
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-0.5 px-5 pt-3">
+        {(["trades", "analytics"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-1.5 text-[13px] rounded-t-[8px] capitalize transition-colors font-medium ${
+              tab === t ? "bg-white text-[#1c1c1a] border border-b-0 border-[#e2e2df]" : "text-[#888] hover:text-[#1c1c1a]"
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Analytics Panel */}
+      {tab === "analytics" && (
+        <div className="px-5 pb-5">
+          <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5 space-y-6">
+            {/* Equity Curve */}
+            <div>
+              <div className="text-[12px] font-semibold text-[#1c1c1a] mb-1">Equity Curve</div>
+              <div className="text-[11px] text-[#aaa] mb-3">Cumulative P&amp;L across closed trades</div>
+              <EquityCurve data={analytics?.equity_curve ?? []} />
+            </div>
+
+            {/* Monthly P&L */}
+            {(analytics?.monthly_pnl?.length ?? 0) > 0 && (
+              <div>
+                <div className="text-[12px] font-semibold text-[#1c1c1a] mb-3">Monthly P&amp;L</div>
+                <div className="flex gap-2 flex-wrap">
+                  {analytics!.monthly_pnl.map((m) => {
+                    const pos = m.pnl >= 0;
+                    return (
+                      <div key={m.month} className="flex-1 min-w-[80px] rounded-[8px] px-3 py-2.5 text-center"
+                        style={{ background: pos ? "#edfaf3" : "#fff0f0" }}>
+                        <div className="text-[11px] font-bold" style={{ color: pos ? "#26a65b" : "#e5383b" }}>
+                          {m.pnl >= 0 ? "+" : ""}₹{Math.abs(m.pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </div>
+                        <div className="text-[10px] text-[#aaa] mt-0.5">{m.month}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Setup Breakdown */}
+            {(analytics?.setup_breakdown?.length ?? 0) > 0 && (
+              <div>
+                <div className="text-[12px] font-semibold text-[#1c1c1a] mb-3">Performance by Setup</div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[12px]">
+                    <thead>
+                      <tr className="border-b border-[#f0f0ee]">
+                        {["Setup", "Trades", "Win Rate", "Avg P&L", "Total P&L"].map((h) => (
+                          <th key={h} className="text-left pb-2 text-[11px] text-[#aaa] font-medium uppercase tracking-wider pr-4">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics!.setup_breakdown.map((s) => {
+                        const pos = s.total_pnl >= 0;
+                        return (
+                          <tr key={s.setup} className="border-b border-[#f7f7f5]">
+                            <td className="py-2.5 pr-4 font-medium text-[#1c1c1a]">{s.setup}</td>
+                            <td className="py-2.5 pr-4 text-[#888]">{s.trades}</td>
+                            <td className="py-2.5 pr-4">
+                              <span className="font-semibold" style={{ color: s.win_rate >= 50 ? "#26a65b" : "#e5383b" }}>
+                                {s.win_rate}%
+                              </span>
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              <span style={{ color: s.avg_pnl >= 0 ? "#26a65b" : "#e5383b" }}>
+                                {s.avg_pnl >= 0 ? "+" : ""}₹{Math.abs(s.avg_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                              </span>
+                            </td>
+                            <td className="py-2.5">
+                              <span className="font-semibold" style={{ color: pos ? "#26a65b" : "#e5383b" }}>
+                                {pos ? "+" : ""}₹{Math.abs(s.total_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {!analytics?.setup_breakdown?.length && !analytics?.equity_curve?.length && (
+              <div className="text-center py-8 text-[13px] text-[#aaa]">
+                Close some trades to see analytics here.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Body */}
-      <div className="flex gap-2.5 px-5 pt-3 pb-5">
+      {tab === "trades" && <div className="flex gap-2.5 px-5 pt-0 pb-5">
         {/* Trade list */}
         <div className="flex-1 min-w-0">
           {/* Toolbar */}
@@ -738,7 +880,7 @@ export default function JournalPage() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
