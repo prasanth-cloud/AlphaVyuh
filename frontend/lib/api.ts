@@ -229,7 +229,11 @@ export async function createWatchlist(name: string): Promise<Watchlist> {
     headers,
     body: JSON.stringify({ name }),
   });
-  if (!res.ok) throw new Error("Create failed");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    const msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
   return res.json();
 }
 

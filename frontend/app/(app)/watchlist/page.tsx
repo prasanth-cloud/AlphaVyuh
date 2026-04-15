@@ -109,6 +109,7 @@ export default function WatchlistPage() {
   const [loading, setLoading] = useState(true);
   const [newWlName, setNewWlName] = useState("");
   const [showNewWl, setShowNewWl] = useState(false);
+  const [toast, setToast] = useState("");
 
   // Symbol search
   const [symbolInput, setSymbolInput] = useState("");
@@ -117,13 +118,19 @@ export default function WatchlistPage() {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  useEffect(() => {
-    getWatchlists().then(wls => {
-      setWatchlists(wls);
-      if (wls.length > 0) setActiveId(wls[0].id);
-      setLoading(false);
-    });
-  }, []);
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3500);
+  }
+
+  async function loadWatchlists() {
+    const wls = await getWatchlists();
+    setWatchlists(wls);
+    if (wls.length > 0 && !activeId) setActiveId(wls[0].id);
+    setLoading(false);
+  }
+
+  useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
 
@@ -135,8 +142,8 @@ export default function WatchlistPage() {
       setActiveId(wl.id);
       setNewWlName("");
       setShowNewWl(false);
-    } catch {
-      // ignore
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Failed to create watchlist");
     }
   }
 
@@ -197,7 +204,12 @@ export default function WatchlistPage() {
   );
 
   return (
-    <div className="flex h-screen bg-[#f2f2f0] overflow-hidden">
+    <div className="flex h-full bg-[#f2f2f0] overflow-hidden">
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg">
+          {toast}
+        </div>
+      )}
       {/* ── Left sidebar: watchlist list ─────────────────────────────── */}
       <aside className="w-[220px] flex-shrink-0 bg-white border-r border-[#e2e2df] flex flex-col h-full">
         <div className="px-4 py-3.5 border-b border-[#f0f0ee] flex items-center justify-between">
