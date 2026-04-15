@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import Navbar from "@/components/Navbar";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -27,5 +28,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <div className="min-h-screen bg-gray-950">{children}</div>;
+  return (
+    <div className="h-screen flex flex-col bg-[#f2f2f0] overflow-hidden">
+      <Navbar />
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {children}
+      </div>
+    </div>
+  );
 }

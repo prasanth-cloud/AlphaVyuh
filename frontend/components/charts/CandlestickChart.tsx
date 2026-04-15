@@ -38,6 +38,10 @@ export type IndicatorData = {
 export type ChartHandle = {
   syncRange: (range: LogicalRange | null) => void;
   updateLegend: (cb: (bar: CandleBar | null) => void) => void;
+  coordinateToPrice: (y: number) => number | null;
+  coordinateToTime: (x: number) => string | null;
+  priceToCoordinate: (price: number) => number | null;
+  timeToCoordinate: (time: string) => number | null;
 };
 
 type Props = {
@@ -86,6 +90,26 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       }
     },
     updateLegend: () => {},
+    coordinateToPrice: (y) => {
+      if (!seriesRef.current.candle) return null;
+      const v = seriesRef.current.candle.coordinateToPrice(y);
+      return v != null ? v : null;
+    },
+    coordinateToTime: (x) => {
+      if (!chartRef.current) return null;
+      const t = chartRef.current.timeScale().coordinateToTime(x);
+      return t != null ? String(t) : null;
+    },
+    priceToCoordinate: (price) => {
+      if (!seriesRef.current.candle) return null;
+      const v = seriesRef.current.candle.priceToCoordinate(price);
+      return v != null ? v : null;
+    },
+    timeToCoordinate: (time) => {
+      if (!chartRef.current) return null;
+      const v = chartRef.current.timeScale().timeToCoordinate(time as Time);
+      return v != null ? v : null;
+    },
   }));
 
   // Build chart once
@@ -116,10 +140,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
         borderColor: "#e2e2df",
         timeVisible: true,
         secondsVisible: false,
-        fixLeftEdge: true,
-        fixRightEdge: true,
       },
-      handleScroll: { vertTouchDrag: false },
+      handleScroll: { vertTouchDrag: false, mouseWheel: true, pressedMouseMove: true },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
     });

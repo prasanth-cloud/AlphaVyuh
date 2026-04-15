@@ -544,7 +544,11 @@ export async function createJournalEntry(entry: CreateJournalEntry): Promise<Jou
     headers,
     body: JSON.stringify(entry),
   });
-  if (!res.ok) throw new Error("Failed to create entry");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    const msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
   return res.json();
 }
 
@@ -555,7 +559,11 @@ export async function updateJournalEntry(id: string, update: UpdateJournalEntry)
     headers,
     body: JSON.stringify(update),
   });
-  if (!res.ok) throw new Error("Failed to update entry");
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    const msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
   return res.json();
 }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import {
   getJournalEntries,
   getJournalStats,
@@ -12,21 +11,6 @@ import {
   searchSymbols,
 } from "@/lib/api";
 import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "@/lib/api";
-
-// ── Nav ───────────────────────────────────────────────────────────────────────
-
-function NavLink({ href, label, active }: { href: string; label: string; active?: boolean }) {
-  return (
-    <Link
-      href={href}
-      className={`px-3 py-1.5 text-[13px] rounded-md transition-colors ${
-        active ? "bg-[#f2f2f0] text-[#1c1c1a] font-medium" : "text-[#888] hover:bg-[#f7f7f5] hover:text-[#1c1c1a]"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -271,35 +255,13 @@ export default function JournalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2f2f0]">
+    <div className="min-h-full bg-[#f2f2f0]">
       {/* Toast */}
       {toast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg">
           {toast}
         </div>
       )}
-
-      {/* Nav */}
-      <nav className="h-[50px] bg-white border-b border-[#e2e2df] flex items-center px-5 gap-0">
-        <div className="flex items-center gap-2 mr-8">
-          <div className="w-7 h-7 bg-[#1c1c1a] rounded-[7px] flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 11L7 3L12 11" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M4.5 8h5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </div>
-          <span className="text-[15px] font-semibold text-[#1c1c1a] tracking-tight">
-            Alpha<span className="text-[#5b63f5]">Vyuh</span>
-          </span>
-        </div>
-        <div className="flex gap-0.5">
-          <NavLink href="/dashboard" label="Dashboard" />
-          <NavLink href="/scanner" label="Scanner" />
-          <NavLink href="/watchlist" label="Watchlist" />
-          <NavLink href="/charts/RELIANCE" label="Charts" />
-          <NavLink href="/journal" label="Journal" active />
-        </div>
-      </nav>
 
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-2.5 px-5 pt-4">

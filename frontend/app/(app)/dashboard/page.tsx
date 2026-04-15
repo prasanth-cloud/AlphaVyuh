@@ -5,27 +5,12 @@ import { getMarketSummary, getMarketMovers } from "@/lib/api";
 import type { MarketSummary, MarketMovers } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
 
-function NavLink({ href, label, active }: { href: string; label: string; active?: boolean }) {
-  return (
-    <Link
-      href={href}
-      className={`px-3 py-1.5 text-[13px] rounded-md transition-colors ${
-        active
-          ? "bg-[#f2f2f0] text-[#1c1c1a] font-medium"
-          : "text-[#888] hover:bg-[#f7f7f5] hover:text-[#1c1c1a]"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-}
 
 export default function DashboardPage() {
   const [market, setMarket] = useState<MarketSummary | null>(null);
   const [movers, setMovers] = useState<MarketMovers | null>(null);
   const [moversTab, setMoversTab] = useState<"gainers" | "losers" | "volume_surge">("gainers");
   const [userName, setUserName] = useState("Trader");
-  const [plan] = useState("free");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -121,40 +106,7 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f2f2f0]">
-      {/* Nav */}
-      <nav className="h-[50px] bg-white border-b border-[#e2e2df] flex items-center px-5 gap-0">
-        <div className="flex items-center gap-2 mr-8">
-          <div className="w-7 h-7 bg-[#1c1c1a] rounded-[7px] flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 11L7 3L12 11" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M4.5 8h5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </div>
-          <span className="text-[15px] font-semibold text-[#1c1c1a] tracking-tight">
-            Alpha<span className="text-[#5b63f5]">Vyuh</span>
-          </span>
-        </div>
-        <div className="flex gap-0.5">
-          <NavLink href="/dashboard" label="Dashboard" active />
-          <NavLink href="/scanner" label="Scanner" />
-          <NavLink href="/watchlist" label="Watchlist" />
-          <NavLink href="/charts/RELIANCE" label="Charts" />
-          <NavLink href="/journal" label="Journal" />
-        </div>
-        <div className="ml-auto flex items-center gap-2.5">
-          <Link
-            href="/settings/billing"
-            className="text-[11px] font-semibold bg-[#eeeffe] text-[#5b63f5] px-2 py-0.5 rounded-full uppercase hover:bg-[#dddefe] transition-colors"
-          >
-            {plan}
-          </Link>
-          <div className="w-[30px] h-[30px] rounded-full bg-[#f2f2f0] border border-[#e2e2df] flex items-center justify-center text-[11px] font-semibold text-[#555]">
-            {firstName[0]?.toUpperCase()}
-          </div>
-        </div>
-      </nav>
-
+    <div className="min-h-full bg-[#f2f2f0]">
       {/* Market breadth strip */}
       <div className="grid grid-cols-4 gap-2.5 px-5 pt-4">
         {loading

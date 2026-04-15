@@ -12,12 +12,20 @@ import {
   getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
-import type { IndicatorData, IchimokuPoint } from "@/components/charts/CandlestickChart";
+import type { IndicatorData, IchimokuPoint, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
 type StochPoint = { time: string; k: number; d: number | null };
 import type { LogicalRange } from "lightweight-charts";
+
+type DrawnLine = {
+  id: string;
+  tool: "Trendline" | "Horizontal" | "Fib";
+  p1: { time: string; price: number };
+  p2: { time: string; price: number };
+  color: string;
+};
 
 // Dynamically import chart components (browser-only)
 const CandlestickChart = dynamic(
@@ -74,7 +82,9 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
   const [activeIndicators, setActiveIndicators] = useState<string[]>(["ema20", "ema50"]);
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
+  const [, setDrawings] = useState<Drawing[]>([]);
+  const [drawnLines, setDrawnLines] = useState<DrawnLine[]>([]);
+  const candleChartRef = useRef<ChartHandle>(null);
 
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
@@ -130,10 +140,24 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     });
   }, [symbol]);
 
-  // Load drawings
+  // Load drawings — parse new price/time format, skip old pixel-ratio format
   useEffect(() => {
-    getDrawings(symbol).then(setDrawings);
-  }, [symbol]);
+    getDrawings(symbol, timeframe).then(list => {
+      setDrawings(list);
+      const lines: DrawnLine[] = list.flatMap(d => {
+        const pts = d.points as { time?: string; price?: number; x?: number; y?: number }[];
+        if (pts.length < 2 || !pts[0].time || pts[0].price == null) return [];
+        return [{
+          id: d.id,
+          tool: d.tool_type === "horizontal" ? "Horizontal" : d.tool_type === "fib" ? "Fib" : "Trendline",
+          p1: { time: pts[0].time, price: pts[0].price },
+          p2: { time: pts[1].time ?? pts[0].time, price: pts[1].price ?? pts[0].price },
+          color: (d.style as { color?: string }).color ?? "#5b63f5",
+        } as DrawnLine];
+      });
+      setDrawnLines(lines);
+    });
+  }, [symbol, timeframe]);
 
   // Fetch indicators when active set changes or data loads
   useEffect(() => {
@@ -192,7 +216,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setTimeout(() => setWlMsg(""), 2500);
   }
 
-  // Drawing overlay handlers (horizontal + trendline)
+  // Drawing overlay handlers — store price/time coordinates for zoom/pan stability
   function handleOverlayMouseDown(e: React.MouseEvent) {
     if (!activeDrawingTool || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
@@ -216,22 +240,40 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     drawingStartRef.current = null;
     setDrawingPreview(null);
 
-    // Persist drawing
-    const points = [
-      { x: start.x / rect.width, y: start.y / rect.height },
-      { x: x2 / rect.width, y: y2 / rect.height },
-    ];
+    // Convert pixel → price/time using chart API
+    const price1 = candleChartRef.current?.coordinateToPrice(start.y) ?? null;
+    const time1  = candleChartRef.current?.coordinateToTime(start.x) ?? null;
+    const price2 = candleChartRef.current?.coordinateToPrice(y2) ?? null;
+    const time2  = candleChartRef.current?.coordinateToTime(x2) ?? null;
+
+    if (price1 == null || time1 == null || price2 == null || time2 == null) return;
+
+    const finalPrice2 = activeDrawingTool === "Horizontal" ? price1 : price2;
+    const line: DrawnLine = {
+      id: crypto.randomUUID(),
+      tool: activeDrawingTool as DrawnLine["tool"],
+      p1: { time: time1, price: price1 },
+      p2: { time: time2, price: finalPrice2 },
+      color: "#5b63f5",
+    };
+    setDrawnLines(prev => [...prev, line]);
+    setActiveDrawingTool(null);
+
+    // Persist to DB (non-blocking)
     try {
       const saved = await saveDrawing(symbol, {
         tool_type: activeDrawingTool.toLowerCase(),
-        points,
+        points: [{ time: time1, price: price1 }, { time: time2, price: finalPrice2 }],
         style: { color: "#5b63f5" },
-        timeframe: "D",
+        timeframe,
       });
       setDrawings(prev => [...prev, saved]);
     } catch { /* ignore */ }
+  }
 
-    setActiveDrawingTool(null);
+  function clearDrawings() {
+    setDrawnLines([]);
+    setDrawings([]);
   }
 
   const latest = data?.latest;
@@ -259,7 +301,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const showAtr   = activeIndicators.includes("atr");
 
   return (
-    <div className="flex flex-col h-screen bg-[#f2f2f0] overflow-hidden">
+    <div className="flex flex-col bg-[#f2f2f0] overflow-hidden" style={{ height: "calc(100vh - 48px)" }}>
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#e2e2df] gap-4 flex-shrink-0">
@@ -333,6 +375,16 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               {tool}
             </button>
           ))}
+
+          {/* Clear drawings */}
+          {drawnLines.length > 0 && (
+            <button
+              onClick={clearDrawings}
+              className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e2e2df] text-[#e5383b] hover:border-[#e5383b] transition-colors"
+            >
+              Clear
+            </button>
+          )}
 
           {/* Save layout */}
           <button
@@ -559,22 +611,62 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 </svg>
               )}
 
-              {/* Persisted drawings (pixel-coordinate approximation) */}
+              {/* Persisted drawings — projected from price/time coords each render */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                {drawings.map(d => {
-                  if (!overlayRef.current) return null;
-                  const w = overlayRef.current.clientWidth;
-                  const h = overlayRef.current.clientHeight;
-                  const pts = d.points as { x: number; y: number }[];
-                  if (pts.length < 2) return null;
+                {drawnLines.map(line => {
+                  const chartW = overlayRef.current?.clientWidth ?? 0;
+                  const x1 = candleChartRef.current?.timeToCoordinate(line.p1.time) ?? null;
+                  const y1 = candleChartRef.current?.priceToCoordinate(line.p1.price) ?? null;
+                  if (x1 == null || y1 == null) return null;
+
+                  if (line.tool === "Horizontal") {
+                    return (
+                      <g key={line.id}>
+                        <line x1={0} y1={y1} x2={chartW} y2={y1}
+                          stroke={line.color} strokeWidth={1.5} />
+                        <text x={chartW - 4} y={y1 - 4} textAnchor="end"
+                          fontSize="10" fill={line.color} fontFamily="monospace">
+                          {line.p1.price.toFixed(2)}
+                        </text>
+                      </g>
+                    );
+                  }
+
+                  const x2 = candleChartRef.current?.timeToCoordinate(line.p2.time) ?? null;
+                  const y2 = candleChartRef.current?.priceToCoordinate(line.p2.price) ?? null;
+                  if (x2 == null || y2 == null) return null;
+
+                  if (line.tool === "Fib") {
+                    const levels = [0, 0.236, 0.382, 0.5, 0.618, 1];
+                    const priceRange = line.p2.price - line.p1.price;
+                    return (
+                      <g key={line.id}>
+                        {levels.map(lvl => {
+                          const priceLvl = line.p1.price + priceRange * (1 - lvl);
+                          const yLvl = candleChartRef.current?.priceToCoordinate(priceLvl) ?? null;
+                          if (yLvl == null) return null;
+                          const colors: Record<number, string> = {
+                            0: "#888", 0.236: "#5b63f5", 0.382: "#26a65b",
+                            0.5: "#d97706", 0.618: "#e5383b", 1: "#888"
+                          };
+                          return (
+                            <g key={lvl}>
+                              <line x1={x1} y1={yLvl} x2={x2} y2={yLvl}
+                                stroke={colors[lvl] || "#5b63f5"} strokeWidth={1} strokeDasharray="3 2" />
+                              <text x={x2 + 4} y={yLvl + 4} fontSize="9" fill={colors[lvl] || "#5b63f5"} fontFamily="monospace">
+                                {(lvl * 100).toFixed(1)}%
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </g>
+                    );
+                  }
+
+                  // Trendline
                   return (
-                    <line key={d.id}
-                      x1={pts[0].x * w} y1={pts[0].y * h}
-                      x2={pts[1].x * w}
-                      y2={d.tool_type === "horizontal" ? pts[0].y * h : pts[1].y * h}
-                      stroke={(d.style as { color?: string }).color || "#5b63f5"}
-                      strokeWidth={1.5}
-                    />
+                    <line key={line.id} x1={x1} y1={y1} x2={x2} y2={y2}
+                      stroke={line.color} strokeWidth={1.5} />
                   );
                 })}
               </svg>
@@ -583,6 +675,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             {/* Main chart */}
             {data && (
               <CandlestickChart
+                ref={candleChartRef}
                 candles={data.candles}
                 indicators={indicatorData}
                 activeIndicators={activeIndicators}
