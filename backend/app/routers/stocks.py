@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 
-from app.middleware.auth import get_current_user_id
+import yfinance as yf
+
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
 
 
 @router.get("/stocks/{symbol}/quote")
-async def get_quote(symbol: str, user_id: str = Depends(get_current_user_id)):
+async def get_quote(symbol: str):
     client = get_admin_client()
     sym = symbol.upper()
 
@@ -67,7 +68,7 @@ async def get_quote(symbol: str, user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/market/summary")
-async def get_market_summary(user_id: str = Depends(get_current_user_id)):
+async def get_market_summary():
     client = get_admin_client()
 
     date_res = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
@@ -144,7 +145,7 @@ async def get_market_summary(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/market/movers")
-async def get_market_movers(user_id: str = Depends(get_current_user_id)):
+async def get_market_movers():
     """Top 5 gainers, top 5 losers, top 5 volume surges for the latest trading date."""
     client = get_admin_client()
 
@@ -216,3 +217,41 @@ async def get_market_movers(user_id: str = Depends(get_current_user_id)):
         "losers": losers,
         "volume_surge": surges,
     }
+
+
+@router.get("/stocks/{symbol}/quote-live")
+async def get_quote_live(symbol: str):
+    """Live quote from Yahoo Finance (NSE stocks with .NS suffix).
+    Returns current price, day change, 52W range, volume — real-time 15-min delayed."""
+    try:
+        ticker = yf.Ticker(f"{symbol.upper()}.NS")
+        info = ticker.fast_info
+        hist = ticker.history(period="2d", interval="1d")
+
+        if hist.empty:
+            raise HTTPException(status_code=404, detail=f"No live data for {symbol}")
+
+        latest = hist.iloc[-1]
+        prev   = hist.iloc[-2] if len(hist) >= 2 else hist.iloc[-1]
+
+        close     = float(latest["Close"])
+        prev_close = float(prev["Close"])
+        pct_change = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
+
+        return {
+            "symbol": symbol.upper(),
+            "close":      round(close, 2),
+            "open":       round(float(latest["Open"]), 2),
+            "high":       round(float(latest["High"]), 2),
+            "low":        round(float(latest["Low"]), 2),
+            "volume":     int(latest["Volume"]),
+            "prev_close": round(prev_close, 2),
+            "pct_change": pct_change,
+            "week_52_high": round(float(info.year_high), 2) if info.year_high else None,
+            "week_52_low":  round(float(info.year_low), 2)  if info.year_low  else None,
+            "source": "yahoo_finance",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Yahoo Finance error: {e}")

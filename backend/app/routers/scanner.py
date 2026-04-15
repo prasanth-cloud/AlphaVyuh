@@ -252,10 +252,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/run")
-async def run_scanner(body: ScanRequest, user_id: str = Depends(get_current_user_id)):
+async def run_scanner(body: ScanRequest):
     client  = get_admin_client()
-    plan    = _get_user_plan(user_id)
-    hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
+    hard_limit = PRO_RESULT_LIMIT
 
     # Latest trade date
     dr = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()

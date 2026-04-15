@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import pandas as pd
+import yfinance as yf
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -203,7 +204,6 @@ async def get_candles(
     from_date: str | None = Query(None),
     to_date: str | None = Query(None),
     limit: int = Query(365, ge=1, le=1000),
-    user_id: str = Depends(get_current_user_id),
 ):
     sym = symbol.upper()
     sb = get_admin_client()
@@ -313,6 +313,84 @@ async def get_candles(
     }
 
 
+# ── Live candles via Yahoo Finance ───────────────────────────────────────────
+
+@router.get("/{symbol}/candles-live")
+async def get_candles_live(
+    symbol: str,
+    timeframe: str = Query("D"),
+    limit: int = Query(500, ge=1, le=1000),
+):
+    """OHLCV from Yahoo Finance for any NSE stock. Always fresh, no DB needed."""
+    sym = symbol.upper()
+    yf_sym = f"{sym}.NS"
+
+    tf = timeframe.upper()
+    period_map  = {"D": "2y",  "W": "5y",  "M": "max"}
+    interval_map = {"D": "1d", "W": "1wk", "M": "1mo"}
+
+    try:
+        ticker = yf.Ticker(yf_sym)
+        hist = ticker.history(
+            period=period_map.get(tf, "2y"),
+            interval=interval_map.get(tf, "1d"),
+            auto_adjust=True,
+        )
+        if hist.empty:
+            raise HTTPException(status_code=404, detail=f"No data from Yahoo Finance for {sym}")
+
+        hist = hist.tail(limit).reset_index()
+        hist.columns = [c.replace(" ", "_").lower() for c in hist.columns]
+
+        candles = []
+        for _, row in hist.iterrows():
+            dt = row["date"] if "date" in row else row["datetime"]
+            if hasattr(dt, "date"):
+                dt = dt.date()
+            candles.append({
+                "time":   str(dt),
+                "open":   round(float(row["open"]),  2),
+                "high":   round(float(row["high"]),  2),
+                "low":    round(float(row["low"]),   2),
+                "close":  round(float(row["close"]), 2),
+                "volume": int(row.get("volume", 0)),
+            })
+
+        if not candles:
+            raise HTTPException(status_code=404, detail=f"No candles for {sym}")
+
+        last = candles[-1]
+        prev_close = candles[-2]["close"] if len(candles) >= 2 else last["close"]
+        pct = round((last["close"] - prev_close) / prev_close * 100, 2) if prev_close else None
+
+        info = ticker.fast_info
+        return {
+            "symbol":       sym,
+            "company_name": sym,
+            "sector":       None,
+            "timeframe":    tf,
+            "source":       "yahoo_finance",
+            "candles":      candles,
+            "latest": {
+                "close":       last["close"],
+                "open":        last["open"],
+                "high":        last["high"],
+                "low":         last["low"],
+                "volume":      last["volume"],
+                "prev_close":  prev_close,
+                "pct_change":  pct,
+                "week_52_high": round(float(info.year_high), 2) if info.year_high else None,
+                "week_52_low":  round(float(info.year_low),  2) if info.year_low  else None,
+                "rsi_14": None, "ema_20": None, "ema_50": None,
+                "ema_200": None, "atr_14": None, "volume_ratio": None,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Yahoo Finance error: {e}")
+
+
 # ── Indicators endpoint ───────────────────────────────────────────────────────
 
 @router.get("/{symbol}/indicators")
@@ -320,7 +398,6 @@ async def get_indicators(
     symbol: str,
     timeframe: str = Query("D"),
     indicators: str = Query("ema20,ema50,ema200,rsi"),
-    user_id: str = Depends(get_current_user_id),
 ):
     sym = symbol.upper()
     tf = timeframe.upper()
@@ -344,7 +421,6 @@ async def get_indicators(
 @router.get("/search")
 async def search_symbols(
     q: str = Query(..., min_length=1),
-    user_id: str = Depends(get_current_user_id),
 ):
     sb = get_admin_client()
     # Two queries: symbol prefix match first, then company name contains

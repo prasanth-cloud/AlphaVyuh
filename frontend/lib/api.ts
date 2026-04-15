@@ -47,6 +47,9 @@ async function authHeaders(): Promise<HeadersInit> {
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 }
 
+// Public endpoints don't need auth — just JSON content-type
+const publicHeaders: HeadersInit = { "Content-Type": "application/json" };
+
 export type ScanResult = {
   symbol: string;
   company_name: string;
@@ -179,10 +182,9 @@ export async function runScan(
   sort_by = "volume_ratio",
   sort_order = "desc"
 ): Promise<ScanResponse> {
-  const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/scanner/run`, {
     method: "POST",
-    headers,
+    headers: publicHeaders,
     body: JSON.stringify({ filters, sort_by, sort_order }),
   });
   if (!res.ok) throw new Error("Scan failed");
@@ -263,8 +265,7 @@ export async function reorderWatchlist(
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/market/summary`, { headers });
+  const res = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
   if (!res.ok) return null;
   return res.json();
 }
@@ -347,13 +348,12 @@ export async function getCandles(
   symbol: string,
   params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
 ): Promise<CandlesResponse> {
-  const headers = await authHeaders();
   const qs = new URLSearchParams();
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.timeframe) qs.set("timeframe", params.timeframe);
-  const res = await fetch(`${API}/api/v1/charts/${symbol}/candles?${qs}`, { headers });
+  const res = await fetch(`${API}/api/v1/charts/${symbol}/candles?${qs}`, { headers: publicHeaders });
   if (!res.ok) throw new Error(`No data for ${symbol}`);
   return res.json();
 }
@@ -363,10 +363,9 @@ export async function getIndicators(
   indicators: string[],
   timeframe = "D"
 ): Promise<IndicatorsResponse> {
-  const headers = await authHeaders();
   const res = await fetch(
     `${API}/api/v1/charts/${symbol}/indicators?indicators=${indicators.join(",")}&timeframe=${timeframe}`,
-    { headers }
+    { headers: publicHeaders }
   );
   if (!res.ok) throw new Error("Indicator fetch failed");
   return res.json();
@@ -388,15 +387,13 @@ export type MarketMovers = {
 };
 
 export async function getMarketMovers(): Promise<MarketMovers | null> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/market/movers`, { headers });
+  const res = await fetch(`${API}/api/v1/market/movers`, { headers: publicHeaders });
   if (!res.ok) return null;
   return res.json();
 }
 
 export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/charts/search?q=${encodeURIComponent(q)}`, { headers });
+  const res = await fetch(`${API}/api/v1/charts/search?q=${encodeURIComponent(q)}`, { headers: publicHeaders });
   if (!res.ok) return [];
   const data = await res.json();
   return data.results ?? [];
