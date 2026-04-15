@@ -8,7 +8,6 @@ pydantic[email]==2.9.2
 pydantic-settings==2.6.1
 pandas==2.2.3
 numpy==1.26.4
-pandas-ta @ https://github.com/twopirllc/pandas-ta/archive/refs/heads/development.zip
 requests==2.32.3
 python-dateutil==2.9.0
 apscheduler==3.10.4

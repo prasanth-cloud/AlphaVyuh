@@ -5,11 +5,11 @@ from typing import Any
 from uuid import UUID
 
 import pandas as pd
-import pandas_ta as ta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services import indicators as ta
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
@@ -76,90 +76,68 @@ def _compute_indicators(df: pd.DataFrame, requested: list[str]) -> dict[str, lis
     low = df["low"].astype(float)
     volume = df["volume"].astype(float)
     dates = df["trade_date"]
-
-    # Use last 365 rows for output
     tail = 365
 
-    def _series_to_list(s: pd.Series, key: str = "value") -> list[dict]:
+    def _to_list(s: pd.Series, key: str = "value") -> list[dict]:
         out = []
-        s_tail = s.iloc[-tail:]
-        d_tail = dates.iloc[-tail:]
-        for dt, val in zip(d_tail, s_tail):
+        for dt, val in zip(dates.iloc[-tail:], s.iloc[-tail:]):
             if pd.notna(val):
                 out.append({"time": str(dt), key: round(float(val), 4)})
         return out
 
-    for ind in requested:
-        ind = ind.lower().strip()
-
+    for ind in [i.lower().strip() for i in requested]:
         if ind == "ema20":
-            s = ta.ema(close, length=20)
-            result["ema20"] = _series_to_list(s) if s is not None else []
+            result["ema20"] = _to_list(ta.ema(close, 20))
 
         elif ind == "ema50":
-            s = ta.ema(close, length=50)
-            result["ema50"] = _series_to_list(s) if s is not None else []
+            result["ema50"] = _to_list(ta.ema(close, 50))
 
         elif ind == "ema200":
-            s = ta.ema(close, length=200)
-            result["ema200"] = _series_to_list(s) if s is not None else []
+            result["ema200"] = _to_list(ta.ema(close, 200))
 
         elif ind == "rsi":
-            s = ta.rsi(close, length=14)
-            result["rsi"] = _series_to_list(s) if s is not None else []
+            result["rsi"] = _to_list(ta.rsi(close, 14))
 
         elif ind == "macd":
-            m = ta.macd(close, fast=12, slow=26, signal=9)
-            if m is not None and not m.empty:
-                out = []
-                m_tail = m.iloc[-tail:]
-                d_tail = dates.iloc[-tail:]
-                mc = m.columns.tolist()
-                macd_col = next((c for c in mc if c.startswith("MACD_") and not c.startswith("MACDs") and not c.startswith("MACDh")), None)
-                sig_col = next((c for c in mc if c.startswith("MACDs_")), None)
-                hist_col = next((c for c in mc if c.startswith("MACDh_")), None)
-                for dt, (_, row) in zip(d_tail, m_tail.iterrows()):
-                    if macd_col and pd.notna(row.get(macd_col)):
-                        out.append({
-                            "time": str(dt),
-                            "macd": round(float(row[macd_col]), 4) if macd_col else None,
-                            "signal": round(float(row[sig_col]), 4) if sig_col and pd.notna(row.get(sig_col)) else None,
-                            "histogram": round(float(row[hist_col]), 4) if hist_col and pd.notna(row.get(hist_col)) else None,
-                        })
-                result["macd"] = out
-            else:
-                result["macd"] = []
+            macd_line, signal_line, histogram = ta.macd(close, 12, 26, 9)
+            out = []
+            for dt, m, s, h in zip(
+                dates.iloc[-tail:],
+                macd_line.iloc[-tail:],
+                signal_line.iloc[-tail:],
+                histogram.iloc[-tail:],
+            ):
+                if pd.notna(m):
+                    out.append({
+                        "time": str(dt),
+                        "macd": round(float(m), 4),
+                        "signal": round(float(s), 4) if pd.notna(s) else None,
+                        "histogram": round(float(h), 4) if pd.notna(h) else None,
+                    })
+            result["macd"] = out
 
         elif ind == "bb":
-            b = ta.bbands(close, length=20, std=2)
-            if b is not None and not b.empty:
-                out = []
-                b_tail = b.iloc[-tail:]
-                d_tail = dates.iloc[-tail:]
-                bc = b.columns.tolist()
-                upper_col = next((c for c in bc if c.startswith("BBU_")), None)
-                mid_col = next((c for c in bc if c.startswith("BBM_")), None)
-                lower_col = next((c for c in bc if c.startswith("BBL_")), None)
-                for dt, (_, row) in zip(d_tail, b_tail.iterrows()):
-                    if upper_col and pd.notna(row.get(upper_col)):
-                        out.append({
-                            "time": str(dt),
-                            "upper": round(float(row[upper_col]), 4) if upper_col else None,
-                            "mid": round(float(row[mid_col]), 4) if mid_col and pd.notna(row.get(mid_col)) else None,
-                            "lower": round(float(row[lower_col]), 4) if lower_col and pd.notna(row.get(lower_col)) else None,
-                        })
-                result["bb"] = out
-            else:
-                result["bb"] = []
+            upper, mid, lower = ta.bbands(close, 20, 2.0)
+            out = []
+            for dt, u, m, l in zip(
+                dates.iloc[-tail:],
+                upper.iloc[-tail:],
+                mid.iloc[-tail:],
+                lower.iloc[-tail:],
+            ):
+                if pd.notna(u):
+                    out.append({
+                        "time": str(dt),
+                        "upper": round(float(u), 4),
+                        "mid": round(float(m), 4) if pd.notna(m) else None,
+                        "lower": round(float(l), 4) if pd.notna(l) else None,
+                    })
+            result["bb"] = out
 
         elif ind == "vwap":
-            # 20-day rolling VWAP approximation
             typical = (high + low + close) / 3
-            tp_vol = typical * volume
-            rolling_tp_vol = tp_vol.rolling(window=20, min_periods=1).sum()
-            rolling_vol = volume.rolling(window=20, min_periods=1).sum()
-            vwap_s = rolling_tp_vol / rolling_vol
-            result["vwap"] = _series_to_list(vwap_s)
+            vwap_s = (typical * volume).rolling(20, min_periods=1).sum() / volume.rolling(20, min_periods=1).sum()
+            result["vwap"] = _to_list(vwap_s)
 
     return result
 

@@ -6,11 +6,7 @@ import numpy as np
 import pandas as pd
 import requests
 
-try:
-    import pandas_ta as ta
-except ImportError:
-    ta = None
-
+from app.services import indicators as ta
 from app.services.supabase import get_admin_client
 
 logger = logging.getLogger(__name__)
@@ -128,29 +124,18 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
         ind["week_52_high"] = _safe_float(high_s.max())
         ind["week_52_low"]  = _safe_float(low_s.min())
 
-        if ta is not None:
-            try:
-                if n >= 15:
-                    rsi = ta.rsi(close_s, length=14)
-                    if rsi is not None and not rsi.empty:
-                        ind["rsi_14"] = _safe_float(rsi.iloc[-1])
-                    atr = ta.atr(high_s, low_s, close_s, length=14)
-                    if atr is not None and not atr.empty:
-                        ind["atr_14"] = _safe_float(atr.iloc[-1])
-                if n >= 20:
-                    e20 = ta.ema(close_s, length=20)
-                    if e20 is not None and not e20.empty:
-                        ind["ema_20"] = _safe_float(e20.iloc[-1])
-                if n >= 50:
-                    e50 = ta.ema(close_s, length=50)
-                    if e50 is not None and not e50.empty:
-                        ind["ema_50"] = _safe_float(e50.iloc[-1])
-                if n >= 200:
-                    e200 = ta.ema(close_s, length=200)
-                    if e200 is not None and not e200.empty:
-                        ind["ema_200"] = _safe_float(e200.iloc[-1])
-            except Exception as e:
-                logger.warning(f"pandas_ta error for {symbol}: {e}")
+        try:
+            if n >= 15:
+                ind["rsi_14"] = _safe_float(ta.rsi(close_s, 14).iloc[-1])
+                ind["atr_14"] = _safe_float(ta.atr(high_s, low_s, close_s, 14).iloc[-1])
+            if n >= 20:
+                ind["ema_20"] = _safe_float(ta.ema(close_s, 20).iloc[-1])
+            if n >= 50:
+                ind["ema_50"] = _safe_float(ta.ema(close_s, 50).iloc[-1])
+            if n >= 200:
+                ind["ema_200"] = _safe_float(ta.ema(close_s, 200).iloc[-1])
+        except Exception as e:
+            logger.warning(f"indicator error for {symbol}: {e}")
 
         if ind:
             results.append((symbol, ind))

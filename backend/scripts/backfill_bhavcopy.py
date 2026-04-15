@@ -29,11 +29,7 @@ from app.services.bhavcopy import (  # noqa: E402
 )
 from app.services.supabase import get_admin_client  # noqa: E402
 
-try:
-    import pandas_ta as ta
-except ImportError:
-    ta = None
-    print("WARNING: pandas_ta not available — indicators will be skipped")
+from app.services import indicators as ta
 
 NSE_HOLIDAYS = {
     date(2025, 1, 26), date(2025, 2, 26), date(2025, 3, 14),
@@ -132,10 +128,6 @@ def _upsert_ohlcv(client, df: pd.DataFrame, trade_date: date):
 
 def _compute_and_update_indicators(client):
     """Fetch all history per symbol in memory, compute indicators, bulk update."""
-    if ta is None:
-        print("  pandas_ta not available, skipping indicator computation")
-        return
-
     print("\nPhase 2: Computing indicators for all symbols...")
     sym_res = client.table("stock_universe").select("symbol").eq("is_active", True).execute()
     symbols = [r["symbol"] for r in (sym_res.data or [])]
@@ -163,11 +155,11 @@ def _compute_and_update_indicators(client):
             vol_s   = hdf["volume"]
 
             # Compute indicator series for the full history
-            rsi_s    = ta.rsi(close_s, length=14) if n >= 15 else None
-            ema20_s  = ta.ema(close_s, length=20)  if n >= 20 else None
-            ema50_s  = ta.ema(close_s, length=50)  if n >= 50 else None
-            ema200_s = ta.ema(close_s, length=200) if n >= 200 else None
-            atr_s    = ta.atr(high_s, low_s, close_s, length=14) if n >= 15 else None
+            rsi_s    = ta.rsi(close_s, 14)             if n >= 15  else None
+            ema20_s  = ta.ema(close_s, 20)             if n >= 20  else None
+            ema50_s  = ta.ema(close_s, 50)             if n >= 50  else None
+            ema200_s = ta.ema(close_s, 200)            if n >= 200 else None
+            atr_s    = ta.atr(high_s, low_s, close_s, 14) if n >= 15 else None
 
             updates = []
             for i, row in hdf.iterrows():
