@@ -16,6 +16,7 @@ import type { IndicatorData } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
+type StochPoint = { time: string; k: number; d: number | null };
 import type { LogicalRange } from "lightweight-charts";
 
 // Dynamically import chart components (browser-only)
@@ -38,6 +39,7 @@ const INDICATOR_CONFIG = [
   { id: "vwap",   label: "VWAP",    color: "#7c6af0", bg: "#f0effb" },
   { id: "rsi",    label: "RSI",     color: "#5b63f5", bg: "#eeeffe" },
   { id: "macd",   label: "MACD",    color: "#5b63f5", bg: "#eeeffe" },
+  { id: "stoch",  label: "Stoch",   color: "#26a65b", bg: "#edfaf3" },
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Horizontal", "Fib", "Text"] as const;
@@ -62,6 +64,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const symbol = params.symbol.toUpperCase();
   const router = useRouter();
 
+  const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
+
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -73,6 +77,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
   const [macdData, setMacdData] = useState<MACDPoint[]>([]);
+  const [stochData, setStochData] = useState<StochPoint[]>([]);
 
   // Crosshair legend
   const [legendBar, setLegendBar] = useState<{
@@ -99,16 +104,18 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setData(null);
     setRsiData([]);
     setMacdData([]);
+    setStochData([]);
     setIndicatorData({});
 
-    getCandles(symbol, { limit: 500 })
+    const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
+    getCandles(symbol, { limit, timeframe })
       .then(d => {
         setData(d);
         setLegendBar(null);
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [symbol]);
+  }, [symbol, timeframe]);
 
   // Load saved layout
   useEffect(() => {
@@ -128,11 +135,11 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   useEffect(() => {
     if (!data) return;
     const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap"].includes(i));
-    const panelInds = activeIndicators.filter(i => ["rsi", "macd"].includes(i));
+    const panelInds = activeIndicators.filter(i => ["rsi", "macd", "stoch"].includes(i));
     const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
     if (!allInds.length) return;
 
-    getIndicators(symbol, allInds).then(resp => {
+    getIndicators(symbol, allInds, timeframe).then(resp => {
       const ind = resp.indicators as Record<string, unknown[]>;
       setIndicatorData({
         ema20:  ind.ema20  as LinePoint[] | undefined,
@@ -141,11 +148,12 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         vwap:   ind.vwap   as LinePoint[] | undefined,
         bb:     ind.bb     as never,
       });
-      if (ind.rsi)  setRsiData(ind.rsi as LinePoint[]);
-      if (ind.macd) setMacdData(ind.macd as MACDPoint[]);
+      if (ind.rsi)   setRsiData(ind.rsi as LinePoint[]);
+      if (ind.macd)  setMacdData(ind.macd as MACDPoint[]);
+      if (ind.stoch) setStochData(ind.stoch as StochPoint[]);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, data, activeIndicators.join(",")]);
+  }, [symbol, timeframe, data, activeIndicators.join(",")]);
 
   function toggleIndicator(id: string) {
     setActiveIndicators(prev =>
@@ -158,7 +166,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   }, []);
 
   async function handleSaveLayout() {
-    await saveChartLayout(symbol, { timeframe: "D", indicators: activeIndicators, drawing_tools: [] });
+    await saveChartLayout(symbol, { timeframe, indicators: activeIndicators, drawing_tools: [] });
   }
 
   async function handleAddWatchlist() {
@@ -239,8 +247,9 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     ...data.candles.at(-1)!,
   } : null);
 
-  const showRsi  = activeIndicators.includes("rsi");
-  const showMacd = activeIndicators.includes("macd");
+  const showRsi   = activeIndicators.includes("rsi");
+  const showMacd  = activeIndicators.includes("macd");
+  const showStoch = activeIndicators.includes("stoch");
 
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f0] overflow-hidden">
@@ -263,10 +272,19 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         {/* Right: timeframe + indicators + drawing tools + save */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Timeframe */}
-          <div className="flex items-center gap-1 mr-1">
-            <span className="text-[11px] px-2.5 py-1 rounded-[4px] bg-[#1c1c1a] text-white font-semibold">D</span>
-            {["1W", "1M"].map(tf => (
-              <span key={tf} className="text-[11px] px-2.5 py-1 rounded-[4px] bg-[#f7f7f5] text-[#ccc] cursor-not-allowed">{tf}</span>
+          <div className="flex items-center gap-0.5 mr-1 bg-[#f7f7f5] rounded-[6px] p-0.5">
+            {(["D", "W", "M"] as const).map(tf => (
+              <button
+                key={tf}
+                onClick={() => setTimeframe(tf)}
+                className="text-[11px] px-2.5 py-1 rounded-[4px] font-semibold transition-colors"
+                style={timeframe === tf
+                  ? { background: "#1c1c1a", color: "white" }
+                  : { background: "transparent", color: "#888" }
+                }
+              >
+                {tf}
+              </button>
             ))}
           </div>
 
@@ -583,6 +601,17 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             <IndicatorPanel
               type="macd"
               data={macdData}
+              height={110}
+              logicalRange={logicalRange}
+              onRangeChange={handleRangeChange}
+            />
+          )}
+
+          {/* Stochastic panel */}
+          {showStoch && stochData.length > 0 && (
+            <IndicatorPanel
+              type="stoch"
+              data={stochData}
               height={110}
               logicalRange={logicalRange}
               onRangeChange={handleRangeChange}

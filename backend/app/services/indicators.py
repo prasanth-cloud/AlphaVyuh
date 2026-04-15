@@ -48,3 +48,24 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, length: int = 14) -> 
         (low - prev_close).abs(),
     ], axis=1).max(axis=1)
     return tr.ewm(alpha=1 / length, adjust=False, min_periods=length).mean()
+
+
+def stochastic(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    k_period: int = 14,
+    d_period: int = 3,
+    smooth_k: int = 3,
+):
+    """
+    Returns (%K smoothed, %D) as two pd.Series.
+    %K = SMA(raw_k, smooth_k),  %D = SMA(%K, d_period)
+    """
+    lowest_low  = low.rolling(k_period, min_periods=k_period).min()
+    highest_high = high.rolling(k_period, min_periods=k_period).max()
+    denom = (highest_high - lowest_low).replace(0, np.nan)
+    raw_k = 100 * (close - lowest_low) / denom
+    k = raw_k.rolling(smooth_k, min_periods=smooth_k).mean()
+    d = k.rolling(d_period, min_periods=d_period).mean()
+    return k, d

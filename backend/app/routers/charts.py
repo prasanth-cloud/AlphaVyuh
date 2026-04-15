@@ -54,18 +54,38 @@ def _fetch_ohlcv(symbol: str, limit: int = 500) -> pd.DataFrame:
     df = pd.DataFrame(r.data)
     df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.date
     df = df.sort_values("trade_date").reset_index(drop=True)
-    # Compute derived fields
-    df["pct_change"] = df.apply(
-        lambda row: round((row["close"] - row["prev_close"]) / row["prev_close"] * 100, 2)
-        if row.get("prev_close") and row["prev_close"] > 0 else None,
-        axis=1,
-    )
-    df["volume_ratio"] = df.apply(
-        lambda row: round(row["volume"] / row["avg_volume_20d"], 2)
-        if row.get("avg_volume_20d") and row["avg_volume_20d"] > 0 else None,
-        axis=1,
-    )
     return df
+
+
+def _aggregate_to_timeframe(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+    """
+    Aggregate daily OHLCV into weekly (W) or monthly (M) bars.
+    Returns same column structure as _fetch_ohlcv but with fewer rows.
+    """
+    if timeframe not in ("W", "M") or df.empty:
+        return df
+
+    df = df.copy()
+    df["trade_date"] = pd.to_datetime(df["trade_date"])
+    for col in ["open", "high", "low", "close", "volume"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    freq = "W-FRI" if timeframe == "W" else "ME"
+    grouped = df.set_index("trade_date").resample(freq)
+
+    agg = pd.DataFrame({
+        "open":   grouped["open"].first(),
+        "high":   grouped["high"].max(),
+        "low":    grouped["low"].min(),
+        "close":  grouped["close"].last(),
+        "volume": grouped["volume"].sum(),
+    }).dropna(subset=["close"])
+
+    agg.index = agg.index.date  # type: ignore[assignment]
+    agg = agg.reset_index().rename(columns={"index": "trade_date"})
+    # Prev close = prior bar's close
+    agg["prev_close"] = agg["close"].shift(1)
+    return agg
 
 
 def _compute_indicators(df: pd.DataFrame, requested: list[str]) -> dict[str, list[dict]]:
@@ -139,6 +159,18 @@ def _compute_indicators(df: pd.DataFrame, requested: list[str]) -> dict[str, lis
             vwap_s = (typical * volume).rolling(20, min_periods=1).sum() / volume.rolling(20, min_periods=1).sum()
             result["vwap"] = _to_list(vwap_s)
 
+        elif ind == "stoch":
+            k, d = ta.stochastic(high, low, close, k_period=14, d_period=3, smooth_k=3)
+            out = []
+            for dt, kv, dv in zip(dates.iloc[-tail:], k.iloc[-tail:], d.iloc[-tail:]):
+                if pd.notna(kv):
+                    out.append({
+                        "time": str(dt),
+                        "k": round(float(kv), 2),
+                        "d": round(float(dv), 2) if pd.notna(dv) else None,
+                    })
+            result["stoch"] = out
+
     return result
 
 
@@ -156,70 +188,106 @@ async def get_candles(
     sym = symbol.upper()
     sb = get_admin_client()
 
-    # Fetch from stock_universe for metadata
+    # Fetch metadata
     uni = sb.table("stock_universe").select("company_name,sector,series").eq("symbol", sym).maybe_single().execute()
     meta = uni.data or {}
 
-    # Date range
+    # For W/M we need more raw daily bars to aggregate into enough candles
+    tf = timeframe.upper()
+    raw_limit = limit if tf == "D" else (limit * 7 if tf == "W" else limit * 31)
+    raw_limit = min(raw_limit, 1000)
+
     td = date.today()
-    fd = date.fromisoformat(from_date) if from_date else (td - timedelta(days=365 * 2))
+    fd = date.fromisoformat(from_date) if from_date else (td - timedelta(days=365 * 5))
     td2 = date.fromisoformat(to_date) if to_date else td
 
     q = (
         sb.table("daily_ohlcv")
-        .select("trade_date,open,high,low,close,volume,prev_close,turnover,rsi_14,ema_20,ema_50,ema_200,atr_14,avg_volume_20d,week_52_high,week_52_low")
+        .select("trade_date,open,high,low,close,volume,prev_close,avg_volume_20d,rsi_14,ema_20,ema_50,ema_200,atr_14,week_52_high,week_52_low")
         .eq("symbol", sym)
         .gte("trade_date", str(fd))
         .lte("trade_date", str(td2))
         .order("trade_date", desc=False)
-        .limit(limit)
+        .limit(raw_limit)
         .execute()
     )
 
     if not q.data:
         raise HTTPException(status_code=404, detail=f"No candle data found for {sym}")
 
-    candles = [
-        {
-            "time": str(row["trade_date"]),
-            "open": float(row["open"]),
-            "high": float(row["high"]),
-            "low": float(row["low"]),
-            "close": float(row["close"]),
-            "volume": int(row["volume"]) if row["volume"] else 0,
+    # Build daily df then aggregate if needed
+    daily_df = pd.DataFrame(q.data)
+    daily_df["trade_date"] = pd.to_datetime(daily_df["trade_date"]).dt.date
+    for col in ["open", "high", "low", "close", "volume"]:
+        daily_df[col] = pd.to_numeric(daily_df[col], errors="coerce")
+
+    if tf in ("W", "M"):
+        agg_df = _aggregate_to_timeframe(daily_df, tf)
+        # Trim to requested limit
+        agg_df = agg_df.tail(limit).reset_index(drop=True)
+        candles = [
+            {
+                "time": str(row["trade_date"]),
+                "open":   round(float(row["open"]),   2),
+                "high":   round(float(row["high"]),   2),
+                "low":    round(float(row["low"]),    2),
+                "close":  round(float(row["close"]),  2),
+                "volume": int(row["volume"]) if pd.notna(row["volume"]) else 0,
+            }
+            for _, row in agg_df.iterrows()
+        ]
+        last = agg_df.iloc[-1]
+        prev_close = float(last["prev_close"]) if pd.notna(last.get("prev_close")) else None
+        close_val = float(last["close"])
+        vol = int(last["volume"]) if pd.notna(last["volume"]) else 0
+        # Latest row indicators come from most recent daily row
+        last_daily = daily_df.iloc[-1]
+        def _f(col): return float(last_daily[col]) if last_daily.get(col) is not None and pd.notna(last_daily[col]) else None
+        avg_vol = _f("avg_volume_20d")
+        latest = {
+            "close": close_val,
+            "pct_change": round((close_val - prev_close) / prev_close * 100, 2) if prev_close and prev_close > 0 else None,
+            "volume": vol, "volume_ratio": round(vol / avg_vol, 2) if avg_vol else None,
+            "rsi_14": _f("rsi_14"), "ema_20": _f("ema_20"), "ema_50": _f("ema_50"), "ema_200": _f("ema_200"),
+            "atr_14": _f("atr_14"), "week_52_high": _f("week_52_high"), "week_52_low": _f("week_52_low"),
+            "open": float(last["open"]), "high": float(last["high"]), "low": float(last["low"]),
+            "prev_close": prev_close,
         }
-        for row in q.data
-    ]
-
-    latest_row = q.data[-1]
-    prev_close = float(latest_row["prev_close"]) if latest_row.get("prev_close") else None
-    close_val = float(latest_row["close"])
-    avg_vol = float(latest_row["avg_volume_20d"]) if latest_row.get("avg_volume_20d") else None
-    vol = int(latest_row["volume"]) if latest_row.get("volume") else 0
-
-    latest = {
-        "close": close_val,
-        "pct_change": round((close_val - prev_close) / prev_close * 100, 2) if prev_close and prev_close > 0 else None,
-        "volume": vol,
-        "volume_ratio": round(vol / avg_vol, 2) if avg_vol and avg_vol > 0 else None,
-        "rsi_14": float(latest_row["rsi_14"]) if latest_row.get("rsi_14") is not None else None,
-        "ema_20": float(latest_row["ema_20"]) if latest_row.get("ema_20") is not None else None,
-        "ema_50": float(latest_row["ema_50"]) if latest_row.get("ema_50") is not None else None,
-        "ema_200": float(latest_row["ema_200"]) if latest_row.get("ema_200") is not None else None,
-        "atr_14": float(latest_row["atr_14"]) if latest_row.get("atr_14") is not None else None,
-        "week_52_high": float(latest_row["week_52_high"]) if latest_row.get("week_52_high") is not None else None,
-        "week_52_low": float(latest_row["week_52_low"]) if latest_row.get("week_52_low") is not None else None,
-        "open": float(latest_row["open"]),
-        "high": float(latest_row["high"]),
-        "low": float(latest_row["low"]),
-        "prev_close": prev_close,
-    }
+    else:
+        # Daily — original logic
+        rows = q.data
+        candles = [
+            {
+                "time": str(row["trade_date"]),
+                "open":   float(row["open"]),
+                "high":   float(row["high"]),
+                "low":    float(row["low"]),
+                "close":  float(row["close"]),
+                "volume": int(row["volume"]) if row["volume"] else 0,
+            }
+            for row in rows
+        ]
+        latest_row = rows[-1]
+        prev_close = float(latest_row["prev_close"]) if latest_row.get("prev_close") else None
+        close_val  = float(latest_row["close"])
+        avg_vol    = float(latest_row["avg_volume_20d"]) if latest_row.get("avg_volume_20d") else None
+        vol        = int(latest_row["volume"]) if latest_row.get("volume") else 0
+        def _f(col): return float(latest_row[col]) if latest_row.get(col) is not None else None  # type: ignore[misc]
+        latest = {
+            "close": close_val,
+            "pct_change": round((close_val - prev_close) / prev_close * 100, 2) if prev_close and prev_close > 0 else None,
+            "volume": vol, "volume_ratio": round(vol / avg_vol, 2) if avg_vol else None,
+            "rsi_14": _f("rsi_14"), "ema_20": _f("ema_20"), "ema_50": _f("ema_50"), "ema_200": _f("ema_200"),
+            "atr_14": _f("atr_14"), "week_52_high": _f("week_52_high"), "week_52_low": _f("week_52_low"),
+            "open": float(latest_row["open"]), "high": float(latest_row["high"]),
+            "low": float(latest_row["low"]), "prev_close": prev_close,
+        }
 
     return {
         "symbol": sym,
         "company_name": meta.get("company_name"),
         "sector": meta.get("sector"),
-        "timeframe": timeframe,
+        "timeframe": tf,
         "candles": candles,
         "latest": latest,
     }
@@ -235,9 +303,15 @@ async def get_indicators(
     user_id: str = Depends(get_current_user_id),
 ):
     sym = symbol.upper()
-    df = _fetch_ohlcv(sym, limit=500)
+    tf = timeframe.upper()
+    # Fetch more daily rows for W/M so aggregation has enough history
+    raw_limit = 500 if tf == "D" else (500 * 7 if tf == "W" else 500 * 31)
+    df = _fetch_ohlcv(sym, limit=min(raw_limit, 1000))
     if df.empty:
         raise HTTPException(status_code=404, detail=f"No data for {sym}")
+
+    if tf in ("W", "M"):
+        df = _aggregate_to_timeframe(df, tf)
 
     requested = [i.strip() for i in indicators.split(",") if i.strip()]
     result = _compute_indicators(df, requested)

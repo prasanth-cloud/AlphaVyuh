@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getMarketSummary } from "@/lib/api";
-import type { MarketSummary } from "@/lib/api";
+import { getMarketSummary, getMarketMovers } from "@/lib/api";
+import type { MarketSummary, MarketMovers } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
 
 function NavLink({ href, label, active }: { href: string; label: string; active?: boolean }) {
@@ -22,6 +22,8 @@ function NavLink({ href, label, active }: { href: string; label: string; active?
 
 export default function DashboardPage() {
   const [market, setMarket] = useState<MarketSummary | null>(null);
+  const [movers, setMovers] = useState<MarketMovers | null>(null);
+  const [moversTab, setMoversTab] = useState<"gainers" | "losers" | "volume_surge">("gainers");
   const [userName, setUserName] = useState("Trader");
   const [plan] = useState("free");
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,10 @@ export default function DashboardPage() {
       .then((m) => { if (m) setMarket(m); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+
+    getMarketMovers()
+      .then(setMovers)
+      .catch(() => { /* non-critical */ });
   }, []);
 
   const greeting = () => {
@@ -199,6 +205,65 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Market Movers */}
+      {movers && (
+        <div className="px-5 pb-4">
+          <div className="bg-white border border-[#e2e2df] rounded-[10px] overflow-hidden">
+            {/* Tab bar */}
+            <div className="flex border-b border-[#f0f0ee]">
+              {([
+                { key: "gainers", label: "Top Gainers", color: "#26a65b" },
+                { key: "losers", label: "Top Losers", color: "#e5383b" },
+                { key: "volume_surge", label: "Volume Surge", color: "#5b63f5" },
+              ] as const).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setMoversTab(tab.key)}
+                  className="flex-1 text-[12px] font-medium py-2.5 transition-colors"
+                  style={moversTab === tab.key
+                    ? { color: tab.color, borderBottom: `2px solid ${tab.color}`, background: "#fafafa" }
+                    : { color: "#aaa", borderBottom: "2px solid transparent" }
+                  }
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* Rows */}
+            <div className="divide-y divide-[#f7f7f5]">
+              {(moversTab === "gainers" ? movers.gainers
+                : moversTab === "losers" ? movers.losers
+                : movers.volume_surge
+              ).map(row => (
+                <Link
+                  key={row.symbol}
+                  href={`/charts/${row.symbol}`}
+                  className="flex items-center justify-between px-4 py-2.5 hover:bg-[#fafafa] transition-colors"
+                >
+                  <div>
+                    <div className="text-[13px] font-semibold text-[#1c1c1a]">{row.symbol}</div>
+                    <div className="text-[11px] text-[#aaa] truncate max-w-[160px]">{row.company_name}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[13px] font-semibold text-[#1c1c1a]">
+                      ₹{row.close.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[12px] font-medium"
+                      style={{ color: row.pct_change >= 0 ? "#26a65b" : "#e5383b" }}
+                    >
+                      {row.pct_change >= 0 ? "+" : ""}{row.pct_change.toFixed(2)}%
+                      {moversTab === "volume_surge" && row.volume_ratio != null && (
+                        <span className="text-[#5b63f5] ml-1.5">{row.volume_ratio}×</span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Module cards */}
       <div className="grid grid-cols-2 gap-2.5 px-5 pb-5">

@@ -141,3 +141,78 @@ async def get_market_summary(user_id: str = Depends(get_current_user_id)):
         "above_ema200_pct": round(above_ema200 / valid_ema200 * 100, 1) if valid_ema200 else None,
         "total_stocks": total,
     }
+
+
+@router.get("/market/movers")
+async def get_market_movers(user_id: str = Depends(get_current_user_id)):
+    """Top 5 gainers, top 5 losers, top 5 volume surges for the latest trading date."""
+    client = get_admin_client()
+
+    date_res = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
+    if not date_res.data:
+        return {"trade_date": None, "gainers": [], "losers": [], "volume_surge": []}
+
+    latest_date = date_res.data[0]["trade_date"]
+
+    # Fetch all rows with needed columns, paginated
+    all_rows: list[dict] = []
+    offset = 0
+    while True:
+        chunk = client.table("daily_ohlcv") \
+            .select("symbol, close, prev_close, volume, avg_volume_20d, stock_universe(company_name, series)") \
+            .eq("trade_date", latest_date) \
+            .range(offset, offset + 999) \
+            .execute()
+        if not chunk.data:
+            break
+        all_rows.extend(chunk.data)
+        if len(chunk.data) < 1000:
+            break
+        offset += 1000
+
+    enriched = []
+    for row in all_rows:
+        close = float(row["close"] or 0)
+        prev  = float(row["prev_close"] or 0)
+        vol   = int(row["volume"] or 0)
+        avg_v = int(row["avg_volume_20d"] or 0)
+        if not prev or not close:
+            continue
+        su = row.get("stock_universe") or {}
+        if isinstance(su, list):
+            su = su[0] if su else {}
+        # Only EQ series (no SME/BE noise)
+        if su.get("series") not in ("EQ", None):
+            continue
+        enriched.append({
+            "symbol": row["symbol"],
+            "company_name": su.get("company_name", row["symbol"]),
+            "close": close,
+            "pct_change": round((close - prev) / prev * 100, 2),
+            "volume_ratio": round(vol / avg_v, 2) if avg_v else None,
+        })
+
+    # Gainers: top 5 by pct_change, min price ₹10
+    gainers = sorted(
+        [r for r in enriched if r["pct_change"] > 0 and r["close"] >= 10],
+        key=lambda x: x["pct_change"], reverse=True
+    )[:5]
+
+    # Losers: bottom 5 by pct_change
+    losers = sorted(
+        [r for r in enriched if r["pct_change"] < 0 and r["close"] >= 10],
+        key=lambda x: x["pct_change"]
+    )[:5]
+
+    # Volume surge: top 5 by volume_ratio
+    surges = sorted(
+        [r for r in enriched if r["volume_ratio"] is not None and r["volume_ratio"] >= 2],
+        key=lambda x: x["volume_ratio"] or 0, reverse=True
+    )[:5]
+
+    return {
+        "trade_date": latest_date,
+        "gainers": gainers,
+        "losers": losers,
+        "volume_surge": surges,
+    }

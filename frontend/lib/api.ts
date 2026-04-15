@@ -345,13 +345,14 @@ export type ChartLayout = {
 
 export async function getCandles(
   symbol: string,
-  params?: { from_date?: string; to_date?: string; limit?: number }
+  params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
 ): Promise<CandlesResponse> {
   const headers = await authHeaders();
   const qs = new URLSearchParams();
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
   if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.timeframe) qs.set("timeframe", params.timeframe);
   const res = await fetch(`${API}/api/v1/charts/${symbol}/candles?${qs}`, { headers });
   if (!res.ok) throw new Error(`No data for ${symbol}`);
   return res.json();
@@ -359,14 +360,37 @@ export async function getCandles(
 
 export async function getIndicators(
   symbol: string,
-  indicators: string[]
+  indicators: string[],
+  timeframe = "D"
 ): Promise<IndicatorsResponse> {
   const headers = await authHeaders();
   const res = await fetch(
-    `${API}/api/v1/charts/${symbol}/indicators?indicators=${indicators.join(",")}`,
+    `${API}/api/v1/charts/${symbol}/indicators?indicators=${indicators.join(",")}&timeframe=${timeframe}`,
     { headers }
   );
   if (!res.ok) throw new Error("Indicator fetch failed");
+  return res.json();
+}
+
+export type MarketMover = {
+  symbol: string;
+  company_name: string;
+  close: number;
+  pct_change: number;
+  volume_ratio: number | null;
+};
+
+export type MarketMovers = {
+  trade_date: string;
+  gainers: MarketMover[];
+  losers: MarketMover[];
+  volume_surge: MarketMover[];
+};
+
+export async function getMarketMovers(): Promise<MarketMovers | null> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/market/movers`, { headers });
+  if (!res.ok) return null;
   return res.json();
 }
 
