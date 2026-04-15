@@ -386,3 +386,121 @@ export async function saveChartLayout(symbol: string, layout: Omit<ChartLayout, 
   if (!res.ok) throw new Error("Save layout failed");
   return res.json();
 }
+
+// ── Journal ───────────────────────────────────────────────────────────────────
+
+export type JournalEntry = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  company_name: string | null;
+  trade_type: "long" | "short";
+  setup_type: string | null;
+  entry_date: string;
+  entry_price: number;
+  quantity: number;
+  exit_date: string | null;
+  exit_price: number | null;
+  pnl: number | null;
+  pnl_pct: number | null;
+  holding_days: number | null;
+  stop_loss: number | null;
+  target_price: number | null;
+  risk_reward: number | null;
+  entry_reason: string | null;
+  exit_reason: string | null;
+  mistakes: string | null;
+  lessons: string | null;
+  status: "open" | "closed" | "cancelled";
+  created_at: string;
+  updated_at: string;
+};
+
+export type JournalStats = {
+  total_trades: number;
+  open_trades: number;
+  total_pnl: number;
+  win_rate: number;
+  avg_pnl: number;
+  avg_win: number;
+  avg_loss: number;
+  best_trade: number;
+  worst_trade: number;
+  avg_holding_days: number;
+};
+
+export type CreateJournalEntry = {
+  symbol: string;
+  trade_type: "long" | "short";
+  entry_date: string;
+  entry_price: number;
+  quantity: number;
+  setup_type?: string;
+  stop_loss?: number;
+  target_price?: number;
+  entry_reason?: string;
+};
+
+export type UpdateJournalEntry = {
+  exit_date?: string;
+  exit_price?: number;
+  exit_reason?: string;
+  mistakes?: string;
+  lessons?: string;
+  stop_loss?: number;
+  target_price?: number;
+  setup_type?: string;
+  entry_reason?: string;
+  status?: string;
+};
+
+export async function getJournalEntries(
+  params?: { limit?: number; offset?: number; status?: string; symbol?: string }
+): Promise<{ entries: JournalEntry[]; total: number }> {
+  const headers = await authHeaders();
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.offset) qs.set("offset", String(params.offset));
+  if (params?.status) qs.set("status", params.status);
+  if (params?.symbol) qs.set("symbol", params.symbol);
+  const res = await fetch(`${API}/api/v1/journal?${qs}`, { headers });
+  if (!res.ok) return { entries: [], total: 0 };
+  return res.json();
+}
+
+export async function getJournalStats(): Promise<JournalStats> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/stats`, { headers });
+  if (!res.ok) return {
+    total_trades: 0, open_trades: 0, total_pnl: 0, win_rate: 0,
+    avg_pnl: 0, avg_win: 0, avg_loss: 0, best_trade: 0, worst_trade: 0, avg_holding_days: 0,
+  };
+  return res.json();
+}
+
+export async function createJournalEntry(entry: CreateJournalEntry): Promise<JournalEntry> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(entry),
+  });
+  if (!res.ok) throw new Error("Failed to create entry");
+  return res.json();
+}
+
+export async function updateJournalEntry(id: string, update: UpdateJournalEntry): Promise<JournalEntry> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(update),
+  });
+  if (!res.ok) throw new Error("Failed to update entry");
+  return res.json();
+}
+
+export async function deleteJournalEntry(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await fetch(`${API}/api/v1/journal/${id}`, { method: "DELETE", headers });
+}

@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import charts, ingest, scanner, stocks, users, waitlist, watchlist
+from app.routers import charts, ingest, journal, scanner, stocks, users, waitlist, watchlist
 from app.services.supabase import settings
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,13 @@ app = FastAPI(title="AlphaVyuh API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    allow_origins=[
+        "http://localhost:3000",
+        settings.frontend_url,
+        "https://*.vercel.app",
+        "https://alphavyuh.vercel.app",
+        "https://alphavyuh.in",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +35,7 @@ app.include_router(scanner.router)
 app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(charts.router)
+app.include_router(journal.router)
 
 _scheduler: AsyncIOScheduler | None = None
 
