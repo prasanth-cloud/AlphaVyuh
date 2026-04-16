@@ -183,9 +183,10 @@ export async function runScan(
   sort_by = "volume_ratio",
   sort_order = "desc"
 ): Promise<ScanResponse> {
+  const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/scanner/run`, {
     method: "POST",
-    headers: publicHeaders,
+    headers,
     body: JSON.stringify({ filters, sort_by, sort_order }),
   });
   if (!res.ok) throw new Error("Scan failed");
