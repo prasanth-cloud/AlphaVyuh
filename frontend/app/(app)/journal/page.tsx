@@ -305,15 +305,19 @@ export default function JournalPage() {
 
       {/* Tabs */}
       <div className="flex gap-0.5 px-5 pt-3">
-        {(["trades", "analytics"] as Tab[]).map((t) => (
+        {([
+          { id: "trades", label: "Trades" },
+          { id: "analytics", label: "Analytics" },
+          { id: "ai", label: "AI Analysis" },
+        ] as { id: Tab; label: string }[]).map(({ id, label }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-1.5 text-[13px] rounded-t-[8px] capitalize transition-colors font-medium ${
-              tab === t ? "bg-white text-[#1c1c1a] border border-b-0 border-[#e2e2df]" : "text-[#888] hover:text-[#1c1c1a]"
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-1.5 text-[13px] rounded-t-[8px] transition-colors font-medium ${
+              tab === id ? "bg-white text-[#1c1c1a] border border-b-0 border-[#e2e2df]" : "text-[#888] hover:text-[#1c1c1a]"
             }`}
           >
-            {t}
+            {label}
           </button>
         ))}
       </div>
