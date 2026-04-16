@@ -477,7 +477,7 @@ export default function JournalPage() {
 
             {!aiAnalysis && !aiLoading && !aiError && (
               <div className="text-center py-10">
-                <div className="text-[13px] text-[#aaa]">Click "Analyse my trades" to get AI-powered insights on your trading patterns.</div>
+                <div className="text-[13px] text-[#aaa]">Click &quot;Analyse my trades&quot; to get AI-powered insights on your trading patterns.</div>
                 <div className="text-[12px] text-[#bbb] mt-1">Requires at least 3 closed trades.</div>
               </div>
             )}
