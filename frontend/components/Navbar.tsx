@@ -8,7 +8,6 @@ import { useEffect, useState } from "react";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/scanner", label: "Scanner" },
-  { href: "/alerts", label: "Alerts" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/charts/RELIANCE", label: "Charts", prefix: "/charts" },
   { href: "/journal", label: "Journal" },
@@ -71,27 +70,17 @@ export default function Navbar() {
         })}
       </div>
 
-      {/* Right: billing + profile + avatar + sign out */}
+      {/* Right: settings + avatar + sign out */}
       <div className="flex items-center gap-2">
         <Link
-          href="/settings/profile"
+          href="/settings"
           className={`text-[12px] px-2.5 py-1 rounded-md transition-colors ${
-            pathname === "/settings/profile"
+            pathname.startsWith("/settings")
               ? "bg-[#eeeffe] text-[#5b63f5] font-medium"
               : "text-[#888] hover:bg-[#f7f7f5] hover:text-[#1c1c1a]"
           }`}
         >
-          Profile
-        </Link>
-        <Link
-          href="/settings/billing"
-          className={`text-[12px] px-2.5 py-1 rounded-md transition-colors ${
-            pathname === "/settings/billing"
-              ? "bg-[#eeeffe] text-[#5b63f5] font-medium"
-              : "text-[#888] hover:bg-[#f7f7f5] hover:text-[#1c1c1a]"
-          }`}
-        >
-          Billing
+          Settings
         </Link>
         <div className="w-[28px] h-[28px] rounded-full bg-[#f2f2f0] border border-[#e2e2df] flex items-center justify-center text-[11px] font-semibold text-[#555]">
           {initials}

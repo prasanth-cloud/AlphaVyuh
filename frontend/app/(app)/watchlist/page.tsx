@@ -24,6 +24,7 @@ import {
   addToWatchlist,
   removeFromWatchlist,
   reorderWatchlist,
+  getQuote,
 } from "@/lib/api";
 import RsiBadge from "@/components/scanner/RsiBadge";
 import PctChange from "@/components/scanner/PctChange";
@@ -154,9 +155,26 @@ export default function WatchlistPage() {
     setAddMsg("");
     try {
       await addToWatchlist(activeId, sym);
-      // Re-fetch to get enriched data
-      const wls = await getWatchlists();
-      setWatchlists(wls);
+      // Fetch only this stock's quote and append optimistically
+      const quote = await getQuote(sym);
+      const newItem: WatchlistItem = quote
+        ? {
+            symbol: quote.symbol,
+            sort_order: 0,
+            added_at: new Date().toISOString(),
+            company_name: quote.company_name,
+            sector: quote.sector,
+            close: quote.close,
+            pct_change: quote.pct_change,
+            volume_ratio: quote.volume_ratio,
+            rsi_14: quote.rsi_14,
+          }
+        : { symbol: sym, sort_order: 0, added_at: new Date().toISOString() };
+      setWatchlists(prev =>
+        prev.map(w =>
+          w.id === activeId ? { ...w, items: [...w.items, newItem] } : w
+        )
+      );
       setSymbolInput("");
       setAddMsg("Added!");
     } catch (e: unknown) {

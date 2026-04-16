@@ -24,7 +24,7 @@ from app.services.supabase import settings
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AlphaVyuh API", version="0.2.0")
+app = FastAPI(title="AlphaVyuh API", version="0.3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -100,4 +100,4 @@ async def stop_scheduler():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.3.0"}
