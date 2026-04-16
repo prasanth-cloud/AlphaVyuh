@@ -69,8 +69,18 @@ export default function Navbar() {
         })}
       </div>
 
-      {/* Right: avatar + sign out */}
+      {/* Right: billing + avatar + sign out */}
       <div className="flex items-center gap-2">
+        <Link
+          href="/settings/billing"
+          className={`text-[12px] px-2.5 py-1 rounded-md transition-colors ${
+            pathname.startsWith("/settings")
+              ? "bg-[#eeeffe] text-[#5b63f5] font-medium"
+              : "text-[#888] hover:bg-[#f7f7f5] hover:text-[#1c1c1a]"
+          }`}
+        >
+          Billing
+        </Link>
         <div className="w-[28px] h-[28px] rounded-full bg-[#f2f2f0] border border-[#e2e2df] flex items-center justify-center text-[11px] font-semibold text-[#555]">
           {initials}
         </div>

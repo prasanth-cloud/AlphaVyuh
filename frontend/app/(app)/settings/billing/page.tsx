@@ -162,7 +162,7 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f2f2f0] flex items-center justify-center">
+      <div className="min-h-full bg-[#f2f2f0] flex items-center justify-center">
         <div className="w-5 h-5 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
       </div>
     );
@@ -174,9 +174,9 @@ export default function BillingPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#f2f2f0]">
+    <div className="min-h-full bg-[#f2f2f0]">
       {/* Nav */}
-      <div className="h-[50px] bg-white border-b border-[#e2e2df] flex items-center px-5 gap-3">
+      <div className="h-[44px] bg-white border-b border-[#e2e2df] flex items-center px-5 gap-3">
         <Link href="/dashboard" className="flex items-center gap-1.5 text-[13px] text-[#888] hover:text-[#1c1c1a]">
           <ArrowLeft size={13} /> Dashboard
         </Link>

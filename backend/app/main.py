@@ -8,6 +8,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import charts, ingest, journal, scanner, stocks, users, waitlist, watchlist
+
+try:
+    from app.routers import payments as payments_router
+    _payments_available = True
+except ImportError:
+    _payments_available = False
 from app.services.supabase import settings
 
 logger = logging.getLogger(__name__)
@@ -38,6 +44,8 @@ app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(charts.router)
 app.include_router(journal.router)
+if _payments_available:
+    app.include_router(payments_router.router)
 
 _scheduler: AsyncIOScheduler | None = None
 
