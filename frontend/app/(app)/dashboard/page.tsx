@@ -121,6 +121,19 @@ export default function DashboardPage() {
       sub: "Save scans and get notified after market close",
       badge: "New", badgeColor: "#5b63f5", badgeBg: "#eeeffe",
     },
+    {
+      href: "/options",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M2 11 L5 5 L8 8 L11 4 L14 7" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M11 4 L14 4 L14 7" stroke="#d97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ),
+      iconBg: "#fff8ec",
+      title: "Options",
+      sub: "Build strategies, visualise payoffs, compute Greeks",
+      badge: "New", badgeColor: "#d97706", badgeBg: "#fff8ec",
+    },
   ];
 
   return (

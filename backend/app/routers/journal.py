@@ -118,10 +118,72 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         month_map[month] = round(month_map.get(month, 0.0) + float(e["pnl"]), 2)
     monthly_pnl = [{"month": k, "pnl": v} for k, v in sorted(month_map.items())]
 
+    # ── Drawdown analysis ────────────────────────────────────────────────────
+    drawdown_curve = []
+    max_dd = 0.0
+    peak = 0.0
+    dd_start: str | None = None
+    longest_dd_days = 0
+    current_dd_start: str | None = None
+
+    for pt in equity_curve:
+        val = pt["cumulative_pnl"]
+        if val > peak:
+            peak = val
+            current_dd_start = None
+        dd = peak - val
+        dd_pct = (dd / abs(peak) * 100) if peak != 0 else 0.0
+        if dd > 0 and current_dd_start is None:
+            current_dd_start = pt["date"]
+        if dd > max_dd:
+            max_dd = dd
+            dd_start = current_dd_start or pt["date"]
+        drawdown_curve.append({
+            "date": pt["date"],
+            "drawdown": -round(dd, 2),         # negative = below peak
+            "drawdown_pct": -round(dd_pct, 2),
+        })
+
+    # Longest drawdown period in calendar days
+    if len(equity_curve) >= 2:
+        from datetime import date as date_
+        in_dd = False
+        dd_start_dt = None
+        for pt in equity_curve:
+            val = pt["cumulative_pnl"]
+            if val < peak:
+                if not in_dd:
+                    in_dd = True
+                    try:
+                        dd_start_dt = date_.fromisoformat(pt["date"])
+                    except Exception:
+                        dd_start_dt = None
+            else:
+                if in_dd and dd_start_dt:
+                    try:
+                        end_dt = date_.fromisoformat(pt["date"])
+                        span = (end_dt - dd_start_dt).days
+                        longest_dd_days = max(longest_dd_days, span)
+                    except Exception:
+                        pass
+                in_dd = False
+                dd_start_dt = None
+
+    total_pnl = equity_curve[-1]["cumulative_pnl"] if equity_curve else 0.0
+    recovery_factor = round(total_pnl / max_dd, 2) if max_dd > 0 else None
+    profit_factor_num = sum(float(e["pnl"]) for e in entries if e.get("pnl") and float(e["pnl"]) > 0)
+    profit_factor_den = abs(sum(float(e["pnl"]) for e in entries if e.get("pnl") and float(e["pnl"]) < 0))
+    profit_factor = round(profit_factor_num / profit_factor_den, 2) if profit_factor_den > 0 else None
+
     return {
-        "equity_curve": equity_curve,
+        "equity_curve":    equity_curve,
         "setup_breakdown": setup_breakdown,
-        "monthly_pnl": monthly_pnl,
+        "monthly_pnl":     monthly_pnl,
+        "drawdown_curve":  drawdown_curve,
+        "max_drawdown":    round(max_dd, 2),
+        "longest_dd_days": longest_dd_days,
+        "recovery_factor": recovery_factor,
+        "profit_factor":   profit_factor,
     }
 
 

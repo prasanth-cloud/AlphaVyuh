@@ -15,12 +15,14 @@ class UserResponse(BaseModel):
     plan: str
     plan_expires_at: str | None
     onboarding_completed: bool
+    telegram_chat_id: str | None = None
     created_at: str
 
 
 class UpdateUserRequest(BaseModel):
     full_name: str | None = None
     onboarding_completed: bool | None = None
+    telegram_chat_id: str | None = None
 
 
 @router.get("/me", response_model=UserResponse)
@@ -28,7 +30,7 @@ async def get_me(user_id: str = Depends(get_current_user_id)):
     client = get_admin_client()
     result = (
         client.table("users")
-        .select("id, email, full_name, avatar_url, plan, plan_expires_at, onboarding_completed, created_at")
+        .select("id, email, full_name, avatar_url, plan, plan_expires_at, onboarding_completed, telegram_chat_id, created_at")
         .eq("id", user_id)
         .single()
         .execute()
@@ -48,6 +50,8 @@ async def update_me(
         updates["full_name"] = body.full_name
     if body.onboarding_completed is not None:
         updates["onboarding_completed"] = body.onboarding_completed
+    if body.telegram_chat_id is not None:
+        updates["telegram_chat_id"] = body.telegram_chat_id or None
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
@@ -57,7 +61,7 @@ async def update_me(
         client.table("users")
         .update(updates)
         .eq("id", user_id)
-        .select("id, email, full_name, avatar_url, plan, plan_expires_at, onboarding_completed, created_at")
+        .select("id, email, full_name, avatar_url, plan, plan_expires_at, onboarding_completed, telegram_chat_id, created_at")
         .single()
         .execute()
     )

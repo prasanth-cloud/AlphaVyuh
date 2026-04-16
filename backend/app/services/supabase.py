@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
     anthropic_api_key: str = ""
+    telegram_bot_token: str = ""    # set via Railway: TELEGRAM_BOT_TOKEN
 
     class Config:
         env_file = ".env"

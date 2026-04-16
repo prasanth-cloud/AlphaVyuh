@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import alerts, charts, ingest, journal, scanner, stocks, users, waitlist, watchlist
+from app.routers import alerts, charts, ingest, journal, options, scanner, stocks, users, waitlist, watchlist
 
 try:
     from app.routers import payments as payments_router
@@ -47,6 +47,7 @@ app.include_router(waitlist.router)
 app.include_router(ingest.router)
 app.include_router(scanner.router)
 app.include_router(alerts.router)
+app.include_router(options.router)
 app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(charts.router)

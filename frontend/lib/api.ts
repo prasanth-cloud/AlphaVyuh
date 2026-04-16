@@ -612,12 +612,17 @@ export type JournalAnalytics = {
     avg_pnl: number;
   }[];
   monthly_pnl: { month: string; pnl: number }[];
+  drawdown_curve: { date: string; drawdown: number; drawdown_pct: number }[];
+  max_drawdown: number | null;
+  longest_dd_days: number;
+  recovery_factor: number | null;
+  profit_factor: number | null;
 };
 
 export async function getJournalAnalytics(): Promise<JournalAnalytics> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
-  if (!res.ok) return { equity_curve: [], setup_breakdown: [], monthly_pnl: [] };
+  if (!res.ok) return { equity_curve: [], setup_breakdown: [], monthly_pnl: [], drawdown_curve: [], max_drawdown: null, longest_dd_days: 0, recovery_factor: null, profit_factor: null };
   return res.json();
 }
 

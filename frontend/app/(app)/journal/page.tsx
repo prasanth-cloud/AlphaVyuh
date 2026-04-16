@@ -104,6 +104,41 @@ function EquityCurve({ data }: { data: { date: string; cumulative_pnl: number }[
   );
 }
 
+// ── Drawdown Chart SVG ────────────────────────────────────────────────────────
+
+function DrawdownChart({ data }: { data: { date: string; drawdown: number; drawdown_pct: number }[] }) {
+  if (data.length < 2) return null;
+  const hasDD = data.some(d => d.drawdown < 0);
+  if (!hasDD) return (
+    <div className="h-[100px] flex items-center justify-center text-[12px] text-[#26a65b]">
+      No drawdown — all-time high throughout
+    </div>
+  );
+  const W = 600, H = 100, PAD = 8;
+  const vals = data.map(d => d.drawdown);
+  const min = Math.min(...vals, -0.01);
+  const pts = data.map((d, i) => {
+    const x = PAD + (i / (data.length - 1)) * (W - PAD * 2);
+    const y = PAD + ((0 - d.drawdown) / (0 - min)) * (H - PAD * 2);
+    return `${x},${y}`;
+  });
+  const zeroY = PAD;
+  const fillPts = `${PAD},${H - PAD} ${pts.join(" ")} ${W - PAD},${H - PAD}`;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[100px]" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="dd-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#e5383b" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#e5383b" stopOpacity="0.04" />
+        </linearGradient>
+      </defs>
+      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="#f0f0ee" strokeWidth="1" />
+      <polygon points={fillPts} fill="url(#dd-grad)" />
+      <polyline points={pts.join(" ")} fill="none" stroke="#e5383b" strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function JournalPage() {
   const [tab, setTab] = useState<Tab>("trades");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -394,6 +429,28 @@ export default function JournalPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {/* Drawdown Analysis */}
+            {(analytics?.drawdown_curve?.length ?? 0) > 1 && (
+              <div>
+                <div className="text-[12px] font-semibold text-[#1c1c1a] mb-1">Drawdown</div>
+                <div className="text-[11px] text-[#aaa] mb-2">Underwater equity relative to all-time high</div>
+                <DrawdownChart data={analytics!.drawdown_curve} />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                  {[
+                    { label: "Max Drawdown",    val: analytics!.max_drawdown != null ? `₹${analytics!.max_drawdown.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", color: "#e5383b" },
+                    { label: "Longest DD",      val: analytics!.longest_dd_days ? `${analytics!.longest_dd_days}d` : "—", color: "#d97706" },
+                    { label: "Recovery Factor", val: analytics!.recovery_factor != null ? analytics!.recovery_factor.toFixed(2) : "—", color: analytics!.recovery_factor != null && analytics!.recovery_factor >= 1 ? "#26a65b" : "#e5383b" },
+                    { label: "Profit Factor",   val: analytics!.profit_factor   != null ? analytics!.profit_factor.toFixed(2)   : "—", color: analytics!.profit_factor   != null && analytics!.profit_factor   >= 1 ? "#26a65b" : "#e5383b" },
+                  ].map(item => (
+                    <div key={item.label} className="bg-[#f7f7f5] rounded-[8px] px-3 py-2.5 text-center">
+                      <div className="text-[14px] font-bold" style={{ color: item.color }}>{item.val}</div>
+                      <div className="text-[10px] text-[#aaa] mt-0.5">{item.label}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

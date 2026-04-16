@@ -10,9 +10,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+import httpx
+import logging
+
 from app.middleware.auth import get_current_user_id
-from app.routers.scanner import ScanFilters, ScanRequest, _apply_filters, SORT_KEYS
-from app.services.supabase import get_admin_client
+from app.routers.scanner import ScanFilters, _apply_filters, SORT_KEYS
+from app.services.supabase import get_admin_client, settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
@@ -249,8 +254,59 @@ async def run_all_alerts(trade_date: date) -> dict:
             "updated_at":      "now()",
         }).eq("id", alert["id"]).execute()
 
+    # Send Telegram notifications if bot token is configured
+    if settings.telegram_bot_token:
+        await _send_telegram_summaries(client, alerts, trade_date)
+
     return {
         "trade_date":   str(trade_date),
         "alerts_run":   len(alerts),
         "total_matches": total_matches,
     }
+
+
+async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> None:
+    """
+    Send a Telegram message to each user who has a Telegram chat_id stored,
+    summarising which of their alerts fired today.
+    """
+    token = settings.telegram_bot_token
+    if not token:
+        return
+
+    # Group alerts by user_id
+    from collections import defaultdict
+    user_alerts: dict[str, list[dict]] = defaultdict(list)
+    for alert in alerts:
+        if alert.get("last_match_count", 0):
+            user_alerts[alert["user_id"]].append(alert)
+
+    if not user_alerts:
+        return
+
+    # Fetch chat_ids for users who have them stored
+    user_ids = list(user_alerts.keys())
+    res = client.table("users").select("id,telegram_chat_id").in_("id", user_ids).execute()
+    chat_map = {r["id"]: r["telegram_chat_id"] for r in (res.data or []) if r.get("telegram_chat_id")}
+
+    if not chat_map:
+        return
+
+    async with httpx.AsyncClient(timeout=10) as http:
+        for user_id, fired in user_alerts.items():
+            chat_id = chat_map.get(user_id)
+            if not chat_id:
+                continue
+            lines = [f"📊 *Artha Scan Alerts — {trade_date}*\n"]
+            for a in fired:
+                count = a.get("last_match_count", 0)
+                lines.append(f"• *{a['name']}*: {count} stock{'s' if count != 1 else ''} matched")
+            lines.append("\nOpen Artha to see results →")
+            text = "\n".join(lines)
+            try:
+                await http.post(
+                    f"https://api.telegram.org/bot{token}/sendMessage",
+                    json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+                )
+            except Exception as e:
+                logger.warning(f"Telegram send failed for {user_id}: {e}")
