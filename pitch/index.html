@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlphaVyuh — Investor Pitch</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f7f6f2;
+    --bg3: #f0efe9;
+    --text: #1a1a18;
+    --text2: #6b6a64;
+    --text3: #9c9a92;
+    --border: rgba(0,0,0,0.1);
+    --border2: rgba(0,0,0,0.18);
+    --accent: #5b63f5;
+    --accent-bg: #eeeffe;
+    --accent-text: #3730a3;
+    --success: #27500A;
+    --success-bg: #EAF3DE;
+    --warn-bg: #FAEEDA;
+    --warn-text: #633806;
+    --radius: 10px;
+    --radius-lg: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --bg2: #252523;
+      --bg3: #2e2e2b;
+      --text: #e8e6dc;
+      --text2: #9c9a92;
+      --text3: #6b6a64;
+      --border: rgba(255,255,255,0.1);
+      --border2: rgba(255,255,255,0.18);
+      --accent: #818cf8;
+      --accent-bg: #1e1e40;
+      --accent-text: #a5b4fc;
+      --success: #C0DD97;
+      --success-bg: #1a2e08;
+      --warn-bg: #2e2008;
+      --warn-text: #FAC775;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; font-size: 15px; }
+
+  .page { max-width: 860px; margin: 0 auto; padding: 48px 32px 80px; }
+
+  /* Cover */
+  .cover { padding: 60px 0 48px; border-bottom: 0.5px solid var(--border); margin-bottom: 48px; }
+  .cover-tag { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--text3); margin-bottom: 20px; }
+  .cover-title { font-size: 44px; font-weight: 700; letter-spacing: -1px; line-height: 1.1; margin-bottom: 12px; }
+  .cover-title span { color: var(--accent); }
+  .cover-sub { font-size: 18px; color: var(--text2); max-width: 600px; line-height: 1.5; margin-bottom: 32px; }
+  .cover-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+  .cover-meta-item { font-size: 13px; }
+  .cover-meta-item strong { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text3); margin-bottom: 3px; }
+
+  /* Section */
+  .section { margin-bottom: 52px; }
+  .section-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .section-label::after { content: ''; flex: 1; height: 0.5px; background: var(--border); }
+  .section-title { font-size: 24px; font-weight: 600; line-height: 1.3; margin-bottom: 10px; letter-spacing: -0.3px; }
+  .section-body { color: var(--text2); line-height: 1.75; }
+
+  /* Metrics row */
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 16px 0; }
+  .metric { background: var(--bg2); border-radius: var(--radius); padding: 14px 16px; }
+  .metric-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+  .metric-val { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; }
+  .metric-note { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+  /* Cards */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; }
+  .card.featured { border: 2px solid var(--accent); }
+  .card-badge { display: inline-block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; padding: 3px 10px; border-radius: 20px; margin-bottom: 8px; }
+  .badge-blue { background: var(--accent-bg); color: var(--accent-text); }
+  .badge-green { background: var(--success-bg); color: var(--success); }
+  .badge-amber { background: var(--warn-bg); color: var(--warn-text); }
+  .card-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .card-price { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; margin: 6px 0; }
+  .card-body { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+  /* Pain grid */
+  .pain-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin: 16px 0; }
+  .pain { background: var(--bg2); border-radius: var(--radius); padding: 14px 16px; }
+  .pain-q { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+  .pain-now { font-size: 12px; color: var(--text3); margin-bottom: 3px; }
+  .pain-fix { font-size: 12px; color: var(--accent); }
+
+  /* Flow */
+  .flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 16px 0; }
+  .flow-step { background: var(--bg2); border: 0.5px solid var(--border2); border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 500; }
+  .flow-arr { color: var(--text3); }
+
+  /* Competitor table */
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+  .comp-table th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text3); border-bottom: 0.5px solid var(--border2); }
+  .comp-table td { padding: 10px 12px; border-bottom: 0.5px solid var(--border); }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table .artha-col { color: var(--accent); font-weight: 600; }
+  .check { color: #3B6D11; }
+  .cross { color: #A32D2D; }
+
+  /* Cost table */
+  .cost-row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 14px; }
+  .cost-row:last-child { border-bottom: none; font-weight: 600; font-size: 15px; padding-top: 12px; }
+  .cost-label { color: var(--text2); }
+
+  /* Dev tool cards */
+  .dev-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+  .dev-card { background: var(--bg2); border-radius: var(--radius); padding: 16px 18px; }
+  .dev-name { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .dev-cost { font-size: 24px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .dev-note { font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .dev-rec { border: 1.5px solid var(--accent); }
+
+  /* Moat items */
+  .moat-list { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; }
+  .moat { display: flex; gap: 14px; background: var(--bg2); border-radius: var(--radius); padding: 14px 16px; font-size: 13px; }
+  .moat-num { font-size: 18px; font-weight: 700; color: var(--text3); flex-shrink: 0; width: 24px; }
+  .moat-text { color: var(--text2); line-height: 1.6; }
+  .moat-text strong { color: var(--text); }
+
+  /* Ask section */
+  .ask-box { background: var(--accent-bg); border-radius: var(--radius-lg); padding: 24px 28px; margin-top: 16px; }
+  .ask-box p { color: var(--accent-text); line-height: 1.7; font-size: 15px; }
+
+  /* Interactive sliders */
+  .slider-section { background: var(--bg2); border-radius: var(--radius-lg); padding: 20px 24px; margin: 16px 0; }
+  .slider-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
+  .slider-row label { font-size: 13px; color: var(--text2); min-width: 140px; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .slider-row span { font-size: 13px; font-weight: 600; min-width: 60px; text-align: right; }
+  .result-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 16px; }
+  .result-item { background: var(--bg); border-radius: var(--radius); padding: 12px 14px; border: 0.5px solid var(--border); }
+  .result-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+  .result-val { font-size: 20px; font-weight: 700; }
+  .profit-box { margin-top: 12px; background: var(--success-bg); border-radius: 8px; padding: 12px 14px; }
+  .profit-box p { font-size: 13px; color: var(--success); font-weight: 600; }
+  .profit-box small { font-size: 12px; color: var(--success); }
+
+  /* Chart */
+  .chart-wrap { position: relative; width: 100%; height: 260px; margin: 20px 0; }
+
+  /* Footer */
+  .footer { margin-top: 60px; padding-top: 24px; border-top: 0.5px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: gap; }
+  .footer p { font-size: 12px; color: var(--text3); }
+
+  hr.divider { border: none; border-top: 0.5px solid var(--border); margin: 48px 0; }
+
+  blockquote { border-left: 3px solid var(--border2); padding: 10px 18px; margin: 16px 0; color: var(--text2); font-style: italic; font-size: 15px; }
+
+  @media (max-width: 600px) {
+    .page { padding: 28px 18px 60px; }
+    .cover-title { font-size: 32px; }
+    .cover-meta { gap: 20px; }
+    .comp-table { font-size: 11px; }
+    .comp-table td, .comp-table th { padding: 7px 6px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- COVER -->
+  <div class="cover">
+    <div class="cover-tag">Investor Pitch Deck — Confidential</div>
+    <div class="cover-title"><span>AlphaVyuh</span> — The Trading OS<br>for Indian Stock Traders</div>
+    <div class="cover-sub">A vertically integrated platform that replaces 4–5 fragmented tools with one connected workflow — and adds an AI layer that tells traders exactly where they're losing money.</div>
+    <div class="cover-meta">
+      <div class="cover-meta-item"><strong>Stage</strong>Pre-seed / Beta</div>
+      <div class="cover-meta-item"><strong>Market</strong>NSE / BSE India</div>
+      <div class="cover-meta-item"><strong>Model</strong>B2C SaaS</div>
+      <div class="cover-meta-item"><strong>Target raise</strong>₹1–2 Crore</div>
+      <div class="cover-meta-item"><strong>Revenue model</strong>₹1,999–₹4,999 / mo</div>
+    </div>
+  </div>
+
+  <!-- PROBLEM -->
+  <div class="section">
+    <div class="section-label">The problem</div>
+    <div class="section-title">Every serious Indian trader runs 4–5 disconnected apps every morning.</div>
+    <blockquote>"I scan on Chartink, chart on TradingView, check Screener.in for fundamentals, place the order on Kite, then manually log it into a spreadsheet — every single day."</blockquote>
+    <div class="section-body" style="margin-bottom: 16px;">That fragmentation isn't just inconvenient — it makes systematic improvement impossible. When your trade data lives in 5 places, you can never answer the one question that actually matters: <em>why do I keep losing?</em></div>
+    <div class="pain-grid">
+      <div class="pain">
+        <div class="pain-q">Why do I keep losing on breakouts?</div>
+        <div class="pain-now">Now: No tool connects scan results to trade outcomes.</div>
+        <div class="pain-fix">AlphaVyuh: AI cross-references your setup tags with P&L automatically.</div>
+      </div>
+      <div class="pain">
+        <div class="pain-q">Which setups actually work for me?</div>
+        <div class="pain-now">Now: Journal is a spreadsheet, disconnected from charts.</div>
+        <div class="pain-fix">AlphaVyuh: Trade journal auto-imports from broker with setup tagging.</div>
+      </div>
+      <div class="pain">
+        <div class="pain-q">How do I act fast when I spot a setup?</div>
+        <div class="pain-now">Now: Spot it in TradingView, scramble to Kite — 60 sec lost.</div>
+        <div class="pain-fix">AlphaVyuh: Click-to-order directly from the chart.</div>
+      </div>
+      <div class="pain">
+        <div class="pain-q">What caused my worst drawdown?</div>
+        <div class="pain-now">Now: Data across 3 apps, no equity curve, no root cause.</div>
+        <div class="pain-fix">AlphaVyuh: Full drawdown analysis with AI mistake pattern detection.</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- SOLUTION -->
+  <div class="section">
+    <div class="section-label">The solution</div>
+    <div class="section-title">One platform. The entire workflow, connected end-to-end.</div>
+    <div class="flow">
+      <div class="flow-step">Scan</div><span class="flow-arr">→</span>
+      <div class="flow-step">Watchlist</div><span class="flow-arr">→</span>
+      <div class="flow-step">Chart &amp; analyse</div><span class="flow-arr">→</span>
+      <div class="flow-step">Place order</div><span class="flow-arr">→</span>
+      <div class="flow-step">Journal auto-fills</div><span class="flow-arr">→</span>
+      <div class="flow-step">AI reviews mistakes</div>
+    </div>
+    <div class="section-body">Every step feeds the next. A stock found in the scanner is one click to watchlist. The chart has a buy button that routes to Zerodha. The trade auto-logs in the journal. A week later, AI surfaces: <em>"You lose 71% of the time when you buy in the last 30 minutes of the session."</em> No other platform does this.</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- MARKET -->
+  <div class="section">
+    <div class="section-label">Market size</div>
+    <div class="section-title">India's retail trading explosion is structural, not cyclical.</div>
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">Demat accounts (India)</div><div class="metric-val">80M+</div><div class="metric-note">Growing 20%/yr</div></div>
+      <div class="metric"><div class="metric-label">Active retail traders</div><div class="metric-val">~8M</div><div class="metric-note">Trade regularly</div></div>
+      <div class="metric"><div class="metric-label">Already paying for tools</div><div class="metric-val">~800K</div><div class="metric-note">Chartink, TradingView Pro</div></div>
+      <div class="metric"><div class="metric-label">NSE daily F&amp;O turnover</div><div class="metric-val">₹3T+</div><div class="metric-note">All-time highs in 2025</div></div>
+    </div>
+    <div class="section-body">Driven by zero-brokerage accounts (Zerodha has 13M+ users, Groww has 10M+), smartphone penetration, and post-COVID market participation. The tooling has not kept up with the growth. There is no Indian-built, India-first platform that covers the full trader workflow.</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- PRICING -->
+  <div class="section">
+    <div class="section-label">Pricing</div>
+    <div class="section-title">Replacing ₹5,500/mo of separate tools at ₹1,999/mo.</div>
+    <div class="section-body" style="margin-bottom: 16px;">A trader using TradingView Pro+ (₹3,500), Sensibull (₹1,200), and Chartink Premium (₹800) pays ₹5,500/month. AlphaVyuh replaces all three for ₹1,999 — and adds the journal and AI layer they don't have at all.</div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-badge badge-amber">Free tier</div>
+        <div class="card-title">Starter</div>
+        <div class="card-price">₹0</div>
+        <div class="card-body">Scanner (5 saved screens), 1 watchlist, basic charts, 3 months journal history. Acquisition funnel — no revenue, high conversion intent.</div>
+      </div>
+      <div class="card featured">
+        <div class="card-badge badge-blue">Core revenue driver</div>
+        <div class="card-title">Pro</div>
+        <div class="card-price">₹1,999<span style="font-size:14px;font-weight:400;color:var(--text2)">/mo</span></div>
+        <div class="card-body">Unlimited scanner, 100+ indicators, full charting, broker connect (Zerodha), auto-journal, AI mistake analysis, options strategy builder with payoff diagrams.</div>
+      </div>
+      <div class="card">
+        <div class="card-badge badge-green">High ACV</div>
+        <div class="card-title">Elite / Team</div>
+        <div class="card-price">₹4,999<span style="font-size:14px;font-weight:400;color:var(--text2)">/mo</span></div>
+        <div class="card-body">5 seats, API access, priority data feed, custom scan alerts, white-label journal exports, dedicated support. Targets prop desks and trading educators.</div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- UNIT ECONOMICS - INTERACTIVE -->
+  <div class="section">
+    <div class="section-label">Unit economics</div>
+    <div class="section-title">Strong SaaS margins. Break-even at just 25 subscribers.</div>
+    <div class="section-body" style="margin-bottom: 16px;">Adjust the sliders to model revenue at different scale points.</div>
+    <div class="slider-section">
+      <div class="slider-row">
+        <label>Pro subscribers</label>
+        <input type="range" min="0" max="5000" step="25" value="500" id="subs">
+        <span id="subs-out">500</span>
+      </div>
+      <div class="slider-row">
+        <label>Elite subscribers</label>
+        <input type="range" min="0" max="500" step="5" value="50" id="elite">
+        <span id="elite-out">50</span>
+      </div>
+      <div class="result-grid">
+        <div class="result-item"><div class="result-label">Monthly revenue</div><div class="result-val" id="mrr">—</div></div>
+        <div class="result-item"><div class="result-label">Annual run rate</div><div class="result-val" id="arr">—</div></div>
+        <div class="result-item"><div class="result-label">Infra cost / mo</div><div class="result-val" id="infra">—</div></div>
+        <div class="result-item"><div class="result-label">Gross margin</div><div class="result-val" id="margin">—</div></div>
+      </div>
+      <div class="profit-box" id="profit-box">
+        <p id="be-text">—</p>
+        <small id="be-sub">—</small>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- COSTS -->
+  <div class="section">
+    <div class="section-label">Running costs</div>
+    <div class="section-title">Monthly infra at 500 Pro users: ~₹62,500 (~6% of revenue).</div>
+    <div class="card" style="margin: 16px 0;">
+      <div class="cost-row"><span class="cost-label">TrueData NSE live feed (fixed, shared across all users)</span><span>₹18,000</span></div>
+      <div class="cost-row"><span class="cost-label">Razorpay transaction fees (~2% of revenue)</span><span>~₹20,000</span></div>
+      <div class="cost-row"><span class="cost-label">AI / LLM API — trade analysis per user</span><span>₹8,000</span></div>
+      <div class="cost-row"><span class="cost-label">Railway backend + FastAPI</span><span>₹5,800</span></div>
+      <div class="cost-row"><span class="cost-label">Vercel frontend hosting</span><span>₹4,200</span></div>
+      <div class="cost-row"><span class="cost-label">Supabase (database + auth)</span><span>₹3,500</span></div>
+      <div class="cost-row"><span class="cost-label">Monitoring, email, CDN, misc</span><span>₹3,000</span></div>
+      <div class="cost-row"><span class="cost-label">Total monthly infra</span><span>~₹62,500</span></div>
+    </div>
+    <div class="section-body">The dominant cost — TrueData's NSE data feed at ₹18K/month — is <strong>fixed regardless of user count</strong>. This means gross margins expand naturally as you scale. At 500 Pro users, infra is 6.2% of revenue. At 2,000 users, it drops below 3%.</div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- REVENUE PROJECTION -->
+  <div class="section">
+    <div class="section-label">Revenue projections</div>
+    <div class="section-title">Conservative path to ₹6Cr ARR by Year 3.</div>
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">Month 6 target</div><div class="metric-val">₹2.5L/mo</div><div class="metric-note">125 Pro, 10 Elite</div></div>
+      <div class="metric"><div class="metric-label">Year 1 ARR</div><div class="metric-val">₹60L</div><div class="metric-note">250 Pro, 25 Elite</div></div>
+      <div class="metric"><div class="metric-label">Year 2 ARR</div><div class="metric-val">₹2Cr</div><div class="metric-note">800 Pro, 80 Elite</div></div>
+      <div class="metric"><div class="metric-label">Year 3 ARR</div><div class="metric-val">₹6Cr+</div><div class="metric-note">2,000 Pro, 200 Elite</div></div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="revChart" role="img" aria-label="Projected ARR from launch to Year 3: ₹0, ₹30L, ₹60L, ₹2Cr, ₹6Cr">Projected ARR: Launch ₹0, Month 6 ₹30L, Year 1 ₹60L, Year 2 ₹2Cr, Year 3 ₹6Cr+</canvas>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- COMPETITOR -->
+  <div class="section">
+    <div class="section-label">Competitive landscape</div>
+    <div class="section-title">No existing player covers the full workflow.</div>
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Chartink</th>
+          <th>TradingView</th>
+          <th>Zerodha Kite</th>
+          <th>Sensibull</th>
+          <th class="artha-col">AlphaVyuh</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Stock scanner (50+ params)</td><td class="check">✓</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td><td class="artha-col check">✓</td></tr>
+        <tr><td>Pro charting (100+ indicators)</td><td class="cross">✗</td><td class="check">✓</td><td class="cross">✗</td><td class="cross">✗</td><td class="artha-col check">✓</td></tr>
+        <tr><td>Broker order execution</td><td class="cross">✗</td><td class="cross">✗</td><td class="check">✓</td><td class="cross">✗</td><td class="artha-col check">✓</td></tr>
+        <tr><td>Auto trade journal</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="artha-col check">✓</td></tr>
+        <tr><td>Options strategy builder</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="check">✓</td><td class="artha-col check">✓</td></tr>
+        <tr><td>AI mistake analysis</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="artha-col check">✓</td></tr>
+        <tr><td>Price (INR/month)</td><td>₹800</td><td>₹3,500</td><td>Free</td><td>₹1,200</td><td class="artha-col">₹1,999</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <!-- BUILD COST -->
+  <div class="section">
+    <div class="section-label">Build cost — AI coding tools</div>
+    <div class="section-title">Total development cost: $200–500. The era of lean SaaS is here.</div>
+    <div class="section-body" style="margin-bottom: 16px;">The entire platform can be built using AI coding agents — a fraction of the cost of a traditional dev team (₹30–50L/year). Core infrastructure is already live.</div>
+    <div class="dev-grid">
+      <div class="dev-card dev-rec">
+        <div class="card-badge badge-blue" style="margin-bottom:8px">Recommended</div>
+        <div class="dev-name">Claude Code</div>
+        <div class="dev-cost">$150–$400 total</div>
+        <div class="dev-note">Best for full-stack agentic development. Understands the full repo — Supabase, FastAPI, Next.js 14. Writes code, runs terminal commands, edits files, pushes to git. ~$30–50 per development phase. The primary build tool.</div>
+      </div>
+      <div class="dev-card">
+        <div class="dev-name">OpenAI Codex / o3</div>
+        <div class="dev-cost">$200–$600 total</div>
+        <div class="dev-note">Strong at isolated coding tasks and complex algorithm generation (scanner logic, options pricing). Use alongside Claude Code for specific technical modules. Less effective at whole-repo agentic work.</div>
+      </div>
+      <div class="dev-card">
+        <div class="dev-name">Local Ollama (Gemma 4)</div>
+        <div class="dev-cost">$0 (already running)</div>
+        <div class="dev-note">Running on MacBook Air M4. Zero API cost. Best for repetitive boilerplate — indicator configs, scanner parameter definitions, data processing scripts. Not suited for complex multi-file architecture work.</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 12px; background: var(--bg2); border-color: var(--border);">
+      <div class="card-title">Recommended strategy</div>
+      <div class="card-body" style="margin-top: 6px;">Claude Code as the primary agent ($30–50/sprint, one sprint per platform phase). Ollama/Gemma 4 locally for free boilerplate generation. Total build cost for all 4 phases of AlphaVyuh: <strong>$200–500</strong> — vs ₹40–60L to hire a 2-person dev team for the same scope.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- MOAT / WHY US -->
+  <div class="section">
+    <div class="section-label">Why us, why now</div>
+    <div class="section-title">The infrastructure is already built. We're not asking for money to start.</div>
+    <div class="moat-list">
+      <div class="moat"><div class="moat-num">1</div><div class="moat-text"><strong>We already shipped the hard parts.</strong> The NSE Bhavcopy scanner runs live on GitHub Actions across 3,400+ stocks. The Zerodha Kite Connect v3 integration — including binary WebSocket tick parsing, GTT stop-loss orders, and InstrumentManager — is complete. The Supabase + Next.js + FastAPI stack is deployed at alphavyuh.vercel.app. Most competitors would spend 3–4 months just getting to this point.</div></div>
+      <div class="moat"><div class="moat-num">2</div><div class="moat-text"><strong>The founder is the customer.</strong> We swing trade NSE stocks daily — following Minervini, Qullamaggie, and Zanger methodologies. The scanner was built for personal use first. That's the strongest possible signal of genuine problem-market fit: the builder felt the pain for years before productizing the solution.</div></div>
+      <div class="moat"><div class="moat-num">3</div><div class="moat-text"><strong>AI makes the journal defensible.</strong> Every competitor has charts or scanning. Nobody has a connected AI layer that analyzes your trade history and tells you where you're systematically losing money. This creates the retention moat: once a trader has 6 months of journal data in AlphaVyuh, switching cost is very high.</div></div>
+      <div class="moat"><div class="moat-num">4</div><div class="moat-text"><strong>Distribution is already there.</strong> The Indian trading community is extremely active on X (formerly Twitter), Telegram, and YouTube. Trader influencers with 100K+ followers regularly recommend tools to their audiences. CAC through community channels is low — traders trust other traders, not ads.</div></div>
+      <div class="moat"><div class="moat-num">5</div><div class="moat-text"><strong>The timing is perfect.</strong> NSE retail participation is at an all-time high. F&amp;O volumes have exploded 5x in 3 years. Zerodha's 13M+ user base is a ready distribution channel via API partnership. The market is primed for a professional-grade trader OS.</div></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- DEVELOPMENT PHASES -->
+  <div class="section">
+    <div class="section-label">Development roadmap</div>
+    <div class="section-title">4 phases. 18 weeks. Built with AI coding agents.</div>
+    <div class="section-body" style="margin-bottom: 20px;">Each phase ships a working, usable product — not a prototype. Revenue can begin at the end of Phase 1. The approach is AI-first: Claude Code as the primary agent, local Ollama for boilerplate, keeping dev cost a fraction of traditional hiring.</div>
+
+    <div style="display:flex; gap:0; margin: 20px 0 28px; overflow-x: auto;">
+      <div style="flex:1; min-width:140px; border:0.5px solid var(--border2); border-radius: 10px 0 0 10px; padding: 16px 14px; background: var(--bg2);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:6px;">Phase 1</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Core MVP</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Weeks 1–8</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent);">$50–80</div>
+        <div style="font-size:11px;color:var(--text3);">Claude Code cost</div>
+      </div>
+      <div style="flex:1; min-width:140px; border:0.5px solid var(--border2); border-left:none; padding: 16px 14px; background: var(--bg);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:6px;">Phase 2</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Full Platform</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Weeks 9–14</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent);">$60–100</div>
+        <div style="font-size:11px;color:var(--text3);">Claude Code cost</div>
+      </div>
+      <div style="flex:1; min-width:140px; border:0.5px solid var(--border2); border-left:none; padding: 16px 14px; background: var(--bg2);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:6px;">Phase 3</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">Broker + Journal</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Weeks 15–18</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent);">$50–80</div>
+        <div style="font-size:11px;color:var(--text3);">Claude Code cost</div>
+      </div>
+      <div style="flex:1; min-width:140px; border:0.5px solid var(--border2); border-left:none; border-radius: 0 10px 10px 0; padding: 16px 14px; background: var(--bg);">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:6px;">Phase 4</div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">AI + Growth</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:10px;">Ongoing</div>
+        <div style="font-size:18px;font-weight:700;color:var(--accent);">$40–60</div>
+        <div style="font-size:11px;color:var(--text3);">Claude Code cost</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;">
+
+      <div class="card" style="border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--accent);margin-bottom:4px;">Phase 1 — Weeks 1–8</div>
+            <div style="font-size:16px;font-weight:600;">Core MVP — Scanner + Charts + Auth + Payments</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:11px;color:var(--text3);">Build cost</div>
+            <div style="font-size:20px;font-weight:700;color:var(--accent);">$50–80</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:12px;">
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">What gets built</div>
+            <div style="color:var(--text2);line-height:1.7;">Supabase auth (signup/login/subscription), NSE stock scanner with 50+ parameters, custom scan builder, save-to-watchlist, TradingView Lightweight Charts with 15+ core indicators, Razorpay Pro subscription flow.</div>
+          </div>
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">Deliverable</div>
+            <div style="color:var(--text2);line-height:1.7;">A live, payable product. Users can sign up, pay ₹1,999/mo, scan NSE stocks, save watchlists, and view interactive charts. Revenue starts here.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:11px;background:var(--accent-bg);color:var(--accent-text);padding:3px 10px;border-radius:20px;">Supabase Auth</span>
+          <span style="font-size:11px;background:var(--accent-bg);color:var(--accent-text);padding:3px 10px;border-radius:20px;">NSE Scanner</span>
+          <span style="font-size:11px;background:var(--accent-bg);color:var(--accent-text);padding:3px 10px;border-radius:20px;">Watchlist</span>
+          <span style="font-size:11px;background:var(--accent-bg);color:var(--accent-text);padding:3px 10px;border-radius:20px;">Lightweight Charts</span>
+          <span style="font-size:11px;background:var(--accent-bg);color:var(--accent-text);padding:3px 10px;border-radius:20px;">Razorpay</span>
+          <span style="font-size:11px;background:var(--success-bg);color:var(--success);padding:3px 10px;border-radius:20px;">Revenue starts</span>
+        </div>
+      </div>
+
+      <div class="card" style="border-left: 3px solid #3B6D11; border-radius: 0 10px 10px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#3B6D11;margin-bottom:4px;">Phase 2 — Weeks 9–14</div>
+            <div style="font-size:16px;font-weight:600;">Full Platform — Complete Charting + Fundamentals</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:11px;color:var(--text3);">Build cost</div>
+            <div style="font-size:20px;font-weight:700;color:#3B6D11;">$60–100</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:12px;">
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">What gets built</div>
+            <div style="color:var(--text2);line-height:1.7;">100+ indicators (RSI, MACD, Bollinger, Ichimoku, VWAP, ATR, Stochastic), all timeframes (1m to 1M), drawing tools (trendlines, Fibonacci, channels), multi-chart layout, fundamentals panel (P/E, EPS, FII/DII, quarterly results), sector breadth overlay.</div>
+          </div>
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">Deliverable</div>
+            <div style="color:var(--text2);line-height:1.7;">TradingView-competitive charting experience. Users can do complete technical and fundamental analysis without leaving AlphaVyuh. Conversion from Free → Pro spikes here.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:11px;background:var(--success-bg);color:var(--success);padding:3px 10px;border-radius:20px;">100+ Indicators</span>
+          <span style="font-size:11px;background:var(--success-bg);color:var(--success);padding:3px 10px;border-radius:20px;">Drawing Tools</span>
+          <span style="font-size:11px;background:var(--success-bg);color:var(--success);padding:3px 10px;border-radius:20px;">Fundamentals Panel</span>
+          <span style="font-size:11px;background:var(--success-bg);color:var(--success);padding:3px 10px;border-radius:20px;">Multi-chart Layout</span>
+          <span style="font-size:11px;background:var(--success-bg);color:var(--success);padding:3px 10px;border-radius:20px;">Sector Breadth</span>
+        </div>
+      </div>
+
+      <div class="card" style="border-left: 3px solid #854F0B; border-radius: 0 10px 10px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#854F0B;margin-bottom:4px;">Phase 3 — Weeks 15–18</div>
+            <div style="font-size:16px;font-weight:600;">Broker + Journal — The Differentiator</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:11px;color:var(--text3);">Build cost</div>
+            <div style="font-size:20px;font-weight:700;color:#854F0B;">$50–80</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:12px;">
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">What gets built</div>
+            <div style="color:var(--text2);line-height:1.7;">Zerodha Kite Connect v3 integration (click-to-order from chart, order book, portfolio view), auto trade journal (every trade imports from broker), setup tagging, screenshot attach, options strategy builder with payoff diagrams and Greeks, post-trade P&amp;L analytics.</div>
+          </div>
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">Deliverable</div>
+            <div style="color:var(--text2);line-height:1.7;">The moat. No competitor has this combination. Once traders have 3+ months of journal data in AlphaVyuh, churn drops to near zero. This phase creates the retention engine.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:11px;background:var(--warn-bg);color:var(--warn-text);padding:3px 10px;border-radius:20px;">Zerodha Kite Connect</span>
+          <span style="font-size:11px;background:var(--warn-bg);color:var(--warn-text);padding:3px 10px;border-radius:20px;">Auto Journal</span>
+          <span style="font-size:11px;background:var(--warn-bg);color:var(--warn-text);padding:3px 10px;border-radius:20px;">Options Strategy Builder</span>
+          <span style="font-size:11px;background:var(--warn-bg);color:var(--warn-text);padding:3px 10px;border-radius:20px;">Trade P&amp;L Analytics</span>
+          <span style="font-size:11px;background:var(--warn-bg);color:var(--warn-text);padding:3px 10px;border-radius:20px;">Greeks + Payoff</span>
+        </div>
+      </div>
+
+      <div class="card" style="border-left: 3px solid #534AB7; border-radius: 0 10px 10px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#534AB7;margin-bottom:4px;">Phase 4 — Ongoing</div>
+            <div style="font-size:16px;font-weight:600;">AI + Growth — The Intelligence Layer</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:11px;color:var(--text3);">Build cost</div>
+            <div style="font-size:20px;font-weight:700;color:#534AB7;">$40–60</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-bottom:12px;">
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">What gets built</div>
+            <div style="color:var(--text2);line-height:1.7;">AI MistakeEngine (surfaces patterns: "you lose on gap-up buys after 2pm"), Telegram/email alerts for scan triggers, mobile-responsive PWA, additional broker integrations (Fyers, Upstox, Angel One), NRI/USD pricing, and eventually US market stocks.</div>
+          </div>
+          <div style="background:var(--bg2);border-radius:8px;padding:10px 12px;font-size:12px;">
+            <div style="font-weight:600;margin-bottom:4px;">Deliverable</div>
+            <div style="color:var(--text2);line-height:1.7;">The product that no one else can easily replicate. AI insights personalized to each trader's history. This is the version that justifies Series A and international expansion.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:11px;background:#EEEDFE;color:#3C3489;padding:3px 10px;border-radius:20px;">AI MistakeEngine</span>
+          <span style="font-size:11px;background:#EEEDFE;color:#3C3489;padding:3px 10px;border-radius:20px;">Telegram Alerts</span>
+          <span style="font-size:11px;background:#EEEDFE;color:#3C3489;padding:3px 10px;border-radius:20px;">Mobile PWA</span>
+          <span style="font-size:11px;background:#EEEDFE;color:#3C3489;padding:3px 10px;border-radius:20px;">Multi-broker</span>
+          <span style="font-size:11px;background:#EEEDFE;color:#3C3489;padding:3px 10px;border-radius:20px;">NRI / USD expansion</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- TOTAL COST BREAKDOWN -->
+  <div class="section">
+    <div class="section-label">Total cost to build</div>
+    <div class="section-title">Full platform cost: ₹20,000–₹45,000. Vs ₹40–60L to hire a team.</div>
+    <div class="section-body" style="margin-bottom: 20px;">This is where AI-first development changes the economics of building SaaS entirely. Here's the complete, honest cost breakdown to go from today's beta to a full production platform.</div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:20px;">
+
+      <div style="background:var(--bg2);border-radius:12px;padding:18px 20px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:12px;">AI coding agents (one-time build)</div>
+        <div class="cost-row"><span class="cost-label">Phase 1 — Claude Code</span><span>$50–80</span></div>
+        <div class="cost-row"><span class="cost-label">Phase 2 — Claude Code</span><span>$60–100</span></div>
+        <div class="cost-row"><span class="cost-label">Phase 3 — Claude Code</span><span>$50–80</span></div>
+        <div class="cost-row"><span class="cost-label">Phase 4 — Claude Code</span><span>$40–60</span></div>
+        <div class="cost-row"><span class="cost-label">OpenAI o3 (complex algos)</span><span>$30–60</span></div>
+        <div class="cost-row"><span class="cost-label">Ollama / local (boilerplate)</span><span>$0</span></div>
+        <div class="cost-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:10px;"><span style="font-weight:600;">Total build cost</span><span style="font-size:17px;font-weight:700;color:var(--accent);">$230–380</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;">≈ ₹19,000–₹32,000 at current rates</div>
+      </div>
+
+      <div style="background:var(--bg2);border-radius:12px;padding:18px 20px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:12px;">One-time setup costs (INR)</div>
+        <div class="cost-row"><span class="cost-label">NSE data vendor license</span><span>₹50,000–₹1L</span></div>
+        <div class="cost-row"><span class="cost-label">SEBI / RA registration</span><span>₹10,000–₹25,000</span></div>
+        <div class="cost-row"><span class="cost-label">Company incorporation</span><span>₹15,000–₹25,000</span></div>
+        <div class="cost-row"><span class="cost-label">Legal (DPDP compliance)</span><span>₹20,000–₹40,000</span></div>
+        <div class="cost-row"><span class="cost-label">Domain + SSL + branding</span><span>₹5,000–₹10,000</span></div>
+        <div class="cost-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:10px;"><span style="font-weight:600;">Total one-time setup</span><span style="font-size:17px;font-weight:700;color:var(--accent);">₹1L–₹2L</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;">Mostly regulatory — unavoidable for a fintech</div>
+      </div>
+
+      <div style="background:var(--bg2);border-radius:12px;padding:18px 20px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text3);margin-bottom:12px;">Monthly recurring (at launch)</div>
+        <div class="cost-row"><span class="cost-label">TrueData NSE feed</span><span>₹18,000</span></div>
+        <div class="cost-row"><span class="cost-label">Railway + Vercel + Supabase</span><span>₹13,500</span></div>
+        <div class="cost-row"><span class="cost-label">AI API (trade analysis)</span><span>₹8,000</span></div>
+        <div class="cost-row"><span class="cost-label">Razorpay fees (~2%)</span><span>Variable</span></div>
+        <div class="cost-row"><span class="cost-label">Monitoring + misc</span><span>₹3,000</span></div>
+        <div class="cost-row" style="border-top:1px solid var(--border2);margin-top:4px;padding-top:10px;"><span style="font-weight:600;">Fixed monthly floor</span><span style="font-size:17px;font-weight:700;color:var(--accent);">~₹42,500</span></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;">Covered by just 22 Pro subscribers</div>
+      </div>
+
+    </div>
+
+    <div style="background:var(--bg2);border-radius:12px;padding:20px 24px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px;">Build cost comparison — AlphaVyuh vs traditional approach</div>
+      <div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>AI-first (Claude Code + Ollama)</span><span style="font-weight:600;color:var(--accent);">₹20K–₹32K</span></div>
+        <div style="background:var(--bg3);border-radius:4px;height:10px;overflow:hidden;"><div style="height:100%;width:1%;background:var(--accent);border-radius:4px;"></div></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>Freelancer dev team (6 months)</span><span style="font-weight:600;">₹3L–₹8L</span></div>
+        <div style="background:var(--bg3);border-radius:4px;height:10px;overflow:hidden;"><div style="height:100%;width:12%;background:var(--text3);border-radius:4px;"></div></div>
+      </div>
+      <div style="margin-bottom:4px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px;"><span>In-house dev team (2 engineers, 1 year)</span><span style="font-weight:600;">₹40L–₹60L</span></div>
+        <div style="background:var(--bg3);border-radius:4px;height:10px;overflow:hidden;"><div style="height:100%;width:100%;background:#D05538;border-radius:4px;"></div></div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;">AI-first development is 100–200x cheaper than traditional hiring for this scope of product.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- THE ASK -->
+  <div class="section">
+    <div class="section-label">The ask</div>
+    <div class="section-title">₹1–2 Crore pre-seed to reach 250 paying subscribers and prove PMF.</div>
+    <div class="metrics">
+      <div class="metric"><div class="metric-label">Raise size</div><div class="metric-val">₹1–2Cr</div><div class="metric-note">Pre-seed / angel</div></div>
+      <div class="metric"><div class="metric-label">Product &amp; data</div><div class="metric-val">50%</div><div class="metric-note">Full build + NSE license</div></div>
+      <div class="metric"><div class="metric-label">Growth &amp; community</div><div class="metric-val">30%</div><div class="metric-note">Influencer, Telegram, events</div></div>
+      <div class="metric"><div class="metric-label">Legal &amp; compliance</div><div class="metric-val">20%</div><div class="metric-note">SEBI, DPDP Act 2025, RA</div></div>
+    </div>
+    <div class="ask-box">
+      <p>At 250 Pro subscribers (our 12-month target), AlphaVyuh generates ₹60L ARR at ~68% gross margin — proof of product-market fit and a clear path to Series A. The raise gets us to that milestone. The infrastructure is already live. The market timing is right. The team trades the product daily. We're raising to scale what already works, not to start from zero.</p>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <p>AlphaVyuh — Confidential. For discussion purposes only. April 2026.</p>
+    <p>alphavyuh.vercel.app</p>
+  </div>
+
+</div>
+
+<script>
+  function fmt(n) {
+    if (n >= 10000000) return '₹' + (n / 10000000).toFixed(1) + 'Cr';
+    if (n >= 100000) return '₹' + Math.round(n / 100000) + 'L';
+    if (n >= 1000) return '₹' + Math.round(n / 1000) + 'K';
+    return '₹' + Math.round(n);
+  }
+
+  function calc() {
+    const s = parseInt(document.getElementById('subs').value);
+    const e = parseInt(document.getElementById('elite').value);
+    document.getElementById('subs-out').textContent = s;
+    document.getElementById('elite-out').textContent = e;
+    const mrr = s * 1999 + e * 4999;
+    const infra = 62500 + Math.max(0, (s - 500)) * 80;
+    const margin = mrr > 0 ? Math.max(0, Math.round((mrr - infra) / mrr * 100)) : 0;
+    document.getElementById('mrr').textContent = mrr > 0 ? fmt(mrr) : '₹0';
+    document.getElementById('arr').textContent = mrr > 0 ? fmt(mrr * 12) : '₹0';
+    document.getElementById('infra').textContent = fmt(infra);
+    document.getElementById('margin').textContent = margin + '%';
+    const bt = document.getElementById('be-text');
+    const bs = document.getElementById('be-sub');
+    if (mrr >= infra && mrr > 0) {
+      bt.textContent = 'Profitable at current scale';
+      bs.textContent = 'Revenue (' + fmt(mrr) + '/mo) exceeds infra (' + fmt(infra) + '/mo) — ' + margin + '% gross margin';
+    } else {
+      const need = Math.ceil((infra - e * 4999) / 1999);
+      bt.textContent = 'Need ' + Math.max(0, need) + ' more Pro subscribers to break even';
+      bs.textContent = 'Currently ' + fmt(Math.abs(mrr - infra)) + '/mo below break-even';
+    }
+  }
+
+  document.getElementById('subs').addEventListener('input', calc);
+  document.getElementById('elite').addEventListener('input', calc);
+  calc();
+
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const textColor = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)';
+  const barColor = isDark ? 'rgba(91,99,245,0.75)' : 'rgba(91,99,245,0.75)';
+  const barBorder = isDark ? '#818cf8' : '#5b63f5';
+
+  new Chart(document.getElementById('revChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Launch', 'Month 6', 'Year 1', 'Year 2', 'Year 3'],
+      datasets: [{
+        label: 'ARR',
+        data: [0, 3000000, 6000000, 20000000, 60000000],
+        backgroundColor: ['rgba(100,100,100,0.15)', barColor, barColor, barColor, barColor],
+        borderColor: ['rgba(100,100,100,0.4)', barBorder, barBorder, barBorder, barBorder],
+        borderWidth: 1,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.raw) } }
+      },
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 12 } } },
+        y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 12 }, callback: v => fmt(v) }, beginAtZero: true }
+      }
+    }
+  });
+</script>
+</body>
+</html>

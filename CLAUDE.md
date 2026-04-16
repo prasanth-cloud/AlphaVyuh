@@ -1,10 +1,13 @@
-# Artha — The Trading OS for Indian Stock Traders
+# AlphaVyuh — The Trading OS for Indian Stock Traders
 # CLAUDE.md — Product Specification & Build Guide
 
 ## Product Vision
 One platform that replaces 4–5 fragmented tools (Chartink + TradingView + Screener.in + Kite + spreadsheet) with a connected end-to-end workflow — and adds an AI layer that tells traders exactly where they're losing money.
 
 **Workflow**: Scan → Watchlist → Chart & analyse → Place order → Journal auto-fills → AI reviews mistakes
+
+## Pitch Deck
+Interactive investor pitch deck at `pitch/index.html` — open in browser. Covers problem, solution, market size, pricing, unit economics (interactive sliders), revenue projections, competitive landscape, build costs, moat, and the ask (₹1–2Cr pre-seed).
 
 ## Stack
 - **Frontend**: Next.js 14 App Router, TypeScript, Tailwind CSS — deployed on Vercel
@@ -32,29 +35,31 @@ One platform that replaces 4–5 fragmented tools (Chartink + TradingView + Scre
 - [x] Dashboard with market breadth
 - [x] Deploy: Vercel (frontend) + Railway (backend) + Supabase
 
-## Phase 2 — Full Platform (NEXT)
-- [ ] **Razorpay subscription payments** (Pro ₹1,999/mo + Elite ₹4,999/mo) ← HIGHEST PRIORITY
-- [ ] **Plan-based access control** (enforce free limits on scanner/watchlist/charts)
-- [ ] **Billing/settings page** with plan status, cancel, upgrade CTA
-- [ ] **Additional chart indicators**: Bollinger Bands, VWAP, Stochastic, Ichimoku, ATR, Volume Profile
-- [ ] **Multiple timeframes** in charts (1D currently; add weekly, monthly)
-- [ ] **Fundamentals panel** on chart sidebar (P/E, EPS, FII/DII, delivery %)
-- [ ] **Sector breadth overlay** on scanner/dashboard
-- [ ] **Scan result alerts** (save a scan, email when stocks match)
+## Phase 2 — Full Platform (COMPLETE)
+- [x] Razorpay subscription payments (Pro ₹1,999/mo + Elite ₹4,999/mo)
+- [x] Plan-based access control (free limits on scanner/watchlist/charts/journal)
+- [x] Billing/settings page with plan status and upgrade CTA
+- [x] Additional chart indicators: Bollinger Bands, VWAP, Stochastic, ATR
+- [x] Fundamentals panel on chart sidebar (P/E, EPS, market cap, growth via yfinance)
+- [x] Sector breadth overlay on scanner/dashboard
+- [x] Scan result alerts (save a scan, Telegram notification after market close)
+- [x] AI trade journal analysis (Claude API — requires Anthropic credits)
 
-## Phase 3 — Broker + Journal Intelligence (FUTURE)
-- [ ] Zerodha Kite Connect v3 integration (click-to-order from chart)
-- [ ] Auto trade journal (import from Zerodha)
-- [ ] Setup tagging + screenshot attach
-- [ ] Options strategy builder with payoff diagrams + Greeks
-- [ ] Equity curve chart in journal
-- [ ] Drawdown analysis + per-setup win rate
+## Phase 3 — Broker + Journal Intelligence (COMPLETE)
+- [x] Options strategy builder with payoff diagrams + Greeks (Black-Scholes, pure Python)
+- [x] Drawdown analysis in journal analytics (equity curve, max drawdown, recovery/profit factors)
+- [x] Telegram scan alerts (notify users via bot after daily market close)
+- [x] User profile settings (/settings/profile) — display name + Telegram Chat ID linking
+- [ ] Zerodha Kite Connect v3 integration (click-to-order from chart) — NEXT
+- [ ] Auto trade journal (import from Zerodha) — NEXT
 
-## Phase 4 — AI + Growth (FUTURE)
-- [ ] **AI MistakeEngine**: surfaces patterns from journal ("you lose 71% on gap-up buys after 2pm")
-- [ ] Telegram/email alerts for scan triggers
-- [ ] Mobile PWA (responsive + installable)
+## Phase 4 — AI + Growth (IN PROGRESS)
+- [x] Mobile PWA: manifest.json, service worker, offline fallback page
+- [x] Telegram alerts infrastructure (backend ready; set TELEGRAM_BOT_TOKEN on Railway)
+- [ ] AI MistakeEngine: surfaces patterns from journal ("you lose 71% on gap-up buys after 2pm")
 - [ ] Multi-broker support (Fyers, Upstox, Angel One)
+- [ ] NRI / USD pricing tier
+- [ ] US market stocks expansion
 
 ## Key Business Metrics
 - Break-even: 22 Pro subscribers
@@ -66,6 +71,9 @@ One platform that replaces 4–5 fragmented tools (Chartink + TradingView + Scre
 - Frontend: https://frontend-nine-xi-14.vercel.app (alias: artha-cyan.vercel.app when domain is set)
 - Backend API: https://alphavyuh-production.up.railway.app
 - Supabase project: fyxltykqdvacbdgmeucf
+
+## Pending env vars (set on Railway when ready)
+- `TELEGRAM_BOT_TOKEN` — enables Telegram scan alert notifications
 
 ## Coding Standards
 - All pages are `"use client"` Next.js components with Tailwind

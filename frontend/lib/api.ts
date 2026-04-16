@@ -189,7 +189,12 @@ export async function runScan(
     headers,
     body: JSON.stringify({ filters, sort_by, sort_order }),
   });
-  if (!res.ok) throw new Error("Scan failed");
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("Session expired — please refresh the page");
+    if (res.status === 503 || res.status === 502) throw new Error("Server is temporarily unavailable — try again in a moment");
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail ?? `Scan failed (${res.status})`);
+  }
   return res.json();
 }
 
