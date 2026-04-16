@@ -799,3 +799,40 @@ export async function getRecentAlertMatches(): Promise<ScanAlertMatch[]> {
   const data = await res.json();
   return data.matches;
 }
+
+export type UserProfile = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  plan: string;
+  plan_expires_at: string | null;
+  onboarding_completed: boolean;
+  telegram_chat_id: string | null;
+  created_at: string;
+};
+
+export async function getMe(): Promise<UserProfile> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/me`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch profile");
+  return res.json();
+}
+
+export async function updateMe(updates: {
+  full_name?: string;
+  onboarding_completed?: boolean;
+  telegram_chat_id?: string;
+}): Promise<UserProfile> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/me`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to update profile");
+  }
+  return res.json();
+}

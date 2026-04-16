@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
+import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -11,12 +12,31 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "AlphaVyuh — Your strategic edge in the market",
   description: "A unified trading platform for NSE and BSE traders.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "AlphaVyuh",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1c1c1a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={dmSans.variable}>
-      <body className="font-sans antialiased">{children}</body>
+      <head>
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
+      <body className="font-sans antialiased">
+        {children}
+        <ServiceWorkerRegistrar />
+      </body>
     </html>
   );
 }
