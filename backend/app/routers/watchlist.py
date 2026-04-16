@@ -77,20 +77,67 @@ def _enrich_items(client, items: list) -> list:
 @router.get("")
 async def get_watchlists(user_id: str = Depends(get_current_user_id)):
     client = get_admin_client()
+
+    # 1 – all watchlists
     wl_res = client.table("watchlists") \
         .select("id, name, sort_order, created_at") \
         .eq("user_id", user_id) \
         .order("sort_order") \
         .execute()
-
     watchlists = wl_res.data or []
+    if not watchlists:
+        return {"watchlists": []}
+
+    wl_ids = [wl["id"] for wl in watchlists]
+
+    # 2 – all items across all watchlists in ONE query
+    items_res = client.table("watchlist_items") \
+        .select("watchlist_id, symbol, sort_order, added_at") \
+        .in_("watchlist_id", wl_ids) \
+        .order("sort_order") \
+        .execute()
+    all_items = items_res.data or []
+
+    # 3 – latest trade date (once)
+    quote_map: dict = {}
+    all_symbols = list({item["symbol"] for item in all_items})
+    if all_symbols:
+        date_res = client.table("daily_ohlcv") \
+            .select("trade_date").order("trade_date", desc=True).limit(1).execute()
+        if date_res.data:
+            latest_date = date_res.data[0]["trade_date"]
+            # 4 – quotes for ALL symbols in ONE query
+            quotes_res = client.table("daily_ohlcv") \
+                .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14,"
+                        "stock_universe(company_name, sector)") \
+                .eq("trade_date", latest_date) \
+                .in_("symbol", all_symbols) \
+                .execute()
+            for q in (quotes_res.data or []):
+                su = q.get("stock_universe") or {}
+                if isinstance(su, list):
+                    su = su[0] if su else {}
+                close = float(q["close"] or 0)
+                prev  = float(q["prev_close"] or 0)
+                vol   = int(q["volume"] or 0)
+                avg   = int(q["avg_volume_20d"] or 0)
+                quote_map[q["symbol"]] = {
+                    "company_name": su.get("company_name"),
+                    "sector":       su.get("sector"),
+                    "close":        close,
+                    "pct_change":   round((close - prev) / prev * 100, 2) if prev else None,
+                    "volume_ratio": round(vol / avg, 2) if avg else None,
+                    "rsi_14":       float(q["rsi_14"]) if q["rsi_14"] is not None else None,
+                }
+
+    # group items by watchlist_id and merge quotes
+    items_by_wl: dict = {}
+    for item in all_items:
+        wid = item["watchlist_id"]
+        items_by_wl.setdefault(wid, []).append({**item, **quote_map.get(item["symbol"], {})})
+
     for wl in watchlists:
-        items_res = client.table("watchlist_items") \
-            .select("symbol, sort_order, added_at") \
-            .eq("watchlist_id", wl["id"]) \
-            .order("sort_order") \
-            .execute()
-        wl["items"] = _enrich_items(client, items_res.data or [])
+        wl["items"] = items_by_wl.get(wl["id"], [])
 
     return {"watchlists": watchlists}
 

@@ -1,0 +1,238 @@
+"use client";
+
+import { useState } from "react";
+import { X } from "lucide-react";
+import { placeOrder } from "@/lib/api";
+import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
+
+const SETUP_TYPES = [
+  { value: "", label: "— Select setup —" },
+  { value: "breakout", label: "Breakout" },
+  { value: "pullback", label: "Pullback" },
+  { value: "reversal", label: "Reversal" },
+  { value: "momentum", label: "Momentum" },
+  { value: "other",    label: "Other" },
+];
+
+type Props = {
+  symbol:      string;
+  currentPrice: number;
+  defaultSide: "buy" | "sell";
+  onClose:     () => void;
+  onFilled:    (result: OrderResult) => void;
+};
+
+export default function OrderModal({ symbol, currentPrice, defaultSide, onClose, onFilled }: Props) {
+  const [side, setSide]             = useState<"buy" | "sell">(defaultSide);
+  const [quantity, setQuantity]     = useState("1");
+  const [price, setPrice]           = useState(currentPrice.toFixed(2));
+  const [stopLoss, setStopLoss]     = useState("");
+  const [target, setTarget]         = useState("");
+  const [setupType, setSetupType]   = useState("");
+  const [notes, setNotes]           = useState("");
+  const [placing, setPlacing]       = useState(false);
+  const [error, setError]           = useState("");
+
+  const priceNum = parseFloat(price) || 0;
+  const slNum    = parseFloat(stopLoss) || 0;
+  const tgtNum   = parseFloat(target) || 0;
+  const qtyNum   = parseInt(quantity) || 1;
+
+  const risk   = slNum  > 0 ? Math.abs(priceNum - slNum) * qtyNum  : null;
+  const reward = tgtNum > 0 ? Math.abs(tgtNum   - priceNum) * qtyNum : null;
+  const rr     = risk && reward && risk > 0 ? (reward / risk).toFixed(2) : null;
+  const invest = priceNum * qtyNum;
+
+  async function submit() {
+    if (!quantity || !price || parseFloat(price) <= 0 || parseInt(quantity) <= 0) {
+      setError("Enter a valid price and quantity");
+      return;
+    }
+    setPlacing(true);
+    setError("");
+    try {
+      const req: PlaceOrderRequest = {
+        symbol,
+        side,
+        quantity: qtyNum,
+        price:    priceNum,
+        order_type: "market",
+        ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
+        ...(tgtNum > 0 ? { target_price: tgtNum } : {}),
+        ...(setupType   ? { setup_type:  setupType } : {}),
+        ...(notes       ? { notes }               : {}),
+      };
+      const result = await placeOrder(req);
+      onFilled(result);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Order failed");
+    } finally {
+      setPlacing(false);
+    }
+  }
+
+  const isBuy = side === "buy";
+  const accent = isBuy ? "#26a65b" : "#e5383b";
+  const accentBg = isBuy ? "#edfaf3" : "#fff0f0";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-[14px] shadow-2xl w-[380px] max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0f0ee]">
+          <div className="flex items-center gap-3">
+            <span className="text-[16px] font-bold text-[#1c1c1a]">{symbol}</span>
+            <span className="text-[12px] text-[#888]">₹{currentPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          </div>
+          <button onClick={onClose} className="text-[#aaa] hover:text-[#555] transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {/* BUY / SELL toggle */}
+          <div className="flex gap-2">
+            {(["buy", "sell"] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setSide(s)}
+                className="flex-1 py-2.5 rounded-[8px] text-[14px] font-bold transition-all"
+                style={side === s
+                  ? { background: s === "buy" ? "#26a65b" : "#e5383b", color: "white" }
+                  : { background: "#f7f7f5", color: "#aaa" }
+                }
+              >
+                {s.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Price */}
+          <div>
+            <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+              Price (₹)
+            </label>
+            <input
+              type="number"
+              value={price}
+              onChange={e => setPrice(e.target.value)}
+              step="0.05"
+              className="w-full text-[14px] font-semibold border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#5b63f5] tabular-nums"
+              style={{ borderColor: accent + "66" }}
+            />
+          </div>
+
+          {/* Quantity */}
+          <div>
+            <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+              Quantity
+            </label>
+            <input
+              type="number"
+              value={quantity}
+              onChange={e => setQuantity(e.target.value)}
+              min="1"
+              step="1"
+              className="w-full text-[14px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#5b63f5]"
+            />
+          </div>
+
+          {/* Investment summary */}
+          {invest > 0 && (
+            <div className="rounded-[8px] px-3 py-2.5 text-[12px] flex items-center justify-between"
+              style={{ background: accentBg }}>
+              <span style={{ color: accent }} className="font-semibold">
+                Total investment: ₹{invest.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </span>
+              {rr && (
+                <span className="text-[#888]">R:R = {rr}</span>
+              )}
+            </div>
+          )}
+
+          {/* Stop Loss & Target */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+                Stop Loss
+              </label>
+              <input
+                type="number"
+                value={stopLoss}
+                onChange={e => setStopLoss(e.target.value)}
+                placeholder="Optional"
+                step="0.05"
+                className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none focus:border-[#e5383b]"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+                Target
+              </label>
+              <input
+                type="number"
+                value={target}
+                onChange={e => setTarget(e.target.value)}
+                placeholder="Optional"
+                step="0.05"
+                className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none focus:border-[#26a65b]"
+              />
+            </div>
+          </div>
+
+          {/* Risk breakdown */}
+          {(risk || reward) && (
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              {risk   && <div className="text-center py-1.5 rounded-md bg-[#fff0f0] text-[#e5383b] font-semibold">Risk ₹{risk.toFixed(0)}</div>}
+              {reward && <div className="text-center py-1.5 rounded-md bg-[#edfaf3] text-[#26a65b] font-semibold">Reward ₹{reward.toFixed(0)}</div>}
+            </div>
+          )}
+
+          {/* Setup */}
+          <div>
+            <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+              Setup Type
+            </label>
+            <select
+              value={setupType}
+              onChange={e => setSetupType(e.target.value)}
+              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none bg-white focus:border-[#5b63f5]"
+            >
+              {SETUP_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
+              Notes (optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Entry rationale, market context…"
+              rows={2}
+              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none resize-none focus:border-[#5b63f5]"
+            />
+          </div>
+
+          {error && <div className="text-[12px] text-[#e5383b] bg-[#fff0f0] rounded-lg px-3 py-2">{error}</div>}
+
+          {/* Submit */}
+          <button
+            onClick={submit}
+            disabled={placing}
+            className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
+            style={{ background: accent }}
+          >
+            {placing ? "Placing order…" : `Place ${side.toUpperCase()} Order`}
+          </button>
+
+          <p className="text-[10px] text-[#ccc] text-center">
+            Simulated order — auto-recorded in your Journal
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

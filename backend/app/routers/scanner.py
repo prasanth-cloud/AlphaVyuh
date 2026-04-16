@@ -217,6 +217,11 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.new_52w_high  and (w52h_v is None or close < w52h_v):  continue
         if f.new_52w_low   and (w52l_v is None or close > w52l_v):  continue
 
+        # ── Series / active stock filter (moved from query-builder for reliability) ──
+        effective_series = f.series if f.series else ["EQ", "BE"]
+        if su.get("series") not in effective_series: continue
+        if not su.get("is_active", True): continue
+
         # ── Sector ────────────────────────────────────────────────────────
         if f.sector is not None and su.get("sector") != f.sector: continue
 
@@ -282,8 +287,8 @@ async def run_scanner(
             "stock_universe!inner(symbol,company_name,series,sector,is_active)"
         )
         .eq("trade_date", latest_date)
-        .eq("stock_universe.is_active", True)
-        .in_("stock_universe.series", series_list)
+        # series + is_active filtering done Python-side in _apply_filters
+        # to avoid PostgREST embedded-filter compatibility issues
     )
 
     # Push simple DB-side filters to reduce rows before Python processing

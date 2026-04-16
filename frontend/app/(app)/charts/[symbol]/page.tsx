@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { BookmarkPlus, Save } from "lucide-react";
 import type {
-  CandlesResponse, Drawing, Fundamentals,
+  CandlesResponse, Drawing, Fundamentals, OrderResult,
 } from "@/lib/api";
 import {
   getCandles, getIndicators, getDrawings, saveDrawing,
@@ -13,6 +13,7 @@ import {
   getFundamentals, getPlanStatus,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
+import OrderModal from "@/components/charts/OrderModal";
 import type { IndicatorData, IchimokuPoint, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -107,9 +108,15 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [showWlPicker, setShowWlPicker] = useState(false);
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
 
-  // Fundamentals
+  // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
   const [showFundamentals, setShowFundamentals] = useState(false);
+  const [showTechnicals, setShowTechnicals] = useState(true);
+
+  // Order modal
+  const [showOrder, setShowOrder] = useState(false);
+  const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
+  const [orderToast, setOrderToast] = useState("");
 
   // Plan (for indicator gating)
   const [userPlan, setUserPlan] = useState<string>("free");
@@ -437,6 +444,28 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       {/* ── Body: sidebar + chart area ────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
+        {/* Order modal */}
+        {showOrder && latest?.close != null && (
+          <OrderModal
+            symbol={symbol}
+            currentPrice={latest.close}
+            defaultSide={orderSide}
+            onClose={() => setShowOrder(false)}
+            onFilled={(result: OrderResult) => {
+              setShowOrder(false);
+              setOrderToast(result.message);
+              setTimeout(() => setOrderToast(""), 5000);
+            }}
+          />
+        )}
+
+        {/* Order toast */}
+        {orderToast && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 bg-[#1c1c1a] text-white text-[13px] px-4 py-2.5 rounded-full shadow-xl pointer-events-none">
+            {orderToast}
+          </div>
+        )}
+
         {/* Sidebar */}
         <aside className="w-[240px] flex-shrink-0 bg-white border-r border-[#e2e2df] flex flex-col overflow-y-auto">
           {loading ? (
@@ -454,31 +483,31 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 <div className="flex items-center justify-between mb-0.5">
                   <span className="text-[18px] font-bold text-[#1c1c1a] tracking-[-0.5px]">{symbol}</span>
                   {data.sector && (
-                    <span className="text-[10px] border border-[#e2e2df] rounded-full px-2 py-0.5 text-[#888]">
+                    <span className="text-[10px] border border-[#e2e2df] rounded-full px-2 py-0.5 text-[#888] truncate max-w-[90px]">
                       {data.sector}
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] text-[#aaa] leading-tight">{data.company_name}</div>
+                <div className="text-[11px] text-[#aaa] leading-tight truncate">{data.company_name}</div>
 
-                <div className="mt-2.5">
-                  <div className="text-[24px] font-bold text-[#1c1c1a] tracking-[-0.8px] tabular-nums">
+                <div className="mt-2">
+                  <div className="text-[22px] font-bold text-[#1c1c1a] tracking-[-0.8px] tabular-nums">
                     {fmtPrice(latest?.close)}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[13px] font-semibold tabular-nums" style={{ color: positive ? "#26a65b" : "#e5383b" }}>
+                    <span className="text-[12px] font-semibold tabular-nums" style={{ color: positive ? "#26a65b" : "#e5383b" }}>
                       {positive ? "+" : ""}{changePct?.toFixed(2)}%
                     </span>
                     {changeAmt != null && (
-                      <span className="text-[12px] tabular-nums" style={{ color: positive ? "#26a65b" : "#e5383b" }}>
-                        {positive ? "+" : ""}{fmtPrice(changeAmt)} today
+                      <span className="text-[11px] tabular-nums" style={{ color: positive ? "#26a65b" : "#e5383b" }}>
+                        {positive ? "+" : ""}{fmtPrice(changeAmt)}
                       </span>
                     )}
                   </div>
                 </div>
 
                 {/* Add to watchlist */}
-                <div className="mt-3 relative">
+                <div className="mt-2.5 relative">
                   {wlMsg ? (
                     <div className={`text-[12px] font-medium text-center py-1.5 ${wlMsg === "Added!" ? "text-[#26a65b]" : "text-[#e5383b]"}`}>
                       {wlMsg}
@@ -499,127 +528,160 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     </div>
                   ) : (
                     <button onClick={handleAddWatchlist}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-[7px] border border-[#e2e2df] text-[12px] text-[#666] hover:border-[#1c1c1a] hover:text-[#1c1c1a] transition-colors">
-                      <BookmarkPlus size={13} /> Add to watchlist
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-[7px] border border-[#e2e2df] text-[11px] text-[#666] hover:border-[#1c1c1a] hover:text-[#1c1c1a] transition-colors">
+                      <BookmarkPlus size={12} /> Add to watchlist
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* OHLCV */}
-              <div className="p-4 border-b border-[#f0f0ee]">
-                <div className="text-[10px] uppercase tracking-[0.5px] text-[#aaa] mb-2 font-medium">OHLCV today</div>
-                <div className="space-y-1.5">
-                  {[
-                    ["Open",   fmtPrice(latest?.open)],
-                    ["High",   fmtPrice(latest?.high)],
-                    ["Low",    fmtPrice(latest?.low)],
-                    ["Close",  fmtPrice(latest?.close)],
-                    ["Volume", latest?.volume ? fmtVol(latest.volume) : "—"],
-                  ].map(([label, val]) => (
-                    <div key={label} className="flex items-center justify-between">
-                      <span className="text-[11px] text-[#aaa]">{label}</span>
-                      <span className="text-[12px] font-medium tabular-nums text-[#1c1c1a]">{val}</span>
+              {/* Buy / Sell */}
+              <div className="px-4 py-3 border-b border-[#f0f0ee] flex gap-2">
+                <button
+                  onClick={() => { setOrderSide("buy"); setShowOrder(true); }}
+                  className="flex-1 py-2 bg-[#26a65b] text-white text-[13px] font-bold rounded-[8px] hover:opacity-90 transition-opacity"
+                >
+                  BUY
+                </button>
+                <button
+                  onClick={() => { setOrderSide("sell"); setShowOrder(true); }}
+                  className="flex-1 py-2 bg-[#e5383b] text-white text-[13px] font-bold rounded-[8px] hover:opacity-90 transition-opacity"
+                >
+                  SELL
+                </button>
+              </div>
+
+              {/* ── Technicals accordion ─────────────────────────────── */}
+              <div className="border-b border-[#f0f0ee]">
+                <button
+                  onClick={() => setShowTechnicals(t => !t)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-[#fafafa] transition-colors"
+                >
+                  <span className="text-[10px] uppercase tracking-[0.5px] text-[#555] font-semibold">Technicals</span>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+                    className="transition-transform flex-shrink-0"
+                    style={{ transform: showTechnicals ? "rotate(180deg)" : "rotate(0deg)" }}>
+                    <path d="M2 4l4 4 4-4" stroke="#aaa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+
+                {showTechnicals && (
+                  <div className="px-4 pb-4 space-y-4">
+                    {/* OHLCV */}
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">OHLCV</div>
+                      <div className="space-y-1">
+                        {([
+                          ["Open",   fmtPrice(latest?.open)],
+                          ["High",   fmtPrice(latest?.high)],
+                          ["Low",    fmtPrice(latest?.low)],
+                          ["Close",  fmtPrice(latest?.close)],
+                          ["Volume", latest?.volume ? fmtVol(latest.volume) : "—"],
+                        ] as [string, string][]).map(([label, val]) => (
+                          <div key={label} className="flex items-center justify-between">
+                            <span className="text-[11px] text-[#aaa]">{label}</span>
+                            <span className="text-[11px] font-medium tabular-nums text-[#1c1c1a]">{val}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Key metrics */}
-              <div className="p-4 border-b border-[#f0f0ee]">
-                <div className="text-[10px] uppercase tracking-[0.5px] text-[#aaa] mb-2 font-medium">Key Metrics</div>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#aaa]">RSI 14</span>
-                    {latest?.rsi_14 != null ? (
-                      <span className="text-[11px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
-                        style={{
-                          background: latest.rsi_14 > 70 ? "#f0efff" : latest.rsi_14 < 40 ? "#fff8ec" : "#edfaf3",
-                          color: latest.rsi_14 > 70 ? "#5b63f5" : latest.rsi_14 < 40 ? "#d97706" : "#26a65b",
-                        }}>
-                        {latest.rsi_14.toFixed(1)}
-                      </span>
-                    ) : <span className="text-[#aaa] text-[11px]">—</span>}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#aaa]">Vol Ratio</span>
-                    <span className="text-[12px] font-medium tabular-nums" style={{ color: "#7c6af0" }}>
-                      {latest?.volume_ratio != null ? `${latest.volume_ratio.toFixed(2)}x` : "—"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[#aaa]">ATR 14</span>
-                    <span className="text-[12px] font-medium tabular-nums text-[#1c1c1a]">
-                      {latest?.atr_14 != null ? fmtPrice(latest.atr_14) : "—"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* EMA stack */}
-              <div className="p-4 border-b border-[#f0f0ee]">
-                <div className="text-[10px] uppercase tracking-[0.5px] text-[#aaa] mb-2 font-medium">EMA Levels</div>
-                <div className="space-y-1.5">
-                  {([
-                    ["EMA 20", latest?.ema_20, "#5b63f5"],
-                    ["EMA 50", latest?.ema_50, "#d97706"],
-                    ["EMA 200", latest?.ema_200, "#e5383b"],
-                  ] as [string, number | null | undefined, string][]).map(([label, ema, color]) => {
-                    const above = ema != null && latest?.close != null && latest.close > ema;
-                    return (
-                      <div key={label} className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full" style={{ background: color }} />
-                          <span className="text-[11px] text-[#aaa]">{label}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[11px] tabular-nums text-[#888]">{fmtPrice(ema)}</span>
-                          {ema != null && (
-                            <span className="text-[11px] font-bold" style={{ color: above ? "#26a65b" : "#e5383b" }}>
-                              {above ? "↑" : "↓"}
+                    {/* Key metrics */}
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">Momentum</div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-[#aaa]">RSI 14</span>
+                          {latest?.rsi_14 != null ? (
+                            <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full"
+                              style={{
+                                background: latest.rsi_14 > 70 ? "#f0efff" : latest.rsi_14 < 40 ? "#fff8ec" : "#edfaf3",
+                                color: latest.rsi_14 > 70 ? "#5b63f5" : latest.rsi_14 < 40 ? "#d97706" : "#26a65b",
+                              }}>
+                              {latest.rsi_14.toFixed(1)}
                             </span>
-                          )}
+                          ) : <span className="text-[#aaa] text-[11px]">—</span>}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-[#aaa]">Vol Ratio</span>
+                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "#7c6af0" }}>
+                            {latest?.volume_ratio != null ? `${latest.volume_ratio.toFixed(2)}x` : "—"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-[#aaa]">ATR 14</span>
+                          <span className="text-[11px] font-medium tabular-nums text-[#1c1c1a]">
+                            {latest?.atr_14 != null ? fmtPrice(latest.atr_14) : "—"}
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+
+                    {/* EMA stack */}
+                    <div>
+                      <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">EMA Levels</div>
+                      <div className="space-y-1">
+                        {([
+                          ["EMA 20",  latest?.ema_20,  "#5b63f5"],
+                          ["EMA 50",  latest?.ema_50,  "#d97706"],
+                          ["EMA 200", latest?.ema_200, "#e5383b"],
+                        ] as [string, number | null | undefined, string][]).map(([label, ema, color]) => {
+                          const above = ema != null && latest?.close != null && latest.close > ema;
+                          return (
+                            <div key={label} className="flex items-center justify-between">
+                              <div className="flex items-center gap-1">
+                                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: color }} />
+                                <span className="text-[11px] text-[#aaa]">{label}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] tabular-nums text-[#888]">{fmtPrice(ema)}</span>
+                                {ema != null && (
+                                  <span className="text-[11px] font-bold" style={{ color: above ? "#26a65b" : "#e5383b" }}>
+                                    {above ? "↑" : "↓"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 52W range */}
+                    {latest?.week_52_high && latest?.week_52_low && (
+                      <div>
+                        <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">52-Week Range</div>
+                        <div className="relative h-[3px] bg-[#f0f0ee] rounded-full mx-0.5 my-2.5">
+                          <div className="absolute h-[3px] bg-[#5b63f5] rounded-full"
+                            style={{ width: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }} />
+                          <div className="absolute w-2.5 h-2.5 bg-[#1c1c1a] rounded-full border-2 border-white -translate-y-[35%] -translate-x-1/2"
+                            style={{ left: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }} />
+                        </div>
+                        <div className="flex justify-between text-[10px] tabular-nums text-[#aaa]">
+                          <span>{fmtPrice(latest.week_52_low)}</span>
+                          <span>{fmtPrice(latest.week_52_high)}</span>
+                        </div>
+                        {pctFrom52H != null && (
+                          <div className="text-[10px] text-center text-[#aaa] mt-0.5">
+                            {pctFrom52H.toFixed(1)}% from 52W high
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* 52W range */}
-              {latest?.week_52_high && latest?.week_52_low && (
-                <div className="p-4 border-b border-[#f0f0ee]">
-                  <div className="text-[10px] uppercase tracking-[0.5px] text-[#aaa] mb-2 font-medium">52-Week Range</div>
-                  <div className="relative h-[3px] bg-[#f0f0ee] rounded-full mx-1 my-3">
-                    <div className="absolute h-[3px] bg-[#5b63f5] rounded-full"
-                      style={{ width: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }} />
-                    <div className="absolute w-2.5 h-2.5 bg-[#1c1c1a] rounded-full border-2 border-white -translate-y-[35%] -translate-x-1/2"
-                      style={{ left: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[10px] tabular-nums text-[#aaa]">
-                    <span>{fmtPrice(latest.week_52_low)}</span>
-                    <span>{fmtPrice(latest.week_52_high)}</span>
-                  </div>
-                  {pctFrom52H != null && (
-                    <div className="text-[10px] text-center text-[#aaa] mt-1">
-                      {pctFrom52H.toFixed(1)}% from 52W high
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Fundamentals accordion */}
+              {/* ── Fundamentals accordion ───────────────────────────── */}
               <div className="border-b border-[#f0f0ee]">
                 <button
                   onClick={() => setShowFundamentals(f => !f)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#fafafa] transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-[#fafafa] transition-colors"
                 >
-                  <span className="text-[10px] uppercase tracking-[0.5px] text-[#aaa] font-medium">Fundamentals</span>
-                  <svg
-                    width="12" height="12" viewBox="0 0 12 12" fill="none"
-                    className="transition-transform"
-                    style={{ transform: showFundamentals ? "rotate(180deg)" : "rotate(0deg)" }}
-                  >
+                  <span className="text-[10px] uppercase tracking-[0.5px] text-[#555] font-semibold">Fundamentals</span>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+                    className="transition-transform flex-shrink-0"
+                    style={{ transform: showFundamentals ? "rotate(180deg)" : "rotate(0deg)" }}>
                     <path d="M2 4l4 4 4-4" stroke="#aaa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>

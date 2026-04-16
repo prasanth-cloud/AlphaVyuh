@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, HTTPException, status
 
 import yfinance as yf
@@ -5,6 +7,10 @@ import yfinance as yf
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
+
+# ── Fundamentals cache (in-memory, 6-hour TTL) ────────────────────────────────
+_fund_cache: dict[str, tuple[float, dict]] = {}
+_FUND_TTL = 6 * 3600  # seconds
 
 
 @router.get("/stocks/{symbol}/quote")
@@ -307,8 +313,15 @@ async def get_sector_breadth():
 @router.get("/stocks/{symbol}/fundamentals")
 async def get_fundamentals(symbol: str):
     """Basic fundamentals from Yahoo Finance: PE, market cap, P/B, dividend yield, EPS etc."""
+    sym = symbol.upper()
+    now = time.time()
+    # Return cached data if fresh
+    if sym in _fund_cache:
+        cached_at, cached_data = _fund_cache[sym]
+        if now - cached_at < _FUND_TTL:
+            return cached_data
     try:
-        ticker = yf.Ticker(f"{symbol.upper()}.NS")
+        ticker = yf.Ticker(f"{sym}.NS")
         info = ticker.info
 
         def _f(key, digits=2):
@@ -326,8 +339,8 @@ async def get_fundamentals(symbol: str):
         else:
             mc_str = None
 
-        return {
-            "symbol": symbol.upper(),
+        result = {
+            "symbol": sym,
             "trailing_pe": _f("trailingPE"),
             "forward_pe": _f("forwardPE"),
             "price_to_book": _f("priceToBook"),
@@ -342,6 +355,8 @@ async def get_fundamentals(symbol: str):
             "market_cap_str": mc_str,
             "shares_outstanding": info.get("sharesOutstanding"),
         }
+        _fund_cache[sym] = (time.time(), result)
+        return result
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Could not fetch fundamentals: {e}")
 

@@ -841,3 +841,41 @@ export async function updateMe(updates: {
   }
   return res.json();
 }
+
+// ── Orders / Broker ───────────────────────────────────────────────────────────
+
+export type PlaceOrderRequest = {
+  symbol:       string;
+  side:         "buy" | "sell";
+  quantity:     number;
+  price:        number;
+  order_type?:  "market" | "limit";
+  stop_loss?:   number;
+  target_price?: number;
+  setup_type?:  string;
+  notes?:       string;
+};
+
+export type OrderResult = {
+  status:     string;
+  message:    string;
+  journal_id: string | null;
+  symbol:     string;
+  side:       string;
+  quantity:   number;
+  price:      number;
+};
+
+export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/orders`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(order),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? `Order failed (${res.status})`);
+  }
+  return res.json();
+}
