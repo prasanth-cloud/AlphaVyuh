@@ -26,7 +26,7 @@ class JournalEntry(BaseModel):
     entry_date: str                     # YYYY-MM-DD
     entry_price: float
     quantity: int
-    setup_type: Optional[str] = None   # breakout, pullback, reversal, momentum, other
+    setup_type: Optional[str] = None
     stop_loss: Optional[float] = None
     target_price: Optional[float] = None
     entry_reason: Optional[str] = None
@@ -60,10 +60,6 @@ def _compute_pnl(entry_price: float, exit_price: float, quantity: int, trade_typ
 
 @router.get("/analytics")
 async def get_analytics(user_id: str = Depends(get_current_user_id)):
-    """
-    Returns equity curve (cumulative P&L over time) and per-setup breakdown.
-    Used for the journal analytics panel.
-    """
     sb = get_admin_client()
     result = (
         sb.table("trade_journal")
@@ -75,7 +71,7 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
     )
     entries = result.data or []
 
-    # ── Equity curve ────────────────────────────────────────────────────────
+    # ── Equity curve ─────────────────────────────────────────────────────────
     equity_curve = []
     cumulative = 0.0
     for e in entries:
@@ -84,7 +80,7 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         cumulative += float(e["pnl"])
         equity_curve.append({"date": e["exit_date"], "cumulative_pnl": round(cumulative, 2)})
 
-    # ── Per-setup breakdown ─────────────────────────────────────────────────
+    # ── Per-setup breakdown ───────────────────────────────────────────────────
     setup_map: dict = {}
     for e in entries:
         s = e.get("setup_type") or "Untagged"
@@ -109,20 +105,19 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
     ]
     setup_breakdown.sort(key=lambda x: x["total_pnl"], reverse=True)
 
-    # ── Monthly P&L ─────────────────────────────────────────────────────────
+    # ── Monthly P&L ───────────────────────────────────────────────────────────
     month_map: dict = {}
     for e in entries:
         if not e.get("exit_date") or e.get("pnl") is None:
             continue
-        month = e["exit_date"][:7]  # YYYY-MM
+        month = e["exit_date"][:7]
         month_map[month] = round(month_map.get(month, 0.0) + float(e["pnl"]), 2)
     monthly_pnl = [{"month": k, "pnl": v} for k, v in sorted(month_map.items())]
 
-    # ── Drawdown analysis ────────────────────────────────────────────────────
+    # ── Drawdown analysis ─────────────────────────────────────────────────────
     drawdown_curve = []
     max_dd = 0.0
     peak = 0.0
-    dd_start: str | None = None
     longest_dd_days = 0
     current_dd_start: str | None = None
 
@@ -137,14 +132,12 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
             current_dd_start = pt["date"]
         if dd > max_dd:
             max_dd = dd
-            dd_start = current_dd_start or pt["date"]
         drawdown_curve.append({
             "date": pt["date"],
-            "drawdown": -round(dd, 2),         # negative = below peak
+            "drawdown": -round(dd, 2),
             "drawdown_pct": -round(dd_pct, 2),
         })
 
-    # Longest drawdown period in calendar days
     if len(equity_curve) >= 2:
         from datetime import date as date_
         in_dd = False
@@ -210,16 +203,9 @@ async def get_stats(user_id: str = Depends(get_current_user_id)):
 
     if not entries:
         return {
-            "total_trades": 0,
-            "open_trades": open_count,
-            "total_pnl": 0,
-            "win_rate": 0,
-            "avg_pnl": 0,
-            "avg_win": 0,
-            "avg_loss": 0,
-            "best_trade": 0,
-            "worst_trade": 0,
-            "avg_holding_days": 0,
+            "total_trades": 0, "open_trades": open_count, "total_pnl": 0,
+            "win_rate": 0, "avg_pnl": 0, "avg_win": 0, "avg_loss": 0,
+            "best_trade": 0, "worst_trade": 0, "avg_holding_days": 0,
         }
 
     pnls = [float(e["pnl"]) for e in entries if e.get("pnl") is not None]
@@ -283,7 +269,6 @@ async def create_entry(
 ):
     sb = get_admin_client()
 
-    # Lookup company name
     stock = (
         sb.table("stock_universe")
         .select("company_name")
@@ -292,7 +277,6 @@ async def create_entry(
     )
     company_name = stock.data[0]["company_name"] if stock.data else body.symbol.upper()
 
-    # Compute R:R if stop and target provided
     risk_reward = None
     if body.stop_loss and body.target_price and body.entry_price:
         if body.trade_type == "long":
@@ -345,11 +329,12 @@ async def update_entry(
     entry = existing.data
     update_data = {k: v for k, v in body.model_dump().items() if v is not None}
 
-    # Compute P&L when closing
-    if body.exit_price and body.exit_date:
+    closing_now = bool(body.exit_price and body.exit_date)
+
+    if closing_now:
         pnl, pnl_pct = _compute_pnl(
             float(entry["entry_price"]),
-            body.exit_price,
+            body.exit_price,  # type: ignore[arg-type]
             int(entry["quantity"]),
             entry["trade_type"],
         )
@@ -358,11 +343,44 @@ async def update_entry(
         update_data["status"] = "closed"
 
         entry_d = date.fromisoformat(entry["entry_date"])
-        exit_d = date.fromisoformat(body.exit_date)
+        exit_d = date.fromisoformat(body.exit_date)  # type: ignore[arg-type]
         update_data["holding_days"] = (exit_d - entry_d).days
 
     result = sb.table("trade_journal").update(update_data).eq("id", entry_id).execute()
-    return result.data[0]
+    updated_entry = result.data[0]
+
+    # Trigger AI analysis when a trade is closed
+    if closing_now:
+        try:
+            from app.routers.broker import _trigger_ai_analysis
+            _trigger_ai_analysis(sb, updated_entry)
+        except Exception:
+            pass  # non-blocking
+
+    return updated_entry
+
+
+@router.post("/{entry_id}/lessons")
+async def generate_lessons(
+    entry_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Trigger AI analysis for a specific closed trade on demand."""
+    sb = get_admin_client()
+    r = sb.table("trade_journal").select("*").eq("id", entry_id).eq("user_id", user_id).maybe_single().execute()
+    if not r.data:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    if r.data["status"] != "closed":
+        raise HTTPException(status_code=400, detail="Trade must be closed first")
+
+    try:
+        from app.routers.broker import _trigger_ai_analysis
+        _trigger_ai_analysis(sb, r.data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI analysis failed: {e}")
+
+    updated = sb.table("trade_journal").select("*").eq("id", entry_id).maybe_single().execute()
+    return updated.data
 
 
 @router.delete("/{entry_id}")

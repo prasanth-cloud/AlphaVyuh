@@ -50,14 +50,25 @@ Interactive investor pitch deck at `pitch/index.html` — open in browser. Cover
 - [x] Drawdown analysis in journal analytics (equity curve, max drawdown, recovery/profit factors)
 - [x] Telegram scan alerts (notify users via bot after daily market close)
 - [x] User profile settings (/settings/profile) — display name + Telegram Chat ID linking
-- [ ] Zerodha Kite Connect v3 integration (click-to-order from chart) — NEXT
-- [ ] Auto trade journal (import from Zerodha) — NEXT
+- [x] Zerodha Kite Connect v3 integration (click-to-order from chart)
+  - BUY/SELL buttons on chart → OrderModal → POST /orders → auto-journal entry
+  - Routes through Zerodha when API key + daily access token present
+  - Zerodha OAuth flow: /broker/zerodha/login → kite.zerodha.com → /broker/callback
+- [x] Auto trade journal (import from Zerodha)
+  - POST /broker/zerodha/import pulls filled orders from Kite order book
+  - Skips duplicates by matching order ID in entry_reason
+  - "Import from Zerodha" button visible in journal toolbar when broker connected
 
-## Phase 4 — AI + Growth (IN PROGRESS)
+## Phase 4 — AI + Growth (COMPLETE)
 - [x] Mobile PWA: manifest.json, service worker, offline fallback page
 - [x] Telegram alerts infrastructure (backend ready; set TELEGRAM_BOT_TOKEN on Railway)
-- [ ] AI MistakeEngine: surfaces patterns from journal ("you lose 71% on gap-up buys after 2pm")
-- [ ] Multi-broker support (Fyers, Upstox, Angel One)
+- [x] AI MistakeEngine: pattern stats + deep analysis
+  - Pattern Stats: win rate by day of week, holding period buckets, long vs short
+  - Avg holding days: winners vs losers
+  - Auto AI lesson triggered on every trade close (Claude Haiku, stored in lessons field)
+  - Per-trade "Get AI lesson" button in journal view panel
+  - Deep Analysis: Claude Sonnet analyses full journal → mistakes, patterns, actionable rules
+- [x] Multi-broker support: Zerodha (full) + Upstox (order routing via v2 API)
 - [ ] NRI / USD pricing tier
 - [ ] US market stocks expansion
 

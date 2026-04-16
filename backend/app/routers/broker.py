@@ -61,6 +61,46 @@ def _get_kite(api_key: str, access_token: str):
         return None
 
 
+def _place_upstox_order(
+    api_key: str, access_token: str,
+    symbol: str, side: str, quantity: int, price: float, order_type: str
+) -> str | None:
+    """Place order via Upstox v2 API. Returns order ID or None on failure."""
+    try:
+        import httpx
+        txn   = "BUY" if side == "buy" else "SELL"
+        otype = "MARKET" if order_type == "market" else "LIMIT"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type":  "application/json",
+            "Accept":        "application/json",
+            "Api-Version":   "2.0",
+        }
+        payload = {
+            "quantity":          quantity,
+            "product":           "D",       # Delivery (CNC)
+            "validity":          "DAY",
+            "price":             price if otype == "LIMIT" else 0,
+            "tag":               "alphavyuh",
+            "instrument_token":  f"NSE_EQ|{symbol}",
+            "order_type":        otype,
+            "transaction_type":  txn,
+            "disclosed_quantity": 0,
+            "trigger_price":     0,
+            "is_amo":            False,
+        }
+        r = httpx.post(
+            "https://api.upstox.com/v2/order/place",
+            json=payload, headers=headers, timeout=10
+        )
+        if r.status_code == 200:
+            return r.json().get("data", {}).get("order_id")
+        logger.error(f"Upstox order failed {r.status_code}: {r.text[:200]}")
+    except Exception as e:
+        logger.error(f"Upstox order error: {e}")
+    return None
+
+
 def _place_zerodha_order(kite, symbol: str, side: str, quantity: int, order_type: str) -> str | None:
     """Place order via Zerodha. Returns broker order ID or None on failure."""
     try:
@@ -113,12 +153,22 @@ async def place_order(
 
     if user_res.data:
         u = user_res.data
-        if u.get("broker_type") == "zerodha" and u.get("broker_api_key") and u.get("broker_access_token"):
+        bt = u.get("broker_type")
+
+        if bt == "zerodha" and u.get("broker_api_key") and u.get("broker_access_token"):
             kite = _get_kite(u["broker_api_key"], u["broker_access_token"])
             if kite:
                 broker_order_id = _place_zerodha_order(kite, sym, body.side, body.quantity, body.order_type)
                 if broker_order_id:
                     broker_used = "zerodha"
+
+        elif bt == "upstox" and u.get("broker_api_key") and u.get("broker_access_token"):
+            broker_order_id = _place_upstox_order(
+                u["broker_api_key"], u["broker_access_token"],
+                sym, body.side, body.quantity, body.price, body.order_type
+            )
+            if broker_order_id:
+                broker_used = "upstox"
 
     trade_type = "long" if body.side == "buy" else "short"
 
@@ -234,6 +284,30 @@ async def list_open_positions(user_id: str = Depends(get_current_user_id)):
 
 # ── Zerodha OAuth flow ────────────────────────────────────────────────────────
 
+@router.get("/broker/status")
+async def broker_status(user_id: str = Depends(get_current_user_id)):
+    """Returns broker connection status for the current user."""
+    sb = get_admin_client()
+    u = sb.table("users").select(
+        "broker_type, broker_api_key, broker_access_token, broker_connected_at"
+    ).eq("id", user_id).maybe_single().execute()
+
+    if not u.data:
+        return {"connected": False, "broker": None}
+
+    bt  = u.data.get("broker_type")
+    key = u.data.get("broker_api_key")
+    tok = u.data.get("broker_access_token")
+
+    return {
+        "connected":    bool(bt and key and tok),
+        "broker":       bt,
+        "has_api_key":  bool(key),
+        "has_token":    bool(tok),
+        "connected_at": u.data.get("broker_connected_at"),
+    }
+
+
 @router.get("/broker/zerodha/login")
 async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     """
@@ -249,6 +323,82 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     api_key = u.data["broker_api_key"]
     login_url = f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3"
     return {"login_url": login_url}
+
+
+@router.post("/broker/zerodha/import")
+async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
+    """
+    Import today's filled orders from Zerodha into the trade journal.
+    Skips orders already recorded (matched by order ID in entry_reason).
+    Requires a valid daily access token set via /broker/zerodha/callback.
+    """
+    sb = get_admin_client()
+    u = sb.table("users").select("broker_api_key, broker_access_token") \
+        .eq("id", user_id).maybe_single().execute()
+    if not u.data or not u.data.get("broker_api_key") or not u.data.get("broker_access_token"):
+        raise HTTPException(status_code=400, detail="Zerodha not connected. Complete the OAuth login first.")
+
+    kite = _get_kite(u.data["broker_api_key"], u.data["broker_access_token"])
+    if not kite:
+        raise HTTPException(status_code=400, detail="Could not connect to Zerodha — check your credentials")
+
+    try:
+        orders = kite.orders()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Zerodha API error: {e}")
+
+    filled = [o for o in orders if o.get("status") == "COMPLETE"]
+    imported = 0
+    skipped = 0
+
+    for order in filled:
+        sym      = (order.get("tradingsymbol") or "").strip().upper()
+        qty      = int(order.get("filled_quantity") or 0)
+        avg_px   = float(order.get("average_price") or 0)
+        txn      = (order.get("transaction_type") or "BUY").upper()
+        order_id = str(order.get("order_id") or "")
+
+        if not sym or not qty or not avg_px or not order_id:
+            continue
+
+        # Skip if already imported
+        existing = (
+            sb.table("trade_journal")
+            .select("id")
+            .eq("user_id", user_id)
+            .ilike("entry_reason", f"%{order_id}%")
+            .execute()
+        )
+        if existing.data:
+            skipped += 1
+            continue
+
+        # Try to get company name
+        stock = sb.table("stock_universe").select("company_name") \
+            .eq("symbol", sym).maybe_single().execute()
+        company_name = stock.data["company_name"] if stock.data else sym
+
+        trade_type = "long" if txn == "BUY" else "short"
+        entry = {
+            "user_id":      user_id,
+            "symbol":       sym,
+            "company_name": company_name,
+            "trade_type":   trade_type,
+            "entry_date":   str(date.today()),
+            "entry_price":  avg_px,
+            "quantity":     qty,
+            "entry_reason": f"Zerodha import — order #{order_id}",
+            "status":       "open",
+        }
+        sb.table("trade_journal").insert(entry).execute()
+        imported += 1
+
+    return {
+        "imported": imported,
+        "skipped":  skipped,
+        "total_filled_orders": len(filled),
+        "message": f"Imported {imported} new trade(s) from Zerodha.",
+    }
 
 
 @router.get("/broker/zerodha/callback")

@@ -893,6 +893,74 @@ export type OrderResult = {
   price:      number;
 };
 
+export async function closePosition(
+  journalId: string,
+  exitPrice: number,
+  exitReason?: string
+): Promise<{ status: string; pnl: number; pnl_pct: number; message: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/orders/close`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ journal_id: journalId, exit_price: exitPrice, exit_reason: exitReason }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? `Close failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function importZerodhaTrades(): Promise<{
+  imported: number; skipped: number; total_filled_orders: number; message: string
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/zerodha/import`, { method: "POST", headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? "Import failed");
+  }
+  return res.json();
+}
+
+export async function getBrokerStatus(): Promise<{
+  connected: boolean; broker: string | null; has_api_key: boolean; has_token: boolean; connected_at: string | null
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/status`, { headers });
+  if (!res.ok) return { connected: false, broker: null, has_api_key: false, has_token: false, connected_at: null };
+  return res.json();
+}
+
+export type AiPatterns = {
+  ready: boolean;
+  total_trades?: number;
+  min_trades_required?: number;
+  trades_available?: number;
+  avg_hold_winners?: number | null;
+  avg_hold_losers?: number | null;
+  day_of_week?: { day: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
+  by_direction?: { direction: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
+  by_holding_period?: { bucket: string; trades: number; wins: number; win_rate: number }[];
+};
+
+export async function getAiPatterns(): Promise<AiPatterns> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/ai/patterns`, { headers });
+  if (!res.ok) return { ready: false };
+  return res.json();
+}
+
+export async function triggerTradeLesson(entryId: string): Promise<JournalEntry> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${entryId}/lessons`, { method: "POST", headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? "AI lesson generation failed");
+  }
+  return res.json();
+}
+
 export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/orders`, {

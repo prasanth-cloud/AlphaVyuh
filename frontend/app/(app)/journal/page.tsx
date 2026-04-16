@@ -10,8 +10,12 @@ import {
   deleteJournalEntry,
   searchSymbols,
   analyseJournal,
+  getAiPatterns,
+  triggerTradeLesson,
+  importZerodhaTrades,
+  getBrokerStatus,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -147,6 +151,12 @@ export default function JournalPage() {
   const [aiTradesCount, setAiTradesCount] = useState(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [patterns, setPatterns] = useState<AiPatterns | null>(null);
+  const [patternsLoading, setPatternsLoading] = useState(false);
+  const [brokerConnected, setBrokerConnected] = useState(false);
+  const [brokerName, setBrokerName] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [lessonLoading, setLessonLoading] = useState<string | null>(null);
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -194,6 +204,21 @@ export default function JournalPage() {
   }, [filterStatus]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Load broker status + patterns on mount
+  useEffect(() => {
+    getBrokerStatus().then(s => {
+      setBrokerConnected(s.connected);
+      setBrokerName(s.broker);
+    }).catch(() => {});
+  }, []);
+
+  // Load patterns when AI tab is opened
+  useEffect(() => {
+    if (tab !== "ai" || patterns !== null) return;
+    setPatternsLoading(true);
+    getAiPatterns().then(setPatterns).catch(() => {}).finally(() => setPatternsLoading(false));
+  }, [tab, patterns]);
 
   // Symbol autocomplete
   useEffect(() => {
@@ -265,12 +290,39 @@ export default function JournalPage() {
       await updateJournalEntry(selectedEntry.id, closeForm as UpdateJournalEntry);
       setPanelMode(null);
       setSelectedEntry(null);
-      showToast("Trade closed");
+      showToast("Trade closed — AI analysing in background…");
       load();
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Failed to close");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleGetLesson = async (entry: JournalEntry) => {
+    setLessonLoading(entry.id);
+    try {
+      const updated = await triggerTradeLesson(entry.id);
+      setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+      if (selectedEntry?.id === updated.id) setSelectedEntry(updated);
+      showToast("AI lesson generated");
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "AI lesson failed");
+    } finally {
+      setLessonLoading(null);
+    }
+  };
+
+  const handleImportZerodha = async () => {
+    setImporting(true);
+    try {
+      const r = await importZerodhaTrades();
+      showToast(r.message);
+      if (r.imported > 0) load();
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -466,13 +518,124 @@ export default function JournalPage() {
 
       {/* AI MistakeEngine Panel */}
       {tab === "ai" && (
-        <div className="px-5 pb-5">
+        <div className="px-5 pb-5 space-y-4">
+
+          {/* Pattern Stats */}
+          <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
+            <div className="text-[13px] font-bold text-[#1c1c1a] mb-1">Pattern Stats</div>
+            <div className="text-[12px] text-[#aaa] mb-4">Computed from your closed trades — no AI needed.</div>
+
+            {patternsLoading ? (
+              <div className="space-y-2">
+                {[1,2,3].map(i => <div key={i} className="h-10 bg-[#f7f7f5] rounded-[8px] animate-pulse" />)}
+              </div>
+            ) : !patterns?.ready ? (
+              <div className="text-center py-6 text-[12px] text-[#aaa]">
+                Close at least {patterns?.min_trades_required ?? 3} trades to see pattern stats.
+                {patterns?.trades_available != null && patterns.trades_available > 0 && (
+                  <span className="block mt-1">You have {patterns.trades_available} so far.</span>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {/* Holding period: winners vs losers */}
+                {(patterns.avg_hold_winners != null || patterns.avg_hold_losers != null) && (
+                  <div>
+                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Avg Holding Period</div>
+                    <div className="flex gap-3">
+                      {patterns.avg_hold_winners != null && (
+                        <div className="flex-1 bg-[#edfaf3] rounded-[8px] px-3 py-2.5 text-center">
+                          <div className="text-[16px] font-bold text-[#26a65b]">{patterns.avg_hold_winners}d</div>
+                          <div className="text-[10px] text-[#888] mt-0.5">Winners</div>
+                        </div>
+                      )}
+                      {patterns.avg_hold_losers != null && (
+                        <div className="flex-1 bg-[#fff0f0] rounded-[8px] px-3 py-2.5 text-center">
+                          <div className="text-[16px] font-bold text-[#e5383b]">{patterns.avg_hold_losers}d</div>
+                          <div className="text-[10px] text-[#888] mt-0.5">Losers</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Win rate by day of week */}
+                {(patterns.day_of_week?.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Win Rate by Day</div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {patterns.day_of_week!.map(d => (
+                        <div key={d.day} className="flex-1 min-w-[60px] rounded-[8px] px-2 py-2 text-center border border-[#e2e2df]">
+                          <div className="text-[13px] font-bold"
+                            style={{ color: d.win_rate >= 60 ? "#26a65b" : d.win_rate >= 40 ? "#d97706" : "#e5383b" }}>
+                            {d.win_rate}%
+                          </div>
+                          <div className="text-[10px] text-[#aaa] mt-0.5">{d.day.slice(0, 3)}</div>
+                          <div className="text-[9px] text-[#ccc]">{d.trades}t</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Holding period buckets */}
+                {(patterns.by_holding_period?.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Win Rate by Holding Period</div>
+                    <div className="space-y-1.5">
+                      {patterns.by_holding_period!.map(b => (
+                        <div key={b.bucket} className="flex items-center gap-3">
+                          <div className="w-[110px] text-[11px] text-[#555] flex-shrink-0">{b.bucket}</div>
+                          <div className="flex-1 bg-[#f7f7f5] rounded-full h-2 overflow-hidden">
+                            <div className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${b.win_rate}%`,
+                                background: b.win_rate >= 60 ? "#26a65b" : b.win_rate >= 40 ? "#d97706" : "#e5383b"
+                              }} />
+                          </div>
+                          <div className="text-[12px] font-semibold w-10 text-right"
+                            style={{ color: b.win_rate >= 60 ? "#26a65b" : b.win_rate >= 40 ? "#d97706" : "#e5383b" }}>
+                            {b.win_rate}%
+                          </div>
+                          <div className="text-[10px] text-[#aaa] w-8">{b.trades}t</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Long vs Short */}
+                {(patterns.by_direction?.length ?? 0) > 0 && (
+                  <div>
+                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Long vs Short</div>
+                    <div className="flex gap-3">
+                      {patterns.by_direction!.map(d => (
+                        <div key={d.direction} className="flex-1 rounded-[8px] border border-[#e2e2df] px-3 py-2.5">
+                          <div className="text-[14px] font-bold"
+                            style={{ color: d.win_rate >= 50 ? "#26a65b" : "#e5383b" }}>
+                            {d.win_rate}%
+                          </div>
+                          <div className="text-[11px] text-[#555] mt-0.5">{d.direction} · {d.trades} trades</div>
+                          <div className="text-[11px] mt-0.5"
+                            style={{ color: d.total_pnl >= 0 ? "#26a65b" : "#e5383b" }}>
+                            {d.total_pnl >= 0 ? "+" : ""}₹{Math.abs(d.total_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* AI Deep Analysis */}
           <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <div className="text-[14px] font-bold text-[#1c1c1a]">AI MistakeEngine</div>
+                <div className="text-[14px] font-bold text-[#1c1c1a]">AI Deep Analysis</div>
                 <div className="text-[12px] text-[#aaa] mt-0.5">
-                  Claude analyses your closed trades and surfaces patterns, mistakes, and rules to add to your playbook.
+                  Claude reads your full journal and surfaces mistakes, patterns, and specific rules to add to your playbook.
                 </div>
               </div>
               <button
@@ -543,6 +706,7 @@ export default function JournalPage() {
               </div>
             )}
           </div>
+
         </div>
       )}
 
@@ -566,6 +730,15 @@ export default function JournalPage() {
               ))}
             </div>
             <div className="flex-1" />
+            {brokerConnected && brokerName === "zerodha" && (
+              <button
+                onClick={handleImportZerodha}
+                disabled={importing}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-[8px] border border-[#e2e2df] text-[#555] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors disabled:opacity-50"
+              >
+                {importing ? "Importing…" : "↓ Import from Zerodha"}
+              </button>
+            )}
             <button
               onClick={openAddPanel}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1c1a] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors"
@@ -981,11 +1154,30 @@ export default function JournalPage() {
                       <p className="text-[12px] text-[#e5383b] leading-relaxed">{selectedEntry.mistakes}</p>
                     </div>
                   )}
-                  {selectedEntry.lessons && (
-                    <div>
-                      <div className="text-[10px] text-[#aaa] uppercase tracking-wider mb-1">Lessons</div>
-                      <p className="text-[12px] text-[#26a65b] leading-relaxed">{selectedEntry.lessons}</p>
+                  {selectedEntry.lessons ? (
+                    <div className="bg-[#edfaf3] border border-[#c3efd4] rounded-[8px] p-3">
+                      <div className="text-[10px] font-bold text-[#26a65b] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                        <span>✦</span> AI Lesson
+                      </div>
+                      {selectedEntry.lessons.split("\n").map((line, i) => {
+                        if (!line.trim()) return null;
+                        const clean = line.replace(/^[-•*]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1");
+                        return (
+                          <div key={i} className="flex gap-1.5 items-start text-[12px] text-[#1c6b3a] leading-relaxed mb-1">
+                            <span className="text-[#26a65b] mt-0.5 flex-shrink-0">•</span>
+                            <span>{clean}</span>
+                          </div>
+                        );
+                      })}
                     </div>
+                  ) : selectedEntry.status === "closed" && (
+                    <button
+                      onClick={() => handleGetLesson(selectedEntry)}
+                      disabled={lessonLoading === selectedEntry.id}
+                      className="w-full py-2 rounded-[8px] text-[12px] font-medium border border-[#5b63f5] text-[#5b63f5] hover:bg-[#eeeffe] transition-colors disabled:opacity-50"
+                    >
+                      {lessonLoading === selectedEntry.id ? "Generating AI lesson…" : "✦ Get AI lesson for this trade"}
+                    </button>
                   )}
                   {selectedEntry.status === "open" && (
                     <button
