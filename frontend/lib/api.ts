@@ -620,6 +620,30 @@ export async function getJournalAnalytics(): Promise<JournalAnalytics> {
   return res.json();
 }
 
+// ── Fundamentals ──────────────────────────────────────────────────────────────
+
+export type Fundamentals = {
+  symbol: string;
+  trailing_pe: number | null;
+  forward_pe: number | null;
+  price_to_book: number | null;
+  dividend_yield: number | null;
+  trailing_eps: number | null;
+  forward_eps: number | null;
+  earnings_growth: number | null;
+  revenue_growth: number | null;
+  return_on_equity: number | null;
+  debt_to_equity: number | null;
+  market_cap: number | null;
+  market_cap_str: string | null;
+};
+
+export async function getFundamentals(symbol: string): Promise<Fundamentals | null> {
+  const res = await fetch(`${API}/api/v1/stocks/${symbol}/fundamentals`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 // ── Payments ──────────────────────────────────────────────────────────────────
 
 export type PlanStatus = {

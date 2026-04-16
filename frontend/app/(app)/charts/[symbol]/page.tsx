@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { BookmarkPlus, Save } from "lucide-react";
 import type {
-  CandlesResponse, Drawing,
+  CandlesResponse, Drawing, Fundamentals,
 } from "@/lib/api";
 import {
   getCandles, getIndicators, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
+  getFundamentals, getPlanStatus,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import type { IndicatorData, IchimokuPoint, ChartHandle } from "@/components/charts/CandlestickChart";
@@ -106,6 +107,15 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [showWlPicker, setShowWlPicker] = useState(false);
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
 
+  // Fundamentals
+  const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
+  const [showFundamentals, setShowFundamentals] = useState(false);
+
+  // Plan (for indicator gating)
+  const [userPlan, setUserPlan] = useState<string>("free");
+  const [planUpgradeToast, setPlanUpgradeToast] = useState("");
+  const FREE_INDICATORS = ["ema20", "ema50", "ema200", "rsi"];
+
   // Overlay drawing state
   const overlayRef = useRef<HTMLDivElement>(null);
   const drawingStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -132,14 +142,23 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       .finally(() => setLoading(false));
   }, [symbol, timeframe]);
 
-  // Load saved layout
+  // Load saved layout + plan
   useEffect(() => {
     getChartLayout(symbol).then(layout => {
       if (layout.indicators?.length) {
         setActiveIndicators(layout.indicators);
       }
     });
+    getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
   }, [symbol]);
+
+  // Load fundamentals when sidebar fundamentals section is opened
+  useEffect(() => {
+    if (!showFundamentals || fundamentals?.symbol === symbol) return;
+    setFundamentals(null);
+    getFundamentals(symbol).then(f => setFundamentals(f));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showFundamentals, symbol]);
 
   // Load drawings — parse new price/time format, skip old pixel-ratio format
   useEffect(() => {
@@ -187,6 +206,12 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   }, [symbol, timeframe, data, activeIndicators.join(",")]);
 
   function toggleIndicator(id: string) {
+    const isPro = !FREE_INDICATORS.includes(id);
+    if (isPro && userPlan === "free" && !activeIndicators.includes(id)) {
+      setPlanUpgradeToast("Upgrade to Pro to use BB, VWAP, MACD, Stoch, ATR and Ichimoku");
+      setTimeout(() => setPlanUpgradeToast(""), 3000);
+      return;
+    }
     setActiveIndicators(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
@@ -304,6 +329,13 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   return (
     <div className="flex flex-col bg-[#f2f2f0] overflow-hidden" style={{ height: "calc(100vh - 48px)" }}>
 
+      {planUpgradeToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg pointer-events-none flex items-center gap-2">
+          <span>{planUpgradeToast}</span>
+          <a href="/settings/billing" className="underline text-[#a5aaff] text-[12px] pointer-events-auto">Upgrade →</a>
+        </div>
+      )}
+
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#e2e2df] gap-4 flex-shrink-0">
         {/* Left: symbol search + name */}
@@ -344,16 +376,21 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Indicator toggles */}
           {INDICATOR_CONFIG.map(ind => {
             const active = activeIndicators.includes(ind.id);
+            const locked = !FREE_INDICATORS.includes(ind.id) && userPlan === "free";
             return (
               <button
                 key={ind.id}
                 onClick={() => toggleIndicator(ind.id)}
-                className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors"
+                title={locked ? "Pro plan required" : undefined}
+                className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors flex items-center gap-1"
                 style={active
                   ? { background: ind.bg, color: ind.color, border: `1px solid ${ind.color}44` }
-                  : { background: "#f7f7f5", color: "#aaa", border: "1px solid #e2e2df" }
+                  : locked
+                    ? { background: "#f7f7f5", color: "#ccc", border: "1px solid #e8e8e6" }
+                    : { background: "#f7f7f5", color: "#aaa", border: "1px solid #e2e2df" }
                 }
               >
+                {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
                 {ind.label}
               </button>
             );
@@ -551,7 +588,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
               {/* 52W range */}
               {latest?.week_52_high && latest?.week_52_low && (
-                <div className="p-4">
+                <div className="p-4 border-b border-[#f0f0ee]">
                   <div className="text-[10px] uppercase tracking-[0.5px] text-[#aaa] mb-2 font-medium">52-Week Range</div>
                   <div className="relative h-[3px] bg-[#f0f0ee] rounded-full mx-1 my-3">
                     <div className="absolute h-[3px] bg-[#5b63f5] rounded-full"
@@ -570,6 +607,56 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                   )}
                 </div>
               )}
+
+              {/* Fundamentals accordion */}
+              <div className="border-b border-[#f0f0ee]">
+                <button
+                  onClick={() => setShowFundamentals(f => !f)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#fafafa] transition-colors"
+                >
+                  <span className="text-[10px] uppercase tracking-[0.5px] text-[#aaa] font-medium">Fundamentals</span>
+                  <svg
+                    width="12" height="12" viewBox="0 0 12 12" fill="none"
+                    className="transition-transform"
+                    style={{ transform: showFundamentals ? "rotate(180deg)" : "rotate(0deg)" }}
+                  >
+                    <path d="M2 4l4 4 4-4" stroke="#aaa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                {showFundamentals && (
+                  <div className="px-4 pb-4">
+                    {!fundamentals ? (
+                      <div className="space-y-1.5">
+                        {[1,2,3,4,5].map(i => (
+                          <div key={i} className="h-3 bg-[#f0f0ee] rounded animate-pulse" />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {([
+                          ["Mkt Cap",    fundamentals.market_cap_str],
+                          ["P/E (TTM)",  fundamentals.trailing_pe != null ? fundamentals.trailing_pe.toFixed(1) : null],
+                          ["P/E (Fwd)",  fundamentals.forward_pe  != null ? fundamentals.forward_pe.toFixed(1)  : null],
+                          ["P/B",        fundamentals.price_to_book != null ? fundamentals.price_to_book.toFixed(2) : null],
+                          ["Div Yield",  fundamentals.dividend_yield != null ? `${fundamentals.dividend_yield}%` : null],
+                          ["EPS (TTM)",  fundamentals.trailing_eps != null ? `₹${fundamentals.trailing_eps}` : null],
+                          ["EPS (Fwd)",  fundamentals.forward_eps  != null ? `₹${fundamentals.forward_eps}`  : null],
+                          ["Rev Growth", fundamentals.revenue_growth != null ? `${fundamentals.revenue_growth > 0 ? "+" : ""}${fundamentals.revenue_growth}%` : null],
+                          ["Earn Grwth", fundamentals.earnings_growth != null ? `${fundamentals.earnings_growth > 0 ? "+" : ""}${fundamentals.earnings_growth}%` : null],
+                          ["D/E Ratio",  fundamentals.debt_to_equity != null ? fundamentals.debt_to_equity.toFixed(1) : null],
+                          ["ROE",        fundamentals.return_on_equity != null ? `${fundamentals.return_on_equity}%` : null],
+                        ] as [string, string | null][]).filter(([, v]) => v != null).map(([label, val]) => (
+                          <div key={label} className="flex items-center justify-between">
+                            <span className="text-[11px] text-[#aaa]">{label}</span>
+                            <span className="text-[11px] font-medium tabular-nums text-[#1c1c1a]">{val}</span>
+                          </div>
+                        ))}
+                        <div className="text-[9px] text-[#ccc] mt-1">Source: Yahoo Finance</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </aside>

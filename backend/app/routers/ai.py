@@ -104,6 +104,15 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
             messages=[{"role": "user", "content": prompt}],
         )
         analysis = message.content[0].text
+    except anthropic.BadRequestError as e:
+        err_body = str(e)
+        logger.error(f"Claude API error: {e}")
+        if "credit balance" in err_body.lower() or "too low" in err_body.lower():
+            raise HTTPException(503, "AI service is temporarily unavailable — please try again later")
+        raise HTTPException(500, "AI analysis failed — please try again")
+    except anthropic.AuthenticationError:
+        logger.error("Anthropic API key invalid or expired")
+        raise HTTPException(503, "AI service is temporarily unavailable — please try again later")
     except Exception as e:
         logger.error(f"Claude API error: {e}")
         raise HTTPException(500, "AI analysis failed — please try again")

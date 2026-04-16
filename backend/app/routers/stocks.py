@@ -304,6 +304,48 @@ async def get_sector_breadth():
     return {"trade_date": latest_date, "sectors": result}
 
 
+@router.get("/stocks/{symbol}/fundamentals")
+async def get_fundamentals(symbol: str):
+    """Basic fundamentals from Yahoo Finance: PE, market cap, P/B, dividend yield, EPS etc."""
+    try:
+        ticker = yf.Ticker(f"{symbol.upper()}.NS")
+        info = ticker.info
+
+        def _f(key, digits=2):
+            v = info.get(key)
+            return round(float(v), digits) if v is not None else None
+
+        market_cap = info.get("marketCap")
+        if market_cap:
+            if market_cap >= 1e12:
+                mc_str = f"₹{market_cap / 1e7 / 100:.0f}K Cr"
+            elif market_cap >= 1e9:
+                mc_str = f"₹{market_cap / 1e7:.0f} Cr"
+            else:
+                mc_str = f"₹{market_cap / 1e5:.0f} L"
+        else:
+            mc_str = None
+
+        return {
+            "symbol": symbol.upper(),
+            "trailing_pe": _f("trailingPE"),
+            "forward_pe": _f("forwardPE"),
+            "price_to_book": _f("priceToBook"),
+            "dividend_yield": round(info["dividendYield"] * 100, 2) if info.get("dividendYield") else None,
+            "trailing_eps": _f("trailingEps"),
+            "forward_eps": _f("forwardEps"),
+            "earnings_growth": round(info["earningsGrowth"] * 100, 1) if info.get("earningsGrowth") else None,
+            "revenue_growth": round(info["revenueGrowth"] * 100, 1) if info.get("revenueGrowth") else None,
+            "return_on_equity": round(info["returnOnEquity"] * 100, 1) if info.get("returnOnEquity") else None,
+            "debt_to_equity": _f("debtToEquity"),
+            "market_cap": market_cap,
+            "market_cap_str": mc_str,
+            "shares_outstanding": info.get("sharesOutstanding"),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not fetch fundamentals: {e}")
+
+
 @router.get("/stocks/{symbol}/quote-live")
 async def get_quote_live(symbol: str):
     """Live quote from Yahoo Finance (NSE stocks with .NS suffix).
