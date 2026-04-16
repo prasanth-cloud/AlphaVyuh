@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,6 +6,14 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services.supabase import get_admin_client
+
+FREE_JOURNAL_MONTHS = 3
+
+
+def _get_user_plan(user_id: str) -> str:
+    sb = get_admin_client()
+    r = sb.table("users").select("plan").eq("id", user_id).single().execute()
+    return r.data["plan"] if r.data else "free"
 
 router = APIRouter(prefix="/api/v1/journal", tags=["journal"])
 
@@ -180,6 +188,8 @@ async def list_entries(
     user_id: str = Depends(get_current_user_id),
 ):
     sb = get_admin_client()
+    plan = _get_user_plan(user_id)
+
     q = (
         sb.table("trade_journal")
         .select("*")
@@ -187,13 +197,21 @@ async def list_entries(
         .order("entry_date", desc=True)
         .range(offset, offset + limit - 1)
     )
+    if plan == "free":
+        cutoff = (date.today() - timedelta(days=FREE_JOURNAL_MONTHS * 30)).isoformat()
+        q = q.gte("entry_date", cutoff)
     if status:
         q = q.eq("status", status)
     if symbol:
         q = q.eq("symbol", symbol.upper())
 
     result = q.execute()
-    return {"entries": result.data or [], "total": len(result.data or [])}
+    return {
+        "entries": result.data or [],
+        "total": len(result.data or []),
+        "plan": plan,
+        "history_months": FREE_JOURNAL_MONTHS if plan == "free" else None,
+    }
 
 
 @router.post("")

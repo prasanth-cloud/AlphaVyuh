@@ -9,6 +9,7 @@ import {
   updateJournalEntry,
   deleteJournalEntry,
   searchSymbols,
+  analyseJournal,
 } from "@/lib/api";
 import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "@/lib/api";
 
@@ -64,7 +65,7 @@ const SETUP_TYPES = ["Breakout", "Pullback", "Reversal", "Momentum", "Other"];
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type PanelMode = "add" | "close" | "view" | null;
-type Tab = "trades" | "analytics";
+type Tab = "trades" | "analytics" | "ai";
 
 // ── Equity Curve SVG ──────────────────────────────────────────────────────────
 
@@ -106,6 +107,11 @@ function EquityCurve({ data }: { data: { date: string; cumulative_pnl: number }[
 export default function JournalPage() {
   const [tab, setTab] = useState<Tab>("trades");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [journalPlan, setJournalPlan] = useState<string | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiTradesCount, setAiTradesCount] = useState(0);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,6 +148,7 @@ export default function JournalPage() {
       const params = filterStatus === "all" ? {} : { status: filterStatus };
       const [e, s, a] = await Promise.all([getJournalEntries(params), getJournalStats(), getJournalAnalytics()]);
       setEntries(e.entries);
+      setJournalPlan(e.plan ?? null);
       setStats(s);
       setAnalytics(a);
     } catch {
@@ -396,6 +403,88 @@ export default function JournalPage() {
         </div>
       )}
 
+      {/* AI MistakeEngine Panel */}
+      {tab === "ai" && (
+        <div className="px-5 pb-5">
+          <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <div className="text-[14px] font-bold text-[#1c1c1a]">AI MistakeEngine</div>
+                <div className="text-[12px] text-[#aaa] mt-0.5">
+                  Claude analyses your closed trades and surfaces patterns, mistakes, and rules to add to your playbook.
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  setAiLoading(true);
+                  setAiError("");
+                  setAiAnalysis(null);
+                  try {
+                    const r = await analyseJournal();
+                    setAiAnalysis(r.analysis);
+                    setAiTradesCount(r.trades_analysed);
+                  } catch (e: unknown) {
+                    setAiError(e instanceof Error ? e.message : "Analysis failed");
+                  } finally {
+                    setAiLoading(false);
+                  }
+                }}
+                disabled={aiLoading}
+                className="flex-shrink-0 px-4 py-2 rounded-[8px] bg-[#1c1c1a] text-white text-[12px] font-semibold hover:opacity-85 disabled:opacity-50 transition-opacity ml-4"
+              >
+                {aiLoading ? "Analysing…" : aiAnalysis ? "Re-analyse" : "Analyse my trades"}
+              </button>
+            </div>
+
+            {aiError && (
+              <div className="text-[13px] text-[#e5383b] bg-[#fff0f0] border border-[#ffd0d0] rounded-[8px] px-4 py-3">
+                {aiError}
+              </div>
+            )}
+
+            {aiLoading && (
+              <div className="flex flex-col items-center py-12 gap-3">
+                <div className="w-6 h-6 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
+                <div className="text-[12px] text-[#aaa]">Reading your journal and finding patterns…</div>
+              </div>
+            )}
+
+            {aiAnalysis && !aiLoading && (
+              <div>
+                <div className="text-[11px] text-[#aaa] mb-3">Based on {aiTradesCount} closed trades</div>
+                <div className="prose prose-sm max-w-none text-[13px] text-[#1c1c1a] leading-relaxed space-y-3">
+                  {aiAnalysis.split("\n").map((line, i) => {
+                    if (line.startsWith("## ") || line.startsWith("### ")) {
+                      return <div key={i} className="text-[13px] font-bold text-[#1c1c1a] mt-4 mb-1">{line.replace(/^#+\s/, "")}</div>;
+                    }
+                    if (line.startsWith("**") && line.endsWith("**")) {
+                      return <div key={i} className="text-[13px] font-bold text-[#1c1c1a] mt-3 mb-1">{line.replace(/\*\*/g, "")}</div>;
+                    }
+                    if (line.startsWith("- ") || line.startsWith("* ")) {
+                      return (
+                        <div key={i} className="flex gap-2 items-start">
+                          <span className="text-[#5b63f5] mt-0.5 flex-shrink-0">•</span>
+                          <span dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") }} />
+                        </div>
+                      );
+                    }
+                    if (line.trim() === "") return <div key={i} className="h-1" />;
+                    return <div key={i} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") }} />;
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!aiAnalysis && !aiLoading && !aiError && (
+              <div className="text-center py-10">
+                <div className="text-[13px] text-[#aaa]">Click "Analyse my trades" to get AI-powered insights on your trading patterns.</div>
+                <div className="text-[12px] text-[#bbb] mt-1">Requires at least 3 closed trades.</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Body */}
       {tab === "trades" && <div className="flex gap-2.5 px-5 pt-0 pb-5">
         {/* Trade list */}
@@ -423,6 +512,14 @@ export default function JournalPage() {
               <span className="text-[16px] leading-none">+</span> Log trade
             </button>
           </div>
+
+          {/* Free plan history notice */}
+          {journalPlan === "free" && (
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[#fff8ec] border border-[#f5d88b] rounded-[8px] mb-3 text-[12px]">
+              <span className="text-[#92600a]">Free plan shows last 3 months of trades only.</span>
+              <a href="/settings/billing" className="text-[#d97706] font-semibold hover:underline ml-4">Upgrade to Pro →</a>
+            </div>
+          )}
 
           {/* Table */}
           <div className="bg-white border border-[#e2e2df] rounded-[10px] overflow-hidden">

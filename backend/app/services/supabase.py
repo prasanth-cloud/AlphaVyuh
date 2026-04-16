@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+    anthropic_api_key: str = ""
 
     class Config:
         env_file = ".env"

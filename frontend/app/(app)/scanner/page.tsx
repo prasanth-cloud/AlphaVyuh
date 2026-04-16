@@ -505,7 +505,7 @@ export default function ScannerPage() {
   const [sortOrder, setSortOrder]         = useState<"asc" | "desc">("desc");
 
   const [results, setResults]   = useState<ScanResult[] | null>(null);
-  const [scanMeta, setScanMeta] = useState<{ trade_date: string; total_matches: number; plan_limit: number } | null>(null);
+  const [scanMeta, setScanMeta] = useState<{ trade_date: string; total_matches: number; plan_limit: number; plan?: string } | null>(null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
 
@@ -618,7 +618,7 @@ export default function ScannerPage() {
     try {
       const resp: ScanResponse = await runScan(filters, sortKey, sortOrder);
       setResults(resp.results);
-      setScanMeta({ trade_date: resp.trade_date, total_matches: resp.total_matches, plan_limit: resp.plan_limit });
+      setScanMeta({ trade_date: resp.trade_date, total_matches: resp.total_matches, plan_limit: resp.plan_limit, plan: resp.plan });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Scan failed");
     } finally {

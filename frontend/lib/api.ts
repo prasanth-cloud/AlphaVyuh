@@ -133,6 +133,7 @@ export type ScanResponse = {
   trade_date: string;
   total_matches: number;
   plan_limit: number;
+  plan?: string;
   results: ScanResult[];
 };
 
@@ -519,7 +520,7 @@ export type UpdateJournalEntry = {
 
 export async function getJournalEntries(
   params?: { limit?: number; offset?: number; status?: string; symbol?: string }
-): Promise<{ entries: JournalEntry[]; total: number }> {
+): Promise<{ entries: JournalEntry[]; total: number; plan?: string; history_months?: number | null }> {
   const headers = await authHeaders();
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
@@ -641,5 +642,15 @@ export async function verifyPayment(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Payment verification failed");
+  return res.json();
+}
+
+export async function analyseJournal(): Promise<{ analysis: string; trades_analysed: number }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/ai/analyse`, { method: "POST", headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Analysis failed");
+  }
   return res.json();
 }
