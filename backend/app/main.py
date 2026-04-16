@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import charts, ingest, journal, scanner, stocks, users, waitlist, watchlist
+from app.routers import alerts, charts, ingest, journal, scanner, stocks, users, waitlist, watchlist
 
 try:
     from app.routers import payments as payments_router
@@ -46,6 +46,7 @@ app.include_router(users.router)
 app.include_router(waitlist.router)
 app.include_router(ingest.router)
 app.include_router(scanner.router)
+app.include_router(alerts.router)
 app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(charts.router)
@@ -65,6 +66,14 @@ async def _trigger_daily_ingest():
         logger.info(f"Scheduled ingest: {result}")
     except Exception as e:
         logger.error(f"Scheduled ingest failed: {e}")
+        return
+
+    # After ingest succeeds, run all saved scan alerts
+    try:
+        alert_result = await alerts.run_all_alerts(date.today())
+        logger.info(f"Scan alerts run: {alert_result}")
+    except Exception as e:
+        logger.error(f"Scan alerts run failed: {e}")
 
 
 @app.on_event("startup")

@@ -677,3 +677,95 @@ export async function analyseJournal(): Promise<{ analysis: string; trades_analy
   }
   return res.json();
 }
+
+// ── Scan Alerts ───────────────────────────────────────────────────────────────
+
+export type ScanAlert = {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  sort_by: string;
+  sort_order: string;
+  is_active: boolean;
+  last_run_at: string | null;
+  last_match_count: number | null;
+  created_at: string;
+};
+
+export type ScanAlertMatch = {
+  id: string;
+  alert_id: string;
+  run_date: string;
+  symbols: Array<{
+    symbol: string;
+    close: number;
+    pct_change: number | null;
+    volume_ratio: number | null;
+    rsi_14: number | null;
+  }>;
+  match_count: number;
+  scan_alerts?: { name: string };
+};
+
+export async function listAlerts(): Promise<ScanAlert[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/alerts`, { headers });
+  if (!res.ok) throw new Error("Failed to load alerts");
+  const data = await res.json();
+  return data.alerts;
+}
+
+export async function createAlert(body: {
+  name: string;
+  filters: Record<string, unknown>;
+  sort_by?: string;
+  sort_order?: string;
+}): Promise<ScanAlert> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/alerts`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(typeof err.detail === "string" ? err.detail : "Failed to create alert");
+  }
+  return res.json();
+}
+
+export async function updateAlert(id: string, body: {
+  name?: string;
+  is_active?: boolean;
+  filters?: Record<string, unknown>;
+}): Promise<ScanAlert> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/alerts/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Failed to update alert");
+  return res.json();
+}
+
+export async function deleteAlert(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await fetch(`${API}/api/v1/alerts/${id}`, { method: "DELETE", headers });
+}
+
+export async function getAlertMatches(alertId: string): Promise<ScanAlertMatch[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/alerts/${alertId}/matches`, { headers });
+  if (!res.ok) throw new Error("Failed to load matches");
+  const data = await res.json();
+  return data.matches;
+}
+
+export async function getRecentAlertMatches(): Promise<ScanAlertMatch[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/alerts/recent/matches`, { headers });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.matches;
+}

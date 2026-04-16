@@ -108,6 +108,19 @@ export default function DashboardPage() {
       sub: "Log trades, track P&L, review mistakes",
       badge: "New", badgeColor: "#5b63f5", badgeBg: "#eeeffe",
     },
+    {
+      href: "/alerts",
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M8 2a4.5 4.5 0 014.5 4.5c0 2.5.8 3.5 1.5 4.5H2c.7-1 1.5-2 1.5-4.5A4.5 4.5 0 018 2z" stroke="#5b63f5" strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="M6.5 11v.5a1.5 1.5 0 003 0V11" stroke="#5b63f5" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+      ),
+      iconBg: "#eeeffe",
+      title: "Alerts",
+      sub: "Save scans and get notified after market close",
+      badge: "New", badgeColor: "#5b63f5", badgeBg: "#eeeffe",
+    },
   ];
 
   return (

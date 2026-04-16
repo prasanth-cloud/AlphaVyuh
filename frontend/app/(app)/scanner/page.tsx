@@ -6,7 +6,7 @@ import {
   BarChart2, Search, Check,
 } from "lucide-react";
 import type { ScanResult, ScanFilters, ScanResponse, SavedScreen } from "@/lib/api";
-import { runScan, getScreens, saveScreen, deleteScreen, getSectors } from "@/lib/api";
+import { runScan, getScreens, saveScreen, deleteScreen, getSectors, createAlert } from "@/lib/api";
 import StockDetailPanel from "@/components/scanner/StockDetailPanel";
 import RsiBadge from "@/components/scanner/RsiBadge";
 import PctChange from "@/components/scanner/PctChange";
@@ -523,6 +523,12 @@ export default function ScannerPage() {
   const [showSaveInput, setShowSaveInput] = useState(false);
   const screensLoadedRef = useRef(false);
 
+  // Save as alert
+  const [showAlertInput, setShowAlertInput] = useState(false);
+  const [alertName, setAlertName]           = useState("");
+  const [alertSaving, setAlertSaving]       = useState(false);
+  const [alertToast, setAlertToast]         = useState("");
+
   // Close dropdowns on outside click
   useEffect(() => {
     getSectors().then(setSectors).catch(() => {});
@@ -641,6 +647,33 @@ export default function ScannerPage() {
     } catch { /* ignore */ }
   }
 
+  async function handleSaveAlert() {
+    if (!alertName.trim()) return;
+    setAlertSaving(true);
+    const filters = conditionsToFilters(conditions, {
+      ...presetFilters,
+      series: seriesFilter,
+      ...(sectorFilter ? { sector: sectorFilter } : {}),
+    });
+    try {
+      await createAlert({
+        name: alertName.trim(),
+        filters: filters as Record<string, unknown>,
+        sort_by: sortKey,
+        sort_order: sortOrder,
+      });
+      setAlertName("");
+      setShowAlertInput(false);
+      setAlertToast("Alert saved! Results will appear after market close.");
+      setTimeout(() => setAlertToast(""), 3000);
+    } catch (e: unknown) {
+      setAlertToast(e instanceof Error ? e.message : "Failed to save alert");
+      setTimeout(() => setAlertToast(""), 3000);
+    } finally {
+      setAlertSaving(false);
+    }
+  }
+
   const isCapped = scanMeta && results && scanMeta.total_matches > results.length;
   const totalConditions = conditions.length + Object.keys(presetFilters).length;
 
@@ -658,6 +691,12 @@ export default function ScannerPage() {
 
   return (
     <div className="flex flex-col h-screen bg-[#f2f2f0] overflow-hidden">
+
+      {alertToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg pointer-events-none">
+          {alertToast}
+        </div>
+      )}
 
       {/* ── Top toolbar ─────────────────────────────────────────────── */}
       <div className="bg-white border-b border-[#e2e2df] px-4 py-2.5 flex-shrink-0" ref={filterBtnRef}>
@@ -870,6 +909,37 @@ export default function ScannerPage() {
                 <button onClick={() => setShowSaveInput(true)}
                   className="flex items-center gap-1 text-[11px] text-[#666] border border-[#e2e2df] rounded-[6px] px-2.5 py-1.5 hover:border-[#888] transition-colors">
                   <BookmarkPlus size={11} /> Save
+                </button>
+              )
+            )}
+
+            {/* Save as Alert */}
+            {results && (
+              showAlertInput ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    autoFocus value={alertName}
+                    onChange={e => setAlertName(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSaveAlert()}
+                    placeholder="Alert name…"
+                    className="text-[11px] border border-[#e2e2df] rounded-[5px] px-2 py-1 w-[140px] outline-none focus:border-[#5b63f5]"
+                  />
+                  <button
+                    onClick={handleSaveAlert}
+                    disabled={alertSaving}
+                    className="text-[11px] text-[#5b63f5] font-medium disabled:opacity-50"
+                  >
+                    {alertSaving ? "Saving…" : "Save Alert"}
+                  </button>
+                  <button onClick={() => setShowAlertInput(false)} className="text-[#aaa]"><X size={11} /></button>
+                </div>
+              ) : (
+                <button onClick={() => setShowAlertInput(true)}
+                  className="flex items-center gap-1 text-[11px] text-[#5b63f5] border border-[#5b63f5] rounded-[6px] px-2.5 py-1.5 hover:bg-[#eeeffe] transition-colors">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
+                    <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  Alert
                 </button>
               )
             )}
