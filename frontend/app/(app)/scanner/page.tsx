@@ -6,7 +6,7 @@ import {
   BarChart2, Search, Check,
 } from "lucide-react";
 import type { ScanResult, ScanFilters, ScanResponse, SavedScreen } from "@/lib/api";
-import { runScan, getScreens, saveScreen, deleteScreen } from "@/lib/api";
+import { runScan, getScreens, saveScreen, deleteScreen, getSectors } from "@/lib/api";
 import StockDetailPanel from "@/components/scanner/StockDetailPanel";
 import RsiBadge from "@/components/scanner/RsiBadge";
 import PctChange from "@/components/scanner/PctChange";
@@ -501,6 +501,8 @@ export default function ScannerPage() {
   const [conditions, setConditions]       = useState<ActiveCondition[]>([]);
   const [presetFilters, setPresetFilters] = useState<Partial<ScanFilters>>({});
   const [seriesFilter, setSeriesFilter]   = useState<string[]>(["EQ", "BE"]);
+  const [sectorFilter, setSectorFilter]   = useState<string>("");
+  const [sectors, setSectors]             = useState<string[]>([]);
   const [sortKey, setSortKey]             = useState<string>("volume_ratio");
   const [sortOrder, setSortOrder]         = useState<"asc" | "desc">("desc");
 
@@ -523,6 +525,7 @@ export default function ScannerPage() {
 
   // Close dropdowns on outside click
   useEffect(() => {
+    getSectors().then(setSectors).catch(() => {});
     function handler(e: MouseEvent) {
       if (filterBtnRef.current && !filterBtnRef.current.contains(e.target as Node)) {
         setShowFilterPanel(false);
@@ -614,6 +617,7 @@ export default function ScannerPage() {
     const filters = conditionsToFilters(conditions, {
       ...presetFilters,
       series: seriesFilter,
+      ...(sectorFilter ? { sector: sectorFilter } : {}),
     });
     try {
       const resp: ScanResponse = await runScan(filters, sortKey, sortOrder);
@@ -735,6 +739,18 @@ export default function ScannerPage() {
               );
             })}
           </div>
+
+          {/* Sector filter */}
+          {sectors.length > 0 && (
+            <select
+              value={sectorFilter}
+              onChange={e => setSectorFilter(e.target.value)}
+              className="text-[11px] border border-[#e2e2df] rounded-[6px] px-2 py-1 bg-white text-[#555] outline-none focus:border-[#5b63f5] cursor-pointer max-w-[140px]"
+            >
+              <option value="">All Sectors</option>
+              {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
 
           <div className="w-px h-5 bg-[#e2e2df] shrink-0" />
 

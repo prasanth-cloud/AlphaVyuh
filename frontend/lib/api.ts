@@ -397,6 +397,29 @@ export async function getMarketMovers(): Promise<MarketMovers | null> {
   return res.json();
 }
 
+export type SectorBreadthItem = {
+  sector: string;
+  total: number;
+  advances: number;
+  declines: number;
+  unchanged: number;
+  ad_ratio: number | null;
+  above_ema200_pct: number | null;
+};
+
+export async function getSectorBreadth(): Promise<{ trade_date: string; sectors: SectorBreadthItem[] } | null> {
+  const res = await fetch(`${API}/api/v1/market/sector-breadth`, { headers: publicHeaders });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function getSectors(): Promise<string[]> {
+  const res = await fetch(`${API}/api/v1/market/sectors`, { headers: publicHeaders });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.sectors ?? [];
+}
+
 export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
   const res = await fetch(`${API}/api/v1/charts/search?q=${encodeURIComponent(q)}`, { headers: publicHeaders });
   if (!res.ok) return [];

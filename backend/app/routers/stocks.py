@@ -219,6 +219,91 @@ async def get_market_movers():
     }
 
 
+@router.get("/market/sectors")
+async def list_sectors():
+    """Returns distinct sector names that have at least 3 stocks."""
+    client = get_admin_client()
+    res = client.table("stock_universe").select("sector").not_.is_("sector", "null").eq("is_active", True).execute()
+    from collections import Counter
+    counts = Counter(r["sector"] for r in (res.data or []) if r.get("sector"))
+    sectors = sorted(s for s, c in counts.items() if c >= 3)
+    return {"sectors": sectors}
+
+
+@router.get("/market/sector-breadth")
+async def get_sector_breadth():
+    """Advance/decline ratio and above-EMA200 % broken down by sector."""
+    client = get_admin_client()
+
+    date_res = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
+    if not date_res.data:
+        return {"sectors": []}
+    latest_date = date_res.data[0]["trade_date"]
+
+    # Pull all rows with sector (paginated)
+    all_rows: list[dict] = []
+    offset = 0
+    while True:
+        chunk = (
+            client.table("daily_ohlcv")
+            .select("close,prev_close,ema_200,stock_universe!inner(sector)")
+            .eq("trade_date", latest_date)
+            .not_.is_("stock_universe.sector", "null")
+            .range(offset, offset + 999)
+            .execute()
+        )
+        if not chunk.data:
+            break
+        all_rows.extend(chunk.data)
+        if len(chunk.data) < 1000:
+            break
+        offset += 1000
+
+    # Aggregate per sector
+    sectors: dict[str, dict] = {}
+    for row in all_rows:
+        su = row.get("stock_universe") or {}
+        if isinstance(su, list):
+            su = su[0] if su else {}
+        sector = su.get("sector")
+        if not sector:
+            continue
+        close = float(row["close"] or 0)
+        prev = float(row["prev_close"] or 0)
+        ema200 = float(row["ema_200"]) if row["ema_200"] is not None else None
+
+        if sector not in sectors:
+            sectors[sector] = {"advances": 0, "declines": 0, "unchanged": 0, "above_ema200": 0, "total": 0}
+        s = sectors[sector]
+        s["total"] += 1
+        if prev:
+            if close > prev * 1.001:
+                s["advances"] += 1
+            elif close < prev * 0.999:
+                s["declines"] += 1
+            else:
+                s["unchanged"] += 1
+        if ema200 and close > ema200:
+            s["above_ema200"] += 1
+
+    result = []
+    for name, s in sorted(sectors.items(), key=lambda x: -x[1]["total"]):
+        total = s["total"]
+        adv = s["advances"]
+        dec = s["declines"]
+        result.append({
+            "sector": name,
+            "total": total,
+            "advances": adv,
+            "declines": dec,
+            "unchanged": s["unchanged"],
+            "ad_ratio": round(adv / dec, 2) if dec else None,
+            "above_ema200_pct": round(s["above_ema200"] / total * 100, 1) if total else None,
+        })
+
+    return {"trade_date": latest_date, "sectors": result}
+
+
 @router.get("/stocks/{symbol}/quote-live")
 async def get_quote_live(symbol: str):
     """Live quote from Yahoo Finance (NSE stocks with .NS suffix).

@@ -74,6 +74,7 @@ class ScanFilters(BaseModel):
 
     # ── Market / Classification ──────────────────────────────────────────
     series:          list[str] | None = None   # ["EQ","BE"]
+    sector:          str | None = None          # e.g. "Information Technology"
 
 
 class ScanRequest(BaseModel):
@@ -215,6 +216,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.w52l_pct_min  is not None and (w52l_pct is None or w52l_pct < f.w52l_pct_min): continue
         if f.new_52w_high  and (w52h_v is None or close < w52h_v):  continue
         if f.new_52w_low   and (w52l_v is None or close > w52l_v):  continue
+
+        # ── Sector ────────────────────────────────────────────────────────
+        if f.sector is not None and su.get("sector") != f.sector: continue
 
         results.append({
             "symbol":         row["symbol"],

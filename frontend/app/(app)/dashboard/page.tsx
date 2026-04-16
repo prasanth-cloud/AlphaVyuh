@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getMarketSummary, getMarketMovers } from "@/lib/api";
-import type { MarketSummary, MarketMovers } from "@/lib/api";
+import { getMarketSummary, getMarketMovers, getSectorBreadth } from "@/lib/api";
+import type { MarketSummary, MarketMovers, SectorBreadthItem } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
 
 
@@ -10,6 +10,7 @@ export default function DashboardPage() {
   const [market, setMarket] = useState<MarketSummary | null>(null);
   const [movers, setMovers] = useState<MarketMovers | null>(null);
   const [moversTab, setMoversTab] = useState<"gainers" | "losers" | "volume_surge">("gainers");
+  const [sectorBreadth, setSectorBreadth] = useState<SectorBreadthItem[]>([]);
   const [userName, setUserName] = useState("Trader");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,6 +32,10 @@ export default function DashboardPage() {
 
     getMarketMovers()
       .then(setMovers)
+      .catch(() => { /* non-critical */ });
+
+    getSectorBreadth()
+      .then(d => { if (d?.sectors?.length) setSectorBreadth(d.sectors); })
       .catch(() => { /* non-critical */ });
   }, []);
 
@@ -212,6 +217,48 @@ export default function DashboardPage() {
                   </div>
                 </Link>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sector Breadth */}
+      {sectorBreadth.length > 0 && (
+        <div className="px-5 pb-4">
+          <div className="bg-white border border-[#e2e2df] rounded-[10px] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#f0f0ee] flex items-center justify-between">
+              <span className="text-[13px] font-bold text-[#1c1c1a]">Sector Breadth</span>
+              <span className="text-[11px] text-[#aaa]">A/D · EMA200</span>
+            </div>
+            <div className="divide-y divide-[#f7f7f5]">
+              {sectorBreadth.slice(0, 10).map(s => {
+                const total = s.advances + s.declines + s.unchanged;
+                const advPct = total > 0 ? (s.advances / total) * 100 : 0;
+                const decPct = total > 0 ? (s.declines / total) * 100 : 0;
+                const bullish = (s.ad_ratio ?? 0) > 1.2;
+                const bearish = (s.ad_ratio ?? 1) < 0.8;
+                return (
+                  <div key={s.sector} className="flex items-center gap-3 px-4 py-2.5">
+                    <div className="w-[130px] text-[12px] font-medium text-[#1c1c1a] truncate">{s.sector}</div>
+                    {/* A/D bar */}
+                    <div className="flex-1 h-[5px] rounded-full bg-[#f0f0ee] overflow-hidden">
+                      <div className="h-full flex">
+                        <div className="h-full bg-[#26a65b] rounded-l-full" style={{ width: `${advPct}%` }} />
+                        <div className="h-full bg-[#e5383b] rounded-r-full" style={{ width: `${decPct}%` }} />
+                      </div>
+                    </div>
+                    <div className="w-[48px] text-right text-[11px] font-semibold tabular-nums"
+                      style={{ color: bullish ? "#26a65b" : bearish ? "#e5383b" : "#888" }}>
+                      {s.ad_ratio != null ? `${s.ad_ratio}x` : "—"}
+                    </div>
+                    {s.above_ema200_pct != null && (
+                      <div className="w-[38px] text-right text-[11px] tabular-nums text-[#5b63f5]">
+                        {s.above_ema200_pct}%
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
