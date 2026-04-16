@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Check, Zap, Sparkles, Crown } from "lucide-react";
 import {
-  getMe, updateMe,
+  getMe, updateMe, getZerodhaLoginUrl,
   listAlerts, updateAlert, deleteAlert, getAlertMatches,
   getPlanStatus, createPaymentOrder, verifyPayment,
   type UserProfile, type ScanAlert, type ScanAlertMatch, type PlanStatus,
@@ -273,6 +273,52 @@ export default function SettingsPage() {
     }
   }
 
+  // ── Broker state ─────────────────────────────────────────────────────────
+  const [brokerType, setBrokerType] = useState("");
+  const [brokerApiKey, setBrokerApiKey] = useState("");
+  const [brokerApiSecret, setBrokerApiSecret] = useState("");
+  const [savingBroker, setSavingBroker] = useState(false);
+  const [connectingZerodha, setConnectingZerodha] = useState(false);
+
+  useEffect(() => {
+    if (profile) {
+      setBrokerType(profile.broker_type ?? "");
+      setBrokerApiKey(""); // never pre-fill secret fields
+      setBrokerApiSecret("");
+    }
+  }, [profile]);
+
+  async function saveBroker() {
+    setSavingBroker(true);
+    try {
+      const updates: Parameters<typeof updateMe>[0] = {};
+      if (brokerType) updates.broker_type = brokerType;
+      if (brokerApiKey.trim()) updates.broker_api_key = brokerApiKey.trim();
+      if (brokerApiSecret.trim()) updates.broker_api_secret = brokerApiSecret.trim();
+      if (Object.keys(updates).length === 0) { showToast("No changes to save", false); return; }
+      const updated = await updateMe(updates);
+      setProfile(updated);
+      setBrokerApiKey(""); setBrokerApiSecret("");
+      showToast("Broker settings saved", true);
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Save failed", false);
+    } finally {
+      setSavingBroker(false);
+    }
+  }
+
+  async function handleZerodhaConnect() {
+    setConnectingZerodha(true);
+    try {
+      const url = await getZerodhaLoginUrl();
+      window.open(url, "_blank");
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Could not start Zerodha login", false);
+    } finally {
+      setConnectingZerodha(false);
+    }
+  }
+
   // ── Alerts state ─────────────────────────────────────────────────────────
   const [alerts, setAlerts] = useState<ScanAlert[]>([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
@@ -500,6 +546,109 @@ export default function SettingsPage() {
                 >
                   {saving ? "Saving..." : "Save changes"}
                 </button>
+              </div>
+
+              {/* Broker connection */}
+              <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5 mt-1">
+                <div className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1">Broker Connection</div>
+                <div className="text-[12px] text-[#888] mb-4 leading-relaxed">
+                  Connect your broker to route orders directly from charts. Orders placed on AlphaVyuh will execute via your broker account.
+                </div>
+
+                {profile?.broker_type && profile.broker_type !== "none" && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#26a65b]" />
+                    <span className="text-[12px] text-[#26a65b] font-medium capitalize">{profile.broker_type} configured</span>
+                    {profile.broker_connected_at && (
+                      <span className="text-[11px] text-[#aaa]">
+                        · since {new Date(profile.broker_connected_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[12px] font-medium text-[#555] block mb-1.5">Broker</label>
+                    <select
+                      value={brokerType}
+                      onChange={e => setBrokerType(e.target.value)}
+                      className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] transition-colors"
+                    >
+                      <option value="">— Select broker —</option>
+                      <option value="zerodha">Zerodha</option>
+                      <option value="upstox">Upstox</option>
+                      <option value="fyers">Fyers</option>
+                      <option value="angel">Angel One</option>
+                      <option value="other">Other (simulated)</option>
+                    </select>
+                  </div>
+
+                  {brokerType === "zerodha" && (
+                    <>
+                      <div className="text-[11px] text-[#888] bg-[#f7f7f5] rounded-lg px-3 py-2.5 leading-relaxed">
+                        Get your API key &amp; secret from{" "}
+                        <span className="text-[#5b63f5] font-medium">developers.kite.trade</span>.
+                        Set the redirect URL to{" "}
+                        <code className="bg-white border border-[#e2e2df] px-1 rounded text-[10px]">http://localhost:3000/broker/callback</code>
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-medium text-[#555] block mb-1.5">API Key</label>
+                        <input
+                          type="text"
+                          value={brokerApiKey}
+                          onChange={e => setBrokerApiKey(e.target.value)}
+                          placeholder={profile?.broker_api_key ? `Current: ${profile.broker_api_key}` : "kitexxxxxxxxxxx"}
+                          className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] font-mono transition-colors"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-medium text-[#555] block mb-1.5">API Secret</label>
+                        <input
+                          type="password"
+                          value={brokerApiSecret}
+                          onChange={e => setBrokerApiSecret(e.target.value)}
+                          placeholder="Enter new secret to update"
+                          className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] transition-colors"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={saveBroker}
+                          disabled={savingBroker}
+                          className="flex-1 py-2.5 rounded-lg text-[13px] font-medium text-white bg-[#1c1c1a] hover:bg-[#333] transition-colors disabled:opacity-50"
+                        >
+                          {savingBroker ? "Saving..." : "Save API credentials"}
+                        </button>
+                        {profile?.broker_api_key && (
+                          <button
+                            onClick={handleZerodhaConnect}
+                            disabled={connectingZerodha}
+                            className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors disabled:opacity-50"
+                            style={{ background: "#5b63f5" }}
+                          >
+                            {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {brokerType && brokerType !== "zerodha" && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12px] text-[#888]">
+                        {brokerType === "other" ? "Orders will be simulated." : `${brokerType} integration coming soon.`}
+                      </p>
+                      <button
+                        onClick={saveBroker}
+                        disabled={savingBroker}
+                        className="px-4 py-2 rounded-lg text-[13px] font-medium text-white bg-[#1c1c1a] hover:bg-[#333] transition-colors disabled:opacity-50"
+                      >
+                        {savingBroker ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

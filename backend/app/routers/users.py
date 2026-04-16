@@ -6,6 +6,12 @@ from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1", tags=["users"])
 
+_SELECT = (
+    "id, email, full_name, avatar_url, plan, plan_expires_at, "
+    "onboarding_completed, telegram_chat_id, "
+    "broker_type, broker_api_key, broker_connected_at, created_at"
+)
+
 
 class UserResponse(BaseModel):
     id: str
@@ -16,6 +22,9 @@ class UserResponse(BaseModel):
     plan_expires_at: str | None
     onboarding_completed: bool
     telegram_chat_id: str | None = None
+    broker_type: str | None = None
+    broker_api_key: str | None = None       # returned masked
+    broker_connected_at: str | None = None
     created_at: str
 
 
@@ -23,6 +32,10 @@ class UpdateUserRequest(BaseModel):
     full_name: str | None = None
     onboarding_completed: bool | None = None
     telegram_chat_id: str | None = None
+    # Broker setup — set during onboarding or settings
+    broker_type: str | None = None          # "zerodha" | "upstox" | "angel" | "fyers" | "none"
+    broker_api_key: str | None = None
+    broker_api_secret: str | None = None    # write-only, never returned
 
 
 @router.get("/me", response_model=UserResponse)
@@ -30,14 +43,19 @@ async def get_me(user_id: str = Depends(get_current_user_id)):
     client = get_admin_client()
     result = (
         client.table("users")
-        .select("id, email, full_name, avatar_url, plan, plan_expires_at, onboarding_completed, telegram_chat_id, created_at")
+        .select(_SELECT)
         .eq("id", user_id)
         .single()
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return result.data
+    row = result.data
+    # Mask API key — show only last 4 chars
+    if row.get("broker_api_key"):
+        key = row["broker_api_key"]
+        row["broker_api_key"] = ("*" * (len(key) - 4) + key[-4:]) if len(key) > 4 else "****"
+    return row
 
 
 @router.patch("/me", response_model=UserResponse)
@@ -52,6 +70,15 @@ async def update_me(
         updates["onboarding_completed"] = body.onboarding_completed
     if body.telegram_chat_id is not None:
         updates["telegram_chat_id"] = body.telegram_chat_id or None
+    if body.broker_type is not None:
+        updates["broker_type"] = body.broker_type if body.broker_type != "none" else None
+    if body.broker_api_key is not None:
+        updates["broker_api_key"] = body.broker_api_key or None
+    if body.broker_api_secret is not None:
+        updates["broker_api_secret"] = body.broker_api_secret or None
+    if body.broker_type or body.broker_api_key:
+        import datetime
+        updates["broker_connected_at"] = datetime.datetime.utcnow().isoformat()
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
@@ -61,10 +88,14 @@ async def update_me(
         client.table("users")
         .update(updates)
         .eq("id", user_id)
-        .select("id, email, full_name, avatar_url, plan, plan_expires_at, onboarding_completed, telegram_chat_id, created_at")
+        .select(_SELECT)
         .single()
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return result.data
+    row = result.data
+    if row.get("broker_api_key"):
+        key = row["broker_api_key"]
+        row["broker_api_key"] = ("*" * (len(key) - 4) + key[-4:]) if len(key) > 4 else "****"
+    return row

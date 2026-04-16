@@ -284,7 +284,7 @@ async def run_scanner(
         .select(
             "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
             "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
-            "stock_universe!inner(symbol,company_name,series,sector,is_active)"
+            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active)"
         )
         .eq("trade_date", latest_date)
         # series + is_active filtering done Python-side in _apply_filters

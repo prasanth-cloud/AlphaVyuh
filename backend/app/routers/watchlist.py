@@ -42,7 +42,7 @@ def _enrich_items(client, items: list) -> list:
 
     # Fetch quotes for all symbols
     quotes_res = client.table("daily_ohlcv") \
-        .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14, stock_universe(company_name, sector)") \
+        .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14, stock_universe!daily_ohlcv_symbol_fkey(company_name, sector)") \
         .eq("trade_date", latest_date) \
         .in_("symbol", symbols) \
         .execute()
@@ -109,7 +109,7 @@ async def get_watchlists(user_id: str = Depends(get_current_user_id)):
             # 4 – quotes for ALL symbols in ONE query
             quotes_res = client.table("daily_ohlcv") \
                 .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14,"
-                        "stock_universe(company_name, sector)") \
+                        "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector)") \
                 .eq("trade_date", latest_date) \
                 .in_("symbol", all_symbols) \
                 .execute()

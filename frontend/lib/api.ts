@@ -814,6 +814,9 @@ export type UserProfile = {
   plan_expires_at: string | null;
   onboarding_completed: boolean;
   telegram_chat_id: string | null;
+  broker_type: string | null;
+  broker_api_key: string | null;   // masked — last 4 chars only
+  broker_connected_at: string | null;
   created_at: string;
 };
 
@@ -828,6 +831,9 @@ export async function updateMe(updates: {
   full_name?: string;
   onboarding_completed?: boolean;
   telegram_chat_id?: string;
+  broker_type?: string;
+  broker_api_key?: string;
+  broker_api_secret?: string;
 }): Promise<UserProfile> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/me`, {
@@ -838,6 +844,27 @@ export async function updateMe(updates: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail ?? "Failed to update profile");
+  }
+  return res.json();
+}
+
+export async function getZerodhaLoginUrl(): Promise<string> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/zerodha/login`, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to get login URL");
+  }
+  const data = await res.json();
+  return data.login_url;
+}
+
+export async function connectZerodha(requestToken: string): Promise<{ status: string; message: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/zerodha/callback?request_token=${encodeURIComponent(requestToken)}`, { headers });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Zerodha connection failed");
   }
   return res.json();
 }
