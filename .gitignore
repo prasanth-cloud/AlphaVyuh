@@ -47,5 +47,7 @@ Thumbs.db
 /tmp/
 
 # ── Claude ───────────────────────────────────────────────────────────────────
-.claude/
+# .claude/ intentionally tracked — project rules, skills, and agent configs
+# Only exclude the local settings file (contains personal tool permissions)
+.claude/settings.local.json
 .vercel

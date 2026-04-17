@@ -1,102 +1,110 @@
-# AlphaVyuh — The Trading OS for Indian Stock Traders
-# CLAUDE.md — Product Specification & Build Guide
+# AlphaVyuh — Developer Guide
 
-## Product Vision
-One platform that replaces 4–5 fragmented tools (Chartink + TradingView + Screener.in + Kite + spreadsheet) with a connected end-to-end workflow — and adds an AI layer that tells traders exactly where they're losing money.
+## What this is
+Trading OS SaaS for Indian stock traders. Replaces Chartink + TradingView + Screener.in + Kite + spreadsheet with one connected platform. All 4 phases are implemented and deployed.
 
-**Workflow**: Scan → Watchlist → Chart & analyse → Place order → Journal auto-fills → AI reviews mistakes
+**Workflow**: Scan → Watchlist → Chart → Order → Journal (auto-filled) → AI reviews mistakes
 
-## Pitch Deck
-Interactive investor pitch deck at `pitch/index.html` — open in browser. Covers problem, solution, market size, pricing, unit economics (interactive sliders), revenue projections, competitive landscape, build costs, moat, and the ask (₹1–2Cr pre-seed).
+## Monorepo layout
+```
+alphavyuh/
+├── frontend/          Next.js 14.2 App Router (Vercel)
+├── backend/           FastAPI 0.115 / Python 3.12 (Railway)
+├── supabase/          migrations/ (001–015), no ORM
+└── .claude/           rules/, skills/, agents/
+```
 
 ## Stack
-- **Frontend**: Next.js 14 App Router, TypeScript, Tailwind CSS — deployed on Vercel
-- **Backend**: FastAPI (Python), deployed on Railway
-- **Database + Auth**: Supabase (Postgres + Row Level Security)
-- **Payments**: Razorpay (₹1,999/mo Pro, ₹4,999/mo Elite)
-- **Data**: NSE Bhavcopy (historical via backfill script), TrueData (live feed — Phase 2)
-- **Charts**: TradingView Lightweight Charts v4
-- **AI**: Claude API (claude-sonnet-4-6) for trade analysis / MistakeEngine
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js 14.2, TypeScript 5, Tailwind 3.4, `"use client"` throughout |
+| Backend | FastAPI 0.115, Uvicorn, Python 3.12 (`.venv` at `backend/.venv`) |
+| Database | Supabase Postgres + RLS; 15 ordered migrations |
+| Auth | Supabase JWT → validated by backend via `client.auth.get_user(token)` |
+| Payments | Razorpay (INR + USD, monthly + annual) |
+| AI | Anthropic `claude-sonnet-4-6` / `claude-haiku` via `anthropic==0.49.0` |
+| Broker | Zerodha Kite Connect v3 + Upstox v2 |
+| Charts | TradingView Lightweight Charts v4 |
+| Indicators | Pure pandas/numpy — no TA-Lib |
+| Scheduling | APScheduler: bhavcopy ingest at 16:00 IST daily |
 
-## Pricing Tiers
-| Plan | Price | Limits |
-|------|-------|--------|
-| Free | ₹0 | Scanner: 5 saved screens, 50 results; 1 watchlist; basic charts (EMA/RSI only); 3-month journal history |
-| Pro | ₹1,999/mo | Unlimited scanner + 500 results; unlimited watchlists; 100+ indicators; full charting; broker connect; auto-journal; AI mistake analysis; options strategy builder |
-| Elite | ₹4,999/mo | 5 seats; API access; priority data feed; custom scan alerts; white-label journal exports; dedicated support |
+## Commands
 
-## Phase 1 — Core MVP (COMPLETE)
-- [x] Supabase auth (signup/login/session management)
-- [x] NSE stock scanner (3,400+ stocks, 35+ filters)
-- [x] Custom scan builder + saved screens
-- [x] Watchlist (create, add/remove, drag-to-reorder)
-- [x] TradingView Lightweight Charts (EMA 20/50/200, RSI, MACD, BB, VWAP)
-- [x] Trade journal (manual entry, P&L tracking, stats)
-- [x] Dashboard with market breadth
-- [x] Deploy: Vercel (frontend) + Railway (backend) + Supabase
+### Frontend
+```bash
+cd frontend
+npm run dev          # localhost:3000
+npm run build
+npm run lint
+```
 
-## Phase 2 — Full Platform (COMPLETE)
-- [x] Razorpay subscription payments (Pro ₹1,999/mo + Elite ₹4,999/mo)
-- [x] Plan-based access control (free limits on scanner/watchlist/charts/journal)
-- [x] Billing/settings page with plan status and upgrade CTA
-- [x] Additional chart indicators: Bollinger Bands, VWAP, Stochastic, ATR
-- [x] Fundamentals panel on chart sidebar (P/E, EPS, market cap, growth via yfinance)
-- [x] Sector breadth overlay on scanner/dashboard
-- [x] Scan result alerts (save a scan, Telegram notification after market close)
-- [x] AI trade journal analysis (Claude API — requires Anthropic credits)
+### Backend
+```bash
+cd backend
+.venv/bin/uvicorn app.main:app --reload --port 8000
+.venv/bin/python -m pytest tests/ -v          # run all tests (38 tests, all pure logic)
+.venv/bin/python -m pytest tests/test_payments.py -v
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install pytest              # if pytest not installed in venv
+```
 
-## Phase 3 — Broker + Journal Intelligence (COMPLETE)
-- [x] Options strategy builder with payoff diagrams + Greeks (Black-Scholes, pure Python)
-- [x] Drawdown analysis in journal analytics (equity curve, max drawdown, recovery/profit factors)
-- [x] Telegram scan alerts (notify users via bot after daily market close)
-- [x] User profile settings (/settings/profile) — display name + Telegram Chat ID linking
-- [x] Zerodha Kite Connect v3 integration (click-to-order from chart)
-  - BUY/SELL buttons on chart → OrderModal → POST /orders → auto-journal entry
-  - Routes through Zerodha when API key + daily access token present
-  - Zerodha OAuth flow: /broker/zerodha/login → kite.zerodha.com → /broker/callback
-- [x] Auto trade journal (import from Zerodha)
-  - POST /broker/zerodha/import pulls filled orders from Kite order book
-  - Skips duplicates by matching order ID in entry_reason
-  - "Import from Zerodha" button visible in journal toolbar when broker connected
+### Data
+```bash
+cd backend
+.venv/bin/python scripts/backfill_bhavcopy.py   # ~15-20 min, 300 days
+.venv/bin/python scripts/populate_sectors.py
+```
 
-## Phase 4 — AI + Growth (COMPLETE)
-- [x] Mobile PWA: manifest.json, service worker, offline fallback page
-- [x] Telegram alerts infrastructure (backend ready; set TELEGRAM_BOT_TOKEN on Railway)
-- [x] AI MistakeEngine: pattern stats + deep analysis
-  - Pattern Stats: win rate by day of week, holding period buckets, long vs short
-  - Avg holding days: winners vs losers
-  - Auto AI lesson triggered on every trade close (Claude Haiku, stored in lessons field)
-  - Per-trade "Get AI lesson" button in journal view panel
-  - Deep Analysis: Claude Sonnet analyses full journal → mistakes, patterns, actionable rules
-- [x] Multi-broker support: Zerodha (full) + Upstox (order routing via v2 API)
-- [x] NRI / USD pricing tier — Pro $29/mo, Elite $69/mo via Razorpay international
-  - Currency toggle on /settings?tab=billing (INR / USD)
-  - Persists `billing_currency` + `billing_region` on user profile
-  - `POST /payments/create-order` accepts `{ plan, currency }`; `GET /payments/plans?currency=` exposes prices
-- [x] US market stocks expansion — NASDAQ + NYSE
-  - `market` + `currency` columns on `stock_universe`; 45 seeded US stocks (AAPL, MSFT, etc.)
-  - Scanner `market` filter (`IN` / `US` / `NSE` / `NASDAQ` / …) with toolbar toggle
-  - yfinance routing handles bare ticker (US) vs `.NS` suffix (NSE)
-  - `GET /market/markets` lists supported markets
+### Migrations
+Apply via Supabase dashboard or CLI. Files are in `supabase/migrations/`, numbered `001`–`015`. Always add a new numbered file — never edit existing ones.
 
-## Key Business Metrics
-- Break-even: 22 Pro subscribers
-- Month 6 target: 125 Pro + 10 Elite = ₹2.5L MRR
-- Year 1 target: 250 Pro + 25 Elite = ₹60L ARR
-- Year 3 target: 2,000 Pro + 200 Elite = ₹6Cr ARR
+## Architecture invariants
+1. **All plan checks are server-side** — `_get_user_plan(user_id)` called in every router. Never trust frontend plan state.
+2. **Backend uses service-role key** — bypasses RLS for all backend reads/writes. This is intentional.
+3. **JWT never stored on backend** — validated per-request via Supabase Auth API.
+4. **`authHeaders()` is async** — token is module-cached in `frontend/lib/api.ts`; all fetch calls must `await authHeaders()`.
+5. **PostgREST FK hint required** — joins on `stock_universe` must use `stock_universe!daily_ohlcv_symbol_fkey!inner(...)` or queries silently fail (PGRST201).
+6. **Indicators are precomputed** — `daily_ohlcv` stores all indicator columns; charts router reads them directly. Never recompute inline.
+7. **`plan_cache` has 60s TTL** — `services/rate_limit.py` caches plan lookups. Invalidate on plan change.
+8. **Rate limits** — 30 scans/min, 5 AI calls/5min per user (in-memory, resets on restart).
 
-## Deployment URLs
-- Frontend: https://frontend-nine-xi-14.vercel.app (alias: artha-cyan.vercel.app when domain is set)
-- Backend API: https://alphavyuh-production.up.railway.app
-- Supabase project: fyxltykqdvacbdgmeucf
+## Pricing (source of truth)
+| Plan | INR monthly | INR annual | USD monthly | USD annual |
+|---|---|---|---|---|
+| Pro | ₹1,999 | ₹19,999 | $29 | $279 |
+| Elite | ₹4,999 | ₹49,999 | $69 | $699 |
 
-## Pending env vars (set on Railway when ready)
-- `TELEGRAM_BOT_TOKEN` — enables Telegram scan alert notifications
+Amounts in **paise/cents** in code. Razorpay HMAC-SHA256 over `order_id|payment_id`.
 
-## Coding Standards
-- All pages are `"use client"` Next.js components with Tailwind
-- Color palette: `#1c1c1a` (dark text), `#5b63f5` (accent/indigo), `#26a65b` (green), `#e5383b` (red), `#f2f2f0` (bg)
-- API auth: Supabase JWT → Railway FastAPI via `Authorization: Bearer <token>`
+## Env vars
+| File | Key vars |
+|---|---|
+| `frontend/.env.local` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_URL` |
+| `backend/.env` | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, `FRONTEND_URL`, `INGEST_SERVICE_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN` |
+
+## Coding standards
+- Color palette: `#1c1c1a` dark, `#5b63f5` indigo, `#26a65b` green, `#e5383b` red, `#f2f2f0` bg
 - All API functions live in `frontend/lib/api.ts`
 - Backend routes in `backend/app/routers/`
-- Keep responses terse — no trailing summaries, no emojis unless asked
+- New router → register in `backend/app/main.py`
+- No trailing summaries in responses, no emojis unless asked
+
+## Known issues (do not fix without approval)
+- **BACKEND CRASH**: `backend/app/routers/community.py` is unconditionally imported in `main.py` line 10 (not guarded with try/except unlike payments/ai). It uses `app.dependencies` and `app.database` which do not exist. **The backend cannot start until this is fixed or the import is guarded.** Fix: change imports to `app.middleware.auth` + `app.services.supabase`, or wrap in try/except.
+- `public/` directory is missing icon images (`icon-192.png`, `icon-512.png`) referenced by `manifest.json`.
+
+## Deployment
+- **Frontend**: Vercel — auto-deploys on push to `main` via `.github/workflows/deploy.yml`
+- **Backend**: Railway — `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (nixpacks)
+- **Health**: `GET https://alphavyuh-production.up.railway.app/health`
+- **Supabase project**: `fyxltykqdvacbdgmeucf`
+
+## When to use agents / skills
+- Planning a new feature → `.claude/agents/planner.md`
+- Implementing an approved plan → `.claude/agents/implementer.md`
+- Reviewing a diff → `.claude/agents/reviewer.md`
+- Running validation → `.claude/agents/tester.md`
+- Adding a DB migration → `.claude/skills/add-migration/SKILL.md`
+- Debugging a production issue → `.claude/skills/debug-production/SKILL.md`
+- Tracing a billing issue → `.claude/skills/trace-billing-flow/SKILL.md`
+- Shipping a new feature end-to-end → `.claude/skills/ship-feature/SKILL.md`

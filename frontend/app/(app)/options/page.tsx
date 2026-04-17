@@ -134,6 +134,24 @@ function makeLeg(overrides?: Partial<Leg>): Leg {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type PresetDraft = {
+  spot: number | "";
+  expiry: string;          // YYYY-MM-DD
+  legs: { strike: number | ""; premium: number | "" }[];
+};
+
+function dteFromExpiry(expiry: string): number {
+  if (!expiry) return 30;
+  const diff = Math.ceil((new Date(expiry).getTime() - Date.now()) / 86400000);
+  return Math.max(0, diff);
+}
+
+function defaultExpiry(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function OptionsPage() {
   const [spot, setSpot]         = useState<number | "">("");
   const [symbol, setSymbol]     = useState("NIFTY");
@@ -145,6 +163,10 @@ export default function OptionsPage() {
   const [error, setError]       = useState("");
   const [presets, setPresets]   = useState<Record<string, Preset>>({});
   const [showPresets, setShowPresets] = useState(false);
+
+  // Preset customisation modal
+  const [presetKey, setPresetKey]     = useState<string | null>(null);
+  const [presetDraft, setPresetDraft] = useState<PresetDraft | null>(null);
 
   useEffect(() => {
     fetch(`${API}/api/v1/options/presets`)
@@ -184,16 +206,39 @@ export default function OptionsPage() {
     }
   }, [spot, legs, iv, dte]);
 
-  function applyPreset(key: string) {
+  function openPresetModal(key: string) {
     const p = presets[key];
     if (!p) return;
-    setLegs(p.legs_template.map(t => makeLeg({
-      type: t.type, action: t.action,
-      strike: "" as unknown as number,
-      premium: "" as unknown as number,
-    })));
-    setResult(null);
+    setPresetKey(key);
+    setPresetDraft({
+      spot: spot,
+      expiry: defaultExpiry(),
+      legs: p.legs_template.map(() => ({ strike: "", premium: "" })),
+    });
     setShowPresets(false);
+  }
+
+  function confirmPreset() {
+    if (!presetKey || !presetDraft) return;
+    const p = presets[presetKey];
+    setLegs(p.legs_template.map((t, i) => makeLeg({
+      type: t.type,
+      action: t.action,
+      strike: presetDraft.legs[i]?.strike ?? "",
+      premium: presetDraft.legs[i]?.premium ?? "",
+    })));
+    if (presetDraft.spot !== "") setSpot(presetDraft.spot);
+    if (presetDraft.expiry) setDte(dteFromExpiry(presetDraft.expiry));
+    setResult(null);
+    setPresetKey(null);
+    setPresetDraft(null);
+  }
+
+  function updatePresetLeg(i: number, patch: Partial<PresetDraft["legs"][0]>) {
+    setPresetDraft(d => d ? {
+      ...d,
+      legs: d.legs.map((l, idx) => idx === i ? { ...l, ...patch } : l),
+    } : d);
   }
 
   function updateLeg(id: string, patch: Partial<Leg>) {
@@ -237,10 +282,13 @@ export default function OptionsPage() {
                 {Object.entries(presets).map(([key, p]) => (
                   <button
                     key={key}
-                    onClick={() => applyPreset(key)}
+                    onClick={() => openPresetModal(key)}
                     className="w-full text-left px-4 py-3 hover:bg-[#fafafa] border-b border-[#f7f7f5] last:border-0 transition-colors"
                   >
-                    <div className="text-[13px] font-semibold text-[#1c1c1a]">{p.name}</div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[13px] font-semibold text-[#1c1c1a]">{p.name}</div>
+                      <span className="text-[10px] text-[#5b63f5] font-medium">{p.legs_template.length}L</span>
+                    </div>
                     <div className="text-[11px] text-[#aaa] mt-0.5">{p.description}</div>
                   </button>
                 ))}
@@ -485,6 +533,133 @@ export default function OptionsPage() {
           </div>
         </div>
       </div>
+
+      {/* Preset customisation modal */}
+      {presetKey && presetDraft && (() => {
+        const p = presets[presetKey];
+        const legLabels: Record<string, string[]> = {
+          bull_call_spread: ["Lower strike (buy)", "Higher strike (sell)"],
+          bear_put_spread:  ["Higher strike (buy)", "Lower strike (sell)"],
+          iron_condor:      ["Put (buy, far OTM)", "Put (sell, near OTM)", "Call (sell, near OTM)", "Call (buy, far OTM)"],
+          straddle:         ["ATM call", "ATM put"],
+          strangle:         ["OTM call", "OTM put"],
+        };
+        const labels = legLabels[presetKey] ?? p.legs_template.map((_, i) => `Leg ${i + 1}`);
+
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-[14px] shadow-2xl w-full max-w-[440px] overflow-hidden">
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-[#f0f0ee]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[15px] font-semibold text-[#1c1c1a]">{p.name}</div>
+                    <div className="text-[12px] text-[#888] mt-0.5">{p.description}</div>
+                  </div>
+                  <button
+                    onClick={() => { setPresetKey(null); setPresetDraft(null); }}
+                    className="text-[#aaa] hover:text-[#1c1c1a] text-[18px] leading-none ml-3"
+                  >×</button>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+
+                {/* Underlying params */}
+                <div>
+                  <div className="text-[11px] font-semibold text-[#888] uppercase tracking-[0.5px] mb-2">Underlying</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-[10px] text-[#aaa] mb-1">Spot Price ₹</div>
+                      <input
+                        type="number"
+                        value={presetDraft.spot}
+                        onChange={e => setPresetDraft(d => d ? { ...d, spot: e.target.value === "" ? "" : Number(e.target.value) } : d)}
+                        placeholder="e.g. 24000"
+                        className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-[#aaa] mb-1">Expiry Date</div>
+                      <input
+                        type="date"
+                        value={presetDraft.expiry}
+                        onChange={e => setPresetDraft(d => d ? { ...d, expiry: e.target.value } : d)}
+                        className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                      />
+                      {presetDraft.expiry && (
+                        <div className="text-[10px] text-[#5b63f5] mt-0.5">{dteFromExpiry(presetDraft.expiry)}d to expiry</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-leg strikes */}
+                <div>
+                  <div className="text-[11px] font-semibold text-[#888] uppercase tracking-[0.5px] mb-2">Option Legs</div>
+                  <div className="space-y-2.5">
+                    {p.legs_template.map((t, i) => (
+                      <div key={i} className="border border-[#f0f0ee] rounded-[8px] p-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize"
+                            style={{
+                              background: t.action === "buy" ? "#edfaf3" : "#fff0f0",
+                              color: t.action === "buy" ? "#26a65b" : "#e5383b",
+                            }}
+                          >{t.action} {t.type}</span>
+                          <span className="text-[11px] text-[#888]">{labels[i]}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="text-[10px] text-[#aaa] mb-0.5">Strike ₹</div>
+                            <input
+                              type="number"
+                              value={presetDraft.legs[i]?.strike ?? ""}
+                              onChange={e => updatePresetLeg(i, { strike: e.target.value === "" ? "" : Number(e.target.value) })}
+                              placeholder={presetDraft.spot ? String(presetDraft.spot) : "e.g. 24000"}
+                              className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1.5 outline-none focus:border-[#5b63f5]"
+                            />
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-[#aaa] mb-0.5">Premium ₹</div>
+                            <input
+                              type="number"
+                              value={presetDraft.legs[i]?.premium ?? ""}
+                              onChange={e => updatePresetLeg(i, { premium: e.target.value === "" ? "" : Number(e.target.value) })}
+                              placeholder="e.g. 120"
+                              className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1.5 outline-none focus:border-[#5b63f5]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="text-[11px] text-[#aaa] mt-2">
+                    Get strikes and premiums from NSE option chain or your broker
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-4 border-t border-[#f0f0ee] flex gap-3">
+                <button
+                  onClick={() => { setPresetKey(null); setPresetDraft(null); }}
+                  className="flex-1 py-2 rounded-[8px] border border-[#e2e2df] text-[13px] text-[#888] hover:bg-[#f7f7f5] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmPreset}
+                  className="flex-1 py-2 rounded-[8px] bg-[#1c1c1a] text-white text-[13px] font-semibold hover:opacity-85 transition-opacity"
+                >
+                  Apply Strategy
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

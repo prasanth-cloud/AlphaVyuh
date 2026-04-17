@@ -473,11 +473,19 @@ export async function saveDrawing(
 }
 
 export async function deleteDrawing(symbol: string, drawingId: string): Promise<void> {
-  const headers = await authHeaders();
-  await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
-    method: "DELETE",
-    headers,
-  });
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
+      method: "DELETE",
+      headers,
+    });
+    if (!res.ok && res.status !== 404) {
+      console.warn("deleteDrawing failed:", res.status);
+    }
+  } catch (e) {
+    // Network error — drawing state is local, so silently skip
+    console.warn("deleteDrawing network error:", e);
+  }
 }
 
 export async function getChartLayout(symbol: string): Promise<ChartLayout> {
