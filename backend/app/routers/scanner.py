@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
@@ -102,9 +103,14 @@ SORT_KEYS = {
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_user_plan(user_id: str) -> str:
+    cached = plan_cache.get(user_id)
+    if cached:
+        return cached
     client = get_admin_client()
     r = client.table("users").select("plan").eq("id", user_id).single().execute()
-    return r.data["plan"] if r.data else "free"
+    plan = r.data["plan"] if r.data else "free"
+    plan_cache.set(user_id, plan)
+    return plan
 
 
 def _safe(val, default=0.0):
@@ -276,6 +282,9 @@ async def run_scanner(
     body: ScanRequest,
     user_id: str = Depends(get_current_user_id),
 ):
+    if not scanner_limiter.is_allowed(user_id):
+        raise HTTPException(429, "Too many requests — max 30 scans per minute")
+
     client  = get_admin_client()
     plan = _get_user_plan(user_id)
     hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT

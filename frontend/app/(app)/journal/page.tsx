@@ -676,6 +676,9 @@ export default function JournalPage() {
             {aiAnalysis && !aiLoading && (
               <div>
                 <div className="text-[11px] text-[#aaa] mb-3">Based on {aiTradesCount} closed trades</div>
+                <div className="mb-3 px-3 py-2 rounded-lg bg-[#fff8ec] border border-[#fde68a] text-[11px] text-[#92400e] leading-relaxed">
+                  <strong>Disclaimer:</strong> AI analysis is for educational purposes only and does not constitute SEBI-registered investment advice. Past performance is not indicative of future results.
+                </div>
                 <div className="prose prose-sm max-w-none text-[13px] text-[#1c1c1a] leading-relaxed space-y-3">
                   {aiAnalysis.split("\n").map((line, i) => {
                     if (line.startsWith("## ") || line.startsWith("### ")) {

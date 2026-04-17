@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 import httpx
@@ -310,3 +310,120 @@ async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> No
                 )
             except Exception as e:
                 logger.warning(f"Telegram send failed for {user_id}: {e}")
+
+
+# ── Telegram Bot Webhook ──────────────────────────────────────────────────────
+
+@router.post("/telegram/webhook")
+async def telegram_webhook(request: Request):
+    """Receive Telegram bot updates (messages/commands from users)."""
+    from app.services.supabase import settings as _settings
+    if not _settings.telegram_bot_token:
+        return {"ok": True}
+
+    payload = await request.json()
+    message = payload.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    text = (message.get("text") or "").strip()
+
+    if not chat_id or not text.startswith("/"):
+        return {"ok": True}
+
+    parts = text.split(maxsplit=1)
+    cmd = parts[0].lower().split("@")[0]  # strip @botname
+    args = parts[1].strip() if len(parts) > 1 else ""
+
+    async def send_msg(msg: str):
+        url = f"https://api.telegram.org/bot{_settings.telegram_bot_token}/sendMessage"
+        async with httpx.AsyncClient() as http_client:
+            await http_client.post(url, json={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"})
+
+    sb = get_admin_client()
+
+    if cmd in ("/start", "/help"):
+        await send_msg(
+            "👋 <b>AlphaVyuh Bot</b>\n\n"
+            "Commands:\n"
+            "/price &lt;SYMBOL&gt; — live quote (e.g. /price RELIANCE)\n"
+            "/scan &lt;name&gt; — run your saved scan (e.g. /scan My Momentum)\n"
+            "/help — show this menu\n\n"
+            "Link your Telegram Chat ID in AlphaVyuh Settings → Profile to get scan alerts."
+        )
+
+    elif cmd == "/price":
+        symbol = args.upper()
+        if not symbol:
+            await send_msg("Usage: /price SYMBOL (e.g. /price RELIANCE)")
+        else:
+            try:
+                dr = sb.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
+                latest_date = dr.data[0]["trade_date"] if dr.data else None
+                if latest_date:
+                    row = sb.table("daily_ohlcv").select(
+                        "symbol,close,prev_close,volume,rsi_14,stock_universe(company_name)"
+                    ).eq("symbol", symbol).eq("trade_date", latest_date).maybe_single().execute()
+                    if row and row.data:
+                        d = row.data
+                        close = float(d["close"] or 0)
+                        prev = float(d["prev_close"] or 0)
+                        pct = round((close - prev) / prev * 100, 2) if prev else 0
+                        arrow = "▲" if pct >= 0 else "▼"
+                        su = d.get("stock_universe") or {}
+                        name = (su.get("company_name") if isinstance(su, dict) else (su[0].get("company_name") if su else None)) or symbol
+                        rsi = d.get("rsi_14")
+                        rsi_str = f" | RSI {float(rsi):.0f}" if rsi is not None else ""
+                        await send_msg(
+                            f"<b>{symbol}</b> — {name}\n"
+                            f"₹{close:,.2f}  {arrow} {abs(pct):.2f}%{rsi_str}\n"
+                            f"Vol: {int(d['volume'] or 0):,} | Date: {latest_date}"
+                        )
+                    else:
+                        await send_msg(f"Symbol {symbol} not found. Check the symbol and try again.")
+                else:
+                    await send_msg("No market data available yet.")
+            except Exception as e:
+                await send_msg(f"Error fetching {symbol}: {e}")
+
+    elif cmd == "/scan":
+        if not args:
+            await send_msg("Usage: /scan &lt;name&gt; (e.g. /scan My Momentum)")
+        else:
+            user_r = sb.table("users").select("id").eq("telegram_chat_id", str(chat_id)).maybe_single().execute()
+            if not user_r or not user_r.data:
+                await send_msg("Link your Telegram Chat ID in AlphaVyuh Settings → Profile first.")
+            else:
+                tg_user_id = user_r.data["id"]
+                screen_r = sb.table("saved_screens").select("*").eq("user_id", tg_user_id).ilike("name", f"%{args}%").limit(1).execute()
+                if not screen_r.data:
+                    await send_msg(f"No saved screen named \"{args}\" found.")
+                else:
+                    screen = screen_r.data[0]
+                    from app.routers.scanner import ScanFilters, _apply_filters
+                    dr = sb.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
+                    latest_date = dr.data[0]["trade_date"] if dr.data else None
+                    if not latest_date:
+                        await send_msg("No market data available.")
+                    else:
+                        try:
+                            filters = ScanFilters(**screen["filters"])
+                            rows = sb.table("daily_ohlcv").select(
+                                "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
+                                "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
+                                "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
+                            ).eq("trade_date", latest_date).limit(2000).execute().data or []
+                            matched = _apply_filters(rows, filters)
+                            matched.sort(key=lambda x: (x.get("volume_ratio") is not None, x.get("volume_ratio") or 0), reverse=True)
+                            top = matched[:5]
+                            if not top:
+                                await send_msg(f"Scan \"{screen['name']}\" matched 0 stocks today.")
+                            else:
+                                lines = [f"<b>{screen['name']}</b> — {len(matched)} matches today\n"]
+                                for r in top:
+                                    pct = r.get("pct_change")
+                                    arrow = "▲" if (pct or 0) >= 0 else "▼"
+                                    lines.append(f"• {r['symbol']}  ₹{r['close']:,.2f}  {arrow}{abs(pct or 0):.2f}%")
+                                await send_msg("\n".join(lines))
+                        except Exception as e:
+                            await send_msg(f"Scan failed: {e}")
+
+    return {"ok": True}
