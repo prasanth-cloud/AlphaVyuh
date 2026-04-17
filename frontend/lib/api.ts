@@ -1037,6 +1037,100 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
   return res.json();
 }
 
+// ── Live candles (Yahoo Finance, no DB) ──────────────────────────────────────
+
+export async function getCandlesLive(
+  symbol: string,
+  params?: { limit?: number; timeframe?: string }
+): Promise<CandlesResponse> {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.timeframe) qs.set("timeframe", params.timeframe);
+  const res = await fetch(`${API}/api/v1/charts/${symbol}/candles-live?${qs}`, { headers: publicHeaders });
+  if (!res.ok) throw new Error(`No live data for ${symbol}`);
+  return res.json();
+}
+
+// ── Price alerts ─────────────────────────────────────────────────────────────
+
+export type PriceAlert = {
+  id: string;
+  symbol: string;
+  condition: "above" | "below";
+  target_price: number;
+  note: string | null;
+  is_active: boolean;
+  triggered_at: string | null;
+  created_at: string;
+};
+
+export async function getPriceAlerts(): Promise<PriceAlert[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
+  if (!res.ok) return [];
+  const d = await res.json();
+  return d.alerts ?? [];
+}
+
+export async function createPriceAlert(
+  payload: { symbol: string; condition: "above" | "below"; target_price: number; note?: string }
+): Promise<PriceAlert> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/price-alerts`, {
+    method: "POST", headers, body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const b = await res.json().catch(() => ({ detail: "Failed" }));
+    throw new Error(b.detail ?? "Failed to create alert");
+  }
+  return res.json();
+}
+
+export async function deletePriceAlert(id: string): Promise<void> {
+  const headers = await authHeaders();
+  await fetch(`${API}/api/v1/price-alerts/${id}`, { method: "DELETE", headers });
+}
+
+// ── Portfolio ─────────────────────────────────────────────────────────────────
+
+export type PortfolioPosition = {
+  id: string;
+  symbol: string;
+  company_name: string | null;
+  trade_type: "long" | "short";
+  entry_date: string;
+  entry_price: number;
+  quantity: number;
+  stop_loss: number | null;
+  target_price: number | null;
+  setup_type: string | null;
+  current_price: number;
+  day_change_pct: number | null;
+  unrealised_pnl: number;
+  unrealised_pnl_pct: number;
+  invested: number;
+  sector: string | null;
+};
+
+export type PortfolioResponse = {
+  positions: PortfolioPosition[];
+  summary: {
+    total_invested: number;
+    total_current: number;
+    total_pnl: number;
+    total_pnl_pct: number;
+    open_count: number;
+  };
+  sectors: { sector: string; pnl: number }[];
+};
+
+export async function getPortfolio(): Promise<PortfolioResponse> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/portfolio`, { headers });
+  if (!res.ok) throw new Error("Failed to load portfolio");
+  return res.json();
+}
+
 // ── Backtest ──────────────────────────────────────────────────────────────────
 
 export type BacktestResult = {

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/scanner", label: "Scanner" },
   { href: "/watchlist", label: "Watchlist" },
   { href: "/charts/RELIANCE", label: "Charts", prefix: "/charts" },
+  { href: "/portfolio", label: "Portfolio" },
   { href: "/journal", label: "Journal" },
   { href: "/options", label: "Options" },
   { href: "/community", label: "Community" },

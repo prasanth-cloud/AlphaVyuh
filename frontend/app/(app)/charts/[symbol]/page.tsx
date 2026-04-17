@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { BookmarkPlus, Save } from "lucide-react";
+import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandlesResponse, Drawing, Fundamentals, OrderResult,
+  CandlesResponse, Drawing, Fundamentals, OrderResult, PriceAlert,
 } from "@/lib/api";
 import {
-  getCandles, getIndicators, getDrawings, saveDrawing,
+  getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
   getFundamentals, getPlanStatus, getQuote, getBrokerStatus,
+  getPriceAlerts, createPriceAlert, deletePriceAlert,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -20,7 +22,6 @@ import type { IndicatorData, IchimokuPoint, ChartHandle } from "@/components/cha
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
 type StochPoint = { time: string; k: number; d: number | null };
-import type { LogicalRange } from "lightweight-charts";
 
 type DrawnLine = {
   id: string;
@@ -81,10 +82,26 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const router = useRouter();
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
+  const [liveMode, setLiveMode] = useState(false);
 
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Compare symbol
+  const [compareSymbol, setCompareSymbol] = useState("");
+  const [compareInput, setCompareInput] = useState("");
+  const [showCompareInput, setShowCompareInput] = useState(false);
+  const [compareData, setCompareData] = useState<CandlesResponse | null>(null);
+
+  // Price alerts
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
+  const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
+  const [alertPrice, setAlertPrice] = useState("");
+  const [alertNote, setAlertNote] = useState("");
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertMsg, setAlertMsg] = useState("");
 
   const [activeIndicators, setActiveIndicators] = useState<string[]>(["ema20", "ema50"]);
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
@@ -136,6 +153,13 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const drawingStartRef = useRef<{ x: number; y: number } | null>(null);
   const [drawingPreview, setDrawingPreview] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
 
+  // Load compare symbol data
+  useEffect(() => {
+    if (!compareSymbol) { setCompareData(null); return; }
+    const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
+    getCandles(compareSymbol, { limit, timeframe }).then(setCompareData).catch(() => setCompareData(null));
+  }, [compareSymbol, timeframe]);
+
   // Load chart data
   useEffect(() => {
     setLoading(true);
@@ -148,25 +172,37 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setIndicatorData({});
 
     const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
-    getCandles(symbol, { limit, timeframe })
-      .then(d => {
-        setData(d);
-        setLegendBar(null);
-      })
+    const fetcher = liveMode
+      ? getCandlesLive(symbol, { limit, timeframe })
+      : getCandles(symbol, { limit, timeframe });
+
+    fetcher
+      .then(d => { setData(d); setLegendBar(null); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [symbol, timeframe]);
+  }, [symbol, timeframe, liveMode]);
 
-  // Load saved layout + plan
+  // Auto-refresh every 5 minutes in live mode
+  useEffect(() => {
+    if (!liveMode) return;
+    const interval = setInterval(() => {
+      const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
+      getCandlesLive(symbol, { limit, timeframe })
+        .then(d => { setData(d); setLegendBar(null); })
+        .catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [liveMode, symbol, timeframe]);
+
+  // Load saved layout + plan + alerts
   useEffect(() => {
     getChartLayout(symbol).then(layout => {
-      if (layout.indicators?.length) {
-        setActiveIndicators(layout.indicators);
-      }
+      if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
     getQuote(symbol).then(q => { if (q?.currency) setSymbolCurrency(q.currency); }).catch(() => {});
     getBrokerStatus().then(s => setBrokerConnected(s.connected)).catch(() => {});
+    getPriceAlerts().then(alerts => setPriceAlerts(alerts.filter(a => a.symbol === symbol && a.is_active))).catch(() => {});
   }, [symbol]);
 
   // Load fundamentals when sidebar fundamentals section is opened
@@ -248,6 +284,28 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setShowWlPicker(true);
   }
 
+  async function handleCreateAlert() {
+    const price = parseFloat(alertPrice);
+    if (!price || price <= 0) { setAlertMsg("Enter a valid price"); return; }
+    setAlertSaving(true);
+    try {
+      const created = await createPriceAlert({ symbol, condition: alertCondition, target_price: price, note: alertNote || undefined });
+      setPriceAlerts(prev => [created, ...prev]);
+      setAlertMsg("Alert set!");
+      setAlertPrice("");
+      setAlertNote("");
+      setTimeout(() => { setAlertMsg(""); setShowAlertModal(false); }, 1500);
+    } catch (e: unknown) {
+      setAlertMsg(e instanceof Error ? e.message : "Failed");
+    }
+    setAlertSaving(false);
+  }
+
+  async function handleDeleteAlert(id: string) {
+    await deletePriceAlert(id).catch(() => {});
+    setPriceAlerts(prev => prev.filter(a => a.id !== id));
+  }
+
   async function handlePickWl(wlId: string) {
     setShowWlPicker(false);
     try {
@@ -321,6 +379,14 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
   const latest = data?.latest;
   const prevClose = latest?.prev_close;
+
+  // Stale data warning: show if last candle is > 1 trading day old
+  const lastCandleDate = data?.candles?.at(-1)?.time ?? null;
+  const dataAgeDays = lastCandleDate
+    ? Math.floor((Date.now() - new Date(lastCandleDate).getTime()) / 86400000)
+    : null;
+  // Don't show stale warning in live mode or on weekends that are expected
+  const showStaleWarning = !liveMode && dataAgeDays != null && dataAgeDays > 2;
   const changeAmt = latest && prevClose ? latest.close - prevClose : null;
   const changePct = latest?.pct_change;
   const positive = changePct != null ? changePct >= 0 : true;
@@ -346,10 +412,89 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   return (
     <div className="flex flex-col bg-[#f2f2f0] overflow-hidden" style={{ height: "calc(100vh - 48px)" }}>
 
+      {/* Price alert modal */}
+      {showAlertModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setShowAlertModal(false)} />
+          <div className="relative bg-white rounded-[12px] shadow-xl border border-[#e2e2df] p-5 w-[340px]">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[14px] font-semibold text-[#1c1c1a]">Price alert — {symbol}</span>
+              <button onClick={() => setShowAlertModal(false)} className="text-[#aaa] hover:text-[#1c1c1a] transition-colors text-[18px] leading-none">×</button>
+            </div>
+
+            {/* Existing alerts */}
+            {priceAlerts.length > 0 && (
+              <div className="mb-4 space-y-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-[#aaa] font-semibold mb-1">Active alerts</div>
+                {priceAlerts.map(a => (
+                  <div key={a.id} className="flex items-center justify-between bg-[#f7f7f5] rounded-[6px] px-3 py-2">
+                    <span className="text-[12px] text-[#1c1c1a]">
+                      {a.condition === "above" ? "↑ Above" : "↓ Below"} ₹{Number(a.target_price).toLocaleString("en-IN")}
+                    </span>
+                    <button onClick={() => handleDeleteAlert(a.id)} className="text-[#e5383b] text-[11px] hover:font-semibold">Remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* New alert form */}
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                {(["above", "below"] as const).map(c => (
+                  <button key={c} onClick={() => setAlertCondition(c)}
+                    className="flex-1 py-1.5 text-[12px] font-semibold rounded-[6px] border transition-colors capitalize"
+                    style={alertCondition === c
+                      ? { background: c === "above" ? "#edfaf3" : "#fff0f0", color: c === "above" ? "#26a65b" : "#e5383b", borderColor: c === "above" ? "#26a65b44" : "#e5383b44" }
+                      : { background: "#f7f7f5", color: "#aaa", borderColor: "#e2e2df" }}
+                  >
+                    {c === "above" ? "↑ Above" : "↓ Below"}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="number"
+                value={alertPrice}
+                onChange={e => setAlertPrice(e.target.value)}
+                placeholder={`Target price${latest?.close ? ` (current ₹${latest.close.toFixed(2)})` : ""}`}
+                className="w-full border border-[#e2e2df] rounded-[7px] px-3 py-2 text-[13px] text-[#1c1c1a] outline-none focus:border-[#5b63f5]"
+              />
+              <input
+                type="text"
+                value={alertNote}
+                onChange={e => setAlertNote(e.target.value)}
+                placeholder="Note (optional)"
+                className="w-full border border-[#e2e2df] rounded-[7px] px-3 py-2 text-[13px] text-[#1c1c1a] outline-none focus:border-[#5b63f5]"
+              />
+              {alertMsg && (
+                <div className={`text-[12px] font-medium ${alertMsg === "Alert set!" ? "text-[#26a65b]" : "text-[#e5383b]"}`}>{alertMsg}</div>
+              )}
+              <button
+                onClick={handleCreateAlert}
+                disabled={alertSaving}
+                className="w-full py-2 bg-[#5b63f5] text-white text-[13px] font-semibold rounded-[8px] hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {alertSaving ? "Saving…" : "Set alert"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {planUpgradeToast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg pointer-events-none flex items-center gap-2">
           <span>{planUpgradeToast}</span>
           <a href="/settings/billing" className="underline text-[#a5aaff] text-[12px] pointer-events-auto">Upgrade →</a>
+        </div>
+      )}
+
+      {/* Stale data banner */}
+      {showStaleWarning && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-[#fff8ec] border-b border-[#d9770622] text-[11px] text-[#d97706] flex-shrink-0">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Data is {dataAgeDays} days old — bhavcopy may not have run.
+          <button onClick={() => setLiveMode(true)} className="underline font-semibold hover:no-underline">Switch to live data</button>
         </div>
       )}
 
@@ -440,6 +585,74 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               Clear
             </button>
           )}
+
+          {/* Compare symbol */}
+          <div className="relative">
+            {showCompareInput ? (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  value={compareInput}
+                  onChange={e => setCompareInput(e.target.value.toUpperCase())}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && compareInput.trim()) {
+                      setCompareSymbol(compareInput.trim());
+                      setShowCompareInput(false);
+                    }
+                    if (e.key === "Escape") { setShowCompareInput(false); setCompareInput(""); }
+                  }}
+                  placeholder="Symbol…"
+                  className="text-[11px] px-2 py-1 rounded-[4px] border border-[#5b63f5] outline-none w-[80px] text-[#1c1c1a]"
+                />
+                <button onClick={() => { setShowCompareInput(false); setCompareInput(""); }} className="text-[#aaa] text-[14px] leading-none hover:text-[#1c1c1a]">×</button>
+              </div>
+            ) : compareSymbol ? (
+              <div className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] border bg-[#eeeffe] border-[#5b63f544] text-[#5b63f5] font-semibold">
+                vs {compareSymbol}
+                <button onClick={() => { setCompareSymbol(""); setCompareData(null); }} className="ml-0.5 hover:text-[#e5383b] transition-colors">×</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowCompareInput(true)}
+                className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e2e2df] text-[#888] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors"
+                title="Compare with another symbol"
+              >
+                Compare
+              </button>
+            )}
+          </div>
+
+          {/* Live data toggle */}
+          <button
+            onClick={() => setLiveMode(m => !m)}
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] font-semibold transition-colors border"
+            style={liveMode
+              ? { background: "#edfaf3", color: "#26a65b", borderColor: "#26a65b44" }
+              : { background: "#f7f7f5", color: "#888", borderColor: "#e2e2df" }}
+            title={liveMode ? "Live data (Yahoo Finance) — refresh every 5 min" : "Switch to live Yahoo Finance data"}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : "bg-[#ccc]"}`} />
+            {liveMode ? "Live" : "EOD"}
+          </button>
+
+          {/* Price alert bell */}
+          <button
+            onClick={() => { setShowAlertModal(m => !m); setAlertMsg(""); }}
+            className="relative flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] border transition-colors"
+            style={priceAlerts.length > 0
+              ? { background: "#fff8ec", color: "#d97706", borderColor: "#d9770644" }
+              : { background: "#f7f7f5", color: "#888", borderColor: "#e2e2df" }}
+            title="Price alerts"
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            {priceAlerts.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-[#d97706] text-white text-[8px] flex items-center justify-center font-bold">
+                {priceAlerts.length}
+              </span>
+            )}
+          </button>
 
           {/* Save layout */}
           <button
@@ -860,6 +1073,50 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 onReady={handle => { chartHandleRef.current = handle; }}
               />
             )}
+
+            {/* Compare overlay: price-normalised SVG chart */}
+            {compareData && compareData.candles.length > 1 && data && data.candles.length > 1 && (() => {
+              const base1 = data.candles[0].close;
+              const base2 = compareData.candles[0].close;
+              const sym1Pct = data.candles.map(c => ((c.close - base1) / base1) * 100);
+              const sym2Pct = compareData.candles.map(c => ((c.close - base2) / base2) * 100);
+              const allPcts = [...sym1Pct, ...sym2Pct];
+              const minPct = Math.min(...allPcts);
+              const maxPct = Math.max(...allPcts);
+              const range = maxPct - minPct || 1;
+              const H = 80;
+              const toY = (pct: number) => H - ((pct - minPct) / range) * (H - 4) - 2;
+              const toX = (i: number, len: number) => ((i / (len - 1)) * 100).toFixed(2);
+              const mkPath = (arr: number[]) => arr.map((v, i) => `${i === 0 ? "M" : "L"}${toX(i, arr.length)},${toY(v).toFixed(2)}`).join(" ");
+              const last1 = sym1Pct.at(-1) ?? 0;
+              const last2 = sym2Pct.at(-1) ?? 0;
+              return (
+                <div className="absolute bottom-2 left-2 right-2 z-10 bg-white/90 rounded-[8px] border border-[#e2e2df] px-3 py-2 pointer-events-none">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-0.5 rounded" style={{ background: "#5b63f5" }} />
+                      <span className="text-[10px] font-semibold text-[#5b63f5]">{symbol}</span>
+                      <span className="text-[10px] tabular-nums" style={{ color: last1 >= 0 ? "#26a65b" : "#e5383b" }}>
+                        {last1 >= 0 ? "+" : ""}{last1.toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-0.5 rounded" style={{ background: "#d97706" }} />
+                      <span className="text-[10px] font-semibold text-[#d97706]">{compareSymbol}</span>
+                      <span className="text-[10px] tabular-nums" style={{ color: last2 >= 0 ? "#26a65b" : "#e5383b" }}>
+                        {last2 >= 0 ? "+" : ""}{last2.toFixed(2)}%
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-[#aaa] ml-auto">Normalised</span>
+                  </div>
+                  <svg viewBox={`0 0 100 ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
+                    <path d={mkPath(sym1Pct)} fill="none" stroke="#5b63f5" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+                    <path d={mkPath(sym2Pct)} fill="none" stroke="#d97706" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+                    <line x1="0" y1={toY(0).toFixed(2)} x2="100" y2={toY(0).toFixed(2)} stroke="#e2e2df" strokeWidth="0.3" vectorEffect="non-scaling-stroke" strokeDasharray="2 2" />
+                  </svg>
+                </div>
+              );
+            })()}
           </div>
 
           {/* RSI panel */}

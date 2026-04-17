@@ -7,7 +7,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import alerts, backtest as backtest_router, broker, charts, community as community_router, ingest, journal, options, scanner, stocks, users, waitlist, watchlist
+from app.routers import alerts, backtest as backtest_router, broker, charts, community as community_router, ingest, journal, options, price_alerts as price_alerts_router, scanner, stocks, users, waitlist, watchlist
 
 try:
     from app.routers import payments as payments_router
@@ -55,6 +55,7 @@ app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(charts.router)
 app.include_router(journal.router)
+app.include_router(price_alerts_router.router)
 if _payments_available:
     app.include_router(payments_router.router)
 if _ai_available:
@@ -91,8 +92,15 @@ async def start_scheduler():
         id="daily_bhavcopy",
         replace_existing=True,
     )
+    _scheduler.add_job(
+        price_alerts_router.check_price_alerts,
+        "interval",
+        minutes=5,
+        id="price_alert_check",
+        replace_existing=True,
+    )
     _scheduler.start()
-    logger.info("APScheduler started — daily ingest at 16:00 IST")
+    logger.info("APScheduler started — daily ingest at 16:00 IST, price alerts every 5 min")
 
 
 @app.on_event("shutdown")

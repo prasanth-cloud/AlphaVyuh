@@ -394,3 +394,104 @@ async def delete_entry(
     sb = get_admin_client()
     sb.table("trade_journal").delete().eq("id", entry_id).eq("user_id", user_id).execute()
     return {"message": "Deleted"}
+
+
+@router.get("/portfolio")
+async def get_portfolio(user_id: str = Depends(get_current_user_id)):
+    """
+    Returns all open positions with current price from daily_ohlcv,
+    unrealised P&L, and sector breakdown.
+    """
+    sb = get_admin_client()
+    result = (
+        sb.table("trade_journal")
+        .select("id,symbol,company_name,trade_type,entry_date,entry_price,quantity,stop_loss,target_price,setup_type")
+        .eq("user_id", user_id)
+        .eq("status", "open")
+        .order("entry_date", desc=False)
+        .execute()
+    )
+    positions = result.data or []
+    if not positions:
+        return {"positions": [], "summary": {"total_invested": 0, "total_current": 0, "total_pnl": 0, "total_pnl_pct": 0}, "sectors": []}
+
+    # Fetch latest prices for all symbols at once
+    symbols = list({p["symbol"] for p in positions})
+    price_rows = (
+        sb.table("daily_ohlcv")
+        .select("symbol,close,pct_change")
+        .in_("symbol", symbols)
+        .order("trade_date", desc=True)
+        .execute()
+    )
+    # Keep only the most recent price per symbol
+    latest_prices: dict[str, dict] = {}
+    for row in (price_rows.data or []):
+        sym = row["symbol"]
+        if sym not in latest_prices:
+            latest_prices[sym] = {"close": float(row["close"]), "pct_change": row.get("pct_change")}
+
+    # Fetch sector info
+    sector_rows = (
+        sb.table("stock_universe")
+        .select("symbol,sector")
+        .in_("symbol", symbols)
+        .execute()
+    )
+    sectors_map: dict[str, str | None] = {r["symbol"]: r.get("sector") for r in (sector_rows.data or [])}
+
+    enriched = []
+    total_invested = 0.0
+    total_current  = 0.0
+    sector_pnl: dict[str, float] = {}
+
+    for p in positions:
+        sym   = p["symbol"]
+        qty   = int(p["quantity"] or 0)
+        entry = float(p["entry_price"] or 0)
+        cur   = latest_prices.get(sym, {}).get("close", entry)
+        day_chg = latest_prices.get(sym, {}).get("pct_change")
+
+        if p["trade_type"] == "long":
+            pnl = (cur - entry) * qty
+        else:
+            pnl = (entry - cur) * qty
+        pnl_pct = (pnl / (entry * qty) * 100) if entry and qty else 0
+
+        invested = entry * qty
+        total_invested += invested
+        total_current  += cur * qty
+
+        sector = sectors_map.get(sym)
+        if sector:
+            sector_pnl[sector] = sector_pnl.get(sector, 0) + pnl
+
+        enriched.append({
+            **p,
+            "current_price": round(cur, 2),
+            "day_change_pct": round(float(day_chg), 2) if day_chg is not None else None,
+            "unrealised_pnl": round(pnl, 2),
+            "unrealised_pnl_pct": round(pnl_pct, 2),
+            "invested": round(invested, 2),
+            "sector": sector,
+        })
+
+    total_pnl = total_current - total_invested
+    total_pnl_pct = (total_pnl / total_invested * 100) if total_invested else 0
+
+    sectors_list = [
+        {"sector": s or "Unknown", "pnl": round(v, 2)}
+        for s, v in sorted(sector_pnl.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    return {
+        "positions": enriched,
+        "summary": {
+            "total_invested": round(total_invested, 2),
+            "total_current":  round(total_current, 2),
+            "total_pnl":      round(total_pnl, 2),
+            "total_pnl_pct":  round(total_pnl_pct, 2),
+            "open_count":     len(enriched),
+        },
+        "sectors": sectors_list,
+    }
