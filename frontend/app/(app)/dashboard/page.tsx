@@ -5,6 +5,16 @@ import { getMarketSummary, getMarketMovers, getSectorBreadth } from "@/lib/api";
 import type { MarketSummary, MarketMovers, SectorBreadthItem } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
 
+function getMarketPhase(market: MarketSummary) {
+  const ad  = market.advance_decline_ratio ?? 0;
+  const e200 = market.above_ema200_pct ?? 0;
+  if (ad > 1.4 && e200 > 55)
+    return { label: "Bullish", color: "#26a65b", bg: "#edfaf3", desc: "Strong breadth — good conditions for longs" };
+  if (ad < 0.7 || e200 < 40)
+    return { label: "Bearish", color: "#e5383b", bg: "#fff0f0", desc: "Weak breadth — avoid new longs" };
+  return { label: "Neutral", color: "#d97706", bg: "#fff8ec", desc: "Mixed conditions — trade selectively" };
+}
+
 
 export default function DashboardPage() {
   const [market, setMarket] = useState<MarketSummary | null>(null);
@@ -165,6 +175,26 @@ export default function DashboardPage() {
             ))}
       </div>
 
+      {/* Market phase banner */}
+      {market && (() => {
+        const phase = getMarketPhase(market);
+        return (
+          <div
+            className="mx-5 mt-3 mb-1 px-4 py-2.5 rounded-[10px] border flex items-center gap-3"
+            style={{ background: phase.bg, borderColor: phase.color + "40" }}
+          >
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: phase.color }} />
+            <div>
+              <span className="text-[13px] font-semibold" style={{ color: phase.color }}>{phase.label} market</span>
+              <span className="text-[12px] text-[#888] ml-2">{phase.desc}</span>
+            </div>
+            <div className="ml-auto text-[11px] text-[#aaa] hidden sm:block">
+              A/D {market.advance_decline_ratio?.toFixed(2)} · {market.above_ema200_pct}% above EMA 200
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Greeting */}
       <div className="px-5 pt-5 pb-3">
         <div className="text-[11px] text-[#aaa] mb-0.5">
@@ -286,6 +316,30 @@ export default function DashboardPage() {
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top movers strip */}
+      {movers && movers.gainers.length > 0 && (
+        <div className="px-5 pb-4">
+          <div className="text-[11px] uppercase tracking-wider text-[#aaa] mb-2">Top movers today</div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {movers.gainers.slice(0, 6).map(stock => (
+              <Link
+                key={stock.symbol}
+                href={`/charts/${stock.symbol}`}
+                className="flex-shrink-0 bg-white border border-[#e2e2df] rounded-[10px] px-4 py-3 hover:border-[#bbb] transition-colors min-w-[110px]"
+              >
+                <div className="text-[13px] font-semibold text-[#1c1c1a]">{stock.symbol}</div>
+                <div className={`text-[13px] font-semibold mt-0.5 ${stock.pct_change >= 0 ? "text-[#26a65b]" : "text-[#e5383b]"}`}>
+                  {stock.pct_change >= 0 ? "+" : ""}{stock.pct_change.toFixed(2)}%
+                </div>
+                {stock.volume_ratio != null && (
+                  <div className="text-[11px] text-[#aaa] mt-0.5">Vol {stock.volume_ratio}×</div>
+                )}
+              </Link>
+            ))}
           </div>
         </div>
       )}

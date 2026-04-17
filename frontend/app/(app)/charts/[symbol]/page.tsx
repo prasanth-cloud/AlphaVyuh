@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { BookmarkPlus, Save } from "lucide-react";
 import type {
   CandlesResponse, Drawing, Fundamentals, OrderResult,
@@ -10,7 +11,7 @@ import type {
 import {
   getCandles, getIndicators, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
-  getFundamentals, getPlanStatus, getQuote,
+  getFundamentals, getPlanStatus, getQuote, getBrokerStatus,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -121,6 +122,9 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
   const [orderToast, setOrderToast] = useState("");
 
+  // Broker status
+  const [brokerConnected, setBrokerConnected] = useState(false);
+
   // Plan (for indicator gating)
   const [userPlan, setUserPlan] = useState<string>("free");
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
@@ -161,8 +165,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       }
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
-    // Detect currency from stock universe (US stocks = USD)
     getQuote(symbol).then(q => { if (q?.currency) setSymbolCurrency(q.currency); }).catch(() => {});
+    getBrokerStatus().then(s => setBrokerConnected(s.connected)).catch(() => {});
   }, [symbol]);
 
   // Load fundamentals when sidebar fundamentals section is opened
@@ -725,6 +729,22 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                   </div>
                 )}
               </div>
+              {/* ── Broker connect panel ────────────────────────────── */}
+              {!brokerConnected && (
+                <div className="border-t border-[#f0f0ee] p-4">
+                  <div className="text-[10px] uppercase tracking-[0.5px] text-[#bbb] mb-2 font-semibold">Quick order</div>
+                  <div className="bg-[#eeeffe] rounded-[8px] p-3 text-center">
+                    <div className="text-[12px] font-semibold text-[#3730a3] mb-0.5">Connect your broker</div>
+                    <div className="text-[11px] text-[#6366f1] mb-2.5">Trade directly from the chart</div>
+                    <Link
+                      href="/settings?tab=profile"
+                      className="inline-block text-[11px] font-semibold bg-[#5b63f5] text-white px-3 py-1.5 rounded-[6px] hover:opacity-85 transition-opacity"
+                    >
+                      Connect Zerodha
+                    </Link>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </aside>

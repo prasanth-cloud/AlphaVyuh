@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, Trash2, GripVertical, X, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 import type { Watchlist, WatchlistItem } from "@/lib/api";
 import {
   getWatchlists,
@@ -25,7 +26,9 @@ import {
   removeFromWatchlist,
   reorderWatchlist,
   getQuote,
+  searchSymbols,
 } from "@/lib/api";
+import type { SymbolSearchResult } from "@/lib/api";
 import RsiBadge from "@/components/scanner/RsiBadge";
 import PctChange from "@/components/scanner/PctChange";
 
@@ -38,6 +41,7 @@ function SortableRow({
   item: WatchlistItem;
   onRemove: (symbol: string) => void;
 }) {
+  const router = useRouter();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.symbol });
 
@@ -51,9 +55,10 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      className="border-b border-[#f7f7f5] group bg-white hover:bg-[#f7f7f5] transition-colors"
+      onClick={() => router.push(`/charts/${item.symbol}`)}
+      className="border-b border-[#f7f7f5] group bg-white hover:bg-[#f7f7f5] transition-colors cursor-pointer"
     >
-      <td className="px-3 py-3 w-8">
+      <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
         <button
           {...attributes}
           {...listeners}
@@ -82,14 +87,11 @@ function SortableRow({
       <td className="px-3 py-3">
         <RsiBadge rsi={item.rsi_14 ?? null} />
       </td>
-      <td className="px-3 py-3 text-right">
+      <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-2">
-          <a
-            href={`/charts/${item.symbol}`}
-            className="opacity-0 group-hover:opacity-100 text-[11px] text-[#5b63f5] hover:underline transition-opacity whitespace-nowrap"
-          >
+          <span className="opacity-0 group-hover:opacity-100 text-[11px] text-[#5b63f5] font-medium transition-opacity whitespace-nowrap">
             View chart →
-          </a>
+          </span>
           <button
             onClick={() => onRemove(item.symbol)}
             className="opacity-0 group-hover:opacity-100 text-[#ccc] hover:text-[#e5383b] transition-opacity"
@@ -112,10 +114,12 @@ export default function WatchlistPage() {
   const [showNewWl, setShowNewWl] = useState(false);
   const [toast, setToast] = useState("");
 
-  // Symbol search
+  // Symbol search + autocomplete
   const [symbolInput, setSymbolInput] = useState("");
   const [addMsg, setAddMsg] = useState("");
   const [adding, setAdding] = useState(false);
+  const [searchResults, setSearchResults] = useState<SymbolSearchResult[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -145,6 +149,42 @@ export default function WatchlistPage() {
       setShowNewWl(false);
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Failed to create watchlist");
+    }
+  }
+
+  const handleSearchInput = useCallback(async (q: string) => {
+    setSymbolInput(q);
+    if (q.length >= 1) {
+      const results = await searchSymbols(q).catch(() => []);
+      setSearchResults(results.slice(0, 6));
+      setShowDropdown(results.length > 0);
+    } else {
+      setSearchResults([]);
+      setShowDropdown(false);
+    }
+  }, []);
+
+  async function handlePickSymbol(symbol: string) {
+    setSymbolInput(symbol);
+    setShowDropdown(false);
+    setSearchResults([]);
+    if (!activeId) return;
+    setAdding(true);
+    setAddMsg("");
+    try {
+      await addToWatchlist(activeId, symbol);
+      const quote = await getQuote(symbol);
+      const newItem: WatchlistItem = quote
+        ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14 }
+        : { symbol, sort_order: 0, added_at: new Date().toISOString() };
+      setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
+      setSymbolInput("");
+      setAddMsg("Added!");
+    } catch (e: unknown) {
+      setAddMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setAdding(false);
+      setTimeout(() => setAddMsg(""), 2500);
     }
   }
 
@@ -320,11 +360,32 @@ export default function WatchlistPage() {
                 <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#aaa]" />
                 <input
                   value={symbolInput}
-                  onChange={e => setSymbolInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleAddSymbol()}
+                  onChange={e => handleSearchInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") {
+                      if (searchResults.length > 0) handlePickSymbol(searchResults[0].symbol);
+                      else handleAddSymbol();
+                    }
+                    if (e.key === "Escape") setShowDropdown(false);
+                  }}
+                  onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                   placeholder="Add symbol…"
-                  className="text-[12px] border border-[#e2e2df] rounded-[6px] pl-7 pr-3 py-1.5 outline-none focus:border-[#5b63f5] w-[150px]"
+                  className="text-[12px] border border-[#e2e2df] rounded-[6px] pl-7 pr-3 py-1.5 outline-none focus:border-[#5b63f5] w-[180px]"
                 />
+                {showDropdown && searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 bg-white border border-[#e2e2df] rounded-[8px] shadow-md z-20 mt-0.5 max-h-48 overflow-y-auto">
+                    {searchResults.map(s => (
+                      <div
+                        key={s.symbol}
+                        onMouseDown={() => handlePickSymbol(s.symbol)}
+                        className="px-3 py-2 hover:bg-[#f7f7f5] cursor-pointer"
+                      >
+                        <div className="text-[12px] font-semibold text-[#1c1c1a]">{s.symbol}</div>
+                        <div className="text-[10px] text-[#aaa] truncate">{s.company_name}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 onClick={handleAddSymbol}
