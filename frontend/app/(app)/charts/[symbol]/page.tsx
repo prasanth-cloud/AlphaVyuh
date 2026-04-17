@@ -416,10 +416,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       {showAlertModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
           <div className="absolute inset-0 bg-black/20" onClick={() => setShowAlertModal(false)} />
-          <div className="relative bg-white rounded-[12px] shadow-xl border border-[#e2e2df] p-5 w-[340px]">
+          <div className="relative bg-white rounded-[12px] shadow-xl border border-[#e8e8e6] p-5 w-[340px]">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[14px] font-semibold text-[#1c1c1a]">Price alert — {symbol}</span>
-              <button onClick={() => setShowAlertModal(false)} className="text-[#aaa] hover:text-[#1c1c1a] transition-colors text-[18px] leading-none">×</button>
+              <span className="text-[14px] font-semibold text-[#0f0f0e]">Price alert — {symbol}</span>
+              <button onClick={() => setShowAlertModal(false)} className="text-[#aaa] hover:text-[#0f0f0e] transition-colors text-[18px] leading-none">×</button>
             </div>
 
             {/* Existing alerts */}
@@ -428,7 +428,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 <div className="text-[10px] uppercase tracking-wider text-[#aaa] font-semibold mb-1">Active alerts</div>
                 {priceAlerts.map(a => (
                   <div key={a.id} className="flex items-center justify-between bg-[#f7f7f5] rounded-[6px] px-3 py-2">
-                    <span className="text-[12px] text-[#1c1c1a]">
+                    <span className="text-[12px] text-[#0f0f0e]">
                       {a.condition === "above" ? "↑ Above" : "↓ Below"} ₹{Number(a.target_price).toLocaleString("en-IN")}
                     </span>
                     <button onClick={() => handleDeleteAlert(a.id)} className="text-[#e5383b] text-[11px] hover:font-semibold">Remove</button>
@@ -456,14 +456,14 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 value={alertPrice}
                 onChange={e => setAlertPrice(e.target.value)}
                 placeholder={`Target price${latest?.close ? ` (current ₹${latest.close.toFixed(2)})` : ""}`}
-                className="w-full border border-[#e2e2df] rounded-[7px] px-3 py-2 text-[13px] text-[#1c1c1a] outline-none focus:border-[#5b63f5]"
+                className="w-full border border-[#e8e8e6] rounded-[7px] px-3 py-2 text-[13px] text-[#0f0f0e] outline-none focus:border-[#5b63f5]"
               />
               <input
                 type="text"
                 value={alertNote}
                 onChange={e => setAlertNote(e.target.value)}
                 placeholder="Note (optional)"
-                className="w-full border border-[#e2e2df] rounded-[7px] px-3 py-2 text-[13px] text-[#1c1c1a] outline-none focus:border-[#5b63f5]"
+                className="w-full border border-[#e8e8e6] rounded-[7px] px-3 py-2 text-[13px] text-[#0f0f0e] outline-none focus:border-[#5b63f5]"
               />
               {alertMsg && (
                 <div className={`text-[12px] font-medium ${alertMsg === "Alert set!" ? "text-[#26a65b]" : "text-[#e5383b]"}`}>{alertMsg}</div>
@@ -499,7 +499,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       )}
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#e2e2df] gap-4 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#e8e8e6] gap-4 flex-shrink-0">
         {/* Left: symbol search + name */}
         <div className="flex items-center gap-3">
           <SymbolSearch
@@ -580,7 +580,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {drawnLines.length > 0 && (
             <button
               onClick={clearDrawings}
-              className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e2e2df] text-[#e5383b] hover:border-[#e5383b] transition-colors"
+              className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e8e8e6] text-[#e5383b] hover:border-[#e5383b] transition-colors"
             >
               Clear
             </button>
@@ -602,9 +602,9 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     if (e.key === "Escape") { setShowCompareInput(false); setCompareInput(""); }
                   }}
                   placeholder="Symbol…"
-                  className="text-[11px] px-2 py-1 rounded-[4px] border border-[#5b63f5] outline-none w-[80px] text-[#1c1c1a]"
+                  className="text-[11px] px-2 py-1 rounded-[4px] border border-[#5b63f5] outline-none w-[80px] text-[#0f0f0e]"
                 />
-                <button onClick={() => { setShowCompareInput(false); setCompareInput(""); }} className="text-[#aaa] text-[14px] leading-none hover:text-[#1c1c1a]">×</button>
+                <button onClick={() => { setShowCompareInput(false); setCompareInput(""); }} className="text-[#aaa] text-[14px] leading-none hover:text-[#0f0f0e]">×</button>
               </div>
             ) : compareSymbol ? (
               <div className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] border bg-[#eeeffe] border-[#5b63f544] text-[#5b63f5] font-semibold">
@@ -614,7 +614,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             ) : (
               <button
                 onClick={() => setShowCompareInput(true)}
-                className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e2e2df] text-[#888] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors"
+                className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e8e8e6] text-[#888] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors"
                 title="Compare with another symbol"
               >
                 Compare
@@ -657,7 +657,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Save layout */}
           <button
             onClick={handleSaveLayout}
-            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e2e2df] text-[#666] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors"
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e8e8e6] text-[#666] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors"
           >
             <Save size={11} /> Save
           </button>
@@ -690,7 +690,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         )}
 
         {/* Sidebar */}
-        <aside className="w-[240px] flex-shrink-0 bg-white border-r border-[#e2e2df] flex flex-col overflow-y-auto">
+        <aside className="w-[240px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col overflow-y-auto">
           {loading ? (
             <div className="p-4 space-y-3">
               {[80, 50, 60, 40, 70].map((w, i) => (
@@ -704,9 +704,9 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               {/* Symbol header */}
               <div className="p-4 border-b border-[#f0f0ee]">
                 <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[18px] font-bold text-[#1c1c1a] tracking-[-0.5px]">{symbol}</span>
+                  <span className="text-[18px] font-bold text-[#0f0f0e] tracking-[-0.5px]">{symbol}</span>
                   {data.sector && (
-                    <span className="text-[10px] border border-[#e2e2df] rounded-full px-2 py-0.5 text-[#888] truncate max-w-[90px]">
+                    <span className="text-[10px] border border-[#e8e8e6] rounded-full px-2 py-0.5 text-[#888] truncate max-w-[90px]">
                       {data.sector}
                     </span>
                   )}
@@ -714,7 +714,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 <div className="text-[11px] text-[#aaa] leading-tight truncate">{data.company_name}</div>
 
                 <div className="mt-2">
-                  <div className="text-[22px] font-bold text-[#1c1c1a] tracking-[-0.8px] tabular-nums">
+                  <div className="text-[22px] font-bold text-[#0f0f0e] tracking-[-0.8px] tabular-nums">
                     {fmtPrice(latest?.close, symbolCurrency)}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -736,11 +736,11 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       {wlMsg}
                     </div>
                   ) : showWlPicker ? (
-                    <div className="border border-[#e2e2df] rounded-[7px] overflow-hidden">
+                    <div className="border border-[#e8e8e6] rounded-[7px] overflow-hidden">
                       <div className="px-3 py-2 bg-[#f7f7f5] text-[11px] text-[#888]">Pick a watchlist</div>
                       {watchlists.map(wl => (
                         <button key={wl.id} onClick={() => handlePickWl(wl.id)}
-                          className="w-full text-left px-3 py-2 text-[12px] text-[#1c1c1a] hover:bg-[#f7f7f5] border-t border-[#f0f0ee]">
+                          className="w-full text-left px-3 py-2 text-[12px] text-[#0f0f0e] hover:bg-[#f7f7f5] border-t border-[#f0f0ee]">
                           {wl.name}
                         </button>
                       ))}
@@ -751,7 +751,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     </div>
                   ) : (
                     <button onClick={handleAddWatchlist}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-[7px] border border-[#e2e2df] text-[11px] text-[#666] hover:border-[#1c1c1a] hover:text-[#1c1c1a] transition-colors">
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-[7px] border border-[#e8e8e6] text-[11px] text-[#666] hover:border-[#1c1c1a] hover:text-[#0f0f0e] transition-colors">
                       <BookmarkPlus size={12} /> Add to watchlist
                     </button>
                   )}
@@ -803,7 +803,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                         ] as [string, string][]).map(([label, val]) => (
                           <div key={label} className="flex items-center justify-between">
                             <span className="text-[11px] text-[#aaa]">{label}</span>
-                            <span className="text-[11px] font-medium tabular-nums text-[#1c1c1a]">{val}</span>
+                            <span className="text-[11px] font-medium tabular-nums text-[#0f0f0e]">{val}</span>
                           </div>
                         ))}
                       </div>
@@ -833,7 +833,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-[#aaa]">ATR 14</span>
-                          <span className="text-[11px] font-medium tabular-nums text-[#1c1c1a]">
+                          <span className="text-[11px] font-medium tabular-nums text-[#0f0f0e]">
                             {latest?.atr_14 != null ? fmtPrice(latest.atr_14, symbolCurrency) : "—"}
                           </span>
                         </div>
@@ -933,7 +933,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                         ] as [string, string | null][]).filter(([, v]) => v != null).map(([label, val]) => (
                           <div key={label} className="flex items-center justify-between">
                             <span className="text-[11px] text-[#aaa]">{label}</span>
-                            <span className="text-[11px] font-medium tabular-nums text-[#1c1c1a]">{val}</span>
+                            <span className="text-[11px] font-medium tabular-nums text-[#0f0f0e]">{val}</span>
                           </div>
                         ))}
                         <div className="text-[9px] text-[#ccc] mt-1">Source: Yahoo Finance</div>
@@ -969,13 +969,13 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             {/* Candle legend */}
             {displayBar && (
               <div className="absolute top-2 left-3 z-10 pointer-events-none bg-white/80 rounded px-2 py-1 text-[11px] text-[#888] font-mono">
-                <span className="text-[#1c1c1a] font-semibold mr-2">{symbol}</span>
+                <span className="text-[#0f0f0e] font-semibold mr-2">{symbol}</span>
                 <span className="mr-3">{displayBar.time}</span>
-                <span className="mr-2">O <span className="text-[#1c1c1a]">{displayBar.open?.toFixed(2)}</span></span>
-                <span className="mr-2">H <span className="text-[#1c1c1a]">{displayBar.high?.toFixed(2)}</span></span>
-                <span className="mr-2">L <span className="text-[#1c1c1a]">{displayBar.low?.toFixed(2)}</span></span>
+                <span className="mr-2">O <span className="text-[#0f0f0e]">{displayBar.open?.toFixed(2)}</span></span>
+                <span className="mr-2">H <span className="text-[#0f0f0e]">{displayBar.high?.toFixed(2)}</span></span>
+                <span className="mr-2">L <span className="text-[#0f0f0e]">{displayBar.low?.toFixed(2)}</span></span>
                 <span className="mr-2">C <span className={displayBar.close >= displayBar.open ? "text-[#26a65b]" : "text-[#e5383b]"}>{displayBar.close?.toFixed(2)}</span></span>
-                <span>Vol <span className="text-[#1c1c1a]">{fmtVol(displayBar.volume)}</span></span>
+                <span>Vol <span className="text-[#0f0f0e]">{fmtVol(displayBar.volume)}</span></span>
               </div>
             )}
 
@@ -1091,7 +1091,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               const last1 = sym1Pct.at(-1) ?? 0;
               const last2 = sym2Pct.at(-1) ?? 0;
               return (
-                <div className="absolute bottom-2 left-2 right-2 z-10 bg-white/90 rounded-[8px] border border-[#e2e2df] px-3 py-2 pointer-events-none">
+                <div className="absolute bottom-2 left-2 right-2 z-10 bg-white/90 rounded-[8px] border border-[#e8e8e6] px-3 py-2 pointer-events-none">
                   <div className="flex items-center gap-3 mb-1">
                     <div className="flex items-center gap-1.5">
                       <div className="w-3 h-0.5 rounded" style={{ background: "#5b63f5" }} />

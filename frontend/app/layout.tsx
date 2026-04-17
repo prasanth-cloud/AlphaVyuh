@@ -10,9 +10,12 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "AlphaVyuh — Your strategic edge in the market",
-  description: "A unified trading platform for NSE and BSE traders.",
+  title: "AlphaVyuh — Trading OS for Indian Markets",
+  description: "Scan → Analyse → Trade → Journal → Improve. Built for NSE/BSE swing traders.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/favicon.svg",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

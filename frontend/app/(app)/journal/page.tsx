@@ -352,7 +352,7 @@ export default function JournalPage() {
     <div className="min-h-full bg-[#f2f2f0]">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#0f0f0e] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg">
           {toast}
         </div>
       )}
@@ -373,7 +373,7 @@ export default function JournalPage() {
           {
             label: "Closed Trades",
             val: stats?.total_trades ?? "—",
-            color: "#1c1c1a",
+            color: "#0f0f0e",
           },
           {
             label: "Open Trades",
@@ -381,7 +381,7 @@ export default function JournalPage() {
             color: "#5b63f5",
           },
         ].map((item) => (
-          <div key={item.label} className="bg-white border border-[#e2e2df] rounded-[10px] px-4 py-3.5">
+          <div key={item.label} className="bg-white border border-[#e8e8e6] rounded-[10px] px-4 py-3.5">
             <div className="text-[22px] font-bold tracking-tight leading-none" style={{ color: item.color }}>
               {item.val}
             </div>
@@ -401,7 +401,7 @@ export default function JournalPage() {
             key={id}
             onClick={() => setTab(id)}
             className={`px-4 py-1.5 text-[13px] rounded-t-[8px] transition-colors font-medium ${
-              tab === id ? "bg-white text-[#1c1c1a] border border-b-0 border-[#e2e2df]" : "text-[#888] hover:text-[#1c1c1a]"
+              tab === id ? "bg-white text-[#0f0f0e] border border-b-0 border-[#e8e8e6]" : "text-[#888] hover:text-[#0f0f0e]"
             }`}
           >
             {label}
@@ -412,10 +412,10 @@ export default function JournalPage() {
       {/* Analytics Panel */}
       {tab === "analytics" && (
         <div className="px-5 pb-5">
-          <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5 space-y-6">
+          <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5 space-y-6">
             {/* Equity Curve */}
             <div>
-              <div className="text-[12px] font-semibold text-[#1c1c1a] mb-1">Equity Curve</div>
+              <div className="text-[12px] font-semibold text-[#0f0f0e] mb-1">Equity Curve</div>
               <div className="text-[11px] text-[#aaa] mb-3">Cumulative P&amp;L across closed trades</div>
               <EquityCurve data={analytics?.equity_curve ?? []} />
             </div>
@@ -423,7 +423,7 @@ export default function JournalPage() {
             {/* Monthly P&L */}
             {(analytics?.monthly_pnl?.length ?? 0) > 0 && (
               <div>
-                <div className="text-[12px] font-semibold text-[#1c1c1a] mb-3">Monthly P&amp;L</div>
+                <div className="text-[12px] font-semibold text-[#0f0f0e] mb-3">Monthly P&amp;L</div>
                 <div className="flex gap-2 flex-wrap">
                   {analytics!.monthly_pnl.map((m) => {
                     const pos = m.pnl >= 0;
@@ -444,11 +444,11 @@ export default function JournalPage() {
             {/* Setup Breakdown */}
             {(analytics?.setup_breakdown?.length ?? 0) > 0 && (
               <div>
-                <div className="text-[12px] font-semibold text-[#1c1c1a] mb-3">Performance by Setup</div>
+                <div className="text-[12px] font-semibold text-[#0f0f0e] mb-3">Performance by Setup</div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-[12px]">
                     <thead>
-                      <tr className="border-b border-[#f0f0ee]">
+                      <tr className="border-b border-[#f2f2f0]">
                         {["Setup", "Trades", "Win Rate", "Avg P&L", "Total P&L"].map((h) => (
                           <th key={h} className="text-left pb-2 text-[11px] text-[#aaa] font-medium uppercase tracking-wider pr-4">{h}</th>
                         ))}
@@ -459,7 +459,7 @@ export default function JournalPage() {
                         const pos = s.total_pnl >= 0;
                         return (
                           <tr key={s.setup} className="border-b border-[#f7f7f5]">
-                            <td className="py-2.5 pr-4 font-medium text-[#1c1c1a]">{s.setup}</td>
+                            <td className="py-2.5 pr-4 font-medium text-[#0f0f0e]">{s.setup}</td>
                             <td className="py-2.5 pr-4 text-[#888]">{s.trades}</td>
                             <td className="py-2.5 pr-4">
                               <span className="font-semibold" style={{ color: s.win_rate >= 50 ? "#26a65b" : "#e5383b" }}>
@@ -488,7 +488,7 @@ export default function JournalPage() {
             {/* Drawdown Analysis */}
             {(analytics?.drawdown_curve?.length ?? 0) > 1 && (
               <div>
-                <div className="text-[12px] font-semibold text-[#1c1c1a] mb-1">Drawdown</div>
+                <div className="text-[12px] font-semibold text-[#0f0f0e] mb-1">Drawdown</div>
                 <div className="text-[11px] text-[#aaa] mb-2">Underwater equity relative to all-time high</div>
                 <DrawdownChart data={analytics!.drawdown_curve} />
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
@@ -521,8 +521,8 @@ export default function JournalPage() {
         <div className="px-5 pb-5 space-y-4">
 
           {/* Pattern Stats */}
-          <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
-            <div className="text-[13px] font-bold text-[#1c1c1a] mb-1">Pattern Stats</div>
+          <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5">
+            <div className="text-[13px] font-bold text-[#0f0f0e] mb-1">Pattern Stats</div>
             <div className="text-[12px] text-[#aaa] mb-4">Computed from your closed trades — no AI needed.</div>
 
             {patternsLoading ? (
@@ -565,7 +565,7 @@ export default function JournalPage() {
                     <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Win Rate by Day</div>
                     <div className="flex gap-1.5 flex-wrap">
                       {patterns.day_of_week!.map(d => (
-                        <div key={d.day} className="flex-1 min-w-[60px] rounded-[8px] px-2 py-2 text-center border border-[#e2e2df]">
+                        <div key={d.day} className="flex-1 min-w-[60px] rounded-[8px] px-2 py-2 text-center border border-[#e8e8e6]">
                           <div className="text-[13px] font-bold"
                             style={{ color: d.win_rate >= 60 ? "#26a65b" : d.win_rate >= 40 ? "#d97706" : "#e5383b" }}>
                             {d.win_rate}%
@@ -610,7 +610,7 @@ export default function JournalPage() {
                     <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Long vs Short</div>
                     <div className="flex gap-3">
                       {patterns.by_direction!.map(d => (
-                        <div key={d.direction} className="flex-1 rounded-[8px] border border-[#e2e2df] px-3 py-2.5">
+                        <div key={d.direction} className="flex-1 rounded-[8px] border border-[#e8e8e6] px-3 py-2.5">
                           <div className="text-[14px] font-bold"
                             style={{ color: d.win_rate >= 50 ? "#26a65b" : "#e5383b" }}>
                             {d.win_rate}%
@@ -630,10 +630,10 @@ export default function JournalPage() {
           </div>
 
           {/* AI Deep Analysis */}
-          <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
+          <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <div className="text-[14px] font-bold text-[#1c1c1a]">AI Deep Analysis</div>
+                <div className="text-[14px] font-bold text-[#0f0f0e]">AI Deep Analysis</div>
                 <div className="text-[12px] text-[#aaa] mt-0.5">
                   Claude reads your full journal and surfaces mistakes, patterns, and specific rules to add to your playbook.
                 </div>
@@ -654,7 +654,7 @@ export default function JournalPage() {
                   }
                 }}
                 disabled={aiLoading}
-                className="flex-shrink-0 px-4 py-2 rounded-[8px] bg-[#1c1c1a] text-white text-[12px] font-semibold hover:opacity-85 disabled:opacity-50 transition-opacity ml-4"
+                className="flex-shrink-0 px-4 py-2 rounded-[8px] bg-[#0f0f0e] text-white text-[12px] font-semibold hover:opacity-85 disabled:opacity-50 transition-opacity ml-4"
               >
                 {aiLoading ? "Analysing…" : aiAnalysis ? "Re-analyse" : "Analyse my trades"}
               </button>
@@ -679,13 +679,13 @@ export default function JournalPage() {
                 <div className="mb-3 px-3 py-2 rounded-lg bg-[#fff8ec] border border-[#fde68a] text-[11px] text-[#92400e] leading-relaxed">
                   <strong>Disclaimer:</strong> AI analysis is for educational purposes only and does not constitute SEBI-registered investment advice. Past performance is not indicative of future results.
                 </div>
-                <div className="prose prose-sm max-w-none text-[13px] text-[#1c1c1a] leading-relaxed space-y-3">
+                <div className="prose prose-sm max-w-none text-[13px] text-[#0f0f0e] leading-relaxed space-y-3">
                   {aiAnalysis.split("\n").map((line, i) => {
                     if (line.startsWith("## ") || line.startsWith("### ")) {
-                      return <div key={i} className="text-[13px] font-bold text-[#1c1c1a] mt-4 mb-1">{line.replace(/^#+\s/, "")}</div>;
+                      return <div key={i} className="text-[13px] font-bold text-[#0f0f0e] mt-4 mb-1">{line.replace(/^#+\s/, "")}</div>;
                     }
                     if (line.startsWith("**") && line.endsWith("**")) {
-                      return <div key={i} className="text-[13px] font-bold text-[#1c1c1a] mt-3 mb-1">{line.replace(/\*\*/g, "")}</div>;
+                      return <div key={i} className="text-[13px] font-bold text-[#0f0f0e] mt-3 mb-1">{line.replace(/\*\*/g, "")}</div>;
                     }
                     if (line.startsWith("- ") || line.startsWith("* ")) {
                       return (
@@ -719,13 +719,13 @@ export default function JournalPage() {
         <div className="flex-1 min-w-0">
           {/* Toolbar */}
           <div className="flex items-center gap-2 mb-2.5">
-            <div className="flex bg-white border border-[#e2e2df] rounded-[8px] p-0.5 gap-0.5">
+            <div className="flex bg-white border border-[#e8e8e6] rounded-[8px] p-0.5 gap-0.5">
               {(["all", "open", "closed"] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setFilterStatus(s)}
                   className={`px-3 py-1 text-[12px] rounded-[6px] capitalize transition-colors ${
-                    filterStatus === s ? "bg-[#1c1c1a] text-white" : "text-[#888] hover:text-[#1c1c1a]"
+                    filterStatus === s ? "bg-[#0f0f0e] text-white" : "text-[#888] hover:text-[#0f0f0e]"
                   }`}
                 >
                   {s}
@@ -737,14 +737,14 @@ export default function JournalPage() {
               <button
                 onClick={handleImportZerodha}
                 disabled={importing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-[8px] border border-[#e2e2df] text-[#555] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-[8px] border border-[#e8e8e6] text-[#555] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors disabled:opacity-50"
               >
                 {importing ? "Importing…" : "↓ Import from Zerodha"}
               </button>
             )}
             <button
               onClick={openAddPanel}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1c1a] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors"
             >
               <span className="text-[16px] leading-none">+</span> Log trade
             </button>
@@ -759,10 +759,10 @@ export default function JournalPage() {
           )}
 
           {/* Table */}
-          <div className="bg-white border border-[#e2e2df] rounded-[10px] overflow-hidden">
+          <div className="bg-white border border-[#e8e8e6] rounded-[10px] overflow-hidden">
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-[#f0f0ee]">
+                <tr className="border-b border-[#f2f2f0]">
                   {["Symbol", "Type", "Entry", "Entry px", "Exit px", "P&L", "Status", ""].map((h) => (
                     <th key={h} className="text-left px-3 py-2.5 text-[11px] font-medium text-[#aaa] uppercase tracking-wider">
                       {h}
@@ -803,7 +803,7 @@ export default function JournalPage() {
                       }`}
                     >
                       <td className="px-3 py-2.5">
-                        <span className="font-medium text-[#1c1c1a]">{e.symbol}</span>
+                        <span className="font-medium text-[#0f0f0e]">{e.symbol}</span>
                         {e.setup_type && (
                           <span className="ml-1.5 text-[10px] text-[#aaa]">{e.setup_type}</span>
                         )}
@@ -855,10 +855,10 @@ export default function JournalPage() {
         {/* Side panel */}
         {panelMode && (
           <div className="w-[340px] flex-shrink-0">
-            <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
+            <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5">
               {/* Panel header */}
               <div className="flex items-center justify-between mb-4">
-                <div className="text-[14px] font-semibold text-[#1c1c1a]">
+                <div className="text-[14px] font-semibold text-[#0f0f0e]">
                   {panelMode === "add" ? "Log Trade" : panelMode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
                 </div>
                 <button onClick={() => { setPanelMode(null); setSelectedEntry(null); }} className="text-[#ccc] hover:text-[#888] text-[18px] leading-none">×</button>
@@ -877,10 +877,10 @@ export default function JournalPage() {
                         setSymbolQ(ev.target.value.toUpperCase());
                       }}
                       placeholder="e.g. RELIANCE"
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                     />
                     {symbolResults.length > 0 && !selectedSymbol && (
-                      <div className="absolute top-full left-0 right-0 bg-white border border-[#e2e2df] rounded-[8px] shadow-lg z-20 overflow-hidden mt-0.5">
+                      <div className="absolute top-full left-0 right-0 bg-white border border-[#e8e8e6] rounded-[8px] shadow-lg z-20 overflow-hidden mt-0.5">
                         {symbolResults.map((r) => (
                           <button
                             key={r.symbol}
@@ -926,7 +926,7 @@ export default function JournalPage() {
                       type="date"
                       value={addForm.entry_date || ""}
                       onChange={(ev) => setAddForm((f) => ({ ...f, entry_date: ev.target.value }))}
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                     />
                   </div>
 
@@ -939,7 +939,7 @@ export default function JournalPage() {
                         value={addForm.entry_price || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, entry_price: parseFloat(ev.target.value) || undefined }))}
                         placeholder="0.00"
-                        className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                       />
                     </div>
                     <div>
@@ -949,7 +949,7 @@ export default function JournalPage() {
                         value={addForm.quantity || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, quantity: parseInt(ev.target.value) || undefined }))}
                         placeholder="0"
-                        className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                       />
                     </div>
                   </div>
@@ -968,7 +968,7 @@ export default function JournalPage() {
                         value={addForm.stop_loss || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, stop_loss: parseFloat(ev.target.value) || undefined }))}
                         placeholder="optional"
-                        className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                       />
                     </div>
                     <div>
@@ -978,7 +978,7 @@ export default function JournalPage() {
                         value={addForm.target_price || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, target_price: parseFloat(ev.target.value) || undefined }))}
                         placeholder="optional"
-                        className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                       />
                     </div>
                   </div>
@@ -1003,7 +1003,7 @@ export default function JournalPage() {
                           onClick={() => setAddForm((f) => ({ ...f, setup_type: f.setup_type === s.toLowerCase() ? undefined : s.toLowerCase() }))}
                           className="px-2.5 py-1 text-[12px] rounded-full border transition-colors"
                           style={addForm.setup_type === s.toLowerCase()
-                            ? { background: "#1c1c1a", color: "white", borderColor: "#1c1c1a" }
+                            ? { background: "#0f0f0e", color: "white", borderColor: "#1c1c1a" }
                             : { background: "white", color: "#888", borderColor: "#e2e2df" }
                           }
                         >
@@ -1021,14 +1021,14 @@ export default function JournalPage() {
                       onChange={(ev) => setAddForm((f) => ({ ...f, entry_reason: ev.target.value }))}
                       rows={3}
                       placeholder="EMA alignment, volume surge, breakout of resistance..."
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
                     />
                   </div>
 
                   <button
                     onClick={handleAddTrade}
                     disabled={saving}
-                    className="w-full py-2.5 bg-[#1c1c1a] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors disabled:opacity-50"
+                    className="w-full py-2.5 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors disabled:opacity-50"
                   >
                     {saving ? "Saving..." : "Save Trade"}
                   </button>
@@ -1038,7 +1038,7 @@ export default function JournalPage() {
               {/* ── CLOSE FORM ── */}
               {panelMode === "close" && selectedEntry && (
                 <div className="space-y-3">
-                  <div className="text-[12px] text-[#888] pb-2 border-b border-[#f0f0ee]">
+                  <div className="text-[12px] text-[#888] pb-2 border-b border-[#f2f2f0]">
                     {selectedEntry.trade_type === "long" ? "Long" : "Short"} · {selectedEntry.quantity} qty · Entered ₹{selectedEntry.entry_price.toLocaleString("en-IN")} on {fmtDate(selectedEntry.entry_date)}
                   </div>
 
@@ -1048,7 +1048,7 @@ export default function JournalPage() {
                       type="date"
                       value={closeForm.exit_date || ""}
                       onChange={(ev) => setCloseForm((f) => ({ ...f, exit_date: ev.target.value }))}
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                     />
                   </div>
 
@@ -1059,7 +1059,7 @@ export default function JournalPage() {
                       value={closeForm.exit_price || ""}
                       onChange={(ev) => setCloseForm((f) => ({ ...f, exit_price: parseFloat(ev.target.value) || undefined }))}
                       placeholder="0.00"
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
                     />
                   </div>
 
@@ -1083,7 +1083,7 @@ export default function JournalPage() {
                       onChange={(ev) => setCloseForm((f) => ({ ...f, exit_reason: ev.target.value }))}
                       rows={2}
                       placeholder="Target hit, stop loss, chart breakdown..."
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
                     />
                   </div>
 
@@ -1094,7 +1094,7 @@ export default function JournalPage() {
                       onChange={(ev) => setCloseForm((f) => ({ ...f, mistakes: ev.target.value }))}
                       rows={2}
                       placeholder="Sized too large, ignored stop..."
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
                     />
                   </div>
 
@@ -1105,14 +1105,14 @@ export default function JournalPage() {
                       onChange={(ev) => setCloseForm((f) => ({ ...f, lessons: ev.target.value }))}
                       rows={2}
                       placeholder="Always wait for confirmation..."
-                      className="w-full border border-[#e2e2df] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
                     />
                   </div>
 
                   <button
                     onClick={handleCloseTrade}
                     disabled={saving}
-                    className="w-full py-2.5 bg-[#1c1c1a] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors disabled:opacity-50"
+                    className="w-full py-2.5 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors disabled:opacity-50"
                   >
                     {saving ? "Saving..." : "Close Trade"}
                   </button>
@@ -1139,7 +1139,7 @@ export default function JournalPage() {
                     ].map(([k, v]) => (
                       <div key={k}>
                         <div className="text-[10px] text-[#aaa] uppercase tracking-wider">{k}</div>
-                        <div className="font-medium text-[#1c1c1a] mt-0.5">{v}</div>
+                        <div className="font-medium text-[#0f0f0e] mt-0.5">{v}</div>
                       </div>
                     ))}
                   </div>
@@ -1189,7 +1189,7 @@ export default function JournalPage() {
                   {selectedEntry.status === "open" && (
                     <button
                       onClick={() => openClosePanel(selectedEntry)}
-                      className="w-full py-2 bg-[#1c1c1a] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors"
+                      className="w-full py-2 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors"
                     >
                       Close this trade
                     </button>

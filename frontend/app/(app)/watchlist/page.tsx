@@ -56,7 +56,7 @@ function SortableRow({
       ref={setNodeRef}
       style={style}
       onClick={() => router.push(`/charts/${item.symbol}`)}
-      className="border-b border-[#f7f7f5] group bg-white hover:bg-[#f7f7f5] transition-colors cursor-pointer"
+      className="border-b border-[#f7f7f5] group bg-white hover:bg-[#fafaf9] transition-colors cursor-pointer"
     >
       <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
         <button
@@ -68,12 +68,12 @@ function SortableRow({
         </button>
       </td>
       <td className="px-3 py-3">
-        <div className="text-[13px] font-semibold text-[#1c1c1a]">{item.symbol}</div>
+        <div className="text-[13px] font-semibold text-[#0f0f0e]">{item.symbol}</div>
         {item.company_name && (
           <div className="text-[10px] text-[#aaa] truncate max-w-[140px]">{item.company_name}</div>
         )}
       </td>
-      <td className="px-3 py-3 tabular-nums text-[12px] text-[#1c1c1a] font-medium">
+      <td className="px-3 py-3 tabular-nums text-[12px] text-[#0f0f0e] font-medium">
         {item.close != null
           ? `₹${item.close.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
           : "—"}
@@ -264,14 +264,14 @@ export default function WatchlistPage() {
   return (
     <div className="flex h-full bg-[#f2f2f0] overflow-hidden">
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#0f0f0e] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg">
           {toast}
         </div>
       )}
       {/* ── Left sidebar: watchlist list ─────────────────────────────── */}
-      <aside className="w-[220px] flex-shrink-0 bg-white border-r border-[#e2e2df] flex flex-col h-full">
-        <div className="px-4 py-3.5 border-b border-[#f0f0ee] flex items-center justify-between">
-          <span className="text-[13px] font-bold text-[#1c1c1a]">Watchlists</span>
+      <aside className="w-[220px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col h-full">
+        <div className="px-4 py-3.5 border-b border-[#f2f2f0] flex items-center justify-between">
+          <span className="text-[13px] font-bold text-[#0f0f0e]">Watchlists</span>
           <button
             onClick={() => setShowNewWl(o => !o)}
             className="text-[#5b63f5] hover:opacity-70"
@@ -281,14 +281,14 @@ export default function WatchlistPage() {
         </div>
 
         {showNewWl && (
-          <div className="px-4 py-2.5 border-b border-[#f0f0ee] flex gap-1.5">
+          <div className="px-4 py-2.5 border-b border-[#f2f2f0] flex gap-1.5">
             <input
               autoFocus
               value={newWlName}
               onChange={e => setNewWlName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleCreateWatchlist()}
               placeholder="List name…"
-              className="flex-1 text-[11px] border border-[#e2e2df] rounded-[4px] px-2 py-1 outline-none focus:border-[#5b63f5]"
+              className="flex-1 text-[11px] border border-[#e8e8e6] rounded-[4px] px-2 py-1 outline-none focus:border-[#5b63f5]"
             />
             <button onClick={handleCreateWatchlist} className="text-[11px] text-[#5b63f5] font-medium">
               Add
@@ -318,7 +318,7 @@ export default function WatchlistPage() {
                 className={`w-full text-left px-4 py-2.5 text-[13px] transition-colors ${
                   activeId === wl.id
                     ? "bg-[#eeeffe] text-[#5b63f5] font-medium"
-                    : "text-[#444] hover:bg-[#f7f7f5]"
+                    : "text-[#444] hover:bg-[#fafaf9]"
                 }`}
               >
                 <div className="truncate">{wl.name}</div>
@@ -332,9 +332,9 @@ export default function WatchlistPage() {
       {/* ── Right panel: items table ─────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e2e2df] bg-white flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e8e6] bg-white flex-shrink-0">
           <div>
-            <h1 className="text-[16px] font-bold text-[#1c1c1a]">
+            <h1 className="text-[16px] font-bold text-[#0f0f0e]">
               {activeWl ? activeWl.name : "Watchlist"}
             </h1>
             {activeWl && (
@@ -370,17 +370,17 @@ export default function WatchlistPage() {
                   }}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                   placeholder="Add symbol…"
-                  className="text-[12px] border border-[#e2e2df] rounded-[6px] pl-7 pr-3 py-1.5 outline-none focus:border-[#5b63f5] w-[180px]"
+                  className="text-[12px] border border-[#e8e8e6] rounded-[6px] pl-7 pr-3 py-1.5 outline-none focus:border-[#5b63f5] w-[180px]"
                 />
                 {showDropdown && searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 bg-white border border-[#e2e2df] rounded-[8px] shadow-md z-20 mt-0.5 max-h-48 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 bg-white border border-[#e8e8e6] rounded-[8px] shadow-md z-20 mt-0.5 max-h-48 overflow-y-auto">
                     {searchResults.map(s => (
                       <div
                         key={s.symbol}
                         onMouseDown={() => handlePickSymbol(s.symbol)}
-                        className="px-3 py-2 hover:bg-[#f7f7f5] cursor-pointer"
+                        className="px-3 py-2 hover:bg-[#fafaf9] cursor-pointer"
                       >
-                        <div className="text-[12px] font-semibold text-[#1c1c1a]">{s.symbol}</div>
+                        <div className="text-[12px] font-semibold text-[#0f0f0e]">{s.symbol}</div>
                         <div className="text-[10px] text-[#aaa] truncate">{s.company_name}</div>
                       </div>
                     ))}
@@ -390,7 +390,7 @@ export default function WatchlistPage() {
               <button
                 onClick={handleAddSymbol}
                 disabled={adding || !symbolInput.trim()}
-                className="px-3 py-1.5 rounded-[6px] bg-[#1c1c1a] text-white text-[12px] font-medium hover:opacity-85 disabled:opacity-50 transition-opacity"
+                className="px-3 py-1.5 rounded-[6px] bg-[#0f0f0e] text-white text-[12px] font-medium hover:opacity-85 disabled:opacity-50 transition-opacity"
               >
                 {adding ? "Adding…" : "Add"}
               </button>
@@ -402,12 +402,12 @@ export default function WatchlistPage() {
         <div className="flex-1 overflow-auto bg-white">
           {!activeWl ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <div className="text-[14px] font-medium text-[#1c1c1a] mb-1">No watchlist selected</div>
+              <div className="text-[14px] font-medium text-[#0f0f0e] mb-1">No watchlist selected</div>
               <div className="text-[12px] text-[#aaa]">Create or select a watchlist from the sidebar.</div>
             </div>
           ) : activeWl.items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <div className="text-[14px] font-medium text-[#1c1c1a] mb-1">This watchlist is empty</div>
+              <div className="text-[14px] font-medium text-[#0f0f0e] mb-1">This watchlist is empty</div>
               <div className="text-[12px] text-[#aaa]">
                 Type a symbol above and press Enter to add your first stock.
               </div>
@@ -423,7 +423,7 @@ export default function WatchlistPage() {
                 strategy={verticalListSortingStrategy}
               >
                 <table className="w-full border-collapse text-[12px]">
-                  <thead className="sticky top-0 bg-white border-b border-[#e2e2df] z-10">
+                  <thead className="sticky top-0 bg-white border-b border-[#e8e8e6] z-10">
                     <tr>
                       <th className="px-3 py-2.5 w-8" />
                       <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">
