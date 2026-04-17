@@ -985,7 +985,11 @@ export default function JournalPage() {
                   {(riskRupees || rrRatio) && (
                     <div className="text-[11px] text-[#aaa] flex gap-3">
                       {riskRupees && <span>Risk: ₹{riskRupees.toLocaleString("en-IN")}</span>}
-                      {rrRatio && <span className="font-medium text-[#5b63f5]">R:R = {rrRatio}</span>}
+                      {rrRatio && (
+                        <span className="font-semibold" style={{ color: parseFloat(rrRatio) >= 2 ? "#26a65b" : "#d97706" }}>
+                          R:R = 1:{rrRatio} {parseFloat(rrRatio) >= 2 ? "✓" : "⚠ below 2:1"}
+                        </span>
+                      )}
                     </div>
                   )}
 

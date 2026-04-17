@@ -5,15 +5,11 @@ Fetches OHLCV + indicators and upserts into daily_ohlcv / stock_universe.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Optional
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
 
 # Top 200 NSE stocks by liquidity
 NSE_UNIVERSE = [
@@ -51,8 +47,8 @@ NSE_UNIVERSE = [
 
 
 def _get_sb():
-    from supabase import create_client
-    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    from app.services.supabase import get_admin_client
+    return get_admin_client()
 
 
 def _compute_rsi(series: pd.Series, length: int = 14) -> pd.Series:
@@ -155,6 +151,8 @@ def fetch_and_ingest(symbol: str, period: str = "1y") -> dict:
                     r[col] = int(val)
                 elif col == "trade_date":
                     r[col] = str(val)
+                elif col == "volume":
+                    r[col] = int(float(val))
                 else:
                     r[col] = round(float(val), 4 if col == "atr_14" else 2)
             if "trade_date" in r:

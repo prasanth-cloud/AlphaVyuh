@@ -81,6 +81,28 @@ async def _trigger_daily_ingest():
         logger.error(f"Scan alerts run failed: {e}")
 
 
+async def _trigger_yfinance_refresh():
+    """
+    Runs at 4:15 PM IST weekdays — 15 min after NSE close.
+    Pulls last 5 days from Yahoo Finance so charts always show fresh data.
+    """
+    import asyncio as _asyncio
+    try:
+        from app.services.yfinance_ingest import fetch_and_ingest, NSE_UNIVERSE
+        success = 0
+        for sym in NSE_UNIVERSE[:200]:
+            try:
+                r = fetch_and_ingest(sym, period="5d")
+                if r.get("status") == "success":
+                    success += 1
+            except Exception as e:
+                logger.warning("yfinance refresh failed for %s: %s", sym, e)
+            await _asyncio.sleep(0.25)
+        logger.info("Daily yfinance refresh complete: %d/200 updated", success)
+    except Exception as e:
+        logger.error("Daily yfinance refresh error: %s", e)
+
+
 @app.on_event("startup")
 async def start_scheduler():
     global _scheduler
@@ -93,6 +115,12 @@ async def start_scheduler():
         replace_existing=True,
     )
     _scheduler.add_job(
+        _trigger_yfinance_refresh,
+        CronTrigger(hour=16, minute=15, day_of_week="mon-fri", timezone=ist),
+        id="daily_yfinance_refresh",
+        replace_existing=True,
+    )
+    _scheduler.add_job(
         price_alerts_router.check_price_alerts,
         "interval",
         minutes=5,
@@ -100,7 +128,7 @@ async def start_scheduler():
         replace_existing=True,
     )
     _scheduler.start()
-    logger.info("APScheduler started — daily ingest at 16:00 IST, price alerts every 5 min")
+    logger.info("APScheduler started — bhavcopy 16:00, yfinance refresh 16:15, price alerts every 5 min")
 
 
 @app.on_event("shutdown")
