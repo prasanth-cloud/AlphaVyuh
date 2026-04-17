@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from app.dependencies import get_current_user_id
-from app.database import get_supabase
+from app.middleware.auth import get_current_user_id
+from app.services.supabase import get_admin_client
 
-router = APIRouter(prefix="/community", tags=["community"])
+router = APIRouter(prefix="/api/v1/community", tags=["community"])
 
 
 class ShareScreenRequest(BaseModel):
@@ -16,7 +16,7 @@ class ShareScreenRequest(BaseModel):
 
 @router.get("/screens")
 async def list_shared_screens(limit: int = 50, featured: bool = False):
-    sb = get_supabase()
+    sb = get_admin_client()
     query = sb.table("shared_screens").select("*").order("upvotes", desc=True).limit(limit)
     if featured:
         query = query.eq("is_featured", True)
@@ -26,7 +26,7 @@ async def list_shared_screens(limit: int = 50, featured: bool = False):
 
 @router.post("/screens")
 async def share_screen(body: ShareScreenRequest, user_id: str = Depends(get_current_user_id)):
-    sb = get_supabase()
+    sb = get_admin_client()
     res = sb.table("shared_screens").insert({
         "user_id": user_id,
         "screen_id": body.screen_id,
@@ -41,7 +41,7 @@ async def share_screen(body: ShareScreenRequest, user_id: str = Depends(get_curr
 
 @router.post("/screens/{screen_id}/upvote")
 async def upvote_screen(screen_id: str, user_id: str = Depends(get_current_user_id)):
-    sb = get_supabase()
+    sb = get_admin_client()
     # Try inserting upvote (composite PK prevents double-voting)
     try:
         sb.table("screen_upvotes").insert({"user_id": user_id, "screen_id": screen_id}).execute()
@@ -65,6 +65,6 @@ async def upvote_screen(screen_id: str, user_id: str = Depends(get_current_user_
 
 @router.delete("/screens/{screen_id}")
 async def delete_shared_screen(screen_id: str, user_id: str = Depends(get_current_user_id)):
-    sb = get_supabase()
+    sb = get_admin_client()
     sb.table("shared_screens").delete().eq("id", screen_id).eq("user_id", user_id).execute()
     return {"status": "deleted"}
