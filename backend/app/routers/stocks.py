@@ -40,7 +40,7 @@ async def get_quote(symbol: str):
             "symbol, trade_date, open, high, low, close, prev_close, volume, "
             "avg_volume_20d, week_52_high, week_52_low, rsi_14, "
             "ema_20, ema_50, ema_200, atr_14, turnover, "
-            "stock_universe(company_name, sector, series, market, currency)"
+            "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series, market, currency)"
         ) \
         .eq("symbol", sym) \
         .order("trade_date", desc=True) \
@@ -185,7 +185,7 @@ async def get_market_movers():
     offset = 0
     while True:
         chunk = client.table("daily_ohlcv") \
-            .select("symbol, close, prev_close, volume, avg_volume_20d, stock_universe(company_name, series)") \
+            .select("symbol, close, prev_close, volume, avg_volume_20d, stock_universe!daily_ohlcv_symbol_fkey(company_name, series)") \
             .eq("trade_date", latest_date) \
             .range(offset, offset + 999) \
             .execute()
@@ -288,7 +288,7 @@ async def get_sector_breadth():
     while True:
         chunk = (
             client.table("daily_ohlcv")
-            .select("close,prev_close,ema_200,stock_universe!inner(sector)")
+            .select("close,prev_close,ema_200,stock_universe!daily_ohlcv_symbol_fkey!inner(sector)")
             .eq("trade_date", latest_date)
             .not_.is_("stock_universe.sector", "null")
             .range(offset, offset + 999)

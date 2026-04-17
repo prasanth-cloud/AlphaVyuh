@@ -189,7 +189,7 @@ async def run_all_alerts(trade_date: date) -> dict:
             .select(
                 "symbol, open, high, low, close, prev_close, volume, avg_volume_20d, "
                 "turnover, rsi_14, ema_20, ema_50, ema_200, atr_14, week_52_high, "
-                "week_52_low, stock_universe(company_name, sector, series)"
+                "week_52_low, stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series)"
             ) \
             .eq("trade_date", str(trade_date)) \
             .range(offset, offset + 999) \
@@ -360,7 +360,7 @@ async def telegram_webhook(request: Request):
                 latest_date = dr.data[0]["trade_date"] if dr.data else None
                 if latest_date:
                     row = sb.table("daily_ohlcv").select(
-                        "symbol,close,prev_close,volume,rsi_14,stock_universe(company_name)"
+                        "symbol,close,prev_close,volume,rsi_14,stock_universe!daily_ohlcv_symbol_fkey(company_name)"
                     ).eq("symbol", symbol).eq("trade_date", latest_date).maybe_single().execute()
                     if row and row.data:
                         d = row.data
