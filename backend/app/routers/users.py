@@ -117,14 +117,8 @@ async def update_me(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
 
     client = get_admin_client()
-    result = (
-        client.table("users")
-        .update(updates)
-        .eq("id", user_id)
-        .select(_SELECT)
-        .single()
-        .execute()
-    )
+    client.table("users").update(updates).eq("id", user_id).execute()
+    result = client.table("users").select(_SELECT).eq("id", user_id).single().execute()
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     row = result.data
