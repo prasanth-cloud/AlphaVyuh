@@ -68,10 +68,16 @@ class ScanFilters(BaseModel):
     atr_pct_max:     float | None = None
 
     # ── 52-Week Range ────────────────────────────────────────────────────
-    w52h_pct_max:    float | None = None   # (high-close)/close*100 ≤ X  (within X% of 52W high)
-    w52l_pct_min:    float | None = None   # (close-low)/low*100  ≥ X  (X% above 52W low)
-    new_52w_high:    bool | None = None    # close >= week_52_high
-    new_52w_low:     bool | None = None    # close <= week_52_low
+    w52h_pct_max:         float | None = None   # (high-close)/close*100 ≤ X  (within X% of 52W high)
+    week_52_high_pct_max: float | None = None   # alias for w52h_pct_max (new scanner UI)
+    w52l_pct_min:         float | None = None   # (close-low)/low*100  ≥ X  (X% above 52W low)
+    new_52w_high:         bool | None = None    # close >= week_52_high
+    new_52w_low:          bool | None = None    # close <= week_52_low
+
+    # ── EMA position aliases (new scanner UI: 'above' | 'below' | '') ───
+    price_vs_ema20:  str | None = None   # 'above' | 'below'
+    price_vs_ema50:  str | None = None
+    price_vs_ema200: str | None = None
 
     # ── Market / Classification ──────────────────────────────────────────
     series:          list[str] | None = None   # ["EQ","BE"]
@@ -219,10 +225,19 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.atr_pct_max is not None and (atr_pct_v is None or atr_pct_v > f.atr_pct_max): continue
 
         # ── 52-Week ───────────────────────────────────────────────────────
-        if f.w52h_pct_max  is not None and (w52h_pct is None or w52h_pct > f.w52h_pct_max): continue
+        w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
+        if w52h_limit is not None and (w52h_pct is None or w52h_pct > w52h_limit): continue
         if f.w52l_pct_min  is not None and (w52l_pct is None or w52l_pct < f.w52l_pct_min): continue
         if f.new_52w_high  and (w52h_v is None or close < w52h_v):  continue
         if f.new_52w_low   and (w52l_v is None or close > w52l_v):  continue
+
+        # ── EMA position aliases (price_vs_ema*) ─────────────────────────
+        if f.price_vs_ema20 == "above"  and (ema20_v  is None or close <= ema20_v):  continue
+        if f.price_vs_ema20 == "below"  and (ema20_v  is None or close >= ema20_v):  continue
+        if f.price_vs_ema50 == "above"  and (ema50_v  is None or close <= ema50_v):  continue
+        if f.price_vs_ema50 == "below"  and (ema50_v  is None or close >= ema50_v):  continue
+        if f.price_vs_ema200 == "above" and (ema200_v is None or close <= ema200_v): continue
+        if f.price_vs_ema200 == "below" and (ema200_v is None or close >= ema200_v): continue
 
         # ── Series / active stock filter (moved from query-builder for reliability) ──
         effective_series = f.series if f.series else ["EQ", "BE"]

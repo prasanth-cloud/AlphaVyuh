@@ -124,9 +124,14 @@ export type ScanFilters = {
   atr_pct_max?: number;
   // 52-Week
   w52h_pct_max?: number;
+  week_52_high_pct_max?: number;  // alias for w52h_pct_max (new scanner UI)
   w52l_pct_min?: number;
   new_52w_high?: boolean;
   new_52w_low?: boolean;
+  // EMA position aliases (new scanner UI: 'above' | 'below')
+  price_vs_ema20?: string;
+  price_vs_ema50?: string;
+  price_vs_ema200?: string;
   // Market
   series?: string[];
   sector?: string;
@@ -199,7 +204,9 @@ export type SavedScreen = {
 export async function runScan(
   filters: ScanFilters,
   sort_by = "volume_ratio",
-  sort_order = "desc"
+  sort_order = "desc",
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _limit?: number   // limit is enforced server-side by plan
 ): Promise<ScanResponse> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/scanner/run`, {
