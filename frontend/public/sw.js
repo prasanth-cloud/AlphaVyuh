@@ -1,4 +1,4 @@
-const CACHE_NAME = "alphavyuh-v1";
+const CACHE_NAME = "alphavyuh-v2";
 const STATIC_ASSETS = [
   "/",
   "/dashboard",
@@ -27,8 +27,13 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(event.request.url);
 
-  // Skip API requests — always go network-first
-  if (url.pathname.startsWith("/api/") || url.hostname.includes("railway.app") || url.hostname.includes("supabase.co")) {
+  // Skip API requests and Next.js build chunks — always go network-first
+  if (
+    url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/_next/") ||
+    url.hostname.includes("railway.app") ||
+    url.hostname.includes("supabase.co")
+  ) {
     return;
   }
 
