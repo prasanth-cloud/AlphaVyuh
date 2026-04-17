@@ -653,7 +653,9 @@ export default function SettingsPage() {
                         Get your API key &amp; secret from{" "}
                         <span className="text-[#5b63f5] font-medium">developers.kite.trade</span>.
                         Set the redirect URL to{" "}
-                        <code className="bg-white border border-[#e2e2df] px-1 rounded text-[10px]">http://localhost:3000/broker/callback</code>
+                        <code className="bg-white border border-[#e2e2df] px-1 rounded text-[10px]">
+                          {typeof window !== "undefined" ? `${window.location.origin}/broker/callback` : "/broker/callback"}
+                        </code>
                       </div>
                       <div>
                         <label className="text-[12px] font-medium text-[#555] block mb-1.5">API Key</label>

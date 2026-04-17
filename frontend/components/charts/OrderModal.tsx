@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { placeOrder } from "@/lib/api";
+import { placeOrder, getBrokerStatus } from "@/lib/api";
 import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
 
 const SETUP_TYPES = [
@@ -32,6 +32,13 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, onClose,
   const [notes, setNotes]           = useState("");
   const [placing, setPlacing]       = useState(false);
   const [error, setError]           = useState("");
+  const [brokerName, setBrokerName] = useState<string | null>(null);
+
+  useEffect(() => {
+    getBrokerStatus()
+      .then(s => { if (s.connected && s.broker) setBrokerName(s.broker); })
+      .catch(() => {});
+  }, []);
 
   const priceNum = parseFloat(price) || 0;
   const slNum    = parseFloat(stopLoss) || 0;
@@ -229,7 +236,9 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, onClose,
           </button>
 
           <p className="text-[10px] text-[#ccc] text-center">
-            Simulated order — auto-recorded in your Journal
+            {brokerName
+              ? `Live order via ${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} — auto-recorded in your Journal`
+              : "Simulated order — auto-recorded in your Journal"}
           </p>
         </div>
       </div>

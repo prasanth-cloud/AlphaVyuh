@@ -937,13 +937,15 @@ export type PlaceOrderRequest = {
 };
 
 export type OrderResult = {
-  status:     string;
-  message:    string;
-  journal_id: string | null;
-  symbol:     string;
-  side:       string;
-  quantity:   number;
-  price:      number;
+  status:           string;
+  message:          string;
+  journal_id:       string | null;
+  symbol:           string;
+  side:             string;
+  quantity:         number;
+  price:            number;
+  broker:           string;          // "simulated" | "zerodha" | "upstox"
+  broker_order_id:  string | null;
 };
 
 export async function closePosition(
