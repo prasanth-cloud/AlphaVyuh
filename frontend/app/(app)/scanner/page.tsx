@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { runScan, addToWatchlist, getWatchlists } from "@/lib/api";
 import type { ScanFilters, Watchlist } from "@/lib/api";
 
@@ -217,40 +216,6 @@ export default function ScannerPage() {
 
   return (
     <div className="min-h-screen bg-[#f2f2f0]">
-
-      {/* ── NAV ── */}
-      <nav className="h-[50px] bg-white border-b border-[#e2e2df] flex items-center px-5 gap-1 sticky top-0 z-30">
-        <div className="flex items-center gap-2 mr-6">
-          <div className="w-[28px] h-[28px] bg-[#1c1c1a] rounded-[7px] flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 11L7 3L12 11" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M4.5 8h5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-          </div>
-          <span className="text-[15px] font-semibold text-[#1c1c1a] tracking-tight">
-            Alpha<span className="text-[#5b63f5]">Vyuh</span>
-          </span>
-        </div>
-        {[
-          { label: "Dashboard", href: "/dashboard" },
-          { label: "Scanner",   href: "/scanner",          active: true },
-          { label: "Watchlist", href: "/watchlist" },
-          { label: "Charts",    href: "/charts/RELIANCE" },
-          { label: "Journal",   href: "/journal" },
-        ].map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={`px-3 py-1.5 text-[13px] rounded-md transition-colors ${
-              "active" in link && link.active
-                ? "bg-[#f2f2f0] text-[#1c1c1a] font-medium"
-                : "text-[#888] hover:bg-[#f7f7f5] hover:text-[#1c1c1a]"
-            }`}
-          >
-            {link.label}
-          </Link>
-        ))}
-      </nav>
 
       <div className="max-w-[1280px] mx-auto px-5 py-4">
 
