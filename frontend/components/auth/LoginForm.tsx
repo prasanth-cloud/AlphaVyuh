@@ -13,7 +13,7 @@ type Step = "email" | "otp";
 export default function LoginForm() {
   const [step, setStep]       = useState<Step>("email");
   const [email, setEmail]     = useState("");
-  const [otp, setOtp]         = useState(["", "", "", "", "", ""]);
+  const [otp, setOtp]         = useState(["", "", "", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [resendTimer, setResendTimer] = useState(0);
@@ -51,7 +51,7 @@ export default function LoginForm() {
   async function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
     const token = otp.join("");
-    if (token.length < 6) { setError("Please enter the 6-digit code."); return; }
+    if (token.length < 8) { setError("Please enter the 8-digit code."); return; }
     setError("");
     setLoading(true);
     const supabase = createClient();
@@ -63,7 +63,7 @@ export default function LoginForm() {
     setLoading(false);
     if (err) {
       setError("Invalid or expired code. Please try again.");
-      setOtp(["", "", "", "", "", ""]);
+      setOtp(["", "", "", "", "", "", "", ""]);
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
       return;
     }
@@ -77,7 +77,7 @@ export default function LoginForm() {
     const supabase = createClient();
     await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     setLoading(false);
-    setOtp(["", "", "", "", "", ""]);
+    setOtp(["", "", "", "", "", "", "", ""]);
     setResendTimer(30);
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
   }
@@ -85,11 +85,11 @@ export default function LoginForm() {
   function handleOtpChange(index: number, value: string) {
     // Allow paste of full 6-digit code
     if (value.length > 1) {
-      const digits = value.replace(/\D/g, "").slice(0, 6).split("");
+      const digits = value.replace(/\D/g, "").slice(0, 8).split("");
       const next = [...otp];
       digits.forEach((d, i) => { if (index + i < 6) next[index + i] = d; });
       setOtp(next);
-      const focusIdx = Math.min(index + digits.length, 5);
+      const focusIdx = Math.min(index + digits.length, 7);
       inputRefs.current[focusIdx]?.focus();
       return;
     }
@@ -97,7 +97,7 @@ export default function LoginForm() {
     const next = [...otp];
     next[index] = value;
     setOtp(next);
-    if (value && index < 5) inputRefs.current[index + 1]?.focus();
+    if (value && index < 7) inputRefs.current[index + 1]?.focus();
   }
 
   function handleOtpKeyDown(index: number, e: React.KeyboardEvent) {
@@ -116,7 +116,7 @@ export default function LoginForm() {
         <CardDescription className="text-gray-400">
           {step === "email"
             ? "Enter your email to receive a one-time login code"
-            : `We sent a 6-digit code to ${email}`}
+            : `We sent an 8-digit code to ${email}`}
         </CardDescription>
       </CardHeader>
 
@@ -159,7 +159,7 @@ export default function LoginForm() {
 
             {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 
-            <Button type="submit" disabled={loading || otp.join("").length < 6}
+            <Button type="submit" disabled={loading || otp.join("").length < 8}
               className="w-full bg-indigo-600 hover:bg-indigo-500 text-white">
               {loading ? "Verifying…" : "Verify & Log in"}
             </Button>
