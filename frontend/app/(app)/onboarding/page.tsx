@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase";
 import { updateMe } from "@/lib/api";
 
 const STEPS = ["About you", "Your broker", "Get started"];

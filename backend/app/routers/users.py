@@ -9,7 +9,8 @@ router = APIRouter(prefix="/api/v1", tags=["users"])
 _SELECT = (
     "id, email, full_name, avatar_url, plan, plan_expires_at, "
     "onboarding_completed, telegram_chat_id, "
-    "broker_type, broker_api_key, broker_connected_at, created_at"
+    "broker_type, broker_api_key, broker_connected_at, "
+    "billing_region, billing_currency, created_at"
 )
 
 
@@ -25,6 +26,8 @@ class UserResponse(BaseModel):
     broker_type: str | None = None
     broker_api_key: str | None = None       # returned masked
     broker_connected_at: str | None = None
+    billing_region: str | None = "IN"       # "IN" | "NRI" | "US" | "INTL"
+    billing_currency: str | None = "INR"    # "INR" | "USD"
     created_at: str
 
 
@@ -36,6 +39,9 @@ class UpdateUserRequest(BaseModel):
     broker_type: str | None = None          # "zerodha" | "upstox" | "angel" | "fyers" | "none"
     broker_api_key: str | None = None
     broker_api_secret: str | None = None    # write-only, never returned
+    # Billing preferences
+    billing_region: str | None = None
+    billing_currency: str | None = None
 
 
 @router.get("/me", response_model=UserResponse)
@@ -79,6 +85,14 @@ async def update_me(
     if body.broker_type or body.broker_api_key:
         import datetime
         updates["broker_connected_at"] = datetime.datetime.utcnow().isoformat()
+    if body.billing_region is not None:
+        if body.billing_region not in ("IN", "NRI", "US", "INTL"):
+            raise HTTPException(400, "Invalid billing_region")
+        updates["billing_region"] = body.billing_region
+    if body.billing_currency is not None:
+        if body.billing_currency not in ("INR", "USD"):
+            raise HTTPException(400, "Invalid billing_currency")
+        updates["billing_currency"] = body.billing_currency
 
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")

@@ -13,6 +13,23 @@ _fund_cache: dict[str, tuple[float, dict]] = {}
 _FUND_TTL = 6 * 3600  # seconds
 
 
+def _lookup_market(sym: str) -> tuple[str, str]:
+    """Return (market, currency) for a symbol. Defaults to NSE/INR when unknown."""
+    try:
+        r = get_admin_client().table("stock_universe") \
+            .select("market,currency").eq("symbol", sym).maybe_single().execute()
+        if r and r.data:
+            return (r.data.get("market") or "NSE", r.data.get("currency") or "INR")
+    except Exception:
+        pass
+    return ("NSE", "INR")
+
+
+def _yf_ticker_symbol(sym: str, market: str) -> str:
+    """Yahoo Finance uses .NS suffix for NSE stocks, bare symbol for US."""
+    return sym if market in ("NASDAQ", "NYSE") else f"{sym}.NS"
+
+
 @router.get("/stocks/{symbol}/quote")
 async def get_quote(symbol: str):
     client = get_admin_client()
@@ -23,7 +40,7 @@ async def get_quote(symbol: str):
             "symbol, trade_date, open, high, low, close, prev_close, volume, "
             "avg_volume_20d, week_52_high, week_52_low, rsi_14, "
             "ema_20, ema_50, ema_200, atr_14, turnover, "
-            "stock_universe(company_name, sector, series)"
+            "stock_universe(company_name, sector, series, market, currency)"
         ) \
         .eq("symbol", sym) \
         .order("trade_date", desc=True) \
@@ -50,6 +67,8 @@ async def get_quote(symbol: str):
         "company_name": su.get("company_name"),
         "sector": su.get("sector"),
         "series": su.get("series"),
+        "market": su.get("market") or "NSE",
+        "currency": su.get("currency") or "INR",
         "trade_date": row["trade_date"],
         "open": float(row["open"] or 0),
         "high": float(row["high"] or 0),
@@ -225,6 +244,23 @@ async def get_market_movers():
     }
 
 
+@router.get("/market/markets")
+async def list_markets():
+    """Returns available markets with stock counts."""
+    client = get_admin_client()
+    from collections import Counter
+    r = client.table("stock_universe").select("market").eq("is_active", True).execute()
+    counts = Counter(x.get("market") or "NSE" for x in (r.data or []))
+    markets = [
+        {"key": "IN",     "label": "India (NSE + BSE)", "currency": "INR", "count": counts.get("NSE", 0) + counts.get("BSE", 0)},
+        {"key": "US",     "label": "United States",     "currency": "USD", "count": counts.get("NASDAQ", 0) + counts.get("NYSE", 0)},
+        {"key": "NSE",    "label": "NSE (India)",       "currency": "INR", "count": counts.get("NSE", 0)},
+        {"key": "NASDAQ", "label": "NASDAQ",            "currency": "USD", "count": counts.get("NASDAQ", 0)},
+        {"key": "NYSE",   "label": "NYSE",              "currency": "USD", "count": counts.get("NYSE", 0)},
+    ]
+    return {"markets": [m for m in markets if m["count"] > 0 or m["key"] in ("IN", "US")]}
+
+
 @router.get("/market/sectors")
 async def list_sectors():
     """Returns distinct sector names that have at least 3 stocks."""
@@ -321,7 +357,8 @@ async def get_fundamentals(symbol: str):
         if now - cached_at < _FUND_TTL:
             return cached_data
     try:
-        ticker = yf.Ticker(f"{sym}.NS")
+        market, currency = _lookup_market(sym)
+        ticker = yf.Ticker(_yf_ticker_symbol(sym, market))
         info = ticker.info
 
         def _f(key, digits=2):
@@ -330,17 +367,27 @@ async def get_fundamentals(symbol: str):
 
         market_cap = info.get("marketCap")
         if market_cap:
-            if market_cap >= 1e12:
-                mc_str = f"₹{market_cap / 1e7 / 100:.0f}K Cr"
-            elif market_cap >= 1e9:
-                mc_str = f"₹{market_cap / 1e7:.0f} Cr"
+            if currency == "USD":
+                if market_cap >= 1e12:
+                    mc_str = f"${market_cap / 1e12:.2f}T"
+                elif market_cap >= 1e9:
+                    mc_str = f"${market_cap / 1e9:.1f}B"
+                else:
+                    mc_str = f"${market_cap / 1e6:.0f}M"
             else:
-                mc_str = f"₹{market_cap / 1e5:.0f} L"
+                if market_cap >= 1e12:
+                    mc_str = f"₹{market_cap / 1e7 / 100:.0f}K Cr"
+                elif market_cap >= 1e9:
+                    mc_str = f"₹{market_cap / 1e7:.0f} Cr"
+                else:
+                    mc_str = f"₹{market_cap / 1e5:.0f} L"
         else:
             mc_str = None
 
         result = {
             "symbol": sym,
+            "market": market,
+            "currency": currency,
             "trailing_pe": _f("trailingPE"),
             "forward_pe": _f("forwardPE"),
             "price_to_book": _f("priceToBook"),
@@ -363,10 +410,12 @@ async def get_fundamentals(symbol: str):
 
 @router.get("/stocks/{symbol}/quote-live")
 async def get_quote_live(symbol: str):
-    """Live quote from Yahoo Finance (NSE stocks with .NS suffix).
+    """Live quote from Yahoo Finance. NSE stocks use .NS suffix; US stocks use bare symbol.
     Returns current price, day change, 52W range, volume — real-time 15-min delayed."""
     try:
-        ticker = yf.Ticker(f"{symbol.upper()}.NS")
+        sym = symbol.upper()
+        market, currency = _lookup_market(sym)
+        ticker = yf.Ticker(_yf_ticker_symbol(sym, market))
         info = ticker.fast_info
         hist = ticker.history(period="2d", interval="1d")
 
@@ -381,7 +430,9 @@ async def get_quote_live(symbol: str):
         pct_change = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
 
         return {
-            "symbol": symbol.upper(),
+            "symbol": sym,
+            "market": market,
+            "currency": currency,
             "close":      round(close, 2),
             "open":       round(float(latest["Open"]), 2),
             "high":       round(float(latest["High"]), 2),

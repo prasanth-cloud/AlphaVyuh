@@ -75,6 +75,7 @@ class ScanFilters(BaseModel):
     # ── Market / Classification ──────────────────────────────────────────
     series:          list[str] | None = None   # ["EQ","BE"]
     sector:          str | None = None          # e.g. "Information Technology"
+    market:          str | None = None          # "IN" (NSE+BSE), "US" (NASDAQ+NYSE) or specific exchange
 
 
 class ScanRequest(BaseModel):
@@ -225,11 +226,21 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         # ── Sector ────────────────────────────────────────────────────────
         if f.sector is not None and su.get("sector") != f.sector: continue
 
+        # ── Market (IN / US / specific exchange) ─────────────────────────
+        if f.market is not None:
+            mkt = (su.get("market") or "NSE").upper()
+            m = f.market.upper()
+            if m == "IN" and mkt not in ("NSE", "BSE"): continue
+            elif m == "US" and mkt not in ("NASDAQ", "NYSE"): continue
+            elif m in ("NSE", "BSE", "NASDAQ", "NYSE") and mkt != m: continue
+
         results.append({
             "symbol":         row["symbol"],
             "company_name":   su.get("company_name") or row["symbol"],
             "series":         su.get("series") or "",
             "sector":         su.get("sector"),
+            "market":         su.get("market") or "NSE",
+            "currency":       su.get("currency") or "INR",
             "close":          close,
             "prev_close":     prev_close,
             "open":           open_p,
@@ -284,7 +295,7 @@ async def run_scanner(
         .select(
             "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
             "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
-            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active)"
+            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
         )
         .eq("trade_date", latest_date)
         # series + is_active filtering done Python-side in _apply_filters
