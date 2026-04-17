@@ -380,7 +380,10 @@ async def generate_lessons(
         raise HTTPException(status_code=500, detail=f"AI analysis failed: {e}")
 
     updated = sb.table("trade_journal").select("*").eq("id", entry_id).maybe_single().execute()
-    return updated.data
+    from app.routers.ai import _DISCLAIMER
+    result = dict(updated.data or {})
+    result["disclaimer"] = _DISCLAIMER
+    return result
 
 
 @router.delete("/{entry_id}")

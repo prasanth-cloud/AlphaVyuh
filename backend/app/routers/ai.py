@@ -12,6 +12,7 @@ import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.middleware.auth import get_current_user_id
+from app.services.rate_limit import ai_limiter
 from app.services.supabase import get_admin_client, settings
 
 logger = logging.getLogger(__name__)
@@ -67,8 +68,17 @@ Trade Journal:
 Respond in clean markdown with the four sections above. No preamble."""
 
 
+_DISCLAIMER = (
+    "AI analysis is for educational purposes only and does not constitute "
+    "SEBI-registered investment advice. Past performance is not indicative of future results."
+)
+
+
 @router.post("/analyse")
 async def analyse_journal(user_id: str = Depends(get_current_user_id)):
+    if not ai_limiter.is_allowed(user_id):
+        raise HTTPException(429, "Too many AI requests — max 5 per 5 minutes")
+
     if not settings.anthropic_api_key:
         raise HTTPException(503, "AI analysis not available — contact support")
 
@@ -119,6 +129,7 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
     return {
         "analysis": analysis,
         "trades_analysed": len(trades),
+        "disclaimer": _DISCLAIMER,
     }
 
 

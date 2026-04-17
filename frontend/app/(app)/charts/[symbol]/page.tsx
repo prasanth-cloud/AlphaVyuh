@@ -10,7 +10,7 @@ import type {
 import {
   getCandles, getIndicators, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
-  getFundamentals, getPlanStatus,
+  getFundamentals, getPlanStatus, getQuote,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -65,8 +65,11 @@ function fmtVol(v: number): string {
   return v.toLocaleString("en-IN");
 }
 
-function fmtPrice(v: number | null | undefined): string {
+function fmtPrice(v: number | null | undefined, currency = "INR"): string {
   if (v == null) return "—";
+  if (currency === "USD") {
+    return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -120,6 +123,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
   // Plan (for indicator gating)
   const [userPlan, setUserPlan] = useState<string>("free");
+  const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
   const FREE_INDICATORS = ["ema20", "ema50", "ema200", "rsi"];
 
@@ -157,6 +161,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       }
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
+    // Detect currency from stock universe (US stocks = USD)
+    getQuote(symbol).then(q => { if (q?.currency) setSymbolCurrency(q.currency); }).catch(() => {});
   }, [symbol]);
 
   // Load fundamentals when sidebar fundamentals section is opened
@@ -492,7 +498,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
                 <div className="mt-2">
                   <div className="text-[22px] font-bold text-[#1c1c1a] tracking-[-0.8px] tabular-nums">
-                    {fmtPrice(latest?.close)}
+                    {fmtPrice(latest?.close, symbolCurrency)}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[12px] font-semibold tabular-nums" style={{ color: positive ? "#26a65b" : "#e5383b" }}>
@@ -500,7 +506,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     </span>
                     {changeAmt != null && (
                       <span className="text-[11px] tabular-nums" style={{ color: positive ? "#26a65b" : "#e5383b" }}>
-                        {positive ? "+" : ""}{fmtPrice(changeAmt)}
+                        {positive ? "+" : ""}{fmtPrice(changeAmt, symbolCurrency)}
                       </span>
                     )}
                   </div>
@@ -572,10 +578,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">OHLCV</div>
                       <div className="space-y-1">
                         {([
-                          ["Open",   fmtPrice(latest?.open)],
-                          ["High",   fmtPrice(latest?.high)],
-                          ["Low",    fmtPrice(latest?.low)],
-                          ["Close",  fmtPrice(latest?.close)],
+                          ["Open",   fmtPrice(latest?.open,  symbolCurrency)],
+                          ["High",   fmtPrice(latest?.high,  symbolCurrency)],
+                          ["Low",    fmtPrice(latest?.low,   symbolCurrency)],
+                          ["Close",  fmtPrice(latest?.close, symbolCurrency)],
                           ["Volume", latest?.volume ? fmtVol(latest.volume) : "—"],
                         ] as [string, string][]).map(([label, val]) => (
                           <div key={label} className="flex items-center justify-between">
@@ -611,7 +617,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-[#aaa]">ATR 14</span>
                           <span className="text-[11px] font-medium tabular-nums text-[#1c1c1a]">
-                            {latest?.atr_14 != null ? fmtPrice(latest.atr_14) : "—"}
+                            {latest?.atr_14 != null ? fmtPrice(latest.atr_14, symbolCurrency) : "—"}
                           </span>
                         </div>
                       </div>
@@ -634,7 +640,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                                 <span className="text-[11px] text-[#aaa]">{label}</span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <span className="text-[10px] tabular-nums text-[#888]">{fmtPrice(ema)}</span>
+                                <span className="text-[10px] tabular-nums text-[#888]">{fmtPrice(ema, symbolCurrency)}</span>
                                 {ema != null && (
                                   <span className="text-[11px] font-bold" style={{ color: above ? "#26a65b" : "#e5383b" }}>
                                     {above ? "↑" : "↓"}
@@ -658,8 +664,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                             style={{ left: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }} />
                         </div>
                         <div className="flex justify-between text-[10px] tabular-nums text-[#aaa]">
-                          <span>{fmtPrice(latest.week_52_low)}</span>
-                          <span>{fmtPrice(latest.week_52_high)}</span>
+                          <span>{fmtPrice(latest.week_52_low,  symbolCurrency)}</span>
+                          <span>{fmtPrice(latest.week_52_high, symbolCurrency)}</span>
                         </div>
                         {pctFrom52H != null && (
                           <div className="text-[10px] text-center text-[#aaa] mt-0.5">
@@ -701,8 +707,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                           ["P/E (Fwd)",  fundamentals.forward_pe  != null ? fundamentals.forward_pe.toFixed(1)  : null],
                           ["P/B",        fundamentals.price_to_book != null ? fundamentals.price_to_book.toFixed(2) : null],
                           ["Div Yield",  fundamentals.dividend_yield != null ? `${fundamentals.dividend_yield}%` : null],
-                          ["EPS (TTM)",  fundamentals.trailing_eps != null ? `₹${fundamentals.trailing_eps}` : null],
-                          ["EPS (Fwd)",  fundamentals.forward_eps  != null ? `₹${fundamentals.forward_eps}`  : null],
+                          ["EPS (TTM)",  fundamentals.trailing_eps != null ? fmtPrice(fundamentals.trailing_eps, symbolCurrency) : null],
+                          ["EPS (Fwd)",  fundamentals.forward_eps  != null ? fmtPrice(fundamentals.forward_eps,  symbolCurrency) : null],
                           ["Rev Growth", fundamentals.revenue_growth != null ? `${fundamentals.revenue_growth > 0 ? "+" : ""}${fundamentals.revenue_growth}%` : null],
                           ["Earn Grwth", fundamentals.earnings_growth != null ? `${fundamentals.earnings_growth > 0 ? "+" : ""}${fundamentals.earnings_growth}%` : null],
                           ["D/E Ratio",  fundamentals.debt_to_equity != null ? fundamentals.debt_to_equity.toFixed(1) : null],

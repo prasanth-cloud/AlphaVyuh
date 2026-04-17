@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import threading
+import time
+from collections import defaultdict
+
+
+class RateLimiter:
+    def __init__(self, max_calls: int, period: float):
+        self.max_calls = max_calls
+        self.period = period
+        self._calls: dict[str, list[float]] = defaultdict(list)
+        self._lock = threading.Lock()
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.time()
+        with self._lock:
+            cutoff = now - self.period
+            calls = [t for t in self._calls[key] if t > cutoff]
+            self._calls[key] = calls
+            if len(calls) >= self.max_calls:
+                return False
+            self._calls[key].append(now)
+            return True
+
+
+class PlanCache:
+    def __init__(self, ttl: float = 60.0):
+        self._cache: dict[str, tuple[float, str]] = {}
+        self._lock = threading.Lock()
+        self.ttl = ttl
+
+    def get(self, user_id: str) -> str | None:
+        with self._lock:
+            if user_id in self._cache:
+                ts, plan = self._cache[user_id]
+                if time.time() - ts < self.ttl:
+                    return plan
+        return None
+
+    def set(self, user_id: str, plan: str):
+        with self._lock:
+            self._cache[user_id] = (time.time(), plan)
+
+    def invalidate(self, user_id: str):
+        with self._lock:
+            self._cache.pop(user_id, None)
+
+
+# Singletons
+scanner_limiter = RateLimiter(max_calls=30, period=60.0)   # 30 scans/minute per user
+ai_limiter      = RateLimiter(max_calls=5,  period=300.0)  # 5 AI calls per 5 min per user
+plan_cache      = PlanCache(ttl=60.0)

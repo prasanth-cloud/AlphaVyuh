@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
@@ -75,6 +76,7 @@ class ScanFilters(BaseModel):
     # ── Market / Classification ──────────────────────────────────────────
     series:          list[str] | None = None   # ["EQ","BE"]
     sector:          str | None = None          # e.g. "Information Technology"
+    market:          str | None = None          # "IN" (NSE+BSE), "US" (NASDAQ+NYSE) or specific exchange
 
 
 class ScanRequest(BaseModel):
@@ -101,9 +103,14 @@ SORT_KEYS = {
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_user_plan(user_id: str) -> str:
+    cached = plan_cache.get(user_id)
+    if cached:
+        return cached
     client = get_admin_client()
     r = client.table("users").select("plan").eq("id", user_id).single().execute()
-    return r.data["plan"] if r.data else "free"
+    plan = r.data["plan"] if r.data else "free"
+    plan_cache.set(user_id, plan)
+    return plan
 
 
 def _safe(val, default=0.0):
@@ -225,11 +232,21 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         # ── Sector ────────────────────────────────────────────────────────
         if f.sector is not None and su.get("sector") != f.sector: continue
 
+        # ── Market (IN / US / specific exchange) ─────────────────────────
+        if f.market is not None:
+            mkt = (su.get("market") or "NSE").upper()
+            m = f.market.upper()
+            if m == "IN" and mkt not in ("NSE", "BSE"): continue
+            elif m == "US" and mkt not in ("NASDAQ", "NYSE"): continue
+            elif m in ("NSE", "BSE", "NASDAQ", "NYSE") and mkt != m: continue
+
         results.append({
             "symbol":         row["symbol"],
             "company_name":   su.get("company_name") or row["symbol"],
             "series":         su.get("series") or "",
             "sector":         su.get("sector"),
+            "market":         su.get("market") or "NSE",
+            "currency":       su.get("currency") or "INR",
             "close":          close,
             "prev_close":     prev_close,
             "open":           open_p,
@@ -265,6 +282,9 @@ async def run_scanner(
     body: ScanRequest,
     user_id: str = Depends(get_current_user_id),
 ):
+    if not scanner_limiter.is_allowed(user_id):
+        raise HTTPException(429, "Too many requests — max 30 scans per minute")
+
     client  = get_admin_client()
     plan = _get_user_plan(user_id)
     hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
@@ -284,7 +304,7 @@ async def run_scanner(
         .select(
             "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
             "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
-            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active)"
+            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
         )
         .eq("trade_date", latest_date)
         # series + is_active filtering done Python-side in _apply_filters

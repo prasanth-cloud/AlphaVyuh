@@ -69,8 +69,15 @@ Interactive investor pitch deck at `pitch/index.html` — open in browser. Cover
   - Per-trade "Get AI lesson" button in journal view panel
   - Deep Analysis: Claude Sonnet analyses full journal → mistakes, patterns, actionable rules
 - [x] Multi-broker support: Zerodha (full) + Upstox (order routing via v2 API)
-- [ ] NRI / USD pricing tier
-- [ ] US market stocks expansion
+- [x] NRI / USD pricing tier — Pro $29/mo, Elite $69/mo via Razorpay international
+  - Currency toggle on /settings?tab=billing (INR / USD)
+  - Persists `billing_currency` + `billing_region` on user profile
+  - `POST /payments/create-order` accepts `{ plan, currency }`; `GET /payments/plans?currency=` exposes prices
+- [x] US market stocks expansion — NASDAQ + NYSE
+  - `market` + `currency` columns on `stock_universe`; 45 seeded US stocks (AAPL, MSFT, etc.)
+  - Scanner `market` filter (`IN` / `US` / `NSE` / `NASDAQ` / …) with toolbar toggle
+  - yfinance routing handles bare ticker (US) vs `.NS` suffix (NSE)
+  - `GET /market/markets` lists supported markets
 
 ## Key Business Metrics
 - Break-even: 22 Pro subscribers

@@ -7,7 +7,7 @@ import { Check, Zap, Sparkles, Crown } from "lucide-react";
 import {
   getMe, updateMe, getZerodhaLoginUrl,
   listAlerts, updateAlert, deleteAlert, getAlertMatches,
-  getPlanStatus, createPaymentOrder, verifyPayment,
+  getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
   type UserProfile, type ScanAlert, type ScanAlertMatch, type PlanStatus,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
@@ -165,12 +165,42 @@ function MatchDrawer({ alert, onClose }: { alert: ScanAlert; onClose: () => void
 
 // ── Billing plan data ─────────────────────────────────────────────────────────
 
-const PLANS = [
+type PlanId = "free" | "pro" | "elite";
+type Currency = "INR" | "USD";
+
+type BillingPeriod = "monthly" | "annual";
+
+const PLAN_PRICES: Record<Currency, Record<BillingPeriod, Record<PlanId, { price: string; period: string; savings?: string }>>> = {
+  INR: {
+    monthly: {
+      free:  { price: "₹0",      period: "" },
+      pro:   { price: "₹1,999",  period: "/month" },
+      elite: { price: "₹4,999",  period: "/month" },
+    },
+    annual: {
+      free:  { price: "₹0",      period: "" },
+      pro:   { price: "₹19,999", period: "/year", savings: "Save 2 months" },
+      elite: { price: "₹49,999", period: "/year", savings: "Save 2 months" },
+    },
+  },
+  USD: {
+    monthly: {
+      free:  { price: "$0",   period: "" },
+      pro:   { price: "$29",  period: "/month" },
+      elite: { price: "$69",  period: "/month" },
+    },
+    annual: {
+      free:  { price: "$0",   period: "" },
+      pro:   { price: "$279", period: "/year", savings: "Save $69" },
+      elite: { price: "$699", period: "/year", savings: "Save $129" },
+    },
+  },
+};
+
+const PLAN_META: { id: PlanId; label: string; color: string; bg: string; features: string[] }[] = [
   {
-    id: "free" as const,
+    id: "free",
     label: "Free",
-    price: "₹0",
-    period: "",
     color: "#888",
     bg: "#f7f7f5",
     features: [
@@ -182,10 +212,8 @@ const PLANS = [
     ],
   },
   {
-    id: "pro" as const,
+    id: "pro",
     label: "Pro",
-    price: "₹1,999",
-    period: "/month",
     color: "#5b63f5",
     bg: "#eeeffe",
     features: [
@@ -196,13 +224,12 @@ const PLANS = [
       "Full journal + AI mistake analysis",
       "Sector breadth overlay",
       "Options strategy builder",
+      "US stocks (NASDAQ + NYSE)",
     ],
   },
   {
-    id: "elite" as const,
+    id: "elite",
     label: "Elite",
-    price: "₹4,999",
-    period: "/month",
     color: "#d97706",
     bg: "#fff8ec",
     features: [
@@ -370,6 +397,40 @@ export default function SettingsPage() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingLoaded, setBillingLoaded] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
+  const [billingCurrency, setBillingCurrency] = useState<Currency>("INR");
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
+  const [referralCode, setReferralCode] = useState<string>("");
+
+  // Sync currency with user profile on initial load
+  useEffect(() => {
+    const c = profile?.billing_currency;
+    if (c === "USD" || c === "INR") setBillingCurrency(c);
+  }, [profile?.billing_currency]);
+
+  // Load referral code when billing tab opens
+  useEffect(() => {
+    if (tab !== "billing" || referralCode) return;
+    getReferralCode().then(r => setReferralCode(r.referral_code)).catch(() => {});
+  }, [tab, referralCode]);
+
+  async function switchCurrency(next: Currency) {
+    if (next === billingCurrency) return;
+    setBillingCurrency(next);
+    try {
+      // Persist preference; default region follows currency for new NRI users.
+      const updates: Parameters<typeof updateMe>[0] = { billing_currency: next };
+      if (next === "USD" && (!profile?.billing_region || profile.billing_region === "IN")) {
+        updates.billing_region = "NRI";
+      }
+      if (next === "INR" && profile?.billing_region && profile.billing_region !== "IN") {
+        updates.billing_region = "IN";
+      }
+      const updated = await updateMe(updates);
+      setProfile(updated);
+    } catch {
+      /* non-blocking */
+    }
+  }
 
   const loadBilling = useCallback(async () => {
     const supabase = createClient();
@@ -396,13 +457,13 @@ export default function SettingsPage() {
     try {
       const loaded = await loadRazorpay();
       if (!loaded) { showToast("Could not load payment gateway", false); setPaying(null); return; }
-      const order = await createPaymentOrder(planId);
+      const order = await createPaymentOrder(planId, billingCurrency, billingPeriod);
       await new Promise<void>((resolve, reject) => {
         const rzp = new window.Razorpay({
           key: RAZORPAY_KEY,
           amount: order.amount,
           currency: order.currency,
-          name: "Artha",
+          name: "AlphaVyuh",
           description: order.label,
           order_id: order.order_id,
           prefill: { name: userName, email: userEmail },
@@ -414,6 +475,8 @@ export default function SettingsPage() {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 plan: planId,
+                currency: billingCurrency,
+                billing: billingPeriod,
               });
               showToast(`${planId === "pro" ? "Pro" : "Elite"} plan activated!`, true);
               await loadBilling();
@@ -813,13 +876,44 @@ export default function SettingsPage() {
                 <div className="text-[12px] text-[#888]">{userEmail}</div>
               </div>
 
+              {/* Currency + period toggles */}
+              <div className="flex flex-wrap items-center gap-3 mb-5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] text-[#888]">Currency:</span>
+                  <div className="inline-flex rounded-lg border border-[#e2e2df] bg-white overflow-hidden">
+                    {(["INR", "USD"] as const).map(c => (
+                      <button key={c} onClick={() => switchCurrency(c)}
+                        className="px-3 py-1.5 text-[12px] font-semibold transition-colors"
+                        style={billingCurrency === c ? { background: "#1c1c1a", color: "#fff" } : { background: "transparent", color: "#555" }}
+                      >
+                        {c === "INR" ? "₹ India" : "$ NRI / International"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] text-[#888]">Billing:</span>
+                  <div className="inline-flex rounded-lg border border-[#e2e2df] bg-white overflow-hidden">
+                    {(["monthly", "annual"] as const).map(p => (
+                      <button key={p} onClick={() => setBillingPeriod(p)}
+                        className="px-3 py-1.5 text-[12px] font-semibold transition-colors"
+                        style={billingPeriod === p ? { background: "#26a65b", color: "#fff" } : { background: "transparent", color: "#555" }}
+                      >
+                        {p === "monthly" ? "Monthly" : "Annual (save 2 months)"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* Plan cards */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {PLANS.map(plan => {
+                {PLAN_META.map(plan => {
                   const isCurrent = currentPlan === plan.id;
                   const isHigher =
                     (currentPlan === "free" && plan.id !== "free") ||
                     (currentPlan === "pro" && plan.id === "elite");
+                  const priceInfo = PLAN_PRICES[billingCurrency][billingPeriod][plan.id];
                   return (
                     <div
                       key={plan.id}
@@ -833,11 +927,18 @@ export default function SettingsPage() {
                         >
                           {plan.label}
                         </span>
-                        {isCurrent && <span className="text-[11px] text-[#888] font-medium">Current</span>}
+                        <div className="flex items-center gap-1.5">
+                          {priceInfo.savings && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#edfaf3] text-[#26a65b]">
+                              {priceInfo.savings}
+                            </span>
+                          )}
+                          {isCurrent && <span className="text-[11px] text-[#888] font-medium">Current</span>}
+                        </div>
                       </div>
                       <div className="mb-4">
-                        <span className="text-[28px] font-bold tracking-tight text-[#1c1c1a]">{plan.price}</span>
-                        {plan.period && <span className="text-[13px] text-[#aaa]">{plan.period}</span>}
+                        <span className="text-[28px] font-bold tracking-tight text-[#1c1c1a]">{priceInfo.price}</span>
+                        {priceInfo.period && <span className="text-[13px] text-[#aaa]">{priceInfo.period}</span>}
                       </div>
                       <ul className="flex-1 space-y-2 mb-5">
                         {plan.features.map(f => (
@@ -869,6 +970,30 @@ export default function SettingsPage() {
                   );
                 })}
               </div>
+
+              {/* Referral code */}
+              {referralCode && (
+                <div className="mt-6 bg-white border border-[#e2e2df] rounded-[12px] p-5">
+                  <div className="text-[13px] font-semibold text-[#1c1c1a] mb-1">Refer a friend</div>
+                  <div className="text-[12px] text-[#888] mb-3">
+                    Share your referral code. When a friend subscribes, you both get 30 days added to your plan.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 font-mono text-[14px] font-bold tracking-wider text-[#5b63f5] bg-[#eeeffe] border border-[#d0d3fb] rounded-lg px-4 py-2.5">
+                      {referralCode}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(referralCode);
+                        showToast("Referral code copied!", true);
+                      }}
+                      className="px-4 py-2.5 rounded-lg text-[13px] font-medium bg-[#1c1c1a] text-white hover:bg-[#333] transition-colors"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 text-[12px] text-[#aaa] space-y-1">
                 <p>Payments processed by Razorpay. Secure, encrypted, and instant.</p>

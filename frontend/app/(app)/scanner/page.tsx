@@ -185,8 +185,11 @@ type ColDef = {
   width?: string;
 };
 
-function priceFmt(v: number | null | undefined) {
+function priceFmt(v: number | null | undefined, currency: string = "INR") {
   if (v == null) return <span className="text-[#ccc]">—</span>;
+  if (currency === "USD") {
+    return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 function volFmt(v: number) {
@@ -226,7 +229,7 @@ const TABLE_COLS: ColDef[] = [
   },
   {
     key: "close", label: "Close", sortKey: "close", align: "right",
-    render: r => <span className="tabular-nums text-[12px] font-medium text-[#1c1c1a]">{priceFmt(r.close)}</span>,
+    render: r => <span className="tabular-nums text-[12px] font-medium text-[#1c1c1a]">{priceFmt(r.close, r.currency)}</span>,
   },
   {
     key: "pct_change", label: "Chg %", sortKey: "pct_change", align: "right",
@@ -503,6 +506,7 @@ export default function ScannerPage() {
   const [seriesFilter, setSeriesFilter]   = useState<string[]>(["EQ", "BE"]);
   const [sectorFilter, setSectorFilter]   = useState<string>("");
   const [sectors, setSectors]             = useState<string[]>([]);
+  const [marketFilter, setMarketFilter]   = useState<"IN" | "US">("IN");
   const [sortKey, setSortKey]             = useState<string>("volume_ratio");
   const [sortOrder, setSortOrder]         = useState<"asc" | "desc">("desc");
 
@@ -623,6 +627,7 @@ export default function ScannerPage() {
     const filters = conditionsToFilters(conditions, {
       ...presetFilters,
       series: seriesFilter,
+      market: marketFilter,
       ...(sectorFilter ? { sector: sectorFilter } : {}),
     });
     try {
@@ -653,6 +658,7 @@ export default function ScannerPage() {
     const filters = conditionsToFilters(conditions, {
       ...presetFilters,
       series: seriesFilter,
+      market: marketFilter,
       ...(sectorFilter ? { sector: sectorFilter } : {}),
     });
     try {
@@ -760,24 +766,46 @@ export default function ScannerPage() {
             )}
           </div>
 
-          {/* Series filter pills */}
+          {/* Market switcher (India / US) */}
           <div className="flex items-center gap-1 shrink-0">
-            {["EQ", "BE", "BZ"].map(s => {
-              const on = seriesFilter.includes(s);
+            {(["IN", "US"] as const).map(m => {
+              const on = marketFilter === m;
               return (
-                <button key={s}
-                  onClick={() => setSeriesFilter(prev => on ? prev.filter(x => x !== s) : [...prev, s])}
-                  className="text-[11px] px-2 py-1 rounded-[4px] font-medium transition-colors"
+                <button key={m}
+                  onClick={() => setMarketFilter(m)}
+                  className="text-[11px] px-2 py-1 rounded-[4px] font-semibold transition-colors"
                   style={on
-                    ? { background: "#1c1c1a", color: "#fff" }
-                    : { background: "#f7f7f5", color: "#aaa", border: "1px solid #e2e2df" }
+                    ? { background: "#5b63f5", color: "#fff" }
+                    : { background: "#f7f7f5", color: "#888", border: "1px solid #e2e2df" }
                   }
+                  title={m === "IN" ? "India — NSE & BSE" : "US — NASDAQ & NYSE"}
                 >
-                  {s}
+                  {m === "IN" ? "🇮🇳 IN" : "🇺🇸 US"}
                 </button>
               );
             })}
           </div>
+
+          {/* Series filter pills (hidden for US market) */}
+          {marketFilter === "IN" && (
+            <div className="flex items-center gap-1 shrink-0">
+              {["EQ", "BE", "BZ"].map(s => {
+                const on = seriesFilter.includes(s);
+                return (
+                  <button key={s}
+                    onClick={() => setSeriesFilter(prev => on ? prev.filter(x => x !== s) : [...prev, s])}
+                    className="text-[11px] px-2 py-1 rounded-[4px] font-medium transition-colors"
+                    style={on
+                      ? { background: "#1c1c1a", color: "#fff" }
+                      : { background: "#f7f7f5", color: "#aaa", border: "1px solid #e2e2df" }
+                    }
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Sector filter */}
           {sectors.length > 0 && (

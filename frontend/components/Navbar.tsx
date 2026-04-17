@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/charts/RELIANCE", label: "Charts", prefix: "/charts" },
   { href: "/journal", label: "Journal" },
   { href: "/options", label: "Options" },
+  { href: "/community", label: "Community" },
 ];
 
 export default function Navbar() {

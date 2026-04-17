@@ -23,9 +23,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 
 PLAN_PRICES = {
-    "pro":   {"amount": 199900, "label": "Artha Pro — ₹1,999/month",   "days": 30},
-    "elite": {"amount": 499900, "label": "Artha Elite — ₹4,999/month", "days": 30},
+    ("pro",   "INR", "monthly"): {"amount": 199900,   "label": "AlphaVyuh Pro — ₹1,999/month",   "days": 30},
+    ("pro",   "INR", "annual"):  {"amount": 1999900,  "label": "AlphaVyuh Pro — ₹19,999/year",   "days": 365},
+    ("elite", "INR", "monthly"): {"amount": 499900,   "label": "AlphaVyuh Elite — ₹4,999/month", "days": 30},
+    ("elite", "INR", "annual"):  {"amount": 4999900,  "label": "AlphaVyuh Elite — ₹49,999/year", "days": 365},
+    ("pro",   "USD", "monthly"): {"amount": 2900,     "label": "AlphaVyuh Pro — $29/month",      "days": 30},
+    ("pro",   "USD", "annual"):  {"amount": 27900,    "label": "AlphaVyuh Pro — $279/year",      "days": 365},
+    ("elite", "USD", "monthly"): {"amount": 6900,     "label": "AlphaVyuh Elite — $69/month",    "days": 30},
+    ("elite", "USD", "annual"):  {"amount": 69900,    "label": "AlphaVyuh Elite — $699/year",    "days": 365},
 }
+
+SUPPORTED_CURRENCIES = {"INR", "USD"}
+SUPPORTED_BILLINGS   = {"monthly", "annual"}
 
 
 def _rzp_client():
@@ -37,7 +46,9 @@ def _rzp_client():
 # ── Create Order ──────────────────────────────────────────────────────────────
 
 class CreateOrderRequest(BaseModel):
-    plan: str  # "pro" or "elite"
+    plan: str           # "pro" or "elite"
+    currency: str = "INR"  # "INR" or "USD"
+    billing: str = "monthly"  # "monthly" or "annual"
 
 
 @router.post("/create-order")
@@ -45,28 +56,62 @@ async def create_order(
     body: CreateOrderRequest,
     user_id: str = Depends(get_current_user_id),
 ):
-    if body.plan not in PLAN_PRICES:
+    currency = (body.currency or "INR").upper()
+    if currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(400, f"Unsupported currency: {currency}")
+
+    billing = (body.billing or "monthly").lower()
+    if billing not in SUPPORTED_BILLINGS:
+        raise HTTPException(400, f"Unsupported billing period: {billing}")
+
+    key = (body.plan, currency, billing)
+    if key not in PLAN_PRICES:
         raise HTTPException(400, "Invalid plan")
 
-    meta = PLAN_PRICES[body.plan]
+    meta = PLAN_PRICES[key]
     try:
         client = _rzp_client()
         order = client.order.create({
             "amount": meta["amount"],
-            "currency": "INR",
-            "receipt": f"{user_id[:8]}-{body.plan}",
-            "notes": {"user_id": user_id, "plan": body.plan},
+            "currency": currency,
+            "receipt": f"{user_id[:8]}-{body.plan}-{currency}-{billing}",
+            "notes": {"user_id": user_id, "plan": body.plan, "currency": currency, "billing": billing},
         })
         return {
             "order_id": order["id"],
             "amount": meta["amount"],
-            "currency": "INR",
+            "currency": currency,
             "plan": body.plan,
+            "billing": billing,
             "label": meta["label"],
         }
     except Exception as e:
         logger.error(f"Razorpay order create failed: {e}")
         raise HTTPException(500, "Payment gateway error")
+
+
+@router.get("/plans")
+async def list_plans(currency: str = "INR", billing: str = "monthly"):
+    """Public plan prices for a given currency (INR or USD) and billing period (monthly or annual)."""
+    c = (currency or "INR").upper()
+    if c not in SUPPORTED_CURRENCIES:
+        raise HTTPException(400, f"Unsupported currency: {c}")
+    b = (billing or "monthly").lower()
+    if b not in SUPPORTED_BILLINGS:
+        raise HTTPException(400, f"Unsupported billing period: {b}")
+    plans = []
+    for plan_id in ("pro", "elite"):
+        meta = PLAN_PRICES[(plan_id, c, b)]
+        plans.append({
+            "plan": plan_id,
+            "currency": c,
+            "billing": b,
+            "amount": meta["amount"],
+            "amount_display": meta["amount"] / 100,
+            "label": meta["label"],
+            "days": meta["days"],
+        })
+    return {"currency": c, "billing": b, "plans": plans}
 
 
 # ── Verify Payment ────────────────────────────────────────────────────────────
@@ -76,6 +121,8 @@ class VerifyRequest(BaseModel):
     razorpay_payment_id: str
     razorpay_signature: str
     plan: str
+    currency: str = "INR"
+    billing: str = "monthly"
 
 
 @router.post("/verify")
@@ -93,17 +140,22 @@ async def verify_payment(
     if expected != body.razorpay_signature:
         raise HTTPException(400, "Invalid payment signature")
 
-    if body.plan not in PLAN_PRICES:
+    currency = (body.currency or "INR").upper()
+    billing = (body.billing or "monthly").lower()
+    key = (body.plan, currency, billing)
+    if key not in PLAN_PRICES:
         raise HTTPException(400, "Invalid plan")
 
-    # Activate plan for 30 days
-    days = PLAN_PRICES[body.plan]["days"]
-    expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+    # Activate plan
+    meta = PLAN_PRICES[key]
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=meta["days"])).isoformat()
 
     sb = get_admin_client()
     sb.table("users").update({
         "plan": body.plan,
         "plan_expires_at": expires_at,
+        "billing_currency": currency,
+        "billing_period": billing,
     }).eq("id", user_id).execute()
 
     # Log the payment
@@ -112,12 +164,13 @@ async def verify_payment(
         "razorpay_order_id": body.razorpay_order_id,
         "razorpay_payment_id": body.razorpay_payment_id,
         "plan": body.plan,
-        "amount": PLAN_PRICES[body.plan]["amount"],
+        "amount": meta["amount"],
+        "currency": currency,
         "status": "success",
     }).execute()
 
-    logger.info(f"Payment verified: user={user_id} plan={body.plan}")
-    return {"status": "success", "plan": body.plan, "expires_at": expires_at}
+    logger.info(f"Payment verified: user={user_id} plan={body.plan} currency={currency} billing={billing}")
+    return {"status": "success", "plan": body.plan, "expires_at": expires_at, "currency": currency, "billing": billing}
 
 
 # ── Webhook (server-side confirmation from Razorpay) ─────────────────────────
@@ -142,18 +195,23 @@ async def razorpay_webhook(request: Request):
     if event == "payment.captured":
         payment = payload["payload"]["payment"]["entity"]
         notes = payment.get("notes", {})
-        user_id = notes.get("user_id")
-        plan = notes.get("plan", "pro")
+        user_id  = notes.get("user_id")
+        plan     = notes.get("plan", "pro")
+        currency = (notes.get("currency") or payment.get("currency") or "INR").upper()
+        billing  = (notes.get("billing") or "monthly").lower()
 
-        if user_id and plan in PLAN_PRICES:
-            days = PLAN_PRICES[plan]["days"]
+        key = (plan, currency, billing)
+        if user_id and key in PLAN_PRICES:
+            days = PLAN_PRICES[key]["days"]
             expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
             sb = get_admin_client()
             sb.table("users").update({
                 "plan": plan,
                 "plan_expires_at": expires_at,
+                "billing_currency": currency,
+                "billing_period": billing,
             }).eq("id", user_id).execute()
-            logger.info(f"Webhook: plan activated user={user_id} plan={plan}")
+            logger.info(f"Webhook: plan activated user={user_id} plan={plan} currency={currency} billing={billing}")
 
     return {"status": "ok"}
 

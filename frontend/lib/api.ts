@@ -55,6 +55,8 @@ export type ScanResult = {
   company_name: string;
   series: string;
   sector: string | null;
+  market?: string;
+  currency?: string;
   close: number;
   prev_close: number;
   open: number;
@@ -127,7 +129,23 @@ export type ScanFilters = {
   new_52w_low?: boolean;
   // Market
   series?: string[];
+  sector?: string;
+  market?: string;  // "IN" | "US" | "NSE" | "BSE" | "NASDAQ" | "NYSE"
 };
+
+export type Market = {
+  key: string;
+  label: string;
+  currency: string;
+  count: number;
+};
+
+export async function getMarkets(): Promise<Market[]> {
+  const res = await fetch(`${API}/api/v1/market/markets`, { headers: publicHeaders });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.markets ?? [];
+}
 
 export type ScanResponse = {
   trade_date: string;
@@ -670,18 +688,23 @@ export async function getPlanStatus(): Promise<PlanStatus> {
   return res.json();
 }
 
-export async function createPaymentOrder(plan: "pro" | "elite"): Promise<{
+export async function createPaymentOrder(
+  plan: "pro" | "elite",
+  currency: "INR" | "USD" = "INR",
+  billing: "monthly" | "annual" = "monthly",
+): Promise<{
   order_id: string;
   amount: number;
   currency: string;
   plan: string;
+  billing: string;
   label: string;
 }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/payments/create-order`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({ plan, currency, billing }),
   });
   if (!res.ok) throw new Error("Failed to create payment order");
   return res.json();
@@ -692,7 +715,9 @@ export async function verifyPayment(data: {
   razorpay_payment_id: string;
   razorpay_signature: string;
   plan: string;
-}): Promise<{ status: string; plan: string; expires_at: string }> {
+  currency?: string;
+  billing?: string;
+}): Promise<{ status: string; plan: string; expires_at: string; currency?: string; billing?: string }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/payments/verify`, {
     method: "POST",
@@ -703,7 +728,23 @@ export async function verifyPayment(data: {
   return res.json();
 }
 
-export async function analyseJournal(): Promise<{ analysis: string; trades_analysed: number }> {
+export type PlanPrice = {
+  plan: "pro" | "elite";
+  currency: "INR" | "USD";
+  amount: number;          // smallest unit (paise/cents)
+  amount_display: number;  // whole currency
+  label: string;
+  days: number;
+};
+
+export async function getPlanPrices(currency: "INR" | "USD" = "INR"): Promise<PlanPrice[]> {
+  const res = await fetch(`${API}/api/v1/payments/plans?currency=${currency}`, { headers: publicHeaders });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.plans ?? [];
+}
+
+export async function analyseJournal(): Promise<{ analysis: string; trades_analysed: number; disclaimer?: string }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/ai/analyse`, { method: "POST", headers });
   if (!res.ok) {
@@ -817,6 +858,8 @@ export type UserProfile = {
   broker_type: string | null;
   broker_api_key: string | null;   // masked — last 4 chars only
   broker_connected_at: string | null;
+  billing_region?: string;         // "IN" | "NRI" | "US" | "INTL"
+  billing_currency?: string;       // "INR" | "USD"
   created_at: string;
 };
 
@@ -834,6 +877,8 @@ export async function updateMe(updates: {
   broker_type?: string;
   broker_api_key?: string;
   broker_api_secret?: string;
+  billing_region?: string;
+  billing_currency?: string;
 }): Promise<UserProfile> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/me`, {
@@ -972,5 +1017,120 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? `Order failed (${res.status})`);
   }
+  return res.json();
+}
+
+// ── Backtest ──────────────────────────────────────────────────────────────────
+
+export type BacktestResult = {
+  date: string;
+  match_count: number;
+  top_symbols: string[];
+};
+
+export type BacktestResponse = {
+  days_analysed: number;
+  avg_matches: number;
+  max_matches: number;
+  min_matches: number;
+  results: BacktestResult[];
+};
+
+export async function runBacktest(
+  filters: ScanFilters,
+  days = 30,
+): Promise<BacktestResponse> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/backtest/run`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ filters, days }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? `Backtest failed (${res.status})`);
+  }
+  return res.json();
+}
+
+// ── Referral ──────────────────────────────────────────────────────────────────
+
+export async function getReferralCode(): Promise<{ referral_code: string; referral_url: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/referral-code`, { headers });
+  if (!res.ok) throw new Error("Failed to get referral code");
+  return res.json();
+}
+
+export async function applyReferral(code: string): Promise<{ status: string; message: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/referral/apply`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ referral_code: code }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? "Failed to apply referral");
+  }
+  return res.json();
+}
+
+// ── Community shared screens ──────────────────────────────────────────────────
+
+export type SharedScreen = {
+  id: string;
+  user_id: string;
+  screen_id: string;
+  title: string;
+  description: string | null;
+  tags: string[];
+  upvotes: number;
+  is_featured: boolean;
+  created_at: string;
+};
+
+export async function getSharedScreens(limit = 20): Promise<SharedScreen[]> {
+  const res = await fetch(`${API}/api/v1/community/screens?limit=${limit}`, { headers: publicHeaders });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.screens ?? [];
+}
+
+export async function shareScreen(screenId: string, title: string, description?: string, tags?: string[]): Promise<SharedScreen> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/community/screens`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ screen_id: screenId, title, description, tags: tags ?? [] }),
+  });
+  if (!res.ok) throw new Error("Failed to share screen");
+  return res.json();
+}
+
+export async function upvoteScreen(sharedScreenId: string): Promise<{ upvotes: number }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/community/screens/${sharedScreenId}/upvote`, {
+    method: "POST",
+    headers,
+  });
+  if (!res.ok) throw new Error("Upvote failed");
+  return res.json();
+}
+
+// ── Annual plan helpers ───────────────────────────────────────────────────────
+
+export async function createPaymentOrderFull(
+  plan: "pro" | "elite",
+  currency: "INR" | "USD" = "INR",
+  billing: "monthly" | "annual" = "monthly",
+): Promise<{ order_id: string; amount: number; currency: string; plan: string; billing: string; label: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/payments/create-order`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ plan, currency, billing }),
+  });
+  if (!res.ok) throw new Error("Failed to create payment order");
   return res.json();
 }
