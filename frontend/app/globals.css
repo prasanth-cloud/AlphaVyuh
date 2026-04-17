@@ -1,6 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* AlphaVyuh design system */
+:root {
+  --av-dark:       #0f0f0e;
+  --av-dark-2:     #1a1a18;
+  --av-dark-3:     #242422;
+  --av-page:       #f2f2f0;
+  --av-surface:    #ffffff;
+  --av-border:     #e8e8e6;
+  --av-border-sub: #f2f2f0;
+  --av-text-1:     #0f0f0e;
+  --av-text-2:     #555553;
+  --av-text-3:     #888886;
+  --av-text-4:     #b0b0ae;
+  --av-accent:     #5b63f5;
+  --av-accent-bg:  #eeeffe;
+  --av-accent-dim: #818cf8;
+  --av-gain:       #26a65b;
+  --av-gain-bg:    #edfaf3;
+  --av-loss:       #e5383b;
+  --av-loss-bg:    #fff0f0;
+  --av-warn:       #d97706;
+  --av-warn-bg:    #fff8ec;
+  --av-vol:        #7c6af0;
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+.av-gain  { color: var(--av-gain); }
+.av-loss  { color: var(--av-loss); }
+.av-accent { color: var(--av-accent); }
+
+.rsi-high { background: #f0efff; color: #5b63f5; }
+.rsi-mid  { background: #edfaf3; color: #26a65b; }
+.rsi-low  { background: #fff8ec; color: #d97706; }
 
 @layer base {
   :root {

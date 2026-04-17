@@ -225,25 +225,25 @@ export default function ScannerPage() {
             <button
               key={preset.id}
               onClick={() => switchPreset(preset.id)}
-              className="text-left p-3.5 rounded-[10px] transition-all"
+              className="text-left p-4 rounded-[12px] transition-all"
               style={
                 activePreset === preset.id
-                  ? { border: `2px solid ${preset.color}`, background: preset.bg }
-                  : { border: "1px solid #e2e2df", background: "white" }
+                  ? { border: `2px solid ${preset.color}`, background: preset.bg, boxShadow: `0 0 0 3px ${preset.color}15` }
+                  : { border: "1px solid #e8e8e6", background: "white" }
               }
             >
-              <div className="text-[20px] mb-1.5 leading-none">{preset.icon}</div>
-              <div className="text-[13px] font-semibold text-[#1c1c1a] mb-0.5">{preset.label}</div>
+              <div className="text-[22px] mb-2 leading-none">{preset.icon}</div>
+              <div className="text-[13px] font-semibold text-[#0f0f0e] mb-0.5">{preset.label}</div>
               <div className="text-[11px] text-[#aaa] leading-tight">{preset.description}</div>
             </button>
           ))}
         </div>
 
         {/* ── RESULTS PANEL ── */}
-        <div className="bg-white border border-[#e2e2df] rounded-[10px] overflow-hidden">
+        <div className="bg-white border border-[#e8e8e6] rounded-[12px] overflow-hidden">
 
           {/* Header row */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#f0f0ee]">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#f2f2f0]">
             <div className="flex-1 flex items-center gap-2">
               {loading ? (
                 <span className="text-[13px] text-[#aaa]">Scanning…</span>
@@ -251,7 +251,7 @@ export default function ScannerPage() {
                 <span className="text-[13px] text-[#e5383b]">{error}</span>
               ) : (
                 <>
-                  <span className="text-[13px] font-semibold text-[#1c1c1a]">{totalMatches} stocks</span>
+                  <span className="text-[13px] font-semibold text-[#0f0f0e]">{totalMatches} stocks</span>
                   <span className="text-[13px] text-[#aaa]">matched</span>
                   {tradeDate && (
                     <span className="text-[11px] text-[#aaa] ml-1">· EOD {tradeDate}</span>
@@ -273,8 +273,8 @@ export default function ScannerPage() {
                   className="text-[11px] px-3 py-1 rounded-full border transition-colors"
                   style={
                     sortBy === s.key
-                      ? { background: "#1c1c1a", borderColor: "#1c1c1a", color: "#fff" }
-                      : { borderColor: "#e2e2df", color: "#888" }
+                      ? { background: "#0f0f0e", borderColor: "#0f0f0e", color: "#fff" }
+                      : { borderColor: "#e8e8e6", color: "#888" }
                   }
                 >
                   {s.label}
@@ -288,7 +288,7 @@ export default function ScannerPage() {
               className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-[7px] border transition-colors"
               style={
                 showAdvanced
-                  ? { background: "#f2f2f0", borderColor: "#bbb", color: "#1c1c1a", fontWeight: 500 }
+                  ? { background: "#f2f2f0", borderColor: "#bbb", color: "#0f0f0e", fontWeight: 500 }
                   : { borderColor: "#e2e2df", color: "#888" }
               }
             >
@@ -301,7 +301,7 @@ export default function ScannerPage() {
 
           {/* Advanced filters */}
           {showAdvanced && (
-            <div className="px-4 py-3 bg-[#fafaf8] border-b border-[#f0f0ee]">
+            <div className="px-4 py-3 bg-[#fafaf9] border-b border-[#f2f2f0]">
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-3">
                 {(
                   [
@@ -324,7 +324,7 @@ export default function ScannerPage() {
                         setAdv((prev) => ({ ...prev, [f.key]: e.target.value }))
                       }
                       placeholder="Any"
-                      className="w-full px-2 py-1.5 border border-[#e2e2df] rounded-[5px] text-[12px] bg-white focus:border-[#5b63f5] outline-none"
+                      className="w-full px-2 py-1.5 border border-[#e8e8e6] rounded-[5px] text-[12px] bg-white focus:border-[#5b63f5] outline-none"
                     />
                   </div>
                 ))}
@@ -338,7 +338,7 @@ export default function ScannerPage() {
                       <label className="text-[10px] uppercase tracking-wider text-[#aaa] mb-1 block">
                         vs EMA{n}
                       </label>
-                      <div className="flex border border-[#e2e2df] rounded-[5px] overflow-hidden">
+                      <div className="flex border border-[#e8e8e6] rounded-[5px] overflow-hidden">
                         {(["above", "any", "below"] as const).map((v) => (
                           <button
                             key={v}
@@ -348,7 +348,7 @@ export default function ScannerPage() {
                             className="px-2 py-1.5 text-[11px] capitalize transition-colors"
                             style={
                               (adv[key] || "any") === v
-                                ? { background: "#1c1c1a", color: "#fff" }
+                                ? { background: "#0f0f0e", color: "#fff" }
                                 : { color: "#888" }
                             }
                           >
@@ -361,13 +361,13 @@ export default function ScannerPage() {
                 })}
                 <button
                   onClick={applyAdvanced}
-                  className="px-4 py-1.5 bg-[#1c1c1a] text-white text-[12px] font-medium rounded-[7px] hover:opacity-85"
+                  className="px-4 py-1.5 bg-[#0f0f0e] text-white text-[12px] font-medium rounded-[7px] hover:opacity-85"
                 >
                   Apply
                 </button>
                 <button
                   onClick={resetAdvanced}
-                  className="px-3 py-1.5 text-[12px] text-[#888] hover:text-[#1c1c1a]"
+                  className="px-3 py-1.5 text-[12px] text-[#888] hover:text-[#0f0f0e]"
                 >
                   Reset
                 </button>
@@ -393,7 +393,7 @@ export default function ScannerPage() {
               </div>
             ) : results.length === 0 && !error ? (
               <div className="flex flex-col items-center py-16 text-center">
-                <div className="text-[14px] font-medium text-[#1c1c1a] mb-1">No stocks matched</div>
+                <div className="text-[14px] font-medium text-[#0f0f0e] mb-1">No stocks matched</div>
                 <div className="text-[12px] text-[#aaa]">
                   Try a different preset or relax the advanced filters
                 </div>
@@ -401,7 +401,7 @@ export default function ScannerPage() {
             ) : (
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="border-b border-[#e2e2df]">
+                  <tr className="border-b border-[#e8e8e6]">
                     {[
                       { label: "Symbol",       w: "w-44" },
                       { label: "Price",        w: "w-24" },
@@ -426,17 +426,17 @@ export default function ScannerPage() {
                     <tr
                       key={i}
                       onClick={() => router.push(`/charts/${row.symbol}`)}
-                      className="border-b border-[#f0f0ee] hover:bg-[#fafaf8] cursor-pointer group"
+                      className="border-b border-[#f2f2f0] hover:bg-[#fafaf9] cursor-pointer group transition-colors"
                     >
                       <td className="px-3 py-2.5">
-                        <div className="text-[13px] font-semibold text-[#1c1c1a]">
+                        <div className="text-[13px] font-semibold text-[#0f0f0e]">
                           {String(row.symbol)}
                         </div>
                         <div className="text-[10px] text-[#aaa] truncate max-w-[140px]">
                           {String(row.company_name || "")}
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 text-[13px] font-medium text-[#1c1c1a] tabular-nums">
+                      <td className="px-3 py-2.5 text-[13px] font-medium text-[#0f0f0e] tabular-nums">
                         ₹{(row.close as number)?.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
                       </td>
                       <td className="px-3 py-2.5">
@@ -491,7 +491,7 @@ export default function ScannerPage() {
                         <button
                           onClick={() => handleAddToWatchlist(row.symbol as string)}
                           disabled={addingToWl === row.symbol}
-                          className="opacity-0 group-hover:opacity-100 text-[11px] font-medium px-3 py-1 rounded-full border border-[#e2e2df] text-[#888] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-all disabled:opacity-40"
+                          className="opacity-0 group-hover:opacity-100 text-[11px] font-medium px-3 py-1 rounded-full border border-[#e8e8e6] text-[#888] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-all disabled:opacity-40"
                         >
                           {addingToWl === row.symbol ? "…" : "+ Watchlist"}
                         </button>
@@ -507,7 +507,7 @@ export default function ScannerPage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#1c1c1a] text-white text-[13px] px-5 py-2.5 rounded-full shadow-lg z-50 pointer-events-none">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-[#0f0f0e] text-white text-[13px] px-5 py-2.5 rounded-full shadow-lg z-50 pointer-events-none">
           {toast}
         </div>
       )}
