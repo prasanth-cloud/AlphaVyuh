@@ -80,6 +80,14 @@ export type ScanResult = {
   week_52_low_pct: number | null;
   atr_14: number | null;
   atr_pct: number | null;
+  turnover_cr?: number | null;
+  macd_hist?: number | null;
+  bb_width?: number | null;
+  stoch_k?: number | null;
+  adx_14?: number | null;
+  delivery_pct?: number | null;
+  is_new_52w_high?: boolean;
+  is_inside_bar?: boolean;
 };
 
 export type ScanFilters = {
@@ -1243,5 +1251,61 @@ export async function createPaymentOrderFull(
     body: JSON.stringify({ plan, currency, billing }),
   });
   if (!res.ok) throw new Error("Failed to create payment order");
+  return res.json();
+}
+
+// ── Market overview ───────────────────────────────────────────────────────────
+
+export interface MarketOverview {
+  trade_date: string;
+  advances: number;
+  declines: number;
+  unchanged: number;
+  total: number;
+  advance_decline_ratio: number;
+  new_52w_highs: number;
+  new_52w_lows: number;
+  above_ema20_pct: number;
+  above_ema50_pct: number;
+  above_ema200_pct: number;
+  market_phase: string;
+  market_phase_desc: string;
+  sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
+  top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
+  top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
+  most_active: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
+}
+
+export async function getMarketOverview(): Promise<MarketOverview> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/market/overview`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch market overview");
+  return res.json();
+}
+
+// ── Scanner presets ───────────────────────────────────────────────────────────
+
+export interface ScanPreset {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  filters: Record<string, unknown>;
+}
+
+export async function getScannerPresets(): Promise<ScanPreset[]> {
+  const res = await fetch(`${API}/api/v1/scanner/presets`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function runScanner(filters: Record<string, unknown>, sort_by = "volume_ratio", sort_order = "desc"): Promise<{ trade_date: string; total_matches: number; plan: string; results: ScanResult[] }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/scanner/run`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ filters, sort_by, sort_order }),
+  });
+  if (!res.ok) throw new Error("Scanner failed");
   return res.json();
 }

@@ -79,10 +79,58 @@ class ScanFilters(BaseModel):
     price_vs_ema50:  str | None = None
     price_vs_ema200: str | None = None
 
+    # ── MACD ─────────────────────────────────────────────────────────────
+    macd_signal:        str | None = None   # "bullish_cross"|"bearish_cross"|"above_signal"|"below_signal"
+    macd_hist_positive: bool | None = None
+
+    # ── Bollinger Bands ───────────────────────────────────────────────────
+    bb_position:  str | None = None   # "above_upper"|"below_lower"|"inside"|"near_upper"|"near_lower"
+    bb_width_min: float | None = None
+    bb_width_max: float | None = None
+
+    # ── Stochastic ────────────────────────────────────────────────────────
+    stoch_k_min: float | None = None
+    stoch_k_max: float | None = None
+    stoch_d_min: float | None = None
+    stoch_d_max: float | None = None
+
+    # ── ADX ───────────────────────────────────────────────────────────────
+    adx_min: float | None = None
+    adx_max: float | None = None
+
+    # ── CCI ───────────────────────────────────────────────────────────────
+    cci_min: float | None = None
+    cci_max: float | None = None
+
+    # ── Williams %R ───────────────────────────────────────────────────────
+    williams_r_min: float | None = None
+    williams_r_max: float | None = None
+
+    # ── Candle patterns ───────────────────────────────────────────────────
+    is_inside_bar:       bool | None = None
+    is_outside_bar:      bool | None = None
+    bullish_engulfing:   bool | None = None
+    bearish_engulfing:   bool | None = None
+    hammer:              bool | None = None
+    shooting_star:       bool | None = None
+    doji:                bool | None = None
+
+    # ── Delivery / OBV ───────────────────────────────────────────────────
+    delivery_pct_min: float | None = None
+    delivery_pct_max: float | None = None
+
+    # ── EMA 50/200 cross aliases ──────────────────────────────────────────
+    ema20_vs_ema50:   str | None = None   # "golden" | "death"
+    ema50_vs_ema200:  str | None = None   # "golden" | "death"
+
+    # ── Turnover in crores alias ──────────────────────────────────────────
+    turnover_min_cr: float | None = None  # crores (1 cr = 10M INR)
+
     # ── Market / Classification ──────────────────────────────────────────
     series:          list[str] | None = None   # ["EQ","BE"]
-    sector:          str | None = None          # e.g. "Information Technology"
+    sector:          list[str] | str | None = None   # e.g. "Information Technology" or list
     market:          str | None = None          # "IN" (NSE+BSE), "US" (NASDAQ+NYSE) or specific exchange
+    market_cap_category: list[str] | str | None = None
 
 
 class ScanRequest(BaseModel):
@@ -102,8 +150,70 @@ class SaveScreenRequest(BaseModel):
 SORT_KEYS = {
     "symbol", "close", "pct_change", "volume", "volume_ratio",
     "rsi_14", "ema_20", "atr_14", "week_52_high_pct", "gap_pct",
-    "atr_pct", "turnover",
+    "atr_pct", "turnover", "adx_14", "stoch_k",
 }
+
+PRESETS = [
+    {
+        "id": "momentum",
+        "name": "Momentum",
+        "description": "Strong stocks above EMAs with rising volume",
+        "color": "#5b63f5",
+        "filters": {"rsi_min": 55, "rsi_max": 80, "volume_ratio_min": 1.5,
+                    "price_vs_ema20": "above", "price_vs_ema50": "above",
+                    "pct_change_min": 1.0, "series": ["EQ"]},
+    },
+    {
+        "id": "breakout",
+        "name": "Breakout",
+        "description": "Price breaking higher with volume surge",
+        "color": "#26a65b",
+        "filters": {"volume_ratio_min": 2.0, "pct_change_min": 2.0,
+                    "price_vs_ema20": "above", "week_52_high_pct_max": 5.0, "series": ["EQ"]},
+    },
+    {
+        "id": "near_52w_high",
+        "name": "Near 52W High",
+        "description": "Within 5% of yearly high",
+        "color": "#d97706",
+        "filters": {"week_52_high_pct_max": 5.0, "price_vs_ema20": "above", "series": ["EQ"]},
+    },
+    {
+        "id": "oversold_bounce",
+        "name": "Oversold Bounce",
+        "description": "RSI oversold, price above 200 EMA",
+        "color": "#e5383b",
+        "filters": {"rsi_min": 20, "rsi_max": 38, "price_vs_ema200": "above", "series": ["EQ"]},
+    },
+    {
+        "id": "new_highs",
+        "name": "New 52W Highs",
+        "description": "Fresh yearly highs today",
+        "color": "#7c6af0",
+        "filters": {"new_52w_high": True, "volume_ratio_min": 1.2, "series": ["EQ"]},
+    },
+    {
+        "id": "high_volume",
+        "name": "High Volume",
+        "description": "Unusual volume — 3× average or more",
+        "color": "#0f766e",
+        "filters": {"volume_ratio_min": 3.0, "series": ["EQ"]},
+    },
+    {
+        "id": "golden_cross",
+        "name": "Golden Cross",
+        "description": "EMA 20 above EMA 50 with bullish trend",
+        "color": "#b45309",
+        "filters": {"ema20_vs_ema50": "golden", "price_vs_ema200": "above", "series": ["EQ"]},
+    },
+    {
+        "id": "strong_trend",
+        "name": "Strong Trend",
+        "description": "All 3 EMAs aligned bullish",
+        "color": "#0369a1",
+        "filters": {"all_emas_bullish": True, "rsi_min": 50, "series": ["EQ"]},
+    },
+]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -239,13 +349,90 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.price_vs_ema200 == "above" and (ema200_v is None or close <= ema200_v): continue
         if f.price_vs_ema200 == "below" and (ema200_v is None or close >= ema200_v): continue
 
-        # ── Series / active stock filter (moved from query-builder for reliability) ──
+        # ── MACD ─────────────────────────────────────────────────────────
+        macd_hist_v  = float(row["macd_hist"])   if row.get("macd_hist")   is not None else None
+        macd_line_v  = float(row["macd_line"])   if row.get("macd_line")   is not None else None
+        macd_sig_v   = float(row["macd_signal"]) if row.get("macd_signal") is not None else None
+        if f.macd_hist_positive is True  and (macd_hist_v is None or macd_hist_v <= 0): continue
+        if f.macd_hist_positive is False and (macd_hist_v is None or macd_hist_v >= 0): continue
+        if f.macd_signal == "above_signal"  and (macd_line_v is None or macd_sig_v is None or macd_line_v <= macd_sig_v): continue
+        if f.macd_signal == "below_signal"  and (macd_line_v is None or macd_sig_v is None or macd_line_v >= macd_sig_v): continue
+        # bullish/bearish cross requires yesterday's data — skip for now (needs prev row)
+
+        # ── Bollinger Bands ───────────────────────────────────────────────
+        bb_upper_v  = float(row["bb_upper"]) if row.get("bb_upper")  is not None else None
+        bb_lower_v  = float(row["bb_lower"]) if row.get("bb_lower")  is not None else None
+        bb_mid_v    = float(row["bb_middle"]) if row.get("bb_middle") is not None else None
+        bb_width_v  = float(row["bb_width"]) if row.get("bb_width")  is not None else None
+        if f.bb_width_min is not None and (bb_width_v is None or bb_width_v < f.bb_width_min): continue
+        if f.bb_width_max is not None and (bb_width_v is None or bb_width_v > f.bb_width_max): continue
+        if f.bb_position == "above_upper"  and (bb_upper_v is None or close <= bb_upper_v): continue
+        if f.bb_position == "below_lower"  and (bb_lower_v is None or close >= bb_lower_v): continue
+        if f.bb_position == "inside"       and bb_upper_v is not None and bb_lower_v is not None:
+            if close >= bb_upper_v or close <= bb_lower_v: continue
+        if f.bb_position == "near_upper"   and (bb_upper_v is None or bb_mid_v is None or close <= bb_mid_v or close > bb_upper_v * 1.02): continue
+        if f.bb_position == "near_lower"   and (bb_lower_v is None or bb_mid_v is None or close >= bb_mid_v or close < bb_lower_v * 0.98): continue
+
+        # ── Stochastic ────────────────────────────────────────────────────
+        stoch_k_v = float(row["stoch_k"]) if row.get("stoch_k") is not None else None
+        stoch_d_v = float(row["stoch_d"]) if row.get("stoch_d") is not None else None
+        if f.stoch_k_min is not None and (stoch_k_v is None or stoch_k_v < f.stoch_k_min): continue
+        if f.stoch_k_max is not None and (stoch_k_v is None or stoch_k_v > f.stoch_k_max): continue
+        if f.stoch_d_min is not None and (stoch_d_v is None or stoch_d_v < f.stoch_d_min): continue
+        if f.stoch_d_max is not None and (stoch_d_v is None or stoch_d_v > f.stoch_d_max): continue
+
+        # ── ADX ───────────────────────────────────────────────────────────
+        adx_v = float(row["adx_14"]) if row.get("adx_14") is not None else None
+        if f.adx_min is not None and (adx_v is None or adx_v < f.adx_min): continue
+        if f.adx_max is not None and (adx_v is None or adx_v > f.adx_max): continue
+
+        # ── CCI ───────────────────────────────────────────────────────────
+        cci_v = float(row["cci_20"]) if row.get("cci_20") is not None else None
+        if f.cci_min is not None and (cci_v is None or cci_v < f.cci_min): continue
+        if f.cci_max is not None and (cci_v is None or cci_v > f.cci_max): continue
+
+        # ── Williams %R ───────────────────────────────────────────────────
+        wr_v = float(row["williams_r"]) if row.get("williams_r") is not None else None
+        if f.williams_r_min is not None and (wr_v is None or wr_v < f.williams_r_min): continue
+        if f.williams_r_max is not None and (wr_v is None or wr_v > f.williams_r_max): continue
+
+        # ── Candle patterns (from precomputed flags) ──────────────────────
+        if f.is_inside_bar  is True  and not row.get("is_inside_bar"):  continue
+        if f.is_outside_bar is True  and not row.get("is_outside_bar"): continue
+        # Compute on-the-fly patterns from OHLC
+        body_size   = abs(close - open_p)
+        total_range = high - low if high != low else 0.001
+        lower_wick  = min(open_p, close) - low
+        upper_wick  = high - max(open_p, close)
+        if f.doji            is True and body_size >= 0.1 * total_range:  continue
+        if f.hammer          is True and not (lower_wick > 2 * body_size and upper_wick < body_size * 0.5 and body_size > 0): continue
+        if f.shooting_star   is True and not (upper_wick > 2 * body_size and lower_wick < body_size * 0.5 and body_size > 0): continue
+
+        # ── Delivery pct ─────────────────────────────────────────────────
+        del_pct_v = float(row["delivery_pct"]) if row.get("delivery_pct") is not None else None
+        if f.delivery_pct_min is not None and (del_pct_v is None or del_pct_v < f.delivery_pct_min): continue
+        if f.delivery_pct_max is not None and (del_pct_v is None or del_pct_v > f.delivery_pct_max): continue
+
+        # ── EMA cross aliases ─────────────────────────────────────────────
+        if f.ema20_vs_ema50 == "golden" and (ema20_v is None or ema50_v is None or ema20_v <= ema50_v): continue
+        if f.ema20_vs_ema50 == "death"  and (ema20_v is None or ema50_v is None or ema20_v >= ema50_v): continue
+        if f.ema50_vs_ema200 == "golden" and (ema50_v is None or ema200_v is None or ema50_v <= ema200_v): continue
+        if f.ema50_vs_ema200 == "death"  and (ema50_v is None or ema200_v is None or ema50_v >= ema200_v): continue
+
+        # ── Turnover in crores ────────────────────────────────────────────
+        if f.turnover_min_cr is not None:
+            # turnover stored in INR, 1 Cr = 10_000_000
+            if turnover < f.turnover_min_cr * 10_000_000: continue
+
+        # ── Series / active stock filter ──────────────────────────────────
         effective_series = f.series if f.series else ["EQ", "BE"]
         if su.get("series") not in effective_series: continue
         if not su.get("is_active", True): continue
 
         # ── Sector ────────────────────────────────────────────────────────
-        if f.sector is not None and su.get("sector") != f.sector: continue
+        if f.sector is not None:
+            sectors = f.sector if isinstance(f.sector, list) else [f.sector]
+            if su.get("sector") not in sectors: continue
 
         # ── Market (IN / US / specific exchange) ─────────────────────────
         if f.market is not None:
@@ -254,6 +441,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             if m == "IN" and mkt not in ("NSE", "BSE"): continue
             elif m == "US" and mkt not in ("NASDAQ", "NYSE"): continue
             elif m in ("NSE", "BSE", "NASDAQ", "NYSE") and mkt != m: continue
+
+        # Use stored pct_change if available, else computed
+        final_pct = float(row["pct_change"]) if row.get("pct_change") is not None else pct_change
 
         results.append({
             "symbol":         row["symbol"],
@@ -267,12 +457,13 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "open":           open_p,
             "high":           high,
             "low":            low,
-            "pct_change":     pct_change,
+            "pct_change":     final_pct,
             "gap_pct":        gap_pct,
             "volume":         volume,
             "avg_volume_20d": avg_vol,
             "volume_ratio":   volume_ratio,
             "turnover":       turnover,
+            "turnover_cr":    round(turnover / 10_000_000, 2) if turnover else None,
             "rsi_14":         rsi_v,
             "ema_20":         ema20_v,
             "ema_50":         ema50_v,
@@ -285,6 +476,13 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "week_52_low_pct":  w52l_pct,
             "atr_14":         atr_v,
             "atr_pct":        atr_pct_v,
+            "macd_hist":      float(row["macd_hist"]) if row.get("macd_hist") is not None else None,
+            "bb_width":       float(row["bb_width"]) if row.get("bb_width") is not None else None,
+            "stoch_k":        float(row["stoch_k"]) if row.get("stoch_k") is not None else None,
+            "adx_14":         float(row["adx_14"]) if row.get("adx_14") is not None else None,
+            "delivery_pct":   float(row["delivery_pct"]) if row.get("delivery_pct") is not None else None,
+            "is_new_52w_high": bool(row.get("is_new_52w_high")),
+            "is_inside_bar":   bool(row.get("is_inside_bar")),
         })
 
     return results
@@ -319,11 +517,13 @@ async def run_scanner(
         .select(
             "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
             "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
+            "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
+            "bb_upper,bb_middle,bb_lower,bb_width,"
+            "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
+            "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
             "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
         )
         .eq("trade_date", latest_date)
-        # series + is_active filtering done Python-side in _apply_filters
-        # to avoid PostgREST embedded-filter compatibility issues
     )
 
     # Push simple DB-side filters to reduce rows before Python processing
@@ -390,3 +590,9 @@ async def delete_screen(screen_id: UUID, user_id: str = Depends(get_current_user
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Screen not found")
     client.table("saved_screens").delete().eq("id", str(screen_id)).execute()
     return {"message": "Deleted"}
+
+
+@router.get("/presets")
+async def get_presets():
+    """Return all built-in scan presets — public, no auth needed."""
+    return PRESETS

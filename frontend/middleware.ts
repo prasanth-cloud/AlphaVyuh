@@ -30,6 +30,13 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
+  // Redirect /charts/* to /watchlist
+  if (pathname.startsWith("/charts")) {
+    const symbol = pathname.split("/")[2];
+    const dest = symbol ? `/watchlist?symbol=${symbol}` : "/watchlist";
+    return NextResponse.redirect(new URL(dest, request.url));
+  }
+
   // Supabase magic links redirect to the Site URL (root) with ?code=...
   // Forward to the auth callback route so we can exchange the code for a session.
   const code = request.nextUrl.searchParams.get("code");
