@@ -3,22 +3,29 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Step = "email" | "otp";
+
+const OTP_LEN = 6;
 
 export default function LoginForm() {
   const [step, setStep]       = useState<Step>("email");
   const [email, setEmail]     = useState("");
-  const [otp, setOtp]         = useState(["", "", "", "", "", "", "", ""]);
+  const [otp, setOtp]         = useState<string[]>(Array(OTP_LEN).fill(""));
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [resendTimer, setResendTimer] = useState(0);
+  const [sent, setSent]       = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // URL-based error (e.g. auth callback failed)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "auth_callback_failed") {
+      setError("Login link expired or invalid. Please request a new one.");
+    }
+  }, []);
 
   // Countdown timer for resend
   useEffect(() => {
@@ -27,6 +34,10 @@ export default function LoginForm() {
     return () => clearTimeout(t);
   }, [resendTimer]);
 
+  function getCallbackUrl() {
+    return `${window.location.origin}/auth/callback`;
+  }
+
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -34,16 +45,22 @@ export default function LoginForm() {
     const supabase = createClient();
     const { error: err } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false },
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: getCallbackUrl(),
+      },
     });
     setLoading(false);
     if (err) {
-      setError(err.message.includes("not found") || err.message.includes("not registered")
-        ? "No account found with this email. Please sign up first."
-        : err.message);
+      setError(
+        err.message.includes("not found") || err.message.includes("not registered")
+          ? "No account found with this email. Please sign up first."
+          : err.message
+      );
       return;
     }
     setStep("otp");
+    setSent(true);
     setResendTimer(30);
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
   }
@@ -51,7 +68,10 @@ export default function LoginForm() {
   async function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
     const token = otp.join("");
-    if (token.length < 8) { setError("Please enter the 8-digit code."); return; }
+    if (token.length < OTP_LEN) {
+      setError(`Please enter the ${OTP_LEN}-digit code.`);
+      return;
+    }
     setError("");
     setLoading(true);
     const supabase = createClient();
@@ -62,8 +82,8 @@ export default function LoginForm() {
     });
     setLoading(false);
     if (err) {
-      setError("Invalid or expired code. Please try again.");
-      setOtp(["", "", "", "", "", "", "", ""]);
+      setError("Invalid or expired code. Check your email for the link or try a new code.");
+      setOtp(Array(OTP_LEN).fill(""));
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
       return;
     }
@@ -75,21 +95,23 @@ export default function LoginForm() {
     setError("");
     setLoading(true);
     const supabase = createClient();
-    await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, emailRedirectTo: getCallbackUrl() },
+    });
     setLoading(false);
-    setOtp(["", "", "", "", "", "", "", ""]);
+    setOtp(Array(OTP_LEN).fill(""));
     setResendTimer(30);
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
   }
 
   function handleOtpChange(index: number, value: string) {
-    // Allow paste of full 6-digit code
     if (value.length > 1) {
-      const digits = value.replace(/\D/g, "").slice(0, 8).split("");
+      const digits = value.replace(/\D/g, "").slice(0, OTP_LEN).split("");
       const next = [...otp];
-      digits.forEach((d, i) => { if (index + i < 6) next[index + i] = d; });
+      digits.forEach((d, i) => { if (index + i < OTP_LEN) next[index + i] = d; });
       setOtp(next);
-      const focusIdx = Math.min(index + digits.length, 7);
+      const focusIdx = Math.min(index + digits.length, OTP_LEN - 1);
       inputRefs.current[focusIdx]?.focus();
       return;
     }
@@ -97,7 +119,7 @@ export default function LoginForm() {
     const next = [...otp];
     next[index] = value;
     setOtp(next);
-    if (value && index < 7) inputRefs.current[index + 1]?.focus();
+    if (value && index < OTP_LEN - 1) inputRefs.current[index + 1]?.focus();
   }
 
   function handleOtpKeyDown(index: number, e: React.KeyboardEvent) {
@@ -107,88 +129,96 @@ export default function LoginForm() {
   }
 
   return (
-    <Card className="bg-gray-900 border-gray-800">
-      <CardHeader>
-        <div className="mb-2 text-2xl font-bold text-white tracking-tight">AlphaVyuh</div>
-        <CardTitle className="text-white">
-          {step === "email" ? "Welcome back" : "Check your email"}
-        </CardTitle>
-        <CardDescription className="text-gray-400">
-          {step === "email"
-            ? "Enter your email to receive a one-time login code"
-            : `We sent an 8-digit code to ${email}`}
-        </CardDescription>
-      </CardHeader>
+    <div className="bg-white rounded-[14px] shadow-sm border border-[#e2e2df] p-8 w-full">
+      {/* Logo / Brand */}
+      <div className="mb-6">
+        <div className="text-[22px] font-bold text-[#1c1c1a] tracking-tight">AlphaVyuh</div>
+        <div className="text-[13px] text-[#888] mt-0.5">
+          {step === "email" ? "Sign in to your account" : `Check your email — ${email}`}
+        </div>
+      </div>
 
-      <CardContent>
-        {step === "email" ? (
-          <form onSubmit={sendOtp} className="space-y-4">
-            <div className="space-y-1">
-              <Label htmlFor="email" className="text-gray-300">Email</Label>
-              <Input
-                id="email" type="email" value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="arjun@example.com" required autoFocus
-                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500"
+      {step === "email" ? (
+        <form onSubmit={sendOtp} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="email" className="text-[12px] font-semibold text-[#555] uppercase tracking-wide">
+              Email address
+            </label>
+            <input
+              id="email" type="email" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com" required autoFocus
+              className="w-full text-[14px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#5b63f5] focus:ring-1 focus:ring-[#5b63f5]/30 transition-colors"
+            />
+          </div>
+
+          {error && <p className="text-[13px] text-[#e5383b]">{error}</p>}
+
+          <button
+            type="submit" disabled={loading}
+            className="w-full py-2.5 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
+            style={{ background: "#5b63f5" }}
+          >
+            {loading ? "Sending…" : "Send login code →"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={verifyOtp} className="space-y-5">
+          <p className="text-[13px] text-[#555]">
+            We sent a {OTP_LEN}-digit code to <strong>{email}</strong>.
+            You can also click the link in the email to log in instantly.
+          </p>
+
+          {/* OTP boxes */}
+          <div className="flex justify-center gap-2">
+            {otp.map((digit, i) => (
+              <input
+                key={i}
+                ref={(el) => { inputRefs.current[i] = el; }}
+                type="text" inputMode="numeric" maxLength={OTP_LEN}
+                value={digit}
+                onChange={(e) => handleOtpChange(i, e.target.value)}
+                onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                className="w-12 h-13 text-center text-xl font-bold rounded-[8px] border border-[#e2e2df] bg-white text-[#1c1c1a] focus:border-[#5b63f5] focus:outline-none focus:ring-1 focus:ring-[#5b63f5]/30 transition-colors"
+                style={{ height: "52px" }}
               />
-            </div>
+            ))}
+          </div>
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-[13px] text-[#e5383b] text-center">{error}</p>}
 
-            <Button type="submit" disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white">
-              {loading ? "Sending…" : "Send OTP →"}
-            </Button>
-          </form>
-        ) : (
-          <form onSubmit={verifyOtp} className="space-y-5">
-            {/* 6-digit OTP boxes */}
-            <div className="flex justify-center gap-2">
-              {otp.map((digit, i) => (
-                <input
-                  key={i}
-                  ref={(el) => { inputRefs.current[i] = el; }}
-                  type="text" inputMode="numeric" maxLength={6}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(i, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                  className="w-11 h-12 text-center text-xl font-bold rounded-lg border bg-gray-800 border-gray-600 text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
-                />
-              ))}
-            </div>
+          <button
+            type="submit"
+            disabled={loading || otp.join("").length < OTP_LEN}
+            className="w-full py-2.5 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
+            style={{ background: "#5b63f5" }}
+          >
+            {loading ? "Verifying…" : "Verify & sign in →"}
+          </button>
 
-            {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+          <div className="flex items-center justify-between text-[13px]">
+            <button
+              type="button"
+              onClick={() => { setStep("email"); setError(""); setOtp(Array(OTP_LEN).fill("")); }}
+              className="text-[#888] hover:text-[#1c1c1a] transition-colors"
+            >
+              ← Change email
+            </button>
+            <button
+              type="button" onClick={resendOtp}
+              disabled={resendTimer > 0 || loading}
+              className="text-[#5b63f5] hover:text-[#4550d4] disabled:text-[#bbb] disabled:cursor-not-allowed transition-colors"
+            >
+              {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
+            </button>
+          </div>
+        </form>
+      )}
 
-            <Button type="submit" disabled={loading || otp.join("").length < 8}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white">
-              {loading ? "Verifying…" : "Verify & Log in"}
-            </Button>
-
-            <div className="flex items-center justify-between text-sm">
-              <button
-                type="button"
-                onClick={() => { setStep("email"); setError(""); setOtp(["", "", "", "", "", ""]); }}
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                ← Change email
-              </button>
-              <button
-                type="button"
-                onClick={resendOtp}
-                disabled={resendTimer > 0 || loading}
-                className="text-indigo-400 hover:text-indigo-300 disabled:text-gray-600 disabled:cursor-not-allowed transition-colors"
-              >
-                {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend code"}
-              </button>
-            </div>
-          </form>
-        )}
-
-        <p className="mt-4 text-center text-sm text-gray-400">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-indigo-400 hover:text-indigo-300">Sign up</Link>
-        </p>
-      </CardContent>
-    </Card>
+      <p className="mt-5 text-center text-[13px] text-[#888]">
+        Don&apos;t have an account?{" "}
+        <Link href="/signup" className="text-[#5b63f5] hover:underline">Sign up</Link>
+      </p>
+    </div>
   );
 }

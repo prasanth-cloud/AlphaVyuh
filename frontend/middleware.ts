@@ -28,10 +28,20 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  const pathname = request.nextUrl.pathname;
+
+  // Supabase magic links redirect to the Site URL (root) with ?code=...
+  // Forward to the auth callback route so we can exchange the code for a session.
+  const code = request.nextUrl.searchParams.get("code");
+  if (code && pathname === "/") {
+    const callbackUrl = new URL("/auth/callback", request.url);
+    callbackUrl.searchParams.set("code", code);
+    return NextResponse.redirect(callbackUrl);
+  }
+
   // getUser() validates the JWT server-side and refreshes the session if needed.
   // This is safer than getSession() which only reads the cookie without validation.
   const { data: { user } } = await supabase.auth.getUser();
-  const pathname = request.nextUrl.pathname;
 
   // No session + protected route → login
   if (!user && PROTECTED.test(pathname)) {
