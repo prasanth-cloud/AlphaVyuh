@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   DndContext,
   closestCenter,
@@ -17,8 +17,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus, Trash2, GripVertical, X, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
-import type { Watchlist, WatchlistItem } from "@/lib/api";
+import dynamic from "next/dynamic";
+import type { Watchlist, WatchlistItem, CandleBar } from "@/lib/api";
 import {
   getWatchlists,
   createWatchlist,
@@ -27,21 +27,27 @@ import {
   reorderWatchlist,
   getQuote,
   searchSymbols,
+  getCandles,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
 import RsiBadge from "@/components/scanner/RsiBadge";
 import PctChange from "@/components/scanner/PctChange";
 
+const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
+
 // ─── Sortable row ─────────────────────────────────────────────────────────────
 
 function SortableRow({
   item,
+  isHovered,
   onRemove,
+  onHover,
 }: {
   item: WatchlistItem;
+  isHovered: boolean;
   onRemove: (symbol: string) => void;
+  onHover: (symbol: string | null) => void;
 }) {
-  const router = useRouter();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.symbol });
 
@@ -55,8 +61,11 @@ function SortableRow({
     <tr
       ref={setNodeRef}
       style={style}
-      onClick={() => router.push(`/charts/${item.symbol}`)}
-      className="border-b border-[#f7f7f5] group bg-white hover:bg-[#fafaf9] transition-colors cursor-pointer"
+      onMouseEnter={() => onHover(item.symbol)}
+      onMouseLeave={() => onHover(null)}
+      className={`border-b border-[#f7f7f5] group transition-colors cursor-default ${
+        isHovered ? "bg-[#eeeffe]" : "bg-white hover:bg-[#fafaf9]"
+      }`}
     >
       <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
         <button
@@ -88,19 +97,50 @@ function SortableRow({
         <RsiBadge rsi={item.rsi_14 ?? null} />
       </td>
       <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-end gap-2">
-          <span className="opacity-0 group-hover:opacity-100 text-[11px] text-[#5b63f5] font-medium transition-opacity whitespace-nowrap">
-            View chart →
-          </span>
-          <button
-            onClick={() => onRemove(item.symbol)}
-            className="opacity-0 group-hover:opacity-100 text-[#ccc] hover:text-[#e5383b] transition-opacity"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
+        <button
+          onClick={() => onRemove(item.symbol)}
+          className="opacity-0 group-hover:opacity-100 text-[#ccc] hover:text-[#e5383b] transition-opacity"
+        >
+          <Trash2 size={13} />
+        </button>
       </td>
     </tr>
+  );
+}
+
+// ─── Chart panel ──────────────────────────────────────────────────────────────
+
+function ChartPanel({ symbol }: { symbol: string }) {
+  const [candles, setCandles] = useState<CandleBar[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(false);
+    setCandles([]);
+    getCandles(symbol, { limit: 120 })
+      .then(d => setCandles(d.candles))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [symbol]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-2.5 border-b border-[#f0f0ee] flex-shrink-0">
+        <div className="text-[13px] font-bold text-[#0f0f0e]">{symbol}</div>
+        <div className="text-[10px] text-[#aaa]">Daily · 120 bars</div>
+      </div>
+      <div className="flex-1 min-h-0 flex items-center justify-center">
+        {loading ? (
+          <div className="w-5 h-5 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
+        ) : error ? (
+          <div className="text-[12px] text-[#aaa]">No chart data</div>
+        ) : (
+          <MiniChart candles={candles} height={240} />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -113,6 +153,11 @@ export default function WatchlistPage() {
   const [newWlName, setNewWlName] = useState("");
   const [showNewWl, setShowNewWl] = useState(false);
   const [toast, setToast] = useState("");
+
+  // Hover-to-chart
+  const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Symbol search + autocomplete
   const [symbolInput, setSymbolInput] = useState("");
@@ -136,6 +181,15 @@ export default function WatchlistPage() {
   }
 
   useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced hover handler (80ms)
+  const handleRowHover = useCallback((symbol: string | null) => {
+    setHoveredSymbol(symbol);
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    if (symbol) {
+      hoverTimerRef.current = setTimeout(() => setChartSymbol(symbol), 80);
+    }
+  }, []);
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
 
@@ -195,7 +249,6 @@ export default function WatchlistPage() {
     setAddMsg("");
     try {
       await addToWatchlist(activeId, sym);
-      // Fetch only this stock's quote and append optimistically
       const quote = await getQuote(sym);
       const newItem: WatchlistItem = quote
         ? {
@@ -233,6 +286,7 @@ export default function WatchlistPage() {
         w.id === activeId ? { ...w, items: w.items.filter(i => i.symbol !== symbol) } : w
       )
     );
+    if (chartSymbol === symbol) setChartSymbol(null);
   }
 
   const handleDragEnd = useCallback(
@@ -249,7 +303,6 @@ export default function WatchlistPage() {
             ...item,
             sort_order: idx,
           }));
-          // Persist asynchronously
           reorderWatchlist(
             activeId,
             reordered.map(i => ({ symbol: i.symbol, sort_order: i.sort_order }))
@@ -268,14 +321,12 @@ export default function WatchlistPage() {
           {toast}
         </div>
       )}
-      {/* ── Left sidebar: watchlist list ─────────────────────────────── */}
-      <aside className="w-[220px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col h-full">
+
+      {/* ── Left sidebar: watchlist list ──────────────────────────────── */}
+      <aside className="w-[200px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col h-full">
         <div className="px-4 py-3.5 border-b border-[#f2f2f0] flex items-center justify-between">
           <span className="text-[13px] font-bold text-[#0f0f0e]">Watchlists</span>
-          <button
-            onClick={() => setShowNewWl(o => !o)}
-            className="text-[#5b63f5] hover:opacity-70"
-          >
+          <button onClick={() => setShowNewWl(o => !o)} className="text-[#5b63f5] hover:opacity-70">
             <Plus size={15} />
           </button>
         </div>
@@ -290,26 +341,18 @@ export default function WatchlistPage() {
               placeholder="List name…"
               className="flex-1 text-[11px] border border-[#e8e8e6] rounded-[4px] px-2 py-1 outline-none focus:border-[#5b63f5]"
             />
-            <button onClick={handleCreateWatchlist} className="text-[11px] text-[#5b63f5] font-medium">
-              Add
-            </button>
-            <button onClick={() => setShowNewWl(false)} className="text-[#aaa]">
-              <X size={12} />
-            </button>
+            <button onClick={handleCreateWatchlist} className="text-[11px] text-[#5b63f5] font-medium">Add</button>
+            <button onClick={() => setShowNewWl(false)} className="text-[#aaa]"><X size={12} /></button>
           </div>
         )}
 
         <div className="flex-1 overflow-y-auto py-1">
           {loading ? (
             <div className="space-y-1 px-3 py-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="h-8 rounded bg-[#f0f0ee] animate-pulse" />
-              ))}
+              {[1, 2, 3].map(i => <div key={i} className="h-8 rounded bg-[#f0f0ee] animate-pulse" />)}
             </div>
           ) : watchlists.length === 0 ? (
-            <div className="px-4 py-8 text-center text-[12px] text-[#aaa]">
-              No watchlists yet
-            </div>
+            <div className="px-4 py-8 text-center text-[12px] text-[#aaa]">No watchlists yet</div>
           ) : (
             watchlists.map(wl => (
               <button
@@ -329,12 +372,12 @@ export default function WatchlistPage() {
         </div>
       </aside>
 
-      {/* ── Right panel: items table ─────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      {/* ── Middle: items table ──────────────────────────────────────── */}
+      <div className="w-[380px] flex-shrink-0 flex flex-col overflow-hidden border-r border-[#e8e8e6]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#e8e8e6] bg-white flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#e8e8e6] bg-white flex-shrink-0">
           <div>
-            <h1 className="text-[16px] font-bold text-[#0f0f0e]">
+            <h1 className="text-[15px] font-bold text-[#0f0f0e]">
               {activeWl ? activeWl.name : "Watchlist"}
             </h1>
             {activeWl && (
@@ -344,15 +387,10 @@ export default function WatchlistPage() {
             )}
           </div>
 
-          {/* Add symbol input */}
           {activeWl && (
             <div className="flex items-center gap-2">
               {addMsg && (
-                <span
-                  className={`text-[11px] font-medium ${
-                    addMsg === "Added!" ? "text-[#26a65b]" : "text-[#e5383b]"
-                  }`}
-                >
+                <span className={`text-[11px] font-medium ${addMsg === "Added!" ? "text-[#26a65b]" : "text-[#e5383b]"}`}>
                   {addMsg}
                 </span>
               )}
@@ -370,7 +408,7 @@ export default function WatchlistPage() {
                   }}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
                   placeholder="Add symbol…"
-                  className="text-[12px] border border-[#e8e8e6] rounded-[6px] pl-7 pr-3 py-1.5 outline-none focus:border-[#5b63f5] w-[180px]"
+                  className="text-[12px] border border-[#e8e8e6] rounded-[6px] pl-7 pr-3 py-1.5 outline-none focus:border-[#5b63f5] w-[150px]"
                 />
                 {showDropdown && searchResults.length > 0 && (
                   <div className="absolute top-full left-0 right-0 bg-white border border-[#e8e8e6] rounded-[8px] shadow-md z-20 mt-0.5 max-h-48 overflow-y-auto">
@@ -390,9 +428,9 @@ export default function WatchlistPage() {
               <button
                 onClick={handleAddSymbol}
                 disabled={adding || !symbolInput.trim()}
-                className="px-3 py-1.5 rounded-[6px] bg-[#0f0f0e] text-white text-[12px] font-medium hover:opacity-85 disabled:opacity-50 transition-opacity"
+                className="px-2.5 py-1.5 rounded-[6px] bg-[#0f0f0e] text-white text-[12px] font-medium hover:opacity-85 disabled:opacity-50 transition-opacity"
               >
-                {adding ? "Adding…" : "Add"}
+                {adding ? "…" : "Add"}
               </button>
             </div>
           )}
@@ -408,45 +446,32 @@ export default function WatchlistPage() {
           ) : activeWl.items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
               <div className="text-[14px] font-medium text-[#0f0f0e] mb-1">This watchlist is empty</div>
-              <div className="text-[12px] text-[#aaa]">
-                Type a symbol above and press Enter to add your first stock.
-              </div>
+              <div className="text-[12px] text-[#aaa]">Type a symbol above and press Enter to add stocks.</div>
             </div>
           ) : (
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={activeWl.items.map(i => i.symbol)}
-                strategy={verticalListSortingStrategy}
-              >
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={activeWl.items.map(i => i.symbol)} strategy={verticalListSortingStrategy}>
                 <table className="w-full border-collapse text-[12px]">
                   <thead className="sticky top-0 bg-white border-b border-[#e8e8e6] z-10">
                     <tr>
                       <th className="px-3 py-2.5 w-8" />
-                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">
-                        Symbol
-                      </th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">
-                        Close
-                      </th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">
-                        Change
-                      </th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">
-                        Vol Ratio
-                      </th>
-                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">
-                        RSI
-                      </th>
-                      <th className="px-3 py-2.5 w-10" />
+                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">Symbol</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">Close</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">Chg%</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">Vol×</th>
+                      <th className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.4px] text-[#888]">RSI</th>
+                      <th className="px-3 py-2.5 w-8" />
                     </tr>
                   </thead>
                   <tbody>
                     {activeWl.items.map(item => (
-                      <SortableRow key={item.symbol} item={item} onRemove={handleRemove} />
+                      <SortableRow
+                        key={item.symbol}
+                        item={item}
+                        isHovered={hoveredSymbol === item.symbol}
+                        onRemove={handleRemove}
+                        onHover={handleRowHover}
+                      />
                     ))}
                   </tbody>
                 </table>
@@ -454,6 +479,22 @@ export default function WatchlistPage() {
             </DndContext>
           )}
         </div>
+      </div>
+
+      {/* ── Right: chart panel ───────────────────────────────────────── */}
+      <div className="flex-1 min-w-0 bg-white overflow-hidden">
+        {chartSymbol ? (
+          <ChartPanel key={chartSymbol} symbol={chartSymbol} />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-center px-8">
+            <div className="w-12 h-12 rounded-full bg-[#f2f2f0] flex items-center justify-center mb-3">
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                <polyline points="3,17 9,11 13,15 21,7" stroke="#ccc" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="text-[13px] font-medium text-[#aaa]">Hover over a stock to see its chart</p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -113,8 +113,10 @@ export default function ScannerPage() {
   }, []);
 
   function applyPreset(p: ScanPreset) {
-    setFilters(p.filters as Filters);
+    const f = p.filters as Filters;
+    setFilters(f);
     setActivePreset(p.id);
+    scan(f);
   }
 
   function resetFilters() {
@@ -122,12 +124,13 @@ export default function ScannerPage() {
     setActivePreset(null);
   }
 
-  async function scan() {
+  async function scan(overrideFilters?: Filters) {
     setLoading(true);
     setSelected(null);
     try {
+      const active = overrideFilters ?? filters;
       const clean: Filters = {};
-      for (const [k, v] of Object.entries(filters)) {
+      for (const [k, v] of Object.entries(active)) {
         if (v !== null && v !== undefined && v !== "") clean[k] = v;
       }
       const data = await runScanner(clean, sortBy, sortOrder);
@@ -223,7 +226,7 @@ export default function ScannerPage() {
         </div>
 
         <div className="p-3 border-t border-[#e8e8e6] flex flex-col gap-2">
-          <button onClick={scan} disabled={loading}
+          <button onClick={() => scan()} disabled={loading}
             className="w-full py-2 rounded-[8px] text-[13px] font-bold text-white transition-opacity disabled:opacity-60"
             style={{ background: "#0f0f0e" }}>
             {loading ? "Scanning…" : "Run Scan"}

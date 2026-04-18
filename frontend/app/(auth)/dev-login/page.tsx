@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
-export default function DevLoginPage() {
+function DevLoginInner() {
   const params = useSearchParams();
   const [status, setStatus] = useState("Signing you in…");
 
@@ -34,5 +34,17 @@ export default function DevLoginPage() {
         <p className="text-[14px] text-[#555]">{status}</p>
       </div>
     </div>
+  );
+}
+
+export default function DevLoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#f2f2f0] flex items-center justify-center">
+        <div className="w-6 h-6 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
+      </div>
+    }>
+      <DevLoginInner />
+    </Suspense>
   );
 }
