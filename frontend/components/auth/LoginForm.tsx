@@ -15,7 +15,6 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [resendTimer, setResendTimer] = useState(0);
-  const [sent, setSent]       = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -52,15 +51,17 @@ export default function LoginForm() {
     });
     setLoading(false);
     if (err) {
-      setError(
-        err.message.includes("not found") || err.message.includes("not registered")
-          ? "No account found with this email. Please sign up first."
-          : err.message
-      );
+      const msg = err.message.toLowerCase();
+      if (msg.includes("rate limit") || msg.includes("too many")) {
+        setError("Too many login attempts. Please wait a few minutes before trying again.");
+      } else if (msg.includes("not found") || msg.includes("not registered") || msg.includes("invalid login")) {
+        setError("No account found for this email. Please sign up first.");
+      } else {
+        setError(err.message);
+      }
       return;
     }
     setStep("otp");
-    setSent(true);
     setResendTimer(30);
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
   }

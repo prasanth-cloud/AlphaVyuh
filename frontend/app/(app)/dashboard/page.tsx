@@ -56,13 +56,6 @@ export default function DashboardPage() {
     return "Good evening";
   };
 
-  const sentiment = () => {
-    if (!market?.advance_decline_ratio) return "";
-    if (market.advance_decline_ratio > 1.3) return "Bullish";
-    if (market.advance_decline_ratio < 0.7) return "Bearish";
-    return "Neutral";
-  };
-
   const firstName = userName.split(" ")[0];
 
   const cards = [
