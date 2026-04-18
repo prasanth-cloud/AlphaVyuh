@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase";
 
 type Step = "email" | "otp";
 
-const OTP_LEN = 6;
+const OTP_LEN = 8;
 
 export default function LoginForm() {
   const [step, setStep]       = useState<Step>("email");
