@@ -104,6 +104,7 @@ export default function ScannerPage() {
   const [sortOrder, setSortOrder]       = useState("desc");
   const [selected, setSelected]         = useState<ScanResult | null>(null);
   const [hasRun, setHasRun]             = useState(false);
+  const [scanError, setScanError]       = useState("");
 
   useEffect(() => { getScannerPresets().then(setPresets); }, []);
 
@@ -127,6 +128,7 @@ export default function ScannerPage() {
   async function scan(overrideFilters?: Filters) {
     setLoading(true);
     setSelected(null);
+    setScanError("");
     try {
       const active = overrideFilters ?? filters;
       const clean: Filters = {};
@@ -139,7 +141,10 @@ export default function ScannerPage() {
       setTradeDate(data.trade_date);
       setHasRun(true);
     } catch (e) {
-      console.error(e);
+      const msg = e instanceof Error ? e.message : "Scan failed";
+      setScanError(msg);
+      setHasRun(true);
+      setResults([]);
     } finally {
       setLoading(false);
     }
@@ -240,7 +245,9 @@ export default function ScannerPage() {
       {/* RIGHT RESULTS */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="bg-white border-b border-[#e8e8e6] px-4 py-2 flex items-center gap-3 flex-shrink-0">
-          {hasRun ? (
+          {scanError ? (
+            <span className="text-[13px] text-[#e5383b]">{scanError}</span>
+          ) : hasRun ? (
             <span className="text-[13px] text-[#555]">
               <span className="font-semibold text-[#1c1c1a]">{totalMatches}</span> stocks matched
               {tradeDate && <span className="text-[#aaa] ml-2">· EOD {tradeDate}</span>}

@@ -153,6 +153,7 @@ export default function WatchlistPage() {
   const [newWlName, setNewWlName] = useState("");
   const [showNewWl, setShowNewWl] = useState(false);
   const [toast, setToast] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Hover-to-chart
   const [hoveredSymbol, setHoveredSymbol] = useState<string | null>(null);
@@ -323,54 +324,80 @@ export default function WatchlistPage() {
       )}
 
       {/* ── Left sidebar: watchlist list ──────────────────────────────── */}
-      <aside className="w-[200px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col h-full">
-        <div className="px-4 py-3.5 border-b border-[#f2f2f0] flex items-center justify-between">
-          <span className="text-[13px] font-bold text-[#0f0f0e]">Watchlists</span>
-          <button onClick={() => setShowNewWl(o => !o)} className="text-[#5b63f5] hover:opacity-70">
-            <Plus size={15} />
+      {sidebarCollapsed ? (
+        /* Collapsed: just a narrow strip with expand button */
+        <div className="w-[36px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col items-center pt-3 gap-3">
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            title="Show watchlists"
+            className="text-[#aaa] hover:text-[#5b63f5] transition-colors"
+          >
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
         </div>
-
-        {showNewWl && (
-          <div className="px-4 py-2.5 border-b border-[#f2f2f0] flex gap-1.5">
-            <input
-              autoFocus
-              value={newWlName}
-              onChange={e => setNewWlName(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleCreateWatchlist()}
-              placeholder="List name…"
-              className="flex-1 text-[11px] border border-[#e8e8e6] rounded-[4px] px-2 py-1 outline-none focus:border-[#5b63f5]"
-            />
-            <button onClick={handleCreateWatchlist} className="text-[11px] text-[#5b63f5] font-medium">Add</button>
-            <button onClick={() => setShowNewWl(false)} className="text-[#aaa]"><X size={12} /></button>
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto py-1">
-          {loading ? (
-            <div className="space-y-1 px-3 py-2">
-              {[1, 2, 3].map(i => <div key={i} className="h-8 rounded bg-[#f0f0ee] animate-pulse" />)}
-            </div>
-          ) : watchlists.length === 0 ? (
-            <div className="px-4 py-8 text-center text-[12px] text-[#aaa]">No watchlists yet</div>
-          ) : (
-            watchlists.map(wl => (
-              <button
-                key={wl.id}
-                onClick={() => setActiveId(wl.id)}
-                className={`w-full text-left px-4 py-2.5 text-[13px] transition-colors ${
-                  activeId === wl.id
-                    ? "bg-[#eeeffe] text-[#5b63f5] font-medium"
-                    : "text-[#444] hover:bg-[#fafaf9]"
-                }`}
-              >
-                <div className="truncate">{wl.name}</div>
-                <div className="text-[10px] mt-0.5 opacity-60">{wl.items.length} stocks</div>
+      ) : (
+        <aside className="w-[200px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col h-full">
+          <div className="px-3 py-3 border-b border-[#f2f2f0] flex items-center justify-between">
+            <span className="text-[13px] font-bold text-[#0f0f0e]">Watchlists</span>
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => setShowNewWl(o => !o)} className="text-[#5b63f5] hover:opacity-70">
+                <Plus size={15} />
               </button>
-            ))
+              <button
+                onClick={() => setSidebarCollapsed(true)}
+                title="Hide sidebar"
+                className="text-[#ccc] hover:text-[#888] transition-colors"
+              >
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {showNewWl && (
+            <div className="px-4 py-2.5 border-b border-[#f2f2f0] flex gap-1.5">
+              <input
+                autoFocus
+                value={newWlName}
+                onChange={e => setNewWlName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleCreateWatchlist()}
+                placeholder="List name…"
+                className="flex-1 text-[11px] border border-[#e8e8e6] rounded-[4px] px-2 py-1 outline-none focus:border-[#5b63f5]"
+              />
+              <button onClick={handleCreateWatchlist} className="text-[11px] text-[#5b63f5] font-medium">Add</button>
+              <button onClick={() => setShowNewWl(false)} className="text-[#aaa]"><X size={12} /></button>
+            </div>
           )}
-        </div>
-      </aside>
+
+          <div className="flex-1 overflow-y-auto py-1">
+            {loading ? (
+              <div className="space-y-1 px-3 py-2">
+                {[1, 2, 3].map(i => <div key={i} className="h-8 rounded bg-[#f0f0ee] animate-pulse" />)}
+              </div>
+            ) : watchlists.length === 0 ? (
+              <div className="px-4 py-8 text-center text-[12px] text-[#aaa]">No watchlists yet</div>
+            ) : (
+              watchlists.map(wl => (
+                <button
+                  key={wl.id}
+                  onClick={() => setActiveId(wl.id)}
+                  className={`w-full text-left px-4 py-2.5 text-[13px] transition-colors ${
+                    activeId === wl.id
+                      ? "bg-[#eeeffe] text-[#5b63f5] font-medium"
+                      : "text-[#444] hover:bg-[#fafaf9]"
+                  }`}
+                >
+                  <div className="truncate">{wl.name}</div>
+                  <div className="text-[10px] mt-0.5 opacity-60">{wl.items.length} stocks</div>
+                </button>
+              ))
+            )}
+          </div>
+        </aside>
+      )}
 
       {/* ── Middle: items table ──────────────────────────────────────── */}
       <div className="w-[380px] flex-shrink-0 flex flex-col overflow-hidden border-r border-[#e8e8e6]">
