@@ -83,14 +83,16 @@ function MatchDrawer({ alert, onClose }: { alert: ScanAlert; onClose: () => void
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/30" onClick={onClose} />
-      <div className="w-[420px] bg-white h-full shadow-xl flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f0f0ee]">
+      <div className="flex-1 bg-black/50" onClick={onClose} />
+      <div className="w-[420px] h-full shadow-2xl flex flex-col overflow-hidden"
+        style={{ background: "var(--app-surface)", borderLeft: "1px solid var(--app-border)" }}>
+        <div className="flex items-center justify-between px-5 py-4"
+          style={{ borderBottom: "1px solid var(--app-border)" }}>
           <div>
-            <div className="text-[14px] font-bold text-[#1c1c1a]">{alert.name}</div>
-            <div className="text-[11px] text-[#aaa] mt-0.5">{filterSummary(alert.filters)}</div>
+            <div className="text-[14px] font-bold" style={{ color: "var(--app-text1)" }}>{alert.name}</div>
+            <div className="text-[11px] mt-0.5" style={{ color: "var(--app-text3)" }}>{filterSummary(alert.filters)}</div>
           </div>
-          <button onClick={onClose} className="text-[#aaa] hover:text-[#555] p-1">
+          <button onClick={onClose} className="p-1" style={{ color: "var(--app-text3)" }}>
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
               <path d="M4 4l10 10M14 4L4 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
@@ -105,7 +107,7 @@ function MatchDrawer({ alert, onClose }: { alert: ScanAlert; onClose: () => void
                 className="flex-shrink-0 text-[11px] font-medium px-3 py-1 rounded-full border transition-colors"
                 style={selected?.id === m.id
                   ? { background: "#5b63f5", color: "#fff", borderColor: "#5b63f5" }
-                  : { background: "transparent", color: "#888", borderColor: "#e2e2df" }}
+                  : { background: "transparent", color: "var(--app-text3)", borderColor: "var(--app-border)" }}
               >
                 {m.run_date} <span className="ml-1 opacity-70">({m.match_count})</span>
               </button>
@@ -114,36 +116,39 @@ function MatchDrawer({ alert, onClose }: { alert: ScanAlert; onClose: () => void
         )}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="flex items-center justify-center h-32 text-[13px] text-[#aaa]">Loading...</div>
+            <div className="flex items-center justify-center h-32 text-[13px]" style={{ color: "var(--app-text3)" }}>Loading...</div>
           ) : matches.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-2 px-6 text-center">
-              <div className="text-[14px] font-medium text-[#555]">No results yet</div>
-              <div className="text-[12px] text-[#aaa]">
+              <div className="text-[14px] font-medium" style={{ color: "var(--app-text2)" }}>No results yet</div>
+              <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>
                 This alert runs automatically after daily market data is ingested (around 4:30 PM IST).
               </div>
             </div>
           ) : selected ? (
-            <div className="divide-y divide-[#f7f7f5]">
+            <div style={{ borderTop: "1px solid var(--app-border2)" }}>
               {selected.symbols.length === 0 ? (
-                <div className="px-5 py-8 text-center text-[13px] text-[#aaa]">
+                <div className="px-5 py-8 text-center text-[13px]" style={{ color: "var(--app-text3)" }}>
                   No stocks matched on {selected.run_date}
                 </div>
               ) : selected.symbols.map(s => (
                 <Link
                   key={s.symbol}
                   href={`/charts/${s.symbol}`}
-                  className="flex items-center justify-between px-5 py-3 hover:bg-[#fafafa] transition-colors"
+                  className="flex items-center justify-between px-5 py-3 transition-colors"
+                  style={{ borderBottom: "1px solid var(--app-border2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                 >
-                  <div className="text-[13px] font-semibold text-[#1c1c1a]">{s.symbol}</div>
+                  <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>{s.symbol}</div>
                   <div className="flex items-center gap-3 text-right">
                     {s.volume_ratio != null && (
-                      <span className="text-[11px] text-[#5b63f5] font-medium">{s.volume_ratio}×</span>
+                      <span className="text-[11px] font-medium" style={{ color: "#5b63f5" }}>{s.volume_ratio}×</span>
                     )}
                     {s.rsi_14 != null && (
-                      <span className="text-[11px] text-[#888]">RSI {s.rsi_14.toFixed(0)}</span>
+                      <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>RSI {s.rsi_14.toFixed(0)}</span>
                     )}
                     <div>
-                      <div className="text-[13px] font-semibold text-[#1c1c1a]">
+                      <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>
                         ₹{s.close.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       {s.pct_change != null && (
@@ -167,7 +172,6 @@ function MatchDrawer({ alert, onClose }: { alert: ScanAlert; onClose: () => void
 
 type PlanId = "free" | "pro" | "elite";
 type Currency = "INR" | "USD";
-
 type BillingPeriod = "monthly" | "annual";
 
 const PLAN_PRICES: Record<Currency, Record<BillingPeriod, Record<PlanId, { price: string; period: string; savings?: string }>>> = {
@@ -197,12 +201,9 @@ const PLAN_PRICES: Record<Currency, Record<BillingPeriod, Record<PlanId, { price
   },
 };
 
-const PLAN_META: { id: PlanId; label: string; color: string; bg: string; features: string[] }[] = [
+const PLAN_META: { id: PlanId; label: string; color: string; accentBg: string; features: string[] }[] = [
   {
-    id: "free",
-    label: "Free",
-    color: "#888",
-    bg: "#f7f7f5",
+    id: "free", label: "Free", color: "var(--app-text3)", accentBg: "var(--app-surface3)",
     features: [
       "Scanner — up to 50 results",
       "5 saved screens",
@@ -212,10 +213,7 @@ const PLAN_META: { id: PlanId; label: string; color: string; bg: string; feature
     ],
   },
   {
-    id: "pro",
-    label: "Pro",
-    color: "#5b63f5",
-    bg: "#eeeffe",
+    id: "pro", label: "Pro", color: "#5b63f5", accentBg: "rgba(91,99,245,0.12)",
     features: [
       "Scanner — 500 results, unlimited",
       "Unlimited saved screens",
@@ -228,10 +226,7 @@ const PLAN_META: { id: PlanId; label: string; color: string; bg: string; feature
     ],
   },
   {
-    id: "elite",
-    label: "Elite",
-    color: "#d97706",
-    bg: "#fff8ec",
+    id: "elite", label: "Elite", color: "#d97706", accentBg: "rgba(217,119,6,0.12)",
     features: [
       "Everything in Pro",
       "5 seats (team accounts)",
@@ -243,6 +238,11 @@ const PLAN_META: { id: PlanId; label: string; color: string; bg: string; feature
     ],
   },
 ];
+
+// ── Input style helper ────────────────────────────────────────────────────────
+
+const inputCls = "w-full text-[13px] rounded-[8px] px-3 py-2.5 outline-none transition-colors";
+const inputStyle = { background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" };
 
 // ── Main settings page ────────────────────────────────────────────────────────
 
@@ -310,7 +310,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (profile) {
       setBrokerType(profile.broker_type ?? "");
-      setBrokerApiKey(""); // never pre-fill secret fields
+      setBrokerApiKey("");
       setBrokerApiSecret("");
     }
   }, [profile]);
@@ -401,13 +401,11 @@ export default function SettingsPage() {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const [referralCode, setReferralCode] = useState<string>("");
 
-  // Sync currency with user profile on initial load
   useEffect(() => {
     const c = profile?.billing_currency;
     if (c === "USD" || c === "INR") setBillingCurrency(c);
   }, [profile?.billing_currency]);
 
-  // Load referral code when billing tab opens
   useEffect(() => {
     if (tab !== "billing" || referralCode) return;
     getReferralCode().then(r => setReferralCode(r.referral_code)).catch(() => {});
@@ -417,7 +415,6 @@ export default function SettingsPage() {
     if (next === billingCurrency) return;
     setBillingCurrency(next);
     try {
-      // Persist preference; default region follows currency for new NRI users.
       const updates: Parameters<typeof updateMe>[0] = { billing_currency: next };
       if (next === "USD" && (!profile?.billing_region || profile.billing_region === "IN")) {
         updates.billing_region = "NRI";
@@ -427,9 +424,7 @@ export default function SettingsPage() {
       }
       const updated = await updateMe(updates);
       setProfile(updated);
-    } catch {
-      /* non-blocking */
-    }
+    } catch { /* non-blocking */ }
   }
 
   const loadBilling = useCallback(async () => {
@@ -506,34 +501,31 @@ export default function SettingsPage() {
     { id: "billing", label: "Billing" },
   ];
 
+  const cardStyle = { background: "var(--app-surface2)", border: "1px solid var(--app-border)", borderRadius: "10px" };
+
   return (
-    <div className="min-h-full bg-[#f2f2f0]">
-      {/* Match drawer */}
+    <div className="min-h-full" style={{ background: "var(--app-bg)" }}>
       {drawerAlert && <MatchDrawer alert={drawerAlert} onClose={() => setDrawerAlert(null)} />}
 
-      {/* Toast */}
       {toast && (
-        <div
-          className="fixed bottom-5 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white shadow-lg z-50 pointer-events-none"
-          style={{ background: toast.ok === false ? "#e5383b" : "#26a65b" }}
-        >
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white shadow-lg z-50 pointer-events-none"
+          style={{ background: toast.ok === false ? "#e5383b" : "#26a65b" }}>
           {toast.msg}
         </div>
       )}
 
       {/* Header */}
-      <div className="bg-white border-b border-[#e2e2df] px-5 pt-5 pb-0">
-        <div className="text-[20px] font-semibold text-[#1c1c1a] tracking-tight mb-3">Settings</div>
+      <div className="px-5 pt-5 pb-0" style={{ borderBottom: "1px solid var(--app-border)", background: "var(--app-surface)" }}>
+        <div className="text-[20px] font-semibold tracking-tight mb-3" style={{ color: "var(--app-text1)" }}>Settings</div>
         <div className="flex gap-0">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-4 py-2 text-[13px] font-medium border-b-2 transition-colors ${
-                tab === t.id
-                  ? "border-[#5b63f5] text-[#5b63f5]"
-                  : "border-transparent text-[#888] hover:text-[#1c1c1a]"
-              }`}
+              className="px-4 py-2 text-[13px] font-medium border-b-2 transition-colors"
+              style={tab === t.id
+                ? { borderColor: "#5b63f5", color: "#5b63f5" }
+                : { borderColor: "transparent", color: "var(--app-text3)" }}
             >
               {t.label}
             </button>
@@ -544,59 +536,65 @@ export default function SettingsPage() {
       {/* ── Profile tab ────────────────────────────────────────────────── */}
       {tab === "profile" && (
         <div className="max-w-2xl px-5 py-6">
-          <div className="text-[14px] font-semibold text-[#1c1c1a] mb-0.5">Profile &amp; Notifications</div>
-          <div className="text-[13px] text-[#888] mb-5">Update your display name and connect Telegram for scan alerts.</div>
+          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Profile &amp; Notifications</div>
+          <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Update your display name and connect Telegram for scan alerts.</div>
 
           {profileLoading ? (
             <div className="space-y-3">
-              {[1, 2].map(i => <div key={i} className="bg-white border border-[#e2e2df] rounded-[10px] p-5 animate-pulse h-20" />)}
+              {[1, 2].map(i => (
+                <div key={i} className="animate-pulse h-20 rounded-[10px]" style={cardStyle} />
+              ))}
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
-                <div className="text-[11px] text-[#aaa] uppercase tracking-wider mb-4">Account</div>
+              {/* Account card */}
+              <div className="p-5" style={cardStyle}>
+                <div className="text-[11px] uppercase tracking-wider mb-4" style={{ color: "var(--app-text3)" }}>Account</div>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[12px] font-medium text-[#555] block mb-1.5">Email</label>
-                    <div className="text-[13px] text-[#888] bg-[#f7f7f5] rounded-lg px-3 py-2.5">{profile?.email}</div>
+                    <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Email</label>
+                    <div className="text-[13px] rounded-[8px] px-3 py-2.5" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>{profile?.email}</div>
                   </div>
                   <div>
-                    <label className="text-[12px] font-medium text-[#555] block mb-1.5">Display name</label>
+                    <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Display name</label>
                     <input
                       type="text"
                       value={fullName}
                       onChange={e => setFullName(e.target.value)}
                       placeholder="Your name"
-                      className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] transition-colors"
+                      className={inputCls}
+                      style={inputStyle}
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5">
-                <div className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1">Telegram Alerts</div>
-                <div className="text-[12px] text-[#888] mb-4 leading-relaxed">
+              {/* Telegram card */}
+              <div className="p-5" style={cardStyle}>
+                <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Telegram Alerts</div>
+                <div className="text-[12px] mb-4 leading-relaxed" style={{ color: "var(--app-text3)" }}>
                   Get notified on Telegram when your saved scan alerts trigger after market close.
                 </div>
-                <ol className="text-[12px] text-[#666] space-y-2 mb-4 list-decimal list-inside leading-relaxed">
-                  <li>Open Telegram and search for <span className="font-mono bg-[#f0f0ee] px-1.5 py-0.5 rounded text-[11px]">@userinfobot</span></li>
-                  <li>Send it any message — it replies with your Chat ID (e.g. <span className="font-mono text-[11px]">123456789</span>)</li>
+                <ol className="text-[12px] space-y-2 mb-4 list-decimal list-inside leading-relaxed" style={{ color: "var(--app-text2)" }}>
+                  <li>Open Telegram and search for <code className="font-mono rounded px-1.5 py-0.5 text-[11px]" style={{ background: "var(--app-surface3)", color: "var(--app-text1)" }}>@userinfobot</code></li>
+                  <li>Send it any message — it replies with your Chat ID (e.g. <span className="font-mono text-[11px]" style={{ color: "var(--app-text1)" }}>123456789</span>)</li>
                   <li>Paste that number below and save</li>
                 </ol>
                 <div>
-                  <label className="text-[12px] font-medium text-[#555] block mb-1.5">Telegram Chat ID</label>
+                  <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Telegram Chat ID</label>
                   <input
                     type="text"
                     value={telegramChatId}
                     onChange={e => setTelegramChatId(e.target.value)}
                     placeholder="e.g. 123456789"
-                    className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] transition-colors font-mono"
+                    className={`${inputCls} font-mono`}
+                    style={inputStyle}
                   />
                 </div>
                 {profile?.telegram_chat_id && (
                   <div className="mt-2 flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-[#26a65b]" />
-                    <span className="text-[11px] text-[#26a65b] font-medium">Connected</span>
+                    <span className="text-[11px] font-medium" style={{ color: "#26a65b" }}>Connected</span>
                   </div>
                 )}
               </div>
@@ -605,25 +603,26 @@ export default function SettingsPage() {
                 <button
                   onClick={saveProfile}
                   disabled={saving}
-                  className="px-5 py-2.5 bg-[#1c1c1a] text-white text-[13px] font-medium rounded-lg hover:bg-[#333] transition-colors disabled:opacity-50"
+                  className="px-5 py-2.5 text-white text-[13px] font-medium rounded-[8px] transition-opacity disabled:opacity-50"
+                  style={{ background: "#5b63f5" }}
                 >
                   {saving ? "Saving..." : "Save changes"}
                 </button>
               </div>
 
-              {/* Broker connection */}
-              <div className="bg-white border border-[#e2e2df] rounded-[10px] p-5 mt-1">
-                <div className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1">Broker Connection</div>
-                <div className="text-[12px] text-[#888] mb-4 leading-relaxed">
+              {/* Broker card */}
+              <div className="p-5" style={cardStyle}>
+                <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Broker Connection</div>
+                <div className="text-[12px] mb-4 leading-relaxed" style={{ color: "var(--app-text3)" }}>
                   Connect your broker to route orders directly from charts. Orders placed on AlphaVyuh will execute via your broker account.
                 </div>
 
                 {profile?.broker_type && profile.broker_type !== "none" && (
                   <div className="flex items-center gap-2 mb-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#26a65b]" />
-                    <span className="text-[12px] text-[#26a65b] font-medium capitalize">{profile.broker_type} configured</span>
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#26a65b" }} />
+                    <span className="text-[12px] font-medium capitalize" style={{ color: "#26a65b" }}>{profile.broker_type} configured</span>
                     {profile.broker_connected_at && (
-                      <span className="text-[11px] text-[#aaa]">
+                      <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>
                         · since {new Date(profile.broker_connected_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                       </span>
                     )}
@@ -632,11 +631,12 @@ export default function SettingsPage() {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[12px] font-medium text-[#555] block mb-1.5">Broker</label>
+                    <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Broker</label>
                     <select
                       value={brokerType}
                       onChange={e => setBrokerType(e.target.value)}
-                      className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] transition-colors"
+                      className={inputCls}
+                      style={inputStyle}
                     >
                       <option value="">— Select broker —</option>
                       <option value="zerodha">Zerodha</option>
@@ -649,39 +649,42 @@ export default function SettingsPage() {
 
                   {brokerType === "zerodha" && (
                     <>
-                      <div className="text-[11px] text-[#888] bg-[#f7f7f5] rounded-lg px-3 py-2.5 leading-relaxed">
+                      <div className="text-[11px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
                         Get your API key &amp; secret from{" "}
-                        <span className="text-[#5b63f5] font-medium">developers.kite.trade</span>.
+                        <span className="font-medium" style={{ color: "#5b63f5" }}>developers.kite.trade</span>.
                         Set the redirect URL to{" "}
-                        <code className="bg-white border border-[#e2e2df] px-1 rounded text-[10px]">
+                        <code className="font-mono text-[10px] px-1 rounded" style={{ background: "var(--app-surface2)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}>
                           {typeof window !== "undefined" ? `${window.location.origin}/broker/callback` : "/broker/callback"}
                         </code>
                       </div>
                       <div>
-                        <label className="text-[12px] font-medium text-[#555] block mb-1.5">API Key</label>
+                        <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Key</label>
                         <input
                           type="text"
                           value={brokerApiKey}
                           onChange={e => setBrokerApiKey(e.target.value)}
                           placeholder={profile?.broker_api_key ? `Current: ${profile.broker_api_key}` : "kitexxxxxxxxxxx"}
-                          className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] font-mono transition-colors"
+                          className={`${inputCls} font-mono`}
+                          style={inputStyle}
                         />
                       </div>
                       <div>
-                        <label className="text-[12px] font-medium text-[#555] block mb-1.5">API Secret</label>
+                        <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Secret</label>
                         <input
                           type="password"
                           value={brokerApiSecret}
                           onChange={e => setBrokerApiSecret(e.target.value)}
                           placeholder="Enter new secret to update"
-                          className="w-full text-[13px] bg-[#f7f7f5] border border-[#e2e2df] rounded-lg px-3 py-2.5 outline-none focus:border-[#5b63f5] transition-colors"
+                          className={inputCls}
+                          style={inputStyle}
                         />
                       </div>
                       <div className="flex gap-2">
                         <button
                           onClick={saveBroker}
                           disabled={savingBroker}
-                          className="flex-1 py-2.5 rounded-lg text-[13px] font-medium text-white bg-[#1c1c1a] hover:bg-[#333] transition-colors disabled:opacity-50"
+                          className="flex-1 py-2.5 rounded-[8px] text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
+                          style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                         >
                           {savingBroker ? "Saving..." : "Save API credentials"}
                         </button>
@@ -689,7 +692,7 @@ export default function SettingsPage() {
                           <button
                             onClick={handleZerodhaConnect}
                             disabled={connectingZerodha}
-                            className="flex-1 py-2.5 rounded-lg text-[13px] font-semibold text-white transition-colors disabled:opacity-50"
+                            className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
                             style={{ background: "#5b63f5" }}
                           >
                             {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
@@ -701,13 +704,14 @@ export default function SettingsPage() {
 
                   {brokerType && brokerType !== "zerodha" && (
                     <div className="flex items-center justify-between">
-                      <p className="text-[12px] text-[#888]">
+                      <p className="text-[12px]" style={{ color: "var(--app-text3)" }}>
                         {brokerType === "other" ? "Orders will be simulated." : `${brokerType} integration coming soon.`}
                       </p>
                       <button
                         onClick={saveBroker}
                         disabled={savingBroker}
-                        className="px-4 py-2 rounded-lg text-[13px] font-medium text-white bg-[#1c1c1a] hover:bg-[#333] transition-colors disabled:opacity-50"
+                        className="px-4 py-2 rounded-[8px] text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
+                        style={{ background: "#5b63f5" }}
                       >
                         {savingBroker ? "Saving..." : "Save"}
                       </button>
@@ -723,14 +727,15 @@ export default function SettingsPage() {
       {/* ── Alerts tab ─────────────────────────────────────────────────── */}
       {tab === "alerts" && (
         <div className="px-5 py-5">
-          <div className="text-[14px] font-semibold text-[#1c1c1a] mb-0.5">Scan Alerts</div>
-          <div className="text-[13px] text-[#888] mb-4">Saved scans that run automatically after market close each trading day.</div>
+          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Scan Alerts</div>
+          <div className="text-[13px] mb-4" style={{ color: "var(--app-text3)" }}>Saved scans that run automatically after market close each trading day.</div>
 
-          <div className="mb-4 bg-[#eeeffe] border border-[#d0d3fb] rounded-[10px] px-4 py-3 max-w-2xl">
-            <div className="text-[12px] font-semibold text-[#5b63f5] mb-0.5">How to create an alert</div>
-            <div className="text-[12px] text-[#555] leading-relaxed">
+          <div className="mb-4 max-w-2xl rounded-[10px] px-4 py-3"
+            style={{ background: "rgba(91,99,245,0.1)", border: "1px solid rgba(91,99,245,0.25)" }}>
+            <div className="text-[12px] font-semibold mb-0.5" style={{ color: "#5b63f5" }}>How to create an alert</div>
+            <div className="text-[12px] leading-relaxed" style={{ color: "var(--app-text2)" }}>
               Go to the{" "}
-              <Link href="/scanner" className="underline font-medium text-[#5b63f5]">Scanner</Link>
+              <Link href="/scanner" className="underline font-medium" style={{ color: "#5b63f5" }}>Scanner</Link>
               , build your filter conditions, then click{" "}
               <span className="font-medium">&quot;Save as Alert&quot;</span>{" "}
               in the toolbar. Results will appear here after market close.
@@ -740,57 +745,52 @@ export default function SettingsPage() {
           {alertsLoading ? (
             <div className="space-y-3 max-w-2xl">
               {[1, 2, 3].map(i => (
-                <div key={i} className="bg-white border border-[#e2e2df] rounded-[10px] px-4 py-4 animate-pulse">
-                  <div className="h-4 bg-gray-100 rounded w-40 mb-2" />
-                  <div className="h-3 bg-gray-100 rounded w-64" />
-                </div>
+                <div key={i} className="animate-pulse h-20 rounded-[10px]" style={cardStyle} />
               ))}
             </div>
           ) : alertsError ? (
-            <div className="text-[13px] text-red-400">{alertsError}</div>
+            <div className="text-[13px]" style={{ color: "#e5383b" }}>{alertsError}</div>
           ) : alerts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <div className="w-12 h-12 rounded-full bg-[#eeeffe] flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(91,99,245,0.1)" }}>
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
                   <path d="M11 3v3M11 16v3M3 11h3M16 11h3" stroke="#5b63f5" strokeWidth="1.5" strokeLinecap="round" />
                   <circle cx="11" cy="11" r="4" stroke="#5b63f5" strokeWidth="1.5" />
                 </svg>
               </div>
-              <div className="text-[14px] font-medium text-[#555]">No alerts yet</div>
-              <div className="text-[12px] text-[#aaa]">Create one from the Scanner page</div>
-              <Link href="/scanner" className="mt-1 text-[13px] font-medium text-[#5b63f5] bg-[#eeeffe] px-4 py-1.5 rounded-full">
+              <div className="text-[14px] font-medium" style={{ color: "var(--app-text2)" }}>No alerts yet</div>
+              <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>Create one from the Scanner page</div>
+              <Link href="/scanner" className="mt-1 text-[13px] font-medium px-4 py-1.5 rounded-full"
+                style={{ color: "#5b63f5", background: "rgba(91,99,245,0.1)" }}>
                 Go to Scanner
               </Link>
             </div>
           ) : (
             <div className="max-w-2xl space-y-2.5">
               {alerts.map(alert => (
-                <div
-                  key={alert.id}
-                  className="bg-white border border-[#e2e2df] rounded-[10px] px-4 py-3.5"
-                  style={!alert.is_active ? { opacity: 0.55 } : undefined}
-                >
+                <div key={alert.id} className="rounded-[10px] px-4 py-3.5" style={{ ...cardStyle, opacity: alert.is_active ? 1 : 0.55 }}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-[14px] font-semibold text-[#1c1c1a] truncate">{alert.name}</span>
-                        <span
-                          className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                        <span className="text-[14px] font-semibold truncate" style={{ color: "var(--app-text1)" }}>{alert.name}</span>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
                           style={alert.is_active
-                            ? { background: "#edfaf3", color: "#26a65b" }
-                            : { background: "#f5f5f3", color: "#aaa" }}
-                        >
+                            ? { background: "rgba(38,166,91,0.15)", color: "#26a65b" }
+                            : { background: "var(--app-surface3)", color: "var(--app-text3)" }}>
                           {alert.is_active ? "Active" : "Paused"}
                         </span>
                       </div>
-                      <div className="text-[11px] text-[#aaa] mt-0.5 truncate">{filterSummary(alert.filters)}</div>
+                      <div className="text-[11px] mt-0.5 truncate" style={{ color: "var(--app-text3)" }}>{filterSummary(alert.filters)}</div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button
                         onClick={() => handleToggle(alert)}
                         disabled={toggling === alert.id}
                         title={alert.is_active ? "Pause alert" : "Resume alert"}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-[#aaa] hover:text-[#555] hover:bg-[#f5f5f3] transition-colors"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                        style={{ color: "var(--app-text3)" }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                       >
                         {alert.is_active ? (
                           <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -807,7 +807,10 @@ export default function SettingsPage() {
                         onClick={() => handleDelete(alert)}
                         disabled={deleting === alert.id}
                         title="Delete alert"
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-[#aaa] hover:text-[#e5383b] hover:bg-[#fef2f2] transition-colors"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                        style={{ color: "var(--app-text3)" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#e5383b"; (e.currentTarget as HTMLElement).style.background = "rgba(229,56,59,0.1)"; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--app-text3)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                       >
                         <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
                           <path d="M2 3.5h9M5 3.5V2.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v1M10.5 3.5l-.7 7a.5.5 0 01-.5.5H3.7a.5.5 0 01-.5-.5l-.7-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
@@ -815,19 +818,19 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#f7f7f5]">
-                    <div className="flex items-center gap-3 text-[11px] text-[#aaa]">
+                  <div className="flex items-center justify-between mt-3 pt-2.5" style={{ borderTop: "1px solid var(--app-border2)" }}>
+                    <div className="flex items-center gap-3 text-[11px]" style={{ color: "var(--app-text3)" }}>
                       <span>Last run: {relativeDate(alert.last_run_at)}</span>
                       {alert.last_match_count != null && (
                         <span>
-                          <span className="font-semibold" style={{ color: alert.last_match_count > 0 ? "#5b63f5" : "#aaa" }}>
+                          <span className="font-semibold" style={{ color: alert.last_match_count > 0 ? "#5b63f5" : "var(--app-text3)" }}>
                             {alert.last_match_count}
                           </span>{" "}
                           match{alert.last_match_count !== 1 ? "es" : ""}
                         </span>
                       )}
                     </div>
-                    <button onClick={() => setDrawerAlert(alert)} className="text-[11px] font-medium text-[#5b63f5] hover:underline">
+                    <button onClick={() => setDrawerAlert(alert)} className="text-[11px] font-medium hover:underline" style={{ color: "#5b63f5" }}>
                       View results →
                     </button>
                   </div>
@@ -843,64 +846,64 @@ export default function SettingsPage() {
         <div className="px-5 py-6 max-w-[900px]">
           {billingLoading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="w-5 h-5 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
+              <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
             </div>
           ) : (
             <>
               {/* Current plan banner */}
-              <div className="bg-white border border-[#e2e2df] rounded-[12px] p-5 mb-6 flex items-center justify-between flex-wrap gap-4">
+              <div className="p-5 mb-6 flex items-center justify-between flex-wrap gap-4 rounded-[12px]" style={cardStyle}>
                 <div className="flex items-center gap-3">
-                  {currentPlan === "free"  && <Zap size={18} className="text-[#888]" />}
-                  {currentPlan === "pro"   && <Sparkles size={18} className="text-[#5b63f5]" />}
-                  {currentPlan === "elite" && <Crown size={18} className="text-[#d97706]" />}
+                  {currentPlan === "free"  && <Zap size={18} style={{ color: "var(--app-text3)" }} />}
+                  {currentPlan === "pro"   && <Sparkles size={18} style={{ color: "#5b63f5" }} />}
+                  {currentPlan === "elite" && <Crown size={18} style={{ color: "#d97706" }} />}
                   <div>
-                    <div className="text-[14px] font-semibold text-[#1c1c1a] capitalize">
+                    <div className="text-[14px] font-semibold capitalize" style={{ color: "var(--app-text1)" }}>
                       {currentPlan} Plan
                       {currentPlan !== "free" && (
-                        <span
-                          className="ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                        <span className="ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full"
                           style={{
-                            background: currentPlan === "pro" ? "#eeeffe" : "#fff8ec",
+                            background: currentPlan === "pro" ? "rgba(91,99,245,0.15)" : "rgba(217,119,6,0.15)",
                             color:      currentPlan === "pro" ? "#5b63f5" : "#d97706",
-                          }}
-                        >
+                          }}>
                           Active
                         </span>
                       )}
                     </div>
                     {expiresAt ? (
-                      <div className="text-[12px] text-[#aaa] mt-0.5">Renews {expiresAt}</div>
+                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>Renews {expiresAt}</div>
                     ) : currentPlan === "free" ? (
-                      <div className="text-[12px] text-[#aaa] mt-0.5">Upgrade to unlock all features</div>
+                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>Upgrade to unlock all features</div>
                     ) : null}
                   </div>
                 </div>
-                <div className="text-[12px] text-[#888]">{userEmail}</div>
+                <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>{userEmail}</div>
               </div>
 
               {/* Currency + period toggles */}
               <div className="flex flex-wrap items-center gap-3 mb-5">
                 <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-[#888]">Currency:</span>
-                  <div className="inline-flex rounded-lg border border-[#e2e2df] bg-white overflow-hidden">
+                  <span className="text-[12px]" style={{ color: "var(--app-text3)" }}>Currency:</span>
+                  <div className="inline-flex rounded-[8px] overflow-hidden" style={{ border: "1px solid var(--app-border)", background: "var(--app-surface2)" }}>
                     {(["INR", "USD"] as const).map(c => (
                       <button key={c} onClick={() => switchCurrency(c)}
                         className="px-3 py-1.5 text-[12px] font-semibold transition-colors"
-                        style={billingCurrency === c ? { background: "#1c1c1a", color: "#fff" } : { background: "transparent", color: "#555" }}
-                      >
+                        style={billingCurrency === c
+                          ? { background: "#5b63f5", color: "#fff" }
+                          : { background: "transparent", color: "var(--app-text3)" }}>
                         {c === "INR" ? "₹ India" : "$ NRI / International"}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-[#888]">Billing:</span>
-                  <div className="inline-flex rounded-lg border border-[#e2e2df] bg-white overflow-hidden">
+                  <span className="text-[12px]" style={{ color: "var(--app-text3)" }}>Billing:</span>
+                  <div className="inline-flex rounded-[8px] overflow-hidden" style={{ border: "1px solid var(--app-border)", background: "var(--app-surface2)" }}>
                     {(["monthly", "annual"] as const).map(p => (
                       <button key={p} onClick={() => setBillingPeriod(p)}
                         className="px-3 py-1.5 text-[12px] font-semibold transition-colors"
-                        style={billingPeriod === p ? { background: "#26a65b", color: "#fff" } : { background: "transparent", color: "#555" }}
-                      >
+                        style={billingPeriod === p
+                          ? { background: "#26a65b", color: "#fff" }
+                          : { background: "transparent", color: "var(--app-text3)" }}>
                         {p === "monthly" ? "Monthly" : "Annual (save 2 months)"}
                       </button>
                     ))}
@@ -917,41 +920,41 @@ export default function SettingsPage() {
                     (currentPlan === "pro" && plan.id === "elite");
                   const priceInfo = PLAN_PRICES[billingCurrency][billingPeriod][plan.id];
                   return (
-                    <div
-                      key={plan.id}
-                      className="bg-white border rounded-[14px] p-5 flex flex-col"
-                      style={{ borderColor: isCurrent ? plan.color : "#e2e2df", borderWidth: isCurrent ? 2 : 1 }}
-                    >
+                    <div key={plan.id} className="rounded-[14px] p-5 flex flex-col"
+                      style={{
+                        background: "var(--app-surface2)",
+                        border: isCurrent ? `2px solid ${plan.color}` : "1px solid var(--app-border)",
+                      }}>
                       <div className="flex items-center justify-between mb-4">
-                        <span
-                          className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                          style={{ background: plan.bg, color: plan.color }}
-                        >
+                        <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                          style={{ background: plan.accentBg, color: plan.color }}>
                           {plan.label}
                         </span>
                         <div className="flex items-center gap-1.5">
                           {priceInfo.savings && (
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#edfaf3] text-[#26a65b]">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                              style={{ background: "rgba(38,166,91,0.15)", color: "#26a65b" }}>
                               {priceInfo.savings}
                             </span>
                           )}
-                          {isCurrent && <span className="text-[11px] text-[#888] font-medium">Current</span>}
+                          {isCurrent && <span className="text-[11px] font-medium" style={{ color: "var(--app-text3)" }}>Current</span>}
                         </div>
                       </div>
                       <div className="mb-4">
-                        <span className="text-[28px] font-bold tracking-tight text-[#1c1c1a]">{priceInfo.price}</span>
-                        {priceInfo.period && <span className="text-[13px] text-[#aaa]">{priceInfo.period}</span>}
+                        <span className="text-[28px] font-bold tracking-tight" style={{ color: "var(--app-text1)" }}>{priceInfo.price}</span>
+                        {priceInfo.period && <span className="text-[13px]" style={{ color: "var(--app-text3)" }}>{priceInfo.period}</span>}
                       </div>
                       <ul className="flex-1 space-y-2 mb-5">
                         {plan.features.map(f => (
-                          <li key={f} className="flex items-start gap-2 text-[12px] text-[#555]">
+                          <li key={f} className="flex items-start gap-2 text-[12px]" style={{ color: "var(--app-text2)" }}>
                             <Check size={12} className="mt-0.5 shrink-0" style={{ color: plan.color }} />
                             {f}
                           </li>
                         ))}
                       </ul>
                       {isCurrent ? (
-                        <div className="w-full text-center py-2 rounded-[8px] text-[13px] font-medium" style={{ background: plan.bg, color: plan.color }}>
+                        <div className="w-full text-center py-2 rounded-[8px] text-[13px] font-medium"
+                          style={{ background: plan.accentBg, color: plan.color }}>
                           Current plan
                         </div>
                       ) : isHigher ? (
@@ -959,12 +962,12 @@ export default function SettingsPage() {
                           onClick={() => handleUpgrade(plan.id as "pro" | "elite")}
                           disabled={!!paying}
                           className="w-full py-2 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-60"
-                          style={{ background: plan.color }}
-                        >
+                          style={{ background: plan.color }}>
                           {paying === plan.id ? "Processing…" : `Upgrade to ${plan.label}`}
                         </button>
                       ) : (
-                        <div className="w-full text-center py-2 rounded-[8px] text-[13px] text-[#ccc] bg-[#f7f7f5]">
+                        <div className="w-full text-center py-2 rounded-[8px] text-[13px]"
+                          style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
                           Downgrade available on expiry
                         </div>
                       )}
@@ -975,13 +978,14 @@ export default function SettingsPage() {
 
               {/* Referral code */}
               {referralCode && (
-                <div className="mt-6 bg-white border border-[#e2e2df] rounded-[12px] p-5">
-                  <div className="text-[13px] font-semibold text-[#1c1c1a] mb-1">Refer a friend</div>
-                  <div className="text-[12px] text-[#888] mb-3">
+                <div className="mt-6 p-5 rounded-[12px]" style={cardStyle}>
+                  <div className="text-[13px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>Refer a friend</div>
+                  <div className="text-[12px] mb-3" style={{ color: "var(--app-text3)" }}>
                     Share your referral code. When a friend subscribes, you both get 30 days added to your plan.
                   </div>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 font-mono text-[14px] font-bold tracking-wider text-[#5b63f5] bg-[#eeeffe] border border-[#d0d3fb] rounded-lg px-4 py-2.5">
+                    <code className="flex-1 font-mono text-[14px] font-bold tracking-wider px-4 py-2.5 rounded-[8px]"
+                      style={{ background: "rgba(91,99,245,0.12)", border: "1px solid rgba(91,99,245,0.25)", color: "#5b63f5" }}>
                       {referralCode}
                     </code>
                     <button
@@ -989,19 +993,19 @@ export default function SettingsPage() {
                         navigator.clipboard.writeText(referralCode);
                         showToast("Referral code copied!", true);
                       }}
-                      className="px-4 py-2.5 rounded-lg text-[13px] font-medium bg-[#1c1c1a] text-white hover:bg-[#333] transition-colors"
-                    >
+                      className="px-4 py-2.5 rounded-[8px] text-[13px] font-medium text-white transition-opacity"
+                      style={{ background: "#5b63f5" }}>
                       Copy
                     </button>
                   </div>
                 </div>
               )}
 
-              <div className="mt-6 text-[12px] text-[#aaa] space-y-1">
+              <div className="mt-6 text-[12px] space-y-1" style={{ color: "var(--app-text3)" }}>
                 <p>Payments processed by Razorpay. Secure, encrypted, and instant.</p>
                 <p>Plans auto-expire after 30 days. Cancel anytime — no questions asked.</p>
                 {!RAZORPAY_KEY && (
-                  <p className="text-[#e5383b]">
+                  <p style={{ color: "#e5383b" }}>
                     Payments are in test mode. Add NEXT_PUBLIC_RAZORPAY_KEY_ID to enable live payments.
                   </p>
                 )}
