@@ -1,309 +1,272 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { getMarketOverview, getWatchlists, type MarketOverview } from "@/lib/api";
+import { useEffect, useState } from 'react'
+import { getMarketOverview, getWatchlists, type MarketOverview } from '@/lib/api'
+import { Card, StatCard, EmptyState } from '@/components/ui'
 
-const S = {
-  card: {
-    background: "var(--app-surface)",
-    border: "1px solid var(--app-border)",
-    borderRadius: "12px",
-  } as React.CSSProperties,
-  label: {
-    fontSize: "10px",
-    fontWeight: 600,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.6px",
-    color: "var(--app-text3)",
-  } as React.CSSProperties,
-};
-
-function PhaseBanner({ data }: { data: MarketOverview }) {
-  const phase = data.market_phase;
-  const cfg = phase === "Bullish"
-    ? { bg: "rgba(38,166,91,0.12)", border: "rgba(38,166,91,0.25)", dot: "#26A65B", text: "#4ade80" }
-    : phase === "Bearish"
-    ? { bg: "rgba(229,56,59,0.12)", border: "rgba(229,56,59,0.25)", dot: "#E5383B", text: "#f87171" }
-    : { bg: "rgba(217,119,6,0.12)", border: "rgba(217,119,6,0.25)", dot: "#d97706", text: "#fbbf24" };
-
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mx-5 mt-4 px-4 py-2.5 rounded-[10px] border flex items-center gap-3 flex-wrap"
-      style={{ background: cfg.bg, borderColor: cfg.border }}>
-      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: cfg.dot }} />
-      <span className="text-[13px] font-semibold" style={{ color: cfg.text }}>{phase} Market</span>
-      <span className="text-[12px]" style={{ color: "var(--app-text2)" }}>{data.market_phase_desc}</span>
-      <div className="ml-auto text-[11px] hidden sm:flex gap-3 tabular" style={{ color: "var(--app-text3)" }}>
-        <span>A/D {data.advance_decline_ratio?.toFixed(2)}</span>
-        <span>{data.new_52w_highs} new highs</span>
-        <span>{data.above_ema200_pct}% above EMA 200</span>
-        <span>EOD {data.trade_date}</span>
+    <div style={{ textAlign: 'right' }}>
+      <div className="label" style={{ marginBottom: 2 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+        {value}
       </div>
     </div>
-  );
+  )
 }
 
-function MetricCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
+function PhaseCard({ data }: { data: MarketOverview }) {
+  const phase = data.market_phase
+  const phaseColor = phase === 'Bullish' ? 'var(--gain)'
+                   : phase === 'Bearish' ? 'var(--loss)'
+                   : 'var(--warn)'
   return (
-    <div className="px-4 py-3.5" style={S.card}>
-      <div style={S.label} className="mb-1">{label}</div>
-      <div className="text-[22px] font-bold tabular" style={{ color }}>{value}</div>
-      {sub && <div className="text-[11px] mt-0.5" style={{ color: "var(--app-text3)" }}>{sub}</div>}
-    </div>
-  );
-}
-
-function SectorBreadth({ sectors }: { sectors: MarketOverview["sector_breadth"] }) {
-  return (
-    <div className="p-4" style={S.card}>
-      <div style={S.label} className="mb-3">Sector Breadth</div>
-      <div className="space-y-2">
-        {sectors.map(s => (
-          <div key={s.sector} className="flex items-center gap-3">
-            <div className="w-[110px] text-[12px] truncate flex-shrink-0" style={{ color: "var(--app-text2)" }}>{s.sector}</div>
-            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--app-surface3)" }}>
-              <div className="h-full rounded-full transition-all"
-                style={{
-                  width: `${s.breadth_pct}%`,
-                  background: s.breadth_pct >= 60 ? "#26A65B" : s.breadth_pct <= 40 ? "#E5383B" : "#d97706"
-                }} />
-            </div>
-            <div className="w-10 text-right text-[12px] tabular font-semibold"
-              style={{ color: s.breadth_pct >= 60 ? "#26A65B" : s.breadth_pct <= 40 ? "#E5383B" : "#d97706" }}>
-              {s.breadth_pct}%
-            </div>
-            <div className="w-14 text-right text-[11px] tabular"
-              style={{ color: s.avg_pct_change >= 0 ? "#26A65B" : "#E5383B" }}>
-              {s.avg_pct_change >= 0 ? "+" : ""}{s.avg_pct_change}%
-            </div>
+    <Card padding="md" style={{ marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: phaseColor, flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <span className="heading-card" style={{ color: phaseColor }}>{phase} market</span>
+            <span className="caption">{data.market_phase_desc}</span>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function MoverRow({ m, color }: { m: MarketOverview["top_gainers"][0]; color: string }) {
-  return (
-    <div className="flex items-center gap-2 py-1.5" style={{ borderBottom: "1px solid var(--app-border2)" }}>
-      <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-semibold truncate" style={{ color: "var(--app-text1)" }}>{m.symbol}</div>
-        <div className="text-[11px] truncate" style={{ color: "var(--app-text3)" }}>{m.company_name}</div>
-      </div>
-      <div className="text-right">
-        <div className="text-[13px] font-semibold tabular" style={{ color: "var(--app-text1)" }}>₹{m.close.toLocaleString("en-IN")}</div>
-        <div className="text-[12px] font-bold tabular" style={{ color }}>
-          {m.pct_change >= 0 ? "+" : ""}{m.pct_change?.toFixed(2)}%
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <Metric label="A/D ratio" value={data.advance_decline_ratio?.toFixed(2) ?? '—'} />
+          <Metric label="% above EMA 200" value={`${data.above_ema200_pct ?? '—'}%`} />
+          <span className="caption">EOD {data.trade_date}</span>
         </div>
       </div>
-      {m.volume_ratio != null && (
-        <div className="w-10 text-right text-[11px] tabular" style={{ color: "var(--app-text3)" }}>{m.volume_ratio.toFixed(1)}×</div>
-      )}
-    </div>
-  );
+    </Card>
+  )
 }
 
-function SkeletonCard() {
+function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; breadth_pct: number; avg_pct_change: number }) {
+  const color = breadth_pct > 60 ? 'var(--gain)' : breadth_pct > 40 ? 'var(--warn)' : 'var(--loss)'
   return (
-    <div className="px-4 py-3.5 rounded-[12px] animate-pulse h-[76px]"
-      style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }} />
-  );
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ flex: '0 0 120px', fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {sector}
+      </span>
+      <div style={{ flex: 1, height: 5, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${Math.min(100, breadth_pct)}%`, background: color, transition: 'width 600ms var(--ease-out)' }} />
+      </div>
+      <span className="mono" style={{ flex: '0 0 40px', textAlign: 'right', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+        {breadth_pct.toFixed(0)}%
+      </span>
+      <span className="mono" style={{ flex: '0 0 52px', textAlign: 'right', fontSize: 11, color: avg_pct_change >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
+        {avg_pct_change >= 0 ? '+' : ''}{avg_pct_change}%
+      </span>
+    </div>
+  )
+}
+
+function MoversCard({ title, items, variant }: { title: string; items: MarketOverview['top_gainers']; variant: 'gain' | 'loss' }) {
+  const color = variant === 'gain' ? 'var(--gain)' : 'var(--loss)'
+  return (
+    <Card padding="md">
+      <h2 className="heading-card" style={{ marginBottom: 12 }}>{title}</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {items.slice(0, 5).map(item => (
+          <a key={item.symbol} href={`/watchlist?symbol=${item.symbol}`}
+             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.symbol}</div>
+              <div className="caption" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{item.company_name}</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+                ₹{item.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </div>
+              <div className="mono" style={{ fontSize: 11, fontWeight: 600, color }}>
+                {item.pct_change >= 0 ? '+' : ''}{item.pct_change?.toFixed(2)}%
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+function EmaBreadthCard({ data }: { data: MarketOverview }) {
+  const items = [
+    { label: 'Above EMA 20', pct: data.above_ema20_pct },
+    { label: 'Above EMA 50', pct: data.above_ema50_pct },
+    { label: 'Above EMA 200', pct: data.above_ema200_pct },
+  ]
+  return (
+    <Card padding="md">
+      <h2 className="heading-card" style={{ marginBottom: 12 }}>EMA breadth</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map(e => {
+          const color = (e.pct ?? 0) > 60 ? 'var(--gain)' : (e.pct ?? 0) > 40 ? 'var(--warn)' : 'var(--loss)'
+          return (
+            <div key={e.label}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{e.label}</span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 500, color }}>{e.pct ?? '—'}%</span>
+              </div>
+              <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${Math.min(100, e.pct ?? 0)}%`, background: color }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
+function Skeleton() {
+  return (
+    <div style={{ padding: '20px 32px' }}>
+      <div style={{ height: 56, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)', marginBottom: 20 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+        {[1,2,3,4].map(i => (
+          <div key={i} style={{ height: 80, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+        <div style={{ height: 320, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+        <div style={{ height: 320, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+      </div>
+    </div>
+  )
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [data, setData] = useState<MarketOverview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [data, setData] = useState<MarketOverview | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [lastUpdated, setLastUpdated] = useState('')
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   async function load() {
     try {
-      const d = await getMarketOverview();
-      setData(d);
+      const d = await getMarketOverview()
+      setData(d)
+      setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load");
+      setError(e instanceof Error ? e.message : 'Failed to load market data')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5 * 60 * 1000);
-    getWatchlists().then(wls => { if (wls.length === 0) setShowOnboarding(true); }).catch(() => {});
-    return () => clearInterval(t);
-  }, []);
-
-  const greet = () => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
-  };
+    load()
+    const t = setInterval(load, 5 * 60 * 1000)
+    getWatchlists().then(wls => { if (wls.length === 0) setShowOnboarding(true) }).catch(() => {})
+    return () => clearInterval(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="pb-8">
+    <div style={{ background: 'var(--surface-0)', minHeight: '100%' }}>
+      {/* Page header */}
+      <div style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+          <h1 className="heading-page">Markets</h1>
+          {lastUpdated && (
+            <span className="caption">
+              Last updated {lastUpdated}
+              <span style={{ color: 'var(--accent)', marginLeft: 6 }}>●</span>
+            </span>
+          )}
+        </div>
+        <p className="body-secondary">NSE breadth and sector rotation{data?.trade_date ? ` · ${data.trade_date}` : ''}</p>
+      </div>
+
       {/* Onboarding banner */}
       {showOnboarding && (
-        <div className="mx-5 mt-4" style={{
-          background: "var(--app-teal-dim)", border: "1px solid rgba(0,229,196,0.2)",
-          borderRadius: 10, padding: "14px 20px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-        }}>
+        <div style={{ margin: '16px 32px 0', padding: '14px 20px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-muted)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div className="text-[14px] font-bold mb-1" style={{ color: "var(--app-teal)" }}>Welcome to AlphaVyuh</div>
-            <div className="text-[12px]" style={{ color: "var(--app-text2)" }}>
-              Start by scanning for stocks → add to watchlist → chart them → log your first trade
-            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)', marginBottom: 2 }}>Welcome to AlphaVyuh</div>
+            <div className="caption">Scan for stocks, add to watchlist, chart them, then log your first trade</div>
           </div>
-          <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-            <a href="/scanner" style={{ padding: "6px 14px", borderRadius: 6, background: "var(--app-teal)", color: "#050a08", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-              Start scanning →
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, flexShrink: 0 }}>
+            <a href="/scanner" style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', background: 'var(--accent)', color: '#0A1712', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+              Start scanning
             </a>
-            <button onClick={() => setShowOnboarding(false)} style={{ background: "none", border: "none", color: "var(--app-text3)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+            <button onClick={() => setShowOnboarding(false)} style={{ color: 'var(--text-tertiary)', fontSize: 18, lineHeight: 1 }}>×</button>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <div className="px-5 pt-4 pb-0">
-        <h1 className="text-[18px] font-bold" style={{ color: "var(--app-text1)" }}>{greet()}</h1>
-        <p className="text-[13px] mt-0.5" style={{ color: "var(--app-text2)" }}>NSE market overview</p>
-      </div>
-
-      {/* Phase banner */}
-      {loading ? (
-        <div className="mx-5 mt-4 h-10 rounded-[10px] animate-pulse"
-          style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }} />
-      ) : data ? (
-        <PhaseBanner data={data} />
-      ) : null}
-
+      {/* Error */}
       {error && (
-        <div className="mx-5 mt-4 px-4 py-2 rounded-[10px] text-[13px]"
-          style={{ background: "rgba(229,56,59,0.10)", border: "1px solid rgba(229,56,59,0.25)", color: "#f87171" }}>
+        <div style={{ margin: '16px 32px 0', padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid rgba(225,85,96,0.2)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12 }}>
           {error}
+          <button onClick={load} style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>Retry</button>
         </div>
       )}
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 px-5 pt-3">
-        {loading ? (
-          [1,2,3,4].map(i => <SkeletonCard key={i} />)
-        ) : data ? (
-          <>
-            <MetricCard label="Advances" value={data.advances.toLocaleString()} sub={`of ${data.total} stocks`} color="#26A65B" />
-            <MetricCard label="Declines" value={data.declines.toLocaleString()} sub={`A/D ratio ${data.advance_decline_ratio}`} color="#E5383B" />
-            <MetricCard label="New 52W Highs" value={data.new_52w_highs} sub="fresh yearly highs" color="var(--app-teal)" />
-            <MetricCard label="New 52W Lows" value={data.new_52w_lows} sub="yearly low touches" color="#d97706" />
-          </>
-        ) : null}
-      </div>
+      {loading && <Skeleton />}
 
-      {/* Sector breadth + EMA breadth */}
       {!loading && data && (
-        <div className="px-5 pt-3 grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <div className="lg:col-span-2">
-            <SectorBreadth sectors={data.sector_breadth} />
+        <div style={{ padding: '20px 32px' }}>
+          {/* Phase card */}
+          <PhaseCard data={data} />
+
+          {/* Stat cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+            <StatCard
+              label="Advances"
+              value={data.advances.toLocaleString()}
+              delta={`of ${data.total} stocks`}
+              deltaVariant="gain"
+            />
+            <StatCard
+              label="Declines"
+              value={data.declines.toLocaleString()}
+              delta={`A/D ${data.advance_decline_ratio}`}
+              deltaVariant="loss"
+            />
+            <StatCard
+              label="New 52W highs"
+              value={String(data.new_52w_highs)}
+              deltaVariant="gain"
+            />
+            <StatCard
+              label="New 52W lows"
+              value={String(data.new_52w_lows)}
+              deltaVariant="loss"
+            />
           </div>
 
-          <div className="p-4 flex flex-col gap-3" style={S.card}>
-            <div style={S.label}>EMA Breadth</div>
-            {[
-              { label: "Above EMA 20",  pct: data.above_ema20_pct,  color: "var(--app-teal)" },
-              { label: "Above EMA 50",  pct: data.above_ema50_pct,  color: "#818cf8" },
-              { label: "Above EMA 200", pct: data.above_ema200_pct, color: "#26A65B" },
-            ].map(e => (
-              <div key={e.label}>
-                <div className="flex justify-between text-[12px] mb-1">
-                  <span style={{ color: "var(--app-text2)" }}>{e.label}</span>
-                  <span className="font-semibold tabular" style={{ color: e.color }}>{e.pct}%</span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--app-surface3)" }}>
-                  <div className="h-full rounded-full" style={{ width: `${e.pct}%`, background: e.color }} />
-                </div>
+          {/* Two-column grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+            {/* Left: sector breadth */}
+            <Card padding="lg">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+                <h2 className="heading-card">Sector breadth</h2>
+                <span className="caption">% above EMA 20 · avg chg%</span>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {data.sector_breadth.map(s => (
+                  <SectorBar key={s.sector} sector={s.sector} breadth_pct={s.breadth_pct} avg_pct_change={s.avg_pct_change} />
+                ))}
+              </div>
+            </Card>
 
-      {/* Top Gainers / Losers / Most Active */}
-      {!loading && data && (
-        <div className="px-5 pt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { title: "Top Gainers",  items: data.top_gainers,  color: "#26A65B" },
-            { title: "Top Losers",   items: data.top_losers,   color: "#E5383B" },
-            { title: "Most Active",  items: data.most_active,  color: "#818cf8" },
-          ].map(({ title, items, color }) => (
-            <div key={title} className="p-4" style={S.card}>
-              <div style={S.label} className="mb-2">{title}</div>
-              {items.map(m => <MoverRow key={m.symbol} m={m} color={color} />)}
+            {/* Right: movers + EMA breadth */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" />
+              <MoversCard title="Top losers" items={data.top_losers} variant="loss" />
+              <EmaBreadthCard data={data} />
             </div>
-          ))}
+          </div>
         </div>
       )}
 
-      {/* Quick-nav shortcuts */}
-      <div className="px-5 pt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {[
-          { href: "/scanner",  label: "Scanner",   desc: "Find stocks by filter",  color: "var(--app-teal)" },
-          { href: "/watchlist",label: "Watchlist",  desc: "Track your stocks",       color: "#26A65B" },
-          { href: "/journal",  label: "Journal",   desc: "Review your trades",      color: "#d97706" },
-          { href: "/settings", label: "Settings",  desc: "Broker & account",        color: "#818cf8" },
-        ].map(c => (
-          <button key={c.href} onClick={() => router.push(c.href)}
-            className="px-4 py-3 text-left transition-colors"
-            style={{
-              ...S.card,
-              borderLeft: `2px solid ${c.color}`,
-            }}>
-            <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>{c.label}</div>
-            <div className="text-[11px] mt-0.5" style={{ color: "var(--app-text3)" }}>{c.desc}</div>
-          </button>
-        ))}
-      </div>
-
-      {/* Workflow guide */}
-      <div className="px-5 pt-4 pb-2">
-        <div className="rounded-[12px] px-5 py-4" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
-          <div style={S.label} className="mb-3">How to use AlphaVyuh</div>
-          <div className="flex flex-col sm:flex-row gap-0 sm:gap-0 relative">
-            {[
-              { step: "1", title: "Scan", desc: "Pick a preset or set your own filters in the Scanner. Run the scan to get a filtered list of NSE stocks.", href: "/scanner", color: "var(--app-teal)" },
-              { step: "2", title: "Watchlist", desc: "Add stocks from the scan results to a watchlist. Monitor them side by side with mini-charts.", href: "/watchlist", color: "#818cf8" },
-              { step: "3", title: "Chart", desc: "Open any stock for a full chart. Use drawing tools, apply indicators, and set price alerts.", href: null, color: "#26A65B" },
-              { step: "4", title: "Journal", desc: "After a trade, log it in the Journal. AI reviews your P&L and surfaces patterns in your decisions.", href: "/journal", color: "#d97706" },
-            ].map((s, i) => (
-              <div key={s.step} className="flex sm:flex-col flex-1 gap-3 sm:gap-2 relative">
-                {/* connector line */}
-                {i < 3 && (
-                  <div className="hidden sm:block absolute top-4 left-[calc(50%+16px)] right-0 h-px" style={{ background: "var(--app-border)" }} />
-                )}
-                <div className="flex sm:flex-col gap-3 sm:gap-2 flex-1 sm:pr-4">
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
-                      style={{ background: s.color + "22", color: s.color, border: `1px solid ${s.color}44` }}>
-                      {s.step}
-                    </div>
-                    <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>{s.title}</div>
-                  </div>
-                  <div className="text-[11px] leading-relaxed flex-1" style={{ color: "var(--app-text3)" }}>{s.desc}</div>
-                  {s.href && (
-                    <button onClick={() => router.push(s.href!)}
-                      className="self-start text-[11px] font-semibold px-2.5 py-1 rounded-[6px] transition-colors sm:mt-1"
-                      style={{ background: s.color + "18", color: s.color, border: `1px solid ${s.color}33` }}>
-                      Open →
-                    </button>
-                  )}
-                </div>
-                {i < 3 && <div className="sm:hidden w-px self-stretch" style={{ background: "var(--app-border)" }} />}
-              </div>
-            ))}
-          </div>
+      {!loading && !data && !error && (
+        <div style={{ padding: '20px 32px' }}>
+          <EmptyState
+            title="No market data available"
+            description="Market data loads after the trading session closes (after 3:30 PM IST)."
+            action={{ label: 'Retry', onClick: load }}
+          />
         </div>
-      </div>
+      )}
     </div>
-  );
+  )
 }

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { authHeaders } from '@/lib/api'
+import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -27,7 +28,6 @@ interface ScanResult {
   week_52_high_pct: number | null
   is_new_52w_high: boolean
   bb_width: number | null
-  // Fundamentals
   market_cap_cr: number | null
   pe_ratio: number | null
   pb_ratio: number | null
@@ -40,19 +40,19 @@ interface ScanResult {
 interface SavedScreen { id: string; name: string; filters: Record<string, unknown>; created_at: string }
 interface Watchlist { id: string; name: string }
 
-// ── Presets ────────────────────────────────────────────────
+// ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
-  { id: 'momentum',     name: 'Momentum',     emoji: '🚀',
+  { id: 'momentum',     name: 'Momentum',
     filters: { rsi_min: 55, rsi_max: 80, volume_ratio_min: 1.5, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 1.0 } },
-  { id: 'breakout',     name: 'Breakout',     emoji: '⚡',
+  { id: 'breakout',     name: 'Breakout',
     filters: { volume_ratio_min: 2.0, pct_change_min: 2.0, week_52_high_pct_max: 8.0, price_vs_ema20: 'above' } },
-  { id: 'oversold',     name: 'Oversold',     emoji: '📉',
+  { id: 'oversold',     name: 'Oversold',
     filters: { rsi_min: 20, rsi_max: 35, price_vs_ema200: 'above' } },
-  { id: 'new_highs',    name: '52W Highs',    emoji: '📈',
+  { id: 'new_highs',    name: '52W Highs',
     filters: { new_52w_high: true, volume_ratio_min: 1.2 } },
-  { id: 'high_volume',  name: 'High Vol',     emoji: '🔥',
+  { id: 'high_volume',  name: 'High Vol',
     filters: { volume_ratio_min: 3.0 } },
-  { id: 'golden_cross', name: 'Golden Cross', emoji: '✨',
+  { id: 'golden_cross', name: 'Golden Cross',
     filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above' } },
 ]
 
@@ -73,7 +73,6 @@ type Filters = {
   new_52w_high: boolean; new_52w_low: boolean
   is_inside_bar: boolean
   series: string[]
-  // Fundamentals
   market_cap_min: string; market_cap_max: string
   pe_min: string; pe_max: string
   pb_min: string; pb_max: string
@@ -112,26 +111,25 @@ const emptyFilters = (): Filters => ({
 })
 
 const inputStyle: React.CSSProperties = {
-  padding: '5px 8px', background: 'var(--app-surface2)',
-  border: '1px solid var(--app-border)', borderRadius: 5,
-  fontSize: 12, color: 'var(--app-text1)', outline: 'none', width: '100%',
-}
-const thStyle: React.CSSProperties = {
-  padding: '9px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-  textTransform: 'uppercase', color: 'var(--app-text3)', textAlign: 'left',
-  borderBottom: '1px solid var(--app-border)', whiteSpace: 'nowrap',
-  background: 'var(--app-surface2)', position: 'sticky', top: 0, zIndex: 10,
+  padding: '5px 8px',
+  background: 'var(--surface-2)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 'var(--radius-sm)',
+  fontSize: 12,
+  color: 'var(--text-primary)',
+  outline: 'none',
+  width: '100%',
 }
 
 function Section({ title, children, open: def = false }: { title: string; children: React.ReactNode; open?: boolean }) {
   const [open, setOpen] = useState(def)
   return (
-    <div style={{ borderBottom: '1px solid var(--app-border)' }}>
+    <div style={{ borderBottom: '1px solid var(--border-subtle)' }}>
       <button onClick={() => setOpen(o => !o)} style={{
         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer',
         fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-        color: 'var(--app-text3)',
+        color: 'var(--text-tertiary)',
       }}>
         {title}
         <span style={{ fontSize: 12, transition: 'transform 0.15s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
@@ -140,6 +138,59 @@ function Section({ title, children, open: def = false }: { title: string; childr
     </div>
   )
 }
+
+// Inline detail expansion for a selected row
+function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
+  r: ScanResult
+  watchlists: Watchlist[]
+  onAddToWatchlist: (symbol: string, wlId: string) => void
+  onOpenChart: (symbol: string) => void
+}) {
+  function MetricCell({ label, value, direction }: { label: string; value: string; direction?: 'above' | 'below' }) {
+    const color = direction === 'above' ? 'var(--gain)' : direction === 'below' ? 'var(--loss)' : 'var(--text-secondary)'
+    return (
+      <div>
+        <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+        <div className="mono" style={{ fontSize: 13, fontWeight: 500, color }}>{value}</div>
+      </div>
+    )
+  }
+
+  return (
+    <tr>
+      <td colSpan={8} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
+          <MetricCell label="EMA 20" value={r.ema_20 ? `₹${r.ema_20.toFixed(0)}` : '—'} direction={r.ema_20 ? (r.close > r.ema_20 ? 'above' : 'below') : undefined} />
+          <MetricCell label="EMA 50" value={r.ema_50 ? `₹${r.ema_50.toFixed(0)}` : '—'} direction={r.ema_50 ? (r.close > r.ema_50 ? 'above' : 'below') : undefined} />
+          <MetricCell label="EMA 200" value={r.ema_200 ? `₹${r.ema_200.toFixed(0)}` : '—'} direction={r.ema_200 ? (r.close > r.ema_200 ? 'above' : 'below') : undefined} />
+          <MetricCell label="ATR 14" value={r.atr_14 ? `₹${r.atr_14.toFixed(1)}` : '—'} />
+          <MetricCell label="Sector" value={r.sector || '—'} />
+          <MetricCell label="P/E" value={r.pe_ratio?.toFixed(1) ?? '—'} />
+          <MetricCell label="ROE" value={r.roe ? `${r.roe.toFixed(1)}%` : '—'} />
+          <MetricCell label="ADX 14" value={r.adx_14?.toFixed(1) ?? '—'} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, padding: '0 20px 14px' }}>
+          <Button size="sm" variant="primary" onClick={() => onOpenChart(r.symbol)}>
+            Open chart
+          </Button>
+          {watchlists.length > 0 && (
+            <select
+              onChange={e => { if (e.target.value) { onAddToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
+              style={{ fontSize: 12, padding: '4px 8px', background: 'var(--surface-3)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}
+            >
+              <option value="">Add to watchlist…</option>
+              {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+const SORT_COLS = [
+  ['volume_ratio', 'Vol ×'], ['pct_change', '% Chg'], ['rsi_14', 'RSI'], ['close', 'Price'],
+] as const
 
 export default function ScannerPage() {
   const router = useRouter()
@@ -150,12 +201,11 @@ export default function ScannerPage() {
   const [tradeDate, setTradeDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [selectedRow, setSelectedRow] = useState<ScanResult | null>(null)
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState('volume_ratio')
   const [sortDesc, setSortDesc] = useState(true)
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
   const [savedScreens, setSavedScreens] = useState<SavedScreen[]>([])
-  const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [showWlModal, setShowWlModal] = useState(false)
   const [newScreenName, setNewScreenName] = useState('')
@@ -165,11 +215,11 @@ export default function ScannerPage() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
+  const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
 
   const getToken = useCallback(async () => {
     const h = await authHeaders() as Record<string, string>
-    const auth = h['Authorization'] || ''
-    return auth.replace('Bearer ', '')
+    return (h['Authorization'] || '').replace('Bearer ', '')
   }, [])
 
   useEffect(() => {
@@ -224,7 +274,6 @@ export default function ScannerPage() {
     if (f.new_52w_high) fil.new_52w_high = true
     if (f.new_52w_low) fil.new_52w_low = true
     if (f.is_inside_bar) fil.is_inside_bar = true
-    // Fundamentals
     set('market_cap_min', num(f.market_cap_min)); set('market_cap_max', num(f.market_cap_max))
     set('pe_min', num(f.pe_min)); set('pe_max', num(f.pe_max))
     set('pb_min', num(f.pb_min)); set('pb_max', num(f.pb_max))
@@ -238,7 +287,7 @@ export default function ScannerPage() {
   }
 
   async function runScan(overrideFilters?: Filters, sb = sortBy, sd = sortDesc) {
-    setLoading(true); setError(''); setResults([]); setSelectedRow(null)
+    setLoading(true); setError(''); setResults([]); setExpandedSymbol(null)
     try {
       const token = await getToken()
       const payload = buildPayload(overrideFilters || filters, sb, sd)
@@ -331,7 +380,7 @@ export default function ScannerPage() {
   function rangeRow(label: string, minK: keyof Filters, maxK: keyof Filters) {
     return (
       <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, color: 'var(--app-text3)', marginBottom: 3 }}>{label}</div>
+        <div className="label" style={{ marginBottom: 4 }}>{label}</div>
         <div style={{ display: 'flex', gap: 4 }}>
           {(['min', 'max'] as const).map((t, i) => {
             const k = i === 0 ? minK : maxK
@@ -348,7 +397,7 @@ export default function ScannerPage() {
   function numRow(label: string, k: keyof Filters, placeholder = '') {
     return (
       <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, color: 'var(--app-text3)', marginBottom: 3 }}>{label}</div>
+        <div className="label" style={{ marginBottom: 4 }}>{label}</div>
         <input type="number" placeholder={placeholder} value={(filters[k] as string) || ''}
           onChange={e => setF(k, e.target.value)} style={inputStyle} />
       </div>
@@ -358,16 +407,17 @@ export default function ScannerPage() {
   function segRow(label: string, k: keyof Filters, opts: { value: string; label: string }[]) {
     return (
       <div style={{ marginBottom: 8 }}>
-        <div style={{ fontSize: 10, color: 'var(--app-text3)', marginBottom: 3 }}>{label}</div>
+        <div className="label" style={{ marginBottom: 4 }}>{label}</div>
         <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
           {opts.map(o => {
             const active = filters[k] === o.value
             return (
               <button key={o.value} onClick={() => setF(k, active ? '' : o.value)} style={{
-                padding: '3px 9px', borderRadius: 4, fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                border: `1px solid ${active ? 'rgba(0,229,196,0.4)' : 'var(--app-border)'}`,
-                background: active ? 'var(--app-teal-dim)' : 'transparent',
-                color: active ? 'var(--app-teal)' : 'var(--app-text2)', transition: 'all 0.12s',
+                padding: '3px 9px', borderRadius: 'var(--radius-sm)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                background: active ? 'var(--accent-subtle)' : 'transparent',
+                color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                transition: 'all var(--motion-instant) var(--ease-out)',
               }}>{o.label}</button>
             )
           })}
@@ -380,48 +430,35 @@ export default function ScannerPage() {
     return (
       <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6, cursor: 'pointer' }}>
         <input type="checkbox" checked={!!filters[key]} onChange={e => setF(key, e.target.checked)}
-          style={{ accentColor: 'var(--app-teal)', width: 13, height: 13 }} />
-        <span style={{ fontSize: 12, color: 'var(--app-text2)' }}>{label}</span>
+          style={{ accentColor: 'var(--accent)', width: 13, height: 13 }} />
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{label}</span>
       </label>
     )
   }
 
-  function rsiBadge(rsi: number | null) {
-    if (rsi == null) return <span style={{ color: 'var(--app-text3)', fontSize: 11 }}>—</span>
-    const hot = rsi > 70, ok = rsi >= 40
-    return (
-      <span style={{
-        fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
-        background: hot ? 'rgba(0,229,196,0.12)' : ok ? 'rgba(38,166,91,0.12)' : 'rgba(245,158,11,0.12)',
-        color: hot ? 'var(--app-teal)' : ok ? 'var(--app-gain)' : '#f59e0b',
-      }}>{rsi.toFixed(0)}</span>
-    )
-  }
-
-  const SORT_COLS = [
-    ['volume_ratio', 'Vol ×'], ['pct_change', '% Chg'], ['rsi_14', 'RSI'], ['close', 'Price'],
-  ] as const
+  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setResults([]); setError(''); setHasRun(false) }
 
   return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 48px)', background: 'var(--app-bg)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: 'calc(100vh - 52px)', background: 'var(--surface-0)', overflow: 'hidden' }}>
 
       {/* ── LEFT PANEL ── */}
-      <div style={{ width: 300, flexShrink: 0, background: 'var(--app-surface)', borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ width: 260, flexShrink: 0, background: 'var(--surface-1)', borderRight: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Presets */}
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--app-border)', flexShrink: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--app-text3)', marginBottom: 8 }}>Presets</div>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <div className="label" style={{ marginBottom: 10 }}>Presets</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {PRESETS.map(p => {
               const active = activePreset === p.id
               return (
-                <button key={p.id} onClick={() => applyPreset(p)} title={p.name} style={{
-                  padding: '4px 8px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                  border: `1px solid ${active ? 'rgba(0,229,196,0.5)' : 'var(--app-border)'}`,
-                  background: active ? 'var(--app-teal-dim)' : 'transparent',
-                  color: active ? 'var(--app-teal)' : 'var(--app-text2)',
+                <button key={p.id} onClick={() => applyPreset(p)} style={{
+                  padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                  background: active ? 'var(--accent-subtle)' : 'transparent',
+                  color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                  transition: 'all var(--motion-instant) var(--ease-out)',
                 }}>
-                  {p.emoji} {p.name}
+                  {p.name}
                 </button>
               )
             })}
@@ -430,41 +467,39 @@ export default function ScannerPage() {
 
         {/* Saved screens */}
         {savedScreens.length > 0 && (
-          <div style={{ padding: '8px 14px', borderBottom: '1px solid var(--app-border)', maxHeight: 120, overflowY: 'auto', flexShrink: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--app-text3)', marginBottom: 6 }}>Saved</div>
+          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-subtle)', maxHeight: 120, overflowY: 'auto', flexShrink: 0 }}>
+            <div className="label" style={{ marginBottom: 8 }}>My screens</div>
             {savedScreens.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
                 <button onClick={() => loadScreen(s)} style={{
-                  flex: 1, textAlign: 'left', padding: '3px 8px', borderRadius: 4, fontSize: 11,
-                  background: 'var(--app-surface2)', border: '1px solid var(--app-border)',
-                  color: 'var(--app-text2)', cursor: 'pointer',
+                  flex: 1, textAlign: 'left', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: 11,
+                  background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-secondary)', cursor: 'pointer',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>{s.name}</button>
-                <button onClick={() => deleteScreen(s.id, s.name)} style={{
-                  background: 'none', border: 'none', color: 'var(--app-text3)', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0,
-                }}>×</button>
+                <button onClick={() => deleteScreen(s.id, s.name)} style={{ color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
             ))}
           </div>
         )}
 
         {/* Filters toggle */}
-        <div style={{ padding: '6px 14px', borderBottom: filtersOpen ? '1px solid var(--app-border)' : 'none', flexShrink: 0 }}>
+        <div style={{ padding: '8px 16px', borderBottom: filtersOpen ? '1px solid var(--border-subtle)' : 'none', flexShrink: 0 }}>
           <button onClick={() => setFiltersOpen(o => !o)} style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'none', border: '1px solid var(--app-border)', borderRadius: 6,
+            background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
             padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
-            color: filtersOpen ? 'var(--app-teal)' : 'var(--app-text2)',
+            color: filtersOpen ? 'var(--accent)' : 'var(--text-secondary)',
           }}>
             <span>Filters {filtersOpen ? '▲' : '▼'}</span>
             {filtersOpen && (
               <div style={{ display: 'flex', gap: 4 }}>
                 {(['technical', 'fundamental'] as const).map(tab => (
-                  <button key={tab} onClick={e => { e.stopPropagation(); setFilterTab(tab); }} style={{
-                    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    border: `1px solid ${filterTab === tab ? 'rgba(0,229,196,0.5)' : 'var(--app-border)'}`,
-                    background: filterTab === tab ? 'var(--app-teal-dim)' : 'transparent',
-                    color: filterTab === tab ? 'var(--app-teal)' : 'var(--app-text3)',
+                  <button key={tab} onClick={e => { e.stopPropagation(); setFilterTab(tab) }} style={{
+                    padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    border: `1px solid ${filterTab === tab ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                    background: filterTab === tab ? 'var(--accent-subtle)' : 'transparent',
+                    color: filterTab === tab ? 'var(--accent)' : 'var(--text-tertiary)',
                     textTransform: 'capitalize',
                   }}>{tab}</button>
                 ))}
@@ -482,27 +517,27 @@ export default function ScannerPage() {
                 {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
               </Section>
               <Section title="Volume">
-                {rangeRow('Vol ratio (×avg)', 'volume_ratio_min', 'volume_ratio_max')}
+                {rangeRow('Vol ratio (× avg)', 'volume_ratio_min', 'volume_ratio_max')}
               </Section>
               <Section title="Moving Averages">
-                {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
-                {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
-                {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
-                {segRow('EMA 20 vs 50', 'ema20_vs_ema50', [{ value: 'golden', label: 'Golden ↑' }, { value: 'death', label: 'Death ↓' }])}
-                {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden ↑' }, { value: 'death', label: 'Death ↓' }])}
+                {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
+                {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
+                {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
+                {segRow('EMA 20 vs 50', 'ema20_vs_ema50', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
+                {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
               </Section>
               <Section title="Momentum">
                 {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
                 {rangeRow('ADX 14', 'adx_min', 'adx_max')}
-                {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: '↑ +ve' }, { value: 'negative', label: '↓ −ve' }])}
+                {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: 'Positive' }, { value: 'negative', label: 'Negative' }])}
               </Section>
               <Section title="Bollinger Bands">
                 {segRow('Position', 'bb_position', [
-                  { value: 'above_upper', label: 'Above ↑' },
-                  { value: 'below_lower', label: 'Below ↓' },
-                  { value: 'near_upper',  label: 'Near ↑' },
-                  { value: 'near_lower',  label: 'Near ↓' },
-                  { value: 'inside',      label: 'Inside' },
+                  { value: 'above_upper', label: 'Above upper' },
+                  { value: 'below_lower', label: 'Below lower' },
+                  { value: 'near_upper', label: 'Near upper' },
+                  { value: 'near_lower', label: 'Near lower' },
+                  { value: 'inside', label: 'Inside' },
                 ])}
                 {rangeRow('BB Width', 'bb_width_min', 'bb_width_max')}
               </Section>
@@ -510,9 +545,9 @@ export default function ScannerPage() {
                 {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
               </Section>
               <Section title="52-Week Range">
-                {numRow('Max % below 52W High', 'week_52_high_pct_max', 'e.g. 5')}
-                {toggleRow('New 52W High today', 'new_52w_high')}
-                {toggleRow('New 52W Low today', 'new_52w_low')}
+                {numRow('Max % below 52W high', 'week_52_high_pct_max', 'e.g. 5')}
+                {toggleRow('New 52W high today', 'new_52w_high')}
+                {toggleRow('New 52W low today', 'new_52w_low')}
               </Section>
               <Section title="Candle Patterns">
                 {toggleRow('Inside bar', 'is_inside_bar')}
@@ -521,14 +556,14 @@ export default function ScannerPage() {
           ) : (
             <>
               <Section title="Market Cap" open>
-                {rangeRow('Market Cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
-                <div style={{ fontSize: 10, color: 'var(--app-text3)', marginTop: -4, marginBottom: 6 }}>
-                  e.g. Large cap: 20000+, Mid: 5000–20000, Small: &lt;5000
+                {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: -4, marginBottom: 6, lineHeight: 1.5 }}>
+                  Large: 20000+  ·  Mid: 5000–20000  ·  Small: &lt;5000
                 </div>
               </Section>
               <Section title="Valuation" open>
-                {rangeRow('P/E Ratio', 'pe_min', 'pe_max')}
-                {rangeRow('P/B Ratio', 'pb_min', 'pb_max')}
+                {rangeRow('P/E ratio', 'pe_min', 'pe_max')}
+                {rangeRow('P/B ratio', 'pb_min', 'pb_max')}
                 {rangeRow('EPS (₹)', 'eps_min', 'eps_max')}
               </Section>
               <Section title="Returns & Efficiency" open>
@@ -536,37 +571,27 @@ export default function ScannerPage() {
                 {numRow('ROCE ≥ %', 'roce_min', 'e.g. 15')}
               </Section>
               <Section title="Dividends & Debt">
-                {rangeRow('Dividend Yield %', 'dividend_yield_min', 'dividend_yield_max')}
+                {rangeRow('Dividend yield %', 'dividend_yield_min', 'dividend_yield_max')}
                 {numRow('Debt/Equity ≤', 'debt_to_equity_max', 'e.g. 1')}
               </Section>
-              <div style={{ padding: '10px 14px', fontSize: 11, color: 'var(--app-text3)', lineHeight: 1.5 }}>
-                Fundamental data updates daily via yfinance. Run <code style={{ fontSize: 10, background: 'var(--app-surface3)', padding: '1px 4px', borderRadius: 3 }}>fetch_fundamentals.py</code> to populate.
-              </div>
             </>
           )}
         </div>
 
         {/* Bottom actions */}
-        <div style={{ padding: '10px 14px', borderTop: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => runScan()} disabled={loading} style={{
-            padding: '9px', borderRadius: 7, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-            background: loading ? 'var(--app-surface3)' : 'var(--app-teal)',
-            color: loading ? 'var(--app-text3)' : '#0D0F14',
-            fontSize: 13, fontWeight: 700, transition: 'all 0.15s',
-          }}>
-            {loading ? 'Scanning...' : 'Run Scan'}
-          </button>
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+          <Button variant="primary" size="md" onClick={() => runScan()} loading={loading} fullWidth>
+            Run scan
+          </Button>
           <div style={{ display: 'flex', gap: 6 }}>
             {results.length > 0 && (
-              <button onClick={() => setShowSaveModal(true)} style={{
-                flex: 1, padding: '6px', borderRadius: 6, border: '1px solid var(--app-border)',
-                background: 'transparent', color: 'var(--app-teal)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
-              }}>Save screen</button>
+              <Button variant="ghost" size="sm" onClick={() => setShowSaveModal(true)} fullWidth>
+                Save screen
+              </Button>
             )}
-            <button onClick={() => { setFilters(emptyFilters()); setActivePreset(null); setResults([]); setError('') }} style={{
-              flex: 1, padding: '6px', borderRadius: 6, border: 'none',
-              background: 'transparent', color: 'var(--app-text3)', fontSize: 11, cursor: 'pointer',
-            }}>Reset all</button>
+            <Button variant="ghost" size="sm" onClick={resetFilters} fullWidth>
+              Reset
+            </Button>
           </div>
         </div>
       </div>
@@ -574,27 +599,20 @@ export default function ScannerPage() {
       {/* ── CENTER: Results ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-        {/* Topbar */}
-        <div style={{ height: 44, background: 'var(--app-surface)', borderBottom: '1px solid var(--app-border)', display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10, flexShrink: 0 }}>
+        {/* Results header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', height: 44, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0, background: 'var(--surface-1)' }}>
           {results.length > 0 ? (
             <>
-              <span style={{ fontSize: 13, color: 'var(--app-text2)' }}>
-                <strong style={{ color: 'var(--app-text1)' }}>{results.length}</strong>
-                {totalMatches > results.length && (
-                  <span style={{ color: 'var(--app-text3)' }}> of {totalMatches}</span>
-                )} stocks
-                {tradeDate && <span style={{ color: 'var(--app-text3)', marginLeft: 6 }}>· EOD {tradeDate}</span>}
-              </span>
-              {totalMatches > results.length && (
-                <span style={{
-                  fontSize: 11, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
-                  background: 'rgba(91,99,245,0.12)', color: '#818cf8', border: '1px solid rgba(91,99,245,0.25)',
-                  flexShrink: 0,
-                }} title="Free plan shows 50 results. Upgrade to Pro for up to 500.">
-                  Free plan · 50 result cap
-                </span>
-              )}
-              <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+              <div>
+                <span className="heading-card">{totalMatches > 0 ? `${totalMatches} stocks` : 'Scanner'}</span>
+                {tradeDate && <span className="caption" style={{ marginLeft: 8 }}>EOD {tradeDate} · showing {results.length}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                {isLimited && (
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--warn-subtle)', color: 'var(--warn)', border: '1px solid rgba(232,163,59,0.25)' }}>
+                    Free plan · 50 cap
+                  </span>
+                )}
                 {SORT_COLS.map(([col, lbl]) => {
                   const active = sortBy === col
                   return (
@@ -602,265 +620,147 @@ export default function ScannerPage() {
                       const newDesc = col === sortBy ? !sortDesc : true
                       setSortBy(col); setSortDesc(newDesc); runScan(undefined, col, newDesc)
                     }} style={{
-                      padding: '3px 10px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                      border: `1px solid ${active ? 'rgba(0,229,196,0.4)' : 'var(--app-border)'}`,
-                      background: active ? 'var(--app-teal-dim)' : 'transparent',
-                      color: active ? 'var(--app-teal)' : 'var(--app-text2)',
+                      padding: '3px 10px', borderRadius: 'var(--radius-sm)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                      background: active ? 'var(--accent-subtle)' : 'transparent',
+                      color: active ? 'var(--accent)' : 'var(--text-secondary)',
                     }}>
                       {lbl}{active ? (sortDesc ? ' ↓' : ' ↑') : ''}
                     </button>
                   )
                 })}
+                <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
+                  + Watchlist
+                </Button>
               </div>
-              <button onClick={() => setShowWlModal(true)} style={{
-                padding: '5px 12px', borderRadius: 6, border: 'none',
-                background: 'var(--app-teal)', color: '#0D0F14', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-              }}>+ Watchlist</button>
             </>
           ) : (
-            <span style={{ fontSize: 12, color: 'var(--app-text3)' }}>
-              {loading ? 'Scanning...' : 'Pick a preset or configure filters, then click Run Scan'}
+            <span className="caption">
+              {loading ? 'Scanning…' : 'Pick a preset or configure filters, then click Run scan'}
             </span>
           )}
         </div>
 
+        {/* Error */}
         {error && (
-          <div style={{ margin: '12px 16px', padding: '10px 14px', background: 'rgba(229,56,59,0.08)', border: '1px solid rgba(229,56,59,0.25)', borderRadius: 8, fontSize: 12, color: 'var(--app-loss)' }}>
-            {error} — check that the backend is running at localhost:8000
-          </div>
-        )}
-
-        {/* Plan cap banner */}
-        {isLimited && (
-          <div style={{ margin: '8px 16px 0', padding: '8px 14px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 6, fontSize: 12, color: 'var(--app-warn)' }}>
-            Showing 25 of {totalMatches} results.{' '}
-            <a href="/settings" style={{ color: 'var(--app-teal)', fontWeight: 700 }}>Upgrade to Pro</a> to see all 500.
+          <div style={{ margin: '12px 16px', padding: '10px 14px', background: 'var(--loss-subtle)', border: '1px solid rgba(225,85,96,0.2)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--loss)' }}>
+            {error}
           </div>
         )}
 
         {/* Skeleton */}
         {loading && (
-          <div style={{ padding: 16 }}>
+          <div style={{ padding: '12px 16px' }}>
             {[...Array(8)].map((_, i) => (
-              <div key={i} style={{ height: 44, background: 'var(--app-surface)', borderRadius: 6, marginBottom: 4, opacity: 0.3 + i * 0.06 }} />
+              <div key={i} style={{ height: 36, background: 'var(--surface-1)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', marginBottom: 4, opacity: 0.3 + i * 0.07 }} />
             ))}
           </div>
         )}
 
         {/* Empty — no scan run yet */}
         {!loading && !hasRun && !error && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 }}>
-            <div style={{ fontSize: 28, opacity: 0.4 }}>⊹</div>
-            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--app-text1)' }}>Run your first scan</div>
-            <div style={{ fontSize: 13, color: 'var(--app-text3)', textAlign: 'center', maxWidth: 280 }}>Pick a preset above, or open Filters to set custom conditions</div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <EmptyState
+              title="Run your first scan"
+              description="Pick a preset on the left, or open Filters to set custom conditions."
+            />
           </div>
         )}
 
         {/* Empty — scan ran but 0 results */}
         {!loading && hasRun && results.length === 0 && !error && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--app-text1)' }}>No stocks matched</div>
-            <div style={{ fontSize: 12, color: 'var(--app-text3)', textAlign: 'center', maxWidth: 280 }}>
-              Your filters are too strict. Try widening the RSI range, reducing the volume ratio, or using a preset.
-            </div>
-            <button onClick={() => { setFilters(emptyFilters()); setActivePreset(null); setResults([]); setError(''); setHasRun(false); }} style={{
-              marginTop: 8, padding: '6px 16px', borderRadius: 6, border: '1px solid var(--app-border)',
-              background: 'transparent', color: 'var(--app-teal)', fontSize: 12, cursor: 'pointer',
-            }}>Reset filters</button>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <EmptyState
+              title="No stocks matched"
+              description="Your filters are too strict. Try widening the RSI range or reducing the volume ratio."
+              action={{ label: 'Reset filters', onClick: resetFilters }}
+            />
           </div>
         )}
 
         {/* Results table */}
         {!loading && results.length > 0 && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ ...thStyle, width: 32 }}>
-                    <input type="checkbox" style={{ accentColor: 'var(--app-teal)' }}
-                      onChange={e => setSelectedResults(e.target.checked ? new Set(results.map(r => r.symbol)) : new Set())} />
-                  </th>
-                  <th style={thStyle}>Symbol</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Price</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Chg %</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Vol ×</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>RSI</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>EMA 20</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>52W H%</th>
-                  <th style={{ ...thStyle, width: 64 }}></th>
-                </tr>
-              </thead>
+            <DataTable style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)' }}>
+              <DataTableHead>
+                <Th width={32}>
+                  <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
+                    onChange={e => setSelectedResults(e.target.checked ? new Set(results.map(r => r.symbol)) : new Set())} />
+                </Th>
+                <Th width={200}>Symbol</Th>
+                <Th align="right" width={110}>Price</Th>
+                <Th align="right" width={90}>Change</Th>
+                <Th align="right" width={70}>Vol ×</Th>
+                <Th align="right" width={60}>RSI</Th>
+                <Th align="right" width={90}>52W H%</Th>
+                <Th width={60}>{''}</Th>
+              </DataTableHead>
               <tbody>
                 {results.map(r => {
-                  const sel = selectedRow?.symbol === r.symbol
-                  const chk = selectedResults.has(r.symbol)
+                  const expanded = expandedSymbol === r.symbol
+                  const rsiBadgeVariant = r.rsi_14 != null
+                    ? (r.rsi_14 > 70 ? 'accent' : r.rsi_14 > 40 ? 'gain' : 'warn')
+                    : 'neutral'
                   return (
-                    <tr key={r.symbol} onClick={() => setSelectedRow(sel ? null : r)}
-                      style={{ borderBottom: '1px solid var(--app-border)', background: sel ? 'var(--app-teal-dim)' : 'transparent', cursor: 'pointer' }}
-                      onMouseEnter={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'var(--app-surface2)' }}
-                      onMouseLeave={e => { if (!sel) (e.currentTarget as HTMLElement).style.background = 'transparent' }}>
-                      <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={chk} style={{ accentColor: 'var(--app-teal)' }}
-                          onChange={e => setSelectedResults(s => { const n = new Set(s); if (e.target.checked) { n.add(r.symbol) } else { n.delete(r.symbol) } return n })} />
-                      </td>
-                      <td style={{ padding: '9px 12px' }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text1)', fontFamily: 'monospace' }}>{r.symbol}</div>
-                        <div style={{ fontSize: 10, color: 'var(--app-text3)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
-                      </td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontSize: 13, fontWeight: 600, color: 'var(--app-text1)', fontFamily: 'monospace' }}>
-                        ₹{r.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-                      </td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: r.pct_change >= 0 ? 'var(--app-gain)' : 'var(--app-loss)' }}>
-                        {r.pct_change >= 0 ? '+' : ''}{r.pct_change?.toFixed(2)}%
-                      </td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontSize: 12, fontWeight: 700, color: '#A78BFA', fontFamily: 'monospace' }}>
-                        {r.volume_ratio?.toFixed(1)}×
-                      </td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right' }}>{rsiBadge(r.rsi_14)}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 600, color: r.close > (r.ema_20 || 0) ? 'var(--app-gain)' : 'var(--app-loss)' }}>
-                        {r.ema_20 ? (r.close > r.ema_20 ? '↑ ' : '↓ ') + '₹' + r.ema_20.toFixed(0) : '—'}
-                      </td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontSize: 11, color: 'var(--app-text3)', fontFamily: 'monospace' }}>
-                        {r.week_52_high_pct != null ? r.week_52_high_pct.toFixed(1) + '%' : '—'}
-                      </td>
-                      <td style={{ padding: '9px 12px' }} onClick={e => e.stopPropagation()}>
-                        {watchlists.length > 0 && (
-                          <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
-                            style={{ fontSize: 10, padding: '2px 4px', background: 'var(--app-surface2)', border: '1px solid var(--app-border)', borderRadius: 4, color: 'var(--app-text2)', cursor: 'pointer' }}>
-                            <option value="">+WL</option>
-                            {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                          </select>
-                        )}
-                      </td>
-                    </tr>
+                    <>
+                      <Tr key={r.symbol} onClick={() => setExpandedSymbol(expanded ? null : r.symbol)} selected={expanded}>
+                        <Td>
+                          <input type="checkbox" checked={selectedResults.has(r.symbol)} style={{ accentColor: 'var(--accent)' }}
+                            onChange={e => { e.stopPropagation(); setSelectedResults(s => { const n = new Set(s); if (e.target.checked) { n.add(r.symbol) } else { n.delete(r.symbol) } return n }) }}
+                            onClick={e => e.stopPropagation()} />
+                        </Td>
+                        <Td>
+                          <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
+                          <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                        </Td>
+                        <Td align="right" mono emphasized>₹{r.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Td>
+                        <Td align="right">
+                          <span className="mono" style={{ color: r.pct_change >= 0 ? 'var(--gain)' : 'var(--loss)', fontWeight: 600, fontSize: 12 }}>
+                            {r.pct_change >= 0 ? '+' : ''}{r.pct_change?.toFixed(2)}%
+                          </span>
+                        </Td>
+                        <Td align="right" mono>{r.volume_ratio?.toFixed(1)}×</Td>
+                        <Td align="right">
+                          {r.rsi_14 != null
+                            ? <Badge variant={rsiBadgeVariant as 'accent' | 'gain' | 'warn'} mono>{r.rsi_14.toFixed(0)}</Badge>
+                            : <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
+                          }
+                        </Td>
+                        <Td align="right" mono>
+                          {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
+                        </Td>
+                        <Td>
+                          {watchlists.length > 0 && (
+                            <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
+                              onClick={e => e.stopPropagation()}
+                              style={{ fontSize: 10, padding: '2px 4px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                              <option value="">+WL</option>
+                              {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                            </select>
+                          )}
+                        </Td>
+                      </Tr>
+                      {expanded && (
+                        <RowExpansion
+                          r={r}
+                          watchlists={watchlists}
+                          onAddToWatchlist={addToWatchlist}
+                          onOpenChart={sym => router.push(`/charts/${sym}`)}
+                        />
+                      )}
+                    </>
                   )
                 })}
               </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!loading && results.length === 0 && !error && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--app-text3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.5 }}>⊹</div>
-            <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--app-text1)', marginBottom: 6 }}>No results yet</p>
-            <p style={{ fontSize: 13 }}>Pick a preset or configure filters, then click Run Scan</p>
+            </DataTable>
           </div>
         )}
       </div>
 
-      {/* ── RIGHT: Detail panel ── */}
-      {selectedRow && (
-        <div style={{ width: 256, flexShrink: 0, background: 'var(--app-surface)', borderLeft: '1px solid var(--app-border)', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ padding: '16px', borderBottom: '1px solid var(--app-border)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--app-text1)', fontFamily: 'monospace', letterSpacing: '-0.5px' }}>{selectedRow.symbol}</span>
-              <button onClick={() => setSelectedRow(null)} style={{ background: 'none', border: 'none', color: 'var(--app-text3)', fontSize: 20, cursor: 'pointer', lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--app-text3)', marginBottom: 10 }}>{selectedRow.company_name}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--app-text1)', fontFamily: 'monospace' }}>
-                ₹{selectedRow.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: selectedRow.pct_change >= 0 ? 'var(--app-gain)' : 'var(--app-loss)' }}>
-                {selectedRow.pct_change >= 0 ? '+' : ''}{selectedRow.pct_change?.toFixed(2)}%
-              </span>
-            </div>
-          </div>
-
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--app-text3)', marginBottom: 8 }}>Key Metrics</div>
-            {([
-              ['RSI 14', selectedRow.rsi_14?.toFixed(1)],
-              ['Vol ratio', selectedRow.volume_ratio != null ? selectedRow.volume_ratio.toFixed(1) + '×' : null],
-              ['ATR 14', selectedRow.atr_14 ? '₹' + selectedRow.atr_14.toFixed(1) : null],
-              ['ADX 14', selectedRow.adx_14?.toFixed(1)],
-              ['MACD hist', selectedRow.macd_hist?.toFixed(2)],
-              ['BB Width', selectedRow.bb_width?.toFixed(3)],
-            ] as [string, string | null | undefined][]).filter(([, v]) => v != null).map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
-                <span style={{ color: 'var(--app-text3)' }}>{k}</span>
-                <span style={{ fontWeight: 600, color: 'var(--app-text1)', fontFamily: 'monospace' }}>{v}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--app-text3)', marginBottom: 8 }}>EMA Stack</div>
-            {([['EMA 20', selectedRow.ema_20], ['EMA 50', selectedRow.ema_50], ['EMA 200', selectedRow.ema_200]] as [string, number | null][]).map(([k, v]) => v != null ? (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
-                <span style={{ color: 'var(--app-text3)' }}>{k}</span>
-                <span style={{ fontWeight: 600, color: selectedRow.close > v ? 'var(--app-gain)' : 'var(--app-loss)' }}>
-                  {selectedRow.close > v ? '↑' : '↓'} ₹{v.toFixed(0)}
-                </span>
-              </div>
-            ) : null)}
-          </div>
-
-          {(selectedRow.pe_ratio != null || selectedRow.market_cap_cr != null || selectedRow.roe != null) && (
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--app-text3)', marginBottom: 8 }}>Fundamentals</div>
-              {([
-                ['Market Cap', selectedRow.market_cap_cr != null ? `₹${selectedRow.market_cap_cr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Cr` : null],
-                ['P/E Ratio', selectedRow.pe_ratio?.toFixed(1)],
-                ['P/B Ratio', selectedRow.pb_ratio?.toFixed(2)],
-                ['EPS', selectedRow.eps != null ? `₹${selectedRow.eps.toFixed(2)}` : null],
-                ['ROE', selectedRow.roe != null ? `${selectedRow.roe.toFixed(1)}%` : null],
-                ['ROCE', selectedRow.roce != null ? `${selectedRow.roce.toFixed(1)}%` : null],
-                ['Div Yield', selectedRow.dividend_yield != null ? `${selectedRow.dividend_yield.toFixed(2)}%` : null],
-              ] as [string, string | null | undefined][]).filter(([, v]) => v != null).map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
-                  <span style={{ color: 'var(--app-text3)' }}>{k}</span>
-                  <span style={{ fontWeight: 600, color: 'var(--app-text1)', fontFamily: 'monospace' }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {selectedRow.week_52_high != null && selectedRow.week_52_low != null && (
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--app-text3)', marginBottom: 8 }}>52-Week Range</div>
-              {(() => {
-                const range = selectedRow.week_52_high! - selectedRow.week_52_low!
-                const pct = range > 0 ? Math.min(100, Math.max(0, ((selectedRow.close - selectedRow.week_52_low!) / range) * 100)) : 50
-                return (
-                  <>
-                    <div style={{ height: 4, background: 'var(--app-surface3)', borderRadius: 2, marginBottom: 6, position: 'relative' }}>
-                      <div style={{ height: '100%', width: pct + '%', background: 'var(--app-teal)', borderRadius: 2 }} />
-                      <div style={{ position: 'absolute', top: -2, width: 8, height: 8, borderRadius: '50%', background: 'var(--app-teal)', left: pct + '%', transform: 'translateX(-50%)' }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--app-text3)' }}>
-                      <span>₹{selectedRow.week_52_low?.toFixed(0)}</span>
-                      <span style={{ color: 'var(--app-teal)', fontWeight: 600 }}>{selectedRow.week_52_high_pct?.toFixed(1)}% from high</span>
-                      <span>₹{selectedRow.week_52_high?.toFixed(0)}</span>
-                    </div>
-                  </>
-                )
-              })()}
-            </div>
-          )}
-
-          <div style={{ padding: '12px 16px', marginTop: 'auto', borderTop: '1px solid var(--app-border)' }}>
-            {watchlists.length > 0 && (
-              <select onChange={e => { if (e.target.value) { addToWatchlist(selectedRow.symbol, e.target.value); e.target.value = '' } }}
-                style={{ width: '100%', padding: '7px 10px', background: 'var(--app-surface2)', border: '1px solid var(--app-border)', borderRadius: 7, fontSize: 12, color: 'var(--app-text2)', cursor: 'pointer', marginBottom: 8 }}>
-                <option value="">+ Add to watchlist...</option>
-                {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            )}
-            <button onClick={() => router.push(`/charts/${selectedRow.symbol}`)} style={{
-              width: '100%', padding: '7px', borderRadius: 7, border: 'none',
-              background: 'var(--app-teal)', color: '#0D0F14', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            }}>Open Chart →</button>
-          </div>
-        </div>
-      )}
-
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', top: 60, right: 20, zIndex: 999, padding: '8px 16px', background: 'var(--app-surface2)', border: '1px solid var(--app-border)', borderRadius: 8, fontSize: 12, color: 'var(--app-teal)' }}>
-          ✓ {toast}
+        <div style={{ position: 'fixed', top: 60, right: 20, zIndex: 999, padding: '8px 16px', background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--accent)', boxShadow: 'var(--shadow-dropdown)' }}>
+          {toast}
         </div>
       )}
 
@@ -868,15 +768,16 @@ export default function ScannerPage() {
       {showSaveModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
           onClick={() => setShowSaveModal(false)}>
-          <div style={{ background: 'var(--app-surface)', border: '1px solid var(--app-border)', borderRadius: 12, padding: 24, width: 300 }}
+          <div style={{ background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 24, width: 300, boxShadow: 'var(--shadow-modal)' }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--app-text1)', marginBottom: 16 }}>Save current screen</div>
+            <div className="heading-card" style={{ marginBottom: 16 }}>Save current screen</div>
             <input autoFocus value={newScreenName} onChange={e => setNewScreenName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveCurrentScreen()}
-              placeholder="Screen name..." style={{ ...inputStyle, marginBottom: 12, padding: '8px 12px' }} />
+              placeholder="Screen name…"
+              style={{ ...inputStyle, marginBottom: 12, padding: '8px 12px' }} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowSaveModal(false)} style={{ flex: 1, padding: 8, borderRadius: 7, border: '1px solid var(--app-border)', background: 'transparent', color: 'var(--app-text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={saveCurrentScreen} disabled={!newScreenName.trim()} style={{ flex: 1, padding: 8, borderRadius: 7, border: 'none', background: 'var(--app-teal)', color: '#0D0F14', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: newScreenName.trim() ? 1 : 0.5 }}>Save</button>
+              <Button variant="ghost" size="md" onClick={() => setShowSaveModal(false)} fullWidth>Cancel</Button>
+              <Button variant="primary" size="md" onClick={saveCurrentScreen} disabled={!newScreenName.trim()} fullWidth>Save</Button>
             </div>
           </div>
         </div>
@@ -886,18 +787,19 @@ export default function ScannerPage() {
       {showWlModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
           onClick={() => setShowWlModal(false)}>
-          <div style={{ background: 'var(--app-surface)', border: '1px solid var(--app-border)', borderRadius: 12, padding: 24, width: 320 }}
+          <div style={{ background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 24, width: 320, boxShadow: 'var(--shadow-modal)' }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--app-text1)', marginBottom: 6 }}>Create Watchlist</div>
-            <div style={{ fontSize: 12, color: 'var(--app-text3)', marginBottom: 16 }}>
+            <div className="heading-card" style={{ marginBottom: 6 }}>Create watchlist</div>
+            <div className="caption" style={{ marginBottom: 16 }}>
               {selectedResults.size > 0 ? `Adding ${selectedResults.size} selected stocks` : `Adding all ${Math.min(results.length, 50)} stocks`}
             </div>
             <input autoFocus value={newWlName} onChange={e => setNewWlName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && createWatchlistFromResults()}
-              placeholder="Watchlist name..." style={{ ...inputStyle, marginBottom: 12, padding: '8px 12px' }} />
+              placeholder="Watchlist name…"
+              style={{ ...inputStyle, marginBottom: 12, padding: '8px 12px' }} />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowWlModal(false)} style={{ flex: 1, padding: 8, borderRadius: 7, border: '1px solid var(--app-border)', background: 'transparent', color: 'var(--app-text2)', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={createWatchlistFromResults} disabled={!newWlName.trim()} style={{ flex: 1, padding: 8, borderRadius: 7, border: 'none', background: 'var(--app-teal)', color: '#0D0F14', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: newWlName.trim() ? 1 : 0.5 }}>Create & Go →</button>
+              <Button variant="ghost" size="md" onClick={() => setShowWlModal(false)} fullWidth>Cancel</Button>
+              <Button variant="primary" size="md" onClick={createWatchlistFromResults} disabled={!newWlName.trim()} fullWidth>Create</Button>
             </div>
           </div>
         </div>
