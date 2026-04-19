@@ -401,7 +401,7 @@ export default function ScannerPage() {
     <div style={{ display: 'flex', height: 'calc(100vh - 48px)', background: 'var(--app-bg)', overflow: 'hidden' }}>
 
       {/* ── LEFT PANEL ── */}
-      <div style={{ width: 238, flexShrink: 0, background: 'var(--app-surface)', borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ width: 300, flexShrink: 0, background: 'var(--app-surface)', borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Presets */}
         <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--app-border)', flexShrink: 0 }}>
