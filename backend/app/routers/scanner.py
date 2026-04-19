@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 
 FREE_RESULT_LIMIT  = 25
 PRO_RESULT_LIMIT   = 500
-FETCH_BATCH        = 2000  # rows pulled from DB before Python-side filtering
+FETCH_BATCH        = 6000  # rows pulled from DB before Python-side filtering (NSE+BSE ~3000, US ~1500)
 
 
 # ── Filter model ──────────────────────────────────────────────────────────────
@@ -578,14 +578,16 @@ async def run_scanner(
     )
 
     # Push simple DB-side filters to reduce rows before Python processing
-    if f.price_min  is not None: q = q.gte("close", f.price_min)
-    if f.price_max  is not None: q = q.lte("close", f.price_max)
-    if f.rsi_min    is not None: q = q.gte("rsi_14", f.rsi_min)
-    if f.rsi_max    is not None: q = q.lte("rsi_14", f.rsi_max)
-    if f.atr_min    is not None: q = q.gte("atr_14", f.atr_min)
-    if f.atr_max    is not None: q = q.lte("atr_14", f.atr_max)
-    if f.turnover_min is not None: q = q.gte("turnover", f.turnover_min)
-    if f.turnover_max is not None: q = q.lte("turnover", f.turnover_max)
+    if f.price_min      is not None: q = q.gte("close",      f.price_min)
+    if f.price_max      is not None: q = q.lte("close",      f.price_max)
+    if f.rsi_min        is not None: q = q.gte("rsi_14",     f.rsi_min)
+    if f.rsi_max        is not None: q = q.lte("rsi_14",     f.rsi_max)
+    if f.atr_min        is not None: q = q.gte("atr_14",     f.atr_min)
+    if f.atr_max        is not None: q = q.lte("atr_14",     f.atr_max)
+    if f.turnover_min   is not None: q = q.gte("turnover",   f.turnover_min)
+    if f.turnover_max   is not None: q = q.lte("turnover",   f.turnover_max)
+    if f.pct_change_min is not None: q = q.gte("pct_change", f.pct_change_min)
+    if f.pct_change_max is not None: q = q.lte("pct_change", f.pct_change_max)
 
     rows = q.limit(FETCH_BATCH).execute().data or []
 
