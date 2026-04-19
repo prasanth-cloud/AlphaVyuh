@@ -502,11 +502,16 @@ async def run_scanner(
     plan = _get_user_plan(user_id)
     hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
 
-    # Latest trade date
-    dr = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
+    # Find last complete trading day (partial ingests have <200 rows; full days 2000+)
+    from collections import Counter
+    dr = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(5000).execute()
     if not dr.data:
         return {"trade_date": None, "total_matches": 0, "plan_limit": hard_limit, "results": []}
-    latest_date = dr.data[0]["trade_date"]
+    date_counts = Counter(r["trade_date"] for r in dr.data)
+    latest_date = next(
+        (d for d in sorted(date_counts, reverse=True) if date_counts[d] >= 1000),
+        dr.data[0]["trade_date"],
+    )
 
     # Build base query with series filter pushed to DB
     f = body.filters
@@ -562,7 +567,7 @@ async def run_scanner(
 async def list_screens(user_id: str = Depends(get_current_user_id)):
     client = get_admin_client()
     r = client.table("saved_screens").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-    return r.data or []
+    return {"screens": r.data or []}
 
 
 @router.post("/screens")
