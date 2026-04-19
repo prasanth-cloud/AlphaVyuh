@@ -284,6 +284,9 @@ async def get_candles(
                 "low":    float(row["low"]),
                 "close":  float(row["close"]),
                 "volume": int(row["volume"]) if row["volume"] else 0,
+                "ema_20":  float(row["ema_20"])  if row.get("ema_20")  is not None else None,
+                "ema_50":  float(row["ema_50"])  if row.get("ema_50")  is not None else None,
+                "ema_200": float(row["ema_200"]) if row.get("ema_200") is not None else None,
             }
             for row in rows
         ]

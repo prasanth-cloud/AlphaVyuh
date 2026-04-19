@@ -330,6 +330,9 @@ export type CandleBar = {
   low: number;
   close: number;
   volume: number;
+  ema_20?: number | null;
+  ema_50?: number | null;
+  ema_200?: number | null;
 };
 
 export type CandlesResponse = {

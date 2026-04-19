@@ -28,6 +28,8 @@ import {
   getQuote,
   searchSymbols,
   getCandles,
+  placeOrder,
+  type PlaceOrderRequest,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
 import RsiBadge from "@/components/scanner/RsiBadge";
@@ -115,38 +117,144 @@ function SortableRow({
   );
 }
 
-// ─── Chart panel ──────────────────────────────────────────────────────────────
+// ─── Chart + order panel ──────────────────────────────────────────────────────
 
-function ChartPanel({ symbol }: { symbol: string }) {
+function ChartPanel({ symbol, latestClose }: { symbol: string; latestClose?: number | null }) {
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  // Order form state
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [orderType, setOrderType] = useState<"market" | "limit">("market");
+  const [qty, setQty] = useState("1");
+  const [price, setPrice] = useState("");
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [orderMsg, setOrderMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(false);
     setCandles([]);
     getCandles(symbol, { limit: 120 })
-      .then(d => setCandles(d.candles))
+      .then(d => {
+        setCandles(d.candles);
+        if (d.latest?.close && !price) setPrice(String(d.latest.close));
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
+  // Keep price in sync with latest close when switching symbols
+  useEffect(() => {
+    if (latestClose) setPrice(String(latestClose));
+  }, [latestClose]);
+
+  async function handleOrder() {
+    const qtyN = parseInt(qty, 10);
+    const priceN = parseFloat(price);
+    if (!qtyN || qtyN < 1 || !priceN || priceN <= 0) {
+      setOrderMsg({ ok: false, text: "Enter valid qty and price" });
+      return;
+    }
+    setOrderBusy(true);
+    setOrderMsg(null);
+    try {
+      const req: PlaceOrderRequest = { symbol, side, quantity: qtyN, price: priceN, order_type: orderType };
+      await placeOrder(req);
+      setOrderMsg({ ok: true, text: `${side === "buy" ? "Buy" : "Sell"} order placed!` });
+    } catch (e: unknown) {
+      setOrderMsg({ ok: false, text: e instanceof Error ? e.message : "Order failed" });
+    } finally {
+      setOrderBusy(false);
+      setTimeout(() => setOrderMsg(null), 4000);
+    }
+  }
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-2.5 flex-shrink-0" style={{ borderBottom: "1px solid var(--app-border)" }}>
-        <div className="text-[13px] font-bold" style={{ color: "var(--app-text1)" }}>{symbol}</div>
-        <div className="text-[10px]" style={{ color: "var(--app-text3)" }}>Daily · 120 bars</div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-2.5 flex-shrink-0 flex items-center justify-between"
+        style={{ borderBottom: "1px solid var(--app-border)" }}>
+        <div>
+          <div className="text-[13px] font-bold" style={{ color: "var(--app-text1)" }}>{symbol}</div>
+          <div className="text-[10px]" style={{ color: "var(--app-text3)" }}>Daily · EMA 20/50/200</div>
+        </div>
+        <div className="flex items-center gap-2 text-[10px]" style={{ color: "var(--app-text3)" }}>
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 rounded" style={{ background: "#00E5C4" }} />EMA20</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 rounded" style={{ background: "#818cf8" }} />EMA50</span>
+          <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 rounded" style={{ background: "#f59e0b" }} />EMA200</span>
+        </div>
       </div>
-      <div className="flex-1 min-h-0 flex items-center justify-center">
+
+      {/* Chart */}
+      <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
         {loading ? (
           <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
             style={{ borderColor: "var(--app-teal)", borderTopColor: "transparent" }} />
         ) : error ? (
           <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>No chart data</div>
         ) : (
-          <MiniChart candles={candles} height={240} />
+          <MiniChart candles={candles} height={220} dark />
         )}
+      </div>
+
+      {/* Order panel */}
+      <div className="flex-shrink-0 px-4 py-3" style={{ borderTop: "1px solid var(--app-border)", background: "var(--app-surface2)" }}>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.5px] mb-2" style={{ color: "var(--app-text3)" }}>Quick Order</div>
+
+        {/* Buy / Sell tabs */}
+        <div className="flex rounded-[7px] overflow-hidden mb-3" style={{ border: "1px solid var(--app-border)" }}>
+          {(["buy", "sell"] as const).map(s => (
+            <button key={s} onClick={() => setSide(s)}
+              className="flex-1 py-1.5 text-[12px] font-semibold capitalize transition-colors"
+              style={{
+                background: side === s ? (s === "buy" ? "#26A65B" : "#E5383B") : "transparent",
+                color: side === s ? "#fff" : "var(--app-text3)",
+              }}>
+              {s === "buy" ? "Buy" : "Sell"}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <div>
+            <div className="text-[10px] mb-1" style={{ color: "var(--app-text3)" }}>Type</div>
+            <select value={orderType} onChange={e => setOrderType(e.target.value as "market" | "limit")}
+              className="w-full text-[12px] rounded-[6px] px-2 py-1.5 outline-none"
+              style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}>
+              <option value="market">Market</option>
+              <option value="limit">Limit</option>
+            </select>
+          </div>
+          <div>
+            <div className="text-[10px] mb-1" style={{ color: "var(--app-text3)" }}>Qty</div>
+            <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)}
+              className="w-full text-[12px] rounded-[6px] px-2 py-1.5 outline-none"
+              style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }} />
+          </div>
+        </div>
+
+        <div className="mb-2">
+          <div className="text-[10px] mb-1" style={{ color: "var(--app-text3)" }}>Price (₹)</div>
+          <input type="number" step="0.05" min="0" value={price} onChange={e => setPrice(e.target.value)}
+            className="w-full text-[12px] rounded-[6px] px-2 py-1.5 outline-none"
+            style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }} />
+        </div>
+
+        {orderMsg && (
+          <div className="text-[11px] mb-2 font-medium"
+            style={{ color: orderMsg.ok ? "var(--app-gain)" : "var(--app-loss)" }}>
+            {orderMsg.text}
+          </div>
+        )}
+
+        <button onClick={handleOrder} disabled={orderBusy}
+          className="w-full py-2 rounded-[7px] text-[12px] font-bold disabled:opacity-50 transition-opacity"
+          style={{ background: side === "buy" ? "#26A65B" : "#E5383B", color: "#fff" }}>
+          {orderBusy ? "Placing…" : `Place ${side === "buy" ? "Buy" : "Sell"} Order`}
+        </button>
       </div>
     </div>
   );
@@ -492,10 +600,11 @@ export default function WatchlistPage() {
         </div>
       </div>
 
-      {/* ── Right: chart panel ───────────────────────────────────────── */}
+      {/* ── Right: chart + order panel ───────────────────────────────── */}
       <div className="flex-1 min-w-0 overflow-hidden" style={{ background: "var(--app-surface)" }}>
         {chartSymbol ? (
-          <ChartPanel key={chartSymbol} symbol={chartSymbol} />
+          <ChartPanel key={chartSymbol} symbol={chartSymbol}
+            latestClose={activeWl?.items.find(i => i.symbol === chartSymbol)?.close} />
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center px-8">
             <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
