@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Check, Zap, Sparkles, Crown } from "lucide-react";
@@ -168,6 +168,19 @@ function MatchDrawer({ alert, onClose }: { alert: ScanAlert; onClose: () => void
   );
 }
 
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-full flex items-center justify-center py-20" style={{ background: "var(--app-bg)" }}>
+        <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+      </div>
+    }>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
 // ── Billing plan data ─────────────────────────────────────────────────────────
 
 type PlanId = "free" | "pro" | "elite";
@@ -248,7 +261,7 @@ const inputStyle = { background: "var(--app-surface3)", border: "1px solid var(-
 
 type Tab = "profile" | "alerts" | "billing";
 
-export default function SettingsPage() {
+function SettingsContent() {
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as Tab | null) ?? "profile";
   const [tab, setTab] = useState<Tab>(initialTab);

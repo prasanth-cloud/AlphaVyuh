@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { connectZerodha } from "@/lib/api";
 
-export default function BrokerCallbackPage() {
+function BrokerCallbackContent() {
   const router = useRouter();
   const params = useSearchParams();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
@@ -65,5 +65,18 @@ export default function BrokerCallbackPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BrokerCallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
+        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+      </div>
+    }>
+      <BrokerCallbackContent />
+    </Suspense>
   );
 }
