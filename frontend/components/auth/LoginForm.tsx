@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase";
 
 export default function LoginForm() {
   const [email, setEmail]       = useState("");
@@ -9,45 +10,27 @@ export default function LoginForm() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
 
-  // Show callback errors (e.g. expired magic link)
-  useEffect(() => {
-    // Check hash fragment for Supabase auth errors
-    const hash = window.location.hash;
-    if (hash.includes("error=access_denied") || hash.includes("otp_expired")) {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("error") === "auth_callback_failed") {
-      setError("Login link expired. Use your email and password below.");
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, []);
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        const msg = (json.error ?? "").toLowerCase();
-        if (msg.includes("invalid") || msg.includes("credentials")) {
+      const supabase = createClient();
+      const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (authError) {
+        const msg = authError.message.toLowerCase();
+        if (msg.includes("invalid") || msg.includes("credentials") || msg.includes("password")) {
           setError("Incorrect email or password.");
-        } else if (msg.includes("email not confirmed")) {
+        } else if (msg.includes("confirmed") || msg.includes("verify")) {
           setError("Please verify your email before logging in.");
         } else {
-          setError(json.error ?? "Login failed.");
+          setError(authError.message);
         }
         return;
       }
       window.location.replace("/dashboard");
     } catch {
-      setError("Network error — make sure the app is running.");
+      setError("Network error — please try again.");
     } finally {
       setLoading(false);
     }
