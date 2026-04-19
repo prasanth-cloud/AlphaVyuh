@@ -459,7 +459,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.dividend_yield_max is not None and (dy   is None or dy   > f.dividend_yield_max): continue
         if f.debt_to_equity_max is not None and (dte  is None or dte  > f.debt_to_equity_max): continue
         if f.roe_min            is not None and (roe_ is None or roe_ < f.roe_min):            continue
-        if f.roce_min           is not None and (roce_is None or roce_< f.roce_min):           continue
+        if f.roce_min           is not None and (roce_ is None or roce_ < f.roce_min):          continue
 
         # ── Series / active stock filter ──────────────────────────────────
         effective_series = f.series if f.series else ["EQ", "BE"]
