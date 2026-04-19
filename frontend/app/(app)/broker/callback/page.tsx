@@ -31,26 +31,30 @@ export default function BrokerCallbackPage() {
   }, [params, router]);
 
   return (
-    <div className="min-h-screen bg-[#f2f2f0] flex items-center justify-center">
-      <div className="bg-white rounded-[14px] shadow-sm border border-[#e2e2df] p-8 max-w-sm w-full text-center">
+    <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
+      <div className="rounded-[14px] p-8 max-w-sm w-full text-center"
+        style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)" }}>
         {status === "loading" && (
           <>
-            <div className="w-10 h-10 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin mx-auto mb-4" />
-            <p className="text-[14px] text-[#444]">Connecting Zerodha…</p>
+            <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4"
+              style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+            <p className="text-[14px]" style={{ color: "var(--app-text2)" }}>Connecting Zerodha…</p>
           </>
         )}
         {status === "success" && (
           <>
-            <div className="w-14 h-14 rounded-full bg-[#edfaf3] flex items-center justify-center text-[28px] mx-auto mb-4">✓</div>
-            <h2 className="text-[18px] font-bold text-[#1c1c1a] mb-1">Connected!</h2>
-            <p className="text-[13px] text-[#888]">{message}</p>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center text-[28px] mx-auto mb-4"
+              style={{ background: "rgba(38,166,91,0.15)" }}>✓</div>
+            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Connected!</h2>
+            <p className="text-[13px]" style={{ color: "var(--app-text3)" }}>{message}</p>
           </>
         )}
         {status === "error" && (
           <>
-            <div className="w-14 h-14 rounded-full bg-[#fff0f0] flex items-center justify-center text-[28px] mx-auto mb-4">✗</div>
-            <h2 className="text-[18px] font-bold text-[#1c1c1a] mb-1">Connection failed</h2>
-            <p className="text-[13px] text-[#888] mb-4">{message}</p>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center text-[28px] mx-auto mb-4"
+              style={{ background: "rgba(229,56,59,0.15)" }}>✗</div>
+            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Connection failed</h2>
+            <p className="text-[13px] mb-4" style={{ color: "var(--app-text3)" }}>{message}</p>
             <button
               onClick={() => router.replace("/settings?tab=profile")}
               className="px-4 py-2 rounded-[8px] text-[13px] font-semibold text-white"
