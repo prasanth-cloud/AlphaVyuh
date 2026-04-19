@@ -15,11 +15,16 @@ router = APIRouter(prefix="/api/v1/market", tags=["market"])
 async def market_overview(user_id: str = Depends(get_current_user_id)):
     sb = get_admin_client()
 
-    # Latest trade date
-    dr = sb.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
+    # Find last complete trading day — partial ingests have <200 rows; full days have 2000+
+    from collections import Counter
+    dr = sb.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(5000).execute()
     if not dr.data:
         return {"trade_date": None, "advances": 0, "declines": 0}
-    latest_date = dr.data[0]["trade_date"]
+    date_counts = Counter(r["trade_date"] for r in dr.data)
+    latest_date = next(
+        (d for d in sorted(date_counts, reverse=True) if date_counts[d] >= 1000),
+        dr.data[0]["trade_date"],
+    )
 
     # Fetch all NSE EQ rows for latest date
     rows = (
@@ -36,11 +41,11 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         .data or []
     )
 
-    # Filter NSE EQ active only
+    # Filter NSE EQ active only (avoid double-counting BSE cross-listings)
     rows = [
         r for r in rows
         if (r.get("stock_universe") or {}).get("series") == "EQ"
-        and (r.get("stock_universe") or {}).get("market") in ("NSE", "BSE")
+        and (r.get("stock_universe") or {}).get("market") == "NSE"
         and (r.get("stock_universe") or {}).get("is_active", True)
     ]
 
