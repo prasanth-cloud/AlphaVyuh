@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
 
 export default function LoginForm() {
   const [email, setEmail]       = useState("");
@@ -28,21 +27,30 @@ export default function LoginForm() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const supabase = createClient();
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (err) {
-      const msg = err.message.toLowerCase();
-      if (msg.includes("invalid login") || msg.includes("invalid credentials") || msg.includes("wrong")) {
-        setError("Incorrect email or password.");
-      } else if (msg.includes("email not confirmed")) {
-        setError("Please verify your email before logging in.");
-      } else {
-        setError(err.message);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = (json.error ?? "").toLowerCase();
+        if (msg.includes("invalid") || msg.includes("credentials")) {
+          setError("Incorrect email or password.");
+        } else if (msg.includes("email not confirmed")) {
+          setError("Please verify your email before logging in.");
+        } else {
+          setError(json.error ?? "Login failed.");
+        }
+        return;
       }
-      return;
+      window.location.replace("/dashboard");
+    } catch {
+      setError("Network error — make sure the app is running.");
+    } finally {
+      setLoading(false);
     }
-    window.location.replace("/dashboard");
   }
 
   return (

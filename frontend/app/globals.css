@@ -27,6 +27,21 @@
   --av-warn:       #d97706;
   --av-warn-bg:    #fff8ec;
   --av-vol:        #7c6af0;
+
+  /* Dark app theme */
+  --app-bg:        #0D0F14;
+  --app-surface:   #13161D;
+  --app-surface2:  #181C25;
+  --app-surface3:  #1E2330;
+  --app-border:    rgba(255,255,255,0.07);
+  --app-border2:   rgba(255,255,255,0.04);
+  --app-teal:      #00E5C4;
+  --app-teal-dim:  rgba(0,229,196,0.10);
+  --app-gain:      #26A65B;
+  --app-loss:      #E5383B;
+  --app-text1:     rgba(255,255,255,0.92);
+  --app-text2:     rgba(255,255,255,0.55);
+  --app-text3:     rgba(255,255,255,0.30);
 }
 
 .tabular { font-variant-numeric: tabular-nums; }

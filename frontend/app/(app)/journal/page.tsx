@@ -34,13 +34,11 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function PnlChip({ pnl }: { pnl: number | null }) {
-  if (pnl == null) return <span className="text-[#aaa] text-[12px]">Open</span>;
+  if (pnl == null) return <span className="text-[12px]" style={{ color: "var(--app-text3)" }}>Open</span>;
   const pos = pnl >= 0;
   return (
-    <span
-      className="text-[12px] font-medium px-1.5 py-0.5 rounded-md"
-      style={{ color: pos ? "#26a65b" : "#e5383b", background: pos ? "#edfaf3" : "#fff0f0" }}
-    >
+    <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-md"
+      style={{ color: pos ? "#26A65B" : "#E5383B", background: pos ? "rgba(38,166,91,0.12)" : "rgba(229,56,59,0.12)" }}>
       {pos ? "+" : ""}{fmtCcy(pnl)}
     </span>
   );
@@ -48,18 +46,20 @@ function PnlChip({ pnl }: { pnl: number | null }) {
 
 function StatusBadge({ status, pnl }: { status: string; pnl: number | null }) {
   if (status === "open") {
-    return <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[#eeeffe] text-[#5b63f5]">Open</span>;
+    return <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full"
+      style={{ background: "var(--app-teal-dim)", color: "var(--app-teal)" }}>Open</span>;
   }
   if (status === "closed" && pnl != null) {
     const win = pnl >= 0;
     return (
       <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full"
-        style={{ background: win ? "#edfaf3" : "#fff0f0", color: win ? "#26a65b" : "#e5383b" }}>
+        style={{ background: win ? "rgba(38,166,91,0.12)" : "rgba(229,56,59,0.12)", color: win ? "#26A65B" : "#E5383B" }}>
         {win ? "Win" : "Loss"}
       </span>
     );
   }
-  return <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">{status}</span>;
+  return <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full"
+    style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>{status}</span>;
 }
 
 // ── Setup type chips ──────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ function EquityCurve({ data }: { data: { date: string; cumulative_pnl: number }[
           <stop offset="100%" stopColor={color} stopOpacity="0.02" />
         </linearGradient>
       </defs>
-      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="#e2e2df" strokeWidth="1" />
+      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
       <polygon points={fillPts} fill="url(#eq-grad)" />
       <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
@@ -136,7 +136,7 @@ function DrawdownChart({ data }: { data: { date: string; drawdown: number; drawd
           <stop offset="100%" stopColor="#e5383b" stopOpacity="0.04" />
         </linearGradient>
       </defs>
-      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="#f0f0ee" strokeWidth="1" />
+      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeWidth="1" />
       <polygon points={fillPts} fill="url(#dd-grad)" />
       <polyline points={pts.join(" ")} fill="none" stroke="#e5383b" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
@@ -349,10 +349,11 @@ export default function JournalPage() {
   };
 
   return (
-    <div className="min-h-full bg-[#f2f2f0]">
+    <div className="min-h-full" style={{ background: "var(--app-bg)" }}>
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#0f0f0e] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 text-[13px] px-4 py-2 rounded-lg shadow-lg"
+          style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}>
           {toast}
         </div>
       )}
@@ -381,11 +382,11 @@ export default function JournalPage() {
             color: "#5b63f5",
           },
         ].map((item) => (
-          <div key={item.label} className="bg-white border border-[#e8e8e6] rounded-[10px] px-4 py-3.5">
-            <div className="text-[22px] font-bold tracking-tight leading-none" style={{ color: item.color }}>
+          <div key={item.label} className="px-4 py-3.5" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: "12px" }}>
+            <div className="text-[22px] font-bold tracking-tight leading-none tabular" style={{ color: item.color }}>
               {item.val}
             </div>
-            <div className="text-[10px] text-[#aaa] uppercase tracking-wider mt-1">{item.label}</div>
+            <div className="text-[10px] uppercase tracking-wider mt-1" style={{ color: "var(--app-text3)" }}>{item.label}</div>
           </div>
         ))}
       </div>
@@ -400,9 +401,11 @@ export default function JournalPage() {
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`px-4 py-1.5 text-[13px] rounded-t-[8px] transition-colors font-medium ${
-              tab === id ? "bg-white text-[#0f0f0e] border border-b-0 border-[#e8e8e6]" : "text-[#888] hover:text-[#0f0f0e]"
-            }`}
+            className="px-4 py-1.5 text-[13px] rounded-t-[8px] transition-colors font-medium"
+            style={tab === id
+              ? { background: "var(--app-surface)", color: "var(--app-text1)", border: "1px solid var(--app-border)", borderBottom: "none" }
+              : { color: "var(--app-text3)", background: "transparent", border: "none" }
+            }
           >
             {label}
           </button>
@@ -412,18 +415,18 @@ export default function JournalPage() {
       {/* Analytics Panel */}
       {tab === "analytics" && (
         <div className="px-5 pb-5">
-          <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5 space-y-6">
+          <div className="p-5 space-y-6" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: "12px" }}>
             {/* Equity Curve */}
             <div>
-              <div className="text-[12px] font-semibold text-[#0f0f0e] mb-1">Equity Curve</div>
-              <div className="text-[11px] text-[#aaa] mb-3">Cumulative P&amp;L across closed trades</div>
+              <div className="text-[12px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>Equity Curve</div>
+              <div className="text-[11px] mb-3" style={{ color: "var(--app-text3)" }}>Cumulative P&amp;L across closed trades</div>
               <EquityCurve data={analytics?.equity_curve ?? []} />
             </div>
 
             {/* Monthly P&L */}
             {(analytics?.monthly_pnl?.length ?? 0) > 0 && (
               <div>
-                <div className="text-[12px] font-semibold text-[#0f0f0e] mb-3">Monthly P&amp;L</div>
+                <div className="text-[12px] font-semibold mb-3" style={{ color: "var(--app-text1)" }}>Monthly P&amp;L</div>
                 <div className="flex gap-2 flex-wrap">
                   {analytics!.monthly_pnl.map((m) => {
                     const pos = m.pnl >= 0;
@@ -433,7 +436,7 @@ export default function JournalPage() {
                         <div className="text-[11px] font-bold" style={{ color: pos ? "#26a65b" : "#e5383b" }}>
                           {m.pnl >= 0 ? "+" : ""}₹{Math.abs(m.pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                         </div>
-                        <div className="text-[10px] text-[#aaa] mt-0.5">{m.month}</div>
+                        <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text3)" }}>{m.month}</div>
                       </div>
                     );
                   })}
@@ -444,13 +447,13 @@ export default function JournalPage() {
             {/* Setup Breakdown */}
             {(analytics?.setup_breakdown?.length ?? 0) > 0 && (
               <div>
-                <div className="text-[12px] font-semibold text-[#0f0f0e] mb-3">Performance by Setup</div>
+                <div className="text-[12px] font-semibold mb-3" style={{ color: "var(--app-text1)" }}>Performance by Setup</div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-[12px]">
                     <thead>
-                      <tr className="border-b border-[#f2f2f0]">
+                      <tr style={{ borderBottom: "1px solid var(--app-border)" }}>
                         {["Setup", "Trades", "Win Rate", "Avg P&L", "Total P&L"].map((h) => (
-                          <th key={h} className="text-left pb-2 text-[11px] text-[#aaa] font-medium uppercase tracking-wider pr-4">{h}</th>
+                          <th key={h} className="text-left pb-2 text-[11px] font-medium uppercase tracking-wider pr-4" style={{ color: "var(--app-text3)" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -458,9 +461,9 @@ export default function JournalPage() {
                       {analytics!.setup_breakdown.map((s) => {
                         const pos = s.total_pnl >= 0;
                         return (
-                          <tr key={s.setup} className="border-b border-[#f7f7f5]">
-                            <td className="py-2.5 pr-4 font-medium text-[#0f0f0e]">{s.setup}</td>
-                            <td className="py-2.5 pr-4 text-[#888]">{s.trades}</td>
+                          <tr key={s.setup} style={{ borderBottom: "1px solid var(--app-border2)" }}>
+                            <td className="py-2.5 pr-4 font-medium" style={{ color: "var(--app-text1)" }}>{s.setup}</td>
+                            <td className="py-2.5 pr-4" style={{ color: "var(--app-text2)" }}>{s.trades}</td>
                             <td className="py-2.5 pr-4">
                               <span className="font-semibold" style={{ color: s.win_rate >= 50 ? "#26a65b" : "#e5383b" }}>
                                 {s.win_rate}%
@@ -488,8 +491,8 @@ export default function JournalPage() {
             {/* Drawdown Analysis */}
             {(analytics?.drawdown_curve?.length ?? 0) > 1 && (
               <div>
-                <div className="text-[12px] font-semibold text-[#0f0f0e] mb-1">Drawdown</div>
-                <div className="text-[11px] text-[#aaa] mb-2">Underwater equity relative to all-time high</div>
+                <div className="text-[12px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>Drawdown</div>
+                <div className="text-[11px] mb-2" style={{ color: "var(--app-text3)" }}>Underwater equity relative to all-time high</div>
                 <DrawdownChart data={analytics!.drawdown_curve} />
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
                   {[
@@ -498,9 +501,9 @@ export default function JournalPage() {
                     { label: "Recovery Factor", val: analytics!.recovery_factor != null ? analytics!.recovery_factor.toFixed(2) : "—", color: analytics!.recovery_factor != null && analytics!.recovery_factor >= 1 ? "#26a65b" : "#e5383b" },
                     { label: "Profit Factor",   val: analytics!.profit_factor   != null ? analytics!.profit_factor.toFixed(2)   : "—", color: analytics!.profit_factor   != null && analytics!.profit_factor   >= 1 ? "#26a65b" : "#e5383b" },
                   ].map(item => (
-                    <div key={item.label} className="bg-[#f7f7f5] rounded-[8px] px-3 py-2.5 text-center">
+                    <div key={item.label} className="rounded-[8px] px-3 py-2.5 text-center" style={{ background: "var(--app-surface3)" }}>
                       <div className="text-[14px] font-bold" style={{ color: item.color }}>{item.val}</div>
-                      <div className="text-[10px] text-[#aaa] mt-0.5">{item.label}</div>
+                      <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text3)" }}>{item.label}</div>
                     </div>
                   ))}
                 </div>
@@ -521,13 +524,13 @@ export default function JournalPage() {
         <div className="px-5 pb-5 space-y-4">
 
           {/* Pattern Stats */}
-          <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5">
-            <div className="text-[13px] font-bold text-[#0f0f0e] mb-1">Pattern Stats</div>
-            <div className="text-[12px] text-[#aaa] mb-4">Computed from your closed trades — no AI needed.</div>
+          <div className="p-5" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: "12px" }}>
+            <div className="text-[13px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Pattern Stats</div>
+            <div className="text-[12px] mb-4" style={{ color: "var(--app-text3)" }}>Computed from your closed trades — no AI needed.</div>
 
             {patternsLoading ? (
               <div className="space-y-2">
-                {[1,2,3].map(i => <div key={i} className="h-10 bg-[#f7f7f5] rounded-[8px] animate-pulse" />)}
+                {[1,2,3].map(i => <div key={i} className="h-10 rounded-[8px] animate-pulse" style={{ background: "var(--app-surface3)" }} />)}
               </div>
             ) : !patterns?.ready ? (
               <div className="text-center py-6 text-[12px] text-[#aaa]">
@@ -541,18 +544,18 @@ export default function JournalPage() {
                 {/* Holding period: winners vs losers */}
                 {(patterns.avg_hold_winners != null || patterns.avg_hold_losers != null) && (
                   <div>
-                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Avg Holding Period</div>
+                    <div className="text-[11px] uppercase tracking-wide mb-2" style={{ color: "var(--app-text2)" }}>Avg Holding Period</div>
                     <div className="flex gap-3">
                       {patterns.avg_hold_winners != null && (
-                        <div className="flex-1 bg-[#edfaf3] rounded-[8px] px-3 py-2.5 text-center">
+                        <div className="flex-1 rounded-[8px] px-3 py-2.5 text-center" style={{ background: "rgba(38,166,91,0.12)" }}>
                           <div className="text-[16px] font-bold text-[#26a65b]">{patterns.avg_hold_winners}d</div>
-                          <div className="text-[10px] text-[#888] mt-0.5">Winners</div>
+                          <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text2)" }}>Winners</div>
                         </div>
                       )}
                       {patterns.avg_hold_losers != null && (
-                        <div className="flex-1 bg-[#fff0f0] rounded-[8px] px-3 py-2.5 text-center">
+                        <div className="flex-1 rounded-[8px] px-3 py-2.5 text-center" style={{ background: "rgba(229,56,59,0.12)" }}>
                           <div className="text-[16px] font-bold text-[#e5383b]">{patterns.avg_hold_losers}d</div>
-                          <div className="text-[10px] text-[#888] mt-0.5">Losers</div>
+                          <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text2)" }}>Losers</div>
                         </div>
                       )}
                     </div>
@@ -562,16 +565,16 @@ export default function JournalPage() {
                 {/* Win rate by day of week */}
                 {(patterns.day_of_week?.length ?? 0) > 0 && (
                   <div>
-                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Win Rate by Day</div>
+                    <div className="text-[11px] uppercase tracking-wide mb-2" style={{ color: "var(--app-text2)" }}>Win Rate by Day</div>
                     <div className="flex gap-1.5 flex-wrap">
                       {patterns.day_of_week!.map(d => (
-                        <div key={d.day} className="flex-1 min-w-[60px] rounded-[8px] px-2 py-2 text-center border border-[#e8e8e6]">
+                        <div key={d.day} className="flex-1 min-w-[60px] rounded-[8px] px-2 py-2 text-center" style={{ border: "1px solid var(--app-border)" }}>
                           <div className="text-[13px] font-bold"
                             style={{ color: d.win_rate >= 60 ? "#26a65b" : d.win_rate >= 40 ? "#d97706" : "#e5383b" }}>
                             {d.win_rate}%
                           </div>
-                          <div className="text-[10px] text-[#aaa] mt-0.5">{d.day.slice(0, 3)}</div>
-                          <div className="text-[9px] text-[#ccc]">{d.trades}t</div>
+                          <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text3)" }}>{d.day.slice(0, 3)}</div>
+                          <div className="text-[9px]" style={{ color: "var(--app-text3)" }}>{d.trades}t</div>
                         </div>
                       ))}
                     </div>
@@ -581,12 +584,12 @@ export default function JournalPage() {
                 {/* Holding period buckets */}
                 {(patterns.by_holding_period?.length ?? 0) > 0 && (
                   <div>
-                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Win Rate by Holding Period</div>
+                    <div className="text-[11px] uppercase tracking-wide mb-2" style={{ color: "var(--app-text2)" }}>Win Rate by Holding Period</div>
                     <div className="space-y-1.5">
                       {patterns.by_holding_period!.map(b => (
                         <div key={b.bucket} className="flex items-center gap-3">
-                          <div className="w-[110px] text-[11px] text-[#555] flex-shrink-0">{b.bucket}</div>
-                          <div className="flex-1 bg-[#f7f7f5] rounded-full h-2 overflow-hidden">
+                          <div className="w-[110px] text-[11px] flex-shrink-0" style={{ color: "var(--app-text2)" }}>{b.bucket}</div>
+                          <div className="flex-1 rounded-full h-2 overflow-hidden" style={{ background: "var(--app-surface3)" }}>
                             <div className="h-full rounded-full transition-all"
                               style={{
                                 width: `${b.win_rate}%`,
@@ -597,7 +600,7 @@ export default function JournalPage() {
                             style={{ color: b.win_rate >= 60 ? "#26a65b" : b.win_rate >= 40 ? "#d97706" : "#e5383b" }}>
                             {b.win_rate}%
                           </div>
-                          <div className="text-[10px] text-[#aaa] w-8">{b.trades}t</div>
+                          <div className="text-[10px] w-8" style={{ color: "var(--app-text3)" }}>{b.trades}t</div>
                         </div>
                       ))}
                     </div>
@@ -607,15 +610,15 @@ export default function JournalPage() {
                 {/* Long vs Short */}
                 {(patterns.by_direction?.length ?? 0) > 0 && (
                   <div>
-                    <div className="text-[11px] text-[#888] uppercase tracking-wide mb-2">Long vs Short</div>
+                    <div className="text-[11px] uppercase tracking-wide mb-2" style={{ color: "var(--app-text2)" }}>Long vs Short</div>
                     <div className="flex gap-3">
                       {patterns.by_direction!.map(d => (
-                        <div key={d.direction} className="flex-1 rounded-[8px] border border-[#e8e8e6] px-3 py-2.5">
+                        <div key={d.direction} className="flex-1 rounded-[8px] px-3 py-2.5" style={{ border: "1px solid var(--app-border)" }}>
                           <div className="text-[14px] font-bold"
                             style={{ color: d.win_rate >= 50 ? "#26a65b" : "#e5383b" }}>
                             {d.win_rate}%
                           </div>
-                          <div className="text-[11px] text-[#555] mt-0.5">{d.direction} · {d.trades} trades</div>
+                          <div className="text-[11px] mt-0.5" style={{ color: "var(--app-text2)" }}>{d.direction} · {d.trades} trades</div>
                           <div className="text-[11px] mt-0.5"
                             style={{ color: d.total_pnl >= 0 ? "#26a65b" : "#e5383b" }}>
                             {d.total_pnl >= 0 ? "+" : ""}₹{Math.abs(d.total_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
@@ -630,11 +633,11 @@ export default function JournalPage() {
           </div>
 
           {/* AI Deep Analysis */}
-          <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5">
+          <div className="p-5" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: "12px" }}>
             <div className="flex items-start justify-between mb-4">
               <div>
-                <div className="text-[14px] font-bold text-[#0f0f0e]">AI Deep Analysis</div>
-                <div className="text-[12px] text-[#aaa] mt-0.5">
+                <div className="text-[14px] font-bold" style={{ color: "var(--app-text1)" }}>AI Deep Analysis</div>
+                <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>
                   Claude reads your full journal and surfaces mistakes, patterns, and specific rules to add to your playbook.
                 </div>
               </div>
@@ -654,7 +657,8 @@ export default function JournalPage() {
                   }
                 }}
                 disabled={aiLoading}
-                className="flex-shrink-0 px-4 py-2 rounded-[8px] bg-[#0f0f0e] text-white text-[12px] font-semibold hover:opacity-85 disabled:opacity-50 transition-opacity ml-4"
+                className="flex-shrink-0 px-4 py-2 rounded-[8px] text-[12px] font-semibold disabled:opacity-50 transition-opacity ml-4"
+                style={{ background: "var(--app-teal)", color: "#0D0F14" }}
               >
                 {aiLoading ? "Analysing…" : aiAnalysis ? "Re-analyse" : "Analyse my trades"}
               </button>
@@ -668,18 +672,19 @@ export default function JournalPage() {
 
             {aiLoading && (
               <div className="flex flex-col items-center py-12 gap-3">
-                <div className="w-6 h-6 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
-                <div className="text-[12px] text-[#aaa]">Reading your journal and finding patterns…</div>
+                <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+                style={{ borderColor: "var(--app-teal)", borderTopColor: "transparent" }} />
+                <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>Reading your journal and finding patterns…</div>
               </div>
             )}
 
             {aiAnalysis && !aiLoading && (
               <div>
-                <div className="text-[11px] text-[#aaa] mb-3">Based on {aiTradesCount} closed trades</div>
-                <div className="mb-3 px-3 py-2 rounded-lg bg-[#fff8ec] border border-[#fde68a] text-[11px] text-[#92400e] leading-relaxed">
+                <div className="text-[11px] mb-3" style={{ color: "var(--app-text3)" }}>Based on {aiTradesCount} closed trades</div>
+                <div className="mb-3 px-3 py-2 rounded-lg text-[11px] leading-relaxed" style={{ background: "rgba(217,119,6,0.10)", border: "1px solid rgba(217,119,6,0.25)", color: "#fbbf24" }}>
                   <strong>Disclaimer:</strong> AI analysis is for educational purposes only and does not constitute SEBI-registered investment advice. Past performance is not indicative of future results.
                 </div>
-                <div className="prose prose-sm max-w-none text-[13px] text-[#0f0f0e] leading-relaxed space-y-3">
+                <div className="prose prose-sm max-w-none text-[13px] leading-relaxed space-y-3" style={{ color: "var(--app-text1)" }}>
                   {aiAnalysis.split("\n").map((line, i) => {
                     if (line.startsWith("## ") || line.startsWith("### ")) {
                       return <div key={i} className="text-[13px] font-bold text-[#0f0f0e] mt-4 mb-1">{line.replace(/^#+\s/, "")}</div>;
@@ -719,14 +724,16 @@ export default function JournalPage() {
         <div className="flex-1 min-w-0">
           {/* Toolbar */}
           <div className="flex items-center gap-2 mb-2.5">
-            <div className="flex bg-white border border-[#e8e8e6] rounded-[8px] p-0.5 gap-0.5">
+            <div className="flex rounded-[8px] p-0.5 gap-0.5" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
               {(["all", "open", "closed"] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setFilterStatus(s)}
-                  className={`px-3 py-1 text-[12px] rounded-[6px] capitalize transition-colors ${
-                    filterStatus === s ? "bg-[#0f0f0e] text-white" : "text-[#888] hover:text-[#0f0f0e]"
-                  }`}
+                  className="px-3 py-1 text-[12px] rounded-[6px] capitalize transition-colors"
+                  style={filterStatus === s
+                    ? { background: "var(--app-teal)", color: "#0D0F14" }
+                    : { color: "var(--app-text3)", background: "transparent" }
+                  }
                 >
                   {s}
                 </button>
@@ -737,14 +744,16 @@ export default function JournalPage() {
               <button
                 onClick={handleImportZerodha}
                 disabled={importing}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-[8px] border border-[#e8e8e6] text-[#555] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-[8px] transition-colors disabled:opacity-50"
+                style={{ border: "1px solid var(--app-border)", color: "var(--app-text2)" }}
               >
                 {importing ? "Importing…" : "↓ Import from Zerodha"}
               </button>
             )}
             <button
               onClick={openAddPanel}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-[8px] transition-colors"
+              style={{ background: "var(--app-teal)", color: "#0D0F14" }}
             >
               <span className="text-[16px] leading-none">+</span> Log trade
             </button>
@@ -752,19 +761,21 @@ export default function JournalPage() {
 
           {/* Free plan history notice */}
           {journalPlan === "free" && (
-            <div className="flex items-center justify-between px-4 py-2.5 bg-[#fff8ec] border border-[#f5d88b] rounded-[8px] mb-3 text-[12px]">
-              <span className="text-[#92600a]">Free plan shows last 3 months of trades only.</span>
-              <a href="/settings/billing" className="text-[#d97706] font-semibold hover:underline ml-4">Upgrade to Pro →</a>
+            <div className="flex items-center justify-between px-4 py-2.5 rounded-[8px] mb-3 text-[12px]"
+              style={{ background: "rgba(217,119,6,0.10)", border: "1px solid rgba(217,119,6,0.25)" }}>
+              <span style={{ color: "#fbbf24" }}>Free plan shows last 3 months of trades only.</span>
+              <a href="/settings/billing" className="font-semibold hover:underline ml-4" style={{ color: "#d97706" }}>Upgrade to Pro →</a>
             </div>
           )}
 
           {/* Table */}
-          <div className="bg-white border border-[#e8e8e6] rounded-[10px] overflow-hidden">
+          <div className="overflow-hidden" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: "12px" }}>
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-[#f2f2f0]">
                   {["Symbol", "Type", "Entry", "Entry px", "Exit px", "P&L", "Status", ""].map((h) => (
-                    <th key={h} className="text-left px-3 py-2.5 text-[11px] font-medium text-[#aaa] uppercase tracking-wider">
+                    <th key={h} className="text-left px-3 py-2.5 text-[11px] font-medium uppercase tracking-wider"
+                      style={{ color: "var(--app-text3)" }}>
                       {h}
                     </th>
                   ))}
@@ -773,10 +784,10 @@ export default function JournalPage() {
               <tbody>
                 {loading ? (
                   Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} className="border-b border-[#f7f7f5]">
+                    <tr key={i} style={{ borderBottom: "1px solid var(--app-border2)" }}>
                       {Array.from({ length: 8 }).map((__, j) => (
                         <td key={j} className="px-3 py-3">
-                          <div className="h-4 bg-gray-100 rounded animate-pulse w-16" />
+                          <div className="h-4 rounded animate-pulse w-16" style={{ background: "var(--app-surface3)" }} />
                         </td>
                       ))}
                     </tr>
@@ -784,11 +795,9 @@ export default function JournalPage() {
                 ) : entries.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-3 py-12 text-center">
-                      <div className="text-[13px] text-[#aaa]">No trades yet.</div>
-                      <button
-                        onClick={openAddPanel}
-                        className="mt-2 text-[13px] text-[#5b63f5] hover:underline"
-                      >
+                      <div className="text-[13px]" style={{ color: "var(--app-text3)" }}>No trades yet.</div>
+                      <button onClick={openAddPanel} className="mt-2 text-[13px] hover:underline"
+                        style={{ color: "var(--app-teal)" }}>
                         Log your first trade →
                       </button>
                     </td>
@@ -798,14 +807,16 @@ export default function JournalPage() {
                     <tr
                       key={e.id}
                       onClick={() => { setSelectedEntry(e); setPanelMode("view"); }}
-                      className={`border-b border-[#f7f7f5] cursor-pointer transition-colors ${
-                        selectedEntry?.id === e.id ? "bg-[#f7f7fe]" : "hover:bg-[#fafafa]"
-                      }`}
+                      className="cursor-pointer transition-colors"
+                      style={{
+                        borderBottom: "1px solid var(--app-border2)",
+                        background: selectedEntry?.id === e.id ? "var(--app-teal-dim)" : "transparent",
+                      }}
                     >
                       <td className="px-3 py-2.5">
-                        <span className="font-medium text-[#0f0f0e]">{e.symbol}</span>
+                        <span className="font-medium" style={{ color: "var(--app-text1)" }}>{e.symbol}</span>
                         {e.setup_type && (
-                          <span className="ml-1.5 text-[10px] text-[#aaa]">{e.setup_type}</span>
+                          <span className="ml-1.5 text-[10px]" style={{ color: "var(--app-text3)" }}>{e.setup_type}</span>
                         )}
                       </td>
                       <td className="px-3 py-2.5">
@@ -819,9 +830,9 @@ export default function JournalPage() {
                           {e.trade_type === "long" ? "L" : "S"}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-[#888]">{fmtDate(e.entry_date)}</td>
-                      <td className="px-3 py-2.5 font-medium">₹{e.entry_price.toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-2.5 text-[#888]">
+                      <td className="px-3 py-2.5" style={{ color: "var(--app-text2)" }}>{fmtDate(e.entry_date)}</td>
+                      <td className="px-3 py-2.5 font-medium" style={{ color: "var(--app-text1)" }}>₹{e.entry_price.toLocaleString("en-IN")}</td>
+                      <td className="px-3 py-2.5" style={{ color: "var(--app-text2)" }}>
                         {e.exit_price ? `₹${e.exit_price.toLocaleString("en-IN")}` : "—"}
                       </td>
                       <td className="px-3 py-2.5"><PnlChip pnl={e.pnl} /></td>
@@ -838,7 +849,8 @@ export default function JournalPage() {
                           )}
                           <button
                             onClick={() => handleDelete(e.id)}
-                            className="text-[11px] text-[#ccc] hover:text-[#e5383b]"
+                            className="text-[11px]"
+                            style={{ color: "var(--app-text3)" }}
                           >
                             ×
                           </button>
@@ -855,13 +867,14 @@ export default function JournalPage() {
         {/* Side panel */}
         {panelMode && (
           <div className="w-[340px] flex-shrink-0">
-            <div className="bg-white border border-[#e8e8e6] rounded-[10px] p-5">
+            <div className="p-5" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", borderRadius: "12px" }}>
               {/* Panel header */}
               <div className="flex items-center justify-between mb-4">
-                <div className="text-[14px] font-semibold text-[#0f0f0e]">
+                <div className="text-[14px] font-semibold" style={{ color: "var(--app-text1)" }}>
                   {panelMode === "add" ? "Log Trade" : panelMode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
                 </div>
-                <button onClick={() => { setPanelMode(null); setSelectedEntry(null); }} className="text-[#ccc] hover:text-[#888] text-[18px] leading-none">×</button>
+                <button onClick={() => { setPanelMode(null); setSelectedEntry(null); }} className="text-[18px] leading-none"
+                  style={{ color: "var(--app-text3)" }}>×</button>
               </div>
 
               {/* ── ADD FORM ── */}
@@ -869,7 +882,7 @@ export default function JournalPage() {
                 <div className="space-y-3">
                   {/* Symbol search */}
                   <div className="relative">
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Symbol</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Symbol</label>
                     <input
                       value={selectedSymbol || symbolQ}
                       onChange={(ev) => {
@@ -877,10 +890,12 @@ export default function JournalPage() {
                         setSymbolQ(ev.target.value.toUpperCase());
                       }}
                       placeholder="e.g. RELIANCE"
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                      style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                     {symbolResults.length > 0 && !selectedSymbol && (
-                      <div className="absolute top-full left-0 right-0 bg-white border border-[#e8e8e6] rounded-[8px] shadow-lg z-20 overflow-hidden mt-0.5">
+                      <div className="absolute top-full left-0 right-0 rounded-[8px] shadow-lg z-20 overflow-hidden mt-0.5"
+                        style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)" }}>
                         {symbolResults.map((r) => (
                           <button
                             key={r.symbol}
@@ -889,10 +904,11 @@ export default function JournalPage() {
                               setSymbolQ(r.symbol);
                               setSymbolResults([]);
                             }}
-                            className="w-full text-left px-3 py-2 hover:bg-[#f7f7f5] text-[13px]"
+                            className="w-full text-left px-3 py-2 text-[13px]"
+                          style={{ color: "var(--app-text1)" }}
                           >
-                            <span className="font-medium">{r.symbol}</span>
-                            <span className="text-[#aaa] ml-2 text-[11px]">{r.company_name}</span>
+                            <span className="font-medium" style={{ color: "var(--app-text1)" }}>{r.symbol}</span>
+                            <span className="ml-2 text-[11px]" style={{ color: "var(--app-text3)" }}>{r.company_name}</span>
                           </button>
                         ))}
                       </div>
@@ -901,7 +917,7 @@ export default function JournalPage() {
 
                   {/* Long / Short */}
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Direction</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Direction</label>
                     <div className="flex gap-2">
                       {(["long", "short"] as const).map((t) => (
                         <button
@@ -909,8 +925,8 @@ export default function JournalPage() {
                           onClick={() => setAddForm((f) => ({ ...f, trade_type: t }))}
                           className="flex-1 py-2 rounded-[8px] text-[13px] font-medium border transition-colors capitalize"
                           style={addForm.trade_type === t
-                            ? { background: t === "long" ? "#edfaf3" : "#fff0f0", color: t === "long" ? "#26a65b" : "#e5383b", borderColor: t === "long" ? "#26a65b" : "#e5383b" }
-                            : { background: "white", color: "#aaa", borderColor: "#e2e2df" }
+                            ? { background: t === "long" ? "rgba(38,166,91,0.15)" : "rgba(229,56,59,0.15)", color: t === "long" ? "#26A65B" : "#E5383B", borderColor: t === "long" ? "#26A65B" : "#E5383B" }
+                            : { background: "var(--app-surface3)", color: "var(--app-text3)", borderColor: "var(--app-border)" }
                           }
                         >
                           {t}
@@ -921,35 +937,38 @@ export default function JournalPage() {
 
                   {/* Entry date */}
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Entry Date</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Entry Date</label>
                     <input
                       type="date"
                       value={addForm.entry_date || ""}
                       onChange={(ev) => setAddForm((f) => ({ ...f, entry_date: ev.target.value }))}
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                   </div>
 
                   {/* Price + Qty */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Entry Price ₹</label>
+                      <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Entry Price ₹</label>
                       <input
                         type="number"
                         value={addForm.entry_price || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, entry_price: parseFloat(ev.target.value) || undefined }))}
                         placeholder="0.00"
-                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Quantity</label>
+                      <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Quantity</label>
                       <input
                         type="number"
                         value={addForm.quantity || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, quantity: parseInt(ev.target.value) || undefined }))}
                         placeholder="0"
-                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                       />
                     </div>
                   </div>
@@ -962,23 +981,25 @@ export default function JournalPage() {
                   {/* Stop + Target */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Stop Loss ₹</label>
+                      <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Stop Loss ₹</label>
                       <input
                         type="number"
                         value={addForm.stop_loss || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, stop_loss: parseFloat(ev.target.value) || undefined }))}
                         placeholder="optional"
-                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Target ₹</label>
+                      <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Target ₹</label>
                       <input
                         type="number"
                         value={addForm.target_price || ""}
                         onChange={(ev) => setAddForm((f) => ({ ...f, target_price: parseFloat(ev.target.value) || undefined }))}
                         placeholder="optional"
-                        className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                        className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                       />
                     </div>
                   </div>
@@ -995,7 +1016,7 @@ export default function JournalPage() {
 
                   {/* Setup type */}
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1.5 block">Setup</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1.5 block" style={{ color: "var(--app-text3)" }}>Setup</label>
                     <div className="flex flex-wrap gap-1.5">
                       {SETUP_TYPES.map((s) => (
                         <button
@@ -1003,8 +1024,8 @@ export default function JournalPage() {
                           onClick={() => setAddForm((f) => ({ ...f, setup_type: f.setup_type === s.toLowerCase() ? undefined : s.toLowerCase() }))}
                           className="px-2.5 py-1 text-[12px] rounded-full border transition-colors"
                           style={addForm.setup_type === s.toLowerCase()
-                            ? { background: "#0f0f0e", color: "white", borderColor: "#1c1c1a" }
-                            : { background: "white", color: "#888", borderColor: "#e2e2df" }
+                            ? { background: "var(--app-teal)", color: "#0D0F14", borderColor: "var(--app-teal)" }
+                            : { background: "var(--app-surface3)", color: "var(--app-text3)", borderColor: "var(--app-border)" }
                           }
                         >
                           {s}
@@ -1015,21 +1036,20 @@ export default function JournalPage() {
 
                   {/* Entry reason */}
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Why are you entering?</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Why are you entering?</label>
                     <textarea
                       value={addForm.entry_reason || ""}
                       onChange={(ev) => setAddForm((f) => ({ ...f, entry_reason: ev.target.value }))}
                       rows={3}
                       placeholder="EMA alignment, volume surge, breakout of resistance..."
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none resize-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                   </div>
 
-                  <button
-                    onClick={handleAddTrade}
-                    disabled={saving}
-                    className="w-full py-2.5 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={handleAddTrade} disabled={saving}
+                    className="w-full py-2.5 text-[13px] font-medium rounded-[8px] transition-colors disabled:opacity-50"
+                    style={{ background: "var(--app-teal)", color: "#0D0F14" }}>
                     {saving ? "Saving..." : "Save Trade"}
                   </button>
                 </div>
@@ -1038,28 +1058,30 @@ export default function JournalPage() {
               {/* ── CLOSE FORM ── */}
               {panelMode === "close" && selectedEntry && (
                 <div className="space-y-3">
-                  <div className="text-[12px] text-[#888] pb-2 border-b border-[#f2f2f0]">
+                  <div className="text-[12px] pb-2" style={{ color: "var(--app-text2)", borderBottom: "1px solid var(--app-border)" }}>
                     {selectedEntry.trade_type === "long" ? "Long" : "Short"} · {selectedEntry.quantity} qty · Entered ₹{selectedEntry.entry_price.toLocaleString("en-IN")} on {fmtDate(selectedEntry.entry_date)}
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Exit Date</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Exit Date</label>
                     <input
                       type="date"
                       value={closeForm.exit_date || ""}
                       onChange={(ev) => setCloseForm((f) => ({ ...f, exit_date: ev.target.value }))}
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Exit Price ₹</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Exit Price ₹</label>
                     <input
                       type="number"
                       value={closeForm.exit_price || ""}
                       onChange={(ev) => setCloseForm((f) => ({ ...f, exit_price: parseFloat(ev.target.value) || undefined }))}
                       placeholder="0.00"
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5]"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                   </div>
 
@@ -1067,8 +1089,8 @@ export default function JournalPage() {
                     <div
                       className="text-[13px] font-semibold px-3 py-2 rounded-[8px]"
                       style={{
-                        color: pnlPreview >= 0 ? "#26a65b" : "#e5383b",
-                        background: pnlPreview >= 0 ? "#edfaf3" : "#fff0f0",
+                        color: pnlPreview >= 0 ? "#26A65B" : "#E5383B",
+                        background: pnlPreview >= 0 ? "rgba(38,166,91,0.12)" : "rgba(229,56,59,0.12)",
                       }}
                     >
                       P&L: {pnlPreview >= 0 ? "+" : ""}{fmtCcy(pnlPreview)}
@@ -1077,43 +1099,44 @@ export default function JournalPage() {
                   )}
 
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">Why did you exit?</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Why did you exit?</label>
                     <textarea
                       value={closeForm.exit_reason || ""}
                       onChange={(ev) => setCloseForm((f) => ({ ...f, exit_reason: ev.target.value }))}
                       rows={2}
                       placeholder="Target hit, stop loss, chart breakdown..."
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none resize-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">What went wrong?</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>What went wrong?</label>
                     <textarea
                       value={closeForm.mistakes || ""}
                       onChange={(ev) => setCloseForm((f) => ({ ...f, mistakes: ev.target.value }))}
                       rows={2}
                       placeholder="Sized too large, ignored stop..."
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none resize-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-[#aaa] uppercase tracking-wider mb-1 block">What did I learn?</label>
+                    <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>What did I learn?</label>
                     <textarea
                       value={closeForm.lessons || ""}
                       onChange={(ev) => setCloseForm((f) => ({ ...f, lessons: ev.target.value }))}
                       rows={2}
                       placeholder="Always wait for confirmation..."
-                      className="w-full border border-[#e8e8e6] rounded-[8px] px-3 py-2 text-[13px] outline-none focus:border-[#5b63f5] resize-none"
+                      className="w-full rounded-[8px] px-3 py-2 text-[13px] outline-none resize-none"
+                    style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                     />
                   </div>
 
-                  <button
-                    onClick={handleCloseTrade}
-                    disabled={saving}
-                    className="w-full py-2.5 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={handleCloseTrade} disabled={saving}
+                    className="w-full py-2.5 text-[13px] font-medium rounded-[8px] transition-colors disabled:opacity-50"
+                    style={{ background: "var(--app-teal)", color: "#0D0F14" }}>
                     {saving ? "Saving..." : "Close Trade"}
                   </button>
                 </div>
@@ -1138,59 +1161,58 @@ export default function JournalPage() {
                       ["P&L", selectedEntry.pnl != null ? fmtCcy(selectedEntry.pnl) : "Open"],
                     ].map(([k, v]) => (
                       <div key={k}>
-                        <div className="text-[10px] text-[#aaa] uppercase tracking-wider">{k}</div>
-                        <div className="font-medium text-[#0f0f0e] mt-0.5">{v}</div>
+                        <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--app-text3)" }}>{k}</div>
+                        <div className="font-medium mt-0.5" style={{ color: "var(--app-text1)" }}>{v}</div>
                       </div>
                     ))}
                   </div>
                   {selectedEntry.entry_reason && (
                     <div>
-                      <div className="text-[10px] text-[#aaa] uppercase tracking-wider mb-1">Entry Reason</div>
-                      <p className="text-[12px] text-[#555] leading-relaxed">{selectedEntry.entry_reason}</p>
+                      <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Entry Reason</div>
+                      <p className="text-[12px] leading-relaxed" style={{ color: "var(--app-text2)" }}>{selectedEntry.entry_reason}</p>
                     </div>
                   )}
                   {selectedEntry.exit_reason && (
                     <div>
-                      <div className="text-[10px] text-[#aaa] uppercase tracking-wider mb-1">Exit Reason</div>
-                      <p className="text-[12px] text-[#555] leading-relaxed">{selectedEntry.exit_reason}</p>
+                      <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Exit Reason</div>
+                      <p className="text-[12px] leading-relaxed" style={{ color: "var(--app-text2)" }}>{selectedEntry.exit_reason}</p>
                     </div>
                   )}
                   {selectedEntry.mistakes && (
                     <div>
-                      <div className="text-[10px] text-[#aaa] uppercase tracking-wider mb-1">Mistakes</div>
-                      <p className="text-[12px] text-[#e5383b] leading-relaxed">{selectedEntry.mistakes}</p>
+                      <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Mistakes</div>
+                      <p className="text-[12px] leading-relaxed" style={{ color: "#E5383B" }}>{selectedEntry.mistakes}</p>
                     </div>
                   )}
                   {selectedEntry.lessons ? (
-                    <div className="bg-[#edfaf3] border border-[#c3efd4] rounded-[8px] p-3">
-                      <div className="text-[10px] font-bold text-[#26a65b] uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <div className="rounded-[8px] p-3" style={{ background: "rgba(38,166,91,0.10)", border: "1px solid rgba(38,166,91,0.2)" }}>
+                      <div className="text-[10px] font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1"
+                        style={{ color: "#26A65B" }}>
                         <span>✦</span> AI Lesson
                       </div>
                       {selectedEntry.lessons.split("\n").map((line, i) => {
                         if (!line.trim()) return null;
                         const clean = line.replace(/^[-•*]\s*/, "").replace(/\*\*(.*?)\*\*/g, "$1");
                         return (
-                          <div key={i} className="flex gap-1.5 items-start text-[12px] text-[#1c6b3a] leading-relaxed mb-1">
-                            <span className="text-[#26a65b] mt-0.5 flex-shrink-0">•</span>
+                          <div key={i} className="flex gap-1.5 items-start text-[12px] leading-relaxed mb-1"
+                            style={{ color: "var(--app-text2)" }}>
+                            <span className="mt-0.5 flex-shrink-0" style={{ color: "#26A65B" }}>•</span>
                             <span>{clean}</span>
                           </div>
                         );
                       })}
                     </div>
                   ) : selectedEntry.status === "closed" && (
-                    <button
-                      onClick={() => handleGetLesson(selectedEntry)}
-                      disabled={lessonLoading === selectedEntry.id}
-                      className="w-full py-2 rounded-[8px] text-[12px] font-medium border border-[#5b63f5] text-[#5b63f5] hover:bg-[#eeeffe] transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={() => handleGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
+                      className="w-full py-2 rounded-[8px] text-[12px] font-medium transition-colors disabled:opacity-50"
+                      style={{ border: "1px solid var(--app-teal)", color: "var(--app-teal)", background: "transparent" }}>
                       {lessonLoading === selectedEntry.id ? "Generating AI lesson…" : "✦ Get AI lesson for this trade"}
                     </button>
                   )}
                   {selectedEntry.status === "open" && (
-                    <button
-                      onClick={() => openClosePanel(selectedEntry)}
-                      className="w-full py-2 bg-[#0f0f0e] text-white text-[13px] font-medium rounded-[8px] hover:bg-[#333] transition-colors"
-                    >
+                    <button onClick={() => openClosePanel(selectedEntry)}
+                      className="w-full py-2 text-[13px] font-medium rounded-[8px] transition-colors"
+                      style={{ background: "var(--app-teal)", color: "#0D0F14" }}>
                       Close this trade
                     </button>
                   )}

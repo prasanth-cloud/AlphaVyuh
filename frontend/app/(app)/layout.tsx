@@ -37,8 +37,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-[#0f0f0e] flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
+        <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "var(--app-teal)", borderTopColor: "transparent" }} />
       </div>
     );
   }
@@ -46,17 +47,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (pathname.startsWith("/onboarding")) return <>{children}</>;
 
   return (
-    <div className="h-screen flex flex-col bg-[#f2f2f0] overflow-hidden">
-      {/* Nav */}
-      <nav className="h-[48px] bg-[#0f0f0e] flex items-center px-4 gap-1 flex-shrink-0 border-b border-[#1a1a18] z-50">
+    <div className="h-screen flex flex-col overflow-hidden" style={{ background: "var(--app-bg)" }}>
+      {/* Nav — frosted glass */}
+      <nav className="h-[48px] flex items-center px-4 gap-1 flex-shrink-0 z-50"
+        style={{
+          background: "rgba(13,15,20,0.80)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: "1px solid var(--app-border)",
+        }}>
         {/* Logo */}
         <Link href="/dashboard" className="mr-4 flex items-center gap-2 flex-shrink-0">
           <svg width="30" height="20" viewBox="0 0 72 52" fill="none">
-            <polyline points="2,8 28,42 36,28 62,8" stroke="#5b63f5" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="62" cy="8" r="4.5" fill="#26a65b"/>
+            <polyline points="2,8 28,42 36,28 62,8" stroke="var(--app-teal)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+            <circle cx="62" cy="8" r="4.5" fill="var(--app-gain)"/>
           </svg>
-          <span className="text-[13px] font-semibold text-white tracking-tight">
-            Alpha<span className="text-[#818cf8]">Vyuh</span>
+          <span className="text-[13px] font-semibold tracking-tight" style={{ color: "var(--app-text1)" }}>
+            Alpha<span style={{ color: "var(--app-teal)" }}>Vyuh</span>
           </span>
         </Link>
 
@@ -65,11 +72,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           const active = pathname.startsWith(link.href);
           return (
             <Link key={link.href} href={link.href}
-              className={`px-3 py-1.5 rounded-[6px] text-[12px] font-medium transition-all ${
-                active
-                  ? "bg-[rgba(91,99,245,0.15)] text-white"
-                  : "text-[#555553] hover:text-[#aaa] hover:bg-[#1a1a18]"
-              }`}>
+              className="px-3 py-1.5 rounded-[6px] text-[12px] font-medium transition-all"
+              style={{
+                background: active ? "var(--app-teal-dim)" : "transparent",
+                color: active ? "var(--app-teal)" : "var(--app-text2)",
+              }}
+              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "var(--app-text1)"; }}
+              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "var(--app-text2)"; }}>
               {link.label}
             </Link>
           );
@@ -77,9 +86,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Right side */}
         <div className="ml-auto flex items-center gap-2.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#26a65b] animate-pulse" />
-          <span className="text-[11px] text-[#444]">Live</span>
-          <div className="w-7 h-7 rounded-full bg-[#1a1a18] border border-[#2a2a28] flex items-center justify-center text-[11px] font-bold text-[#888]">
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--app-teal)" }} />
+          <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>Live</span>
+          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold"
+            style={{
+              background: "var(--app-surface2)",
+              border: "1px solid var(--app-border)",
+              color: "var(--app-text2)",
+            }}>
             {initial}
           </div>
         </div>

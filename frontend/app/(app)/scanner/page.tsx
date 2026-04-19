@@ -10,49 +10,56 @@ import {
 type Filters = Record<string, unknown>;
 
 function pctColor(v: number | null) {
-  if (v == null) return "#aaa";
-  return v >= 0 ? "#26a65b" : "#e5383b";
+  if (v == null) return "var(--app-text3)";
+  return v >= 0 ? "#26A65B" : "#E5383B";
 }
 
-function rsiClass(v: number | null) {
-  if (v == null) return "";
-  if (v > 70) return "rsi-high";
-  if (v < 40) return "rsi-low";
-  return "rsi-mid";
+function rsiStyle(v: number | null): React.CSSProperties {
+  if (v == null) return {};
+  if (v > 70) return { background: "rgba(91,99,245,0.15)", color: "#818cf8" };
+  if (v < 40) return { background: "rgba(217,119,6,0.15)", color: "#fbbf24" };
+  return { background: "rgba(38,166,91,0.15)", color: "#4ade80" };
 }
 
 function Section({ title, children, open = false }: { title: string; children: React.ReactNode; open?: boolean }) {
   const [expanded, setExpanded] = useState(open);
   return (
-    <div className="border-b border-[#f0f0ee]">
+    <div style={{ borderBottom: "1px solid var(--app-border)" }}>
       <button onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center justify-between px-4 py-2.5 text-left">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#888]">{title}</span>
-        <span className="text-[#bbb] text-[10px]">{expanded ? "▲" : "▼"}</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.6px]" style={{ color: "var(--app-text3)" }}>{title}</span>
+        <span className="text-[10px]" style={{ color: "var(--app-text3)" }}>{expanded ? "▲" : "▼"}</span>
       </button>
       {expanded && <div className="px-4 pb-3 space-y-2">{children}</div>}
     </div>
   );
 }
 
+const inputCls = "w-full text-[12px] rounded-[6px] px-2 py-1 outline-none";
+const inputStyle: React.CSSProperties = {
+  background: "var(--app-surface3)",
+  border: "1px solid var(--app-border)",
+  color: "var(--app-text1)",
+};
+
 function RangeRow({ label, keyMin, keyMax, filters, onChange }: {
   label: string; keyMin: string; keyMax: string; filters: Filters; onChange: (k: string, v: unknown) => void;
 }) {
   return (
     <div>
-      <div className="text-[11px] text-[#888] mb-1">{label}</div>
+      <div className="text-[11px] mb-1" style={{ color: "var(--app-text2)" }}>{label}</div>
       <div className="flex gap-1.5">
         {keyMin && (
           <input type="number" placeholder="Min"
             value={(filters[keyMin] as number) ?? ""}
             onChange={e => onChange(keyMin, e.target.value === "" ? null : parseFloat(e.target.value))}
-            className="w-full text-[12px] border border-[#e2e2df] rounded-[6px] px-2 py-1 outline-none focus:border-[#5b63f5]" />
+            className={inputCls} style={inputStyle} />
         )}
         {keyMax && (
           <input type="number" placeholder="Max"
             value={(filters[keyMax] as number) ?? ""}
             onChange={e => onChange(keyMax, e.target.value === "" ? null : parseFloat(e.target.value))}
-            className="w-full text-[12px] border border-[#e2e2df] rounded-[6px] px-2 py-1 outline-none focus:border-[#5b63f5]" />
+            className={inputCls} style={inputStyle} />
         )}
       </div>
     </div>
@@ -65,10 +72,10 @@ function SelectRow({ label, filterKey, options, filters, onChange }: {
 }) {
   return (
     <div>
-      <div className="text-[11px] text-[#888] mb-1">{label}</div>
+      <div className="text-[11px] mb-1" style={{ color: "var(--app-text2)" }}>{label}</div>
       <select value={(filters[filterKey] as string) ?? ""}
         onChange={e => onChange(filterKey, e.target.value === "" ? null : e.target.value)}
-        className="w-full text-[12px] border border-[#e2e2df] rounded-[6px] px-2 py-1.5 outline-none focus:border-[#5b63f5] bg-white">
+        className={inputCls + " py-1.5"} style={inputStyle}>
         <option value="">Any</option>
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
@@ -83,10 +90,11 @@ function ToggleRow({ label, filterKey, filters, onChange }: {
   return (
     <label className="flex items-center gap-2 cursor-pointer select-none">
       <div onClick={() => onChange(filterKey, on ? null : true)}
-        className={`w-8 h-4 rounded-full transition-colors flex-shrink-0 cursor-pointer ${on ? "bg-[#5b63f5]" : "bg-[#e2e2df]"}`}>
+        className="w-8 h-4 rounded-full transition-colors flex-shrink-0 cursor-pointer"
+        style={{ background: on ? "var(--app-teal)" : "var(--app-surface3)" }}>
         <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-sm mt-0.5 transition-all ${on ? "ml-[18px]" : "ml-0.5"}`} />
       </div>
-      <span className="text-[12px] text-[#555]">{label}</span>
+      <span className="text-[12px]" style={{ color: "var(--app-text2)" }}>{label}</span>
     </label>
   );
 }
@@ -150,24 +158,34 @@ export default function ScannerPage() {
     }
   }
 
+  const panelStyle: React.CSSProperties = {
+    background: "var(--app-surface)",
+    borderRight: "1px solid var(--app-border)",
+  };
+
   return (
     <div className="flex overflow-hidden" style={{ height: "calc(100vh - 48px)" }}>
       {/* LEFT FILTER PANEL */}
-      <div className="w-[260px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col overflow-hidden">
-        <div className="px-3 pt-3 pb-2 border-b border-[#f0f0ee]">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#aaa] mb-2">Presets</div>
+      <div className="w-[260px] flex-shrink-0 flex flex-col overflow-hidden" style={panelStyle}>
+        <div className="px-3 pt-3 pb-2" style={{ borderBottom: "1px solid var(--app-border)" }}>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.6px] mb-2" style={{ color: "var(--app-text3)" }}>Presets</div>
           <div className="grid grid-cols-2 gap-1.5">
-            {presets.map(p => (
-              <button key={p.id} onClick={() => applyPreset(p)}
-                className={`text-left px-2 py-1.5 rounded-[6px] border text-[11px] transition-all leading-tight ${
-                  activePreset === p.id
-                    ? "border-[#5b63f5] bg-[#eeeffe] text-[#5b63f5] font-semibold"
-                    : "border-[#e8e8e6] text-[#555] hover:border-[#ccc]"
-                }`}>
-                <span className="w-1.5 h-1.5 rounded-full inline-block mr-1 align-middle" style={{ background: p.color }} />
-                {p.name}
-              </button>
-            ))}
+            {presets.map(p => {
+              const active = activePreset === p.id;
+              return (
+                <button key={p.id} onClick={() => applyPreset(p)}
+                  className="text-left px-2 py-1.5 rounded-[6px] text-[11px] transition-all leading-tight"
+                  style={{
+                    border: active ? `1px solid ${p.color}` : "1px solid var(--app-border)",
+                    background: active ? `${p.color}18` : "transparent",
+                    color: active ? p.color : "var(--app-text2)",
+                    fontWeight: active ? 600 : 400,
+                  }}>
+                  <span className="w-1.5 h-1.5 rounded-full inline-block mr-1 align-middle" style={{ background: p.color }} />
+                  {p.name}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -230,13 +248,14 @@ export default function ScannerPage() {
           </Section>
         </div>
 
-        <div className="p-3 border-t border-[#e8e8e6] flex flex-col gap-2">
+        <div className="p-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--app-border)" }}>
           <button onClick={() => scan()} disabled={loading}
-            className="w-full py-2 rounded-[8px] text-[13px] font-bold text-white transition-opacity disabled:opacity-60"
-            style={{ background: "#0f0f0e" }}>
+            className="w-full py-2 rounded-[8px] text-[13px] font-bold transition-opacity disabled:opacity-60"
+            style={{ background: "var(--app-teal)", color: "#0D0F14" }}>
             {loading ? "Scanning…" : "Run Scan"}
           </button>
-          <button onClick={resetFilters} className="w-full text-[12px] text-[#aaa] hover:text-[#555] transition-colors">
+          <button onClick={resetFilters} className="w-full text-[12px] transition-colors"
+            style={{ color: "var(--app-text3)" }}>
             Reset all filters
           </button>
         </div>
@@ -244,21 +263,23 @@ export default function ScannerPage() {
 
       {/* RIGHT RESULTS */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <div className="bg-white border-b border-[#e8e8e6] px-4 py-2 flex items-center gap-3 flex-shrink-0">
+        <div className="px-4 py-2 flex items-center gap-3 flex-shrink-0"
+          style={{ borderBottom: "1px solid var(--app-border)", background: "var(--app-surface)" }}>
           {scanError ? (
-            <span className="text-[13px] text-[#e5383b]">{scanError}</span>
+            <span className="text-[13px]" style={{ color: "#f87171" }}>{scanError}</span>
           ) : hasRun ? (
-            <span className="text-[13px] text-[#555]">
-              <span className="font-semibold text-[#1c1c1a]">{totalMatches}</span> stocks matched
-              {tradeDate && <span className="text-[#aaa] ml-2">· EOD {tradeDate}</span>}
+            <span className="text-[13px]" style={{ color: "var(--app-text2)" }}>
+              <span className="font-semibold" style={{ color: "var(--app-text1)" }}>{totalMatches}</span> stocks matched
+              {tradeDate && <span className="ml-2" style={{ color: "var(--app-text3)" }}>· EOD {tradeDate}</span>}
             </span>
           ) : (
-            <span className="text-[13px] text-[#aaa]">Select filters and run scan</span>
+            <span className="text-[13px]" style={{ color: "var(--app-text3)" }}>Select filters and run scan</span>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[11px] text-[#aaa]">Sort:</span>
+            <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>Sort:</span>
             <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-              className="text-[12px] border border-[#e2e2df] rounded-[6px] px-2 py-1 outline-none bg-white">
+              className="text-[12px] rounded-[6px] px-2 py-1 outline-none"
+              style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}>
               <option value="volume_ratio">Vol ratio</option>
               <option value="pct_change">% Change</option>
               <option value="rsi_14">RSI</option>
@@ -266,7 +287,7 @@ export default function ScannerPage() {
               <option value="week_52_high_pct">52W high%</option>
             </select>
             <button onClick={() => setSortOrder(o => o === "desc" ? "asc" : "desc")}
-              className="text-[12px] text-[#5b63f5] font-medium w-5">
+              className="text-[12px] font-medium w-5" style={{ color: "var(--app-teal)" }}>
               {sortOrder === "desc" ? "↓" : "↑"}
             </button>
           </div>
@@ -276,81 +297,95 @@ export default function ScannerPage() {
           <div className="flex-1 overflow-auto">
             {!hasRun ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-8">
-                <div className="w-12 h-12 rounded-full bg-[#eeeffe] flex items-center justify-center mb-3">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+                  style={{ background: "var(--app-teal-dim)" }}>
                   <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                    <circle cx="11" cy="11" r="8" stroke="#5b63f5" strokeWidth="2"/>
-                    <path d="m21 21-4.35-4.35" stroke="#5b63f5" strokeWidth="2" strokeLinecap="round"/>
+                    <circle cx="11" cy="11" r="8" stroke="var(--app-teal)" strokeWidth="2"/>
+                    <path d="m21 21-4.35-4.35" stroke="var(--app-teal)" strokeWidth="2" strokeLinecap="round"/>
                   </svg>
                 </div>
-                <p className="text-[14px] font-semibold text-[#1c1c1a]">Run a scan</p>
-                <p className="text-[12px] text-[#aaa] mt-1">Pick a preset or configure filters, then click Run Scan</p>
+                <p className="text-[14px] font-semibold" style={{ color: "var(--app-text1)" }}>Run a scan</p>
+                <p className="text-[12px] mt-1" style={{ color: "var(--app-text3)" }}>Pick a preset or configure filters, then click Run Scan</p>
               </div>
             ) : loading ? (
               <div className="p-6 space-y-2">
                 {Array.from({length:8}).map((_,i) => (
-                  <div key={i} className="h-9 bg-white border border-[#e8e8e6] rounded animate-pulse" />
+                  <div key={i} className="h-9 rounded animate-pulse"
+                    style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }} />
                 ))}
               </div>
             ) : results.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full">
-                <p className="text-[14px] font-semibold text-[#1c1c1a]">No matches</p>
-                <p className="text-[12px] text-[#aaa] mt-1">Try relaxing the filters</p>
+                <p className="text-[14px] font-semibold" style={{ color: "var(--app-text1)" }}>No matches</p>
+                <p className="text-[12px] mt-1" style={{ color: "var(--app-text3)" }}>Try relaxing the filters</p>
               </div>
             ) : (
               <table className="w-full text-[12px]">
-                <thead className="sticky top-0 bg-white border-b border-[#e8e8e6] z-10">
+                <thead className="sticky top-0 z-10"
+                  style={{ background: "var(--app-surface)", borderBottom: "1px solid var(--app-border)" }}>
                   <tr>
                     {["Symbol","Close ₹","Change%","Vol Ratio","RSI","EMA dist","52W%","ATR%",""].map((h,i) => (
-                      <th key={i} className="text-left px-3 py-2 text-[10px] uppercase tracking-wider text-[#aaa] font-semibold whitespace-nowrap">{h}</th>
+                      <th key={i} className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-semibold whitespace-nowrap"
+                        style={{ color: "var(--app-text3)" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map(r => (
-                    <tr key={r.symbol}
-                      onClick={() => setSelected(s => s?.symbol === r.symbol ? null : r)}
-                      className={`border-b border-[#f2f2f0] cursor-pointer transition-colors ${
-                        selected?.symbol === r.symbol ? "bg-[#eeeffe]" : "hover:bg-[#fafaf8]"
-                      }`}>
-                      <td className="px-3 py-2">
-                        <div className="font-semibold text-[#1c1c1a]">{r.symbol}</div>
-                        <div className="text-[10px] text-[#aaa] truncate max-w-[110px]">{r.company_name}</div>
-                      </td>
-                      <td className="px-3 py-2 tabular font-semibold text-[#1c1c1a]">₹{r.close.toLocaleString("en-IN")}</td>
-                      <td className="px-3 py-2 tabular font-semibold" style={{ color: pctColor(r.pct_change) }}>
-                        {r.pct_change != null ? `${r.pct_change >= 0 ? "+" : ""}${r.pct_change.toFixed(2)}%` : "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular" style={{ color: (r.volume_ratio ?? 0) >= 2 ? "#5b63f5" : "#555" }}>
-                        {r.volume_ratio != null ? `${r.volume_ratio.toFixed(1)}×` : "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {r.rsi_14 != null ? (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold tabular ${rsiClass(r.rsi_14)}`}>
-                            {r.rsi_14.toFixed(1)}
-                          </span>
-                        ) : "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular">
-                        {r.ema_20 && r.close ? (
-                          <span style={{ color: r.close > r.ema_20 ? "#26a65b" : "#e5383b" }}>
-                            {r.close > r.ema_20 ? "+" : ""}{((r.close - r.ema_20) / r.ema_20 * 100).toFixed(1)}%
-                          </span>
-                        ) : "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular text-[#888]">
-                        {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : "—"}
-                      </td>
-                      <td className="px-3 py-2 tabular text-[#888]">
-                        {r.atr_pct != null ? `${r.atr_pct.toFixed(1)}%` : "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <button onClick={e => { e.stopPropagation(); router.push(`/watchlist?add=${r.symbol}`); }}
-                          className="text-[10px] text-[#5b63f5] hover:underline whitespace-nowrap font-semibold">
-                          +WL
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {results.map(r => {
+                    const isSelected = selected?.symbol === r.symbol;
+                    return (
+                      <tr key={r.symbol}
+                        onClick={() => setSelected(s => s?.symbol === r.symbol ? null : r)}
+                        className="cursor-pointer transition-colors"
+                        style={{
+                          borderBottom: "1px solid var(--app-border2)",
+                          background: isSelected ? "var(--app-teal-dim)" : "transparent",
+                        }}
+                        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"; }}
+                        onMouseLeave={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}>
+                        <td className="px-3 py-2">
+                          <div className="font-semibold" style={{ color: "var(--app-text1)" }}>{r.symbol}</div>
+                          <div className="text-[10px] truncate max-w-[110px]" style={{ color: "var(--app-text3)" }}>{r.company_name}</div>
+                        </td>
+                        <td className="px-3 py-2 tabular font-semibold" style={{ color: "var(--app-text1)" }}>₹{r.close.toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-2 tabular font-semibold" style={{ color: pctColor(r.pct_change) }}>
+                          {r.pct_change != null ? `${r.pct_change >= 0 ? "+" : ""}${r.pct_change.toFixed(2)}%` : "—"}
+                        </td>
+                        <td className="px-3 py-2 tabular"
+                          style={{ color: (r.volume_ratio ?? 0) >= 2 ? "var(--app-teal)" : "var(--app-text2)" }}>
+                          {r.volume_ratio != null ? `${r.volume_ratio.toFixed(1)}×` : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {r.rsi_14 != null ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold tabular"
+                              style={rsiStyle(r.rsi_14)}>
+                              {r.rsi_14.toFixed(1)}
+                            </span>
+                          ) : "—"}
+                        </td>
+                        <td className="px-3 py-2 tabular">
+                          {r.ema_20 && r.close ? (
+                            <span style={{ color: r.close > r.ema_20 ? "#26A65B" : "#E5383B" }}>
+                              {r.close > r.ema_20 ? "+" : ""}{((r.close - r.ema_20) / r.ema_20 * 100).toFixed(1)}%
+                            </span>
+                          ) : <span style={{ color: "var(--app-text3)" }}>—</span>}
+                        </td>
+                        <td className="px-3 py-2 tabular" style={{ color: "var(--app-text2)" }}>
+                          {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="px-3 py-2 tabular" style={{ color: "var(--app-text2)" }}>
+                          {r.atr_pct != null ? `${r.atr_pct.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button onClick={e => { e.stopPropagation(); router.push(`/watchlist?add=${r.symbol}`); }}
+                            className="text-[10px] hover:underline whitespace-nowrap font-semibold"
+                            style={{ color: "var(--app-teal)" }}>
+                            +WL
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -358,26 +393,29 @@ export default function ScannerPage() {
 
           {/* Side detail panel */}
           {selected && (
-            <div className="w-[240px] flex-shrink-0 bg-white border-l border-[#e8e8e6] overflow-y-auto p-4">
+            <div className="w-[240px] flex-shrink-0 overflow-y-auto p-4"
+              style={{ background: "var(--app-surface)", borderLeft: "1px solid var(--app-border)" }}>
               <div className="flex justify-between mb-3">
                 <div>
-                  <div className="text-[15px] font-bold text-[#1c1c1a]">{selected.symbol}</div>
-                  <div className="text-[11px] text-[#aaa]">{selected.company_name}</div>
+                  <div className="text-[15px] font-bold" style={{ color: "var(--app-text1)" }}>{selected.symbol}</div>
+                  <div className="text-[11px]" style={{ color: "var(--app-text3)" }}>{selected.company_name}</div>
                   {selected.sector && (
-                    <span className="inline-block mt-1 text-[10px] font-semibold bg-[#eeeffe] text-[#5b63f5] px-2 py-0.5 rounded-full">{selected.sector}</span>
+                    <span className="inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: "var(--app-teal-dim)", color: "var(--app-teal)" }}>{selected.sector}</span>
                   )}
                 </div>
-                <button onClick={() => setSelected(null)} className="text-[#bbb] text-lg leading-none">×</button>
+                <button onClick={() => setSelected(null)} className="text-lg leading-none"
+                  style={{ color: "var(--app-text3)" }}>×</button>
               </div>
-              <div className="text-[22px] font-bold tabular">₹{selected.close.toLocaleString("en-IN")}</div>
+              <div className="text-[22px] font-bold tabular" style={{ color: "var(--app-text1)" }}>₹{selected.close.toLocaleString("en-IN")}</div>
               <div className="text-[13px] font-semibold tabular mb-3" style={{ color: pctColor(selected.pct_change) }}>
                 {selected.pct_change != null ? `${selected.pct_change >= 0 ? "+" : ""}${selected.pct_change.toFixed(2)}%` : "—"}
               </div>
               <div className="grid grid-cols-2 gap-1.5 mb-3 text-[12px]">
                 {[["Open", `₹${selected.open}`],["High",`₹${selected.high}`],["Low",`₹${selected.low}`],["Volume",`${(selected.volume/1e6).toFixed(1)}M`]].map(([l,v]) => (
-                  <div key={l} className="bg-[#f7f7f5] rounded px-2 py-1.5">
-                    <div className="text-[10px] text-[#aaa]">{l}</div>
-                    <div className="font-semibold">{v}</div>
+                  <div key={l} className="rounded px-2 py-1.5" style={{ background: "var(--app-surface3)" }}>
+                    <div className="text-[10px]" style={{ color: "var(--app-text3)" }}>{l}</div>
+                    <div className="font-semibold" style={{ color: "var(--app-text1)" }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -393,19 +431,24 @@ export default function ScannerPage() {
                   ["52W High%", selected.week_52_high_pct != null ? `${selected.week_52_high_pct.toFixed(1)}%` : "—"],
                 ].map(([l,v]) => (
                   <div key={l} className="flex justify-between">
-                    <span className="text-[#aaa]">{l}</span>
-                    <span className="font-semibold tabular">{v}</span>
+                    <span style={{ color: "var(--app-text3)" }}>{l}</span>
+                    <span className="font-semibold tabular" style={{ color: "var(--app-text1)" }}>{v}</span>
                   </div>
                 ))}
               </div>
               <div className="mt-4 flex flex-col gap-2">
                 <button onClick={() => router.push(`/watchlist?add=${selected.symbol}`)}
-                  className="w-full py-2 rounded-[8px] text-[12px] font-bold text-white"
-                  style={{ background: "#5b63f5" }}>
+                  className="w-full py-2 rounded-[8px] text-[12px] font-bold"
+                  style={{ background: "var(--app-teal)", color: "#0D0F14" }}>
                   + Add to Watchlist
                 </button>
                 <button onClick={() => router.push(`/watchlist?symbol=${selected.symbol}`)}
-                  className="w-full py-2 rounded-[8px] text-[12px] font-semibold border border-[#e2e2df] text-[#555] hover:bg-[#f7f7f5]">
+                  className="w-full py-2 rounded-[8px] text-[12px] font-semibold transition-colors"
+                  style={{
+                    border: "1px solid var(--app-border)",
+                    color: "var(--app-text2)",
+                    background: "transparent",
+                  }}>
                   View Chart →
                 </button>
               </div>
