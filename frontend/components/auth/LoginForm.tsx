@@ -3,9 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const SUPA_URL = "https://fyxltykqdvacbdgmeucf.supabase.co";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5eGx0eWtxZHZhY2JkZ21ldWNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMjU5ODcsImV4cCI6MjA5MTcwMTk4N30.ql5GQNBNaVJvnFwQMXMiVuJ9OuvZcERSWVLR929qG1U";
-
 export default function LoginForm() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
@@ -17,30 +14,16 @@ export default function LoginForm() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPA_KEY,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error_description || data.msg || data.message || "Login failed");
+        setError(data.error || "Login failed");
         return;
       }
-      // Store session tokens so Supabase client picks them up
-      const storageKey = `sb-fyxltykqdvacbdgmeucf-auth-token`;
-      const session = {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        expires_at: Math.floor(Date.now() / 1000) + data.expires_in,
-        expires_in: data.expires_in,
-        token_type: data.token_type,
-        user: data.user,
-      };
-      localStorage.setItem(storageKey, JSON.stringify(session));
       window.location.replace("/dashboard");
     } catch {
       setError("Network error — please try again.");
