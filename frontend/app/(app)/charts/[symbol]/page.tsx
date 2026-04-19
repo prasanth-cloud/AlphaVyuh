@@ -34,7 +34,7 @@ type DrawnLine = {
 // Dynamically import chart components (browser-only)
 const CandlestickChart = dynamic(
   () => import("@/components/charts/CandlestickChart"),
-  { ssr: false, loading: () => <div className="animate-pulse bg-[#f7f7f5] h-full w-full" /> }
+  { ssr: false, loading: () => <div className="animate-pulse h-full w-full" style={{ background: "var(--app-surface3)" }} /> }
 );
 const IndicatorPanel = dynamic(
   () => import("@/components/charts/IndicatorPanel"),
@@ -612,12 +612,16 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     if (e.key === "Escape") { setShowCompareInput(false); setCompareInput(""); }
                   }}
                   placeholder="Symbol…"
-                  className="text-[11px] px-2 py-1 rounded-[4px] border border-[#5b63f5] outline-none w-[80px] text-[#0f0f0e]"
+                  className="text-[11px] px-2 py-1 rounded-[4px] outline-none w-[80px]"
+                  style={{ border: "1px solid var(--app-teal)", background: "var(--app-surface3)", color: "var(--app-text1)" }}
                 />
-                <button onClick={() => { setShowCompareInput(false); setCompareInput(""); }} className="text-[#aaa] text-[14px] leading-none hover:text-[#0f0f0e]">×</button>
+                <button onClick={() => { setShowCompareInput(false); setCompareInput(""); }}
+                  className="text-[14px] leading-none transition-colors"
+                  style={{ color: "var(--app-text3)" }}>×</button>
               </div>
             ) : compareSymbol ? (
-              <div className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] border bg-[#eeeffe] border-[#5b63f544] text-[#5b63f5] font-semibold">
+              <div className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] font-semibold"
+                style={{ background: "rgba(0,229,196,0.1)", border: "1px solid rgba(0,229,196,0.3)", color: "var(--app-teal)" }}>
                 vs {compareSymbol}
                 <button onClick={() => { setCompareSymbol(""); setCompareData(null); }} className="ml-0.5 hover:text-[#e5383b] transition-colors">×</button>
               </div>
