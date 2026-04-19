@@ -57,6 +57,7 @@ const INDICATOR_CONFIG = [
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Horizontal", "Fib", "Text"] as const;
+const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
 type DrawingTool = typeof DRAWING_TOOLS[number];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -147,6 +148,22 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
   const FREE_INDICATORS = ["ema20", "ema50", "ema200", "rsi"];
+
+  // Toolbar dropdowns
+  const [showMoreIndicators, setShowMoreIndicators] = useState(false);
+  const [showDrawMenu, setShowDrawMenu] = useState(false);
+  const moreIndRef = useRef<HTMLDivElement>(null);
+  const drawMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (moreIndRef.current && !moreIndRef.current.contains(e.target as Node)) setShowMoreIndicators(false);
+      if (drawMenuRef.current && !drawMenuRef.current.contains(e.target as Node)) setShowDrawMenu(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   // Overlay drawing state
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -544,8 +561,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Separator */}
           <div className="w-px h-5" style={{ background: "var(--app-border)" }} />
 
-          {/* Indicator toggles */}
-          {INDICATOR_CONFIG.map(ind => {
+          {/* Primary indicator toggles */}
+          {INDICATOR_CONFIG.filter(ind => PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
             const active = activeIndicators.includes(ind.id);
             const locked = !FREE_INDICATORS.includes(ind.id) && userPlan === "free";
             return (
@@ -556,9 +573,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors flex items-center gap-1"
                 style={active
                   ? { background: ind.color + "22", color: ind.color, border: `1px solid ${ind.color}44` }
-                  : locked
-                    ? { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
-                    : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
+                  : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
                 }
               >
                 {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
@@ -567,26 +582,94 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             );
           })}
 
+          {/* More indicators dropdown */}
+          <div ref={moreIndRef} className="relative">
+            <button
+              onClick={() => setShowMoreIndicators(s => !s)}
+              className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors flex items-center gap-1"
+              style={
+                INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id))
+                  ? { background: "rgba(91,99,245,0.15)", color: "#818cf8", border: "1px solid rgba(91,99,245,0.3)" }
+                  : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
+              }
+            >
+              More ▾
+            </button>
+            {showMoreIndicators && (
+              <div className="absolute top-full left-0 mt-1 z-50 rounded-[8px] py-1 shadow-xl"
+                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 130 }}>
+                {INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
+                  const active = activeIndicators.includes(ind.id);
+                  const locked = !FREE_INDICATORS.includes(ind.id) && userPlan === "free";
+                  return (
+                    <button
+                      key={ind.id}
+                      onClick={() => { toggleIndicator(ind.id); }}
+                      className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors"
+                      style={{ color: active ? ind.color : "var(--app-text2)" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                    >
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: active ? ind.color : "var(--app-border)" }} />
+                      {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ flexShrink: 0 }}><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
+                      {ind.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Separator */}
           <div className="w-px h-5" style={{ background: "var(--app-border)" }} />
 
-          {/* Drawing tools */}
-          {DRAWING_TOOLS.map(tool => (
+          {/* Draw dropdown */}
+          <div ref={drawMenuRef} className="relative">
             <button
-              key={tool}
-              onClick={() => setActiveDrawingTool(t => t === tool ? null : tool)}
-              className="text-[11px] px-2.5 py-1 rounded-[4px] font-medium transition-colors"
-              style={activeDrawingTool === tool
+              onClick={() => setShowDrawMenu(s => !s)}
+              className="text-[11px] px-2.5 py-1 rounded-[4px] font-medium transition-colors flex items-center gap-1"
+              style={activeDrawingTool
                 ? { background: "rgba(91,99,245,0.2)", color: "#818cf8", border: "1px solid rgba(91,99,245,0.4)" }
                 : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
               }
             >
-              {tool}
+              {activeDrawingTool ?? "Draw"} ▾
             </button>
-          ))}
+            {showDrawMenu && (
+              <div className="absolute top-full left-0 mt-1 z-50 rounded-[8px] py-1 shadow-xl"
+                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 120 }}>
+                {DRAWING_TOOLS.map(tool => (
+                  <button
+                    key={tool}
+                    onClick={() => { setActiveDrawingTool(t => t === tool ? null : tool); setShowDrawMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-[12px] transition-colors"
+                    style={{ color: activeDrawingTool === tool ? "#818cf8" : "var(--app-text2)" }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                  >
+                    {tool}
+                  </button>
+                ))}
+                {drawnLines.length > 0 && (
+                  <>
+                    <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
+                    <button
+                      onClick={() => { clearDrawings(); setShowDrawMenu(false); }}
+                      className="w-full text-left px-3 py-1.5 text-[12px] transition-colors"
+                      style={{ color: "var(--app-loss)" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                    >
+                      Clear all
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
-          {/* Clear drawings */}
-          {drawnLines.length > 0 && (
+          {/* Clear drawings shortcut (when active) */}
+          {drawnLines.length > 0 && !showDrawMenu && (
             <button
               onClick={clearDrawings}
               className="text-[11px] px-2.5 py-1 rounded-[4px] transition-colors"

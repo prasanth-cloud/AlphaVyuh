@@ -562,9 +562,21 @@ export default function ScannerPage() {
           {results.length > 0 ? (
             <>
               <span style={{ fontSize: 13, color: 'var(--app-text2)' }}>
-                <strong style={{ color: 'var(--app-text1)' }}>{totalMatches}</strong> stocks
+                <strong style={{ color: 'var(--app-text1)' }}>{results.length}</strong>
+                {totalMatches > results.length && (
+                  <span style={{ color: 'var(--app-text3)' }}> of {totalMatches}</span>
+                )} stocks
                 {tradeDate && <span style={{ color: 'var(--app-text3)', marginLeft: 6 }}>· EOD {tradeDate}</span>}
               </span>
+              {totalMatches > results.length && (
+                <span style={{
+                  fontSize: 11, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
+                  background: 'rgba(91,99,245,0.12)', color: '#818cf8', border: '1px solid rgba(91,99,245,0.25)',
+                  flexShrink: 0,
+                }} title="Free plan shows 50 results. Upgrade to Pro for up to 500.">
+                  Free plan · 50 result cap
+                </span>
+              )}
               <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
                 {SORT_COLS.map(([col, lbl]) => {
                   const active = sortBy === col

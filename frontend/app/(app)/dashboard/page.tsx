@@ -240,6 +240,46 @@ export default function DashboardPage() {
           </button>
         ))}
       </div>
+
+      {/* Workflow guide */}
+      <div className="px-5 pt-4 pb-2">
+        <div className="rounded-[12px] px-5 py-4" style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+          <div style={S.label} className="mb-3">How to use AlphaVyuh</div>
+          <div className="flex flex-col sm:flex-row gap-0 sm:gap-0 relative">
+            {[
+              { step: "1", title: "Scan", desc: "Pick a preset or set your own filters in the Scanner. Run the scan to get a filtered list of NSE stocks.", href: "/scanner", color: "var(--app-teal)" },
+              { step: "2", title: "Watchlist", desc: "Add stocks from the scan results to a watchlist. Monitor them side by side with mini-charts.", href: "/watchlist", color: "#818cf8" },
+              { step: "3", title: "Chart", desc: "Open any stock for a full chart. Use drawing tools, apply indicators, and set price alerts.", href: null, color: "#26A65B" },
+              { step: "4", title: "Journal", desc: "After a trade, log it in the Journal. AI reviews your P&L and surfaces patterns in your decisions.", href: "/journal", color: "#d97706" },
+            ].map((s, i) => (
+              <div key={s.step} className="flex sm:flex-col flex-1 gap-3 sm:gap-2 relative">
+                {/* connector line */}
+                {i < 3 && (
+                  <div className="hidden sm:block absolute top-4 left-[calc(50%+16px)] right-0 h-px" style={{ background: "var(--app-border)" }} />
+                )}
+                <div className="flex sm:flex-col gap-3 sm:gap-2 flex-1 sm:pr-4">
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+                      style={{ background: s.color + "22", color: s.color, border: `1px solid ${s.color}44` }}>
+                      {s.step}
+                    </div>
+                    <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>{s.title}</div>
+                  </div>
+                  <div className="text-[11px] leading-relaxed flex-1" style={{ color: "var(--app-text3)" }}>{s.desc}</div>
+                  {s.href && (
+                    <button onClick={() => router.push(s.href!)}
+                      className="self-start text-[11px] font-semibold px-2.5 py-1 rounded-[6px] transition-colors sm:mt-1"
+                      style={{ background: s.color + "18", color: s.color, border: `1px solid ${s.color}33` }}>
+                      Open →
+                    </button>
+                  )}
+                </div>
+                {i < 3 && <div className="sm:hidden w-px self-stretch" style={{ background: "var(--app-border)" }} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
