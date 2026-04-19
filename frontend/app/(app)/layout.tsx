@@ -1,181 +1,417 @@
-"use client";
+'use client'
+import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 
-import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import { useState, useRef } from "react";
+const NAV_LINKS = [
+  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/scanner',   label: 'Scanner' },
+  { href: '/watchlist', label: 'Watchlist' },
+  { href: '/journal',   label: 'Journal' },
+]
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/scanner",   label: "Scanner"   },
-  { href: "/watchlist", label: "Watchlist" },
-  { href: "/journal",   label: "Journal"   },
-];
+type SymbolResult = { symbol: string; company_name: string; sector: string }
 
-type SymbolResult = { symbol: string; company_name: string; sector: string };
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
 
-function SymbolSearch() {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SymbolResult[]>([]);
-  const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  if (pathname.startsWith('/onboarding')) return <>{children}</>
 
-  async function search(q: string) {
-    if (!q || q.length < 1) { setResults([]); setOpen(false); return; }
-    setLoading(true);
-    try {
-      const { createClient } = await import("@/lib/supabase");
-      const sb = createClient();
-      const { data } = await sb
-        .from("stock_universe")
-        .select("symbol, company_name, sector")
-        .or(`symbol.ilike.${q}%,company_name.ilike.%${q}%`)
-        .eq("is_active", true)
-        .limit(8);
-      setResults(data || []);
-      setOpen(true);
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
-  }
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--surface-0)' }}>
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const q = e.target.value.toUpperCase();
-    setQuery(q);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => search(q), 250);
-  }
+      {/* ── NAV ──────────────────────────────────────────────────────────── */}
+      <nav style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        height: 'var(--nav-height)',
+        background: 'rgba(11, 13, 17, 0.88)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid var(--border-subtle)',
+        display: 'flex', alignItems: 'center',
+        padding: '0 24px', gap: 4,
+      }}>
+        {/* Logo */}
+        <Link href="/dashboard" style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          marginRight: 28, flexShrink: 0,
+        }}>
+          <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+            <path d="M4 24 L12 8 L16 16 L20 10 L28 24"
+              stroke="var(--accent)" strokeWidth="2.5"
+              strokeLinecap="round" strokeLinejoin="round" fill="none"
+            />
+            <circle cx="28" cy="24" r="2.5" fill="var(--accent)" />
+          </svg>
+          <span style={{
+            fontSize: 14, fontWeight: 600,
+            letterSpacing: '-0.01em',
+            color: 'var(--text-primary)',
+          }}>
+            AlphaVyuh
+          </span>
+        </Link>
 
-  function select(symbol: string) {
-    setQuery("");
-    setResults([]);
-    setOpen(false);
-    router.push(`/watchlist?symbol=${symbol}`);
+        {/* Nav links */}
+        <div style={{ display: 'flex', gap: 2 }}>
+          {NAV_LINKS.map(link => {
+            const active = pathname.startsWith(link.href)
+            return (
+              <Link key={link.href} href={link.href} style={{
+                padding: '6px 12px',
+                fontSize: 13, fontWeight: active ? 500 : 400,
+                color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                borderRadius: 6,
+                position: 'relative',
+                transition: 'color var(--motion-instant) var(--ease-out)',
+              }}
+              onMouseEnter={e => {
+                if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'
+              }}
+              onMouseLeave={e => {
+                if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
+              }}
+              >
+                {link.label}
+                {active && (
+                  <span style={{
+                    position: 'absolute',
+                    left: '50%', transform: 'translateX(-50%)',
+                    bottom: -15,
+                    width: 20, height: 2,
+                    background: 'var(--accent)',
+                    borderRadius: 1,
+                    display: 'block',
+                  }} />
+                )}
+              </Link>
+            )
+          })}
+        </div>
+
+        {/* Symbol search — center */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 40px' }}>
+          <SymbolSearch />
+        </div>
+
+        {/* Right side: market status + account */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <MarketStatus />
+          <AccountMenuButton />
+        </div>
+      </nav>
+
+      {/* Page content */}
+      <main>{children}</main>
+    </div>
+  )
+}
+
+/* ── MARKET STATUS ───────────────────────────────────────────────────────── */
+function MarketStatus() {
+  const [isOpen, setIsOpen] = useState(false)
+
+  useEffect(() => {
+    const check = () => {
+      const now = new Date()
+      const istOffset = 5.5 * 60 * 60 * 1000
+      const ist = new Date(now.getTime() + istOffset)
+      const h = ist.getUTCHours() + ist.getUTCMinutes() / 60
+      const day = ist.getUTCDay()
+      setIsOpen(day >= 1 && day <= 5 && h >= 9.25 && h < 15.5)
+    }
+    check()
+    const id = setInterval(check, 60000)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '4px 10px',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 'var(--radius-full)',
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: isOpen ? 'var(--gain)' : 'var(--text-tertiary)',
+        boxShadow: isOpen ? '0 0 0 3px rgba(45, 181, 116, 0.15)' : undefined,
+        flexShrink: 0,
+      }} />
+      <span style={{
+        fontSize: 10, fontWeight: 600,
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: isOpen ? 'var(--gain)' : 'var(--text-tertiary)',
+        whiteSpace: 'nowrap',
+      }}>
+        NSE {isOpen ? 'Open' : 'Closed'}
+      </span>
+    </div>
+  )
+}
+
+/* ── ACCOUNT MENU ────────────────────────────────────────────────────────── */
+function AccountMenuButton() {
+  const [open, setOpen] = useState(false)
+  const [initials, setInitials] = useState('P')
+  const ref = useRef<HTMLDivElement>(null)
+  const router = useRouter()
+
+  useEffect(() => {
+    import('@/lib/supabase').then(({ createClient }) => {
+      createClient().auth.getUser().then(({ data }) => {
+        const email = data.user?.email ?? ''
+        setInitials(email[0]?.toUpperCase() ?? 'P')
+      })
+    })
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  async function signOut() {
+    const { createClient } = await import('@/lib/supabase')
+    await createClient().auth.signOut()
+    router.push('/login')
   }
 
   return (
-    <div style={{ position: "relative", flex: "0 0 240px" }}>
-      <input
-        value={query}
-        onChange={handleChange}
-        onKeyDown={e => {
-          if (e.key === "Escape") { setOpen(false); setQuery(""); }
-          if (e.key === "Enter" && results[0]) select(results[0].symbol);
-        }}
-        placeholder={loading ? "Searching…" : "Search symbol…"}
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
         style={{
-          width: "100%", padding: "5px 12px",
-          background: "var(--app-surface2)",
-          border: "1px solid var(--app-border)",
-          borderRadius: 7, fontSize: 12,
-          color: "var(--app-text)", outline: "none",
+          width: 28, height: 28,
+          borderRadius: '50%',
+          background: 'var(--surface-2)',
+          border: '1px solid var(--border-default)',
+          color: 'var(--text-secondary)',
+          fontSize: 11, fontWeight: 600,
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
-        onFocus={() => query && setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
-      />
-      {open && results.length > 0 && (
+      >
+        {initials}
+      </button>
+
+      {open && (
         <div style={{
-          position: "absolute", top: "100%", left: 0, right: 0,
-          background: "var(--app-surface)", border: "1px solid var(--app-border)",
-          borderRadius: 8, marginTop: 4, zIndex: 200, overflow: "hidden",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          width: 180,
+          background: 'var(--surface-float)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-dropdown)',
+          padding: 4,
+          zIndex: 100,
         }}>
-          {results.map(r => (
+          {[
+            { label: 'Settings', href: '/settings' },
+            { label: 'Billing',  href: '/settings/billing' },
+            { label: 'Broker',   href: '/settings/broker' },
+          ].map(item => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setOpen(false)}
+              style={{
+                display: 'block',
+                padding: '7px 10px',
+                fontSize: 12, color: 'var(--text-secondary)',
+                borderRadius: 4,
+                transition: 'background var(--motion-instant)',
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+            >
+              {item.label}
+            </Link>
+          ))}
+          <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+          <button
+            onClick={signOut}
+            style={{
+              width: '100%', textAlign: 'left',
+              padding: '7px 10px',
+              fontSize: 12, color: 'var(--loss)',
+              cursor: 'pointer', background: 'none', border: 'none',
+              borderRadius: 4,
+              transition: 'background var(--motion-instant)',
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--loss-subtle)'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+          >
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── SYMBOL SEARCH ──────────────────────────────────────────────────────── */
+function SymbolSearch() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<SymbolResult[]>([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
+  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  async function search(q: string) {
+    if (!q) { setResults([]); setOpen(false); return }
+    setLoading(true)
+    try {
+      const { createClient } = await import('@/lib/supabase')
+      const sb = createClient()
+      const { data } = await sb
+        .from('stock_universe')
+        .select('symbol, company_name, sector')
+        .or(`symbol.ilike.${q}%,company_name.ilike.%${q}%`)
+        .eq('is_active', true)
+        .limit(7)
+      setResults(data || [])
+      setOpen(true)
+    } catch { /* ignore */ }
+    finally { setLoading(false) }
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const q = e.target.value.toUpperCase()
+    setQuery(q)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => search(q), 200)
+  }
+
+  function select(symbol: string) {
+    setQuery('')
+    setResults([])
+    setOpen(false)
+    router.push(`/watchlist?symbol=${symbol}`)
+    inputRef.current?.blur()
+  }
+
+  return (
+    <div style={{ position: 'relative', width: '100%', maxWidth: 400 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: 'var(--surface-2)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-md)',
+        height: 30,
+        padding: '0 10px',
+      }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>
+          <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+          <path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={handleChange}
+          onFocus={() => query && setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 180)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') { setOpen(false); setQuery(''); inputRef.current?.blur() }
+            if (e.key === 'Enter' && results[0]) select(results[0].symbol)
+          }}
+          placeholder="Search symbols..."
+          style={{
+            flex: 1, height: '100%',
+            fontSize: 12,
+            color: 'var(--text-primary)',
+            background: 'transparent', border: 'none', outline: 'none',
+          }}
+        />
+        <kbd style={{
+          fontSize: 10,
+          padding: '2px 5px',
+          background: 'var(--surface-3)',
+          color: 'var(--text-tertiary)',
+          borderRadius: 3,
+          fontFamily: 'var(--font-mono)',
+          border: '1px solid var(--border-subtle)',
+          flexShrink: 0,
+        }}>
+          ⌘K
+        </kbd>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: 'var(--surface-float)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-dropdown)',
+          overflow: 'hidden',
+          zIndex: 100,
+        }}>
+          {loading && (
+            <div style={{ padding: 12, fontSize: 12, color: 'var(--text-tertiary)' }}>
+              Searching...
+            </div>
+          )}
+          {!loading && results.length === 0 && (
+            <div style={{ padding: 14, fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+              No matches
+            </div>
+          )}
+          {results.map((r, i) => (
             <div
               key={r.symbol}
               onMouseDown={() => select(r.symbol)}
               style={{
-                padding: "8px 12px", cursor: "pointer",
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                borderBottom: "1px solid var(--app-border)",
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '9px 12px',
+                cursor: 'pointer',
+                borderBottom: i < results.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                transition: 'background var(--motion-instant) var(--ease-out)',
               }}
-              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
-              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
             >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--app-text)", fontFamily: "monospace" }}>{r.symbol}</div>
-                <div style={{ fontSize: 10, color: "var(--app-text3)" }}>{r.company_name}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <span style={{
+                  fontSize: 12, fontWeight: 600,
+                  color: 'var(--text-primary)',
+                  fontFamily: 'var(--font-mono)',
+                }}>
+                  {r.symbol}
+                </span>
+                <span style={{
+                  fontSize: 11, color: 'var(--text-tertiary)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>
+                  {r.company_name}
+                </span>
               </div>
-              <div style={{ fontSize: 10, color: "var(--app-text3)", textAlign: "right", maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.sector}</div>
+              <span style={{
+                fontSize: 10, color: 'var(--text-tertiary)',
+                flexShrink: 0, marginLeft: 12,
+              }}>
+                {r.sector}
+              </span>
             </div>
           ))}
         </div>
       )}
     </div>
-  );
-}
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-
-  if (pathname.startsWith("/onboarding")) return <>{children}</>;
-
-  return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ background: "var(--app-bg)" }}>
-      <nav
-        className="h-[48px] flex items-center px-4 gap-2 flex-shrink-0 z-50"
-        style={{
-          background: "rgba(13,15,20,0.90)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderBottom: "1px solid var(--app-border)",
-        }}
-      >
-        {/* Logo */}
-        <Link href="/dashboard" className="mr-3 flex items-center gap-2 flex-shrink-0">
-          <svg width="30" height="20" viewBox="0 0 72 52" fill="none">
-            <polyline points="2,8 28,42 36,28 62,8" stroke="var(--app-teal)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
-            <circle cx="62" cy="8" r="4.5" fill="var(--app-gain)"/>
-          </svg>
-          <span className="text-[13px] font-semibold tracking-tight" style={{ color: "var(--app-text1)" }}>
-            Alpha<span style={{ color: "var(--app-teal)" }}>Vyuh</span>
-          </span>
-        </Link>
-
-        {/* 4 nav links */}
-        {NAV.map(link => {
-          const active = pathname.startsWith(link.href);
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="px-3 py-1.5 rounded-[6px] text-[12px] font-medium transition-all flex-shrink-0"
-              style={{
-                background: active ? "var(--app-teal-dim)" : "transparent",
-                color: active ? "var(--app-teal)" : "var(--app-text2)",
-              }}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "var(--app-text1)"; }}
-              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.color = "var(--app-text2)"; }}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
-
-        {/* Symbol search — center */}
-        <div className="flex-1 flex justify-center px-2">
-          <SymbolSearch />
-        </div>
-
-        {/* Right side — live dot + settings avatar */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--app-teal)" }} />
-          <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>Live</span>
-          <Link
-            href="/settings"
-            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-colors"
-            style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)", color: "var(--app-text2)" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--app-teal)"; (e.currentTarget as HTMLElement).style.color = "var(--app-teal)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--app-border)"; (e.currentTarget as HTMLElement).style.color = "var(--app-text2)"; }}
-          >
-            P
-          </Link>
-        </div>
-      </nav>
-
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {children}
-      </div>
-    </div>
-  );
+  )
 }
