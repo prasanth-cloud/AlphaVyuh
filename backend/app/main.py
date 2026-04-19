@@ -34,6 +34,8 @@ app.add_middleware(
         settings.frontend_url,
         "https://alphavyuh.vercel.app",
         "https://alphavyuh.in",
+        "https://alphavyuh.com",
+        "https://www.alphavyuh.com",
     ],
     # Covers all *.vercel.app preview + production deployments
     allow_origin_regex=r"https://.*\.vercel\.app",
