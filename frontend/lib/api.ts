@@ -1281,9 +1281,43 @@ export interface MarketOverview {
 
 export async function getMarketOverview(): Promise<MarketOverview> {
   const headers = await authHeaders();
+  // Try new comprehensive endpoint first; fall back to legacy summary if not deployed yet
   const res = await fetch(`${API}/api/v1/market/overview`, { headers });
-  if (!res.ok) throw new Error("Failed to fetch market overview");
-  return res.json();
+  if (res.ok) return res.json();
+
+  // Legacy fallback: compose from /market/summary
+  const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
+  if (!legacyRes.ok) throw new Error("Failed to fetch market overview");
+  const s: MarketSummary = await legacyRes.json();
+
+  const total = s.total_stocks ?? (s.advances + s.declines + s.unchanged);
+  const ema200 = s.above_ema200_pct ?? 0;
+  const phase = ema200 >= 60 ? "Bullish" : ema200 <= 40 ? "Bearish" : "Neutral";
+  const phaseDesc = ema200 >= 60
+    ? `Strong breadth — ${s.above_ema20_pct ?? "?"}% above EMA 20`
+    : ema200 <= 40
+    ? `Weak breadth — only ${ema200}% above EMA 200`
+    : `Mixed market — ${ema200}% above EMA 200`;
+
+  return {
+    trade_date: s.trade_date,
+    advances: s.advances,
+    declines: s.declines,
+    unchanged: s.unchanged,
+    total,
+    advance_decline_ratio: s.advance_decline_ratio ?? 0,
+    new_52w_highs: s.new_52w_highs,
+    new_52w_lows: s.new_52w_lows,
+    above_ema20_pct: s.above_ema20_pct ?? 0,
+    above_ema50_pct: 0,
+    above_ema200_pct: ema200,
+    market_phase: phase,
+    market_phase_desc: phaseDesc,
+    sector_breadth: [],
+    top_gainers: [],
+    top_losers: [],
+    most_active: [],
+  };
 }
 
 // ── Scanner presets ───────────────────────────────────────────────────────────

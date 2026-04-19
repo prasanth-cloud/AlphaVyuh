@@ -142,4 +142,4 @@ async def stop_scheduler():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.3.0"}
+    return {"status": "ok", "version": "0.3.1"}
