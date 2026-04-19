@@ -2,13 +2,11 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Check, Zap, Sparkles, Crown } from "lucide-react";
 import {
   getMe, updateMe, getZerodhaLoginUrl,
-  listAlerts, updateAlert, deleteAlert, getAlertMatches,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
-  type UserProfile, type ScanAlert, type ScanAlertMatch, type PlanStatus,
+  type UserProfile, type PlanStatus,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase";
 
@@ -35,138 +33,6 @@ function loadRazorpay(): Promise<boolean> {
   });
 }
 
-// ── Alert helpers ─────────────────────────────────────────────────────────────
-
-function filterSummary(filters: Record<string, unknown>): string {
-  const parts: string[] = [];
-  if (filters.price_min != null || filters.price_max != null)
-    parts.push(`Price ${filters.price_min ?? ""}–${filters.price_max ?? ""} ₹`);
-  if (filters.pct_change_min != null) parts.push(`Change ≥ ${filters.pct_change_min}%`);
-  if (filters.pct_change_max != null) parts.push(`Change ≤ ${filters.pct_change_max}%`);
-  if (filters.volume_ratio_min != null) parts.push(`Vol ≥ ${filters.volume_ratio_min}×`);
-  if (filters.rsi_min != null || filters.rsi_max != null)
-    parts.push(`RSI ${filters.rsi_min ?? ""}–${filters.rsi_max ?? ""}`);
-  if (filters.above_ema20 === true)  parts.push("Above EMA20");
-  if (filters.above_ema50 === true)  parts.push("Above EMA50");
-  if (filters.above_ema200 === true) parts.push("Above EMA200");
-  if (filters.below_ema20 === true)  parts.push("Below EMA20");
-  if (filters.below_ema50 === true)  parts.push("Below EMA50");
-  if (filters.below_ema200 === true) parts.push("Below EMA200");
-  if (filters.new_52w_high === true) parts.push("New 52W High");
-  if (filters.new_52w_low === true)  parts.push("New 52W Low");
-  if (filters.all_emas_bullish === true) parts.push("All EMAs Bullish");
-  if (filters.sector) parts.push(`Sector: ${filters.sector}`);
-  return parts.length ? parts.join(" · ") : "No filters";
-}
-
-function relativeDate(iso: string | null): string {
-  if (!iso) return "Never";
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  return `${days}d ago`;
-}
-
-// ── Match drawer ──────────────────────────────────────────────────────────────
-
-function MatchDrawer({ alert, onClose }: { alert: ScanAlert; onClose: () => void }) {
-  const [matches, setMatches] = useState<ScanAlertMatch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<ScanAlertMatch | null>(null);
-
-  useEffect(() => {
-    getAlertMatches(alert.id)
-      .then(m => { setMatches(m); if (m.length) setSelected(m[0]); })
-      .finally(() => setLoading(false));
-  }, [alert.id]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/50" onClick={onClose} />
-      <div className="w-[420px] h-full shadow-2xl flex flex-col overflow-hidden"
-        style={{ background: "var(--app-surface)", borderLeft: "1px solid var(--app-border)" }}>
-        <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: "1px solid var(--app-border)" }}>
-          <div>
-            <div className="text-[14px] font-bold" style={{ color: "var(--app-text1)" }}>{alert.name}</div>
-            <div className="text-[11px] mt-0.5" style={{ color: "var(--app-text3)" }}>{filterSummary(alert.filters)}</div>
-          </div>
-          <button onClick={onClose} className="p-1" style={{ color: "var(--app-text3)" }}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M4 4l10 10M14 4L4 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        </div>
-        {!loading && matches.length > 0 && (
-          <div className="flex gap-2 px-4 pt-3 pb-1 overflow-x-auto">
-            {matches.map(m => (
-              <button
-                key={m.id}
-                onClick={() => setSelected(m)}
-                className="flex-shrink-0 text-[11px] font-medium px-3 py-1 rounded-full border transition-colors"
-                style={selected?.id === m.id
-                  ? { background: "#5b63f5", color: "#fff", borderColor: "#5b63f5" }
-                  : { background: "transparent", color: "var(--app-text3)", borderColor: "var(--app-border)" }}
-              >
-                {m.run_date} <span className="ml-1 opacity-70">({m.match_count})</span>
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center h-32 text-[13px]" style={{ color: "var(--app-text3)" }}>Loading...</div>
-          ) : matches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-48 gap-2 px-6 text-center">
-              <div className="text-[14px] font-medium" style={{ color: "var(--app-text2)" }}>No results yet</div>
-              <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>
-                This alert runs automatically after daily market data is ingested (around 4:30 PM IST).
-              </div>
-            </div>
-          ) : selected ? (
-            <div style={{ borderTop: "1px solid var(--app-border2)" }}>
-              {selected.symbols.length === 0 ? (
-                <div className="px-5 py-8 text-center text-[13px]" style={{ color: "var(--app-text3)" }}>
-                  No stocks matched on {selected.run_date}
-                </div>
-              ) : selected.symbols.map(s => (
-                <Link
-                  key={s.symbol}
-                  href={`/charts/${s.symbol}`}
-                  className="flex items-center justify-between px-5 py-3 transition-colors"
-                  style={{ borderBottom: "1px solid var(--app-border2)" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>{s.symbol}</div>
-                  <div className="flex items-center gap-3 text-right">
-                    {s.volume_ratio != null && (
-                      <span className="text-[11px] font-medium" style={{ color: "#5b63f5" }}>{s.volume_ratio}×</span>
-                    )}
-                    {s.rsi_14 != null && (
-                      <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>RSI {s.rsi_14.toFixed(0)}</span>
-                    )}
-                    <div>
-                      <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>
-                        ₹{s.close.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      {s.pct_change != null && (
-                        <div className="text-[11px] font-medium" style={{ color: s.pct_change >= 0 ? "#26a65b" : "#e5383b" }}>
-                          {s.pct_change >= 0 ? "+" : ""}{s.pct_change.toFixed(2)}%
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function SettingsPage() {
   return (
@@ -259,11 +125,12 @@ const inputStyle = { background: "var(--app-surface3)", border: "1px solid var(-
 
 // ── Main settings page ────────────────────────────────────────────────────────
 
-type Tab = "profile" | "alerts" | "billing";
+type Tab = "profile" | "broker" | "billing";
 
 function SettingsContent() {
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get("tab") as Tab | null) ?? "profile";
+  const rawTab = searchParams.get("tab");
+  const initialTab: Tab = (rawTab === "profile" || rawTab === "broker" || rawTab === "billing") ? rawTab : "profile";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [toast, setToast] = useState<{ msg: string; ok?: boolean } | null>(null);
 
@@ -356,50 +223,6 @@ function SettingsContent() {
       showToast(e instanceof Error ? e.message : "Could not start Zerodha login", false);
     } finally {
       setConnectingZerodha(false);
-    }
-  }
-
-  // ── Alerts state ─────────────────────────────────────────────────────────
-  const [alerts, setAlerts] = useState<ScanAlert[]>([]);
-  const [alertsLoading, setAlertsLoading] = useState(false);
-  const [alertsLoaded, setAlertsLoaded] = useState(false);
-  const [alertsError, setAlertsError] = useState("");
-  const [drawerAlert, setDrawerAlert] = useState<ScanAlert | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [toggling, setToggling] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (tab !== "alerts" || alertsLoaded) return;
-    setAlertsLoading(true);
-    listAlerts()
-      .then(setAlerts)
-      .catch(e => setAlertsError(e.message))
-      .finally(() => { setAlertsLoading(false); setAlertsLoaded(true); });
-  }, [tab, alertsLoaded]);
-
-  async function handleToggle(alert: ScanAlert) {
-    setToggling(alert.id);
-    try {
-      const updated = await updateAlert(alert.id, { is_active: !alert.is_active });
-      setAlerts(prev => prev.map(a => a.id === updated.id ? updated : a));
-    } catch {
-      showToast("Failed to update alert");
-    } finally {
-      setToggling(null);
-    }
-  }
-
-  async function handleDelete(alert: ScanAlert) {
-    if (!confirm(`Delete alert "${alert.name}"?`)) return;
-    setDeleting(alert.id);
-    try {
-      await deleteAlert(alert.id);
-      setAlerts(prev => prev.filter(a => a.id !== alert.id));
-      showToast("Alert deleted");
-    } catch {
-      showToast("Failed to delete alert");
-    } finally {
-      setDeleting(null);
     }
   }
 
@@ -510,7 +333,7 @@ function SettingsContent() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "profile", label: "Profile" },
-    { id: "alerts", label: "Alerts" },
+    { id: "broker", label: "Broker" },
     { id: "billing", label: "Billing" },
   ];
 
@@ -518,8 +341,6 @@ function SettingsContent() {
 
   return (
     <div className="min-h-full" style={{ background: "var(--app-bg)" }}>
-      {drawerAlert && <MatchDrawer alert={drawerAlert} onClose={() => setDrawerAlert(null)} />}
-
       {toast && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white shadow-lg z-50 pointer-events-none"
           style={{ background: toast.ok === false ? "#e5383b" : "#26a65b" }}>
@@ -549,8 +370,8 @@ function SettingsContent() {
       {/* ── Profile tab ────────────────────────────────────────────────── */}
       {tab === "profile" && (
         <div className="max-w-2xl px-5 py-6">
-          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Profile &amp; Notifications</div>
-          <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Update your display name and connect Telegram for scan alerts.</div>
+          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Profile</div>
+          <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Update your display name and connect Telegram for scan alert notifications.</div>
 
           {profileLoading ? (
             <div className="space-y-3">
@@ -623,232 +444,122 @@ function SettingsContent() {
                 </button>
               </div>
 
-              {/* Broker card */}
-              <div className="p-5" style={cardStyle}>
-                <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Broker Connection</div>
-                <div className="text-[12px] mb-4 leading-relaxed" style={{ color: "var(--app-text3)" }}>
-                  Connect your broker to route orders directly from charts. Orders placed on AlphaVyuh will execute via your broker account.
-                </div>
-
-                {profile?.broker_type && profile.broker_type !== "none" && (
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#26a65b" }} />
-                    <span className="text-[12px] font-medium capitalize" style={{ color: "#26a65b" }}>{profile.broker_type} configured</span>
-                    {profile.broker_connected_at && (
-                      <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>
-                        · since {new Date(profile.broker_connected_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                      </span>
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Broker</label>
-                    <select
-                      value={brokerType}
-                      onChange={e => setBrokerType(e.target.value)}
-                      className={inputCls}
-                      style={inputStyle}
-                    >
-                      <option value="">— Select broker —</option>
-                      <option value="zerodha">Zerodha</option>
-                      <option value="upstox">Upstox</option>
-                      <option value="fyers">Fyers</option>
-                      <option value="angel">Angel One</option>
-                      <option value="other">Other (simulated)</option>
-                    </select>
-                  </div>
-
-                  {brokerType === "zerodha" && (
-                    <>
-                      <div className="text-[11px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
-                        Get your API key &amp; secret from{" "}
-                        <span className="font-medium" style={{ color: "#5b63f5" }}>developers.kite.trade</span>.
-                        Set the redirect URL to{" "}
-                        <code className="font-mono text-[10px] px-1 rounded" style={{ background: "var(--app-surface2)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}>
-                          {typeof window !== "undefined" ? `${window.location.origin}/broker/callback` : "/broker/callback"}
-                        </code>
-                      </div>
-                      <div>
-                        <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Key</label>
-                        <input
-                          type="text"
-                          value={brokerApiKey}
-                          onChange={e => setBrokerApiKey(e.target.value)}
-                          placeholder={profile?.broker_api_key ? `Current: ${profile.broker_api_key}` : "kitexxxxxxxxxxx"}
-                          className={`${inputCls} font-mono`}
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Secret</label>
-                        <input
-                          type="password"
-                          value={brokerApiSecret}
-                          onChange={e => setBrokerApiSecret(e.target.value)}
-                          placeholder="Enter new secret to update"
-                          className={inputCls}
-                          style={inputStyle}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={saveBroker}
-                          disabled={savingBroker}
-                          className="flex-1 py-2.5 rounded-[8px] text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
-                          style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                        >
-                          {savingBroker ? "Saving..." : "Save API credentials"}
-                        </button>
-                        {profile?.broker_api_key && (
-                          <button
-                            onClick={handleZerodhaConnect}
-                            disabled={connectingZerodha}
-                            className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
-                            style={{ background: "#5b63f5" }}
-                          >
-                            {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
-                          </button>
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {brokerType && brokerType !== "zerodha" && (
-                    <div className="flex items-center justify-between">
-                      <p className="text-[12px]" style={{ color: "var(--app-text3)" }}>
-                        {brokerType === "other" ? "Orders will be simulated." : `${brokerType} integration coming soon.`}
-                      </p>
-                      <button
-                        onClick={saveBroker}
-                        disabled={savingBroker}
-                        className="px-4 py-2 rounded-[8px] text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
-                        style={{ background: "#5b63f5" }}
-                      >
-                        {savingBroker ? "Saving..." : "Save"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── Alerts tab ─────────────────────────────────────────────────── */}
-      {tab === "alerts" && (
-        <div className="px-5 py-5">
-          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Scan Alerts</div>
-          <div className="text-[13px] mb-4" style={{ color: "var(--app-text3)" }}>Saved scans that run automatically after market close each trading day.</div>
+      {/* ── Broker tab ─────────────────────────────────────────────────── */}
+      {tab === "broker" && (
+        <div className="max-w-2xl px-5 py-6">
+          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Broker Connection</div>
+          <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Connect your broker to route orders directly from charts.</div>
 
-          <div className="mb-4 max-w-2xl rounded-[10px] px-4 py-3"
-            style={{ background: "rgba(91,99,245,0.1)", border: "1px solid rgba(91,99,245,0.25)" }}>
-            <div className="text-[12px] font-semibold mb-0.5" style={{ color: "#5b63f5" }}>How to create an alert</div>
-            <div className="text-[12px] leading-relaxed" style={{ color: "var(--app-text2)" }}>
-              Go to the{" "}
-              <Link href="/scanner" className="underline font-medium" style={{ color: "#5b63f5" }}>Scanner</Link>
-              , build your filter conditions, then click{" "}
-              <span className="font-medium">&quot;Save as Alert&quot;</span>{" "}
-              in the toolbar. Results will appear here after market close.
-            </div>
-          </div>
-
-          {alertsLoading ? (
-            <div className="space-y-3 max-w-2xl">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="animate-pulse h-20 rounded-[10px]" style={cardStyle} />
-              ))}
-            </div>
-          ) : alertsError ? (
-            <div className="text-[13px]" style={{ color: "#e5383b" }}>{alertsError}</div>
-          ) : alerts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "rgba(91,99,245,0.1)" }}>
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                  <path d="M11 3v3M11 16v3M3 11h3M16 11h3" stroke="#5b63f5" strokeWidth="1.5" strokeLinecap="round" />
-                  <circle cx="11" cy="11" r="4" stroke="#5b63f5" strokeWidth="1.5" />
-                </svg>
-              </div>
-              <div className="text-[14px] font-medium" style={{ color: "var(--app-text2)" }}>No alerts yet</div>
-              <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>Create one from the Scanner page</div>
-              <Link href="/scanner" className="mt-1 text-[13px] font-medium px-4 py-1.5 rounded-full"
-                style={{ color: "#5b63f5", background: "rgba(91,99,245,0.1)" }}>
-                Go to Scanner
-              </Link>
-            </div>
+          {profileLoading ? (
+            <div className="animate-pulse h-48 rounded-[10px]" style={cardStyle} />
           ) : (
-            <div className="max-w-2xl space-y-2.5">
-              {alerts.map(alert => (
-                <div key={alert.id} className="rounded-[10px] px-4 py-3.5" style={{ ...cardStyle, opacity: alert.is_active ? 1 : 0.55 }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[14px] font-semibold truncate" style={{ color: "var(--app-text1)" }}>{alert.name}</span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                          style={alert.is_active
-                            ? { background: "rgba(38,166,91,0.15)", color: "#26a65b" }
-                            : { background: "var(--app-surface3)", color: "var(--app-text3)" }}>
-                          {alert.is_active ? "Active" : "Paused"}
-                        </span>
-                      </div>
-                      <div className="text-[11px] mt-0.5 truncate" style={{ color: "var(--app-text3)" }}>{filterSummary(alert.filters)}</div>
+            <div className="p-5" style={cardStyle}>
+              {profile?.broker_type && profile.broker_type !== "none" && (
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#26a65b" }} />
+                  <span className="text-[12px] font-medium capitalize" style={{ color: "#26a65b" }}>{profile.broker_type} configured</span>
+                  {profile.broker_connected_at && (
+                    <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>
+                      · since {new Date(profile.broker_connected_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Broker</label>
+                  <select
+                    value={brokerType}
+                    onChange={e => setBrokerType(e.target.value)}
+                    className={inputCls}
+                    style={inputStyle}
+                  >
+                    <option value="">— Select broker —</option>
+                    <option value="zerodha">Zerodha</option>
+                    <option value="upstox">Upstox</option>
+                    <option value="fyers">Fyers</option>
+                    <option value="angel">Angel One</option>
+                    <option value="other">Other (simulated)</option>
+                  </select>
+                </div>
+
+                {brokerType === "zerodha" && (
+                  <>
+                    <div className="text-[11px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
+                      Get your API key &amp; secret from{" "}
+                      <span className="font-medium" style={{ color: "#5b63f5" }}>developers.kite.trade</span>.
+                      Set the redirect URL to{" "}
+                      <code className="font-mono text-[10px] px-1 rounded" style={{ background: "var(--app-surface2)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}>
+                        {typeof window !== "undefined" ? `${window.location.origin}/broker/callback` : "/broker/callback"}
+                      </code>
                     </div>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                      <button
-                        onClick={() => handleToggle(alert)}
-                        disabled={toggling === alert.id}
-                        title={alert.is_active ? "Pause alert" : "Resume alert"}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                        style={{ color: "var(--app-text3)" }}
-                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
-                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                      >
-                        {alert.is_active ? (
-                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                            <rect x="2" y="2" width="3.5" height="9" rx="1" fill="currentColor" />
-                            <rect x="7.5" y="2" width="3.5" height="9" rx="1" fill="currentColor" />
-                          </svg>
-                        ) : (
-                          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                            <path d="M3 2l8 4.5L3 11V2z" fill="currentColor" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(alert)}
-                        disabled={deleting === alert.id}
-                        title="Delete alert"
-                        className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                        style={{ color: "var(--app-text3)" }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#e5383b"; (e.currentTarget as HTMLElement).style.background = "rgba(229,56,59,0.1)"; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--app-text3)"; (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                      >
-                        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                          <path d="M2 3.5h9M5 3.5V2.5a.5.5 0 01.5-.5h2a.5.5 0 01.5.5v1M10.5 3.5l-.7 7a.5.5 0 01-.5.5H3.7a.5.5 0 01-.5-.5l-.7-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                        </svg>
-                      </button>
+                    <div>
+                      <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Key</label>
+                      <input
+                        type="text"
+                        value={brokerApiKey}
+                        onChange={e => setBrokerApiKey(e.target.value)}
+                        placeholder={profile?.broker_api_key ? `Current: ${profile.broker_api_key}` : "kitexxxxxxxxxxx"}
+                        className={`${inputCls} font-mono`}
+                        style={inputStyle}
+                      />
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-3 pt-2.5" style={{ borderTop: "1px solid var(--app-border2)" }}>
-                    <div className="flex items-center gap-3 text-[11px]" style={{ color: "var(--app-text3)" }}>
-                      <span>Last run: {relativeDate(alert.last_run_at)}</span>
-                      {alert.last_match_count != null && (
-                        <span>
-                          <span className="font-semibold" style={{ color: alert.last_match_count > 0 ? "#5b63f5" : "var(--app-text3)" }}>
-                            {alert.last_match_count}
-                          </span>{" "}
-                          match{alert.last_match_count !== 1 ? "es" : ""}
-                        </span>
+                    <div>
+                      <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Secret</label>
+                      <input
+                        type="password"
+                        value={brokerApiSecret}
+                        onChange={e => setBrokerApiSecret(e.target.value)}
+                        placeholder="Enter new secret to update"
+                        className={inputCls}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveBroker}
+                        disabled={savingBroker}
+                        className="flex-1 py-2.5 rounded-[8px] text-[13px] font-medium transition-opacity disabled:opacity-50"
+                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                      >
+                        {savingBroker ? "Saving..." : "Save API credentials"}
+                      </button>
+                      {profile?.broker_api_key && (
+                        <button
+                          onClick={handleZerodhaConnect}
+                          disabled={connectingZerodha}
+                          className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
+                          style={{ background: "#5b63f5" }}
+                        >
+                          {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
+                        </button>
                       )}
                     </div>
-                    <button onClick={() => setDrawerAlert(alert)} className="text-[11px] font-medium hover:underline" style={{ color: "#5b63f5" }}>
-                      View results →
+                  </>
+                )}
+
+                {brokerType && brokerType !== "zerodha" && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[12px]" style={{ color: "var(--app-text3)" }}>
+                      {brokerType === "other" ? "Orders will be simulated." : `${brokerType} integration coming soon.`}
+                    </p>
+                    <button
+                      onClick={saveBroker}
+                      disabled={savingBroker}
+                      className="px-4 py-2 rounded-[8px] text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
+                      style={{ background: "#5b63f5" }}
+                    >
+                      {savingBroker ? "Saving..." : "Save"}
                     </button>
                   </div>
-                </div>
-              ))}
+                )}
+              </div>
             </div>
           )}
         </div>

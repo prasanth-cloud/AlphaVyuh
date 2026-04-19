@@ -64,7 +64,7 @@ function StatusBadge({ status, pnl }: { status: string; pnl: number | null }) {
 
 // ── Setup type chips ──────────────────────────────────────────────────────────
 
-const SETUP_TYPES = ["Breakout", "Pullback", "Reversal", "Momentum", "Other"];
+const SETUP_TYPES = ["VCP", "Breakout", "Stage 2", "Base Build", "Cup & Handle", "Oversold Bounce", "Trend Follow", "Earnings Play", "Pullback", "Reversal", "Other"];
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -181,6 +181,7 @@ export default function JournalPage() {
   const [closeForm, setCloseForm] = useState<Partial<UpdateJournalEntry>>({
     exit_date: new Date().toISOString().split("T")[0],
   });
+  const [closeSetupType, setCloseSetupType] = useState("");
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -287,7 +288,7 @@ export default function JournalPage() {
     }
     setSaving(true);
     try {
-      await updateJournalEntry(selectedEntry.id, closeForm as UpdateJournalEntry);
+      await updateJournalEntry(selectedEntry.id, { ...closeForm, ...(closeSetupType ? { setup_type: closeSetupType } : {}) } as UpdateJournalEntry);
       setPanelMode(null);
       setSelectedEntry(null);
       showToast("Trade closed — AI analysing in background…");
@@ -337,6 +338,7 @@ export default function JournalPage() {
   const openClosePanel = (e: JournalEntry) => {
     setSelectedEntry(e);
     setCloseForm({ exit_date: new Date().toISOString().split("T")[0] });
+    setCloseSetupType(e.setup_type || "");
     setPanelMode("close");
   };
 
@@ -1097,6 +1099,25 @@ export default function JournalPage() {
                       {" "}({((pnlPreview / (selectedEntry.entry_price * selectedEntry.quantity)) * 100).toFixed(2)}%)
                     </div>
                   )}
+
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider mb-1.5 block" style={{ color: "var(--app-text3)" }}>Setup</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SETUP_TYPES.map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setCloseSetupType(t => t === s.toLowerCase() ? "" : s.toLowerCase())}
+                          className="px-2.5 py-1 text-[12px] rounded-full border transition-colors"
+                          style={closeSetupType === s.toLowerCase()
+                            ? { background: "var(--app-teal)", color: "#0D0F14", borderColor: "var(--app-teal)" }
+                            : { background: "var(--app-surface3)", color: "var(--app-text3)", borderColor: "var(--app-border)" }
+                          }
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
                   <div>
                     <label className="text-[11px] uppercase tracking-wider mb-1 block" style={{ color: "var(--app-text3)" }}>Why did you exit?</label>

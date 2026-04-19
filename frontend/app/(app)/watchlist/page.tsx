@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   DndContext,
   closestCenter,
@@ -263,7 +264,9 @@ function ChartPanel({ symbol, latestClose }: { symbol: string; latestClose?: num
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function WatchlistPage() {
+function WatchlistContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -299,6 +302,36 @@ export default function WatchlistPage() {
   }
 
   useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle ?symbol= URL param (from global nav search)
+  const symbolParam = searchParams.get("symbol");
+  useEffect(() => {
+    if (!symbolParam || watchlists.length === 0) return;
+    let found = false;
+    for (const wl of watchlists) {
+      if (wl.items?.some((i: WatchlistItem) => i.symbol === symbolParam)) {
+        setActiveId(wl.id);
+        setChartSymbol(symbolParam);
+        setHoveredSymbol(symbolParam);
+        found = true;
+        break;
+      }
+    }
+    if (!found && activeId) {
+      addToWatchlist(activeId, symbolParam)
+        .then(() => getQuote(symbolParam))
+        .then(quote => {
+          const newItem: WatchlistItem = quote
+            ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14 }
+            : { symbol: symbolParam, sort_order: 0, added_at: new Date().toISOString() };
+          setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...(w.items || []), newItem] } : w));
+          setChartSymbol(symbolParam);
+          setHoveredSymbol(symbolParam);
+        })
+        .catch(() => {});
+    }
+    router.replace("/watchlist", { scroll: false });
+  }, [symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRowHover = useCallback((symbol: string | null) => {
     setHoveredSymbol(symbol);
@@ -588,9 +621,14 @@ export default function WatchlistPage() {
               <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>Create or select a watchlist from the sidebar.</div>
             </div>
           ) : activeWl.items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <div className="text-[14px] font-medium mb-1" style={{ color: "var(--app-text1)" }}>This watchlist is empty</div>
-              <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>Type a symbol above and press Enter to add stocks.</div>
+            <div style={{ padding: "24px 16px", textAlign: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--app-text1)", marginBottom: 6 }}>No stocks yet</div>
+              <div style={{ fontSize: 11, color: "var(--app-text3)", marginBottom: 12, lineHeight: 1.6 }}>
+                Add stocks from the Scanner,<br/>or type a symbol above
+              </div>
+              <a href="/scanner" style={{ fontSize: 11, color: "var(--app-teal)", textDecoration: "none", fontWeight: 600 }}>
+                Go to Scanner →
+              </a>
             </div>
           ) : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
@@ -631,17 +669,26 @@ export default function WatchlistPage() {
           <ChartPanel key={chartSymbol} symbol={chartSymbol}
             latestClose={activeWl?.items.find(i => i.symbol === chartSymbol)?.close} />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full text-center px-8">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
-              style={{ background: "var(--app-surface3)" }}>
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                <polyline points="3,17 9,11 13,15 21,7" stroke="var(--app-text3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <p className="text-[13px] font-medium" style={{ color: "var(--app-text3)" }}>Hover over a stock to see its chart</p>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--app-text3)", height: "100%" }}>
+            <div style={{ fontSize: 28, opacity: 0.4 }}>📊</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--app-text2)" }}>Hover any stock to see its chart</div>
+            <div style={{ fontSize: 11 }}>EMA 20, 50, 200 overlaid automatically</div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+export default function WatchlistPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-full">
+        <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "var(--app-teal)", borderTopColor: "transparent" }} />
+      </div>
+    }>
+      <WatchlistContent />
+    </Suspense>
   );
 }

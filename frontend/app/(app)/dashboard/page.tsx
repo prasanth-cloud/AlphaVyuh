@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMarketOverview, type MarketOverview } from "@/lib/api";
+import { getMarketOverview, getWatchlists, type MarketOverview } from "@/lib/api";
 
 const S = {
   card: {
@@ -115,6 +115,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<MarketOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   async function load() {
     try {
@@ -130,6 +131,7 @@ export default function DashboardPage() {
   useEffect(() => {
     load();
     const t = setInterval(load, 5 * 60 * 1000);
+    getWatchlists().then(wls => { if (wls.length === 0) setShowOnboarding(true); }).catch(() => {});
     return () => clearInterval(t);
   }, []);
 
@@ -142,8 +144,30 @@ export default function DashboardPage() {
 
   return (
     <div className="pb-8">
+      {/* Onboarding banner */}
+      {showOnboarding && (
+        <div className="mx-5 mt-4" style={{
+          background: "var(--app-teal-dim)", border: "1px solid rgba(0,229,196,0.2)",
+          borderRadius: 10, padding: "14px 20px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div>
+            <div className="text-[14px] font-bold mb-1" style={{ color: "var(--app-teal)" }}>Welcome to AlphaVyuh</div>
+            <div className="text-[12px]" style={{ color: "var(--app-text2)" }}>
+              Start by scanning for stocks → add to watchlist → chart them → log your first trade
+            </div>
+          </div>
+          <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+            <a href="/scanner" style={{ padding: "6px 14px", borderRadius: 6, background: "var(--app-teal)", color: "#050a08", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
+              Start scanning →
+            </a>
+            <button onClick={() => setShowOnboarding(false)} style={{ background: "none", border: "none", color: "var(--app-text3)", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="px-5 pt-5 pb-0">
+      <div className="px-5 pt-4 pb-0">
         <h1 className="text-[18px] font-bold" style={{ color: "var(--app-text1)" }}>{greet()}</h1>
         <p className="text-[13px] mt-0.5" style={{ color: "var(--app-text2)" }}>NSE market overview</p>
       </div>

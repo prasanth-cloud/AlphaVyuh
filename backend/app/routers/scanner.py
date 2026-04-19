@@ -15,7 +15,7 @@ from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 
-FREE_RESULT_LIMIT  = 50
+FREE_RESULT_LIMIT  = 25
 PRO_RESULT_LIMIT   = 500
 FETCH_BATCH        = 2000  # rows pulled from DB before Python-side filtering
 
@@ -605,6 +605,7 @@ async def run_scanner(
         "total_matches": total,
         "plan_limit":    hard_limit,
         "plan":          plan,
+        "is_limited":    plan == "free" and total > hard_limit,
         "results":       capped,
     }
 

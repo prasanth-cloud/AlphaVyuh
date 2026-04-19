@@ -162,6 +162,9 @@ export default function ScannerPage() {
   const [newWlName, setNewWlName] = useState('')
   const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [isLimited, setIsLimited] = useState(false)
+  const [hasRun, setHasRun] = useState(false)
 
   const getToken = useCallback(async () => {
     const h = await authHeaders() as Record<string, string>
@@ -249,6 +252,8 @@ export default function ScannerPage() {
       setResults(data.results || [])
       setTotalMatches(data.total_matches || 0)
       setTradeDate(data.trade_date || '')
+      setIsLimited(data.is_limited || false)
+      setHasRun(true)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Scan failed')
     } finally { setLoading(false) }
@@ -443,21 +448,33 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* Tab switcher */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--app-border)', flexShrink: 0 }}>
-          {(['technical', 'fundamental'] as const).map(tab => (
-            <button key={tab} onClick={() => setFilterTab(tab)} style={{
-              flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-              background: 'none', border: 'none', textTransform: 'capitalize', letterSpacing: '0.03em',
-              borderBottom: filterTab === tab ? '2px solid var(--app-teal)' : '2px solid transparent',
-              color: filterTab === tab ? 'var(--app-teal)' : 'var(--app-text3)',
-              transition: 'all 0.15s',
-            }}>{tab}</button>
-          ))}
+        {/* Filters toggle */}
+        <div style={{ padding: '6px 14px', borderBottom: filtersOpen ? '1px solid var(--app-border)' : 'none', flexShrink: 0 }}>
+          <button onClick={() => setFiltersOpen(o => !o)} style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: 'none', border: '1px solid var(--app-border)', borderRadius: 6,
+            padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+            color: filtersOpen ? 'var(--app-teal)' : 'var(--app-text2)',
+          }}>
+            <span>Filters {filtersOpen ? '▲' : '▼'}</span>
+            {filtersOpen && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {(['technical', 'fundamental'] as const).map(tab => (
+                  <button key={tab} onClick={e => { e.stopPropagation(); setFilterTab(tab); }} style={{
+                    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                    border: `1px solid ${filterTab === tab ? 'rgba(0,229,196,0.5)' : 'var(--app-border)'}`,
+                    background: filterTab === tab ? 'var(--app-teal-dim)' : 'transparent',
+                    color: filterTab === tab ? 'var(--app-teal)' : 'var(--app-text3)',
+                    textTransform: 'capitalize',
+                  }}>{tab}</button>
+                ))}
+              </div>
+            )}
+          </button>
         </div>
 
         {/* Filters scrollable */}
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: filtersOpen ? 1 : 0, overflowY: 'auto', display: filtersOpen ? 'block' : 'none' }}>
           {filterTab === 'technical' ? (
             <>
               <Section title="Price & Change" open>
@@ -609,7 +626,15 @@ export default function ScannerPage() {
 
         {error && (
           <div style={{ margin: '12px 16px', padding: '10px 14px', background: 'rgba(229,56,59,0.08)', border: '1px solid rgba(229,56,59,0.25)', borderRadius: 8, fontSize: 12, color: 'var(--app-loss)' }}>
-            {error}
+            {error} — check that the backend is running at localhost:8000
+          </div>
+        )}
+
+        {/* Plan cap banner */}
+        {isLimited && (
+          <div style={{ margin: '8px 16px 0', padding: '8px 14px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 6, fontSize: 12, color: 'var(--app-warn)' }}>
+            Showing 25 of {totalMatches} results.{' '}
+            <a href="/settings" style={{ color: 'var(--app-teal)', fontWeight: 700 }}>Upgrade to Pro</a> to see all 500.
           </div>
         )}
 
@@ -619,6 +644,29 @@ export default function ScannerPage() {
             {[...Array(8)].map((_, i) => (
               <div key={i} style={{ height: 44, background: 'var(--app-surface)', borderRadius: 6, marginBottom: 4, opacity: 0.3 + i * 0.06 }} />
             ))}
+          </div>
+        )}
+
+        {/* Empty — no scan run yet */}
+        {!loading && !hasRun && !error && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 }}>
+            <div style={{ fontSize: 28, opacity: 0.4 }}>⊹</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--app-text1)' }}>Run your first scan</div>
+            <div style={{ fontSize: 13, color: 'var(--app-text3)', textAlign: 'center', maxWidth: 280 }}>Pick a preset above, or open Filters to set custom conditions</div>
+          </div>
+        )}
+
+        {/* Empty — scan ran but 0 results */}
+        {!loading && hasRun && results.length === 0 && !error && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--app-text1)' }}>No stocks matched</div>
+            <div style={{ fontSize: 12, color: 'var(--app-text3)', textAlign: 'center', maxWidth: 280 }}>
+              Your filters are too strict. Try widening the RSI range, reducing the volume ratio, or using a preset.
+            </div>
+            <button onClick={() => { setFilters(emptyFilters()); setActivePreset(null); setResults([]); setError(''); setHasRun(false); }} style={{
+              marginTop: 8, padding: '6px 16px', borderRadius: 6, border: '1px solid var(--app-border)',
+              background: 'transparent', color: 'var(--app-teal)', fontSize: 12, cursor: 'pointer',
+            }}>Reset filters</button>
           </div>
         )}
 
