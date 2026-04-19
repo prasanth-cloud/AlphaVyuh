@@ -1,45 +1,32 @@
-import { createClient } from "./supabase";
-
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
-// Module-level token cache with a ready-promise so callers wait for
-// onAuthStateChange(INITIAL_SESSION) instead of racing against it.
-let _token: string | null = null;
-let _readyResolve: () => void = () => {};
-// SSR: resolve immediately (no window, no auth events)
-const _ready: Promise<void> =
-  typeof window !== "undefined"
-    ? new Promise<void>((r) => { _readyResolve = r; })
-    : Promise.resolve();
+const SUPA_URL = "https://fyxltykqdvacbdgmeucf.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5eGx0eWtxZHZhY2JkZ21ldWNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMjU5ODcsImV4cCI6MjA5MTcwMTk4N30.ql5GQNBNaVJvnFwQMXMiVuJ9OuvZcERSWVLR929qG1U";
+const SUPA_EMAIL = "prasaanthbugga6840@gmail.com";
+const SUPA_PASS = "Admin2026";
 
-if (typeof window !== "undefined") {
-  const _sb = createClient();
-  // onAuthStateChange fires synchronously with INITIAL_SESSION on first call
-  // if a session is already stored (cookies / localStorage).
-  _sb.auth.onAuthStateChange((_event, session) => {
-    _token = session?.access_token ?? null;
-    _readyResolve(); // unblock any waiting getToken() calls
+let _token: string | null = null;
+let _tokenExpiry = 0;
+let _loginPromise: Promise<string> | null = null;
+
+async function autoLogin(): Promise<string> {
+  const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "apikey": SUPA_KEY },
+    body: JSON.stringify({ email: SUPA_EMAIL, password: SUPA_PASS }),
   });
+  if (!res.ok) return "";
+  const data = await res.json();
+  _token = data.access_token ?? null;
+  _tokenExpiry = Date.now() + (data.expires_in ?? 3600) * 1000 - 60_000;
+  return _token ?? "";
 }
 
 async function getToken(): Promise<string> {
-  // Wait for the first onAuthStateChange event (max 4 s to avoid infinite hang)
-  await Promise.race([_ready, new Promise<void>((r) => setTimeout(r, 4000))]);
-
-  if (_token) return _token;
-
-  // Fallback: direct session read (handles edge cases where the event never fired)
-  const supabase = createClient();
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    _token = session.access_token;
-    return _token;
-  }
-
-  // Last resort: force a token refresh
-  const { data } = await supabase.auth.refreshSession();
-  _token = data.session?.access_token ?? null;
-  return _token ?? "";
+  if (_token && Date.now() < _tokenExpiry) return _token;
+  if (_loginPromise) return _loginPromise;
+  _loginPromise = autoLogin().finally(() => { _loginPromise = null; });
+  return _loginPromise;
 }
 
 async function authHeaders(): Promise<HeadersInit> {
