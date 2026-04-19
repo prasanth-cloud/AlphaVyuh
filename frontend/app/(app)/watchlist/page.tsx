@@ -22,6 +22,7 @@ import type { Watchlist, WatchlistItem, CandleBar } from "@/lib/api";
 import {
   getWatchlists,
   createWatchlist,
+  deleteWatchlist,
   addToWatchlist,
   removeFromWatchlist,
   reorderWatchlist,
@@ -309,6 +310,19 @@ export default function WatchlistPage() {
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
 
+  async function handleDeleteWatchlist(id: string) {
+    if (!confirm("Delete this watchlist and all its stocks?")) return;
+    try {
+      await deleteWatchlist(id);
+      const remaining = watchlists.filter(w => w.id !== id);
+      setWatchlists(remaining);
+      if (activeId === id) setActiveId(remaining[0]?.id ?? null);
+      if (chartSymbol) setChartSymbol(null);
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Delete failed");
+    }
+  }
+
   async function handleCreateWatchlist() {
     if (!newWlName.trim()) return;
     try {
@@ -474,16 +488,27 @@ export default function WatchlistPage() {
               watchlists.map(wl => {
                 const active = activeId === wl.id;
                 return (
-                  <button key={wl.id} onClick={() => setActiveId(wl.id)}
-                    className="w-full text-left px-4 py-2.5 text-[13px] transition-colors"
-                    style={{
-                      background: active ? "var(--app-teal-dim)" : "transparent",
-                      color: active ? "var(--app-teal)" : "var(--app-text2)",
-                      fontWeight: active ? 500 : 400,
-                    }}>
-                    <div className="truncate">{wl.name}</div>
-                    <div className="text-[10px] mt-0.5 opacity-60">{wl.items.length} stocks</div>
-                  </button>
+                  <div key={wl.id} className="group relative flex items-center">
+                    <button onClick={() => setActiveId(wl.id)}
+                      className="flex-1 text-left px-4 py-2.5 text-[13px] transition-colors"
+                      style={{
+                        background: active ? "var(--app-teal-dim)" : "transparent",
+                        color: active ? "var(--app-teal)" : "var(--app-text2)",
+                        fontWeight: active ? 500 : 400,
+                      }}>
+                      <div className="truncate pr-4">{wl.name}</div>
+                      <div className="text-[10px] mt-0.5 opacity-60">{wl.items.length} stocks</div>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteWatchlist(wl.id)}
+                      className="absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                      style={{ color: "var(--app-text3)" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--app-loss)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--app-text3)"}
+                      title="Delete watchlist">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 );
               })
             )}

@@ -264,6 +264,11 @@ export async function createWatchlist(name: string): Promise<Watchlist> {
   return res.json();
 }
 
+export async function deleteWatchlist(watchlistId: string): Promise<void> {
+  const headers = await authHeaders();
+  await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
+}
+
 export async function addToWatchlist(watchlistId: string, symbol: string): Promise<void> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}/items`, {

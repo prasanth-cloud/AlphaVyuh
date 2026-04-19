@@ -203,6 +203,18 @@ async def add_item(
     return {"message": "Added"}
 
 
+@router.delete("/{watchlist_id}")
+async def delete_watchlist(
+    watchlist_id: UUID,
+    user_id: str = Depends(get_current_user_id),
+):
+    client = get_admin_client()
+    _verify_watchlist_ownership(client, str(watchlist_id), user_id)
+    client.table("watchlist_items").delete().eq("watchlist_id", str(watchlist_id)).execute()
+    client.table("watchlists").delete().eq("id", str(watchlist_id)).execute()
+    return {"message": "Deleted"}
+
+
 @router.delete("/{watchlist_id}/items/{symbol}")
 async def remove_item(
     watchlist_id: UUID,

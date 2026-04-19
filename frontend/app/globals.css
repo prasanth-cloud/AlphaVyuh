@@ -42,6 +42,11 @@
   --app-text3:     rgba(255,255,255,0.30);
 }
 
+/* Typography — match landing page Inter feel */
+html { font-feature-settings: "cv02","cv03","cv04","cv11"; }
+body { letter-spacing: -0.01em; }
+h1,h2,h3,h4,h5,h6 { letter-spacing: -0.025em; font-weight: 700; }
+
 .tabular { font-variant-numeric: tabular-nums; }
 .tabular-num { font-variant-numeric: tabular-nums; font-family: var(--font-mono), 'JetBrains Mono', monospace; }
 .av-gain  { color: var(--av-gain); }
