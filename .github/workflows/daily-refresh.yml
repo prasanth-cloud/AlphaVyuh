@@ -1,0 +1,54 @@
+name: Daily NSE data refresh
+
+on:
+  schedule:
+    # 11:00 UTC = 4:30 PM IST, Mon-Fri
+    - cron: '0 11 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Target date (YYYY-MM-DD, default: today)'
+        required: false
+      yfinance_only:
+        description: 'Skip bhavcopy, use yfinance only'
+        required: false
+        default: 'false'
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run daily refresh
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          cd backend
+          ARGS=""
+          if [ -n "${{ github.event.inputs.date }}" ]; then
+            ARGS="$ARGS --date ${{ github.event.inputs.date }}"
+          fi
+          if [ "${{ github.event.inputs.yfinance_only }}" = "true" ]; then
+            ARGS="$ARGS --yfinance-only"
+          fi
+          python scripts/daily_refresh.py $ARGS
+
+      - name: Report status
+        if: always()
+        run: |
+          echo "Refresh completed with exit code: $?"
