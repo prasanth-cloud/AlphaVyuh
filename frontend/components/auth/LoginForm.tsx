@@ -18,14 +18,7 @@ export default function LoginForm() {
       const supabase = createClient();
       const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
       if (authError) {
-        const msg = authError.message.toLowerCase();
-        if (msg.includes("invalid") || msg.includes("credentials") || msg.includes("password")) {
-          setError("Incorrect email or password.");
-        } else if (msg.includes("confirmed") || msg.includes("verify")) {
-          setError("Please verify your email before logging in.");
-        } else {
-          setError(authError.message);
-        }
+        setError(authError.message);
         return;
       }
       window.location.replace("/dashboard");
