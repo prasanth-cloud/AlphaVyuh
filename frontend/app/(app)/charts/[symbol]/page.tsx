@@ -410,28 +410,32 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const showAtr   = activeIndicators.includes("atr");
 
   return (
-    <div className="flex flex-col bg-[#f2f2f0] overflow-hidden" style={{ height: "calc(100vh - 48px)" }}>
+    <div className="flex flex-col overflow-hidden" style={{ height: "calc(100vh - 48px)", background: "var(--app-bg)" }}>
 
       {/* Price alert modal */}
       {showAlertModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
-          <div className="absolute inset-0 bg-black/20" onClick={() => setShowAlertModal(false)} />
-          <div className="relative bg-white rounded-[12px] shadow-xl border border-[#e8e8e6] p-5 w-[340px]">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowAlertModal(false)} />
+          <div className="relative rounded-[12px] shadow-2xl p-5 w-[340px]"
+            style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[14px] font-semibold text-[#0f0f0e]">Price alert — {symbol}</span>
-              <button onClick={() => setShowAlertModal(false)} className="text-[#aaa] hover:text-[#0f0f0e] transition-colors text-[18px] leading-none">×</button>
+              <span className="text-[14px] font-semibold" style={{ color: "var(--app-text1)" }}>Price alert — {symbol}</span>
+              <button onClick={() => setShowAlertModal(false)} className="text-[18px] leading-none transition-colors"
+                style={{ color: "var(--app-text3)" }}>×</button>
             </div>
 
             {/* Existing alerts */}
             {priceAlerts.length > 0 && (
               <div className="mb-4 space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider text-[#aaa] font-semibold mb-1">Active alerts</div>
+                <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--app-text3)" }}>Active alerts</div>
                 {priceAlerts.map(a => (
-                  <div key={a.id} className="flex items-center justify-between bg-[#f7f7f5] rounded-[6px] px-3 py-2">
-                    <span className="text-[12px] text-[#0f0f0e]">
+                  <div key={a.id} className="flex items-center justify-between rounded-[6px] px-3 py-2"
+                    style={{ background: "var(--app-surface3)" }}>
+                    <span className="text-[12px]" style={{ color: "var(--app-text1)" }}>
                       {a.condition === "above" ? "↑ Above" : "↓ Below"} ₹{Number(a.target_price).toLocaleString("en-IN")}
                     </span>
-                    <button onClick={() => handleDeleteAlert(a.id)} className="text-[#e5383b] text-[11px] hover:font-semibold">Remove</button>
+                    <button onClick={() => handleDeleteAlert(a.id)} className="text-[11px] hover:font-semibold"
+                      style={{ color: "var(--app-loss)" }}>Remove</button>
                   </div>
                 ))}
               </div>
@@ -442,10 +446,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               <div className="flex gap-2">
                 {(["above", "below"] as const).map(c => (
                   <button key={c} onClick={() => setAlertCondition(c)}
-                    className="flex-1 py-1.5 text-[12px] font-semibold rounded-[6px] border transition-colors capitalize"
+                    className="flex-1 py-1.5 text-[12px] font-semibold rounded-[6px] transition-colors capitalize"
                     style={alertCondition === c
-                      ? { background: c === "above" ? "#edfaf3" : "#fff0f0", color: c === "above" ? "#26a65b" : "#e5383b", borderColor: c === "above" ? "#26a65b44" : "#e5383b44" }
-                      : { background: "#f7f7f5", color: "#aaa", borderColor: "#e2e2df" }}
+                      ? { background: c === "above" ? "rgba(38,166,91,0.15)" : "rgba(229,56,59,0.15)", color: c === "above" ? "#26a65b" : "#e5383b", border: `1px solid ${c === "above" ? "rgba(38,166,91,0.3)" : "rgba(229,56,59,0.3)"}` }
+                      : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
                   >
                     {c === "above" ? "↑ Above" : "↓ Below"}
                   </button>
@@ -456,22 +460,25 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 value={alertPrice}
                 onChange={e => setAlertPrice(e.target.value)}
                 placeholder={`Target price${latest?.close ? ` (current ₹${latest.close.toFixed(2)})` : ""}`}
-                className="w-full border border-[#e8e8e6] rounded-[7px] px-3 py-2 text-[13px] text-[#0f0f0e] outline-none focus:border-[#5b63f5]"
+                className="w-full rounded-[7px] px-3 py-2 text-[13px] outline-none"
+                style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
               />
               <input
                 type="text"
                 value={alertNote}
                 onChange={e => setAlertNote(e.target.value)}
                 placeholder="Note (optional)"
-                className="w-full border border-[#e8e8e6] rounded-[7px] px-3 py-2 text-[13px] text-[#0f0f0e] outline-none focus:border-[#5b63f5]"
+                className="w-full rounded-[7px] px-3 py-2 text-[13px] outline-none"
+                style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
               />
               {alertMsg && (
-                <div className={`text-[12px] font-medium ${alertMsg === "Alert set!" ? "text-[#26a65b]" : "text-[#e5383b]"}`}>{alertMsg}</div>
+                <div className="text-[12px] font-medium" style={{ color: alertMsg === "Alert set!" ? "#26a65b" : "#e5383b" }}>{alertMsg}</div>
               )}
               <button
                 onClick={handleCreateAlert}
                 disabled={alertSaving}
-                className="w-full py-2 bg-[#5b63f5] text-white text-[13px] font-semibold rounded-[8px] hover:opacity-90 disabled:opacity-50 transition-opacity"
+                className="w-full py-2 text-[13px] font-semibold rounded-[8px] hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ background: "var(--app-teal)", color: "#0D0F14" }}
               >
                 {alertSaving ? "Saving…" : "Set alert"}
               </button>
@@ -489,7 +496,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
       {/* Stale data banner */}
       {showStaleWarning && (
-        <div className="flex items-center gap-2 px-4 py-1.5 bg-[#fff8ec] border-b border-[#d9770622] text-[11px] text-[#d97706] flex-shrink-0">
+        <div className="flex items-center gap-2 px-4 py-1.5 text-[11px] text-[#d97706] flex-shrink-0"
+          style={{ background: "rgba(217,119,6,0.08)", borderBottom: "1px solid rgba(217,119,6,0.2)" }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
@@ -499,7 +507,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       )}
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-[#e8e8e6] gap-4 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 gap-4 flex-shrink-0"
+        style={{ background: "var(--app-surface)", borderBottom: "1px solid var(--app-border)" }}>
         {/* Left: symbol search + name */}
         <div className="flex items-center gap-3">
           <SymbolSearch
@@ -516,15 +525,15 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         {/* Right: timeframe + indicators + drawing tools + save */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* Timeframe */}
-          <div className="flex items-center gap-0.5 mr-1 bg-[#f7f7f5] rounded-[6px] p-0.5">
+          <div className="flex items-center gap-0.5 mr-1 rounded-[6px] p-0.5" style={{ background: "var(--app-surface3)" }}>
             {(["D", "W", "M"] as const).map(tf => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
                 className="text-[11px] px-2.5 py-1 rounded-[4px] font-semibold transition-colors"
                 style={timeframe === tf
-                  ? { background: "#1c1c1a", color: "white" }
-                  : { background: "transparent", color: "#888" }
+                  ? { background: "var(--app-teal)", color: "#0D0F14" }
+                  : { background: "transparent", color: "var(--app-text3)" }
                 }
               >
                 {tf}
@@ -533,7 +542,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           </div>
 
           {/* Separator */}
-          <div className="w-px h-5 bg-[#e2e2df]" />
+          <div className="w-px h-5" style={{ background: "var(--app-border)" }} />
 
           {/* Indicator toggles */}
           {INDICATOR_CONFIG.map(ind => {
@@ -546,10 +555,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 title={locked ? "Pro plan required" : undefined}
                 className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors flex items-center gap-1"
                 style={active
-                  ? { background: ind.bg, color: ind.color, border: `1px solid ${ind.color}44` }
+                  ? { background: ind.color + "22", color: ind.color, border: `1px solid ${ind.color}44` }
                   : locked
-                    ? { background: "#f7f7f5", color: "#ccc", border: "1px solid #e8e8e6" }
-                    : { background: "#f7f7f5", color: "#aaa", border: "1px solid #e2e2df" }
+                    ? { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
+                    : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
                 }
               >
                 {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
@@ -559,7 +568,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           })}
 
           {/* Separator */}
-          <div className="w-px h-5 bg-[#e2e2df]" />
+          <div className="w-px h-5" style={{ background: "var(--app-border)" }} />
 
           {/* Drawing tools */}
           {DRAWING_TOOLS.map(tool => (
@@ -568,8 +577,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               onClick={() => setActiveDrawingTool(t => t === tool ? null : tool)}
               className="text-[11px] px-2.5 py-1 rounded-[4px] font-medium transition-colors"
               style={activeDrawingTool === tool
-                ? { background: "#eeeffe", color: "#5b63f5", border: "1px solid #5b63f544" }
-                : { background: "#f7f7f5", color: "#888", border: "1px solid #e2e2df" }
+                ? { background: "rgba(91,99,245,0.2)", color: "#818cf8", border: "1px solid rgba(91,99,245,0.4)" }
+                : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
               }
             >
               {tool}
@@ -580,7 +589,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {drawnLines.length > 0 && (
             <button
               onClick={clearDrawings}
-              className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e8e8e6] text-[#e5383b] hover:border-[#e5383b] transition-colors"
+              className="text-[11px] px-2.5 py-1 rounded-[4px] transition-colors"
+              style={{ border: "1px solid var(--app-border)", color: "var(--app-loss)" }}
             >
               Clear
             </button>
@@ -625,23 +635,24 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Live data toggle */}
           <button
             onClick={() => setLiveMode(m => !m)}
-            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] font-semibold transition-colors border"
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] font-semibold transition-colors"
             style={liveMode
-              ? { background: "#edfaf3", color: "#26a65b", borderColor: "#26a65b44" }
-              : { background: "#f7f7f5", color: "#888", borderColor: "#e2e2df" }}
+              ? { background: "rgba(38,166,91,0.15)", color: "#26a65b", border: "1px solid rgba(38,166,91,0.3)" }
+              : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
             title={liveMode ? "Live data (Yahoo Finance) — refresh every 5 min" : "Switch to live Yahoo Finance data"}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : "bg-[#ccc]"}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : ""}`}
+              style={!liveMode ? { background: "var(--app-text3)" } : {}} />
             {liveMode ? "Live" : "EOD"}
           </button>
 
           {/* Price alert bell */}
           <button
             onClick={() => { setShowAlertModal(m => !m); setAlertMsg(""); }}
-            className="relative flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] border transition-colors"
+            className="relative flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] transition-colors"
             style={priceAlerts.length > 0
-              ? { background: "#fff8ec", color: "#d97706", borderColor: "#d9770644" }
-              : { background: "#f7f7f5", color: "#888", borderColor: "#e2e2df" }}
+              ? { background: "rgba(217,119,6,0.15)", color: "#d97706", border: "1px solid rgba(217,119,6,0.3)" }
+              : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
             title="Price alerts"
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -657,7 +668,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Save layout */}
           <button
             onClick={handleSaveLayout}
-            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e8e8e6] text-[#666] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors"
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] transition-colors"
+            style={{ background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--app-teal)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--app-teal)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--app-text3)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--app-border)"; }}
           >
             <Save size={11} /> Save
           </button>
@@ -690,31 +704,33 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         )}
 
         {/* Sidebar */}
-        <aside className="w-[240px] flex-shrink-0 bg-white border-r border-[#e8e8e6] flex flex-col overflow-y-auto">
+        <aside className="w-[240px] flex-shrink-0 flex flex-col overflow-y-auto"
+          style={{ background: "var(--app-surface)", borderRight: "1px solid var(--app-border)" }}>
           {loading ? (
             <div className="p-4 space-y-3">
               {[80, 50, 60, 40, 70].map((w, i) => (
-                <div key={i} className="h-3 rounded bg-[#f0f0ee] animate-pulse" style={{ width: `${w}%` }} />
+                <div key={i} className="h-3 rounded animate-pulse" style={{ background: "var(--app-surface3)", width: `${w}%` }} />
               ))}
             </div>
           ) : error ? (
-            <div className="p-4 text-[12px] text-[#e5383b]">{error}</div>
+            <div className="p-4 text-[12px]" style={{ color: "var(--app-loss)" }}>{error}</div>
           ) : data && (
             <>
               {/* Symbol header */}
-              <div className="p-4 border-b border-[#f0f0ee]">
+              <div className="p-4" style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[18px] font-bold text-[#0f0f0e] tracking-[-0.5px]">{symbol}</span>
+                  <span className="text-[18px] font-bold tracking-[-0.5px]" style={{ color: "var(--app-text1)" }}>{symbol}</span>
                   {data.sector && (
-                    <span className="text-[10px] border border-[#e8e8e6] rounded-full px-2 py-0.5 text-[#888] truncate max-w-[90px]">
+                    <span className="text-[10px] rounded-full px-2 py-0.5 truncate max-w-[90px]"
+                      style={{ border: "1px solid var(--app-border)", color: "var(--app-text3)" }}>
                       {data.sector}
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] text-[#aaa] leading-tight truncate">{data.company_name}</div>
+                <div className="text-[11px] leading-tight truncate" style={{ color: "var(--app-text3)" }}>{data.company_name}</div>
 
                 <div className="mt-2">
-                  <div className="text-[22px] font-bold text-[#0f0f0e] tracking-[-0.8px] tabular-nums">
+                  <div className="text-[22px] font-bold tracking-[-0.8px] tabular-nums" style={{ color: "var(--app-text1)" }}>
                     {fmtPrice(latest?.close, symbolCurrency)}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -736,22 +752,31 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       {wlMsg}
                     </div>
                   ) : showWlPicker ? (
-                    <div className="border border-[#e8e8e6] rounded-[7px] overflow-hidden">
-                      <div className="px-3 py-2 bg-[#f7f7f5] text-[11px] text-[#888]">Pick a watchlist</div>
+                    <div className="rounded-[7px] overflow-hidden" style={{ border: "1px solid var(--app-border)" }}>
+                      <div className="px-3 py-2 text-[11px]" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>Pick a watchlist</div>
                       {watchlists.map(wl => (
                         <button key={wl.id} onClick={() => handlePickWl(wl.id)}
-                          className="w-full text-left px-3 py-2 text-[12px] text-[#0f0f0e] hover:bg-[#f7f7f5] border-t border-[#f0f0ee]">
+                          className="w-full text-left px-3 py-2 text-[12px] transition-colors"
+                          style={{ color: "var(--app-text1)", borderTop: "1px solid var(--app-border2)" }}
+                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
                           {wl.name}
                         </button>
                       ))}
                       <button onClick={() => setShowWlPicker(false)}
-                        className="w-full text-left px-3 py-2 text-[12px] text-[#888] hover:bg-[#f7f7f5] border-t border-[#f0f0ee]">
+                        className="w-full text-left px-3 py-2 text-[12px] transition-colors"
+                        style={{ color: "var(--app-text3)", borderTop: "1px solid var(--app-border2)" }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
                         Cancel
                       </button>
                     </div>
                   ) : (
                     <button onClick={handleAddWatchlist}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-[7px] border border-[#e8e8e6] text-[11px] text-[#666] hover:border-[#1c1c1a] hover:text-[#0f0f0e] transition-colors">
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-[7px] text-[11px] transition-colors"
+                      style={{ border: "1px solid var(--app-border)", color: "var(--app-text2)" }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--app-teal)"; (e.currentTarget as HTMLElement).style.color = "var(--app-teal)"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--app-border)"; (e.currentTarget as HTMLElement).style.color = "var(--app-text2)"; }}>
                       <BookmarkPlus size={12} /> Add to watchlist
                     </button>
                   )}
@@ -759,7 +784,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               </div>
 
               {/* Buy / Sell */}
-              <div className="px-4 py-3 border-b border-[#f0f0ee] flex gap-2">
+              <div className="px-4 py-3 flex gap-2" style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
                   onClick={() => { setOrderSide("buy"); setShowOrder(true); }}
                   className="flex-1 py-2 bg-[#26a65b] text-white text-[13px] font-bold rounded-[8px] hover:opacity-90 transition-opacity"
@@ -775,16 +800,19 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               </div>
 
               {/* ── Technicals accordion ─────────────────────────────── */}
-              <div className="border-b border-[#f0f0ee]">
+              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
                   onClick={() => setShowTechnicals(t => !t)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-[#fafafa] transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
+                  style={{ color: "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                 >
-                  <span className="text-[10px] uppercase tracking-[0.5px] text-[#555] font-semibold">Technicals</span>
+                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Technicals</span>
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
                     className="transition-transform flex-shrink-0"
                     style={{ transform: showTechnicals ? "rotate(180deg)" : "rotate(0deg)" }}>
-                    <path d="M2 4l4 4 4-4" stroke="#aaa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
 
@@ -792,7 +820,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                   <div className="px-4 pb-4 space-y-4">
                     {/* OHLCV */}
                     <div>
-                      <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">OHLCV</div>
+                      <div className="text-[9px] uppercase tracking-[0.5px] mb-1.5 font-semibold" style={{ color: "var(--app-text3)" }}>OHLCV</div>
                       <div className="space-y-1">
                         {([
                           ["Open",   fmtPrice(latest?.open,  symbolCurrency)],
@@ -802,8 +830,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                           ["Volume", latest?.volume ? fmtVol(latest.volume) : "—"],
                         ] as [string, string][]).map(([label, val]) => (
                           <div key={label} className="flex items-center justify-between">
-                            <span className="text-[11px] text-[#aaa]">{label}</span>
-                            <span className="text-[11px] font-medium tabular-nums text-[#0f0f0e]">{val}</span>
+                            <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>{label}</span>
+                            <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--app-text1)" }}>{val}</span>
                           </div>
                         ))}
                       </div>
@@ -811,29 +839,29 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
                     {/* Key metrics */}
                     <div>
-                      <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">Momentum</div>
+                      <div className="text-[9px] uppercase tracking-[0.5px] mb-1.5 font-semibold" style={{ color: "var(--app-text3)" }}>Momentum</div>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[#aaa]">RSI 14</span>
+                          <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>RSI 14</span>
                           {latest?.rsi_14 != null ? (
                             <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full"
                               style={{
-                                background: latest.rsi_14 > 70 ? "#f0efff" : latest.rsi_14 < 40 ? "#fff8ec" : "#edfaf3",
-                                color: latest.rsi_14 > 70 ? "#5b63f5" : latest.rsi_14 < 40 ? "#d97706" : "#26a65b",
+                                background: latest.rsi_14 > 70 ? "rgba(91,99,245,0.2)" : latest.rsi_14 < 40 ? "rgba(217,119,6,0.2)" : "rgba(38,166,91,0.2)",
+                                color: latest.rsi_14 > 70 ? "#818cf8" : latest.rsi_14 < 40 ? "#d97706" : "#26a65b",
                               }}>
                               {latest.rsi_14.toFixed(1)}
                             </span>
-                          ) : <span className="text-[#aaa] text-[11px]">—</span>}
+                          ) : <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>—</span>}
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[#aaa]">Vol Ratio</span>
+                          <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>Vol Ratio</span>
                           <span className="text-[11px] font-medium tabular-nums" style={{ color: "#7c6af0" }}>
                             {latest?.volume_ratio != null ? `${latest.volume_ratio.toFixed(2)}x` : "—"}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[#aaa]">ATR 14</span>
-                          <span className="text-[11px] font-medium tabular-nums text-[#0f0f0e]">
+                          <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>ATR 14</span>
+                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--app-text1)" }}>
                             {latest?.atr_14 != null ? fmtPrice(latest.atr_14, symbolCurrency) : "—"}
                           </span>
                         </div>
@@ -842,22 +870,22 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
                     {/* EMA stack */}
                     <div>
-                      <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">EMA Levels</div>
+                      <div className="text-[9px] uppercase tracking-[0.5px] mb-1.5 font-semibold" style={{ color: "var(--app-text3)" }}>EMA Levels</div>
                       <div className="space-y-1">
                         {([
-                          ["EMA 20",  latest?.ema_20,  "#5b63f5"],
-                          ["EMA 50",  latest?.ema_50,  "#d97706"],
-                          ["EMA 200", latest?.ema_200, "#e5383b"],
+                          ["EMA 20",  latest?.ema_20,  "#00E5C4"],
+                          ["EMA 50",  latest?.ema_50,  "#818cf8"],
+                          ["EMA 200", latest?.ema_200, "#f59e0b"],
                         ] as [string, number | null | undefined, string][]).map(([label, ema, color]) => {
                           const above = ema != null && latest?.close != null && latest.close > ema;
                           return (
                             <div key={label} className="flex items-center justify-between">
                               <div className="flex items-center gap-1">
                                 <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: color }} />
-                                <span className="text-[11px] text-[#aaa]">{label}</span>
+                                <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>{label}</span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <span className="text-[10px] tabular-nums text-[#888]">{fmtPrice(ema, symbolCurrency)}</span>
+                                <span className="text-[10px] tabular-nums" style={{ color: "var(--app-text2)" }}>{fmtPrice(ema, symbolCurrency)}</span>
                                 {ema != null && (
                                   <span className="text-[11px] font-bold" style={{ color: above ? "#26a65b" : "#e5383b" }}>
                                     {above ? "↑" : "↓"}
@@ -873,19 +901,18 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     {/* 52W range */}
                     {latest?.week_52_high && latest?.week_52_low && (
                       <div>
-                        <div className="text-[9px] uppercase tracking-[0.5px] text-[#bbb] mb-1.5 font-semibold">52-Week Range</div>
-                        <div className="relative h-[3px] bg-[#f0f0ee] rounded-full mx-0.5 my-2.5">
-                          <div className="absolute h-[3px] bg-[#5b63f5] rounded-full"
-                            style={{ width: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }} />
-                          <div className="absolute w-2.5 h-2.5 bg-[#1c1c1a] rounded-full border-2 border-white -translate-y-[35%] -translate-x-1/2"
-                            style={{ left: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }} />
+                        <div className="text-[9px] uppercase tracking-[0.5px] mb-1.5 font-semibold" style={{ color: "var(--app-text3)" }}>52-Week Range</div>
+                        <div className="relative h-[3px] rounded-full mx-0.5 my-2.5" style={{ background: "var(--app-surface3)" }}>
+                          <div className="absolute h-[3px] rounded-full" style={{ width: `${Math.min(100, Math.max(0, w52pct ?? 0))}%`, background: "var(--app-teal)" }} />
+                          <div className="absolute w-2.5 h-2.5 rounded-full -translate-y-[35%] -translate-x-1/2"
+                            style={{ left: `${Math.min(100, Math.max(0, w52pct ?? 0))}%`, background: "var(--app-text1)", border: "2px solid var(--app-bg)" }} />
                         </div>
-                        <div className="flex justify-between text-[10px] tabular-nums text-[#aaa]">
+                        <div className="flex justify-between text-[10px] tabular-nums" style={{ color: "var(--app-text3)" }}>
                           <span>{fmtPrice(latest.week_52_low,  symbolCurrency)}</span>
                           <span>{fmtPrice(latest.week_52_high, symbolCurrency)}</span>
                         </div>
                         {pctFrom52H != null && (
-                          <div className="text-[10px] text-center text-[#aaa] mt-0.5">
+                          <div className="text-[10px] text-center mt-0.5" style={{ color: "var(--app-text3)" }}>
                             {pctFrom52H.toFixed(1)}% from 52W high
                           </div>
                         )}
@@ -896,16 +923,18 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               </div>
 
               {/* ── Fundamentals accordion ───────────────────────────── */}
-              <div className="border-b border-[#f0f0ee]">
+              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
                   onClick={() => setShowFundamentals(f => !f)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-[#fafafa] transition-colors"
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                 >
-                  <span className="text-[10px] uppercase tracking-[0.5px] text-[#555] font-semibold">Fundamentals</span>
+                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Fundamentals</span>
                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
                     className="transition-transform flex-shrink-0"
                     style={{ transform: showFundamentals ? "rotate(180deg)" : "rotate(0deg)" }}>
-                    <path d="M2 4l4 4 4-4" stroke="#aaa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
                 {showFundamentals && (
@@ -913,7 +942,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     {!fundamentals ? (
                       <div className="space-y-1.5">
                         {[1,2,3,4,5].map(i => (
-                          <div key={i} className="h-3 bg-[#f0f0ee] rounded animate-pulse" />
+                          <div key={i} className="h-3 rounded animate-pulse" style={{ background: "var(--app-surface3)" }} />
                         ))}
                       </div>
                     ) : (
@@ -932,11 +961,11 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                           ["ROE",        fundamentals.return_on_equity != null ? `${fundamentals.return_on_equity}%` : null],
                         ] as [string, string | null][]).filter(([, v]) => v != null).map(([label, val]) => (
                           <div key={label} className="flex items-center justify-between">
-                            <span className="text-[11px] text-[#aaa]">{label}</span>
-                            <span className="text-[11px] font-medium tabular-nums text-[#0f0f0e]">{val}</span>
+                            <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>{label}</span>
+                            <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--app-text1)" }}>{val}</span>
                           </div>
                         ))}
-                        <div className="text-[9px] text-[#ccc] mt-1">Source: Yahoo Finance</div>
+                        <div className="text-[9px] mt-1" style={{ color: "var(--app-text3)" }}>Source: Yahoo Finance</div>
                       </div>
                     )}
                   </div>
@@ -944,14 +973,15 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               </div>
               {/* ── Broker connect panel ────────────────────────────── */}
               {!brokerConnected && (
-                <div className="border-t border-[#f0f0ee] p-4">
-                  <div className="text-[10px] uppercase tracking-[0.5px] text-[#bbb] mb-2 font-semibold">Quick order</div>
-                  <div className="bg-[#eeeffe] rounded-[8px] p-3 text-center">
-                    <div className="text-[12px] font-semibold text-[#3730a3] mb-0.5">Connect your broker</div>
-                    <div className="text-[11px] text-[#6366f1] mb-2.5">Trade directly from the chart</div>
+                <div className="p-4" style={{ borderTop: "1px solid var(--app-border)" }}>
+                  <div className="text-[10px] uppercase tracking-[0.5px] mb-2 font-semibold" style={{ color: "var(--app-text3)" }}>Quick order</div>
+                  <div className="rounded-[8px] p-3 text-center" style={{ background: "rgba(0,229,196,0.08)", border: "1px solid rgba(0,229,196,0.2)" }}>
+                    <div className="text-[12px] font-semibold mb-0.5" style={{ color: "var(--app-teal)" }}>Connect your broker</div>
+                    <div className="text-[11px] mb-2.5" style={{ color: "var(--app-text2)" }}>Trade directly from the chart</div>
                     <Link
                       href="/settings?tab=profile"
-                      className="inline-block text-[11px] font-semibold bg-[#5b63f5] text-white px-3 py-1.5 rounded-[6px] hover:opacity-85 transition-opacity"
+                      className="inline-block text-[11px] font-semibold px-3 py-1.5 rounded-[6px] hover:opacity-85 transition-opacity"
+                      style={{ background: "var(--app-teal)", color: "#0D0F14" }}
                     >
                       Connect Zerodha
                     </Link>
@@ -963,19 +993,20 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         </aside>
 
         {/* Chart area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "var(--app-bg)" }}>
           {/* OHLCV legend / crosshair overlay */}
           <div className="relative flex-1 min-h-0">
             {/* Candle legend */}
             {displayBar && (
-              <div className="absolute top-2 left-3 z-10 pointer-events-none bg-white/80 rounded px-2 py-1 text-[11px] text-[#888] font-mono">
-                <span className="text-[#0f0f0e] font-semibold mr-2">{symbol}</span>
+              <div className="absolute top-2 left-3 z-10 pointer-events-none rounded px-2 py-1 text-[11px] font-mono"
+                style={{ background: "rgba(13,15,20,0.8)", color: "rgba(255,255,255,0.4)" }}>
+                <span className="font-semibold mr-2" style={{ color: "rgba(255,255,255,0.9)" }}>{symbol}</span>
                 <span className="mr-3">{displayBar.time}</span>
-                <span className="mr-2">O <span className="text-[#0f0f0e]">{displayBar.open?.toFixed(2)}</span></span>
-                <span className="mr-2">H <span className="text-[#0f0f0e]">{displayBar.high?.toFixed(2)}</span></span>
-                <span className="mr-2">L <span className="text-[#0f0f0e]">{displayBar.low?.toFixed(2)}</span></span>
-                <span className="mr-2">C <span className={displayBar.close >= displayBar.open ? "text-[#26a65b]" : "text-[#e5383b]"}>{displayBar.close?.toFixed(2)}</span></span>
-                <span>Vol <span className="text-[#0f0f0e]">{fmtVol(displayBar.volume)}</span></span>
+                <span className="mr-2">O <span style={{ color: "rgba(255,255,255,0.85)" }}>{displayBar.open?.toFixed(2)}</span></span>
+                <span className="mr-2">H <span style={{ color: "rgba(255,255,255,0.85)" }}>{displayBar.high?.toFixed(2)}</span></span>
+                <span className="mr-2">L <span style={{ color: "rgba(255,255,255,0.85)" }}>{displayBar.low?.toFixed(2)}</span></span>
+                <span className="mr-2">C <span style={{ color: displayBar.close >= displayBar.open ? "#26a65b" : "#e5383b" }}>{displayBar.close?.toFixed(2)}</span></span>
+                <span>Vol <span style={{ color: "rgba(255,255,255,0.85)" }}>{fmtVol(displayBar.volume)}</span></span>
               </div>
             )}
 
@@ -1091,28 +1122,29 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               const last1 = sym1Pct.at(-1) ?? 0;
               const last2 = sym2Pct.at(-1) ?? 0;
               return (
-                <div className="absolute bottom-2 left-2 right-2 z-10 bg-white/90 rounded-[8px] border border-[#e8e8e6] px-3 py-2 pointer-events-none">
+                <div className="absolute bottom-2 left-2 right-2 z-10 rounded-[8px] px-3 py-2 pointer-events-none"
+                  style={{ background: "rgba(13,15,20,0.9)", border: "1px solid var(--app-border)" }}>
                   <div className="flex items-center gap-3 mb-1">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-0.5 rounded" style={{ background: "#5b63f5" }} />
-                      <span className="text-[10px] font-semibold text-[#5b63f5]">{symbol}</span>
+                      <div className="w-3 h-0.5 rounded" style={{ background: "var(--app-teal)" }} />
+                      <span className="text-[10px] font-semibold" style={{ color: "var(--app-teal)" }}>{symbol}</span>
                       <span className="text-[10px] tabular-nums" style={{ color: last1 >= 0 ? "#26a65b" : "#e5383b" }}>
                         {last1 >= 0 ? "+" : ""}{last1.toFixed(2)}%
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-0.5 rounded" style={{ background: "#d97706" }} />
-                      <span className="text-[10px] font-semibold text-[#d97706]">{compareSymbol}</span>
+                      <div className="w-3 h-0.5 rounded" style={{ background: "#f59e0b" }} />
+                      <span className="text-[10px] font-semibold" style={{ color: "#f59e0b" }}>{compareSymbol}</span>
                       <span className="text-[10px] tabular-nums" style={{ color: last2 >= 0 ? "#26a65b" : "#e5383b" }}>
                         {last2 >= 0 ? "+" : ""}{last2.toFixed(2)}%
                       </span>
                     </div>
-                    <span className="text-[9px] text-[#aaa] ml-auto">Normalised</span>
+                    <span className="text-[9px] ml-auto" style={{ color: "var(--app-text3)" }}>Normalised</span>
                   </div>
                   <svg viewBox={`0 0 100 ${H}`} className="w-full" style={{ height: H }} preserveAspectRatio="none">
-                    <path d={mkPath(sym1Pct)} fill="none" stroke="#5b63f5" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
-                    <path d={mkPath(sym2Pct)} fill="none" stroke="#d97706" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
-                    <line x1="0" y1={toY(0).toFixed(2)} x2="100" y2={toY(0).toFixed(2)} stroke="#e2e2df" strokeWidth="0.3" vectorEffect="non-scaling-stroke" strokeDasharray="2 2" />
+                    <path d={mkPath(sym1Pct)} fill="none" stroke="rgba(0,229,196,0.8)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+                    <path d={mkPath(sym2Pct)} fill="none" stroke="rgba(245,158,11,0.8)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+                    <line x1="0" y1={toY(0).toFixed(2)} x2="100" y2={toY(0).toFixed(2)} stroke="rgba(255,255,255,0.1)" strokeWidth="0.3" vectorEffect="non-scaling-stroke" strokeDasharray="2 2" />
                   </svg>
                 </div>
               );

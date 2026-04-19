@@ -119,26 +119,26 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#ffffff" },
-        textColor: "#888888",
-        fontFamily: "DM Sans, system-ui, sans-serif",
+        background: { type: ColorType.Solid, color: "#0D0F14" },
+        textColor: "rgba(255,255,255,0.35)",
+        fontFamily: "Inter, system-ui, sans-serif",
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: "#f0f0ee", style: 1 },
-        horzLines: { color: "#f0f0ee", style: 1 },
+        vertLines: { color: "rgba(255,255,255,0.04)", style: 1 },
+        horzLines: { color: "rgba(255,255,255,0.04)", style: 1 },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "#aaaaaa", width: 1, style: 3 },
-        horzLine: { color: "#aaaaaa", width: 1, style: 3 },
+        vertLine: { color: "rgba(255,255,255,0.2)", width: 1, style: 3 },
+        horzLine: { color: "rgba(255,255,255,0.2)", width: 1, style: 3 },
       },
       rightPriceScale: {
-        borderColor: "#e2e2df",
+        borderColor: "rgba(255,255,255,0.07)",
         scaleMargins: { top: 0.08, bottom: 0.22 },
       },
       timeScale: {
-        borderColor: "#e2e2df",
+        borderColor: "rgba(255,255,255,0.07)",
         timeVisible: true,
         secondsVisible: false,
       },

@@ -20,10 +20,7 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
   const containerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep input in sync if parent changes value externally
-  useEffect(() => {
-    setQuery(value);
-  }, [value]);
+  useEffect(() => { setQuery(value); }, [value]);
 
   const fetchResults = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); return; }
@@ -77,7 +74,6 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
     }
   }
 
-  // Close on outside click
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -95,7 +91,7 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
     return (
       <>
         {text.slice(0, idx)}
-        <span className="text-[#5b63f5] font-semibold">{text.slice(idx, idx + q.length)}</span>
+        <span style={{ color: "var(--app-teal)", fontWeight: 700 }}>{text.slice(idx, idx + q.length)}</span>
         {text.slice(idx + q.length)}
       </>
     );
@@ -104,50 +100,62 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
   return (
     <div ref={containerRef} className="relative">
       <div className="relative">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#aaa]" />
+        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--app-text3)" }} />
         <input
           value={query}
           onChange={handleChange}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="w-[200px] text-[13px] font-medium text-[#1c1c1a] border border-[#e2e2df] rounded-[7px] pl-8 pr-3 py-1.5 outline-none focus:border-[#5b63f5] bg-white"
+          className="w-[200px] text-[13px] font-semibold rounded-[7px] pl-8 pr-3 py-1.5 outline-none"
+          style={{
+            background: "var(--app-surface3)",
+            border: "1px solid var(--app-border)",
+            color: "var(--app-text1)",
+          }}
         />
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute top-full mt-1 left-0 w-[320px] bg-white border border-[#e2e2df] rounded-[8px] shadow-lg z-50 overflow-hidden">
+        <div className="absolute top-full mt-1 left-0 w-[320px] rounded-[8px] shadow-2xl z-50 overflow-hidden"
+          style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)" }}>
           {results.slice(0, 8).map((r, i) => (
             <button
               key={r.symbol}
               onMouseDown={() => select(r.symbol)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
-                i === activeIdx ? "bg-[#eeeffe]" : "hover:bg-[#f7f7f5]"
-              }`}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors"
+              style={{
+                background: i === activeIdx ? "var(--app-surface3)" : "transparent",
+                borderBottom: "1px solid var(--app-border2)",
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = i === activeIdx ? "var(--app-surface3)" : "transparent"}
             >
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-[13px] font-semibold text-[#1c1c1a] shrink-0">
+                <span className="text-[13px] font-semibold shrink-0" style={{ color: "var(--app-text1)" }}>
                   {highlight(r.symbol, query)}
                 </span>
-                <span className="text-[11px] text-[#aaa] truncate">
+                <span className="text-[11px] truncate" style={{ color: "var(--app-text3)" }}>
                   {r.company_name}
                 </span>
               </div>
               {r.sector && (
-                <span className="text-[10px] text-[#888] border border-[#e2e2df] rounded-full px-2 py-0.5 ml-2 shrink-0">
+                <span className="text-[10px] rounded-full px-2 py-0.5 ml-2 shrink-0"
+                  style={{ color: "var(--app-text3)", border: "1px solid var(--app-border)" }}>
                   {r.sector}
                 </span>
               )}
             </button>
           ))}
           {loading && (
-            <div className="px-3 py-2 text-[11px] text-[#aaa]">Searching…</div>
+            <div className="px-3 py-2 text-[11px]" style={{ color: "var(--app-text3)" }}>Searching…</div>
           )}
         </div>
       )}
 
       {open && !loading && results.length === 0 && query.length >= 2 && (
-        <div className="absolute top-full mt-1 left-0 w-[260px] bg-white border border-[#e2e2df] rounded-[8px] shadow-md z-50 px-3 py-2.5 text-[12px] text-[#aaa]">
+        <div className="absolute top-full mt-1 left-0 w-[260px] rounded-[8px] shadow-md z-50 px-3 py-2.5 text-[12px]"
+          style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)", color: "var(--app-text3)" }}>
           No symbols found
         </div>
       )}
