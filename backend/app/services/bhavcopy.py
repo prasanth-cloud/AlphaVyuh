@@ -118,8 +118,12 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
         ind: dict = {}
 
         if n >= 2:
-            ind["prev_close"] = _safe_float(close_s.iloc[-2])
+            pc = _safe_float(close_s.iloc[-2])
+            ind["prev_close"] = pc
             ind["avg_volume_20d"] = _safe_int(vol_s.iloc[:-1].tail(20).mean())
+            cur = _safe_float(close_s.iloc[-1])
+            if pc and pc > 0 and cur is not None:
+                ind["pct_change"] = round((cur - pc) / pc * 100, 2)
 
         ind["week_52_high"] = _safe_float(high_s.max())
         ind["week_52_low"]  = _safe_float(low_s.min())
