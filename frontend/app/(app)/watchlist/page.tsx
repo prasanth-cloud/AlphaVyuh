@@ -197,7 +197,7 @@ function ChartPanel({ symbol, latestClose }: { symbol: string; latestClose?: num
         ) : error ? (
           <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>No chart data</div>
         ) : (
-          <MiniChart candles={candles} height={220} dark />
+          <MiniChart candles={candles} height={320} dark />
         )}
       </div>
 

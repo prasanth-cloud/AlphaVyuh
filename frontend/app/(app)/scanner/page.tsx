@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { authHeaders } from '@/lib/api'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -27,6 +27,14 @@ interface ScanResult {
   week_52_high_pct: number | null
   is_new_52w_high: boolean
   bb_width: number | null
+  // Fundamentals
+  market_cap_cr: number | null
+  pe_ratio: number | null
+  pb_ratio: number | null
+  eps: number | null
+  dividend_yield: number | null
+  roe: number | null
+  roce: number | null
 }
 
 interface SavedScreen { id: string; name: string; filters: Record<string, unknown>; created_at: string }
@@ -65,6 +73,15 @@ type Filters = {
   new_52w_high: boolean; new_52w_low: boolean
   is_inside_bar: boolean
   series: string[]
+  // Fundamentals
+  market_cap_min: string; market_cap_max: string
+  pe_min: string; pe_max: string
+  pb_min: string; pb_max: string
+  eps_min: string; eps_max: string
+  dividend_yield_min: string; dividend_yield_max: string
+  debt_to_equity_max: string
+  roe_min: string
+  roce_min: string
 }
 
 const emptyFilters = (): Filters => ({
@@ -84,6 +101,14 @@ const emptyFilters = (): Filters => ({
   new_52w_high: false, new_52w_low: false,
   is_inside_bar: false,
   series: ['EQ'],
+  market_cap_min: '', market_cap_max: '',
+  pe_min: '', pe_max: '',
+  pb_min: '', pb_max: '',
+  eps_min: '', eps_max: '',
+  dividend_yield_min: '', dividend_yield_max: '',
+  debt_to_equity_max: '',
+  roe_min: '',
+  roce_min: '',
 })
 
 const inputStyle: React.CSSProperties = {
@@ -136,11 +161,12 @@ export default function ScannerPage() {
   const [newScreenName, setNewScreenName] = useState('')
   const [newWlName, setNewWlName] = useState('')
   const [toast, setToast] = useState('')
+  const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
 
   const getToken = useCallback(async () => {
-    const sb = createClient()
-    const { data: { session } } = await sb.auth.getSession()
-    return session?.access_token || ''
+    const h = await authHeaders() as Record<string, string>
+    const auth = h['Authorization'] || ''
+    return auth.replace('Bearer ', '')
   }, [])
 
   useEffect(() => {
@@ -195,6 +221,15 @@ export default function ScannerPage() {
     if (f.new_52w_high) fil.new_52w_high = true
     if (f.new_52w_low) fil.new_52w_low = true
     if (f.is_inside_bar) fil.is_inside_bar = true
+    // Fundamentals
+    set('market_cap_min', num(f.market_cap_min)); set('market_cap_max', num(f.market_cap_max))
+    set('pe_min', num(f.pe_min)); set('pe_max', num(f.pe_max))
+    set('pb_min', num(f.pb_min)); set('pb_max', num(f.pb_max))
+    set('eps_min', num(f.eps_min)); set('eps_max', num(f.eps_max))
+    set('dividend_yield_min', num(f.dividend_yield_min)); set('dividend_yield_max', num(f.dividend_yield_max))
+    set('debt_to_equity_max', num(f.debt_to_equity_max))
+    set('roe_min', num(f.roe_min))
+    set('roce_min', num(f.roce_min))
 
     return { filters: fil, sort_by: sb, sort_order: sd ? 'desc' : 'asc', limit: 200 }
   }
@@ -408,48 +443,90 @@ export default function ScannerPage() {
           </div>
         )}
 
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--app-border)', flexShrink: 0 }}>
+          {(['technical', 'fundamental'] as const).map(tab => (
+            <button key={tab} onClick={() => setFilterTab(tab)} style={{
+              flex: 1, padding: '8px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              background: 'none', border: 'none', textTransform: 'capitalize', letterSpacing: '0.03em',
+              borderBottom: filterTab === tab ? '2px solid var(--app-teal)' : '2px solid transparent',
+              color: filterTab === tab ? 'var(--app-teal)' : 'var(--app-text3)',
+              transition: 'all 0.15s',
+            }}>{tab}</button>
+          ))}
+        </div>
+
         {/* Filters scrollable */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          <Section title="Price & Change" open>
-            {rangeRow('Price (₹)', 'price_min', 'price_max')}
-            {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
-          </Section>
-          <Section title="Volume">
-            {rangeRow('Vol ratio (×avg)', 'volume_ratio_min', 'volume_ratio_max')}
-          </Section>
-          <Section title="Moving Averages">
-            {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
-            {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
-            {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
-            {segRow('EMA 20 vs 50', 'ema20_vs_ema50', [{ value: 'golden', label: 'Golden ↑' }, { value: 'death', label: 'Death ↓' }])}
-            {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden ↑' }, { value: 'death', label: 'Death ↓' }])}
-          </Section>
-          <Section title="Momentum">
-            {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
-            {rangeRow('ADX 14', 'adx_min', 'adx_max')}
-            {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: '↑ +ve' }, { value: 'negative', label: '↓ −ve' }])}
-          </Section>
-          <Section title="Bollinger Bands">
-            {segRow('Position', 'bb_position', [
-              { value: 'above_upper', label: 'Above ↑' },
-              { value: 'below_lower', label: 'Below ↓' },
-              { value: 'near_upper',  label: 'Near ↑' },
-              { value: 'near_lower',  label: 'Near ↓' },
-              { value: 'inside',      label: 'Inside' },
-            ])}
-            {rangeRow('BB Width', 'bb_width_min', 'bb_width_max')}
-          </Section>
-          <Section title="Volatility">
-            {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
-          </Section>
-          <Section title="52-Week Range">
-            {numRow('Max % below 52W High', 'week_52_high_pct_max', 'e.g. 5')}
-            {toggleRow('New 52W High today', 'new_52w_high')}
-            {toggleRow('New 52W Low today', 'new_52w_low')}
-          </Section>
-          <Section title="Candle Patterns">
-            {toggleRow('Inside bar', 'is_inside_bar')}
-          </Section>
+          {filterTab === 'technical' ? (
+            <>
+              <Section title="Price & Change" open>
+                {rangeRow('Price (₹)', 'price_min', 'price_max')}
+                {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
+              </Section>
+              <Section title="Volume">
+                {rangeRow('Vol ratio (×avg)', 'volume_ratio_min', 'volume_ratio_max')}
+              </Section>
+              <Section title="Moving Averages">
+                {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
+                {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
+                {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: '↑ Above' }, { value: 'below', label: '↓ Below' }])}
+                {segRow('EMA 20 vs 50', 'ema20_vs_ema50', [{ value: 'golden', label: 'Golden ↑' }, { value: 'death', label: 'Death ↓' }])}
+                {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden ↑' }, { value: 'death', label: 'Death ↓' }])}
+              </Section>
+              <Section title="Momentum">
+                {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
+                {rangeRow('ADX 14', 'adx_min', 'adx_max')}
+                {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: '↑ +ve' }, { value: 'negative', label: '↓ −ve' }])}
+              </Section>
+              <Section title="Bollinger Bands">
+                {segRow('Position', 'bb_position', [
+                  { value: 'above_upper', label: 'Above ↑' },
+                  { value: 'below_lower', label: 'Below ↓' },
+                  { value: 'near_upper',  label: 'Near ↑' },
+                  { value: 'near_lower',  label: 'Near ↓' },
+                  { value: 'inside',      label: 'Inside' },
+                ])}
+                {rangeRow('BB Width', 'bb_width_min', 'bb_width_max')}
+              </Section>
+              <Section title="Volatility">
+                {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
+              </Section>
+              <Section title="52-Week Range">
+                {numRow('Max % below 52W High', 'week_52_high_pct_max', 'e.g. 5')}
+                {toggleRow('New 52W High today', 'new_52w_high')}
+                {toggleRow('New 52W Low today', 'new_52w_low')}
+              </Section>
+              <Section title="Candle Patterns">
+                {toggleRow('Inside bar', 'is_inside_bar')}
+              </Section>
+            </>
+          ) : (
+            <>
+              <Section title="Market Cap" open>
+                {rangeRow('Market Cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
+                <div style={{ fontSize: 10, color: 'var(--app-text3)', marginTop: -4, marginBottom: 6 }}>
+                  e.g. Large cap: 20000+, Mid: 5000–20000, Small: &lt;5000
+                </div>
+              </Section>
+              <Section title="Valuation" open>
+                {rangeRow('P/E Ratio', 'pe_min', 'pe_max')}
+                {rangeRow('P/B Ratio', 'pb_min', 'pb_max')}
+                {rangeRow('EPS (₹)', 'eps_min', 'eps_max')}
+              </Section>
+              <Section title="Returns & Efficiency" open>
+                {numRow('ROE ≥ %', 'roe_min', 'e.g. 15')}
+                {numRow('ROCE ≥ %', 'roce_min', 'e.g. 15')}
+              </Section>
+              <Section title="Dividends & Debt">
+                {rangeRow('Dividend Yield %', 'dividend_yield_min', 'dividend_yield_max')}
+                {numRow('Debt/Equity ≤', 'debt_to_equity_max', 'e.g. 1')}
+              </Section>
+              <div style={{ padding: '10px 14px', fontSize: 11, color: 'var(--app-text3)', lineHeight: 1.5 }}>
+                Fundamental data updates daily via yfinance. Run <code style={{ fontSize: 10, background: 'var(--app-surface3)', padding: '1px 4px', borderRadius: 3 }}>fetch_fundamentals.py</code> to populate.
+              </div>
+            </>
+          )}
         </div>
 
         {/* Bottom actions */}
@@ -660,6 +737,26 @@ export default function ScannerPage() {
               </div>
             ) : null)}
           </div>
+
+          {(selectedRow.pe_ratio != null || selectedRow.market_cap_cr != null || selectedRow.roe != null) && (
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--app-text3)', marginBottom: 8 }}>Fundamentals</div>
+              {([
+                ['Market Cap', selectedRow.market_cap_cr != null ? `₹${selectedRow.market_cap_cr.toLocaleString('en-IN', { maximumFractionDigits: 0 })} Cr` : null],
+                ['P/E Ratio', selectedRow.pe_ratio?.toFixed(1)],
+                ['P/B Ratio', selectedRow.pb_ratio?.toFixed(2)],
+                ['EPS', selectedRow.eps != null ? `₹${selectedRow.eps.toFixed(2)}` : null],
+                ['ROE', selectedRow.roe != null ? `${selectedRow.roe.toFixed(1)}%` : null],
+                ['ROCE', selectedRow.roce != null ? `${selectedRow.roce.toFixed(1)}%` : null],
+                ['Div Yield', selectedRow.dividend_yield != null ? `${selectedRow.dividend_yield.toFixed(2)}%` : null],
+              ] as [string, string | null | undefined][]).filter(([, v]) => v != null).map(([k, v]) => (
+                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
+                  <span style={{ color: 'var(--app-text3)' }}>{k}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--app-text1)', fontFamily: 'monospace' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {selectedRow.week_52_high != null && selectedRow.week_52_low != null && (
             <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--app-border)' }}>

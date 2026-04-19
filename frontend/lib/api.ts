@@ -29,7 +29,7 @@ async function getToken(): Promise<string> {
   return _loginPromise;
 }
 
-async function authHeaders(): Promise<HeadersInit> {
+export async function authHeaders(): Promise<HeadersInit> {
   const token = await getToken();
   return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 }

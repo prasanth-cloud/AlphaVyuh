@@ -132,6 +132,21 @@ class ScanFilters(BaseModel):
     market:          str | None = None          # "IN" (NSE+BSE), "US" (NASDAQ+NYSE) or specific exchange
     market_cap_category: list[str] | str | None = None
 
+    # ── Fundamentals ─────────────────────────────────────────────────────
+    market_cap_min:       float | None = None   # ₹ Crores
+    market_cap_max:       float | None = None
+    pe_min:               float | None = None
+    pe_max:               float | None = None
+    pb_min:               float | None = None
+    pb_max:               float | None = None
+    eps_min:              float | None = None
+    eps_max:              float | None = None
+    dividend_yield_min:   float | None = None
+    dividend_yield_max:   float | None = None
+    debt_to_equity_max:   float | None = None
+    roe_min:              float | None = None
+    roce_min:             float | None = None
+
 
 class ScanRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
@@ -421,8 +436,30 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
 
         # ── Turnover in crores ────────────────────────────────────────────
         if f.turnover_min_cr is not None:
-            # turnover stored in INR, 1 Cr = 10_000_000
             if turnover < f.turnover_min_cr * 10_000_000: continue
+
+        # ── Fundamentals (from stock_universe) ───────────────────────────
+        mc   = su.get("market_cap_cr")
+        pe   = su.get("pe_ratio")
+        pb   = su.get("pb_ratio")
+        eps_ = su.get("eps")
+        dy   = su.get("dividend_yield")
+        dte  = su.get("debt_to_equity")
+        roe_ = su.get("roe")
+        roce_= su.get("roce")
+        if f.market_cap_min     is not None and (mc   is None or mc   < f.market_cap_min):     continue
+        if f.market_cap_max     is not None and (mc   is None or mc   > f.market_cap_max):     continue
+        if f.pe_min             is not None and (pe   is None or pe   < f.pe_min):             continue
+        if f.pe_max             is not None and (pe   is None or pe   > f.pe_max):             continue
+        if f.pb_min             is not None and (pb   is None or pb   < f.pb_min):             continue
+        if f.pb_max             is not None and (pb   is None or pb   > f.pb_max):             continue
+        if f.eps_min            is not None and (eps_ is None or eps_ < f.eps_min):            continue
+        if f.eps_max            is not None and (eps_ is None or eps_ > f.eps_max):            continue
+        if f.dividend_yield_min is not None and (dy   is None or dy   < f.dividend_yield_min): continue
+        if f.dividend_yield_max is not None and (dy   is None or dy   > f.dividend_yield_max): continue
+        if f.debt_to_equity_max is not None and (dte  is None or dte  > f.debt_to_equity_max): continue
+        if f.roe_min            is not None and (roe_ is None or roe_ < f.roe_min):            continue
+        if f.roce_min           is not None and (roce_is None or roce_< f.roce_min):           continue
 
         # ── Series / active stock filter ──────────────────────────────────
         effective_series = f.series if f.series else ["EQ", "BE"]
@@ -483,6 +520,15 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "delivery_pct":   float(row["delivery_pct"]) if row.get("delivery_pct") is not None else None,
             "is_new_52w_high": bool(row.get("is_new_52w_high")),
             "is_inside_bar":   bool(row.get("is_inside_bar")),
+            # Fundamentals
+            "market_cap_cr":   su.get("market_cap_cr"),
+            "pe_ratio":        su.get("pe_ratio"),
+            "pb_ratio":        su.get("pb_ratio"),
+            "eps":             su.get("eps"),
+            "dividend_yield":  su.get("dividend_yield"),
+            "debt_to_equity":  su.get("debt_to_equity"),
+            "roe":             su.get("roe"),
+            "roce":            su.get("roce"),
         })
 
     return results
@@ -526,7 +572,7 @@ async def run_scanner(
             "bb_upper,bb_middle,bb_lower,bb_width,"
             "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
             "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
+            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
         )
         .eq("trade_date", latest_date)
     )
