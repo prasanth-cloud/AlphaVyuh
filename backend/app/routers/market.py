@@ -32,7 +32,6 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         .select(
             "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
             "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,"
-            "pct_change,is_new_52w_high,is_new_52w_low,"
             "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
         )
         .eq("trade_date", latest_date)
@@ -64,17 +63,14 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         volume = int(r.get("volume") or 0)
         avg_vol = int(r.get("avg_volume_20d") or 0)
 
-        # pct_change — prefer stored, fall back to computed
-        if r.get("pct_change") is not None:
-            pct = float(r["pct_change"])
-        elif prev_close:
-            pct = round((close - prev_close) / prev_close * 100, 2)
-        else:
-            pct = 0.0
+        pct = round((close - prev_close) / prev_close * 100, 2) if prev_close else 0.0
 
         vol_ratio = round(volume / avg_vol, 2) if avg_vol else None
         w52h = _f(r.get("week_52_high"), None)
+        w52l = _f(r.get("week_52_low"), None)
         w52h_pct = round((w52h - close) / close * 100, 2) if w52h and close else None
+        is_new_52w_high = bool(w52h and close and close >= w52h * 0.995)
+        is_new_52w_low  = bool(w52l and close and close <= w52l * 1.005)
 
         enriched.append({
             "symbol": r["symbol"],
@@ -90,8 +86,8 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
             "ema_200": _f(r.get("ema_200"), None),
             "week_52_high": w52h,
             "week_52_high_pct": w52h_pct,
-            "is_new_52w_high": bool(r.get("is_new_52w_high")),
-            "is_new_52w_low": bool(r.get("is_new_52w_low")),
+            "is_new_52w_high": is_new_52w_high,
+            "is_new_52w_low": is_new_52w_low,
         })
 
     total = len(enriched)
