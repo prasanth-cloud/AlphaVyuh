@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp",
+      "description": "Query the alphavyuh DB, inspect schema, read logs. Use this before writing SQL to check current state."
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com",
+      "description": "Check deploys, read build & runtime logs. Use when debugging prod issues or verifying a deploy."
+    },
+    "notion": {
+      "type": "http",
+      "url": "https://mcp.notion.com/mcp",
+      "description": "Read PRDs, design docs, and the trading playbook. Use when a task references a doc or ticket."
+    },
+    "github": {
+      "type": "stdio",
+      "command": "bunx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "Open/read PRs, inspect CI runs, read issues. Set GITHUB_TOKEN in your shell."
+    }
+  }
+}
