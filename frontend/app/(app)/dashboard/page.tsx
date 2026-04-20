@@ -99,15 +99,18 @@ function EmaBreadthCard({ data }: { data: MarketOverview }) {
       <h2 className="heading-card" style={{ marginBottom: 12 }}>EMA breadth</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {items.map(e => {
-          const color = (e.pct ?? 0) > 60 ? 'var(--gain)' : (e.pct ?? 0) > 40 ? 'var(--warn)' : 'var(--loss)'
+          const hasData = e.pct != null && e.pct > 0
+          const color = !hasData ? 'var(--text-tertiary)' : (e.pct ?? 0) > 60 ? 'var(--gain)' : (e.pct ?? 0) > 40 ? 'var(--warn)' : 'var(--loss)'
           return (
             <div key={e.label}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{e.label}</span>
-                <span className="mono" style={{ fontSize: 12, fontWeight: 500, color }}>{e.pct ?? '—'}%</span>
+                <span className="mono" style={{ fontSize: 12, fontWeight: 500, color }}>
+                  {hasData ? `${e.pct}%` : '—'}
+                </span>
               </div>
               <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.min(100, e.pct ?? 0)}%`, background: color }} />
+                <div style={{ height: '100%', width: hasData ? `${Math.min(100, e.pct ?? 0)}%` : '0%', background: color }} />
               </div>
             </div>
           )
@@ -242,9 +245,15 @@ export default function DashboardPage() {
                 <span className="caption">% above EMA 20 · avg chg%</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {data.sector_breadth.map(s => (
-                  <SectorBar key={s.sector} sector={s.sector} breadth_pct={s.breadth_pct} avg_pct_change={s.avg_pct_change} />
-                ))}
+                {(!data.sector_breadth || data.sector_breadth.length === 0) ? (
+                  <div style={{ padding: '32px 0', textAlign: 'center' }}>
+                    <div className="caption">No sector data yet — loads after market close</div>
+                  </div>
+                ) : (
+                  data.sector_breadth.map(s => (
+                    <SectorBar key={s.sector} sector={s.sector} breadth_pct={s.breadth_pct} avg_pct_change={s.avg_pct_change} />
+                  ))
+                )}
               </div>
             </Card>
 
