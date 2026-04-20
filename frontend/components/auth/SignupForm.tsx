@@ -36,7 +36,7 @@ export default function SignupForm() {
 
     setLoading(true);
     const supabase = createClient();
-    const { error: err } = await supabase.auth.signUp({
+    const { data, error: err } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: { data: { full_name: form.full_name } },
@@ -45,10 +45,16 @@ export default function SignupForm() {
 
     if (err) {
       if (err.message.toLowerCase().includes("already")) {
-        setError("Email already in use");
+        setError("Email already in use. Please log in instead.");
       } else {
         setError(err.message);
       }
+      return;
+    }
+
+    // If email confirmation is disabled, Supabase returns a session immediately
+    if (data.session) {
+      window.location.replace("/dashboard");
       return;
     }
 
