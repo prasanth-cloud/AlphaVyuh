@@ -1,37 +1,23 @@
+import { createClient } from './supabase'
+
 const API = process.env.NEXT_PUBLIC_API_URL!;
 
-const SUPA_URL = "https://fyxltykqdvacbdgmeucf.supabase.co";
-const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ5eGx0eWtxZHZhY2JkZ21ldWNmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMjU5ODcsImV4cCI6MjA5MTcwMTk4N30.ql5GQNBNaVJvnFwQMXMiVuJ9OuvZcERSWVLR929qG1U";
-const SUPA_EMAIL = "prasaanthbugga6840@gmail.com";
-const SUPA_PASS = "Admin2026";
-
-let _token: string | null = null;
-let _tokenExpiry = 0;
-let _loginPromise: Promise<string> | null = null;
-
-async function autoLogin(): Promise<string> {
-  const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "apikey": SUPA_KEY },
-    body: JSON.stringify({ email: SUPA_EMAIL, password: SUPA_PASS }),
-  });
-  if (!res.ok) return "";
-  const data = await res.json();
-  _token = data.access_token ?? null;
-  _tokenExpiry = Date.now() + (data.expires_in ?? 3600) * 1000 - 60_000;
-  return _token ?? "";
-}
-
-async function getToken(): Promise<string> {
-  if (_token && Date.now() < _tokenExpiry) return _token;
-  if (_loginPromise) return _loginPromise;
-  _loginPromise = autoLogin().finally(() => { _loginPromise = null; });
-  return _loginPromise;
+async function getToken(): Promise<string | null> {
+  try {
+    const sb = createClient()
+    const { data } = await sb.auth.getSession()
+    return data.session?.access_token ?? null
+  } catch {
+    return null
+  }
 }
 
 export async function authHeaders(): Promise<HeadersInit> {
-  const token = await getToken();
-  return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  const token = await getToken()
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
 }
 
 // Public endpoints don't need auth — just JSON content-type
