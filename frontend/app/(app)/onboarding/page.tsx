@@ -22,8 +22,13 @@ const BROKERS = [
   { value: "none",     label: "None yet",  logo: "–" },
 ];
 
-const cardStyle = { background: "var(--app-surface2)", border: "1px solid var(--app-border)", borderRadius: "14px" };
-const inputStyle = { background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" };
+const cardStyle = {
+  background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: "24px",
+  boxShadow: "var(--shadow-panel)",
+};
+const inputStyle = { background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), var(--surface-2)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" };
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
@@ -38,12 +43,12 @@ export default function OnboardingPage() {
     return (
       <label className="flex items-center gap-3 p-3 rounded-[8px] border cursor-pointer transition-colors"
         style={checked
-          ? { border: "1px solid #5b63f5", background: "rgba(91,99,245,0.1)" }
-          : { border: "1px solid var(--app-border)", background: "transparent" }}>
+          ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
+          : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}>
         <input type="radio" name={name} value={value} checked={checked}
           onChange={() => setForm((f) => ({ ...f, [name]: value }))}
-          className="accent-[#5b63f5]" />
-        <span className="text-[14px]" style={{ color: "var(--app-text1)" }}>{label}</span>
+          className="accent-[var(--accent)]" />
+        <span className="text-[14px]" style={{ color: "var(--text-primary)" }}>{label}</span>
       </label>
     );
   }
@@ -75,24 +80,39 @@ export default function OnboardingPage() {
   const zerodhaSelected = form.broker === "zerodha";
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "var(--app-bg)" }}>
-      <div className="w-full max-w-lg">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "transparent" }}>
+      <div className="w-full max-w-3xl">
+        <div style={{
+          padding: "22px 24px",
+          borderRadius: 24,
+          border: "1px solid rgba(255,255,255,0.08)",
+          background:
+            "radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
+          boxShadow: "var(--shadow-panel)",
+          marginBottom: 16,
+        }}>
+          <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Onboarding</div>
+          <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Set up your desk before the first real workflow.</h1>
+          <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
+            Tell AlphaVyuh how you trade, connect your preferred broker, and start with the same visual language as the public site and product workspace.
+          </p>
+        </div>
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
           {STEPS.map((s, i) => (
             <div key={i} className="flex items-center gap-2 flex-1">
               <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0"
                 style={i <= step
-                  ? { background: "#5b63f5", color: "#fff" }
-                  : { background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text3)" }}>
+                  ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }
+                  : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-tertiary)" }}>
                 {i < step ? "✓" : i + 1}
               </div>
               <span className="text-[13px]"
-                style={{ color: i === step ? "var(--app-text1)" : "var(--app-text3)", fontWeight: i === step ? 600 : 400 }}>
+                style={{ color: i === step ? "var(--text-primary)" : "var(--text-tertiary)", fontWeight: i === step ? 600 : 400 }}>
                 {s}
               </span>
               {i < STEPS.length - 1 && (
-                <div className="flex-1 h-px" style={{ background: i < step ? "#5b63f5" : "var(--app-border)" }} />
+                <div className="flex-1 h-px" style={{ background: i < step ? "var(--accent)" : "rgba(255,255,255,0.08)" }} />
               )}
             </div>
           ))}
@@ -101,12 +121,12 @@ export default function OnboardingPage() {
         {/* Step 1 — About you */}
         {step === 0 && (
           <div className="p-6" style={cardStyle}>
-            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Tell us about yourself</h2>
-            <p className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>We will personalise your experience</p>
+            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>Tell us about yourself</h2>
+            <p className="text-[13px] mb-5" style={{ color: "var(--text-secondary)" }}>We will personalise your experience</p>
 
             <div className="space-y-5">
               <div>
-                <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--app-text3)" }}>Experience level</p>
+                <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--text-tertiary)" }}>Experience level</p>
                 <div className="space-y-2">
                   <Radio name="experience" value="beginner" label="Beginner — new to trading" />
                   <Radio name="experience" value="intermediate" label="Intermediate — 1–3 years" />
@@ -114,7 +134,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div>
-                <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--app-text3)" }}>What do you trade?</p>
+                <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--text-tertiary)" }}>What do you trade?</p>
                 <div className="space-y-2">
                   <Radio name="trades" value="equity" label="Equity (stocks)" />
                   <Radio name="trades" value="fno" label="F&O (futures & options)" />
@@ -123,7 +143,7 @@ export default function OnboardingPage() {
               </div>
               <button
                 className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-50"
-                style={{ background: "#5b63f5" }}
+                style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
                 disabled={!form.experience || !form.trades}
                 onClick={() => setStep(1)}>
                 Continue →
@@ -135,8 +155,8 @@ export default function OnboardingPage() {
         {/* Step 2 — Broker */}
         {step === 1 && (
           <div className="p-6" style={cardStyle}>
-            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Connect your broker</h2>
-            <p className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Orders placed on AlphaVyuh will route through your broker</p>
+            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>Connect your broker</h2>
+            <p className="text-[13px] mb-5" style={{ color: "var(--text-secondary)" }}>Orders placed on AlphaVyuh will route through your broker</p>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
               {BROKERS.map((b) => (
@@ -145,31 +165,31 @@ export default function OnboardingPage() {
                   onClick={() => setForm((f) => ({ ...f, broker: b.value }))}
                   className="flex items-center gap-2 p-3 rounded-[8px] text-left transition-all"
                   style={form.broker === b.value
-                    ? { border: "1px solid #5b63f5", background: "rgba(91,99,245,0.1)" }
-                    : { border: "1px solid var(--app-border)", background: "transparent" }}>
+                    ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
+                    : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold"
                     style={form.broker === b.value
-                      ? { background: "#5b63f5", color: "#fff" }
-                      : { background: "var(--app-surface3)", color: "var(--app-text3)" }}>
+                      ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }
+                      : { background: "rgba(255,255,255,0.03)", color: "var(--text-tertiary)" }}>
                     {b.logo}
                   </div>
-                  <span className="text-[13px] font-medium" style={{ color: "var(--app-text1)" }}>{b.label}</span>
+                  <span className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>{b.label}</span>
                 </button>
               ))}
             </div>
 
             {zerodhaSelected && (
-              <div className="space-y-3 mb-4 p-4 rounded-[8px]" style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)" }}>
-                <p className="text-[12px] font-semibold" style={{ color: "#5b63f5" }}>
+              <div className="space-y-3 mb-4 p-4 rounded-[14px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
                   Zerodha Kite Connect — enter your API credentials
                 </p>
-                <p className="text-[11px]" style={{ color: "var(--app-text3)" }}>
+                <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
                   Get your API key & secret from{" "}
-                  <span style={{ color: "#5b63f5" }}>developers.kite.trade</span>.
-                  Set redirect URL to <code className="px-1 rounded text-[10px]" style={{ background: "var(--app-surface2)", color: "var(--app-text2)" }}>http://localhost:3000/broker/callback</code>
+                  <span style={{ color: "var(--accent)" }}>developers.kite.trade</span>.
+                  Set redirect URL to <code className="px-1 rounded text-[10px]" style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-secondary)" }}>http://localhost:3000/broker/callback</code>
                 </p>
                 <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1" style={{ color: "var(--app-text3)" }}>API Key</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1" style={{ color: "var(--text-tertiary)" }}>API Key</label>
                   <input
                     type="text"
                     value={form.broker_api_key}
@@ -180,7 +200,7 @@ export default function OnboardingPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1" style={{ color: "var(--app-text3)" }}>API Secret</label>
+                  <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1" style={{ color: "var(--text-tertiary)" }}>API Secret</label>
                   <input
                     type="password"
                     value={form.broker_api_secret}
@@ -196,13 +216,13 @@ export default function OnboardingPage() {
             <div className="flex gap-3">
               <button
                 className="flex-1 py-2.5 rounded-[8px] text-[14px] font-semibold transition-colors"
-                style={{ border: "1px solid var(--app-border)", color: "var(--app-text3)", background: "transparent" }}
+                style={{ border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-tertiary)", background: "transparent" }}
                 onClick={() => setStep(2)}>
                 Skip for now
               </button>
               <button
                 className="flex-1 py-2.5 rounded-[8px] text-[14px] font-bold text-white"
-                style={{ background: "#5b63f5" }}
+                style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
                 onClick={() => setStep(2)}>
                 Continue →
               </button>
@@ -215,18 +235,18 @@ export default function OnboardingPage() {
           <div className="p-6" style={cardStyle}>
             <div className="text-center mb-6">
               <div className="w-14 h-14 rounded-full flex items-center justify-center text-[28px] mx-auto mb-3"
-                style={{ background: "rgba(38,166,91,0.15)" }}>
+                style={{ background: "rgba(38,166,91,0.15)", color: "var(--gain)" }}>
                 ✓
               </div>
-              <h2 className="text-[20px] font-bold" style={{ color: "var(--app-text1)" }}>You are all set!</h2>
-              <p className="text-[13px] mt-1" style={{ color: "var(--app-text3)" }}>
+              <h2 className="text-[20px] font-bold" style={{ color: "var(--text-primary)" }}>You are all set!</h2>
+              <p className="text-[13px] mt-1" style={{ color: "var(--text-secondary)" }}>
                 {form.broker && form.broker !== "none"
                   ? `Broker set to ${BROKERS.find(b => b.value === form.broker)?.label}. You can connect it in Settings anytime.`
                   : "You can connect a broker later in Settings."}
               </p>
             </div>
 
-            <div className="space-y-2 mb-5 text-[13px]" style={{ color: "var(--app-text2)" }}>
+            <div className="space-y-2 mb-5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
               {[
                 "Scan stocks with 35+ filters on the Scanner page",
                 "Add them to a Watchlist to track closely",
@@ -234,7 +254,7 @@ export default function OnboardingPage() {
                 "Every order auto-records in your Journal — AI reviews your mistakes",
               ].map((text, i) => (
                 <div key={i} className="flex items-start gap-2">
-                  <span className="font-bold mt-0.5" style={{ color: "#5b63f5" }}>{i + 1}.</span>
+                  <span className="font-bold mt-0.5" style={{ color: "var(--accent)" }}>{i + 1}.</span>
                   <span>{text}</span>
                 </div>
               ))}
@@ -249,7 +269,7 @@ export default function OnboardingPage() {
 
             <button
               className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
-              style={{ background: "#5b63f5" }}
+              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
               disabled={loading}
               onClick={finish}>
               {loading ? "Setting up…" : "Go to Dashboard →"}

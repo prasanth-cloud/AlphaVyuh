@@ -337,10 +337,15 @@ function SettingsContent() {
     { id: "billing", label: "Billing" },
   ];
 
-  const cardStyle = { background: "var(--app-surface2)", border: "1px solid var(--app-border)", borderRadius: "10px" };
+  const cardStyle = {
+    background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: "20px",
+    boxShadow: "var(--shadow-panel)",
+  };
 
   return (
-    <div className="min-h-full" style={{ background: "var(--app-bg)" }}>
+    <div className="min-h-full" style={{ background: "transparent", display: "flex", flexDirection: "column", gap: 16 }}>
       {toast && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg text-[13px] font-medium text-white shadow-lg z-50 pointer-events-none"
           style={{ background: toast.ok === false ? "#e5383b" : "#26a65b" }}>
@@ -349,17 +354,32 @@ function SettingsContent() {
       )}
 
       {/* Header */}
-      <div className="px-5 pt-5 pb-0" style={{ borderBottom: "1px solid var(--app-border)", background: "var(--app-surface)" }}>
-        <div className="text-[20px] font-semibold tracking-tight mb-3" style={{ color: "var(--app-text1)" }}>Settings</div>
-        <div className="flex gap-0">
+      <div style={{
+        padding: "22px 24px",
+        borderRadius: 24,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "radial-gradient(circle at top right, rgba(90,139,232,0.14), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
+        boxShadow: "var(--shadow-panel)",
+      }}>
+        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Control Panel</div>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 18 }}>
+          <div>
+            <div style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8, color: "var(--text-primary)" }}>Settings built in the same product language as the rest of the desk.</div>
+            <div style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
+              Manage your profile, broker access, billing state, and launch readiness from one branded control surface.
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 flex-wrap">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className="px-4 py-2 text-[13px] font-medium border-b-2 transition-colors"
+              className="px-4 py-2.5 text-[13px] font-medium transition-colors rounded-full border"
               style={tab === t.id
-                ? { borderColor: "#5b63f5", color: "#5b63f5" }
-                : { borderColor: "transparent", color: "var(--app-text3)" }}
+                ? { borderColor: "rgba(86,215,193,0.16)", color: "var(--text-primary)", background: "rgba(255,255,255,0.05)" }
+                : { borderColor: "transparent", color: "var(--text-tertiary)", background: "transparent" }}
             >
               {t.label}
             </button>
@@ -369,7 +389,7 @@ function SettingsContent() {
 
       {/* ── Profile tab ────────────────────────────────────────────────── */}
       {tab === "profile" && (
-        <div className="max-w-2xl px-5 py-6">
+        <div className="max-w-2xl">
           <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Profile</div>
           <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Update your display name and connect Telegram for scan alert notifications.</div>
 
@@ -438,7 +458,7 @@ function SettingsContent() {
                   onClick={saveProfile}
                   disabled={saving}
                   className="px-5 py-2.5 text-white text-[13px] font-medium rounded-[8px] transition-opacity disabled:opacity-50"
-                  style={{ background: "#5b63f5" }}
+                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}
                 >
                   {saving ? "Saving..." : "Save changes"}
                 </button>
@@ -451,7 +471,7 @@ function SettingsContent() {
 
       {/* ── Broker tab ─────────────────────────────────────────────────── */}
       {tab === "broker" && (
-        <div className="max-w-2xl px-5 py-6">
+        <div className="max-w-2xl">
           <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Broker Connection</div>
           <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Connect your broker to route orders directly from charts.</div>
 
@@ -493,7 +513,7 @@ function SettingsContent() {
                   <>
                     <div className="text-[11px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
                       Get your API key &amp; secret from{" "}
-                      <span className="font-medium" style={{ color: "#5b63f5" }}>developers.kite.trade</span>.
+                      <span className="font-medium" style={{ color: "var(--accent)" }}>developers.kite.trade</span>.
                       Set the redirect URL to{" "}
                       <code className="font-mono text-[10px] px-1 rounded" style={{ background: "var(--app-surface2)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}>
                         {typeof window !== "undefined" ? `${window.location.origin}/broker/callback` : "/broker/callback"}
@@ -534,8 +554,8 @@ function SettingsContent() {
                         <button
                           onClick={handleZerodhaConnect}
                           disabled={connectingZerodha}
-                          className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
-                          style={{ background: "#5b63f5" }}
+                          className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold transition-opacity disabled:opacity-50"
+                          style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}
                         >
                           {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
                         </button>
@@ -552,8 +572,8 @@ function SettingsContent() {
                     <button
                       onClick={saveBroker}
                       disabled={savingBroker}
-                      className="px-4 py-2 rounded-[8px] text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
-                      style={{ background: "#5b63f5" }}
+                      className="px-4 py-2 rounded-[8px] text-[13px] font-medium transition-opacity disabled:opacity-50"
+                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}
                     >
                       {savingBroker ? "Saving..." : "Save"}
                     </button>
@@ -567,7 +587,7 @@ function SettingsContent() {
 
       {/* ── Billing tab ────────────────────────────────────────────────── */}
       {tab === "billing" && (
-        <div className="px-5 py-6 max-w-[900px]">
+        <div className="max-w-[900px]">
           {billingLoading ? (
             <div className="flex items-center justify-center py-16">
               <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
@@ -575,19 +595,19 @@ function SettingsContent() {
           ) : (
             <>
               {/* Current plan banner */}
-              <div className="p-5 mb-6 flex items-center justify-between flex-wrap gap-4 rounded-[12px]" style={cardStyle}>
+              <div className="p-5 mb-6 flex items-center justify-between flex-wrap gap-4" style={cardStyle}>
                 <div className="flex items-center gap-3">
                   {currentPlan === "free"  && <Zap size={18} style={{ color: "var(--app-text3)" }} />}
-                  {currentPlan === "pro"   && <Sparkles size={18} style={{ color: "#5b63f5" }} />}
-                  {currentPlan === "elite" && <Crown size={18} style={{ color: "#d97706" }} />}
+                  {currentPlan === "pro"   && <Sparkles size={18} style={{ color: "var(--accent)" }} />}
+                  {currentPlan === "elite" && <Crown size={18} style={{ color: "var(--warn)" }} />}
                   <div>
                     <div className="text-[14px] font-semibold capitalize" style={{ color: "var(--app-text1)" }}>
                       {currentPlan} Plan
                       {currentPlan !== "free" && (
                         <span className="ml-2 text-[11px] font-semibold px-2 py-0.5 rounded-full"
                           style={{
-                            background: currentPlan === "pro" ? "rgba(91,99,245,0.15)" : "rgba(217,119,6,0.15)",
-                            color:      currentPlan === "pro" ? "#5b63f5" : "#d97706",
+                            background: currentPlan === "pro" ? "var(--accent-subtle)" : "var(--warn-subtle)",
+                            color:      currentPlan === "pro" ? "var(--accent)" : "var(--warn)",
                           }}>
                           Active
                         </span>
@@ -612,7 +632,7 @@ function SettingsContent() {
                       <button key={c} onClick={() => switchCurrency(c)}
                         className="px-3 py-1.5 text-[12px] font-semibold transition-colors"
                         style={billingCurrency === c
-                          ? { background: "#5b63f5", color: "#fff" }
+                          ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }
                           : { background: "transparent", color: "var(--app-text3)" }}>
                         {c === "INR" ? "₹ India" : "$ NRI / International"}
                       </button>
@@ -626,7 +646,7 @@ function SettingsContent() {
                       <button key={p} onClick={() => setBillingPeriod(p)}
                         className="px-3 py-1.5 text-[12px] font-semibold transition-colors"
                         style={billingPeriod === p
-                          ? { background: "#26a65b", color: "#fff" }
+                          ? { background: "var(--gain)", color: "#fff" }
                           : { background: "transparent", color: "var(--app-text3)" }}>
                         {p === "monthly" ? "Monthly" : "Annual (save 2 months)"}
                       </button>
@@ -646,8 +666,9 @@ function SettingsContent() {
                   return (
                     <div key={plan.id} className="rounded-[14px] p-5 flex flex-col"
                       style={{
-                        background: "var(--app-surface2)",
-                        border: isCurrent ? `2px solid ${plan.color}` : "1px solid var(--app-border)",
+                        background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)",
+                        border: isCurrent ? `2px solid ${plan.id === 'pro' ? 'var(--accent)' : plan.color}` : "1px solid rgba(255,255,255,0.08)",
+                        boxShadow: "var(--shadow-panel)",
                       }}>
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
@@ -718,7 +739,7 @@ function SettingsContent() {
                         showToast("Referral code copied!", true);
                       }}
                       className="px-4 py-2.5 rounded-[8px] text-[13px] font-medium text-white transition-opacity"
-                      style={{ background: "#5b63f5" }}>
+                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}>
                       Copy
                     </button>
                   </div>

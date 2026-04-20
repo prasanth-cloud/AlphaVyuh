@@ -31,6 +31,7 @@ import {
   searchSymbols,
   getCandles,
   placeOrder,
+  getQuoteLive,
   type PlaceOrderRequest,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
@@ -327,6 +328,55 @@ function WatchlistContent() {
 
   useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const activeSymbolsKey = (watchlists.find(w => w.id === activeId)?.items ?? [])
+    .map(item => item.symbol)
+    .join(",");
+
+  useEffect(() => {
+    if (!activeId) return;
+    const active = watchlists.find(w => w.id === activeId);
+    if (!active?.items?.length) return;
+    const activeItems = active.items;
+
+    let cancelled = false;
+
+    async function refreshLiveQuotes() {
+      const updates = await Promise.all(
+        activeItems.map(async (item) => {
+          const live = await getQuoteLive(item.symbol).catch(() => null);
+          return live ? {
+            symbol: item.symbol,
+            close: live.close,
+            pct_change: live.pct_change,
+          } : null;
+        })
+      );
+
+      if (cancelled) return;
+      const liveMap = new Map(updates.filter(Boolean).map((u) => [u!.symbol, u!]));
+      setWatchlists(prev => prev.map(w => (
+        w.id !== activeId
+          ? w
+          : {
+              ...w,
+              items: w.items.map(item => {
+                const live = liveMap.get(item.symbol);
+                return live ? { ...item, close: live.close, pct_change: live.pct_change } : item;
+              }),
+            }
+      )));
+    }
+
+    refreshLiveQuotes();
+    const id = setInterval(refreshLiveQuotes, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  // We intentionally refresh only when the active watchlist or its symbol set changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, activeSymbolsKey]);
+
   const symbolParam = searchParams.get("symbol");
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
@@ -475,17 +525,56 @@ function WatchlistContent() {
   }, [activeId]);
 
   return (
-    <div style={{ display: "flex", height: "100%", overflow: "hidden", background: "var(--surface-0)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, minHeight: "calc(100vh - 120px)" }}>
+      <div style={{
+        padding: "22px 24px",
+        borderRadius: 24,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "radial-gradient(circle at top right, rgba(90,139,232,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
+        boxShadow: "var(--shadow-panel)",
+      }}>
+        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Watchlist Desk</div>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>
+              Track names, inspect charts, and route orders from the same flow.
+            </h1>
+            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
+              Keep your shortlist clean, reorder it as the market changes, and let the active chart react instantly as you move through symbols.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              `${watchlists.length} watchlists`,
+              activeWl ? `${activeWl.items.length} names active` : "Pick a list",
+              chartSymbol || "Hover to preview",
+            ].map((item) => (
+              <div key={item} style={{
+                minWidth: 120,
+                padding: "12px 14px",
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+              }}>
+                <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{item}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 16, minHeight: "calc(100vh - 320px)", overflow: "hidden" }}>
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", top: 64, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "8px 16px", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-dropdown)", background: "var(--surface-float)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
+        <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
           {toast}
         </div>
       )}
 
       {/* ── Watchlist tabs sidebar ─── */}
       {sidebarCollapsed ? (
-        <div style={{ width: 36, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 12, background: "var(--surface-1)", borderRight: "1px solid var(--border-subtle)" }}>
+        <div style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, background: "linear-gradient(180deg, rgba(86,215,193,0.06), rgba(255,255,255,0.02)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 22, boxShadow: "var(--shadow-panel)" }}>
           <button onClick={() => setSidebarCollapsed(false)} style={{ color: "var(--text-tertiary)" }}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
               <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -493,8 +582,8 @@ function WatchlistContent() {
           </button>
         </div>
       ) : (
-        <aside style={{ width: 200, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "var(--surface-1)", borderRight: "1px solid var(--border-subtle)" }}>
-          <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <aside style={{ width: 228, flexShrink: 0, display: "flex", flexDirection: "column", height: "100%", background: "linear-gradient(180deg, rgba(86,215,193,0.06), rgba(255,255,255,0.02)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, overflow: "hidden", boxShadow: "var(--shadow-panel)" }}>
+          <div style={{ padding: "14px 14px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Watchlists</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <button onClick={() => setShowNewWl(o => !o)} style={{ color: "var(--accent)", lineHeight: 0 }}>
@@ -564,9 +653,9 @@ function WatchlistContent() {
       )}
 
       {/* ── Stock list ─────────────────────────────────────── */}
-      <div style={{ width: 260, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--surface-1)", borderRight: "1px solid var(--border-subtle)" }}>
+      <div style={{ width: 296, flexShrink: 0, display: "flex", flexDirection: "column", overflow: "hidden", background: "linear-gradient(180deg, rgba(90,139,232,0.04), rgba(255,255,255,0.02)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, boxShadow: "var(--shadow-panel)" }}>
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--border-subtle)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
               {activeWl ? activeWl.name : "Watchlist"}
@@ -614,7 +703,7 @@ function WatchlistContent() {
                 )}
               </div>
               <button onClick={handleAddSymbol} disabled={adding || !symbolInput.trim()}
-                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 500, background: "var(--accent)", color: "#0A1712", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
+                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
                 {adding ? "…" : "Add"}
               </button>
             </div>
@@ -663,7 +752,7 @@ function WatchlistContent() {
       </div>
 
       {/* ── Chart + order panel ─────────────────────────────── */}
-      <div style={{ flex: 1, minWidth: 0, overflow: "hidden", background: "var(--surface-1)" }}>
+      <div style={{ flex: 1, minWidth: 0, overflow: "hidden", background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, boxShadow: "var(--shadow-panel)" }}>
         {chartSymbol ? (
           <ChartPanel key={chartSymbol} symbol={chartSymbol}
             latestClose={activeWl?.items.find(i => i.symbol === chartSymbol)?.close} />
@@ -681,6 +770,7 @@ function WatchlistContent() {
         .wl-item:hover .wl-delete { opacity: 1 !important; }
         tr:hover .remove-btn { opacity: 1 !important; }
       `}</style>
+      </div>
     </div>
   );
 }

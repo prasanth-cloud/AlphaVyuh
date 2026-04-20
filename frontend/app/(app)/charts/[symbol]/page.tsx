@@ -83,7 +83,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const router = useRouter();
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
-  const [liveMode, setLiveMode] = useState(false);
+  const [liveMode, setLiveMode] = useState(true);
 
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -427,7 +427,44 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const showAtr   = activeIndicators.includes("atr");
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ height: "calc(100vh - 48px)", background: "var(--app-bg)" }}>
+    <div className="flex flex-col overflow-hidden" style={{ minHeight: "calc(100vh - 120px)", gap: 16, background: "transparent" }}>
+      <div style={{
+        padding: "20px 24px",
+        borderRadius: 24,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
+        boxShadow: "var(--shadow-panel)",
+      }}>
+        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Chart Desk</div>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>{symbol} chart workspace</h1>
+            <p style={{ maxWidth: 760, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
+              Inspect price structure, stack indicators, compare symbols, draw levels, route orders, and create alerts without leaving the same market surface.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              `${timeframe} timeframe`,
+              liveMode ? "Live mode on" : "EOD mode",
+              `${activeIndicators.length} indicators`,
+            ].map((item) => (
+              <div key={item} style={{
+                minWidth: 120,
+                padding: "12px 14px",
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+              }}>
+                <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{item}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col overflow-hidden" style={{ flex: 1, borderRadius: 24, border: "1px solid rgba(255,255,255,0.08)", boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)), var(--surface-1)" }}>
 
       {/* Price alert modal */}
       {showAlertModal && (
@@ -524,8 +561,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       )}
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2 gap-4 flex-shrink-0"
-        style={{ background: "var(--app-surface)", borderBottom: "1px solid var(--app-border)" }}>
+      <div className="flex items-center justify-between px-4 py-3 gap-4 flex-shrink-0"
+        style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         {/* Left: symbol search + name */}
         <div className="flex items-center gap-3">
           <SymbolSearch
@@ -792,7 +829,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
         {/* Sidebar */}
         <aside className="w-[240px] flex-shrink-0 flex flex-col overflow-y-auto"
-          style={{ background: "var(--app-surface)", borderRight: "1px solid var(--app-border)" }}>
+          style={{ background: "linear-gradient(180deg, rgba(86,215,193,0.04), rgba(255,255,255,0.02)), var(--surface-1)", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
           {loading ? (
             <div className="p-4 space-y-3">
               {[80, 50, 60, 40, 70].map((w, i) => (
@@ -1080,7 +1117,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         </aside>
 
         {/* Chart area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "var(--app-bg)" }}>
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "transparent" }}>
           {/* OHLCV legend / crosshair overlay */}
           <div className="relative flex-1 min-h-0">
             {/* Candle legend */}
@@ -1282,6 +1319,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             />
           )}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -63,11 +63,12 @@ export default function SignupForm() {
 
   if (done) {
     return (
-      <Card className="bg-gray-900 border-gray-800">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-white">Check your email</CardTitle>
-          <CardDescription className="text-gray-400">
-            We sent a confirmation link to <strong className="text-white">{form.email}</strong>.
+          <div className="auth-kicker">Verification</div>
+          <CardTitle>Check your email</CardTitle>
+          <CardDescription>
+            We sent a confirmation link to <strong style={{ color: "var(--text-primary)" }}>{form.email}</strong>.
             Click it to activate your account.
           </CardDescription>
         </CardHeader>
@@ -76,54 +77,53 @@ export default function SignupForm() {
   }
 
   return (
-    <Card className="bg-gray-900 border-gray-800">
+    <Card>
       <CardHeader>
-        <div className="mb-2 text-2xl font-bold text-white tracking-tight">AlphaVyuh</div>
-        <CardTitle className="text-white">Create your account</CardTitle>
-        <CardDescription className="text-gray-400">Start your free trading edge today</CardDescription>
+        <div className="auth-kicker">New Account</div>
+        <div style={{ marginBottom: 10, fontSize: 30, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
+          Create your account
+        </div>
+        <CardDescription>Start your free trading edge in the same workspace you saw on the landing page.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <Label htmlFor="full_name" className="text-gray-300">Full name</Label>
+            <Label htmlFor="full_name">Full name</Label>
             <Input id="full_name" value={form.full_name} onChange={set("full_name")}
-              placeholder="Arjun Sharma" required
-              className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" />
+              placeholder="Arjun Sharma" required />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="email" className="text-gray-300">Email</Label>
+            <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" value={form.email} onChange={set("email")}
-              placeholder="arjun@example.com" required
-              className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" />
+              placeholder="arjun@example.com" required />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="password" className="text-gray-300">Password</Label>
+            <Label htmlFor="password">Password</Label>
             <div className="relative">
               <Input id="password" type={showPass ? "text" : "password"} value={form.password}
-                onChange={set("password")} placeholder="Min 8 characters" required minLength={8}
-                className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 pr-10" />
+                onChange={set("password")} placeholder="Min 8 characters" required minLength={8} />
               <button type="button" onClick={() => setShowPass((s) => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+                style={{ color: "var(--text-tertiary)" }}>
                 {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
           <div className="space-y-1">
-            <Label htmlFor="confirm" className="text-gray-300">Confirm password</Label>
+            <Label htmlFor="confirm">Confirm password</Label>
             <Input id="confirm" type={showPass ? "text" : "password"} value={form.confirm}
-              onChange={set("confirm")} placeholder="Repeat password" required
-              className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" />
+              onChange={set("confirm")} placeholder="Repeat password" required />
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p style={{ fontSize: 13, color: "var(--loss)" }}>{error}</p>}
 
-          <Button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white">
+          <Button type="submit" disabled={loading} variant="primary" size="lg" fullWidth>
             {loading ? "Creating account…" : "Create account"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-400">
+        <p style={{ marginTop: 16, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
           Already have an account?{" "}
-          <Link href="/login" className="text-indigo-400 hover:text-indigo-300">Log in</Link>
+          <Link href="/login" style={{ color: "var(--accent)" }}>Log in</Link>
         </p>
       </CardContent>
     </Card>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Button, Input, Label } from "@/components/ui";
 
 export default function LoginForm() {
   const [email, setEmail]       = useState("");
@@ -33,51 +34,59 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="bg-white rounded-[14px] shadow-sm border border-[#e2e2df] p-8 w-full">
-      <div className="mb-6">
-        <div className="text-[22px] font-bold text-[#1c1c1a] tracking-tight">AlphaVyuh</div>
-        <div className="text-[13px] text-[#888] mt-0.5">Sign in to your account</div>
+    <div style={{
+      background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), rgba(10,14,18,0.88)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: 24,
+      boxShadow: "var(--shadow-panel)",
+      padding: 32,
+      width: "100%",
+      backdropFilter: "blur(14px)",
+    }}>
+      <div style={{ marginBottom: 28 }}>
+        <div className="auth-kicker">Member Access</div>
+        <div style={{ fontSize: 30, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
+          Sign in to AlphaVyuh
+        </div>
+        <div style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.6 }}>
+          Continue into your trading workspace and pick up exactly where your workflow left off.
+        </div>
       </div>
 
-      <form onSubmit={handleLogin} className="space-y-4">
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="text-[12px] font-semibold text-[#555] uppercase tracking-wide">
-            Email
-          </label>
-          <input
+      <form onSubmit={handleLogin} style={{ display: "grid", gap: 16 }}>
+        <div style={{ display: "grid", gap: 8 }}>
+          <Label htmlFor="email">Email</Label>
+          <Input
             id="email" type="email" value={email}
             onChange={e => setEmail(e.target.value)}
             placeholder="you@example.com" required autoFocus
-            className="w-full text-[14px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#5b63f5] focus:ring-1 focus:ring-[#5b63f5]/30 transition-colors"
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="password" className="text-[12px] font-semibold text-[#555] uppercase tracking-wide">
-            Password
-          </label>
-          <input
+        <div style={{ display: "grid", gap: 8 }}>
+          <Label htmlFor="password">Password</Label>
+          <Input
             id="password" type="password" value={password}
             onChange={e => setPassword(e.target.value)}
             placeholder="Your password" required
-            className="w-full text-[14px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#5b63f5] focus:ring-1 focus:ring-[#5b63f5]/30 transition-colors"
           />
         </div>
 
-        {error && <p className="text-[13px] text-[#e5383b]">{error}</p>}
+        {error && <p style={{ fontSize: 13, color: "var(--loss)" }}>{error}</p>}
 
-        <button
+        <Button
           type="submit" disabled={loading || !email || !password}
-          className="w-full py-2.5 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
-          style={{ background: "#5b63f5" }}
+          variant="primary"
+          size="lg"
+          fullWidth
         >
-          {loading ? "Signing in…" : "Sign in →"}
-        </button>
+          {loading ? "Signing in..." : "Sign in"}
+        </Button>
       </form>
 
-      <p className="mt-5 text-center text-[13px] text-[#888]">
+      <p style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
         Don&apos;t have an account?{" "}
-        <Link href="/signup" className="text-[#5b63f5] hover:underline">Sign up</Link>
+        <Link href="/signup" style={{ color: "var(--accent)" }}>Create one</Link>
       </p>
     </div>
   );

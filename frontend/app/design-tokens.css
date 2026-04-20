@@ -20,16 +20,18 @@
   --border-focus:    rgba(86, 215, 193, 0.40);
 
   /* Text (4 levels — don't add more) */
-  --text-primary:    #EDECE8;   /* headlines, primary data */
-  --text-secondary:  #A8A49C;   /* body, secondary data */
-  --text-tertiary:   #6A6A6A;   /* labels, captions */
-  --text-disabled:   #464646;
+  --text-primary:    #F5F3EE;   /* headlines, primary data */
+  --text-secondary:  #CAC4B8;   /* body, secondary data */
+  --text-tertiary:   #9F988C;   /* labels, captions */
+  --text-disabled:   #6F6A61;
 
   /* Brand — single accent */
   --accent:          #56D7C1;   /* the one color that says "AlphaVyuh" */
   --accent-hover:    #6FE3CF;
   --accent-subtle:   rgba(86, 215, 193, 0.10);
   --accent-muted:    rgba(86, 215, 193, 0.18);
+  --accent-glow:     rgba(86, 215, 193, 0.28);
+  --accent-strong:   #8CF0E1;
 
   /* Semantic — P&L ONLY. Never decorative. */
   --gain:            #2DB574;
@@ -105,6 +107,8 @@
 
   --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.32);
   --shadow-modal:    0 12px 40px rgba(0, 0, 0, 0.48);
+  --shadow-panel:    0 24px 60px rgba(0, 0, 0, 0.32);
+  --shadow-glow:     0 0 0 1px rgba(86, 215, 193, 0.07), 0 18px 48px rgba(0, 0, 0, 0.32);
 
   /* ── LAYOUT ────────────────────────────────────────────────────────────── */
 

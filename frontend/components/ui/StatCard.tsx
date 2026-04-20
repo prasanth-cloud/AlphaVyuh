@@ -6,10 +6,11 @@ export function StatCard({ label, value, delta, deltaVariant }: {
 }) {
   return (
     <div style={{
-      background: 'var(--surface-1)',
-      border: '1px solid var(--border-subtle)',
-      borderRadius: 'var(--radius-lg)',
+      background: 'linear-gradient(180deg, rgba(86,215,193,0.08), rgba(86,215,193,0.02) 30%, rgba(255,255,255,0.02)), var(--surface-1)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: '18px',
       padding: '16px 18px',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), var(--shadow-glow)',
     }}>
       <div className="label" style={{ marginBottom: 10 }}>{label}</div>
       <div style={{

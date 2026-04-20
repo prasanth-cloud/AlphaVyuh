@@ -18,91 +18,55 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (pathname.startsWith('/onboarding')) return <>{children}</>
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--surface-0)' }}>
+    <div className="app-shell">
+      <nav className="app-topbar">
+        <div className="app-topbar-inner">
+          <Link href="/dashboard" className="app-brand">
+            <span className="app-brand-mark" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+                <path
+                  d="M4 24 L12 8 L16 16 L20 10 L28 24"
+                  stroke="var(--accent)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="28" cy="24" r="2.5" fill="var(--accent)" />
+              </svg>
+            </span>
+            <span className="app-brand-copy">
+              <strong>AlphaVyuh</strong>
+              <span>Trading Operating System</span>
+            </span>
+          </Link>
 
-      {/* ── NAV ──────────────────────────────────────────────────────────── */}
-      <nav style={{
-        position: 'sticky', top: 0, zIndex: 50,
-        height: 'var(--nav-height)',
-        background: 'rgba(11, 13, 17, 0.88)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex', alignItems: 'center',
-        padding: '0 24px', gap: 4,
-      }}>
-        {/* Logo */}
-        <Link href="/dashboard" style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          marginRight: 28, flexShrink: 0,
-        }}>
-          <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-            <path d="M4 24 L12 8 L16 16 L20 10 L28 24"
-              stroke="var(--accent)" strokeWidth="2.5"
-              strokeLinecap="round" strokeLinejoin="round" fill="none"
-            />
-            <circle cx="28" cy="24" r="2.5" fill="var(--accent)" />
-          </svg>
-          <span style={{
-            fontSize: 14, fontWeight: 600,
-            letterSpacing: '-0.01em',
-            color: 'var(--text-primary)',
-          }}>
-            AlphaVyuh
-          </span>
-        </Link>
+          <div className="app-nav">
+            {NAV_LINKS.map(link => {
+              const active = pathname.startsWith(link.href)
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`app-navlink ${active ? 'app-navlink-active' : ''}`}
+                >
+                  {link.label}
+                </Link>
+              )
+            })}
+          </div>
 
-        {/* Nav links */}
-        <div style={{ display: 'flex', gap: 2 }}>
-          {NAV_LINKS.map(link => {
-            const active = pathname.startsWith(link.href)
-            return (
-              <Link key={link.href} href={link.href} style={{
-                padding: '6px 12px',
-                fontSize: 13, fontWeight: active ? 500 : 400,
-                color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                borderRadius: 6,
-                position: 'relative',
-                transition: 'color var(--motion-instant) var(--ease-out)',
-              }}
-              onMouseEnter={e => {
-                if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-primary)'
-              }}
-              onMouseLeave={e => {
-                if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'
-              }}
-              >
-                {link.label}
-                {active && (
-                  <span style={{
-                    position: 'absolute',
-                    left: '50%', transform: 'translateX(-50%)',
-                    bottom: -15,
-                    width: 20, height: 2,
-                    background: 'var(--accent)',
-                    borderRadius: 1,
-                    display: 'block',
-                  }} />
-                )}
-              </Link>
-            )
-          })}
-        </div>
+          <div className="app-search-wrap">
+            <SymbolSearch />
+          </div>
 
-        {/* Symbol search — center */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '0 40px' }}>
-          <SymbolSearch />
-        </div>
-
-        {/* Right side: market status + account */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-          <MarketStatus />
-          <AccountMenuButton />
+          <div className="app-toolbar">
+            <MarketStatus />
+            <AccountMenuButton />
+          </div>
         </div>
       </nav>
 
-      {/* Page content */}
-      <main>{children}</main>
+      <main className="app-content">{children}</main>
     </div>
   )
 }
@@ -126,12 +90,7 @@ function MarketStatus() {
   }, [])
 
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      padding: '4px 10px',
-      border: '1px solid var(--border-subtle)',
-      borderRadius: 'var(--radius-full)',
-    }}>
+    <div className="app-toolbar-pill">
       <span style={{
         width: 6, height: 6, borderRadius: '50%',
         background: isOpen ? 'var(--gain)' : 'var(--text-tertiary)',
@@ -185,14 +144,15 @@ function AccountMenuButton() {
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          width: 28, height: 28,
+          width: 34, height: 34,
           borderRadius: '50%',
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border-default)',
-          color: 'var(--text-secondary)',
+          background: 'linear-gradient(180deg, rgba(86,215,193,0.12), rgba(255,255,255,0.02)), var(--surface-2)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          color: 'var(--text-primary)',
           fontSize: 11, fontWeight: 600,
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
         }}
       >
         {initials}
@@ -202,10 +162,10 @@ function AccountMenuButton() {
         <div style={{
           position: 'absolute', top: 'calc(100% + 8px)', right: 0,
           width: 180,
-          background: 'var(--surface-float)',
-          border: '1px solid var(--border-default)',
+          background: 'linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))',
+          border: '1px solid rgba(255,255,255,0.09)',
           borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-dropdown)',
+          boxShadow: 'var(--shadow-panel)',
           padding: 4,
           zIndex: 100,
         }}>
@@ -309,14 +269,7 @@ function SymbolSearch() {
 
   return (
     <div style={{ position: 'relative', width: '100%', maxWidth: 400 }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: 'var(--surface-2)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-md)',
-        height: 30,
-        padding: '0 10px',
-      }}>
+      <div className="app-search-shell">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>
           <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
           <path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -356,13 +309,10 @@ function SymbolSearch() {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-          background: 'var(--surface-float)',
-          border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-dropdown)',
+          borderRadius: '16px',
           overflow: 'hidden',
           zIndex: 100,
-        }}>
+        }} className="app-float-panel">
           {loading && (
             <div style={{ padding: 12, fontSize: 12, color: 'var(--text-tertiary)' }}>
               Searching...

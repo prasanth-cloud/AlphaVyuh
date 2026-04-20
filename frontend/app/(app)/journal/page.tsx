@@ -300,31 +300,43 @@ export default function JournalPage() {
   };
 
   return (
-    <div style={{ minHeight: "100%", background: "var(--surface-0)" }}>
+    <div style={{ minHeight: "100%", background: "transparent", display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", top: 64, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "8px 16px", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow-dropdown)", background: "var(--surface-float)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
+        <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
           {toast}
         </div>
       )}
 
-      {/* Page header */}
-      <div style={{ padding: "20px 32px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16 }}>
-          <h1 className="heading-page">Journal</h1>
+      <div style={{
+        padding: "22px 24px",
+        borderRadius: 24,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
+        boxShadow: "var(--shadow-panel)",
+      }}>
+        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Trading Journal</div>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Review execution, close the loop, and learn faster.</h1>
+            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
+              Capture entries and exits, study your real P&amp;L curve, and let the AI layer turn repeated mistakes into practical trading rules.
+            </p>
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             {brokerConnected && brokerName === "zerodha" && (
               <button
                 onClick={handleImportZerodha}
                 disabled={importing}
-                style={{ padding: "6px 12px", fontSize: 12, fontWeight: 500, borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", cursor: "pointer", opacity: importing ? 0.5 : 1 }}
+                style={{ padding: "9px 14px", fontSize: 12, fontWeight: 500, borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "var(--text-secondary)", cursor: "pointer", opacity: importing ? 0.5 : 1 }}
               >
                 {importing ? "Importing…" : "Import from Zerodha"}
               </button>
             )}
             <button
               onClick={openAddPanel}
-              style={{ padding: "6px 14px", fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-sm)", background: "var(--accent)", color: "#0A1712", cursor: "pointer" }}
+              style={{ padding: "10px 16px", fontSize: 12, fontWeight: 600, borderRadius: 999, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#0A1712", cursor: "pointer", boxShadow: "0 10px 24px rgba(86,215,193,0.18)" }}
             >
               + Log trade
             </button>
@@ -332,7 +344,7 @@ export default function JournalPage() {
         </div>
 
         {/* Stat cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
           <StatCard
             label="Total P&L"
             value={stats ? fmtCcy(stats.total_pnl) : "—"}
@@ -348,18 +360,17 @@ export default function JournalPage() {
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: "flex", gap: 4 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {([{ id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "AI analysis" }] as { id: Tab; label: string }[]).map(({ id, label }) => (
             <button key={id} onClick={() => setTab(id)} style={{
               padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer",
               color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
-              background: "none", border: "none",
+              background: tab === id ? "rgba(255,255,255,0.05)" : "transparent",
+              border: `1px solid ${tab === id ? 'rgba(86,215,193,0.16)' : 'transparent'}`,
+              borderRadius: 999,
               position: "relative",
             }}>
               {label}
-              {tab === id && (
-                <span style={{ position: "absolute", left: 16, right: 16, bottom: -1, height: 2, background: "var(--accent)", borderRadius: 1 }} />
-              )}
             </button>
           ))}
         </div>
@@ -367,7 +378,7 @@ export default function JournalPage() {
 
       {/* ── Analytics ── */}
       {tab === "analytics" && (
-        <div style={{ padding: "24px 32px" }}>
+        <div>
           <Card padding="lg">
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               {/* Equity curve */}
@@ -473,7 +484,7 @@ export default function JournalPage() {
 
       {/* ── AI Analysis ── */}
       {tab === "ai" && (
-        <div style={{ padding: "24px 32px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* Pattern stats */}
           <Card padding="lg">
@@ -591,7 +602,7 @@ export default function JournalPage() {
                   finally { setAiLoading(false); }
                 }}
                 disabled={aiLoading}
-                style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-sm)", fontSize: 12, fontWeight: 600, background: "var(--accent)", color: "#0A1712", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
+                style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-sm)", fontSize: 12, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
               >
                 {aiLoading ? "Analysing…" : aiAnalysis ? "Re-analyse" : "Analyse my trades"}
               </button>
@@ -653,7 +664,7 @@ export default function JournalPage() {
 
       {/* ── Trades ── */}
       {tab === "trades" && (
-        <div style={{ display: "flex", gap: 20, padding: "20px 32px" }}>
+        <div style={{ display: "flex", gap: 20 }}>
           {/* Trade list */}
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Toolbar */}
@@ -683,10 +694,10 @@ export default function JournalPage() {
             )}
 
             {/* Table */}
-            <div style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
+            <div style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 22, overflow: "hidden", boxShadow: "var(--shadow-panel)" }}>
               <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)" }}>
                     {["Symbol", "Type", "Entry", "Entry px", "Exit px", "P&L", "Status", ""].map(h => (
                       <th key={h} className="label" style={{ textAlign: "left", padding: "10px 12px" }}>{h}</th>
                     ))}
@@ -780,7 +791,7 @@ export default function JournalPage() {
           {/* Side panel */}
           {panelMode && (
             <div style={{ width: 340, flexShrink: 0 }}>
-              <Card padding="lg">
+              <Card padding="lg" style={{ borderRadius: 22 }}>
                 {/* Header */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <div className="heading-card">
@@ -881,7 +892,7 @@ export default function JournalPage() {
                     </div>
 
                     <button onClick={handleAddTrade} disabled={saving}
-                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-sm)", background: "var(--accent)", color: "#0A1712", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
+                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-sm)", background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
                       {saving ? "Saving…" : "Save trade"}
                     </button>
                   </div>
@@ -931,7 +942,7 @@ export default function JournalPage() {
                     </div>
 
                     <button onClick={handleCloseTrade} disabled={saving}
-                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-sm)", background: "var(--accent)", color: "#0A1712", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
+                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-sm)", background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
                       {saving ? "Saving…" : "Close trade"}
                     </button>
                   </div>
@@ -1006,7 +1017,7 @@ export default function JournalPage() {
 
                     {selectedEntry.status === "open" && (
                       <button onClick={() => openClosePanel(selectedEntry)}
-                        style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-sm)", background: "var(--accent)", color: "#0A1712", cursor: "pointer" }}>
+                        style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-sm)", background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: "pointer" }}>
                         Close this trade
                       </button>
                     )}

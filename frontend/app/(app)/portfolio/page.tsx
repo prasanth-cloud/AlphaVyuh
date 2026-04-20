@@ -42,25 +42,34 @@ export default function PortfolioPage() {
   const portfolioPnlPos = (s?.total_pnl ?? 0) >= 0;
 
   return (
-    <div className="min-h-screen bg-[#f2f2f0]">
-      <div className="max-w-[1100px] mx-auto px-5 py-6">
+    <div className="min-h-screen" style={{ background: "transparent" }}>
+      <div className="max-w-[1100px] mx-auto py-0">
 
         {/* Header */}
-        <div className="mb-5">
-          <div className="text-[20px] font-semibold text-[#1c1c1a]">Portfolio</div>
-          <div className="text-[13px] text-[#888] mt-0.5">Open positions &amp; unrealised P&amp;L</div>
+        <div style={{
+          padding: "22px 24px",
+          borderRadius: 24,
+          border: "1px solid rgba(255,255,255,0.08)",
+          background:
+            "radial-gradient(circle at top right, rgba(90,139,232,0.14), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
+          boxShadow: "var(--shadow-panel)",
+          marginBottom: 16,
+        }}>
+          <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Portfolio</div>
+          <div style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8, color: "var(--text-primary)" }}>Open positions and unrealised P&amp;L in one operating view.</div>
+          <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.7 }}>Review current exposure, check sector concentration, and jump straight into the chart of any active position.</div>
         </div>
 
         {loading && (
           <div className="space-y-3">
             {[1,2,3].map(i => (
-              <div key={i} className="h-14 rounded-[10px] bg-white border border-[#e2e2df] animate-pulse" />
+              <div key={i} className="h-14 rounded-[16px] animate-pulse" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }} />
             ))}
           </div>
         )}
 
         {!loading && error && (
-          <div className="bg-white border border-[#e2e2df] rounded-[10px] p-8 text-center text-[13px] text-[#e5383b]">{error}</div>
+          <div className="rounded-[20px] p-8 text-center text-[13px]" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--loss)", boxShadow: "var(--shadow-panel)" }}>{error}</div>
         )}
 
         {!loading && !error && data && (
@@ -74,8 +83,8 @@ export default function PortfolioPage() {
                   { label: "Unrealised P&L", value: `${portfolioPnlPos ? "+" : ""}${fmtPrice(s.total_pnl)}`, color: portfolioPnlPos ? "#26a65b" : "#e5383b" },
                   { label: "Return", value: `${portfolioPnlPos ? "+" : ""}${s.total_pnl_pct.toFixed(2)}%`, color: portfolioPnlPos ? "#26a65b" : "#e5383b" },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-white border border-[#e2e2df] rounded-[10px] p-4">
-                    <div className="text-[10px] uppercase tracking-wider text-[#aaa] font-semibold mb-1">{label}</div>
+                  <div key={label} className="rounded-[18px] p-4" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "var(--shadow-panel)" }}>
+                    <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--text-tertiary)" }}>{label}</div>
                     <div className="text-[18px] font-bold tabular-nums" style={{ color }}>{value}</div>
                   </div>
                 ))}
@@ -84,8 +93,8 @@ export default function PortfolioPage() {
 
             {/* Sector breakdown */}
             {data.sectors.length > 0 && (
-              <div className="bg-white border border-[#e2e2df] rounded-[10px] p-4 mb-5">
-                <div className="text-[11px] uppercase tracking-wider text-[#888] font-semibold mb-3">Sector breakdown</div>
+              <div className="rounded-[20px] p-4 mb-5" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "var(--shadow-panel)" }}>
+                <div className="text-[11px] uppercase tracking-wider font-semibold mb-3" style={{ color: "var(--text-tertiary)" }}>Sector breakdown</div>
                 <div className="space-y-2">
                   {data.sectors.map(sec => {
                     const pos = sec.pnl >= 0;
@@ -93,8 +102,8 @@ export default function PortfolioPage() {
                     const pct = maxAbs > 0 ? (Math.abs(sec.pnl) / maxAbs) * 100 : 0;
                     return (
                       <div key={sec.sector} className="flex items-center gap-3">
-                        <span className="text-[12px] text-[#555] w-[130px] flex-shrink-0 truncate">{sec.sector}</span>
-                        <div className="flex-1 h-[6px] bg-[#f0f0ee] rounded-full overflow-hidden">
+                        <span className="text-[12px] w-[130px] flex-shrink-0 truncate" style={{ color: "var(--text-secondary)" }}>{sec.sector}</span>
+                        <div className="flex-1 h-[6px] rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
                           <div className="h-full rounded-full transition-all"
                             style={{ width: `${pct}%`, background: pos ? "#26a65b" : "#e5383b" }} />
                         </div>
@@ -110,21 +119,22 @@ export default function PortfolioPage() {
 
             {/* Positions table */}
             {data.positions.length === 0 ? (
-              <div className="bg-white border border-[#e2e2df] rounded-[10px] p-10 text-center">
-                <div className="text-[14px] font-semibold text-[#1c1c1a] mb-1">No open positions</div>
-                <div className="text-[13px] text-[#888] mb-4">Add trades via the journal or the chart page.</div>
+              <div className="rounded-[20px] p-10 text-center" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "var(--shadow-panel)" }}>
+                <div className="text-[14px] font-semibold mb-1" style={{ color: "var(--text-primary)" }}>No open positions</div>
+                <div className="text-[13px] mb-4" style={{ color: "var(--text-secondary)" }}>Add trades via the journal or the chart page.</div>
                 <button onClick={() => router.push("/journal")}
-                  className="px-4 py-2 bg-[#5b63f5] text-white text-[13px] font-semibold rounded-[8px] hover:opacity-90 transition-opacity">
+                  className="px-4 py-2 text-[13px] font-semibold rounded-[999px] hover:opacity-90 transition-opacity"
+                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}>
                   Go to Journal →
                 </button>
               </div>
             ) : (
-              <div className="bg-white border border-[#e2e2df] rounded-[10px] overflow-hidden">
+              <div className="rounded-[20px] overflow-hidden" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "var(--shadow-panel)" }}>
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-[#f0f0ee]">
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                       {["Symbol", "Type", "Qty", "Entry", "Current", "Day %", "Invested", "P&L"].map(h => (
-                        <th key={h} className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider text-[#aaa] font-semibold">{h}</th>
+                        <th key={h} className="text-left px-4 py-2.5 text-[10px] uppercase tracking-wider font-semibold" style={{ color: "var(--text-tertiary)" }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -135,27 +145,28 @@ export default function PortfolioPage() {
                         <tr
                           key={pos.id}
                           onClick={() => router.push(`/charts/${pos.symbol}`)}
-                          className="border-b border-[#f0f0ee] last:border-0 hover:bg-[#fafafa] cursor-pointer transition-colors"
+                          className="last:border-0 cursor-pointer transition-colors"
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
                         >
                           <td className="px-4 py-3">
-                            <div className="text-[13px] font-semibold text-[#1c1c1a]">{pos.symbol}</div>
-                            {pos.sector && <div className="text-[10px] text-[#aaa] truncate max-w-[100px]">{pos.sector}</div>}
+                            <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>{pos.symbol}</div>
+                            {pos.sector && <div className="text-[10px] truncate max-w-[100px]" style={{ color: "var(--text-tertiary)" }}>{pos.sector}</div>}
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
                               style={pos.trade_type === "long"
-                                ? { background: "#edfaf3", color: "#26a65b" }
-                                : { background: "#fff0f0", color: "#e5383b" }}>
+                                ? { background: "var(--gain-subtle)", color: "var(--gain)" }
+                                : { background: "var(--loss-subtle)", color: "var(--loss)" }}>
                               {pos.trade_type.toUpperCase()}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-[13px] text-[#1c1c1a] tabular-nums">{pos.quantity}</td>
-                          <td className="px-4 py-3 text-[13px] text-[#1c1c1a] tabular-nums">₹{pos.entry_price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                          <td className="px-4 py-3 text-[13px] font-semibold text-[#1c1c1a] tabular-nums">₹{pos.current_price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                          <td className="px-4 py-3 text-[13px] tabular-nums" style={{ color: "var(--text-primary)" }}>{pos.quantity}</td>
+                          <td className="px-4 py-3 text-[13px] tabular-nums" style={{ color: "var(--text-primary)" }}>₹{pos.entry_price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                          <td className="px-4 py-3 text-[13px] font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>₹{pos.current_price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                           <td className="px-4 py-3 text-[12px] font-semibold tabular-nums" style={{ color: dayPos ? "#26a65b" : "#e5383b" }}>
                             {pos.day_change_pct != null ? `${dayPos ? "+" : ""}${pos.day_change_pct.toFixed(2)}%` : "—"}
                           </td>
-                          <td className="px-4 py-3 text-[12px] text-[#888] tabular-nums">{fmtPrice(pos.invested)}</td>
+                          <td className="px-4 py-3 text-[12px] tabular-nums" style={{ color: "var(--text-secondary)" }}>{fmtPrice(pos.invested)}</td>
                           <td className="px-4 py-3">
                             <PnlBadge value={pos.unrealised_pnl} pct={pos.unrealised_pnl_pct} />
                           </td>

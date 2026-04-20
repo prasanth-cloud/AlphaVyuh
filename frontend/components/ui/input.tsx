@@ -17,12 +17,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       {label && <span className="label">{label}</span>}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        background: 'var(--surface-2)',
-        border: `1px solid ${error ? 'var(--loss)' : 'var(--border-default)'}`,
-        borderRadius: 'var(--radius-md)',
-        height: size === 'sm' ? 30 : 36,
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), var(--surface-2)',
+        border: `1px solid ${error ? 'var(--loss)' : 'rgba(255,255,255,0.09)'}`,
+        borderRadius: '12px',
+        height: size === 'sm' ? 34 : 42,
         padding: '0 12px',
-        transition: 'border-color var(--motion-instant) var(--ease-out)',
+        transition: 'border-color var(--motion-instant) var(--ease-out), box-shadow var(--motion-instant) var(--ease-out)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
       }}>
         {iconLeft && <span style={{ color: 'var(--text-tertiary)', display: 'flex' }}>{iconLeft}</span>}
         <input

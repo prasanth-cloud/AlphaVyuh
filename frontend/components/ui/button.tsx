@@ -21,33 +21,34 @@ const sizeStyles: Record<Size, React.CSSProperties> = {
 
 const variantStyles: Record<Variant, React.CSSProperties> = {
   primary: {
-    background: 'var(--accent)',
-    color: '#0A1712',
-    fontWeight: 600,
-    border: '1px solid transparent',
+    background: 'linear-gradient(180deg, var(--accent-strong), var(--accent))',
+    color: '#04120d',
+    fontWeight: 700,
+    border: '1px solid rgba(86, 215, 193, 0.28)',
+    boxShadow: '0 10px 24px rgba(86, 215, 193, 0.18)',
   },
   secondary: {
-    background: 'var(--surface-2)',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025)), var(--surface-2)',
     color: 'var(--text-primary)',
     fontWeight: 500,
-    border: '1px solid var(--border-default)',
+    border: '1px solid rgba(255,255,255,0.09)',
   },
   ghost: {
-    background: 'transparent',
+    background: 'rgba(255,255,255,0.01)',
     color: 'var(--text-secondary)',
     fontWeight: 500,
     border: '1px solid transparent',
   },
   danger: {
-    background: 'transparent',
+    background: 'rgba(225, 85, 96, 0.04)',
     color: 'var(--loss)',
     fontWeight: 500,
-    border: '1px solid var(--loss-subtle)',
+    border: '1px solid rgba(225, 85, 96, 0.16)',
   },
 }
 
 const variantHover: Record<Variant, string> = {
-  primary: 'var(--accent-hover)',
+  primary: 'linear-gradient(180deg, #9af6e8, var(--accent-hover))',
   secondary: 'var(--surface-3)',
   ghost: 'var(--surface-2)',
   danger: 'var(--loss-subtle)',
@@ -64,7 +65,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         justifyContent: 'center',
         cursor: disabled || loading ? 'not-allowed' : 'pointer',
         opacity: disabled || loading ? 0.5 : 1,
-        transition: `background var(--motion-instant) var(--ease-out), border-color var(--motion-instant) var(--ease-out)`,
+        transition: `background var(--motion-instant) var(--ease-out), border-color var(--motion-instant) var(--ease-out), transform var(--motion-instant) var(--ease-out), box-shadow var(--motion-instant) var(--ease-out)`,
         whiteSpace: 'nowrap',
         width: fullWidth ? '100%' : 'auto',
         ...sizeStyles[size],
@@ -72,11 +73,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ...style,
       }}
       onMouseEnter={e => {
-        if (!disabled && !loading) e.currentTarget.style.background = variantHover[variant]
+        if (!disabled && !loading) {
+          e.currentTarget.style.background = variantHover[variant]
+          e.currentTarget.style.transform = 'translateY(-1px)'
+        }
         onMouseEnter?.(e)
       }}
       onMouseLeave={e => {
         e.currentTarget.style.background = variantStyles[variant].background as string
+        e.currentTarget.style.transform = 'translateY(0)'
         onMouseLeave?.(e)
       }}
       {...rest}

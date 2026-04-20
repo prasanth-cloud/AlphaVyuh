@@ -15,21 +15,25 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       style={{
-        background: 'var(--surface-1)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-lg)',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015)), var(--surface-1)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '16px',
         padding: paddingMap[padding],
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), var(--shadow-glow)',
+        backdropFilter: 'blur(14px)',
         transition: interactive
-          ? 'border-color var(--motion-instant) var(--ease-out), background var(--motion-instant) var(--ease-out)'
+          ? 'border-color var(--motion-instant) var(--ease-out), transform var(--motion-instant) var(--ease-out), background var(--motion-instant) var(--ease-out)'
           : undefined,
         cursor: interactive ? 'pointer' : undefined,
         ...style,
       }}
       onMouseEnter={interactive ? e => {
-        e.currentTarget.style.borderColor = 'var(--border-default)'
+        e.currentTarget.style.borderColor = 'rgba(86, 215, 193, 0.18)'
+        e.currentTarget.style.transform = 'translateY(-1px)'
       } : undefined}
       onMouseLeave={interactive ? e => {
-        e.currentTarget.style.borderColor = 'var(--border-subtle)'
+        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+        e.currentTarget.style.transform = 'translateY(0)'
       } : undefined}
       {...rest}
     >
@@ -76,7 +80,7 @@ export function CardFooter({ children, style, ...rest }: HTMLAttributes<HTMLDivE
   return (
     <div style={{
       padding: '12px 20px',
-      borderTop: '1px solid var(--border-subtle)',
+      borderTop: '1px solid rgba(255,255,255,0.06)',
       display: 'flex', alignItems: 'center',
       ...style,
     }} {...rest}>

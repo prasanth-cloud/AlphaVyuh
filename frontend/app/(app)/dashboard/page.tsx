@@ -164,11 +164,23 @@ export default function DashboardPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{ background: 'var(--surface-0)', minHeight: '100%' }}>
-      {/* Page header */}
-      <div style={{ padding: '24px 32px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-          <h1 className="heading-page">Markets</h1>
+    <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{
+        padding: '22px 24px',
+        borderRadius: 24,
+        border: '1px solid rgba(255,255,255,0.08)',
+        background:
+          'radial-gradient(circle at top right, rgba(90,139,232,0.14), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))',
+        boxShadow: 'var(--shadow-panel)',
+      }}>
+        <div className="label" style={{ color: 'var(--accent)', marginBottom: 10 }}>Market Overview</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.02, letterSpacing: '-0.04em', marginBottom: 8 }}>Read the market before you place the next trade.</h1>
+            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
+              Track breadth, phase, sector rotation, and leadership in one calm surface before moving into scanner, charts, or execution.
+            </p>
+          </div>
           {lastUpdated && (
             <span className="caption">
               Last updated {lastUpdated}
@@ -181,13 +193,13 @@ export default function DashboardPage() {
 
       {/* Onboarding banner */}
       {showOnboarding && (
-        <div style={{ margin: '16px 32px 0', padding: '14px 20px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-muted)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '14px 20px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-muted)', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)', marginBottom: 2 }}>Welcome to AlphaVyuh</div>
             <div className="caption">Scan for stocks, add to watchlist, chart them, then log your first trade</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, flexShrink: 0 }}>
-            <a href="/scanner" style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', background: 'var(--accent)', color: '#0A1712', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+            <a href="/scanner" style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', background: 'linear-gradient(180deg, var(--accent-strong), var(--accent))', color: '#04120d', border: '1px solid rgba(86,215,193,0.24)', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
               Start scanning
             </a>
             <button onClick={() => setShowOnboarding(false)} style={{ color: 'var(--text-tertiary)', fontSize: 18, lineHeight: 1 }}>×</button>
@@ -197,7 +209,7 @@ export default function DashboardPage() {
 
       {/* Error */}
       {error && (
-        <div style={{ margin: '16px 32px 0', padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid rgba(225,85,96,0.2)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid rgba(225,85,96,0.2)', borderRadius: 16, fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12 }}>
           {error}
           <button onClick={load} style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>Retry</button>
         </div>
@@ -206,7 +218,7 @@ export default function DashboardPage() {
       {loading && <Skeleton />}
 
       {!loading && data && (
-        <div style={{ padding: '20px 32px' }}>
+        <div>
           {/* Phase card */}
           <PhaseCard data={data} />
 
@@ -268,7 +280,7 @@ export default function DashboardPage() {
       )}
 
       {!loading && !data && !error && (
-        <div style={{ padding: '20px 32px' }}>
+        <div>
           <EmptyState
             title="No market data available"
             description="Market data loads after the trading session closes (after 3:30 PM IST)."

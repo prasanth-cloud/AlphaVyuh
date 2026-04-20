@@ -57,8 +57,8 @@ function BrokerCallbackContent() {
             <p className="text-[13px] mb-4" style={{ color: "var(--app-text3)" }}>{message}</p>
             <button
               onClick={() => router.replace("/settings?tab=profile")}
-              className="px-4 py-2 rounded-[8px] text-[13px] font-semibold text-white"
-              style={{ background: "#5b63f5" }}>
+              className="px-4 py-2 rounded-[8px] text-[13px] font-semibold"
+              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}>
               Back to Settings
             </button>
           </>

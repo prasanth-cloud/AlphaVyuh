@@ -299,6 +299,29 @@ export async function getQuote(symbol: string): Promise<ScanResult | null> {
   return res.json();
 }
 
+export type LiveQuote = {
+  symbol: string;
+  market: string;
+  currency: string;
+  close: number;
+  open: number;
+  high: number;
+  low: number;
+  volume: number;
+  prev_close: number;
+  pct_change: number | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+  source: string;
+};
+
+export async function getQuoteLive(symbol: string): Promise<LiveQuote | null> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/stocks/${symbol}/quote-live`, { headers });
+  if (!res.ok) return null;
+  return res.json();
+}
+
 // ── Charts ────────────────────────────────────────────────────────────────────
 
 export type CandleBar = {

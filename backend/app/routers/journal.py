@@ -2,6 +2,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+import yfinance as yf
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
@@ -415,7 +416,7 @@ async def get_portfolio(user_id: str = Depends(get_current_user_id)):
     if not positions:
         return {"positions": [], "summary": {"total_invested": 0, "total_current": 0, "total_pnl": 0, "total_pnl_pct": 0}, "sectors": []}
 
-    # Fetch latest prices for all symbols at once
+    # Fetch fallback prices from the latest stored EOD row
     symbols = list({p["symbol"] for p in positions})
     price_rows = (
         sb.table("daily_ohlcv")
@@ -424,12 +425,38 @@ async def get_portfolio(user_id: str = Depends(get_current_user_id)):
         .order("trade_date", desc=True)
         .execute()
     )
-    # Keep only the most recent price per symbol
     latest_prices: dict[str, dict] = {}
     for row in (price_rows.data or []):
         sym = row["symbol"]
         if sym not in latest_prices:
-            latest_prices[sym] = {"close": float(row["close"]), "pct_change": row.get("pct_change")}
+            latest_prices[sym] = {"close": float(row["close"]), "pct_change": row.get("pct_change"), "source": "daily_ohlcv"}
+
+    # Prefer live Yahoo Finance quotes when available
+    market_rows = (
+        sb.table("stock_universe")
+        .select("symbol,market")
+        .in_("symbol", symbols)
+        .execute()
+    )
+    market_map: dict[str, str] = {r["symbol"]: (r.get("market") or "NSE") for r in (market_rows.data or [])}
+
+    def _yf_symbol(sym: str, market: str) -> str:
+        return sym if market in ("NASDAQ", "NYSE") else f"{sym}.NS"
+
+    for sym in symbols:
+        try:
+            ticker = yf.Ticker(_yf_symbol(sym, market_map.get(sym, "NSE")))
+            hist = ticker.history(period="2d", interval="1d")
+            if hist.empty:
+                continue
+            latest = hist.iloc[-1]
+            prev = hist.iloc[-2] if len(hist) >= 2 else hist.iloc[-1]
+            close = float(latest["Close"])
+            prev_close = float(prev["Close"])
+            pct_change = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
+            latest_prices[sym] = {"close": close, "pct_change": pct_change, "source": "yahoo_finance"}
+        except Exception:
+            continue
 
     # Fetch sector info
     sector_rows = (
