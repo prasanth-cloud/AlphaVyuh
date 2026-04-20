@@ -1,8 +1,19 @@
 name: Deploy to Vercel
 
+# Vercel's native GitHub integration handles production deploys automatically
+# when code is pushed to main. This workflow is intentionally disabled to
+# prevent duplicate deployments competing for the production slot.
+#
+# Root cause: having both this workflow AND Vercel's git integration caused
+# two simultaneous production deployments per push — one always failed.
+# Fix: set rootDirectory=frontend on the Vercel project + use native integration only.
+
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # manual trigger only — kept for emergency use
+    inputs:
+      reason:
+        description: 'Reason for manual deploy'
+        required: false
 
 jobs:
   deploy:
