@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# Hooks run in a minimal subshell that does not source ~/.zshrc.
+# Add common tool paths so bun, bunx, etc. are available.
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 # The hook receives the edited file path as $CLAUDE_TOOL_FILE_PATH
 FILE="${CLAUDE_TOOL_FILE_PATH:-}"
 

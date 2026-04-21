@@ -5,6 +5,10 @@
 
 set -euo pipefail
 
+# Hooks run in a minimal subshell that does not source ~/.zshrc.
+# Add common tool paths so bun, bunx, etc. are available.
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 cd "${CLAUDE_PROJECT_DIR:-.}"
 
 # Skip if there's no package.json (not in the project root for some reason)

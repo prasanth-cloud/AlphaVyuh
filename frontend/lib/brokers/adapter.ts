@@ -1,5 +1,18 @@
-// BrokerAdapter — the contract every broker implementation must satisfy.
-// Import ONLY from this file in app code. Never import from lib/brokers/<broker>/ directly.
+/**
+ * BrokerAdapter — canonical contract for all broker integrations.
+ *
+ * ARCHITECTURE: This file is TYPES ONLY. Do not add implementation code here.
+ * All real broker logic lives in backend/app/brokers/<broker>/ (Python/FastAPI).
+ * The frontend calls the backend over HTTP — it never calls broker APIs directly.
+ * broker API keys must never reach the browser.
+ *
+ * SYNC: The Python counterpart is backend/app/brokers/adapter.py. Any change
+ * to method signatures or DTO shapes must update both files in the same PR.
+ * See docs/decisions/004-adapter-language-split.md for full rationale.
+ *
+ * Import ONLY from this file in frontend code. Never import from
+ * lib/brokers/<broker>/ directly.
+ */
 
 // ─── Identity ────────────────────────────────────────────────────────────────
 

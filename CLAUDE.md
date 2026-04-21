@@ -35,7 +35,7 @@ The competitive frame is: **TradingView + Chartink + a broker terminal + a tradi
 | Package manager | **Bun** | Use `bun`, not `npm`/`pnpm`. `bun install`, `bun run dev`, `bun add <pkg>`. |
 | Testing | **Playwright** (e2e) + **Vitest** (unit) | Every merged PR must have at least one Playwright spec for new user-facing flows. |
 
-Broker integrations are **multi-broker from day one**: Zerodha Kite Connect, Upstox, Dhan. Each broker lives behind a common `BrokerAdapter` interface (`lib/brokers/adapter.ts`). Never call a broker SDK directly from a route or component.
+Broker integrations are **multi-broker from day one**: Zerodha Kite Connect, Upstox, Dhan. Architecture split (ADR 004): `frontend/lib/brokers/adapter.ts` is the canonical **TypeScript contract** (types-only, no implementation). All real broker logic lives in `backend/app/brokers/<broker>/` (Python/FastAPI). Never call a broker SDK from the frontend — only call the FastAPI `/api/brokers/*` routes. Never import from `backend/` in frontend code.
 
 ---
 
@@ -56,10 +56,18 @@ alphavyuh/
 ├── components/               # Reusable UI (shadcn in components/ui/)
 ├── lib/
 │   ├── supabase/             # Server & client factories, typed queries
-│   ├── brokers/              # BrokerAdapter + per-broker implementations
+│   ├── brokers/
+│   │   └── adapter.ts        # CONTRACT ONLY — types, no implementation (ADR 004)
 │   ├── scans/                # SEPA, VCP, custom scan engines
 │   ├── indicators/           # EMA, RS, ATR, pivot logic
 │   └── ai/                   # Journal analysis prompts & pipelines
+├── backend/
+│   └── app/
+│       └── brokers/
+│           ├── adapter.py    # Python ABC — mirrors adapter.ts (ADR 004)
+│           ├── credentials.py# AES-256-GCM encrypt/decrypt (ADR 002)
+│           ├── kite/         # KiteAdapter(BrokerAdapter) — Python
+│           └── mock/         # MockAdapter for tests
 ├── supabase/
 │   ├── migrations/           # Source of truth for schema. Never edit applied migrations.
 │   └── seed.sql
@@ -70,7 +78,8 @@ alphavyuh/
 │   ├── architecture.md
 │   ├── data-model.md
 │   ├── broker-adapter.md
-│   └── scan-dsl.md
+│   ├── scan-dsl.md
+│   └── decisions/            # ADRs — check before proposing architectural changes
 └── .claude/                  # Subagents, hooks, settings (shared with team)
 ```
 
