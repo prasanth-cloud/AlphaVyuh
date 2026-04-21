@@ -629,11 +629,10 @@ async def run_scanner(
     if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
     if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
     if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
-    # M3-A columns (push only when populated; NULL rows satisfy IS NOT NULL check in DB indexes)
-    if f.rs_rating_min is not None: q = q.gte("rs_rating", f.rs_rating_min)
-    if f.rs_rating_max is not None: q = q.lte("rs_rating", f.rs_rating_max)
-    # volume_ratio / w52h_pct / w52l_pct DB push deferred to ingest-job PR;
-    # Python fallback in _apply_filters handles them until columns are populated.
+    # M3-A columns: DB push deferred to ingest-job PR — all values currently NULL in production.
+    # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
+    # Python fallback in _apply_filters handles rs_rating/volume_ratio/w52h_pct/w52l_pct
+    # until the ingest job populates these columns.
 
     rows = q.limit(SCAN_ROW_CAP).execute().data or []
 

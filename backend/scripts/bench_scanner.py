@@ -94,8 +94,13 @@ def bench_once(client, trade_date: str) -> tuple[float, int, int]:
 
 
 def percentile(sorted_data: list[float], p: float) -> float:
-    idx = max(0, int(p / 100 * len(sorted_data)) - 1)
-    return sorted_data[min(idx, len(sorted_data) - 1)]
+    n = len(sorted_data)
+    if n < 4:
+        return sorted_data[-1]
+    # statistics.quantiles uses n=100 intervals → gives true percentile for any N>=4
+    quantiles = statistics.quantiles(sorted_data, n=100, method="inclusive")
+    idx = max(0, min(int(p) - 1, 98))
+    return quantiles[idx]
 
 
 def main() -> None:
@@ -123,7 +128,7 @@ def main() -> None:
     p99 = percentile(latencies, 99)
 
     print()
-    print(f"Results ({ITERATIONS} runs, sorted):")
+    print(f"Results ({ITERATIONS} runs, sorted):  [p95/p99 are estimates; increase ITERATIONS for accuracy]")
     print(f"  p50 = {p50:.0f}ms  (ADR 005 target: <{P50_TARGET_MS}ms)")
     print(f"  p95 = {p95:.0f}ms")
     print(f"  p99 = {p99:.0f}ms")
