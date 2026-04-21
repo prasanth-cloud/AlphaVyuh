@@ -306,3 +306,42 @@ Schema additions are needed regardless of option choice.
 ### 5. APScheduler parallelism becomes a bottleneck
 
 At 1,000+ saved scans per day, option (c) dedicated worker becomes worth the infrastructure cost.
+
+---
+
+## Post-fix Observations (2026-04-21)
+
+### Nifty 500 CTE scales well; all-NSE does not scale linearly
+
+The `get_vcp_lookback` CTE at 500 symbols gives 910ms p95. At 3,046 symbols (6.1× more),
+the chunked approach yields 5,327ms p95 — a 5.8× increase. This is approximately linear:
+each 500-symbol chunk adds ~550ms. The overhead is dominated by:
+
+1. **Network round-trips:** 7 sequential RPC calls × ~130ms Mac RTT = ~910ms in network alone.
+   On Railway (same region as Supabase, ~5ms RTT), the 7 round-trips add only ~35ms total.
+   This explains why the all-NSE Mac measurement is marginal (5,327ms) but Railway production
+   is expected to be well under 5,000ms.
+
+2. **DB query time:** Each 500-symbol CTE call takes ~420ms DB-side. At 7 calls that's ~2,940ms
+   that can't be reduced by moving to Railway. Reducing chunk DB time requires either:
+   - Fewer symbols per chunk (fewer rows processed per query)
+   - Async parallel chunks (requires asyncio + supabase-py async client)
+   - Shorter lookback window (75 → 60 days reduces rows/chunk by 20%)
+
+### Design constraint: the chunking threshold is latency-sensitive
+
+`VCP_RPC_CHUNK = 500` was chosen to avoid the Supabase statement timeout (hit at 3,046 symbols
+in one call). At 500 symbols the CTE takes ~550ms; the timeout trigger is somewhere between
+500 and 3,046 symbols. The safe upper bound is 500 until tested higher.
+
+If the statement timeout is raised on the Supabase project, larger chunks reduce round-trips
+but increase per-call latency. The optimal chunk size depends on `DB_time_per_symbol × chunk_size
++ RTT ≤ latency_budget / n_chunks`. At Railway RTT the optimal is probably 1,000–1,500 symbols
+per chunk (1–2 calls for all-NSE), which would bring all-NSE well under 2,000ms.
+
+### The hybrid routing rule holds
+
+The routing rule (`candidates × lookback_days > POSTGREST_ROW_CAP → CTE`) remains correct.
+The CTE approach is the right architecture. The remaining all-NSE latency is a network topology
+problem (Mac → trans-Pacific → Supabase), not a design flaw. Production co-location resolves
+the symptom; the underlying fix for scale is async parallel chunks.

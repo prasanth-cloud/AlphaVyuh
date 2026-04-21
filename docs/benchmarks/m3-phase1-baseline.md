@@ -186,6 +186,25 @@
 
 ---
 
+## All-NSE VCP: Open Performance Commitment
+
+**Current: 5,327ms p95 — 6.5% over the 5,000ms soft target.**
+
+This is tolerated for now under the following explicit conditions:
+
+1. **No user-exposed unfiltered all-NSE scans.** Product UI must default to Nifty 500 universe or require a universe filter (e.g. series=EQ, sector, or price_min). An unfiltered all-NSE VCP is not a user-facing path until this is resolved.
+
+2. **Any filter composition that measurably adds to VCP latency triggers a re-measure.** If a new EXPENSIVE filter lands and the benchmark regresses, all-NSE must be addressed before that filter ships.
+
+3. **Dedicated perf PR after the filter catalog (Task 2) merges.** Options to evaluate then:
+   - Async concurrent RPC chunks (asyncio.gather on 2–3 smaller batches in parallel)
+   - Reduce LOOKBACK_DAYS from 75 → 60 (12 weeks still sufficient for VCP)
+   - Re-measure from Railway to confirm production is actually under target
+
+See CLAUDE.md §8 Known gaps and ADR 005 §Post-fix observations for the architectural context.
+
+---
+
 ## Headroom Summary (post-fix)
 
 | Scan | Metric | Pre-fix | Post-fix | Target | Status |
