@@ -49,29 +49,32 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          set -euo pipefail
+          set -e
           OUT=/tmp/bench-${{ github.event.inputs.run_label }}.txt
 
+          # Header
+          tee "$OUT" <<HEADER
+          === VCP Latency Benchmark — ${{ github.event.inputs.run_label }} ===
+          Run ID    : ${{ github.run_id }}
+          Runner OS : $(uname -srm)
+          UTC time  : $(date -u)
+          Iterations: ${{ github.event.inputs.iterations }}
+          HEADER
+
+          # Network probe — measure RTT from runner to Supabase
+          SUPABASE_HOST=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|/.*||')
+          PUBLIC_IP=$(curl -sf --max-time 5 https://api.ipify.org 2>/dev/null || echo "unavailable")
+
           {
-            echo "=== VCP Latency Benchmark — ${{ github.event.inputs.run_label }} ==="
-            echo "Run ID      : ${{ github.run_id }}"
-            echo "Runner OS   : $(uname -srm)"
-            echo "UTC time    : $(date -u)"
-            echo "Iterations  : ${{ github.event.inputs.iterations }}"
             echo ""
-
-            # Network environment
             echo "--- Network probe ---"
-            PUBLIC_IP=$(curl -sf --max-time 5 https://api.ipify.org || echo "unavailable")
-            echo "Runner public IP: $PUBLIC_IP"
-
-            SUPABASE_HOST=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|/.*||')
-            echo "Supabase host   : $SUPABASE_HOST"
+            echo "Runner public IP : $PUBLIC_IP"
+            echo "Supabase host    : $SUPABASE_HOST"
             echo ""
-            echo "RTT to Supabase REST endpoint (5 curl samples, time_connect):"
+            echo "RTT samples (curl -w %{time_connect}, 5 attempts):"
             for i in 1 2 3 4 5; do
               curl -sS -o /dev/null \
-                -w "  sample $i: connect=${time_connect}s  ttfb=${time_starttransfer}s\n" \
+                -w "  sample $i: connect=%{time_connect}s  ttfb=%{time_starttransfer}s\n" \
                 --max-time 10 \
                 "https://$SUPABASE_HOST/rest/v1/" \
                 -H "apikey: probe" 2>/dev/null \
@@ -79,7 +82,7 @@ jobs:
             done
             echo ""
             echo "--- Benchmark ---"
-          } | tee "$OUT"
+          } | tee -a "$OUT"
 
           TRADE_DATE_ARG=""
           if [ -n "${{ github.event.inputs.trade_date }}" ]; then
