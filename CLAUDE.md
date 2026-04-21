@@ -175,6 +175,11 @@ const headerStore = await headers();
 
 If we upgrade to Next.js 15, `cookies()` and `headers()` become async Promises — add `await` back then.
 
+### Scanner filter conventions
+- **Prefer filter composition over pre-built combinations.** If a requested filter is equivalent to composing 2–3 existing FREE/CHEAP filters, implement it as a preset that composes them in the UI — not as a new standalone `ScanFilters` field. Standalone multi-day filters carry EXPENSIVE latency costs that composition avoids. (ADR 006 §Decision 3)
+- **Volume dry-up requires `vcp_contraction = true`.** The field exists only as a VCP composition rule. Reject it standalone with a validation error pointing to `volume_ratio_max`.
+- Any new multi-day filter (lookback > 1 day) must clear the CTE routing rule: `candidates × lookback_days > POSTGREST_ROW_CAP(1000)` → mandatory CTE. See ADR 005.
+
 ### Things to never do
 - Never install a new dependency without checking if shadcn/ui or an existing lib covers it
 - Never add `localStorage` calls in Server Components (they'll crash the build silently in edge cases)
@@ -250,7 +255,9 @@ If any of these go out of date, updating them is part of the task that broke the
   - Broker adapter interface not finalized
   - **Email confirmation is OFF** in Supabase. Before enabling it (or adding magic links / OAuth), a `/auth/callback` Route Handler must be built to exchange the code for a session and set cookies. Without it, confirmation links will 404 and the user will not get a session.
   - **Broker credential key rotation is NOT implemented.** `scripts/rotate_broker_key.py.TODO` describes the spec. A rotation script and runbook MUST land before the first real broker credential is stored in production. This is a **hard blocker on exiting MVP** — see `docs/decisions/002-broker-credentials.md §Q3`.
-  - **All-NSE VCP scan at 5,327ms p95 — 6.5% over the 5,000ms soft target.** Committed to a dedicated perf PR after the filter catalog (Task 2) merges. Until fixed: all-NSE unfiltered scans are not user-exposed; product UI must default to Nifty 500 or force a universe filter. See `docs/benchmarks/m3-phase1-baseline.md §All-NSE VCP: Open Performance Commitment`.
+  - **All-NSE VCP scan at 5,327ms p95 — 6.5% over the 5,000ms soft target.** Dedicated perf PR after M3-F merges. Until fixed: all-NSE + VCP returns a hard API error; product UI defaults to Nifty 500 for VCP scans. See `docs/benchmarks/m3-phase1-baseline.md §All-NSE VCP: Open Performance Commitment`.
+  - **Fundamentals deferred to post-MVP.** PE and market cap refresh daily in bhavcopy; quarterly metrics (ROE, ROCE, PB, D/E) shown with "as of [date]". No external data source (FMP/XBRL) in M3. See ADR 006 §Decision 2.
+  - **RS Score is alpha-version pending calibration.** (Field names: `rs_score_min/max` — not "RS Rating" to avoid IBD association.) Score distribution must be validated before public launch; see ADR 006 §Decision 5 for acceptance criteria.
 
 ---
 
