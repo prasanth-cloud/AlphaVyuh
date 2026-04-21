@@ -38,6 +38,8 @@ Composed of:
 
 ## Execution
 
-Scans run against a cached EOD snapshot in Postgres, refreshed after market close via a scheduled job. The scan compiler turns a `ScanDefinition` into a single parameterized SQL query — no row-by-row evaluation in the app layer.
+Scans run against a cached EOD snapshot in Postgres, refreshed after market close via a scheduled job.
 
-Each `scan_run` captures the input definition, the result rows, and a timestamp — so users can look back at "what did this scan find on Tuesday?"
+**Architecture (see ADR 005):** Single-day filters are pushed to the DB as WHERE clauses and executed in Postgres. Multi-day pattern filters (VCP, volume_dry_up) use a two-pass approach: Pass 1 returns candidates via DB filters; Pass 2 fetches a bounded lookback window for those candidates and runs Python-side pattern detection. This is a deliberate choice over a monolithic SQL compiler — see `docs/decisions/005-scan-engine.md` for the full rationale.
+
+Each `scan_run` captures the input definition, the result rows, and a timestamp — so users can look back at "what did this scan find on Tuesday?" Historical re-runs over a date range (backtesting) are implemented as background jobs, not synchronous requests.
