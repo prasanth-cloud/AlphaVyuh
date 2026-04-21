@@ -153,6 +153,12 @@ class ScanFilters(BaseModel):
     roe_min:              float | None = None
     roce_min:             float | None = None
 
+    # ── Setup patterns (multi-day, two-pass) ─────────────────────────────
+    vcp_contraction:          bool | None = None   # True → enable VCP two-pass
+    vcp_min_pivots:           int  | None = None   # contracting bases required (default 2)
+    vcp_max_depth_pct:        float| None = None   # final base max depth % (default 15.0)
+    vcp_pivot_proximity_pct:  float| None = None   # max |close - pivot_high| / pivot_high % (default 10.0)
+
 
 class ScanRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
@@ -546,6 +552,70 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
     return results
 
 
+def _run_vcp_pass2(
+    client,
+    pass1_results: list[dict],
+    latest_date: str,
+    f: "ScanFilters",
+) -> list[dict]:
+    """
+    Pass 2 of VCP detection: fetch LOOKBACK_DAYS of daily OHLCV per candidate,
+    run detect_vcp() on each, return only matching results.
+
+    Called only when f.vcp_contraction is True.
+
+    Batch size: PostgREST's hosted max_rows cap is 1000 rows per request.
+    We batch candidates so that BATCH_SIZE * LOOKBACK_DAYS <= 1000, ensuring
+    no result is silently truncated.
+    """
+    from collections import defaultdict
+    from app.scanners.vcp import detect_vcp, LOOKBACK_DAYS
+
+    min_pivots           = f.vcp_min_pivots           or 2
+    max_depth_pct        = f.vcp_max_depth_pct        or 15.0
+    pivot_proximity_pct  = f.vcp_pivot_proximity_pct  or 10.0
+
+    candidate_symbols = [r["symbol"] for r in pass1_results if r.get("symbol")]
+    if not candidate_symbols:
+        return []
+
+    # PostgREST hard cap: 1000 rows per request on hosted Supabase.
+    # Keep each batch well under that limit.
+    POSTGREST_ROW_CAP = 1000
+    batch_size = max(1, POSTGREST_ROW_CAP // LOOKBACK_DAYS)  # 13 at LOOKBACK_DAYS=75
+
+    by_symbol: dict[str, list[dict]] = defaultdict(list)
+    for i in range(0, len(candidate_symbols), batch_size):
+        batch = candidate_symbols[i : i + batch_size]
+        rows = (
+            client.table("daily_ohlcv")
+            .select("symbol,trade_date,high,low,close,volume")
+            .in_("symbol", batch)
+            .lte("trade_date", latest_date)
+            .order("trade_date", desc=True)
+            .limit(batch_size * LOOKBACK_DAYS)
+            .execute()
+            .data or []
+        )
+        for row in rows:
+            by_symbol[row["symbol"]].append(row)
+
+    # Sort ascending and cap at LOOKBACK_DAYS per symbol
+    for sym in by_symbol:
+        by_symbol[sym].sort(key=lambda r: r["trade_date"])
+        by_symbol[sym] = by_symbol[sym][-LOOKBACK_DAYS:]
+
+    return [
+        r for r in pass1_results
+        if detect_vcp(
+            by_symbol.get(r["symbol"], []),
+            min_pivots=min_pivots,
+            max_depth_pct=max_depth_pct,
+            pivot_proximity_pct=pivot_proximity_pct,
+        )
+    ]
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/run")
@@ -638,6 +708,10 @@ async def run_scanner(
 
     # Python-side filter for computed columns
     results = _apply_filters(rows, f)
+
+    # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
+    if f.vcp_contraction is True and results:
+        results = _run_vcp_pass2(client, results, latest_date, f)
 
     # Sort
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
