@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
-    supabase_jwt_secret: str
+    supabase_jwt_secret: str = ""  # not needed for service-role calls; optional for bench/scripts
     frontend_url: str = "http://localhost:3000"
     ingest_service_key: str = ""
     razorpay_key_id: str = ""
