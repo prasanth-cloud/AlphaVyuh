@@ -1,6 +1,8 @@
 """
 Scanner router — TradingView-style stock screener for NSE/BSE data.
-All filtering is done in Python post-query to avoid PostgREST URL limits.
+Single-day filters are pushed to the DB as WHERE clauses (ADR 005 M3-B).
+Multi-day filters (VCP, volume dry-up) run Python-side post-fetch on a
+smaller candidate set returned by the DB push-filters.
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 
 FREE_RESULT_LIMIT  = 25
 PRO_RESULT_LIMIT   = 500
-FETCH_BATCH        = 6000  # rows pulled from DB before Python-side filtering (NSE+BSE ~3000, US ~1500)
+SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 
 
 # ── Filter model ──────────────────────────────────────────────────────────────
@@ -78,6 +80,10 @@ class ScanFilters(BaseModel):
     price_vs_ema20:  str | None = None   # 'above' | 'below'
     price_vs_ema50:  str | None = None
     price_vs_ema200: str | None = None
+
+    # ── Relative Strength (Minervini RS rating, 1–99) ────────────────────
+    rs_rating_min:   float | None = None   # >= X (70+ is Minervini threshold)
+    rs_rating_max:   float | None = None
 
     # ── MACD ─────────────────────────────────────────────────────────────
     macd_signal:        str | None = None   # "bullish_cross"|"bearish_cross"|"above_signal"|"below_signal"
@@ -281,23 +287,28 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         w52l       = _safe(row.get("week_52_low"), None)   # type: ignore[arg-type]
 
         # None-preserving casts
-        rsi_v   = float(row["rsi_14"])   if row.get("rsi_14")   is not None else None
-        ema20_v = float(row["ema_20"])   if row.get("ema_20")   is not None else None
-        ema50_v = float(row["ema_50"])   if row.get("ema_50")   is not None else None
-        ema200_v= float(row["ema_200"])  if row.get("ema_200")  is not None else None
-        atr_v   = float(row["atr_14"])   if row.get("atr_14")   is not None else None
-        w52h_v  = float(row["week_52_high"]) if row.get("week_52_high") is not None else None
-        w52l_v  = float(row["week_52_low"])  if row.get("week_52_low")  is not None else None
+        rsi_v      = float(row["rsi_14"])       if row.get("rsi_14")       is not None else None
+        ema20_v    = float(row["ema_20"])        if row.get("ema_20")       is not None else None
+        ema50_v    = float(row["ema_50"])        if row.get("ema_50")       is not None else None
+        ema200_v   = float(row["ema_200"])       if row.get("ema_200")      is not None else None
+        atr_v      = float(row["atr_14"])        if row.get("atr_14")       is not None else None
+        w52h_v     = float(row["week_52_high"])  if row.get("week_52_high") is not None else None
+        w52l_v     = float(row["week_52_low"])   if row.get("week_52_low")  is not None else None
+        rs_rating_v= float(row["rs_rating"])     if row.get("rs_rating")    is not None else None
 
-        # Computed columns
-        pct_change    = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
-        volume_ratio  = round(volume / avg_vol, 2) if avg_vol else None
-        gap_pct       = round((open_p - prev_close) / prev_close * 100, 2) if prev_close else None
-        w52h_pct      = round((w52h_v - close) / close * 100, 2) if w52h_v and close else None
-        w52l_pct      = round((close - w52l_v) / w52l_v * 100, 2) if w52l_v and close else None
-        atr_pct_v     = round(atr_v / close * 100, 2) if atr_v and close else None
-        ema20_dist    = round((close - ema20_v) / ema20_v * 100, 2) if ema20_v else None
-        ema50_dist    = round((close - ema50_v) / ema50_v * 100, 2) if ema50_v else None
+        # Computed columns — prefer precomputed DB values when populated (M3-A columns)
+        pct_change   = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
+        gap_pct      = round((open_p - prev_close) / prev_close * 100, 2) if prev_close else None
+        atr_pct_v    = round(atr_v / close * 100, 2) if atr_v and close else None
+        ema20_dist   = round((close - ema20_v) / ema20_v * 100, 2) if ema20_v else None
+        ema50_dist   = round((close - ema50_v) / ema50_v * 100, 2) if ema50_v else None
+        # Use DB-precomputed ratio when available; fall back to on-the-fly compute
+        _db_vr   = float(row["volume_ratio"]) if row.get("volume_ratio") is not None else None
+        volume_ratio = _db_vr if _db_vr is not None else (round(volume / avg_vol, 2) if avg_vol else None)
+        _db_w52h = float(row["w52h_pct"])     if row.get("w52h_pct")     is not None else None
+        w52h_pct = _db_w52h if _db_w52h is not None else (round((w52h_v - close) / close * 100, 2) if w52h_v and close else None)
+        _db_w52l = float(row["w52l_pct"])     if row.get("w52l_pct")     is not None else None
+        w52l_pct = _db_w52l if _db_w52l is not None else (round((close - w52l_v) / w52l_v * 100, 2) if w52l_v and close else None)
 
         # ── Price & Performance ──────────────────────────────────────────
         if f.price_min       is not None and close < f.price_min:            continue
@@ -320,6 +331,10 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         # ── Momentum ─────────────────────────────────────────────────────
         if f.rsi_min is not None and (rsi_v is None or rsi_v < f.rsi_min):  continue
         if f.rsi_max is not None and (rsi_v is None or rsi_v > f.rsi_max):  continue
+
+        # ── Relative Strength rating ───────────────────────────────────────
+        if f.rs_rating_min is not None and (rs_rating_v is None or rs_rating_v < f.rs_rating_min): continue
+        if f.rs_rating_max is not None and (rs_rating_v is None or rs_rating_v > f.rs_rating_max): continue
 
         # ── Trend / EMAs ─────────────────────────────────────────────────
         if f.above_ema20  and (ema20_v  is None or close <= ema20_v):  continue
@@ -434,10 +449,6 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.ema50_vs_ema200 == "golden" and (ema50_v is None or ema200_v is None or ema50_v <= ema200_v): continue
         if f.ema50_vs_ema200 == "death"  and (ema50_v is None or ema200_v is None or ema50_v >= ema200_v): continue
 
-        # ── Turnover in crores ────────────────────────────────────────────
-        if f.turnover_min_cr is not None:
-            if turnover < f.turnover_min_cr * 10_000_000: continue
-
         # ── Fundamentals (from stock_universe) ───────────────────────────
         mc   = su.get("market_cap_cr")
         pe   = su.get("pe_ratio")
@@ -518,6 +529,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "stoch_k":        float(row["stoch_k"]) if row.get("stoch_k") is not None else None,
             "adx_14":         float(row["adx_14"]) if row.get("adx_14") is not None else None,
             "delivery_pct":   float(row["delivery_pct"]) if row.get("delivery_pct") is not None else None,
+            "rs_rating":      rs_rating_v,
             "is_new_52w_high": bool(row.get("is_new_52w_high")),
             "is_inside_bar":   bool(row.get("is_inside_bar")),
             # Fundamentals
@@ -572,24 +584,57 @@ async def run_scanner(
             "bb_upper,bb_middle,bb_lower,bb_width,"
             "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
             "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
+            "rs_rating,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
             "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
         )
         .eq("trade_date", latest_date)
     )
 
-    # Push simple DB-side filters to reduce rows before Python processing
-    if f.price_min      is not None: q = q.gte("close",      f.price_min)
-    if f.price_max      is not None: q = q.lte("close",      f.price_max)
-    if f.rsi_min        is not None: q = q.gte("rsi_14",     f.rsi_min)
-    if f.rsi_max        is not None: q = q.lte("rsi_14",     f.rsi_max)
-    if f.atr_min        is not None: q = q.gte("atr_14",     f.atr_min)
-    if f.atr_max        is not None: q = q.lte("atr_14",     f.atr_max)
-    if f.turnover_min   is not None: q = q.gte("turnover",   f.turnover_min)
-    if f.turnover_max   is not None: q = q.lte("turnover",   f.turnover_max)
-    if f.pct_change_min is not None: q = q.gte("pct_change", f.pct_change_min)
-    if f.pct_change_max is not None: q = q.lte("pct_change", f.pct_change_max)
+    # ── Push all single-day filters to DB (ADR 005 M3-B) ─────────────────────
+    # Precomputed columns already in schema before M3-A:
+    if f.price_min        is not None: q = q.gte("close",       f.price_min)
+    if f.price_max        is not None: q = q.lte("close",       f.price_max)
+    if f.high_min         is not None: q = q.gte("high",        f.high_min)
+    if f.low_max          is not None: q = q.lte("low",         f.low_max)
+    if f.volume_min       is not None: q = q.gte("volume",      f.volume_min)
+    if f.volume_max       is not None: q = q.lte("volume",      f.volume_max)
+    if f.rsi_min          is not None: q = q.gte("rsi_14",      f.rsi_min)
+    if f.rsi_max          is not None: q = q.lte("rsi_14",      f.rsi_max)
+    if f.atr_min          is not None: q = q.gte("atr_14",      f.atr_min)
+    if f.atr_max          is not None: q = q.lte("atr_14",      f.atr_max)
+    if f.turnover_min     is not None: q = q.gte("turnover",    f.turnover_min)
+    if f.turnover_max     is not None: q = q.lte("turnover",    f.turnover_max)
+    if f.turnover_min_cr  is not None: q = q.gte("turnover",    f.turnover_min_cr * 10_000_000)
+    if f.pct_change_min   is not None: q = q.gte("pct_change",  f.pct_change_min)
+    if f.pct_change_max   is not None: q = q.lte("pct_change",  f.pct_change_max)
+    if f.gap_pct_min      is not None: q = q.gte("gap_pct",     f.gap_pct_min)
+    if f.gap_pct_max      is not None: q = q.lte("gap_pct",     f.gap_pct_max)
+    if f.adx_min          is not None: q = q.gte("adx_14",      f.adx_min)
+    if f.adx_max          is not None: q = q.lte("adx_14",      f.adx_max)
+    if f.stoch_k_min      is not None: q = q.gte("stoch_k",     f.stoch_k_min)
+    if f.stoch_k_max      is not None: q = q.lte("stoch_k",     f.stoch_k_max)
+    if f.stoch_d_min      is not None: q = q.gte("stoch_d",     f.stoch_d_min)
+    if f.stoch_d_max      is not None: q = q.lte("stoch_d",     f.stoch_d_max)
+    if f.cci_min          is not None: q = q.gte("cci_20",      f.cci_min)
+    if f.cci_max          is not None: q = q.lte("cci_20",      f.cci_max)
+    if f.williams_r_min   is not None: q = q.gte("williams_r",  f.williams_r_min)
+    if f.williams_r_max   is not None: q = q.lte("williams_r",  f.williams_r_max)
+    if f.bb_width_min     is not None: q = q.gte("bb_width",    f.bb_width_min)
+    if f.bb_width_max     is not None: q = q.lte("bb_width",    f.bb_width_max)
+    if f.delivery_pct_min is not None: q = q.gte("delivery_pct", f.delivery_pct_min)
+    if f.delivery_pct_max is not None: q = q.lte("delivery_pct", f.delivery_pct_max)
+    if f.new_52w_high is True:  q = q.eq("is_new_52w_high", True)
+    if f.new_52w_low  is True:  q = q.eq("is_new_52w_low",  True)
+    if f.is_inside_bar  is True: q = q.eq("is_inside_bar",  True)
+    if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
+    if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
+    if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
+    # M3-A columns: DB push deferred to ingest-job PR — all values currently NULL in production.
+    # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
+    # Python fallback in _apply_filters handles rs_rating/volume_ratio/w52h_pct/w52l_pct
+    # until the ingest job populates these columns.
 
-    rows = q.limit(FETCH_BATCH).execute().data or []
+    rows = q.limit(SCAN_ROW_CAP).execute().data or []
 
     # Python-side filter for computed columns
     results = _apply_filters(rows, f)

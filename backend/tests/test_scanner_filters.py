@@ -93,3 +93,52 @@ class TestMarketFilter:
     def test_exact_match(self):
         assert _apply_market_filter("NASDAQ", "NASDAQ") is True
         assert _apply_market_filter("NSE", "NASDAQ") is False
+
+
+class TestRsRatingFilter:
+    """rs_rating is a new M3-A column — 1-99 Minervini relative strength scale."""
+
+    def test_above_threshold_passes(self):
+        assert _apply_numeric_filter(75, 70, None) is True
+
+    def test_below_threshold_fails(self):
+        assert _apply_numeric_filter(65, 70, None) is False
+
+    def test_at_threshold_passes(self):
+        assert _apply_numeric_filter(70, 70, None) is True
+
+    def test_range_filter(self):
+        assert _apply_numeric_filter(80, 70, 99) is True
+        assert _apply_numeric_filter(65, 70, 99) is False
+        assert _apply_numeric_filter(99, 70, 99) is True
+
+    def test_none_filter_passes_all(self):
+        assert _apply_numeric_filter(1, None, None) is True
+        assert _apply_numeric_filter(99, None, None) is True
+
+
+def _resolve_volume_ratio(db_value, volume: int, avg_vol: int) -> float | None:
+    """Mirrors the DB-prefer fallback logic in _apply_filters (M3-B)."""
+    if db_value is not None:
+        return float(db_value)
+    return round(volume / avg_vol, 2) if avg_vol else None
+
+
+class TestVolumeRatioFallback:
+    """volume_ratio column: use DB value when populated, else compute from raw cols."""
+
+    def test_uses_db_value_when_present(self):
+        result = _resolve_volume_ratio(db_value=2.5, volume=500_000, avg_vol=100_000)
+        assert result == 2.5
+
+    def test_falls_back_to_computation_when_db_null(self):
+        result = _resolve_volume_ratio(db_value=None, volume=300_000, avg_vol=100_000)
+        assert result == 3.0
+
+    def test_returns_none_when_avg_vol_zero(self):
+        result = _resolve_volume_ratio(db_value=None, volume=100_000, avg_vol=0)
+        assert result is None
+
+    def test_db_zero_is_used_not_treated_as_null(self):
+        result = _resolve_volume_ratio(db_value=0.0, volume=500_000, avg_vol=100_000)
+        assert result == 0.0
