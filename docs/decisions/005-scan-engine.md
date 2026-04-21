@@ -1,6 +1,10 @@
 # ADR 005 — Scan Engine Architecture
 
-> Status: **ACCEPTED**
+> Status: **AMENDED** (originally ACCEPTED; amended after M3-C benchmark)
+>
+> Original decision: option (b) Python worker with two-pass VCP.
+> Amendment: VCP pass 2 now uses a Postgres CTE (hybrid architecture).
+> See §Amendment — Hybrid Architecture and §Revisit Triggers for the change log.
 >
 > Supersedes: the clause in `docs/scan-dsl.md §Execution` that read "The scan compiler
 > turns a `ScanDefinition` into a single parameterized SQL query — no row-by-row evaluation
@@ -25,14 +29,6 @@ universe on-demand and on a daily schedule after market close.
 | Existing implementation | `backend/app/routers/scanner.py` — option (b) already working: fetches ≤6,000 rows from `daily_ohlcv`, filters in Python |
 | Saved scans | `saved_screens` table stores `ScanFilters` JSON; re-run any time |
 | Runtime | FastAPI on Railway (single process + APScheduler), Supabase managed Postgres |
-
-**A note on latency figures in this document:** The current implementation (option b, simple SEPA
-filters) has been observed in production to return in 600–900ms for the full-NSE fetch. All other
-latency figures in this ADR are **estimates derived from first principles and analogous Postgres
-benchmarks** — they have not been measured against this specific database and schema. They are
-presented to reason about order-of-magnitude feasibility, not as guarantees. The implementation
-milestones for M3 must include benchmark checkpoints; if measured latency exceeds budget, the
-"What would cause us to revisit" section below defines the escalation path.
 
 **The scan DSL filters divide into two classes:**
 
@@ -60,9 +56,11 @@ A valid VCP, as described by Minervini, requires:
 5. **Pivot confirmation** — a breakout above the pivot on volume ≥ 150% of 50-day average
 
 For M3, the `vcp_contraction` filter implementation requires:
-- A **lookback window** of 10–15 weeks of daily data per candidate symbol
-- A **pivot detection** algorithm: find local highs/lows within a sliding window, measure base depth (high-to-low percentage) at each base, verify contraction
-- **Input parameters** from the DSL: `minPivots` (minimum number of contracting bases, typically 2) and `minTightness` (maximum allowed depth of the final base, e.g. 15%)
+- A **lookback window** of 75 trading days (≈15 weeks) of daily data per candidate symbol
+- A **pivot detection** algorithm: find local strict maxima within a ±3-bar sliding window,
+  measure base depth (high-to-low percentage) at each base, verify contraction
+- **Input parameters** from the DSL: `min_pivots` (minimum contracting bases, default 2),
+  `max_depth_pct` (final base tightness, default 15%), `pivot_proximity_pct` (default 10%)
 
 This definition is implementable in Python with a sorted list of daily rows per symbol. It is
 **not** expressible as a simple SQL WHERE clause over precomputed columns — it inherently
@@ -79,20 +77,21 @@ Complex filters use window functions or LATERAL joins.
 
 **Pros:**
 - One network round trip; the DB returns only matching rows
-- For simple SEPA on 500 symbols: estimated 50–150ms (plausible for indexed boolean columns; **unmeasured**)
+- For simple SEPA on 500 symbols: estimated 50–150ms (plausible for indexed boolean columns)
 - "What did this find on a given date?" is a WHERE clause — trivially handled
-- A 252-day historical backtest is one query: `WHERE trade_date BETWEEN x AND y GROUP BY trade_date` — returns all results in a single pass
+- A 252-day historical backtest is one query: `WHERE trade_date BETWEEN x AND y GROUP BY trade_date`
 
 **Cons — concrete for this app:**
-- A DSL-to-SQL compiler for VCP (window functions over 15-week lookbacks) is significant engineering — the SQL is complex, test coverage is hard, and the compiler itself is a new abstraction layer
-- VCP cannot be expressed as a simple SQL window function without a stored procedure that encodes the pivot-detection algorithm in PL/pgSQL — a maintenance burden
-- Multi-timeframe filters (weekly candle structure) require a separate `weekly_ohlcv` table not currently in the schema
+- A DSL-to-SQL compiler for VCP (window functions over 15-week lookbacks) is significant engineering
+- VCP cannot be expressed as a simple SQL window function without a stored procedure encoding the
+  pivot-detection algorithm in PL/pgSQL — a maintenance burden
+- Multi-timeframe filters require a separate `weekly_ohlcv` table not currently in the schema
 - Debugging means reading query plans; the team is Python-first
-- Migration from the current PostgREST/Python approach: all 40+ filter fields in `ScanFilters` must be rewritten as SQL clauses, tested for exact behavior parity, and saved scan definitions in `saved_screens` would need a compatibility shim
+- Migration from current PostgREST/Python approach: all 40+ filter fields must be rewritten as SQL
 
-**Estimated latency (unmeasured):**
+**Estimated latency:**
 - Simple SEPA on Nifty 500: 50–150ms
-- VCP (PL/pgSQL pivot detection over 15 weeks × 500 symbols = 7,500 rows): 300–700ms
+- VCP (PL/pgSQL pivot detection over 15 weeks × 500 symbols = 37,500 rows): 300–700ms
 
 ---
 
@@ -103,125 +102,205 @@ The existing implementation. A two-pass approach for complex filters:
 - **Pass 2 (for VCP/volume_dry_up only):** Fetch last K days for the candidate set; run Python pattern detection
 
 **Pros:**
-- Already working; measured at 600–900ms for unoptimized all-NSE fetch
-- Push more filters DB-side → estimated 200–400ms for a SEPA scan on Nifty 500 (significant portion of latency is the current over-fetch of 6,000 rows; targeted query reduces payload by ~10×)
-- VCP two-pass: after Pass 1, a SEPA pre-filter typically leaves 20–80 candidates. Pass 2 fetches last 75 trading days × 75 candidates = ~5,600 rows. Estimated: ~200ms fetch + ~50ms Python detection = ~250ms. Combined with Pass 1: ~500ms total. **This path does not exist yet; estimate is unmeasured.**
+- Already working; M3-B measured at 171ms p50 for SEPA on a 3,046-symbol staging universe
 - Adding a new filter = one Python function + one test; no compiler involved
 - Saved scans: `ScanFilters` JSON is the stored format; re-running is a direct function call
 
 **Cons — concrete for this app:**
-- Current implementation over-fetches (6,000 rows before filtering). Must be fixed in M3.
-- Multi-day pass for VCP adds complexity: two DB calls per scan, symbol-group management in Python
-- APScheduler runs in-process; a slow scan could starve the event loop. Mitigation: run scheduled scans in a thread pool via `asyncio.get_event_loop().run_in_executor()`
+- Multi-day pass for VCP adds complexity: separate DB calls per scan, symbol-group management in Python
+- **M3-C measured VCP at 3,962ms p50 / 5,267ms p95** (500 candidates × 75 days batched over 39
+  sequential HTTP round-trips at ~100ms each). This exceeded the 1,500ms p95 target by 3.5×.
+- APScheduler runs in-process; a slow scan could starve the event loop
 - **Backtesting is a separate problem** — see §Backtesting interaction below
-
-**Estimated latency (Pass 1 measured; Pass 2 unmeasured):**
-- Simple SEPA, Nifty 500 with pushed filters: 200–400ms
-- SEPA + VCP, Nifty 500 (two-pass): 450–700ms (estimated)
-- All-NSE VCP: likely 1,500–3,000ms (estimated; may exceed budget — see §Revisit triggers)
 
 ---
 
 ### (c) Dedicated Python worker (Celery / RQ) — queue-triggered
 
-A separate worker process consumes jobs from Redis. FastAPI returns a task ID; frontend polls.
-
-**Pros:**
-- No event-loop starvation
-- Could pre-compute scan results at 16:15 IST; on-demand scan returns cached results instantly
-
-**Cons — concrete for this app:**
-- Adds Redis + worker service: two new Railway services, new failure modes
-- Queue hop adds 200–500ms of latency; on-demand scans are slower than option (b)
-- Frontend polling changes the API contract meaningfully
-- Pre-computation only helps if the user runs the same saved scan definition; custom one-off scans (the primary use case) still run synchronously
-- Unjustified infrastructure for current scale
+**Not chosen.** Adds Redis + worker service; queue hop adds 200–500ms latency; pre-computation
+only helps for saved scans not custom one-offs. Unjustified infrastructure for current scale.
 
 ---
 
 ## Backtesting Interaction
 
-The billing table commits to a "backtest" feature (blocked on free, allowed on pro/elite). A true
-backtest means: run this scan on every trading day for a date range (e.g., 252 trading days) and
-return what it would have found each day.
+Option (b) does not handle 252-day backtests in a synchronous request. At 400ms per day ×
+252 days = ~100 seconds. Backtesting must be implemented as a background job:
 
-**Option (b) does not handle 252-day backtests in a synchronous request.** At 400ms per day ×
-252 days = ~100 seconds of sequential execution. This exceeds any reasonable HTTP timeout and
-blocks the event loop.
-
-**How option (b) handles backtesting:**
-Backtesting must be implemented as a background job, not a synchronous scan. The flow:
 1. User submits a backtest request (scan definition + date range)
-2. FastAPI enqueues the job in `scan_backtest_jobs` table (status: pending)
-3. APScheduler picks it up and runs 252 passes sequentially in a thread pool, storing daily
-   results in a `scan_backtest_results` table
-4. Frontend polls `/api/v1/backtests/{id}/status` and loads results when complete
+2. FastAPI enqueues in `scan_backtest_jobs` table (status: pending)
+3. APScheduler picks it up and runs 252 passes sequentially in a thread pool
+4. Frontend polls `/api/v1/backtests/{id}/status`
 
-This is architecturally compatible with option (b) — it uses the same `run_scanner()` function
-called 252 times, with `trade_date` as a parameter. It does require a jobs table and poll
-endpoint that don't exist yet.
-
-**If option (a) were chosen instead:** A 252-day backtest becomes one SQL query
-(`WHERE trade_date BETWEEN x AND y`), executing in seconds. This is the primary concrete
-advantage of (a) over (b) for this product's feature set. If backtesting becomes a high-priority
-feature with a strict latency requirement (e.g., results in < 10s), option (a) or a materialized
-result cache should be reconsidered.
+**If option (a) CTE approach were used for all filters:** A 252-day backtest becomes one SQL query,
+executing in seconds. This remains the primary concrete advantage of (a) for historical runs.
+If backtesting becomes a strict latency requirement (results in < 10s), adding a CTE-based
+historical-scan path alongside option (b) is the preferred upgrade path.
 
 ---
 
 ## Decision
 
-**Option (b) — Python worker on FastAPI** with two optimizations required before ship.
+**Hybrid: option (b) for single-day filters + option (a) Postgres CTE for lookback-heavy passes.**
 
-Rationale:
+### Original decision (M3-A/B)
 
-1. **It already runs.** The scanner works today for single-day filters. M3 is an optimization and extension, not a ground-up build.
+Option (b) — Python worker on FastAPI — was chosen for single-day SEPA filters. Rationale:
 
-2. **Simple filters meet the budget.** Push-to-DB optimization cuts Nifty 500 SEPA to an estimated 200–400ms. This must be validated with benchmark checkpoints during M3; if it doesn't hold, the revisit triggers below apply.
+1. Already working; SEPA measured at 171ms p50 in M3-B — 57% headroom vs 400ms p50 target.
+2. Adding a new single-day filter = one Python function + one push-filter clause. No SQL compiler.
+3. Saved scan definitions remain `ScanFilters` JSON; no data migration on filter changes.
 
-3. **VCP is feasible via two-pass.** The SEPA pre-filter typically reduces candidates to <100 symbols before the VCP lookback. At that scale, option (b) is estimated to stay within budget. **This is a bet that must be validated during M3 implementation.** If Nifty 500 VCP benchmark exceeds 1.5s or all-NSE VCP exceeds 5s in M3-C, move VCP execution to option (a) Postgres CTE as a scoped fix — no full architecture change needed.
+### Amendment — Hybrid Architecture (M3-C)
 
-4. **Backtesting is a background job, not a blocker.** The 252-day backtest limitation is resolved by implementing it as an async job, not a synchronous request. **Instant backtesting (< 10s historical scans) is out of scope for MVP.** If user demand emerges post-launch, the preferred path is adding option (a) Postgres-side compilation as a dedicated historical-scan path alongside option (b) — not replacing it. The Minervini/Qullamaggie audience thinks in weeks, not milliseconds; over-engineering before demand is wasteful.
+The M3-C VCP benchmark **fired the revisit trigger** (see §Revisit Triggers — FIRED):
 
-5. **Lower total cost for current phase.** No SQL compiler to build, no new infrastructure, no API contract changes. The incremental investment over the working implementation is measured in days, not weeks.
+- **Pre-fix VCP p95: 5,267ms** vs 1,500ms target — 3.5× over budget
+- **Root cause:** 500 candidates ÷ 13 symbols/batch = 39 sequential HTTP round-trips at ~100ms each
+- **Fix:** Replace batching with a single Postgres CTE via a security-definer RPC function
+  (`get_vcp_lookback`). The function returns one JSONB row per symbol (not one row per date)
+  so the PostgREST row cap is never hit. Python unpacks the history and calls `detect_vcp()`
+  unchanged. One network round-trip replaces 39.
+- **Post-fix target:** VCP p95 < 1,500ms (to be validated in M3-C-fix branch; ADR amendment
+  is provisional until post-fix benchmark is recorded)
 
-### Required optimizations (M3 must deliver)
+### The routing rule going forward
 
-**A. Push-filter optimization:** All precomputed boolean and range columns in `daily_ohlcv` must be
-expressed as DB WHERE clauses, not Python post-filters. The `FETCH_BATCH = 6000` fixed pull must
-be replaced with a selective query. Target: ≤500 rows returned for a typical SEPA scan.
+> **Any scan pass where `candidate_symbols × lookback_days > POSTGREST_ROW_CAP` must use a
+> Postgres CTE (option a). All other passes stay in Python (option b).**
 
-**B. Two-pass VCP:** Implement `vcp_contraction` filter using the spec above. Pass 2 triggers
-only after Pass 1 produces a candidate set; never fetches multi-day data for the full universe.
-Add a benchmark checkpoint: VCP scan on Nifty 500 must complete in < 1.5s end-to-end.
+**Named constants (update this table if Supabase settings change):**
 
-**C. Backtest background job:** Design and implement the job table + polling endpoint. The
-synchronous `run_scanner()` function is reused unchanged.
+| Constant | Value | Where set |
+|---|---|---|
+| `POSTGREST_ROW_CAP` | 1,000 rows | Supabase project → Settings → API → Max rows |
+| `LOOKBACK_DAYS` (VCP) | 75 trading days | `backend/app/scanners/vcp.py` |
+| CTE threshold (VCP) | 1,000 / 75 = **13 symbols** | derived |
+
+At 13 symbols × 75 days = 975 rows — one batch, just under the cap. At 14 symbols (1,050 rows)
+a second batch is required and sequential-request overhead begins. For VCP at 500 candidates the
+threshold is exceeded by 38×, which is why 39 sequential batches were needed and why the CTE fix
+is mandatory.
+
+**The threshold is a function of both variables.** A filter with 200-day lookback crosses the
+threshold at just 5 symbols (5 × 200 = 1,000). A filter with 5-day lookback crosses at 200
+symbols (200 × 5 = 1,000). Applying a fixed symbol count without the lookback term is wrong;
+the formula `symbols × lookback_days > POSTGREST_ROW_CAP` is the correct gate.
+
+**How the CTE RPC avoids the row cap:**
+The SQL function does NOT return one raw row per (symbol, date) — that would be 37,500 rows for
+500 symbols × 75 days, re-hitting the cap at the RPC response layer. Instead the function returns
+**one row per symbol** with the OHLCV history packed as a JSONB array. At 500 symbols the RPC
+response is 500 rows — well under the cap. Python unpacks each row's `history` field. This is the
+architecture used in `get_vcp_lookback()` (migration 029).
+
+```sql
+-- Correct: one row per symbol, history packed as JSONB
+SELECT symbol,
+       jsonb_agg(
+         jsonb_build_object('trade_date', trade_date, 'high', high, 'low', low,
+                            'close', close, 'volume', volume)
+         ORDER BY trade_date ASC
+       ) AS history
+FROM recent WHERE rn <= $lookback_days
+GROUP BY symbol;
+```
+
+**Security-definer note:** `get_vcp_lookback` is security-definer. This is safe for `daily_ohlcv`
+specifically because it is market data (not user-scoped) and has no RLS policy restricting reads.
+Any future lookback function that joins user-owned tables (`watchlist_items`, `trade_journal`, etc.)
+must NOT be security-definer — it must run as the caller with RLS enforced.
+
+**Known scans that need CTE treatment (lookback × candidates > 1,000):**
+- `vcp_contraction` (75 days × 500 candidates = 37,500) — being fixed in M3-C-fix
+- `volume_dry_up` (proposed, 50 days): crosses threshold at 20 candidates. Any pass-1 producing
+  > 20 candidates requires CTE. If pass-1 is aggressive enough to keep candidates < 20,
+  Python batching is acceptable.
+- Any multi-week rolling indicator (RS percentile, base count, multi-timeframe analysis)
+
+**The CTE is data-fetch-only. Python pivot detection is unchanged.**
+The `detect_vcp()` Python function and all of `backend/app/scanners/vcp.py` remain untouched.
+The CTE replaces only the batching loop in `_run_vcp_pass2()` that fetched OHLCV rows.
+After the CTE call returns one JSONB row per symbol, Python unpacks it and calls `detect_vcp()`
+per symbol exactly as before. Nothing about the VCP algorithm moves into SQL.
+
+**Migration path if a Python-side pass turns out to need CTE treatment:**
+1. Determine the effective `lookback_days` for the pass (may be user-configurable; use the maximum)
+2. Verify `candidates × lookback_days > POSTGREST_ROW_CAP` — if not, no migration needed
+3. Write a SQL function (security-definer only for non-user-scoped tables) returning one JSONB
+   row per symbol with the aggregated history — this keeps RPC response ≤ candidate count rows
+4. Add the function in a new numbered migration; call from Python via `client.rpc()`
+5. The Python detection logic stays unchanged — only the batching loop is replaced
+6. Add the function to the benchmark script; verify < latency target before merge
+
+---
+
+## Required Optimizations (M3 must deliver)
+
+**A. Push-filter optimization** ✅ SHIPPED (M3-B, PR #11)
+All precomputed boolean and range columns expressed as DB WHERE clauses. FETCH_BATCH=6000 replaced
+with a selective query. Measured: 171ms p50 / 545ms p95 for SEPA on 3,046 symbols.
+
+**B. Two-pass VCP** ✅ SHIPPED (M3-C, PR #12) / 🔄 CTE fix pending (M3-C-fix)
+`vcp_contraction` filter implemented and merged. Pass-2 data fetch being rewritten as CTE.
+Pre-fix p95: 5,267ms. Post-fix target: < 1,500ms.
+
+**C. Backtest background job** — deferred; out of scope for MVP.
+
+---
+
+## Performance Baseline
+
+See `docs/benchmarks/m3-phase1-baseline.md` for full run logs.
+
+| Scan | Date | p50 | p95 | p99 | Target | Status |
+|------|------|-----|-----|-----|--------|--------|
+| SEPA (3,046 symbols) | 2026-04-19 | 171ms | 545ms | 678ms | p50 < 400ms | ✅ PASS |
+| VCP Nifty-500 (pre-fix) | 2026-04-19 | 3,962ms | 5,267ms | 12,892ms | p95 < 1,500ms | ❌ FAIL |
+| VCP Nifty-500 (post-fix) | pending | — | — | — | p95 < 1,500ms | pending |
+| VCP all-NSE (post-fix) | pending | — | — | — | p95 < 5,000ms | pending |
 
 ---
 
 ## Migration Cost If We Pick Wrong
 
-If option (b) is abandoned for option (a) later, the cost is:
+If option (b) is abandoned entirely for option (a) later, the cost is:
 
 - Rewrite all 40+ `ScanFilters` fields as SQL clause generators in a DSL compiler
-- Rewrite `_apply_filters()` (currently 200 lines of Python) as equivalent PL/pgSQL or CTEs; test for exact behavior parity including edge cases (None handling, dual-alias fields like `w52h_pct_max` / `week_52_high_pct_max`)
-- Saved scan definitions in `saved_screens` are stored as `ScanFilters` JSON; they remain valid as input to the compiler, so no data migration is needed — only the execution path changes
+- Rewrite `_apply_filters()` (currently 200 lines of Python) as equivalent PL/pgSQL or CTEs
+- Saved scan definitions in `saved_screens` remain valid input; only the execution path changes
 - Add `weekly_ohlcv` materialized view if multi-timeframe filters are needed
 - Switch DB client from PostgREST to `asyncpg` for calling stored functions
 
-Estimated: 1–2 weeks for a single engineer. Not catastrophic, but non-trivial. This reinforces
-the importance of the M3 benchmark checkpoints: if (b) is going to fail, we want to know at
-Pass-1 optimization time, not after VCP is fully built on top of it.
+Estimated: 1–2 weeks for a single engineer. The hybrid approach (option b for single-day,
+CTE for multi-day) significantly reduces this cost if a full migration ever becomes necessary —
+the CTE infrastructure and pattern are already in place.
 
 ---
 
-## What Would Cause Us to Revisit
+## Revisit Triggers
 
-1. **All-NSE VCP measured above 3s** after push-filter optimization. At that point, option (a)'s window functions or a pre-computation cache become worth the complexity.
+### 1. Nifty 500 VCP > 1.5s p95 — **🔴 FIRED (M3-C)**
 
-2. **Backtesting latency is a product requirement** (e.g., user must see 252-day results in under 10s). Option (b)'s async-job approach delivers results in minutes, not seconds. If competitive pressure demands near-instant historical runs, option (a) is the right answer.
+Measured 5,267ms p95 on 2026-04-19. Root cause: 39 sequential HTTP round-trips.
+**Resolution:** Replace batching with Postgres CTE in `get_vcp_lookback()` function (migration 029).
+Implementation in progress on branch `feat/scanner-vcp-cte-fix`.
 
-3. **Multi-timeframe filters in the DSL** (weekly/monthly candle analysis). These require data the current schema doesn't have and would need schema additions regardless of option choice.
+### 2. All-NSE VCP > 5s — pending post-CTE measurement
 
-4. **APScheduler parallelism becomes a bottleneck** (e.g., alert system running 1,000+ saved scans per day). At that scale, option (c)'s dedicated worker with horizontal scaling becomes worth the infrastructure cost.
+Pre-fix all-NSE bench crashed with JSON error (URL too long for 3,046-symbol IN clause at 3,046
+symbols). Post-fix CTE bench pending. Target: p95 < 5,000ms.
+
+### 3. Backtesting latency is a product requirement
+
+If users must see 252-day results in < 10s, the async-job approach (minutes to complete) is
+insufficient. At that point, option (a) CTE for the historical-scan path becomes warranted.
+
+### 4. Multi-timeframe filters in the DSL
+
+Weekly/monthly candle analysis requires a `weekly_ohlcv` materialized view not currently in schema.
+Schema additions are needed regardless of option choice.
+
+### 5. APScheduler parallelism becomes a bottleneck
+
+At 1,000+ saved scans per day, option (c) dedicated worker becomes worth the infrastructure cost.
