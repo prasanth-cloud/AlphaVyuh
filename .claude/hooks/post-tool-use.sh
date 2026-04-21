@@ -5,9 +5,8 @@
 
 set -euo pipefail
 
-# Hooks run in a minimal subshell that does not source ~/.zshrc.
-# Add common tool paths so bun, bunx, etc. are available.
-export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+# Add common bun/tool install locations. Hooks don't source ~/.zshrc.
+export PATH="$HOME/.bun/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/v22.22.2/bin:$PATH"
 
 # The hook receives the edited file path as $CLAUDE_TOOL_FILE_PATH
 FILE="${CLAUDE_TOOL_FILE_PATH:-}"
@@ -31,19 +30,28 @@ if [[ ! -f "$FILE" ]]; then
   exit 0
 fi
 
-# Prettier — silent unless it fails
-bunx prettier --write "$FILE" > /dev/null 2>&1 || {
-  echo "prettier failed on $FILE" >&2
+# Resolve prettier — prefer bunx, fall back to frontend/node_modules, skip if absent
+run_prettier() {
+  if command -v bunx &>/dev/null; then
+    bunx prettier --write "$FILE" > /dev/null 2>&1
+  elif [[ -x "${CLAUDE_PROJECT_DIR:-.}/frontend/node_modules/.bin/prettier" ]]; then
+    "${CLAUDE_PROJECT_DIR:-.}/frontend/node_modules/.bin/prettier" --write "$FILE" > /dev/null 2>&1
+  else
+    return 0  # prettier not available — skip silently
+  fi
 }
+
+run_prettier || echo "prettier failed on $FILE" >&2
 
 # ESLint --fix for JS/TS only
 case "$FILE" in
   *.ts|*.tsx|*.js|*.jsx)
-    bunx eslint --fix "$FILE" > /dev/null 2>&1 || {
-      # Non-fatal: ESLint may surface issues it can't auto-fix.
-      # Report them so Claude sees and addresses in the next turn.
-      bunx eslint "$FILE" >&2 || true
-    }
+    if command -v bunx &>/dev/null; then
+      bunx eslint --fix "$FILE" > /dev/null 2>&1 || bunx eslint "$FILE" >&2 || true
+    elif [[ -x "${CLAUDE_PROJECT_DIR:-.}/frontend/node_modules/.bin/eslint" ]]; then
+      ESLINT="${CLAUDE_PROJECT_DIR:-.}/frontend/node_modules/.bin/eslint"
+      "$ESLINT" --fix "$FILE" > /dev/null 2>&1 || "$ESLINT" "$FILE" >&2 || true
+    fi
     ;;
 esac
 
