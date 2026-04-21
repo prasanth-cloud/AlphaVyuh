@@ -7,6 +7,10 @@ import numpy as np
 import pandas as pd
 
 
+def sma(series: pd.Series, length: int) -> pd.Series:
+    return series.rolling(window=length, min_periods=length).mean()
+
+
 def ema(series: pd.Series, length: int) -> pd.Series:
     return series.ewm(span=length, adjust=False, min_periods=length).mean()
 
@@ -72,6 +76,65 @@ def ichimoku(
     sb = midpoint(senkou_b).shift(kijun)
     chikou = close.shift(-kijun)
     return t, k, sa, sb, chikou
+
+
+def supertrend(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    period: int = 10,
+    multiplier: float = 3.0,
+) -> pd.Series:
+    """
+    Supertrend(period, multiplier). Returns pd.Series of int8 direction:
+      1 = bullish (close above lower band), -1 = bearish (close below upper band),
+      0 = insufficient data (ATR not yet defined).
+
+    ATR uses Wilder RMA (alpha=1/period), matching atr() above.
+
+    Band-locking (the sticky logic that makes Supertrend a trend-following indicator):
+      final_upper[i] = min(basic_upper[i], final_upper[i-1])
+                       if close[i-1] <= final_upper[i-1] else basic_upper[i]
+      final_lower[i] = max(basic_lower[i], final_lower[i-1])
+                       if close[i-1] >= final_lower[i-1] else basic_lower[i]
+
+    Direction flip:
+      if prev_dir >= 0: stay bullish while close >= final_lower[i], else flip bearish
+      if prev_dir < 0:  stay bearish while close <= final_upper[i], else flip bullish
+    """
+    atr_s = atr(high, low, close, period)
+    hl2 = (high + low) / 2.0
+    basic_upper = hl2 + multiplier * atr_s
+    basic_lower = hl2 - multiplier * atr_s
+
+    n = len(close)
+    fu = np.full(n, np.nan)
+    fl = np.full(n, np.nan)
+    direction = np.zeros(n, dtype=int)
+
+    for i in range(n):
+        if np.isnan(atr_s.iloc[i]):
+            continue  # direction stays 0
+
+        bu = float(basic_upper.iloc[i])
+        bl = float(basic_lower.iloc[i])
+
+        if i == 0 or np.isnan(fu[i - 1]):
+            fu[i] = bu
+            fl[i] = bl
+        else:
+            prev_c = float(close.iloc[i - 1])
+            fu[i] = min(bu, fu[i - 1]) if prev_c <= fu[i - 1] else bu
+            fl[i] = max(bl, fl[i - 1]) if prev_c >= fl[i - 1] else bl
+
+        c = float(close.iloc[i])
+        prev_dir = direction[i - 1] if i > 0 else 0
+        if prev_dir >= 0:
+            direction[i] = 1 if c >= fl[i] else -1
+        else:
+            direction[i] = -1 if c <= fu[i] else 1
+
+    return pd.Series(direction, index=close.index)
 
 
 def stochastic(

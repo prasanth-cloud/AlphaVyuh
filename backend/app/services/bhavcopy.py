@@ -136,8 +136,42 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
                 ind["ema_20"] = _safe_float(ta.ema(close_s, 20).iloc[-1])
             if n >= 50:
                 ind["ema_50"] = _safe_float(ta.ema(close_s, 50).iloc[-1])
+                ind["sma_50"] = _safe_float(ta.sma(close_s, 50).iloc[-1])
+            if n >= 150:
+                ind["sma_150"] = _safe_float(ta.sma(close_s, 150).iloc[-1])
             if n >= 200:
                 ind["ema_200"] = _safe_float(ta.ema(close_s, 200).iloc[-1])
+                ind["sma_200"] = _safe_float(ta.sma(close_s, 200).iloc[-1])
+
+            # M3-E: momentum (requires close N+1 sessions ago; n >= N+1)
+            if n >= 6:
+                c0 = _safe_float(close_s.iloc[-6])
+                c1 = _safe_float(close_s.iloc[-1])
+                if c0 and c0 > 0 and c1 is not None:
+                    ind["momentum_5d"] = round((c1 - c0) / c0 * 100, 4)
+            if n >= 11:
+                c0 = _safe_float(close_s.iloc[-11])
+                c1 = _safe_float(close_s.iloc[-1])
+                if c0 and c0 > 0 and c1 is not None:
+                    ind["momentum_10d"] = round((c1 - c0) / c0 * 100, 4)
+            if n >= 21:
+                c0 = _safe_float(close_s.iloc[-21])
+                c1 = _safe_float(close_s.iloc[-1])
+                if c0 and c0 > 0 and c1 is not None:
+                    ind["momentum_20d"] = round((c1 - c0) / c0 * 100, 4)
+
+            # M3-E: Supertrend(10, 3) — needs ~30 rows for ATR warm-up
+            if n >= 30:
+                st_dir = ta.supertrend(high_s, low_s, close_s, period=10, multiplier=3.0)
+                last_dir = int(st_dir.iloc[-1])
+                ind["supertrend_direction"] = last_dir if last_dir != 0 else None
+
+            # M3-E: prev_macd_hist — MACD cross detection (needs ≥ 36 rows)
+            if n >= 36:
+                _, _, hist_s = ta.macd(close_s)
+                prev_h = _safe_float(hist_s.iloc[-2])
+                ind["prev_macd_hist"] = prev_h
+
         except Exception as e:
             logger.warning(f"indicator error for {symbol}: {e}")
 
