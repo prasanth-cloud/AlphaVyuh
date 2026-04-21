@@ -81,8 +81,11 @@ class ScanFilters(BaseModel):
     price_vs_ema50:  str | None = None
     price_vs_ema200: str | None = None
 
-    # ── Relative Strength (Minervini RS rating, 1–99) ────────────────────
-    rs_rating_min:   float | None = None   # >= X (70+ is Minervini threshold)
+    # ── Relative Strength score (percentile rank of 12-month NSE perf) ──
+    rs_score_min:    float | None = None   # >= X (70+ ≈ Minervini threshold)
+    rs_score_max:    float | None = None
+    # Legacy alias — maps to rs_score in _apply_filters
+    rs_rating_min:   float | None = None
     rs_rating_max:   float | None = None
 
     # ── MACD ─────────────────────────────────────────────────────────────
@@ -153,11 +156,36 @@ class ScanFilters(BaseModel):
     roe_min:              float | None = None
     roce_min:             float | None = None
 
+    # ── SMA position & stack (Minervini SEPA trend template) ─────────────
+    above_sma50:         bool | None = None   # close > sma_50
+    above_sma150:        bool | None = None   # close > sma_150
+    above_sma200:        bool | None = None   # close > sma_200
+    sma_stack_bullish:   bool | None = None   # close > sma_50 > sma_150 > sma_200
+    sma_stack_bearish:   bool | None = None   # close < sma_50 < sma_150 < sma_200
+    sma_50_above_sma150: bool | None = None   # sma_50 > sma_150
+    sma_150_above_sma200:bool | None = None   # sma_150 > sma_200
+
+    # ── N-day momentum (precomputed in M3-E; FREE once columns populated) ─
+    momentum_5d_min:     float | None = None
+    momentum_5d_max:     float | None = None
+    momentum_10d_min:    float | None = None
+    momentum_10d_max:    float | None = None
+    momentum_20d_min:    float | None = None
+    momentum_20d_max:    float | None = None
+
+    # ── Supertrend ────────────────────────────────────────────────────────
+    supertrend_signal:   str | None = None   # "bullish" | "bearish"
+
     # ── Setup patterns (multi-day, two-pass) ─────────────────────────────
     vcp_contraction:          bool | None = None   # True → enable VCP two-pass
     vcp_min_pivots:           int  | None = None   # contracting bases required (default 2)
     vcp_max_depth_pct:        float| None = None   # final base max depth % (default 15.0)
     vcp_pivot_proximity_pct:  float| None = None   # max |close - pivot_high| / pivot_high % (default 10.0)
+
+    # ── VCP-composition-only filters (ADR 006 §Decision 3) ───────────────
+    volume_dryup:             bool | None = None   # requires vcp_contraction=True
+    consecutive_up_closes:    int  | None = None   # N consecutive up closes; requires vcp_contraction=True
+    consecutive_down_closes:  int  | None = None   # N consecutive down closes; requires vcp_contraction=True
 
 
 class ScanRequest(BaseModel):
@@ -181,6 +209,39 @@ SORT_KEYS = {
 }
 
 PRESETS = [
+    {
+        "id": "sepa",
+        "name": "SEPA",
+        "description": "Minervini trend template: SMA stack + RS Score + price setup",
+        "color": "#5b63f5",
+        "filters": {
+            "sma_stack_bullish": True,      # close > sma_50 > sma_150 > sma_200 (ADR 006 Decision 1)
+            "above_sma150": True,           # criteria 1
+            "above_sma200": True,           # criteria 2
+            "sma_150_above_sma200": True,   # criteria 3 (SMA 150 trending up proxy)
+            "sma_50_above_sma150": True,    # criteria 4
+            "w52h_pct_max": 25.0,           # within 25% of 52-week high (criteria 6)
+            "w52l_pct_min": 30.0,           # at least 30% above 52-week low (criteria 7)
+            "rs_score_min": 70.0,           # criteria 8 — top quartile RS
+            "rsi_min": 50.0,                # momentum confirmation
+            "price_min": 20.0,              # minimum price (₹)
+            "series": ["EQ"],
+        },
+    },
+    {
+        "id": "vcp",
+        "name": "VCP",
+        "description": "Volatility Contraction Pattern — Qullamaggie/Minervini base setup",
+        "color": "#26a65b",
+        "filters": {
+            "sma_stack_bullish": True,
+            "rs_score_min": 70.0,
+            "rsi_min": 50.0,
+            "price_min": 20.0,
+            "vcp_contraction": True,
+            "series": ["EQ"],
+        },
+    },
     {
         "id": "momentum",
         "name": "Momentum",
@@ -236,9 +297,9 @@ PRESETS = [
     {
         "id": "strong_trend",
         "name": "Strong Trend",
-        "description": "All 3 EMAs aligned bullish",
+        "description": "SMA 50 > 150 > 200 aligned bullish",
         "color": "#0369a1",
-        "filters": {"all_emas_bullish": True, "rsi_min": 50, "series": ["EQ"]},
+        "filters": {"sma_stack_bullish": True, "rsi_min": 50, "series": ["EQ"]},
     },
 ]
 
@@ -300,7 +361,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         atr_v      = float(row["atr_14"])        if row.get("atr_14")       is not None else None
         w52h_v     = float(row["week_52_high"])  if row.get("week_52_high") is not None else None
         w52l_v     = float(row["week_52_low"])   if row.get("week_52_low")  is not None else None
-        rs_rating_v= float(row["rs_rating"])     if row.get("rs_rating")    is not None else None
+        rs_score_v = float(row["rs_rating"])     if row.get("rs_rating")    is not None else None
 
         # Computed columns — prefer precomputed DB values when populated (M3-A columns)
         pct_change   = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
@@ -338,9 +399,11 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.rsi_min is not None and (rsi_v is None or rsi_v < f.rsi_min):  continue
         if f.rsi_max is not None and (rsi_v is None or rsi_v > f.rsi_max):  continue
 
-        # ── Relative Strength rating ───────────────────────────────────────
-        if f.rs_rating_min is not None and (rs_rating_v is None or rs_rating_v < f.rs_rating_min): continue
-        if f.rs_rating_max is not None and (rs_rating_v is None or rs_rating_v > f.rs_rating_max): continue
+        # ── Relative Strength score (rs_score_* canonical; rs_rating_* legacy alias) ──
+        effective_rs_min = f.rs_score_min if f.rs_score_min is not None else f.rs_rating_min
+        effective_rs_max = f.rs_score_max if f.rs_score_max is not None else f.rs_rating_max
+        if effective_rs_min is not None and (rs_score_v is None or rs_score_v < effective_rs_min): continue
+        if effective_rs_max is not None and (rs_score_v is None or rs_score_v > effective_rs_max): continue
 
         # ── Trend / EMAs ─────────────────────────────────────────────────
         if f.above_ema20  and (ema20_v  is None or close <= ema20_v):  continue
@@ -393,7 +456,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.macd_hist_positive is False and (macd_hist_v is None or macd_hist_v >= 0): continue
         if f.macd_signal == "above_signal"  and (macd_line_v is None or macd_sig_v is None or macd_line_v <= macd_sig_v): continue
         if f.macd_signal == "below_signal"  and (macd_line_v is None or macd_sig_v is None or macd_line_v >= macd_sig_v): continue
-        # bullish/bearish cross requires yesterday's data — skip for now (needs prev row)
+        # bullish_cross/bearish_cross handled further below after sma/momentum/supertrend blocks
 
         # ── Bollinger Bands ───────────────────────────────────────────────
         bb_upper_v  = float(row["bb_upper"]) if row.get("bb_upper")  is not None else None
@@ -454,6 +517,49 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.ema20_vs_ema50 == "death"  and (ema20_v is None or ema50_v is None or ema20_v >= ema50_v): continue
         if f.ema50_vs_ema200 == "golden" and (ema50_v is None or ema200_v is None or ema50_v <= ema200_v): continue
         if f.ema50_vs_ema200 == "death"  and (ema50_v is None or ema200_v is None or ema50_v >= ema200_v): continue
+
+        # ── SMA position & stack ─────────────────────────────────────────
+        sma50_v  = float(row["sma_50"])  if row.get("sma_50")  is not None else None
+        sma150_v = float(row["sma_150"]) if row.get("sma_150") is not None else None
+        sma200_v = float(row["sma_200"]) if row.get("sma_200") is not None else None
+        if f.above_sma50  and (sma50_v  is None or close <= sma50_v):  continue
+        if f.above_sma150 and (sma150_v is None or close <= sma150_v): continue
+        if f.above_sma200 and (sma200_v is None or close <= sma200_v): continue
+        if f.sma_50_above_sma150 and (sma50_v is None or sma150_v is None or sma50_v <= sma150_v): continue
+        if f.sma_150_above_sma200 and (sma150_v is None or sma200_v is None or sma150_v <= sma200_v): continue
+        if f.sma_stack_bullish and (
+            sma50_v is None or sma150_v is None or sma200_v is None
+            or not (close > sma50_v > sma150_v > sma200_v)
+        ): continue
+        if f.sma_stack_bearish and (
+            sma50_v is None or sma150_v is None or sma200_v is None
+            or not (close < sma50_v < sma150_v < sma200_v)
+        ): continue
+
+        # ── N-day momentum (precomputed columns, M3-E) ────────────────────
+        mom5_v  = float(row["momentum_5d"])  if row.get("momentum_5d")  is not None else None
+        mom10_v = float(row["momentum_10d"]) if row.get("momentum_10d") is not None else None
+        mom20_v = float(row["momentum_20d"]) if row.get("momentum_20d") is not None else None
+        if f.momentum_5d_min  is not None and (mom5_v  is None or mom5_v  < f.momentum_5d_min):  continue
+        if f.momentum_5d_max  is not None and (mom5_v  is None or mom5_v  > f.momentum_5d_max):  continue
+        if f.momentum_10d_min is not None and (mom10_v is None or mom10_v < f.momentum_10d_min): continue
+        if f.momentum_10d_max is not None and (mom10_v is None or mom10_v > f.momentum_10d_max): continue
+        if f.momentum_20d_min is not None and (mom20_v is None or mom20_v < f.momentum_20d_min): continue
+        if f.momentum_20d_max is not None and (mom20_v is None or mom20_v > f.momentum_20d_max): continue
+
+        # ── Supertrend (precomputed direction, M3-E) ─────────────────────
+        st_dir_v = row.get("supertrend_direction")
+        if f.supertrend_signal == "bullish"  and (st_dir_v is None or st_dir_v != 1):  continue
+        if f.supertrend_signal == "bearish"  and (st_dir_v is None or st_dir_v != -1): continue
+
+        # ── MACD cross (uses prev_macd_hist from M3-E) ────────────────────
+        # macd_hist_v already extracted above; prev_macd_hist_v from DB row
+        if f.macd_signal in ("bullish_cross", "bearish_cross"):
+            prev_hist_v = float(row["prev_macd_hist"]) if row.get("prev_macd_hist") is not None else None
+            if f.macd_signal == "bullish_cross":
+                if macd_hist_v is None or prev_hist_v is None or not (macd_hist_v > 0 >= prev_hist_v): continue
+            elif f.macd_signal == "bearish_cross":
+                if macd_hist_v is None or prev_hist_v is None or not (macd_hist_v < 0 <= prev_hist_v): continue
 
         # ── Fundamentals (from stock_universe) ───────────────────────────
         mc   = su.get("market_cap_cr")
@@ -535,7 +641,15 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "stoch_k":        float(row["stoch_k"]) if row.get("stoch_k") is not None else None,
             "adx_14":         float(row["adx_14"]) if row.get("adx_14") is not None else None,
             "delivery_pct":   float(row["delivery_pct"]) if row.get("delivery_pct") is not None else None,
-            "rs_rating":      rs_rating_v,
+            "rs_score":        rs_score_v,
+            "rs_rating":       rs_score_v,  # legacy alias for old clients
+            "sma_50":          sma50_v,
+            "sma_150":         sma150_v,
+            "sma_200":         sma200_v,
+            "momentum_5d":     mom5_v,
+            "momentum_10d":    mom10_v,
+            "momentum_20d":    mom20_v,
+            "supertrend_direction": int(st_dir_v) if st_dir_v is not None else None,
             "is_new_52w_high": bool(row.get("is_new_52w_high")),
             "is_inside_bar":   bool(row.get("is_inside_bar")),
             # Fundamentals
@@ -599,15 +713,46 @@ def _run_vcp_pass2(
             if row.get("symbol") and row.get("history"):
                 by_symbol[row["symbol"]] = row["history"]
 
-    return [
-        r for r in pass1_results
-        if detect_vcp(
-            by_symbol.get(r["symbol"], []),
+    results = []
+    for r in pass1_results:
+        sym = r["symbol"]
+        history = by_symbol.get(sym, [])
+
+        if not detect_vcp(
+            history,
             min_pivots=min_pivots,
             max_depth_pct=max_depth_pct,
             pivot_proximity_pct=pivot_proximity_pct,
-        )
-    ]
+        ):
+            continue
+
+        # ── VCP-composition-only post-filters (use shared CTE history) ───
+        if f.volume_dryup:
+            if len(history) >= 50:
+                vols = [h["volume"] for h in history if h.get("volume")]
+                avg_50 = sum(vols[-50:]) / 50 if len(vols) >= 50 else None
+                recent_5 = vols[-5:] if len(vols) >= 5 else []
+                if avg_50 and recent_5:
+                    if not all(v <= 0.6 * avg_50 for v in recent_5):
+                        continue
+                else:
+                    continue  # insufficient data → skip
+
+        if f.consecutive_up_closes and len(history) >= f.consecutive_up_closes + 1:
+            n_up = f.consecutive_up_closes
+            closes = [h["close"] for h in history[-n_up - 1:] if h.get("close")]
+            if len(closes) < n_up + 1 or not all(closes[i] > closes[i - 1] for i in range(1, len(closes))):
+                continue
+
+        if f.consecutive_down_closes and len(history) >= f.consecutive_down_closes + 1:
+            n_dn = f.consecutive_down_closes
+            closes = [h["close"] for h in history[-n_dn - 1:] if h.get("close")]
+            if len(closes) < n_dn + 1 or not all(closes[i] < closes[i - 1] for i in range(1, len(closes))):
+                continue
+
+        results.append(r)
+
+    return results
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -649,6 +794,7 @@ async def run_scanner(
             "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
             "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
             "rs_rating,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+            "momentum_5d,momentum_10d,momentum_20d,supertrend_direction,prev_macd_hist,"
             "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
         )
         .eq("trade_date", latest_date)
@@ -697,6 +843,34 @@ async def run_scanner(
     # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
     # Python fallback in _apply_filters handles rs_rating/volume_ratio/w52h_pct/w52l_pct
     # until the ingest job populates these columns.
+
+    # M3-F: push momentum + supertrend to DB (FREE, NULL-safe — only pushed when columns populated)
+    if f.momentum_5d_min  is not None: q = q.gte("momentum_5d",  f.momentum_5d_min)
+    if f.momentum_5d_max  is not None: q = q.lte("momentum_5d",  f.momentum_5d_max)
+    if f.momentum_10d_min is not None: q = q.gte("momentum_10d", f.momentum_10d_min)
+    if f.momentum_10d_max is not None: q = q.lte("momentum_10d", f.momentum_10d_max)
+    if f.momentum_20d_min is not None: q = q.gte("momentum_20d", f.momentum_20d_min)
+    if f.momentum_20d_max is not None: q = q.lte("momentum_20d", f.momentum_20d_max)
+    if f.supertrend_signal == "bullish": q = q.eq("supertrend_direction", 1)
+    if f.supertrend_signal == "bearish": q = q.eq("supertrend_direction", -1)
+
+    # M3-F: SMA position push-filters (above_sma* pushed individually; stack compound check in Python)
+    if f.above_sma50  is True: q = q.gt("sma_50",  0)   # non-null guard; Python does close > sma_50
+    if f.above_sma150 is True: q = q.gt("sma_150", 0)   # non-null guard
+    if f.above_sma200 is True: q = q.gt("sma_200", 0)   # non-null guard
+    # sma_stack_bullish requires compound column comparison → Python only; no DB push
+
+    # ── VCP-composition-only validation ──────────────────────────────────────
+    if f.volume_dryup and not f.vcp_contraction:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="volume_dryup requires vcp_contraction=true — consider composing volume_ratio_max with your scan instead.",
+        )
+    if (f.consecutive_up_closes or f.consecutive_down_closes) and not f.vcp_contraction:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="consecutive_up_closes/consecutive_down_closes require vcp_contraction=true (shared CTE data).",
+        )
 
     rows = q.limit(SCAN_ROW_CAP).execute().data or []
 
