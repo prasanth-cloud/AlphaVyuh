@@ -1,0 +1,104 @@
+name: VCP Latency Benchmark
+
+# Production-representative benchmark for the all-NSE VCP scan latency.
+# Runs from GitHub's Azure East US infrastructure (~10-20ms RTT to Supabase
+# us-east-2) vs. the Mac → trans-Pacific baseline (~130ms RTT).
+#
+# Trigger manually three times at different times of day:
+#   gh workflow run benchmark-vcp.yml -f run_label=morning -f iterations=50
+#   gh workflow run benchmark-vcp.yml -f run_label=afternoon -f iterations=50
+#   gh workflow run benchmark-vcp.yml -f run_label=evening -f iterations=50
+#
+# See: docs/benchmarks/m3-production-env.md, ADR 005 §Post-fix observations
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_label:
+        description: 'Label for this run (morning / afternoon / evening / run1 etc.)'
+        required: true
+        default: 'run1'
+      iterations:
+        description: 'Benchmark iterations per scan'
+        required: false
+        default: '50'
+      trade_date:
+        description: 'Trade date override (YYYY-MM-DD, leave blank for auto)'
+        required: false
+        default: ''
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run benchmark (with RTT probe)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          OUT=/tmp/bench-${{ github.event.inputs.run_label }}.txt
+
+          {
+            echo "=== VCP Latency Benchmark — ${{ github.event.inputs.run_label }} ==="
+            echo "Run ID      : ${{ github.run_id }}"
+            echo "Runner OS   : $(uname -srm)"
+            echo "UTC time    : $(date -u)"
+            echo "Iterations  : ${{ github.event.inputs.iterations }}"
+            echo ""
+
+            # Network environment
+            echo "--- Network probe ---"
+            PUBLIC_IP=$(curl -sf --max-time 5 https://api.ipify.org || echo "unavailable")
+            echo "Runner public IP: $PUBLIC_IP"
+
+            SUPABASE_HOST=$(echo "$SUPABASE_URL" | sed 's|https://||' | sed 's|/.*||')
+            echo "Supabase host   : $SUPABASE_HOST"
+            echo ""
+            echo "RTT to Supabase REST endpoint (5 curl samples, time_connect):"
+            for i in 1 2 3 4 5; do
+              curl -sS -o /dev/null \
+                -w "  sample $i: connect=${time_connect}s  ttfb=${time_starttransfer}s\n" \
+                --max-time 10 \
+                "https://$SUPABASE_HOST/rest/v1/" \
+                -H "apikey: probe" 2>/dev/null \
+              || echo "  sample $i: failed"
+            done
+            echo ""
+            echo "--- Benchmark ---"
+          } | tee "$OUT"
+
+          TRADE_DATE_ARG=""
+          if [ -n "${{ github.event.inputs.trade_date }}" ]; then
+            TRADE_DATE_ARG="--trade-date ${{ github.event.inputs.trade_date }}"
+          fi
+
+          cd backend
+          python scripts/bench_scanner.py \
+            --iterations ${{ github.event.inputs.iterations }} \
+            $TRADE_DATE_ARG \
+            2>&1 | tee -a "$OUT"
+
+          echo "" | tee -a "$OUT"
+          echo "Finished: $(date -u)" | tee -a "$OUT"
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ github.event.inputs.run_label }}-${{ github.run_id }}
+          path: /tmp/bench-${{ github.event.inputs.run_label }}.txt
+          retention-days: 30
