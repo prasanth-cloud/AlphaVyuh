@@ -91,15 +91,33 @@ async def update_me(
         updates["onboarding_completed"] = body.onboarding_completed
     if body.telegram_chat_id is not None:
         updates["telegram_chat_id"] = body.telegram_chat_id or None
+    broker = body.broker_type if body.broker_type != "none" else None
     if body.broker_type is not None:
-        updates["broker_type"] = body.broker_type if body.broker_type != "none" else None
-    if body.broker_api_key is not None:
-        updates["broker_api_key"] = body.broker_api_key or None
-    if body.broker_api_secret is not None:
-        updates["broker_api_secret"] = body.broker_api_secret or None
+        updates["broker_type"] = broker
     if body.broker_type or body.broker_api_key:
         import datetime
         updates["broker_connected_at"] = datetime.datetime.utcnow().isoformat()
+
+    # Credentials are stored encrypted in broker_credentials via upsert_broker_credential().
+    # The plaintext columns on users are deprecated — do NOT write to them here.
+    # broker_api_key/secret writes below keep the deprecated columns in sync during transition;
+    # remove this block when feat/kite-adapter migrates the reads.
+    if broker and body.broker_api_key is not None:
+        client.rpc("upsert_broker_credential", {
+            "p_user_id":  user_id,
+            "p_broker":   broker,
+            "p_key_name": "api_key",
+            "p_value":    body.broker_api_key,
+        }).execute()
+        updates["broker_api_key"] = body.broker_api_key or None  # deprecated sync
+    if broker and body.broker_api_secret is not None:
+        client.rpc("upsert_broker_credential", {
+            "p_user_id":  user_id,
+            "p_broker":   broker,
+            "p_key_name": "api_secret",
+            "p_value":    body.broker_api_secret,
+        }).execute()
+        updates["broker_api_secret"] = body.broker_api_secret or None  # deprecated sync
     if body.billing_region is not None:
         if body.billing_region not in ("IN", "NRI", "US", "INTL"):
             raise HTTPException(400, "Invalid billing_region")
