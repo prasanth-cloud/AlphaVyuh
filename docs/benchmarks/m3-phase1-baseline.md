@@ -182,7 +182,7 @@
 | min    | 3,493ms | —     | — |
 | max    | 10,912ms | —    | — |
 
-**Notes:** Soft target, no hard fail (ADR 005 §Revisit Trigger 2). Run 1 cold-start (10,912ms) inflates p95; excluding it, p95 = 4,610ms (under target). Steady-state (runs 2–20 excl. run 12 spike) averages ~3,830ms. On Railway (co-located with Supabase us-east-2), the 7 round-trips at ~5ms RTT each vs ~130ms Mac RTT = ~875ms reduction total, putting production p95 well under 5,000ms.
+**Notes:** Soft target, no hard fail (ADR 005 §Revisit Trigger 2). Run 1 cold-start (10,912ms) inflates p95; excluding it, p95 = 4,610ms (under target). Steady-state (runs 2–20 excl. run 12 spike) averages ~3,830ms. ~~On Railway (co-located with Supabase us-east-2), the 7 round-trips at ~5ms RTT each vs ~130ms Mac RTT = ~875ms reduction total, putting production p95 well under 5,000ms.~~ **This projection is superseded by `docs/benchmarks/m3-production-env.md`**, which measured from GitHub Actions and found the p50→p95 ratio under DB load is ~1.65×, not 1.40×. Production p95 is estimated at 4,729–6,600ms — borderline to failing, not "well under".
 
 ---
 
