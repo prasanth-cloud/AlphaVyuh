@@ -179,7 +179,11 @@ input, textarea, select {
   --secondary-foreground: 40 13% 93%;
   --muted: 220 22% 15%;
   --muted-foreground: 30 5% 60%;
-  --accent: 220 22% 18%;
+  /* --accent intentionally NOT redefined here: design-tokens.css owns it as #56D7C1.
+     Redefining it here with an HSL triplet breaks any component using var(--accent)
+     directly in gradients/borders. shadcn's select hover uses --shadcn-accent instead. */
+  --shadcn-accent: 220 22% 18%;
+  --shadcn-accent-foreground: 40 13% 93%;
   --accent-foreground: 40 13% 93%;
   --destructive: 354 68% 61%;
   --destructive-foreground: 0 0% 98%;

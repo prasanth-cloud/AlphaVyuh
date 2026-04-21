@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
+import { isSafeRedirect } from "@/lib/safe-redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,7 +55,8 @@ export default function SignupForm() {
 
     // If email confirmation is disabled, Supabase returns a session immediately
     if (data.session) {
-      window.location.replace("/dashboard");
+      const next = new URLSearchParams(window.location.search).get("next");
+      window.location.replace(isSafeRedirect(next) ? next : "/dashboard");
       return;
     }
 

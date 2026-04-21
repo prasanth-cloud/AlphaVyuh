@@ -8,7 +8,7 @@ import {
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
   type UserProfile, type PlanStatus,
 } from "@/lib/api";
-import { createClient } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 
 // ── Razorpay ─────────────────────────────────────────────────────────────────
 

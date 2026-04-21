@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "./supabase";
+import { createClient } from "./supabase/client";
 import type { Session } from "@supabase/supabase-js";
 
 export type ApiUser = {

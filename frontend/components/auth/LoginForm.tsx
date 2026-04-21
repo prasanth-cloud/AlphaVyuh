@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button, Input, Label } from "@/components/ui";
+import { isSafeRedirect } from "@/lib/safe-redirect";
 
 export default function LoginForm() {
   const [email, setEmail]       = useState("");
@@ -25,7 +26,8 @@ export default function LoginForm() {
         setError(data.error || "Login failed");
         return;
       }
-      window.location.replace("/dashboard");
+      const next = new URLSearchParams(window.location.search).get("next");
+      window.location.replace(isSafeRedirect(next) ? next! : "/dashboard");
     } catch {
       setError("Network error — please try again.");
     } finally {

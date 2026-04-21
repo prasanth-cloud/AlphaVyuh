@@ -1,16 +1,56 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
+
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/signup",
+  "/reset-password",
+  "/dev-login",
+  "/offline",
+  "/privacy",
+  "/terms",
+  "/api/",
+  "/_next/",
+];
+
+function isPublic(pathname: string): boolean {
+  if (pathname === "/") return true;
+  return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
+}
 
 export async function middleware(request: NextRequest) {
-  const pathname = request.nextUrl.pathname;
+  const { pathname } = request.nextUrl;
 
-  // Redirect /charts/* to /watchlist
+  // Redirect /charts/* to /watchlist (preserve existing behaviour)
   if (pathname.startsWith("/charts")) {
     const symbol = pathname.split("/")[2];
     const dest = symbol ? `/watchlist?symbol=${symbol}` : "/watchlist";
     return NextResponse.redirect(new URL(dest, request.url));
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next({ request });
+  // Expose pathname to Server Components via a custom header
+  response.headers.set("x-pathname", pathname);
+
+  if (isPublic(pathname)) return response;
+
+  const supabase = createMiddlewareClient(request, response);
+
+  // getUser() hits Supabase Auth servers — validates JWT, never trusts cache
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("next", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Onboarding check is handled by the (app)/ layout Server Component,
+  // which reads x-pathname and queries public.users with the session.
+
+  return response;
 }
 
 export const config = {

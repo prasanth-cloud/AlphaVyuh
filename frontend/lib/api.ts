@@ -1,4 +1,4 @@
-import { createClient } from './supabase'
+import { createClient } from './supabase/client'
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 

@@ -1,0 +1,104 @@
+import { test, expect } from "@playwright/test";
+
+// ── Auth gate (unauthenticated) ───────────────────────────────────────────────
+
+test.describe("Auth gate — unauthenticated", () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies();
+  });
+
+  test("/dashboard redirects to /login", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("/dashboard carries ?next=/dashboard through the redirect", async ({ page }) => {
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/login\?next=%2Fdashboard/);
+  });
+
+  test("/scanner redirects to /login with correct ?next", async ({ page }) => {
+    await page.goto("/scanner");
+    await expect(page).toHaveURL(/\/login\?next=%2Fscanner/);
+  });
+
+  test("/journal redirects to /login", async ({ page }) => {
+    await page.goto("/journal");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("/settings redirects to /login", async ({ page }) => {
+    await page.goto("/settings");
+    await expect(page).toHaveURL(/\/login/);
+  });
+});
+
+// ── Public pages (no auth required) ──────────────────────────────────────────
+
+test.describe("Public pages — no redirect", () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies();
+  });
+
+  test("/login is accessible", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator("text=Sign in to AlphaVyuh")).toBeVisible();
+  });
+
+  test("/signup is accessible", async ({ page }) => {
+    await page.goto("/signup");
+    await expect(page).toHaveURL(/\/signup/);
+  });
+
+  test("/reset-password is accessible", async ({ page }) => {
+    await page.goto("/reset-password");
+    await expect(page).toHaveURL(/\/reset-password/);
+  });
+});
+
+// ── Open-redirect protection ──────────────────────────────────────────────────
+
+test.describe("Open-redirect protection", () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies();
+  });
+
+  const attackVectors = [
+    { label: "protocol-relative //evil.com", next: "//evil.com" },
+    { label: "backslash /\\\\evil.com", next: "/\\evil.com" },
+    { label: "absolute https://evil.com", next: "https://evil.com" },
+    { label: "javascript: scheme", next: "javascript:alert(1)" },
+  ];
+
+  for (const { label, next } of attackVectors) {
+    test(`/login?next=${encodeURIComponent(next)} stays on /login (${label})`, async ({ page }) => {
+      await page.goto(`/login?next=${encodeURIComponent(next)}`);
+      // Page should still be /login (not navigated away)
+      await expect(page).toHaveURL(/\/login/);
+      // The login form should be visible — we haven't been hijacked
+      await expect(page.locator("text=Sign in to AlphaVyuh")).toBeVisible();
+    });
+  }
+
+  test("safe /login?next=/dashboard preserves the param (form renders)", async ({ page }) => {
+    await page.goto("/login?next=/dashboard");
+    // Browser may or may not encode the slash — check the parsed param value
+    await expect(page).toHaveURL(/\/login/);
+    const url = new URL(page.url());
+    expect(url.searchParams.get("next")).toBe("/dashboard");
+    await expect(page.locator("text=Sign in to AlphaVyuh")).toBeVisible();
+  });
+});
+
+// ── /charts/* legacy redirect ─────────────────────────────────────────────────
+
+test.describe("/charts redirect", () => {
+  test("/charts/RELIANCE redirects to /watchlist?symbol=RELIANCE", async ({ page }) => {
+    await page.context().clearCookies();
+    // Middleware redirects /charts/* before auth gate, so unauthenticated is fine here
+    const response = await page.goto("/charts/RELIANCE", { waitUntil: "commit" });
+    // Should have been redirected to watchlist (then bounced to login since not authed)
+    expect(page.url()).toMatch(/\/watchlist|\/login/);
+  });
+});

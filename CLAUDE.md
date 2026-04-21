@@ -149,12 +149,30 @@ If you cannot verify, say so explicitly. Do not claim completion.
 - Commit style: conventional commits (`feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`).
 - One logical change per PR. If the PR description needs "also", split it.
 
+### Next.js 14 dynamic API rule (prevents TraceSync errors)
+`cookies()` and `headers()` from `next/headers` are **synchronous** in Next.js 14. Do **not** `await` them.
+Awaiting a sync function crosses an async boundary that can drop the request-scoped `AsyncLocalStorage`
+context, causing Next.js's internal trace system to throw `TraceSync` / "called outside request scope".
+
+```ts
+// ✅ correct (Next.js 14)
+const cookieStore = cookies();
+const headerStore = headers();
+
+// ❌ wrong — triggers TraceSync
+const cookieStore = await cookies();
+const headerStore = await headers();
+```
+
+If we upgrade to Next.js 15, `cookies()` and `headers()` become async Promises — add `await` back then.
+
 ### Things to never do
 - Never install a new dependency without checking if shadcn/ui or an existing lib covers it
 - Never add `localStorage` calls in Server Components (they'll crash the build silently in edge cases)
 - Never write raw SQL in a route handler — put it in a migration or a typed Supabase query
 - Never hardcode broker-specific logic outside `lib/brokers/`
 - Never disable RLS to "make it work" — fix the policy instead
+- Never `await cookies()` or `await headers()` — see Next.js 14 dynamic API rule above
 
 ---
 
@@ -204,6 +222,7 @@ Claude should load these on demand rather than keeping them in the root context:
 - `docs/data-model.md` — Supabase schema, RLS policies, indexes
 - `docs/broker-adapter.md` — the `BrokerAdapter` interface + per-broker quirks
 - `docs/scan-dsl.md` — how scanners are defined & executed
+- `docs/decisions/` — ADRs for architectural choices; **check here before proposing architectural changes**
 - `supabase/migrations/` — ground truth for schema
 - `.env.example` — required environment variables
 
@@ -216,7 +235,10 @@ If any of these go out of date, updating them is part of the task that broke the
 - **Phase:** Scaffolding → MVP
 - **Live:** Landing page at alphavyuh.com
 - **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) SEPA scanner on cached EOD data, (4) Chart with order placement UI
-- **Known gaps:** No production monitoring yet (Sentry to be added), broker adapter interface not finalized
+- **Known gaps:**
+  - No production monitoring yet (Sentry to be added)
+  - Broker adapter interface not finalized
+  - **Email confirmation is OFF** in Supabase. Before enabling it (or adding magic links / OAuth), a `/auth/callback` Route Handler must be built to exchange the code for a session and set cookies. Without it, confirmation links will 404 and the user will not get a session.
 
 ---
 
