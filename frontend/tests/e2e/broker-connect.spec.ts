@@ -10,12 +10,6 @@ import { test, expect } from "@playwright/test";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function interceptDisconnected(page: Parameters<typeof page.route>[2] extends never ? never : Parameters<typeof test.beforeEach>[0] extends (args: { page: infer P }) => unknown ? P : never) {
-  return page;
-}
-
 // ── Auth gate ─────────────────────────────────────────────────────────────────
 
 test.describe("Broker settings — unauthenticated", () => {
