@@ -179,9 +179,9 @@ Rationale:
 
 2. **Simple filters meet the budget.** Push-to-DB optimization cuts Nifty 500 SEPA to an estimated 200–400ms. This must be validated with benchmark checkpoints during M3; if it doesn't hold, the revisit triggers below apply.
 
-3. **VCP is feasible via two-pass.** The SEPA pre-filter typically reduces candidates to <100 symbols before the VCP lookback. At that scale, option (b) is estimated to stay within budget. **This is a bet that must be validated during M3 implementation.** If all-NSE VCP consistently exceeds 3s, option (a)'s window-function approach becomes the upgrade path.
+3. **VCP is feasible via two-pass.** The SEPA pre-filter typically reduces candidates to <100 symbols before the VCP lookback. At that scale, option (b) is estimated to stay within budget. **This is a bet that must be validated during M3 implementation.** If Nifty 500 VCP benchmark exceeds 1.5s or all-NSE VCP exceeds 5s in M3-C, move VCP execution to option (a) Postgres CTE as a scoped fix — no full architecture change needed.
 
-4. **Backtesting is a background job, not a blocker.** The 252-day backtest limitation is resolved by implementing it as an async job, not a synchronous request. This is a clean separation regardless of scan engine choice.
+4. **Backtesting is a background job, not a blocker.** The 252-day backtest limitation is resolved by implementing it as an async job, not a synchronous request. **Instant backtesting (< 10s historical scans) is out of scope for MVP.** If user demand emerges post-launch, the preferred path is adding option (a) Postgres-side compilation as a dedicated historical-scan path alongside option (b) — not replacing it. The Minervini/Qullamaggie audience thinks in weeks, not milliseconds; over-engineering before demand is wasteful.
 
 5. **Lower total cost for current phase.** No SQL compiler to build, no new infrastructure, no API contract changes. The incremental investment over the working implementation is measured in days, not weeks.
 

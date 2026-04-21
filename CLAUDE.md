@@ -250,6 +250,7 @@ If any of these go out of date, updating them is part of the task that broke the
   - Broker adapter interface not finalized
   - **Email confirmation is OFF** in Supabase. Before enabling it (or adding magic links / OAuth), a `/auth/callback` Route Handler must be built to exchange the code for a session and set cookies. Without it, confirmation links will 404 and the user will not get a session.
   - **Broker credential key rotation is NOT implemented.** `scripts/rotate_broker_key.py.TODO` describes the spec. A rotation script and runbook MUST land before the first real broker credential is stored in production. This is a **hard blocker on exiting MVP** — see `docs/decisions/002-broker-credentials.md §Q3`.
+  - **M3-C VCP performance not yet validated on all-NSE universe.** Benchmark during M3-C; fallback to Postgres CTE if Nifty 500 VCP > 1.5s or all-NSE VCP > 5s. See `docs/decisions/005-scan-engine.md §Revisit triggers`.
 
 ---
 
