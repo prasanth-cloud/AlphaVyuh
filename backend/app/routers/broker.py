@@ -121,6 +121,15 @@ def _place_zerodha_order(kite, symbol: str, side: str, quantity: int, order_type
         return None
 
 
+def _zerodha_token_expiry() -> str:
+    """Zerodha access tokens expire at 06:00 IST the next calendar day."""
+    import datetime, zoneinfo
+    ist = zoneinfo.ZoneInfo("Asia/Kolkata")
+    now = datetime.datetime.now(ist)
+    expiry = (now + datetime.timedelta(days=1)).replace(hour=6, minute=0, second=0, microsecond=0)
+    return expiry.isoformat()
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/orders", status_code=status.HTTP_201_CREATED)
@@ -424,12 +433,28 @@ async def zerodha_callback(
         session_data = kite.generate_session(request_token, api_secret=api_secret)
         access_token = session_data["access_token"]
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Zerodha session failed: {e}")
+        # Never include `e` in the response — it may contain api_secret or request_token.
+        logger.error("Zerodha session generation failed for user %s: %s", user_id, e)
+        raise HTTPException(status_code=400, detail="Zerodha session failed — check your API key and secret")
 
     import datetime
+    now_iso = datetime.datetime.utcnow().isoformat()
+
+    # Store the access token encrypted in broker_credentials.
+    # Also update users.broker_access_token (deprecated plaintext column) and
+    # broker_token_expires_at so existing order-placement code continues to work
+    # until the full migration to get_broker_credential() is complete.
+    sb.rpc("upsert_broker_credential", {
+        "p_user_id":  user_id,
+        "p_broker":   "zerodha",
+        "p_key_name": "access_token",
+        "p_value":    access_token,
+    }).execute()
+
     sb.table("users").update({
-        "broker_access_token": access_token,
-        "broker_connected_at": datetime.datetime.utcnow().isoformat(),
+        "broker_access_token":    access_token,           # deprecated — remove after feat/kite-adapter
+        "broker_token_expires_at": _zerodha_token_expiry(),
+        "broker_connected_at":    now_iso,
     }).eq("id", user_id).execute()
 
     return {"status": "connected", "message": "Zerodha connected successfully"}
