@@ -1347,3 +1347,48 @@ export async function runScanner(filters: Record<string, unknown>, sort_by = "vo
   if (!res.ok) throw new Error("Scanner failed");
   return res.json();
 }
+
+// ─── Adapter-backed broker routes (/api/brokers/*) ───────────────────────────
+
+export type BrokerProfile = {
+  broker_id: string;
+  user_id: string;
+  display_name: string;
+  email: string;
+};
+
+export type BrokerHolding = {
+  symbol: string;
+  exchange: string;
+  quantity: number;
+  average_price: number;
+  current_value: number;
+  pnl: number;
+};
+
+export async function startBrokerConnect(broker: string): Promise<{ auth_url: string; state: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/connect/start`, { method: "POST", headers });
+  if (!res.ok) throw new Error("Failed to start broker connect");
+  return res.json();
+}
+
+export async function getBrokerProfile(broker: string): Promise<BrokerProfile> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/profile`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch broker profile");
+  return res.json();
+}
+
+export async function getBrokerHoldings(broker: string): Promise<BrokerHolding[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/holdings`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch broker holdings");
+  return res.json();
+}
+
+export async function disconnectBroker(broker: string): Promise<void> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/disconnect`, { method: "DELETE", headers });
+  if (!res.ok) throw new Error("Failed to disconnect broker");
+}
