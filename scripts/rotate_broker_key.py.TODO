@@ -1,0 +1,103 @@
+# rotate_broker_key.py — SPEC (NOT YET IMPLEMENTED)
+#
+# This file is a spec for a script that must be written before alphavyuh
+# stores real broker credentials in production.
+#
+# Linked from: docs/decisions/002-broker-credentials.md §Q3
+# CLAUDE.md §8 lists this as a hard pre-production blocker.
+#
+# ─── When this script is needed ──────────────────────────────────────────────
+#
+# Run this script if:
+#   1. BROKER_CREDS_KEY is believed to be compromised (primary use case)
+#   2. Scheduled key rotation (e.g. annually, if policy requires it)
+#
+# Do NOT run this script:
+#   - During market hours (09:15–15:30 IST on trading days)
+#   - Without first draining in-flight order placement requests
+#   - Without a tested DB backup taken within the last hour
+#
+# ─── What the script must do ─────────────────────────────────────────────────
+#
+# Pre-flight:
+#   1. Require four env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+#      BROKER_CREDS_KEY (old key), BROKER_CREDS_KEY_NEW (new key).
+#      Exit with an error if any are missing.
+#   2. Verify BROKER_CREDS_KEY_NEW is a valid 32-byte hex string (64 chars).
+#   3. Verify BROKER_CREDS_KEY != BROKER_CREDS_KEY_NEW (refuse to no-op).
+#   4. Count rows in broker_credentials with key_version = 1.
+#      Print: "Will re-encrypt N rows. Continue? [y/N]"
+#   5. Take a snapshot of all row IDs and key_values to a local encrypted
+#      backup file before beginning (protects against partial failure).
+#
+# Re-encryption loop:
+#   6. Fetch rows in batches of 100, ordered by id.
+#      SELECT id, user_id, broker, key_name, key_value
+#      FROM broker_credentials WHERE key_version = 1
+#      ORDER BY id LIMIT 100.
+#   7. For each row:
+#      a. Decrypt key_value using BROKER_CREDS_KEY (old key).
+#         On InvalidTag: log "Row {id} failed to decrypt — skipping" and continue.
+#         Do NOT abort the entire run for one bad row.
+#      b. Re-encrypt plaintext using BROKER_CREDS_KEY_NEW.
+#         The AAD must match the row: f"{user_id}:{broker}:{key_name}"
+#      c. UPDATE broker_credentials SET key_value = <new_cipher>, key_version = 2
+#         WHERE id = <row_id> AND key_version = 1.
+#         The WHERE key_version = 1 guard prevents double-rotation on retry.
+#   8. After each batch: print progress. Sleep 100ms to avoid overwhelming the DB.
+#   9. At completion: print summary — rows rotated, rows skipped, rows failed.
+#
+# Post-rotation:
+#  10. Run a second pass automatically after the main loop:
+#      SELECT COUNT(*) FROM broker_credentials WHERE key_version = 1.
+#      If count > 0, warn: "N rows with key_version = 1 remain (written during rotation).
+#      Re-run this script to complete rotation before swapping the env var."
+#      Exit non-zero so the operator knows not to proceed with the env var swap.
+#      The second pass handles rows written concurrently during the first pass.
+#  11. Instruct the operator (only when second pass reports 0 remaining):
+#      "Set BROKER_CREDS_KEY = <new key value> in Railway.
+#       Remove BROKER_CREDS_KEY_NEW.
+#       Restart the backend service.
+#       Do NOT do this until the script reports 0 remaining rows with key_version = 1."
+#      Consider enabling maintenance mode on the backend before the env var swap to
+#      prevent new version-1 rows from being written after the final confirmation.
+#  12. Remind the operator to delete the local backup file once the rotation
+#      is confirmed successful and the service has restarted cleanly.
+#
+# Rollback (if re-encryption fails partway):
+#   - Rows with key_version = 1 can still be decrypted with the old BROKER_CREDS_KEY.
+#   - Rows with key_version = 2 can only be decrypted with BROKER_CREDS_KEY_NEW.
+#   - If the backend has NOT been restarted with the new key yet, the service
+#     still works for version-1 rows. Version-2 rows will fail decrypt.
+#   - Rollback: re-run the script with old/new keys swapped, targeting key_version = 2.
+#     Then discard BROKER_CREDS_KEY_NEW and do not restart the service.
+#
+# ─── What the script must NOT do ─────────────────────────────────────────────
+#
+#   - Print plaintext credential values at any verbosity level
+#   - Log to any external service (no Sentry, no Railway logs for this run)
+#   - Exit silently on error — always print what went wrong
+#   - Assume the DB is idle — concurrent writes are possible; the WHERE key_version = 1
+#     guard in the UPDATE prevents double-rotation, but new rows written during rotation
+#     will have key_version = 1 and need a second pass
+#
+# ─── Testing requirements before use in production ───────────────────────────
+#
+#   - Run against a staging Supabase project with synthetic credentials
+#   - Verify: all rows after rotation decrypt correctly with the new key
+#   - Verify: a mid-run abort (CTRL-C) leaves the DB in a consistent state
+#     (no row has key_version = 2 that can't be decrypted with the new key)
+#   - Verify: a row with a corrupted key_value (manually zeroed bytes) is
+#     skipped, not fatal
+#   - Verify: the script refuses to start if BROKER_CREDS_KEY == BROKER_CREDS_KEY_NEW
+#
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+#
+#   pip install cryptography supabase
+#   (both are already in requirements.txt for the backend)
+#
+# ─── Implementation note ─────────────────────────────────────────────────────
+#
+# The encrypt/decrypt helpers must be identical to the production helpers
+# in backend/app/brokers/credentials.py. Copy them here, do not import them,
+# to avoid accidental dependency on backend initialization logic.

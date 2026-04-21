@@ -1,0 +1,13 @@
+{
+  "name": "alphavyuh",
+  "private": true,
+  "scripts": {
+    "db:start": "npx supabase start",
+    "db:stop": "npx supabase stop",
+    "db:reset": "npx supabase db reset",
+    "db:types": "npx supabase gen types typescript --local > frontend/lib/supabase/types.ts",
+    "db:push:staging": "scripts/db-push-staging.sh",
+    "dev:frontend": "cd frontend && bun run dev",
+    "dev:backend": "cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000"
+  }
+}
