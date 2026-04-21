@@ -552,6 +552,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
     return results
 
 
+VCP_RPC_CHUNK = 500  # max symbols per get_vcp_lookback RPC call (avoids statement timeout)
+
+
 def _run_vcp_pass2(
     client,
     pass1_results: list[dict],
@@ -559,16 +562,14 @@ def _run_vcp_pass2(
     f: "ScanFilters",
 ) -> list[dict]:
     """
-    Pass 2 of VCP detection: fetch LOOKBACK_DAYS of daily OHLCV per candidate,
-    run detect_vcp() on each, return only matching results.
+    Pass 2 of VCP detection: fetch LOOKBACK_DAYS of daily OHLCV per candidate
+    via the get_vcp_lookback Postgres CTE function, then run detect_vcp() on each.
 
-    Called only when f.vcp_contraction is True.
-
-    Batch size: PostgREST's hosted max_rows cap is 1000 rows per request.
-    We batch candidates so that BATCH_SIZE * LOOKBACK_DAYS <= 1000, ensuring
-    no result is silently truncated.
+    Replaces 39 sequential PostgREST batches with a small number of chunked RPC
+    calls (ADR 005 §Hybrid). Chunking caps symbols per call at VCP_RPC_CHUNK to
+    stay within Supabase statement timeout; each call returns one JSONB row per
+    symbol so the PostgREST row cap is never hit.
     """
-    from collections import defaultdict
     from app.scanners.vcp import detect_vcp, LOOKBACK_DAYS
 
     min_pivots           = f.vcp_min_pivots           or 2
@@ -579,31 +580,24 @@ def _run_vcp_pass2(
     if not candidate_symbols:
         return []
 
-    # PostgREST hard cap: 1000 rows per request on hosted Supabase.
-    # Keep each batch well under that limit.
-    POSTGREST_ROW_CAP = 1000
-    batch_size = max(1, POSTGREST_ROW_CAP // LOOKBACK_DAYS)  # 13 at LOOKBACK_DAYS=75
-
-    by_symbol: dict[str, list[dict]] = defaultdict(list)
-    for i in range(0, len(candidate_symbols), batch_size):
-        batch = candidate_symbols[i : i + batch_size]
-        rows = (
-            client.table("daily_ohlcv")
-            .select("symbol,trade_date,high,low,close,volume")
-            .in_("symbol", batch)
-            .lte("trade_date", latest_date)
-            .order("trade_date", desc=True)
-            .limit(batch_size * LOOKBACK_DAYS)
+    by_symbol: dict[str, list[dict]] = {}
+    for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK):
+        chunk = candidate_symbols[i : i + VCP_RPC_CHUNK]
+        rpc_rows = (
+            client.rpc(
+                "get_vcp_lookback",
+                {
+                    "p_symbols":  chunk,
+                    "p_ref_date": latest_date,
+                    "p_lookback": LOOKBACK_DAYS,
+                },
+            )
             .execute()
             .data or []
         )
-        for row in rows:
-            by_symbol[row["symbol"]].append(row)
-
-    # Sort ascending and cap at LOOKBACK_DAYS per symbol
-    for sym in by_symbol:
-        by_symbol[sym].sort(key=lambda r: r["trade_date"])
-        by_symbol[sym] = by_symbol[sym][-LOOKBACK_DAYS:]
+        for row in rpc_rows:
+            if row.get("symbol") and row.get("history"):
+                by_symbol[row["symbol"]] = row["history"]
 
     return [
         r for r in pass1_results

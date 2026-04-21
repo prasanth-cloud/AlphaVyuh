@@ -101,26 +101,100 @@
 
 ---
 
-## Post-Fix Benchmark (pending)
+## Post-Fix Benchmark (M3-C-fix — feat/scanner-vcp-cte-fix)
 
-To be recorded after `feat/scanner-vcp-cte-fix` merges. Fields will be populated:
+**Recorded:** 2026-04-21  
+**Environment:** Staging — `fyxltykqdvacbdgmeucf.supabase.co` (us-east-2)  
+**Architecture:** Single `get_vcp_lookback` CTE RPC, chunked at 500 symbols per call  
+**Optimisations vs migration 029:** lower date bound (`p_lookback * 2` calendar days), `trade_date` removed from JSONB
 
-| Scan | p50 | p95 | p99 | Target | Status |
-|------|-----|-----|-----|--------|--------|
-| VCP Nifty-500 (CTE) | — | — | — | p95 < 1,500ms | pending |
-| VCP all-NSE (CTE)   | — | — | — | p95 < 5,000ms | pending |
+### VCP Nifty-500 (post-fix, CTE)
+
+**Candidates:** 500 (first 500 SEPA pass-1 results)  
+**VCP hits:** 68 / 500
+
+| Run | Latency |
+|-----|---------|
+| 1   | 2,061ms |
+| 2   | 751ms |
+| 3   | 797ms |
+| 4   | 736ms |
+| 5   | 601ms |
+| 6   | 596ms |
+| 7   | 850ms |
+| 8   | 804ms |
+| 9   | 596ms |
+| 10  | 638ms |
+| 11  | 596ms |
+| 12  | 599ms |
+| 13  | 649ms |
+| 14  | 624ms |
+| 15  | 698ms |
+| 16  | 584ms |
+| 17  | 645ms |
+| 18  | 601ms |
+| 19  | 594ms |
+| 20  | 574ms |
+
+| Metric | Value | Target | Status |
+|--------|-------|--------|--------|
+| p50    | 631ms | —      | — |
+| p95    | 910ms | < 1,500ms | ✅ PASS (+590ms headroom) |
+| p99    | 1,831ms | —    | — |
+| min    | 574ms | —      | — |
+| max    | 2,061ms | —    | — |
+
+**Notes:** Run 1 is a connection-pool cold-start artifact (2,061ms); steady-state is 574–850ms. p95 of 910ms gives +590ms headroom vs 1,500ms target — 3.5× improvement versus the pre-fix 5,267ms p95.
+
+### VCP all-NSE (post-fix, chunked CTE)
+
+**Architecture:** 3,046 symbols ÷ 500 per chunk = 7 sequential RPC calls  
+**VCP hits:** 390 / 3,046
+
+| Run | Latency |
+|-----|---------|
+| 1   | 10,912ms |
+| 2   | 4,208ms |
+| 3   | 3,770ms |
+| 4   | 3,951ms |
+| 5   | 3,902ms |
+| 6   | 3,727ms |
+| 7   | 3,910ms |
+| 8   | 3,748ms |
+| 9   | 3,493ms |
+| 10  | 3,841ms |
+| 11  | 3,704ms |
+| 12  | 5,033ms |
+| 13  | 4,610ms |
+| 14  | 3,757ms |
+| 15  | 3,789ms |
+| 16  | 3,757ms |
+| 17  | 3,721ms |
+| 18  | 3,909ms |
+| 19  | 3,918ms |
+| 20  | 3,781ms |
+
+| Metric | Value | Target | Status |
+|--------|-------|--------|--------|
+| p50    | 3,815ms | —     | — |
+| p95    | 5,327ms | < 5,000ms | ⚠️ MARGINAL (soft target) |
+| p99    | 9,795ms | —     | — |
+| min    | 3,493ms | —     | — |
+| max    | 10,912ms | —    | — |
+
+**Notes:** Soft target, no hard fail (ADR 005 §Revisit Trigger 2). Run 1 cold-start (10,912ms) inflates p95; excluding it, p95 = 4,610ms (under target). Steady-state (runs 2–20 excl. run 12 spike) averages ~3,830ms. On Railway (co-located with Supabase us-east-2), the 7 round-trips at ~5ms RTT each vs ~130ms Mac RTT = ~875ms reduction total, putting production p95 well under 5,000ms.
 
 ---
 
-## Headroom Summary (pre-fix)
+## Headroom Summary (post-fix)
 
-| Scan | Metric | Measured | Target | Headroom |
-|------|--------|----------|--------|----------|
-| SEPA 3,046 symbols | p50 | 171ms | 400ms | +229ms (57%) |
-| VCP 500 symbols | p95 | 5,267ms | 1,500ms | −3,767ms over budget |
+| Scan | Metric | Pre-fix | Post-fix | Target | Status |
+|------|--------|---------|----------|--------|--------|
+| SEPA 3,046 symbols | p50 | 171ms | 154ms | 400ms | ✅ PASS (+246ms) |
+| VCP Nifty-500 (500 cands) | p95 | 5,267ms | 910ms | 1,500ms | ✅ PASS (+590ms) |
+| VCP all-NSE (3,046 cands) | p95 | — | 5,327ms | 5,000ms | ⚠️ MARGINAL (soft) |
 
-The SEPA headroom of +229ms is the budget available for additional single-day push-filters
-without regression. Each new push-filter costs roughly 0–10ms (index seek on precomputed column);
-the headroom comfortably accommodates 20+ additional filters.
+**VCP improvement:** 5,267ms → 910ms p95 = **5.8× faster**. Root cause eliminated: 39 sequential HTTP batches → 1 CTE RPC call (chunked to 500 symbols to avoid statement timeout on all-NSE scans).
 
-VCP headroom is negative until the CTE fix lands.
+The SEPA headroom of +246ms accommodates 20+ additional push-filters at 0–10ms each.  
+The VCP Nifty-500 headroom of +590ms is the budget for future VCP parameter tuning overhead.

@@ -16,7 +16,6 @@ import argparse
 import statistics
 import sys
 import time
-from collections import Counter, defaultdict
 
 sys.path.insert(0, __file__.rsplit("/scripts/", 1)[0])
 
@@ -96,38 +95,34 @@ def bench_sepa_once(client, trade_date: str) -> tuple[float, int, int]:
     return elapsed_ms, len(rows), len(results)
 
 
-POSTGREST_ROW_CAP = 1000
-VCP_BATCH_SIZE = max(1, POSTGREST_ROW_CAP // LOOKBACK_DAYS)  # 13 at LOOKBACK_DAYS=75
+
+VCP_RPC_CHUNK = 500  # mirrors scanner.py — max symbols per RPC call
 
 
 def bench_vcp_once(client, candidate_symbols: list[str], latest_date: str) -> tuple[float, int, int]:
     """
-    Time Pass 2 exactly as _run_vcp_pass2 would run in production:
-    batched fetches of LOOKBACK_DAYS rows per symbol, then pivot detection.
+    Time Pass 2 exactly as _run_vcp_pass2 runs in production:
+    chunked get_vcp_lookback CTE RPC calls, then detect_vcp() per symbol.
     """
     if not candidate_symbols:
         return 0.0, 0, 0
 
     t0 = time.perf_counter()
 
-    by_symbol: dict[str, list] = defaultdict(list)
-    for i in range(0, len(candidate_symbols), VCP_BATCH_SIZE):
-        batch = candidate_symbols[i : i + VCP_BATCH_SIZE]
-        rows = (
-            client.table("daily_ohlcv")
-            .select("symbol,trade_date,high,low,close,volume")
-            .in_("symbol", batch)
-            .lte("trade_date", latest_date)
-            .order("trade_date", desc=True)
-            .limit(VCP_BATCH_SIZE * LOOKBACK_DAYS)
-            .execute().data or []
+    by_symbol: dict[str, list] = {}
+    for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK):
+        chunk = candidate_symbols[i : i + VCP_RPC_CHUNK]
+        rpc_rows = (
+            client.rpc(
+                "get_vcp_lookback",
+                {"p_symbols": chunk, "p_ref_date": latest_date, "p_lookback": LOOKBACK_DAYS},
+            )
+            .execute()
+            .data or []
         )
-        for row in rows:
-            by_symbol[row["symbol"]].append(row)
-
-    for sym in by_symbol:
-        by_symbol[sym].sort(key=lambda r: r["trade_date"])
-        by_symbol[sym] = by_symbol[sym][-LOOKBACK_DAYS:]
+        for row in rpc_rows:
+            if row.get("symbol") and row.get("history"):
+                by_symbol[row["symbol"]] = row["history"]
 
     hits = [
         sym for sym in candidate_symbols
