@@ -257,6 +257,7 @@ If any of these go out of date, updating them is part of the task that broke the
 - **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) SEPA scanner on cached EOD data, (4) Chart with order placement UI
 - **Staging:** `alphavyuh-staging` Supabase project live (`nltfedbnbbrclcufoaly`, `us-east-2`). Push migrations with `bun run db:push:staging`. See `docs/environments.md` for the full promotion flow.
 - **Known gaps:**
+  - **Schema provenance drift (026–031):** Prod schema between migrations 026–031 was applied via mixed paths (migration files + direct MCP SQL). History is now aligned via stub files (030, 031) but object equivalence between prod and what `supabase db reset` would produce has not been verified. See `docs/decisions/010-schema-provenance-drift.md`. **Resolution committed before 2026-05-31** — schema equivalence audit (`pg_dump --schema-only` diff) required before any migration that touches objects from 026–031.
   - No production monitoring yet (Sentry to be added)
   - Broker adapter interface not finalized
   - **Email confirmation is OFF** in Supabase. Before enabling it (or adding magic links / OAuth), a `/auth/callback` Route Handler must be built to exchange the code for a session and set cookies. Without it, confirmation links will 404 and the user will not get a session.
