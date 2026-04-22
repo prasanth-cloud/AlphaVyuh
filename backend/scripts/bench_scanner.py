@@ -13,13 +13,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import statistics
 import sys
 import time
 
 sys.path.insert(0, __file__.rsplit("/scripts/", 1)[0])
 
-from app.routers.scanner import ScanFilters, _apply_filters
+from app.routers.scanner import ScanFilters, _apply_filters, VCP_CONCURRENCY
 from app.scanners.vcp import detect_vcp, LOOKBACK_DAYS
 from app.services.supabase import get_admin_client
 
@@ -99,38 +100,49 @@ def bench_sepa_once(client, trade_date: str) -> tuple[float, int, int]:
 VCP_RPC_CHUNK = 500  # mirrors scanner.py — max symbols per RPC call
 
 
-def bench_vcp_once(client, candidate_symbols: list[str], latest_date: str) -> tuple[float, int, int]:
+async def _bench_vcp_async(client, candidate_symbols: list[str], latest_date: str) -> tuple[float, int, int]:
     """
-    Time Pass 2 exactly as _run_vcp_pass2 runs in production:
-    chunked get_vcp_lookback CTE RPC calls, then detect_vcp() per symbol.
+    Mirror of _run_vcp_pass2: concurrent chunk fetches capped at VCP_CONCURRENCY.
+    Measures wall time of the full async gather — the same path production uses.
     """
     if not candidate_symbols:
         return 0.0, 0, 0
 
     t0 = time.perf_counter()
+    chunks = [
+        candidate_symbols[i : i + VCP_RPC_CHUNK]
+        for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK)
+    ]
+    sem = asyncio.Semaphore(VCP_CONCURRENCY)
 
-    by_symbol: dict[str, list] = {}
-    for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK):
-        chunk = candidate_symbols[i : i + VCP_RPC_CHUNK]
-        rpc_rows = (
-            client.rpc(
-                "get_vcp_lookback",
-                {"p_symbols": chunk, "p_ref_date": latest_date, "p_lookback": LOOKBACK_DAYS},
+    async def _fetch(chunk: list[str]) -> list[dict]:
+        async with sem:
+            return await asyncio.to_thread(
+                lambda: (
+                    client.rpc(
+                        "get_vcp_lookback",
+                        {"p_symbols": chunk, "p_ref_date": latest_date, "p_lookback": LOOKBACK_DAYS},
+                    )
+                    .execute()
+                    .data or []
+                )
             )
-            .execute()
-            .data or []
-        )
+
+    chunk_results = await asyncio.gather(*[_fetch(c) for c in chunks])
+    by_symbol: dict[str, list] = {}
+    for rpc_rows in chunk_results:
         for row in rpc_rows:
             if row.get("symbol") and row.get("history"):
                 by_symbol[row["symbol"]] = row["history"]
 
-    hits = [
-        sym for sym in candidate_symbols
-        if detect_vcp(by_symbol.get(sym, []))
-    ]
-
+    hits = [sym for sym in candidate_symbols if detect_vcp(by_symbol.get(sym, []))]
     elapsed_ms = (time.perf_counter() - t0) * 1000
     return elapsed_ms, len(candidate_symbols), len(hits)
+
+
+def bench_vcp_once(client, candidate_symbols: list[str], latest_date: str) -> tuple[float, int, int]:
+    """Sync wrapper — runs the async concurrent fetch in a fresh event loop."""
+    return asyncio.run(_bench_vcp_async(client, candidate_symbols, latest_date))
 
 
 def percentile(sorted_data: list[float], p: float) -> float:

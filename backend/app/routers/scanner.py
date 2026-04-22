@@ -6,6 +6,7 @@ smaller candidate set returned by the DB push-filters.
 """
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -552,49 +553,65 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
     return results
 
 
-VCP_RPC_CHUNK = 500  # max symbols per get_vcp_lookback RPC call (avoids statement timeout)
+VCP_RPC_CHUNK = 500   # max symbols per get_vcp_lookback RPC call (avoids statement timeout)
+VCP_CONCURRENCY = 4  # simultaneous chunk fetches — keeps Supabase connection pool healthy
 
 
-def _run_vcp_pass2(
+async def _run_vcp_pass2(
     client,
     pass1_results: list[dict],
     latest_date: str,
     f: "ScanFilters",
 ) -> list[dict]:
     """
-    Pass 2 of VCP detection: fetch LOOKBACK_DAYS of daily OHLCV per candidate
-    via the get_vcp_lookback Postgres CTE function, then run detect_vcp() on each.
+    Pass 2 of VCP detection: fetch LOOKBACK_DAYS of OHLCV per candidate via the
+    get_vcp_lookback Postgres CTE, then run detect_vcp() on each.
 
-    Replaces 39 sequential PostgREST batches with a small number of chunked RPC
-    calls (ADR 005 §Hybrid). Chunking caps symbols per call at VCP_RPC_CHUNK to
-    stay within Supabase statement timeout; each call returns one JSONB row per
-    symbol so the PostgREST row cap is never hit.
+    Chunks run concurrently (asyncio.gather, cap=VCP_CONCURRENCY) rather than
+    sequentially, cutting wall time from sum(chunk_times) to
+    ~ceil(n_chunks/VCP_CONCURRENCY) × max(chunk_time). The sync supabase-py
+    client is wrapped in asyncio.to_thread so the event loop is not blocked.
     """
     from app.scanners.vcp import detect_vcp, LOOKBACK_DAYS
 
-    min_pivots           = f.vcp_min_pivots           or 2
-    max_depth_pct        = f.vcp_max_depth_pct        or 15.0
-    pivot_proximity_pct  = f.vcp_pivot_proximity_pct  or 10.0
+    min_pivots          = f.vcp_min_pivots          or 2
+    max_depth_pct       = f.vcp_max_depth_pct       or 15.0
+    pivot_proximity_pct = f.vcp_pivot_proximity_pct or 10.0
 
     candidate_symbols = [r["symbol"] for r in pass1_results if r.get("symbol")]
     if not candidate_symbols:
         return []
 
-    by_symbol: dict[str, list[dict]] = {}
-    for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK):
-        chunk = candidate_symbols[i : i + VCP_RPC_CHUNK]
-        rpc_rows = (
-            client.rpc(
-                "get_vcp_lookback",
-                {
-                    "p_symbols":  chunk,
-                    "p_ref_date": latest_date,
-                    "p_lookback": LOOKBACK_DAYS,
-                },
+    chunks = [
+        candidate_symbols[i : i + VCP_RPC_CHUNK]
+        for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK)
+    ]
+
+    sem = asyncio.Semaphore(VCP_CONCURRENCY)
+
+    async def _fetch_chunk(chunk: list[str]) -> list[dict]:
+        async with sem:
+            return await asyncio.to_thread(
+                lambda: (
+                    client.rpc(
+                        "get_vcp_lookback",
+                        {
+                            "p_symbols":  chunk,
+                            "p_ref_date": latest_date,
+                            "p_lookback": LOOKBACK_DAYS,
+                        },
+                    )
+                    .execute()
+                    .data or []
+                )
             )
-            .execute()
-            .data or []
-        )
+
+    chunk_results = await asyncio.gather(*[_fetch_chunk(c) for c in chunks], return_exceptions=True)
+
+    by_symbol: dict[str, list[dict]] = {}
+    for rpc_rows in chunk_results:
+        if isinstance(rpc_rows, BaseException):
+            continue  # one chunk failure → skip, not a full abort
         for row in rpc_rows:
             if row.get("symbol") and row.get("history"):
                 by_symbol[row["symbol"]] = row["history"]
@@ -705,7 +722,9 @@ async def run_scanner(
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
     if f.vcp_contraction is True and results:
-        results = _run_vcp_pass2(client, results, latest_date, f)
+        if plan == "free":
+            raise HTTPException(403, "VCP scan requires Pro or Elite plan")
+        results = await _run_vcp_pass2(client, results, latest_date, f)
 
     # Sort
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
