@@ -354,35 +354,16 @@ function SettingsContent() {
       )}
 
       {/* Header */}
-      <div style={{
-        padding: "22px 24px",
-        borderRadius: 24,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "radial-gradient(circle at top right, rgba(90,139,232,0.14), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
-        boxShadow: "var(--shadow-panel)",
-      }}>
-        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Control Panel</div>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 18 }}>
-          <div>
-            <div style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8, color: "var(--text-primary)" }}>Settings built in the same product language as the rest of the desk.</div>
-            <div style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-              Manage your profile, broker access, billing state, and launch readiness from one branded control surface.
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
+      <div style={{ height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", background: "var(--surface-1)", border: "1px solid var(--border-default)", borderRadius: 8, flexShrink: 0 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Settings</span>
+        <div style={{ display: "flex", gap: 4 }}>
           {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className="px-4 py-2.5 text-[13px] font-medium transition-colors rounded-full border"
-              style={tab === t.id
-                ? { borderColor: "rgba(86,215,193,0.16)", color: "var(--text-primary)", background: "rgba(255,255,255,0.05)" }
-                : { borderColor: "transparent", color: "var(--text-tertiary)", background: "transparent" }}
-            >
-              {t.label}
-            </button>
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              padding: "3px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer", borderRadius: 6,
+              background: tab === t.id ? "rgba(255,255,255,0.08)" : "transparent",
+              color: tab === t.id ? "var(--text-primary)" : "var(--text-tertiary)",
+              border: tab === t.id ? "1px solid var(--border-default)" : "1px solid transparent",
+            }}>{t.label}</button>
           ))}
         </div>
       </div>

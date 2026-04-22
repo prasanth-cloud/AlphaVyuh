@@ -440,42 +440,14 @@ export default function ScannerPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 'calc(100vh - 120px)' }}>
-      <div style={{
-        padding: '22px 24px',
-        borderRadius: 24,
-        border: '1px solid rgba(255,255,255,0.08)',
-        background:
-          'radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))',
-        boxShadow: 'var(--shadow-panel)',
-      }}>
-        <div className="label" style={{ color: 'var(--accent)', marginBottom: 10 }}>Scanner Workspace</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.02, letterSpacing: '-0.04em', marginBottom: 8 }}>
-              Build sharp scans and move ideas straight into action.
-            </h1>
-            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
-              Run momentum and breakout presets, open the exact filters you care about, and turn strong names into watchlists without leaving the same surface.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {[
-              `${PRESETS.length} presets`,
-              `${savedScreens.length} saved screens`,
-              results.length > 0 ? `${results.length} visible results` : 'Custom filters ready',
-            ].map((item) => (
-              <div key={item} style={{
-                minWidth: 120,
-                padding: '12px 14px',
-                borderRadius: 16,
-                border: '1px solid rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.03)',
-              }}>
-                <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{item}</div>
-              </div>
-            ))}
-          </div>
+      <div style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', background: 'var(--surface-1)', border: '1px solid var(--border-default)', borderRadius: 8, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Scanner</span>
+          <span className="caption">{savedScreens.length > 0 ? `${savedScreens.length} saved screens` : `${PRESETS.length} presets`}</span>
         </div>
+        <span className="caption mono">
+          {results.length > 0 ? `${results.length} results` : !hasRun ? 'Pick a preset or configure filters' : ''}
+        </span>
       </div>
 
       <div style={{ display: 'flex', gap: 16, minHeight: 'calc(100vh - 320px)', overflow: 'visible', flexWrap: 'wrap' }}>
@@ -487,7 +459,7 @@ export default function ScannerPage() {
         flexShrink: 0,
         background: 'linear-gradient(180deg, rgba(86,215,193,0.06), rgba(255,255,255,0.02) 18%, rgba(255,255,255,0.01)), var(--surface-1)',
         border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 24,
+        borderRadius: 8,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -655,7 +627,7 @@ export default function ScannerPage() {
         overflow: 'hidden',
         background: 'linear-gradient(180deg, rgba(90,139,232,0.04), rgba(255,255,255,0.01) 14%), var(--surface-1)',
         border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 24,
+        borderRadius: 8,
         boxShadow: 'var(--shadow-panel)',
       }}>
 
