@@ -5,6 +5,7 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/signup",
   "/reset-password",
+  "/update-password",
   "/dev-login",
   "/offline",
   "/privacy",
