@@ -308,73 +308,47 @@ export default function JournalPage() {
         </div>
       )}
 
-      <div style={{
-        padding: "22px 24px",
-        borderRadius: 24,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
-        boxShadow: "var(--shadow-panel)",
-      }}>
-        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Trading Journal</div>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Review execution, close the loop, and learn faster.</h1>
-            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-              Capture entries and exits, study your real P&amp;L curve, and let the AI layer turn repeated mistakes into practical trading rules.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {brokerConnected && brokerName === "zerodha" && (
-              <button
-                onClick={handleImportZerodha}
-                disabled={importing}
-                style={{ padding: "9px 14px", fontSize: 12, fontWeight: 500, borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "var(--text-secondary)", cursor: "pointer", opacity: importing ? 0.5 : 1 }}
-              >
-                {importing ? "Importing…" : "Import from Zerodha"}
-              </button>
-            )}
-            <button
-              onClick={openAddPanel}
-              style={{ padding: "10px 16px", fontSize: 12, fontWeight: 600, borderRadius: 999, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#0A1712", cursor: "pointer", boxShadow: "0 10px 24px rgba(86,215,193,0.18)" }}
-            >
-              + Log trade
-            </button>
+      <div style={{ height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", background: "var(--surface-1)", border: "1px solid var(--border-default)", borderRadius: 8, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Journal</span>
+          <div style={{ display: "flex", gap: 4 }}>
+            {([ { id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "AI" } ] as { id: Tab; label: string }[]).map(({ id, label }) => (
+              <button key={id} onClick={() => setTab(id)} style={{
+                padding: "3px 10px", fontSize: 12, fontWeight: 500, cursor: "pointer", borderRadius: 6,
+                background: tab === id ? "rgba(255,255,255,0.08)" : "transparent",
+                color: tab === id ? "var(--text-primary)" : "var(--text-tertiary)",
+                border: tab === id ? "1px solid var(--border-default)" : "1px solid transparent",
+              }}>{label}</button>
+            ))}
           </div>
         </div>
-
-        {/* Stat cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
-          <StatCard
-            label="Total P&L"
-            value={stats ? fmtCcy(stats.total_pnl) : "—"}
-            deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"}
-          />
-          <StatCard
-            label="Win rate"
-            value={stats ? `${stats.win_rate}%` : "—"}
-            deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"}
-          />
-          <StatCard label="Closed trades" value={String(stats?.total_trades ?? "—")} />
-          <StatCard label="Open trades" value={String(stats?.open_trades ?? "—")} />
-        </div>
-
-        {/* Tab bar */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {([{ id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "AI analysis" }] as { id: Tab; label: string }[]).map(({ id, label }) => (
-            <button key={id} onClick={() => setTab(id)} style={{
-              padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer",
-              color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
-              background: tab === id ? "rgba(255,255,255,0.05)" : "transparent",
-              border: `1px solid ${tab === id ? 'rgba(86,215,193,0.16)' : 'transparent'}`,
-              borderRadius: 999,
-              position: "relative",
-            }}>
-              {label}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {brokerConnected && brokerName === "zerodha" && (
+            <button onClick={handleImportZerodha} disabled={importing} style={{ padding: "5px 10px", fontSize: 11, fontWeight: 500, borderRadius: 6, border: "1px solid var(--border-default)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", opacity: importing ? 0.5 : 1 }}>
+              {importing ? "Importing…" : "Import Zerodha"}
             </button>
-          ))}
+          )}
+          <button onClick={openAddPanel} style={{ padding: "5px 12px", fontSize: 11, fontWeight: 600, borderRadius: 6, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#0A1712", cursor: "pointer", border: "none" }}>
+            + Log trade
+          </button>
         </div>
       </div>
+
+      {/* Stat cards — shown on trades + analytics tabs only */}
+      {tab !== "ai" && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+        <StatCard
+          label="Total P&L"
+          value={stats ? fmtCcy(stats.total_pnl) : "—"}
+          deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"}
+        />
+        <StatCard
+          label="Win rate"
+          value={stats ? `${stats.win_rate}%` : "—"}
+          deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"}
+        />
+        <StatCard label="Closed trades" value={String(stats?.total_trades ?? "—")} />
+        <StatCard label="Open trades" value={String(stats?.open_trades ?? "—")} />
+      </div>}
 
       {/* ── Analytics ── */}
       {tab === "analytics" && (

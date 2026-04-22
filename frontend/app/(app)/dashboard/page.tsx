@@ -165,30 +165,16 @@ export default function DashboardPage() {
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{
-        padding: '22px 24px',
-        borderRadius: 24,
-        border: '1px solid rgba(255,255,255,0.08)',
-        background:
-          'radial-gradient(circle at top right, rgba(90,139,232,0.14), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))',
-        boxShadow: 'var(--shadow-panel)',
-      }}>
-        <div className="label" style={{ color: 'var(--accent)', marginBottom: 10 }}>Market Overview</div>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.02, letterSpacing: '-0.04em', marginBottom: 8 }}>Read the market before you place the next trade.</h1>
-            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
-              Track breadth, phase, sector rotation, and leadership in one calm surface before moving into scanner, charts, or execution.
-            </p>
-          </div>
-          {lastUpdated && (
-            <span className="caption">
-              Last updated {lastUpdated}
-              <span style={{ color: 'var(--accent)', marginLeft: 6 }}>●</span>
-            </span>
-          )}
+      <div style={{ height: 44, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', background: 'var(--surface-1)', border: '1px solid var(--border-default)', borderRadius: 8, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Market Overview</span>
+          {data?.trade_date && <span className="caption">NSE breadth · {data.trade_date}</span>}
         </div>
-        <p className="body-secondary">NSE breadth and sector rotation{data?.trade_date ? ` · ${data.trade_date}` : ''}</p>
+        {lastUpdated && (
+          <span className="caption" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {lastUpdated}<span style={{ color: 'var(--accent)' }}>●</span>
+          </span>
+        )}
       </div>
 
       {/* Onboarding banner */}
