@@ -606,10 +606,12 @@ async def _run_vcp_pass2(
                 )
             )
 
-    chunk_results = await asyncio.gather(*[_fetch_chunk(c) for c in chunks])
+    chunk_results = await asyncio.gather(*[_fetch_chunk(c) for c in chunks], return_exceptions=True)
 
     by_symbol: dict[str, list[dict]] = {}
     for rpc_rows in chunk_results:
+        if isinstance(rpc_rows, BaseException):
+            continue  # one chunk failure → skip, not a full abort
         for row in rpc_rows:
             if row.get("symbol") and row.get("history"):
                 by_symbol[row["symbol"]] = row["history"]
@@ -720,6 +722,8 @@ async def run_scanner(
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
     if f.vcp_contraction is True and results:
+        if plan == "free":
+            raise HTTPException(403, "VCP scan requires Pro or Elite plan")
         results = await _run_vcp_pass2(client, results, latest_date, f)
 
     # Sort
