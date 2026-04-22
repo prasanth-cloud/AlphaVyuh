@@ -1,0 +1,203 @@
+name: Migration Drift Check
+
+# Runs on every PR that touches supabase/migrations/.
+# This is a FORCING FUNCTION — not an automated pipeline.
+# Migrations are never auto-applied. The check enforces the human process:
+#   1. Apply to staging → 2. Apply to prod → 3. Document in PR description
+#
+# To PASS this check after applying migrations:
+#   Add  <!-- migration-applied-to-prod -->  anywhere in the PR description.
+#
+# Required secret: SUPABASE_ACCESS_TOKEN
+#   Supabase dashboard → Account → Access tokens → Generate new token
+#   Add as repo secret: Settings → Secrets → Actions → SUPABASE_ACCESS_TOKEN
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+
+jobs:
+  check-drift:
+    name: Migration drift check
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Step 1: Detect what changed in supabase/migrations/ ──────────────────
+      - name: Detect migration changes
+        id: detect
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+
+          ADDED=$(git diff --name-only --diff-filter=A \
+            origin/${{ github.base_ref }}...HEAD -- 'supabase/migrations/*.sql')
+          MODIFIED=$(git diff --name-only --diff-filter=M \
+            origin/${{ github.base_ref }}...HEAD -- 'supabase/migrations/*.sql')
+
+          # Strip full paths to filenames only
+          ADDED_NAMES=$(echo "$ADDED" | xargs -I{} basename {} 2>/dev/null || true)
+          MODIFIED_NAMES=$(echo "$MODIFIED" | xargs -I{} basename {} 2>/dev/null || true)
+
+          echo "has_new=$([ -n "$ADDED" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_modified=$([ -n "$MODIFIED" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          {
+            echo "added_files<<HEREDOC"
+            echo "$ADDED_NAMES"
+            echo "HEREDOC"
+          } >> $GITHUB_OUTPUT
+          {
+            echo "modified_files<<HEREDOC"
+            echo "$MODIFIED_NAMES"
+            echo "HEREDOC"
+          } >> $GITHUB_OUTPUT
+
+          echo "=== Added ==="
+          echo "$ADDED_NAMES"
+          echo "=== Modified ==="
+          echo "$MODIFIED_NAMES"
+
+      # ── Step 2: Get prod migration count ─────────────────────────────────────
+      - name: Get prod migration count
+        id: counts
+        if: steps.detect.outputs.has_new == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          LOCAL=$(find supabase/migrations -name '*.sql' | wc -l | tr -d ' ')
+          echo "local_count=$LOCAL" >> $GITHUB_OUTPUT
+
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "remote_count=unknown (SUPABASE_ACCESS_TOKEN secret not set)" >> $GITHUB_OUTPUT
+          else
+            REMOTE=$(curl -sf \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+              "https://api.supabase.com/v1/projects/fyxltykqdvacbdgmeucf/database/migrations" \
+              | jq 'length' 2>/dev/null || echo "unknown")
+            echo "remote_count=$REMOTE" >> $GITHUB_OUTPUT
+            echo "Prod applied: $REMOTE | Local files: $LOCAL"
+          fi
+
+      # ── Step 3: Block modifications to existing migrations ───────────────────
+      - name: Block modified migrations (append-only rule)
+        if: steps.detect.outputs.has_modified == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = `${{ steps.detect.outputs.modified_files }}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## ❌ Migration drift check — append-only violation`,
+                ``,
+                `**Migrations are append-only.** This PR modifies existing migration files:`,
+                `\`\`\``,
+                files,
+                `\`\`\``,
+                ``,
+                `To change applied schema: create a new migration file that ALTERs or DROPs.`,
+                `Never edit a migration that has been applied to any environment.`,
+              ].join('\n'),
+            });
+            core.setFailed('Modified existing migration files — append-only rule violated.');
+
+      # ── Step 4: Post checklist comment for new migrations ────────────────────
+      - name: Post migration checklist
+        if: steps.detect.outputs.has_new == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const added   = `${{ steps.detect.outputs.added_files }}`.trim();
+            const remote  = `${{ steps.counts.outputs.remote_count }}`;
+            const local   = `${{ steps.counts.outputs.local_count }}`;
+
+            // Avoid duplicate comments on re-push — check for existing bot comment
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.includes('Migration drift check')
+            );
+
+            const body = [
+              `## ⚠️ Migration drift check — apply before merging`,
+              ``,
+              `This PR adds migration files that **must be applied to staging and prod** before merging.`,
+              ``,
+              `| | Count |`,
+              `|---|---|`,
+              `| Prod applied | ${remote} |`,
+              `| Local files  | ${local}  |`,
+              ``,
+              `**New migrations:**`,
+              `\`\`\``,
+              added,
+              `\`\`\``,
+              ``,
+              `**Required steps — paste terminal output below each item:**`,
+              ``,
+              `- [ ] Applied to staging: \`bun run db:push:staging\``,
+              `\`\`\``,
+              `# paste staging output here`,
+              `\`\`\``,
+              `- [ ] Applied to prod: \`supabase db push --linked\` (only after staging verified)`,
+              `\`\`\``,
+              `# paste prod output here`,
+              `\`\`\``,
+              `- [ ] Schema verified on prod via Supabase MCP or dashboard`,
+              ``,
+              `---`,
+              `**To pass this check:** add the following marker to the PR description (not a comment):`,
+              `\`<!-- migration-applied-to-prod -->\``,
+            ].join('\n');
+
+            if (existing) {
+              // Update existing comment instead of adding a new one
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # ── Step 5: Fail until evidence is in PR description ─────────────────────
+      - name: Require migration evidence in PR description
+        if: steps.detect.outputs.has_new == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} \
+            --json body -q .body 2>/dev/null || echo "")
+
+          if echo "$PR_BODY" | grep -q "migration-applied-to-prod"; then
+            echo "✓ Migration evidence marker found — check passes."
+          else
+            echo ""
+            echo "✗ Migration check failed."
+            echo ""
+            echo "  New migration files were added but no prod application evidence found."
+            echo "  Steps:"
+            echo "    1. Apply to staging:  bun run db:push:staging"
+            echo "    2. Apply to prod:     supabase db push --linked"
+            echo "    3. Add to PR description: <!-- migration-applied-to-prod -->"
+            echo ""
+            exit 1
+          fi
