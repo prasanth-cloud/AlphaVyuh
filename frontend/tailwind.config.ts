@@ -51,7 +51,34 @@ const config: Config = {
         "av-warn":    "#d97706",
         "av-wbg":     "#fff8ec",
         "av-vol":     "#7c6af0",
+        // ADR 007 — ds- prefix tokens (reference CSS vars from design-tokens.css)
+        // NOTE: bg-ds-*/50 opacity modifiers will NOT work — Tailwind cannot inject
+        // <alpha-value> into bare var() strings. Use inline style or separate alpha
+        // tokens for opacity overlays. Static class names (bg-ds-surface) work fine.
+        "ds-bg":         "var(--surface-0)",
+        "ds-surface":    "var(--surface-1)",
+        "ds-surface2":   "var(--surface-2)",
+        "ds-surface3":   "var(--surface-3)",
+        "ds-float":      "var(--surface-float)",
+        "ds-border":     "var(--border-default)",
+        "ds-border-sub": "var(--border-subtle)",
+        "ds-border-str": "var(--border-strong)",
+        "ds-t1":         "var(--text-primary)",
+        "ds-t2":         "var(--text-secondary)",
+        "ds-t3":         "var(--text-tertiary)",
+        "ds-accent":     "var(--accent)",
+        "ds-accent-bg":  "var(--accent-subtle)",
+        "ds-gain":       "var(--gain)",
+        "ds-gain-bg":    "var(--gain-subtle)",
+        "ds-loss":       "var(--loss)",
+        "ds-loss-bg":    "var(--loss-subtle)",
+        "ds-warn":       "var(--warn)",
+        "ds-warn-bg":    "var(--warn-subtle)",
         // shadcn tokens
+        // IMPORTANT: --accent in design-tokens.css is a raw hex (#56D7C1), NOT an HSL
+        // triplet. Do NOT use hsl(var(--accent)) — it produces invalid CSS. shadcn's
+        // accent slot is remapped to --shadcn-accent (HSL triplet defined in globals.css).
+        // The ds-accent token above uses var(--accent) directly (resolves to the hex).
         border:      "hsl(var(--border))",
         input:       "hsl(var(--input))",
         ring:        "hsl(var(--ring))",
@@ -74,8 +101,8 @@ const config: Config = {
           foreground: "hsl(var(--muted-foreground))",
         },
         accent: {
-          DEFAULT:    "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT:    "hsl(var(--shadcn-accent))",
+          foreground: "hsl(var(--shadcn-accent-foreground))",
         },
         card: {
           DEFAULT:    "hsl(var(--card))",
