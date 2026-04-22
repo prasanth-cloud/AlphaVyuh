@@ -8,6 +8,12 @@ export async function GET(request: Request) {
   const next = requestUrl.searchParams.get("next") ?? "/dashboard";
 
   if (code) {
+    const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin));
+
+    // Write session cookies directly onto the redirect response so the browser
+    // receives Set-Cookie headers. Using cookieStore.set() alone (the previous
+    // approach) writes to the Next.js internal store but not onto an explicitly
+    // returned NextResponse object, meaning cookies were dropped.
     const cookieStore = cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,9 +24,9 @@ export async function GET(request: Request) {
             return cookieStore.getAll();
           },
           setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            cookiesToSet.forEach(({ name, value, options }) => {
+              redirectResponse.cookies.set(name, value, options ?? {});
+            });
           },
         },
       }
@@ -28,10 +34,9 @@ export async function GET(request: Request) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(new URL(next, requestUrl.origin));
+      return redirectResponse;
     }
   }
 
-  // Code missing or exchange failed — send back to login
   return NextResponse.redirect(new URL("/login?error=auth_callback_failed", requestUrl.origin));
 }
