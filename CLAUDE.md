@@ -143,6 +143,9 @@ If you cannot verify, say so explicitly. Do not claim completion.
 - **Use the typed client** from `lib/supabase/server.ts` or `lib/supabase/client.ts`. Never instantiate `createClient` ad-hoc in a route.
 - **Migrations are append-only.** To change an applied migration, write a new one that alters/drops.
 - **Regenerate types** (`bun run db:types`) after every migration. Commit the regenerated file.
+- **Migration PR process (enforced by `check-migration-drift.yml`):** Any PR touching `supabase/migrations/` must include, in the PR description, terminal output proving the migration was applied to both staging and production. The sequence is always: staging first → verify → prod. Merging a migration PR without this output is a process violation. Add `<!-- migration-applied-to-prod -->` to the PR description to pass the drift check after applying.
+- **Known gap:** The Stop hook checks for uncommitted code but does not check for unapplied migrations. The `check-migration-drift.yml` CI check is the compensating control. When working locally, run `supabase migration list --linked` before declaring a migration task done.
+- **Stub files for prod-only migrations:** If a migration was applied directly to prod (e.g., via Supabase MCP during an emergency) without a local file, create a stub `.sql` file in `supabase/migrations/` with a `⚠️ STUB — DO NOT APPLY` header and no executable SQL. This closes the local ↔ prod count gap and prevents false drift alerts.
 
 ### Broker code
 - Always go through `BrokerAdapter`. See `docs/broker-adapter.md` for the interface contract.
@@ -187,6 +190,9 @@ If we upgrade to Next.js 15, `cookies()` and `headers()` become async Promises �
 - Never hardcode broker-specific logic outside `lib/brokers/`
 - Never disable RLS to "make it work" — fix the policy instead
 - Never `await cookies()` or `await headers()` — see Next.js 14 dynamic API rule above
+- Never merge a PR that adds migration files without prod application evidence in the PR description — `check-migration-drift.yml` enforces this, but the human is the last gate
+- Never apply migrations directly to prod without first applying to staging (staging is the canary; a bad migration there is recoverable, a bad migration on prod is not)
+- Never edit an existing migration file — if you need to change something, write a new migration; the drift check will catch and block any modification to existing files
 
 ---
 
@@ -251,6 +257,7 @@ If any of these go out of date, updating them is part of the task that broke the
 - **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) SEPA scanner on cached EOD data, (4) Chart with order placement UI
 - **Staging:** `alphavyuh-staging` Supabase project live (`nltfedbnbbrclcufoaly`, `us-east-2`). Push migrations with `bun run db:push:staging`. See `docs/environments.md` for the full promotion flow.
 - **Known gaps:**
+  - **Schema provenance drift (026–031):** Prod schema between migrations 026–031 was applied via mixed paths (migration files + direct MCP SQL). History is now aligned via stub files (030, 031) but object equivalence between prod and what `supabase db reset` would produce has not been verified. See `docs/decisions/010-schema-provenance-drift.md`. **Resolution committed before 2026-05-31** — schema equivalence audit (`pg_dump --schema-only` diff) required before any migration that touches objects from 026–031.
   - No production monitoring yet (Sentry to be added)
   - Broker adapter interface not finalized
   - **Email confirmation is OFF** in Supabase. Before enabling it (or adding magic links / OAuth), a `/auth/callback` Route Handler must be built to exchange the code for a session and set cookies. Without it, confirmation links will 404 and the user will not get a session.
