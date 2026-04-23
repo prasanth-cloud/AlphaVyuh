@@ -183,6 +183,13 @@ SORT_KEYS = {
 
 PRESETS = [
     {
+        "id": "sepa",
+        "name": "SEPA",
+        "description": "Minervini Stage 2: EMA stack bullish, RS Score ≥ 70, within 25% of 52W high, 30%+ above 52W low",
+        "color": "#56D7C1",
+        "filters": {"all_emas_bullish": True, "rs_rating_min": 70, "w52h_pct_max": 25, "w52l_pct_min": 30, "series": ["EQ"]},
+    },
+    {
         "id": "momentum",
         "name": "Momentum",
         "description": "Strong stocks above EMAs with rising volume",

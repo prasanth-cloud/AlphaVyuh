@@ -27,6 +27,7 @@ interface ScanResult {
   week_52_low: number | null
   week_52_high_pct: number | null
   is_new_52w_high: boolean
+  rs_rating: number | null
   bb_width: number | null
   market_cap_cr: number | null
   pe_ratio: number | null
@@ -42,6 +43,8 @@ interface Watchlist { id: string; name: string }
 
 // ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
+  { id: 'sepa',         name: 'SEPA',
+    filters: { all_emas_bullish: true, rs_rating_min: 70, week_52_high_pct_max: 25, w52l_pct_min: 30 } },
   { id: 'momentum',     name: 'Momentum',
     filters: { rsi_min: 55, rsi_max: 80, volume_ratio_min: 1.5, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 1.0 } },
   { id: 'breakout',     name: 'Breakout',
@@ -70,6 +73,9 @@ type Filters = {
   bb_width_min: string; bb_width_max: string
   atr_pct_min: string; atr_pct_max: string
   week_52_high_pct_max: string
+  rs_rating_min: string
+  w52l_pct_min: string
+  all_emas_bullish: boolean
   new_52w_high: boolean; new_52w_low: boolean
   is_inside_bar: boolean
   series: string[]
@@ -97,6 +103,9 @@ const emptyFilters = (): Filters => ({
   bb_width_min: '', bb_width_max: '',
   atr_pct_min: '', atr_pct_max: '',
   week_52_high_pct_max: '',
+  rs_rating_min: '',
+  w52l_pct_min: '',
+  all_emas_bullish: false,
   new_52w_high: false, new_52w_low: false,
   is_inside_bar: false,
   series: ['EQ'],
@@ -259,6 +268,9 @@ export default function ScannerPage() {
     set('rsi_min', num(f.rsi_min)); set('rsi_max', num(f.rsi_max))
     set('adx_min', num(f.adx_min)); set('adx_max', num(f.adx_max))
     set('week_52_high_pct_max', num(f.week_52_high_pct_max))
+    set('rs_rating_min', num(f.rs_rating_min))
+    set('w52l_pct_min', num(f.w52l_pct_min))
+    if (f.all_emas_bullish) fil.all_emas_bullish = true
     set('bb_width_min', num(f.bb_width_min)); set('bb_width_max', num(f.bb_width_max))
     set('atr_pct_min', num(f.atr_pct_min)); set('atr_pct_max', num(f.atr_pct_max))
     if (f.price_vs_ema20) set('price_vs_ema20', f.price_vs_ema20)
@@ -426,7 +438,7 @@ export default function ScannerPage() {
     )
   }
 
-  function toggleRow(label: string, key: 'new_52w_high' | 'new_52w_low' | 'is_inside_bar') {
+  function toggleRow(label: string, key: 'new_52w_high' | 'new_52w_low' | 'is_inside_bar' | 'all_emas_bullish') {
     return (
       <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6, cursor: 'pointer' }}>
         <input type="checkbox" checked={!!filters[key]} onChange={e => setF(key, e.target.checked)}
@@ -575,6 +587,7 @@ export default function ScannerPage() {
                 {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('EMA 20 vs 50', 'ema20_vs_ema50', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
                 {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
+                {toggleRow('All EMAs bullish (20>50>200)', 'all_emas_bullish')}
               </Section>
               <Section title="Momentum">
                 {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
@@ -595,7 +608,9 @@ export default function ScannerPage() {
                 {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
               </Section>
               <Section title="52-Week Range">
-                {numRow('Max % below 52W high', 'week_52_high_pct_max', 'e.g. 5')}
+                {numRow('Max % below 52W high', 'week_52_high_pct_max', 'e.g. 25')}
+                {numRow('Min % above 52W low', 'w52l_pct_min', 'e.g. 30')}
+                {numRow('RS Score ≥', 'rs_rating_min', 'e.g. 70')}
                 {toggleRow('New 52W high today', 'new_52w_high')}
                 {toggleRow('New 52W low today', 'new_52w_low')}
               </Section>
@@ -763,6 +778,7 @@ export default function ScannerPage() {
                 <Th align="right" width={90}>Change</Th>
                 <Th align="right" width={70}>Vol ×</Th>
                 <Th align="right" width={60}>RSI</Th>
+                <Th align="right" width={50}>RS</Th>
                 <Th align="right" width={90}>52W H%</Th>
                 <Th width={60}>{''}</Th>
               </DataTableHead>
@@ -794,6 +810,12 @@ export default function ScannerPage() {
                         <Td align="right">
                           {r.rsi_14 != null
                             ? <Badge variant={rsiBadgeVariant as 'accent' | 'gain' | 'warn'} mono>{r.rsi_14.toFixed(0)}</Badge>
+                            : <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
+                          }
+                        </Td>
+                        <Td align="right" mono>
+                          {r.rs_rating != null
+                            ? <span style={{ color: r.rs_rating >= 70 ? 'var(--gain)' : 'var(--text-secondary)' }}>{r.rs_rating}</span>
                             : <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
                           }
                         </Td>
