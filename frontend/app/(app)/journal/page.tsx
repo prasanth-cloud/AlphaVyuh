@@ -728,7 +728,7 @@ export default function JournalPage() {
                   tab === id ? "var(--accent-subtle)" : "transparent",
                 border:
                   tab === id
-                    ? "1px solid rgba(86,215,193,0.2)"
+                    ? "1px solid var(--accent-muted)"
                     : "1px solid transparent",
                 borderRadius: "var(--radius-sm)",
               }}
@@ -2762,7 +2762,7 @@ export default function JournalPage() {
                           >
                             <span
                               style={{
-                                color: "var(--accent)",
+                                color: "var(--text-secondary)",
                                 flexShrink: 0,
                                 marginTop: 2,
                               }}
