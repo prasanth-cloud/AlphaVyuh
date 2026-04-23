@@ -293,12 +293,12 @@ async def download_and_ingest(trade_date: date) -> dict:
             except Exception as upd_err:
                 logger.warning(f"Update error for {symbol}: {upd_err}")
 
-        # Compute rs_rating: requires cross-symbol PERCENT_RANK — done via SQL
+        # Compute rs_score: requires cross-symbol PERCENT_RANK — done via SQL
         # after per-symbol updates so today's close + lag(close,252) are in place.
         try:
-            client.rpc("compute_rs_rating_for_date", {"p_trade_date": str(trade_date)}).execute()
+            client.rpc("compute_rs_score_for_date", {"p_trade_date": str(trade_date)}).execute()
         except Exception as rs_err:
-            logger.warning(f"rs_rating RPC failed for {trade_date}: {rs_err}")
+            logger.warning(f"rs_score RPC failed for {trade_date}: {rs_err}")
 
         # 11. Log success
         client.table("bhavcopy_ingestion_log").upsert({

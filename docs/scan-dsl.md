@@ -20,7 +20,7 @@ type ScanDefinition = {
 type Filter =
   | { kind: "price_above_ma"; ma: 50 | 150 | 200 }
   | { kind: "ma_stack"; order: [50, 150, 200] }           // 50 > 150 > 200
-  | { kind: "rs_rating_min"; value: number }               // Minervini RS
+  | { kind: "rs_score_min"; value: number }                // Minervini RS
   | { kind: "distance_from_52w_high"; maxPct: number }     // e.g. <= 25%
   | { kind: "distance_from_52w_low"; minPct: number }      // e.g. >= 30%
   | { kind: "vcp_contraction"; minTightness: number; minPivots: number }
@@ -32,7 +32,7 @@ type Filter =
 Composed of:
 - `price_above_ma` for 50, 150, 200
 - `ma_stack [50, 150, 200]`
-- `rs_rating_min: 70`
+- `rs_score_min: 70`
 - `distance_from_52w_high maxPct: 25`
 - `distance_from_52w_low minPct: 30`
 

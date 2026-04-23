@@ -47,7 +47,7 @@ SELECT_COLS = (
     "bb_upper,bb_middle,bb_lower,bb_width,"
     "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
     "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-    "rs_rating,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+    "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
     "stock_universe!daily_ohlcv_symbol_fkey!inner"
     "(symbol,company_name,series,sector,is_active,market,currency,"
     "market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
