@@ -815,7 +815,7 @@ export default function ScannerPage() {
                         </Td>
                         <Td align="right" mono>
                           {r.rs_rating != null
-                            ? <span style={{ color: r.rs_rating >= 70 ? 'var(--gain)' : 'var(--text-secondary)' }}>{r.rs_rating}</span>
+                            ? <span style={{ color: r.rs_rating >= 70 ? 'var(--accent)' : 'var(--text-secondary)' }}>{r.rs_rating}</span>
                             : <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
                           }
                         </Td>
