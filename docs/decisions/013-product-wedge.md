@@ -44,6 +44,8 @@ Nobody answers: "Here's what your last 60 trades reveal about your discipline, y
 
 **alphavyuh's primary product wedge is the AI-driven trade journal with closed-loop analysis. Scanner, broker integration, and community features are supporting infrastructure, not independent product directions.**
 
+In practice, "supporting infrastructure" means: the scanner is feature-frozen as of M3. Future scanner work is bug fixes and performance only — no new filter categories, no new presets, no UX overhaul. Any proposed scanner change that goes beyond bug fixes requires a new ADR that explicitly falsifies revisit condition 1 first. Without that, the answer is no.
+
 ### Why this wedge
 
 **Audience fit.** The target user is a systematic swing trader running a Minervini SEPA or Qullamaggie VCP playbook. They *already have a process*. What they lack is an honest mirror: are they following it? Where does discipline break down? Which setups work for *them* specifically versus for Minervini in a different market regime?
@@ -92,11 +94,11 @@ Nobody answers: "Here's what your last 60 trades reveal about your discipline, y
 
 ### Scanner feature parity with Chartsmaze
 
-Our scanner is good enough for the SEPA/VCP audience. Every engineering hour spent adding scanner filters is an hour not spent on the journal wedge. If a user's primary complaint is "your scanner is missing filter X," they are probably not our target user.
+The scanner shipped in M3 is the scanner for year 1. Full stop. There is no "add a few more filters" path that doesn't compound into scanner-feature-parity work. If the next thing on the roadmap is a scanner improvement and there is no journaling work queued behind it, the roadmap is wrong.
 
 ### Community scan library
 
-Year 2+. Community features require ~500 active users before the network effects justify the infrastructure. We need the first 100 users who care about the journal wedge. Building community for 5 beta users produces nobody's best work.
+Not before 500 active users. Community requires network effects to be useful; below that threshold it's a maintenance burden with no payoff. Building community infrastructure for a 5-person beta is misallocated effort. This is not "year 2 if things go well" — it is "year 2 after the wedge proves out." If the wedge doesn't prove out, community won't save the product anyway.
 
 ### Aggressive multi-broker expansion
 
@@ -129,15 +131,19 @@ This decision stands until demonstrably falsified by user feedback.
 
 **Revisit if:**
 
-1. After M4–M7 ships and 3 months of journal-focused work, user feedback consistently says the scanner is what they value, not the journal — and churn correlates with journal engagement, not scanner usage.
-2. Journal AI insights prove too shallow to justify ₹100/month: users cancel within 30 days citing "not enough unique value" at a rate above 40% of churned users.
-3. A well-funded competitor ships an AI journal product targeting Indian systematic traders before we reach 100 active users — compressing our window to establish the wedge.
+1. **Scanner-value signal, measured:** In 30-day retention interviews covering at least 20 paying users after M7 ships, more than 60% cite scanner capability (not journal insights) as the primary value driver, AND churn analysis confirms that churned users at >30 days had lower journal engagement than retained users. Both conditions must hold. One data point — a vocal user, a spike in scanner API calls — does not constitute a revisit trigger.
+2. **Insight shallowness, measured:** More than 40% of churned paying users (from a sample of at least 15 churned accounts) give "not enough unique value from insights" as the primary cancel reason in an exit survey. The survey must be asked explicitly; inferring this from support tickets doesn't count.
+3. **Competitor timing, measured:** A well-funded competitor ships an AI journal product explicitly targeting NSE/BSE systematic traders **and** acquires 200+ publicly verifiable users within 90 days of launch. "Similar feature" from a general-purpose tool (TradingView journal widget, Kite notes) does not qualify — it must be a dedicated AI feedback loop aimed at this audience.
 
 **Do NOT revisit for:**
 
 - Users asking for scanner feature X — this is scope creep camouflaged as user feedback. Add it to a backlog, don't act on it.
 - "Chartsmaze launched feature Y" — they will always have more scanner features. We win on the wedge, not feature count. If feature Y is journal-adjacent, evaluate it; if it's scanner-adjacent, ignore it.
 - Engineer enthusiasm for a technically interesting problem that doesn't serve the wedge — log it for year 2.
+
+**The friction gate:**
+
+If you are reading this and you've already started building a scanner feature, community feature, or options screener without a new ADR: stop. Write the ADR first. It must address: (a) which revisit condition above you believe is now met, (b) the specific user data that meets the threshold, (c) what journal work gets deprioritized as a result. If you can't answer all three, the work shouldn't have started.
 
 ---
 
