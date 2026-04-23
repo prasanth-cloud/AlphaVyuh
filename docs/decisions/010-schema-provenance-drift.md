@@ -106,9 +106,18 @@ file has `CREATE POLICY "Users can manage own X" ...` but the dashboard applied 
 the local file's `DROP POLICY IF EXISTS` in a future migration targets the wrong name and
 silently no-ops.
 
-**This is the most dangerous category.** The signup trigger issue in M1 was exactly this
-pattern: a differently-named trigger caused a future migration's `DROP TRIGGER` to silently
-fail, leaving both the old and new trigger active.
+**This is the most dangerous category and the single most likely way this bites us before
+the deadline.** The signup trigger issue in M1 was exactly this pattern: a differently-named
+trigger caused a future migration's `DROP TRIGGER` to silently fail, leaving both old and new
+triggers active.
+
+The concrete scenario: a migration that alters the RLS policy on `watchlist_items` or
+`trade_journal` (the highest-traffic user-owned tables) runs
+`DROP POLICY IF EXISTS "Users can manage own watchlist_items"`. If the dashboard-era policy was
+named `"Enable CRUD for users based on user_id"`, the DROP silently no-ops, the new policy is
+created alongside the old one, and the table now has two `FOR ALL` policies — Postgres treats
+these as OR semantics. Depending on direction, this can over-permit or under-restrict, and it
+will not error. This is the most important thing to check first in the audit.
 
 ### Indexes
 `CREATE INDEX IF NOT EXISTS` in local files is safe. But if an index exists on prod under a
@@ -131,8 +140,13 @@ dashboard era survives alongside any trigger the local file would create.
 
 ## Committed Resolution Plan
 
-**Deadline: 2026-05-31** (before M5 begins, or before any migration that alters objects
-from migrations 001–031 — whichever comes first).
+**Deadline: whichever comes first —**
+- Any migration that alters an object from migrations 001–031 (primary trigger — hard stop)
+- 2026-05-31 (backstop date)
+
+The object-touch trigger is primary because it has teeth: a migration altering `watchlist_items`
+or `trade_journal` RLS policies without the audit in hand is exactly the failure mode described
+in the risk section. The calendar date is a backstop in case no such migration lands before then.
 
 ### Procedure
 
@@ -149,10 +163,18 @@ pg_dump \
 
 > **Network access note:** `pg_dump` requires a direct Postgres connection (port 5432).
 > The sandbox Claude Code runs in cannot reach this port due to Supabase Network Restrictions.
-> This step must be run from a machine whose IP is allowlisted — either a developer's laptop
-> (current working approach) or a GitHub Actions runner with a static IP added to the allowlist.
-> If Network Restrictions block this, the alternative is `supabase db dump --linked --schema-only`
-> which uses the Supabase Management API and does not require port 5432 access.
+> This step must be run from a developer's laptop whose IP is allowlisted — this is the same
+> machine used to run the `db push` commands earlier in this incident.
+>
+> **Do NOT substitute `supabase db dump --linked` here.** That command uses the Supabase
+> Management API (`/pg-meta`), not `pg_dump`. Its output format differs: it omits `SET
+> search_path` clauses on `SECURITY DEFINER` functions (a security-relevant attribute),
+> may omit extensions provisioned outside `public`, and produces different object ordering.
+> Diffing its output against a local `pg_dump` produces misleading noise and may silently
+> miss real divergences. Use `pg_dump` from the developer's laptop only.
+>
+> **Secure handling:** `/tmp/prod_schema.sql` contains the full prod schema (table names,
+> policy expressions, function bodies). Delete it after the audit: `rm /tmp/prod_schema.sql`.
 
 **2. Generate local schema:**
 ```bash
@@ -170,11 +192,16 @@ pg_dump \
 
 **3. Normalize and diff:**
 ```bash
-# Remove timestamps, OIDs, and other noise before diffing
-pg_format /tmp/prod_schema.sql  > /tmp/prod_norm.sql
-pg_format /tmp/local_schema.sql > /tmp/local_norm.sql
+# Strip comment lines (--) and blank lines, lowercase keywords to reduce noise.
+# pg_format (pgFormatter) can normalize further if installed, but is not required.
+grep -v '^--' /tmp/prod_schema.sql  | grep -v '^$' | tr '[:upper:]' '[:lower:]' > /tmp/prod_norm.sql
+grep -v '^--' /tmp/local_schema.sql | grep -v '^$' | tr '[:upper:]' '[:lower:]' > /tmp/local_norm.sql
 diff /tmp/prod_norm.sql /tmp/local_norm.sql
 ```
+
+The diff will have noise (OID references, tablespace clauses, ordering of unrelated objects).
+Focus on: policy names, trigger names, function signatures and `SECURITY DEFINER`/`SET search_path`
+clauses, column nullability, and index names. Ignore cosmetic whitespace and object ordering.
 
 **4. Resolve each difference:**
 
