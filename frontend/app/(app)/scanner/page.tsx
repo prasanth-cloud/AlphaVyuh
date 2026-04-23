@@ -123,7 +123,7 @@ const inputStyle: React.CSSProperties = {
   padding: '5px 8px',
   background: 'var(--surface-2)',
   border: '1px solid var(--border-subtle)',
-  borderRadius: 'var(--radius-sm)',
+  borderRadius: 'var(--radius-md)',
   fontSize: 12,
   color: 'var(--text-primary)',
   outline: 'none',
@@ -452,58 +452,37 @@ export default function ScannerPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 'calc(100vh - 120px)' }}>
-      <div style={{
-        padding: '22px 24px',
-        borderRadius: 24,
-        border: '1px solid rgba(255,255,255,0.08)',
-        background:
-          'radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))',
-        boxShadow: 'var(--shadow-panel)',
-      }}>
-        <div className="label" style={{ color: 'var(--accent)', marginBottom: 10 }}>Scanner Workspace</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.02, letterSpacing: '-0.04em', marginBottom: 8 }}>
-              Build sharp scans and move ideas straight into action.
-            </h1>
-            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
-              Run momentum and breakout presets, open the exact filters you care about, and turn strong names into watchlists without leaving the same surface.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            {[
-              `${PRESETS.length} presets`,
-              `${savedScreens.length} saved screens`,
-              results.length > 0 ? `${results.length} visible results` : 'Custom filters ready',
-            ].map((item) => (
-              <div key={item} style={{
-                minWidth: 120,
-                padding: '12px 14px',
-                borderRadius: 16,
-                border: '1px solid rgba(255,255,255,0.08)',
-                background: 'rgba(255,255,255,0.03)',
-              }}>
-                <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{item}</div>
-              </div>
-            ))}
-          </div>
+      {/* Status bar */}
+      <div style={{ height: 44, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Scanner</span>
+          {tradeDate && (
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD {tradeDate}</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+            {PRESETS.length} presets · {savedScreens.length} saved
+          </span>
+          {results.length > 0 && (
+            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{results.length} visible</span>
+          )}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, minHeight: 'calc(100vh - 320px)', overflow: 'visible', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 16, minHeight: 'calc(100vh - 180px)', overflow: 'visible', flexWrap: 'wrap' }}>
 
       {/* ── LEFT PANEL ── */}
       <div style={{
         width: 292,
         maxWidth: '100%',
         flexShrink: 0,
-        background: 'linear-gradient(180deg, rgba(86,215,193,0.06), rgba(255,255,255,0.02) 18%, rgba(255,255,255,0.01)), var(--surface-1)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 24,
+        background: 'var(--surface-1)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-lg)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        boxShadow: 'var(--shadow-panel)',
       }}>
 
         {/* Presets */}
@@ -668,10 +647,9 @@ export default function ScannerPage() {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        background: 'linear-gradient(180deg, rgba(90,139,232,0.04), rgba(255,255,255,0.01) 14%), var(--surface-1)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 24,
-        boxShadow: 'var(--shadow-panel)',
+        background: 'var(--surface-1)',
+        border: '1px solid var(--border-default)',
+        borderRadius: 'var(--radius-lg)',
       }}>
 
         {/* Results header */}
@@ -681,9 +659,9 @@ export default function ScannerPage() {
           justifyContent: 'space-between',
           padding: '16px 20px',
           minHeight: 72,
-          borderBottom: '1px solid rgba(255,255,255,0.07)',
+          borderBottom: '1px solid var(--border-subtle)',
           flexShrink: 0,
-          background: 'rgba(255,255,255,0.02)',
+          background: 'var(--surface-2)',
           gap: 12,
           flexWrap: 'wrap',
         }}>
@@ -695,7 +673,7 @@ export default function ScannerPage() {
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 {isLimited && (
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--warn-subtle)', color: 'var(--warn)', border: '1px solid rgba(232,163,59,0.25)' }}>
+                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--warn-subtle)', color: 'var(--warn)', border: '1px solid var(--border-subtle)' }}>
                     Free plan · 50 cap
                   </span>
                 )}
@@ -729,7 +707,7 @@ export default function ScannerPage() {
 
         {/* Error */}
         {error && (
-          <div style={{ margin: '12px 16px', padding: '10px 14px', background: 'var(--loss-subtle)', border: '1px solid rgba(225,85,96,0.2)', borderRadius: 14, fontSize: 12, color: 'var(--loss)' }}>
+          <div style={{ margin: '12px 16px', padding: '10px 14px', background: 'var(--loss-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--loss)' }}>
             {error}
           </div>
         )}
@@ -767,7 +745,7 @@ export default function ScannerPage() {
         {/* Results table */}
         {!loading && results.length > 0 && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            <DataTable style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'transparent' }}>
+            <DataTable style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}>
               <DataTableHead>
                 <Th width={32}>
                   <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
@@ -852,16 +830,16 @@ export default function ScannerPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', top: 88, right: 28, zIndex: 999, padding: '10px 16px', background: 'linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, fontSize: 12, color: 'var(--accent)', boxShadow: 'var(--shadow-panel)' }}>
+        <div style={{ position: 'fixed', top: 88, right: 28, zIndex: 999, padding: '10px 16px', background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-primary)', boxShadow: 'var(--shadow-dropdown)' }}>
           {toast}
         </div>
       )}
 
       {/* Save screen modal */}
       {showSaveModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
           onClick={() => setShowSaveModal(false)}>
-          <div style={{ background: 'linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 24, padding: 24, width: 300, boxShadow: 'var(--shadow-modal)' }}
+          <div style={{ background: 'var(--surface-float)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 24, width: 300, boxShadow: 'var(--shadow-modal)' }}
             onClick={e => e.stopPropagation()}>
             <div className="heading-card" style={{ marginBottom: 16 }}>Save current screen</div>
             <input autoFocus value={newScreenName} onChange={e => setNewScreenName(e.target.value)}
@@ -878,9 +856,9 @@ export default function ScannerPage() {
 
       {/* Create watchlist modal */}
       {showWlModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
           onClick={() => setShowWlModal(false)}>
-          <div style={{ background: 'linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 24, padding: 24, width: 320, boxShadow: 'var(--shadow-modal)' }}
+          <div style={{ background: 'var(--surface-float)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 24, width: 320, boxShadow: 'var(--shadow-modal)' }}
             onClick={e => e.stopPropagation()}>
             <div className="heading-card" style={{ marginBottom: 6 }}>Create watchlist</div>
             <div className="caption" style={{ marginBottom: 16 }}>
