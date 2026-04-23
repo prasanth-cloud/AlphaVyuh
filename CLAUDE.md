@@ -265,6 +265,7 @@ If any of these go out of date, updating them is part of the task that broke the
   - **All-NSE VCP latency resolved.** `asyncio.gather` (concurrency cap 4) brought p95 from 5,327ms (marginal) to 3,059–3,655ms (+1,345–1,941ms headroom). See `docs/benchmarks/m3-production-env.md §8`.
   - **Fundamentals deferred to post-MVP.** PE and market cap refresh daily in bhavcopy; quarterly metrics (ROE, ROCE, PB, D/E) shown with "as of [date]". No external data source (FMP/XBRL) in M3. See ADR 006 §Decision 2.
   - **RS Score is alpha-version pending calibration.** (Field names: `rs_score_min/max` — not "RS Rating" to avoid IBD association.) Score distribution must be validated before public launch; see ADR 006 §Decision 5 for acceptance criteria.
+  - **Historical volume_ratio, w52h_pct, w52l_pct are NULL for ~414k older rows** where the underlying `week_52_high`, `week_52_low`, `avg_volume_20d` columns were never populated by the ingest job. Migration 032 only backfills rows where those underlying columns exist. Scanner is unaffected (queries `latest_date` only, which is fully populated). Full historical backfill would require a separate migration to first populate the underlying columns across all rows. Not blocking for MVP.
 
 ---
 
