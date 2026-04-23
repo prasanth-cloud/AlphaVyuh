@@ -36,7 +36,7 @@ Scanner (EOD), dashboard sector breadth (EOD), journal (historical), watchlist r
 - Supports persistent WebSocket connections natively; no config needed
 - **No sticky sessions** — Railway does not support session affinity across replicas
 - **15-minute hard connection timeout** — heartbeat pings every 20–30s are mandatory to keep connections alive
-- Cost: approximately $20–50/month for ~100 concurrent WS connections at the FastAPI relay layer
+- Cost: approximately $20–50/month for ~100 concurrent WS connections at the FastAPI relay layer (single-replica). This estimate is valid at ≤100 concurrent premium users; revisit the cost model before scaling past that threshold.
 
 ---
 
@@ -105,8 +105,8 @@ The matrix supports this over the user's initial bias — it is not a compromise
 - Subscribe the requested symbol on the user's Kite WS
 - Relay ticks to the browser WS at Kite's native tick rate (~1/s for LTP mode)
 - On browser disconnect: unsubscribe the symbol; close Kite WS if no remaining subscriptions for that user
-- Heartbeat ping every 25s from backend to browser; browser echoes pong. Railway's 15-min timeout requires this.
-- Reconnect: if Kite WS drops, backend attempts exponential backoff (1s, 2s, 4s… cap 60s); browser shows "Reconnecting…" state
+- Heartbeat ping every 25s from backend to browser; browser echoes pong. This covers two separate timeout risks: Railway's 15-minute hard connection limit, and AWS ALB / intermediate proxy idle-connection timeouts (typically 60s). A 25s ping beats both. Whether Railway's 15-min limit applies to WS upgrades (vs HTTP only) must be verified empirically during M4 integration testing — if WS connections are exempt, the heartbeat can be relaxed but should remain for proxy resilience.
+- Reconnect: if Kite WS drops, backend attempts exponential backoff (1s, 2s, 4s… cap 60s); browser shows "Reconnecting…" state. Ticks during the reconnect window are dropped — the chart freezes at the last known value. This is acceptable for swing traders (missed a tick, not a trading decision), but the chart must show a visual staleness indicator (e.g., amber dot) rather than appearing live while disconnected. If reconnect exceeds 10s, fall back to the REST quote endpoint on a 5s poll until WS is restored.
 
 **Delayed prices for free users:**
 - `GET /api/v1/quotes/{symbol}` REST endpoint
@@ -124,11 +124,22 @@ The matrix supports this over the user's initial bias — it is not a compromise
 - When user navigates to a new symbol: browser sends close signal on old WS, opens new WS for new symbol
 - Backend unsubscribes old symbol, subscribes new one on Kite WS (or re-uses if already subscribed)
 
+### M4 Infrastructure Constraint: Single-Replica Required
+
+**Railway must be configured to run a single instance during M4.**
+
+Option C holds per-user Kite WS connections in the FastAPI process's in-memory state. If Railway auto-scales to two replicas, a user's browser WS may connect to replica 1 while their Kite WS (and its tick stream) lives on replica 2. Ticks would never arrive at the browser. This is a correctness failure, not a performance concern.
+
+**Hard gate before M4 ship:** Disable Railway auto-scaling. Set `numReplicas: 1` (or equivalent) in the Railway service config and document it in the deployment runbook. Do not enable auto-scale until Redis pub/sub fan-out is implemented (planned for M5 — Redis holds the tick stream; any replica can serve any browser WS by subscribing to the Redis channel for that symbol).
+
+This is not a hypothetical M5+ problem. Railway may restart or deploy a new replica at any time (deploys, crash recovery). The single-replica constraint must be enforced before M4 launches to paying premium users.
+
 ### What is explicitly out of scope for M4
 
 | Feature | Target milestone |
 |---|---|
 | Multi-symbol WS (multiple charts visible simultaneously) | M5 |
+| Redis pub/sub fan-out (enables multi-replica Railway) | M5 |
 | Upstox / Dhan broker WS adapters | M6 |
 | Historical tick storage (for backtest/replay) | M7 |
 | Watchlist row live prices via WS (poll at 5s is sufficient) | Post-M5 |
@@ -139,7 +150,7 @@ The matrix supports this over the user's initial bias — it is not a compromise
 
 The free-vs-premium gate must be enforced at two layers:
 
-1. **Backend (authoritative):** FastAPI `GET /api/v1/ws/prices` checks the user's plan via `plan_cache` before upgrading the connection. Returns HTTP 403 before the WS handshake if plan = free. The `plan_cache` (60s TTL) is acceptable here — a free user who just upgraded might get live ticks up to 60s late. That is better than a DB hit on every WS connection.
+1. **Backend (authoritative):** FastAPI `GET /api/v1/ws/prices` checks the user's plan via `plan_cache` before upgrading the connection. Returns HTTP 403 before the WS handshake if plan = free. The `plan_cache` (60s TTL) is an intentional product tradeoff — a user who just upgraded may receive live ticks up to 60s late; a user who just downgraded may receive live ticks up to 60s longer than their plan allows. Both are acceptable. `plan_cache` must never be seeded from user-supplied input; it is only populated from `_get_user_plan()` (DB read) or the verified payment path after `plan_cache.invalidate(user_id)`.
 
 2. **Frontend (UX only):** Show a "Upgrade for live prices" prompt for free users rather than attempting the WS connection. This is not a security gate — it is purely UX.
 
@@ -157,6 +168,8 @@ The M4 implementation will be Kite-specific at the WS relay layer. To prepare fo
 - M6 adds `UphstoxRealtimeAdapter(RealtimeAdapter)` and `DhanRealtimeAdapter(RealtimeAdapter)`
 
 This mirrors the existing `BrokerAdapter` pattern from ADR 004. The WS relay route does not change between M4 and M6; only the adapter implementation swaps.
+
+**`subscribeFills` in `frontend/lib/brokers/adapter.ts`:** The TypeScript adapter contract currently includes a `subscribeFills` method. Under Option C, order fill events flow through Supabase Realtime (not through the price WS), making `subscribeFills` on the frontend adapter a dead code path before it is ever implemented. Review and remove or re-scope this method before M4 implementation begins to avoid confusion about which channel delivers fill events.
 
 ---
 
