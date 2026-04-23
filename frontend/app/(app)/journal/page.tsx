@@ -84,8 +84,8 @@ function EquityCurve({ data }: { data: { date: string; cumulative_pnl: number }[
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 160 }} preserveAspectRatio="none">
       <defs>
         <linearGradient id="eq-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={last >= 0 ? "#2DB574" : "#E15560"} stopOpacity="0.18" />
-          <stop offset="100%" stopColor={last >= 0 ? "#2DB574" : "#E15560"} stopOpacity="0.02" />
+          <stop offset="0%" style={{ stopColor: last >= 0 ? 'var(--gain)' : 'var(--loss)', stopOpacity: 0.18 }} />
+          <stop offset="100%" style={{ stopColor: last >= 0 ? 'var(--gain)' : 'var(--loss)', stopOpacity: 0.02 }} />
         </linearGradient>
       </defs>
       <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="var(--border-subtle)" strokeWidth="1" />
@@ -116,8 +116,8 @@ function DrawdownChart({ data }: { data: { date: string; drawdown: number; drawd
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 100 }} preserveAspectRatio="none">
       <defs>
         <linearGradient id="dd-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#E15560" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#E15560" stopOpacity="0.04" />
+          <stop offset="0%" style={{ stopColor: 'var(--loss)', stopOpacity: 0.25 }} />
+          <stop offset="100%" style={{ stopColor: 'var(--loss)', stopOpacity: 0.04 }} />
         </linearGradient>
       </defs>
       <polygon points={fillPts} fill="url(#dd-grad)" />
@@ -132,8 +132,8 @@ type PanelMode = "add" | "close" | "view" | null;
 type Tab = "trades" | "analytics" | "ai";
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", borderRadius: "var(--radius-sm)", padding: "7px 10px", fontSize: 13,
-  background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none",
+  width: "100%", borderRadius: "var(--radius-md)", padding: "7px 10px", fontSize: 13,
+  background: "var(--surface-2)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none",
 };
 
 export default function JournalPage() {
@@ -303,77 +303,67 @@ export default function JournalPage() {
     <div style={{ minHeight: "100%", background: "transparent", display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
+        <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: "var(--radius-md)", background: "var(--surface-float)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
           {toast}
         </div>
       )}
 
-      <div style={{
-        padding: "22px 24px",
-        borderRadius: 24,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
-        boxShadow: "var(--shadow-panel)",
-      }}>
-        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Trading Journal</div>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 16, gap: 16, flexWrap: "wrap" }}>
-          <div>
-            <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Review execution, close the loop, and learn faster.</h1>
-            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-              Capture entries and exits, study your real P&amp;L curve, and let the AI layer turn repeated mistakes into practical trading rules.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {brokerConnected && brokerName === "zerodha" && (
-              <button
-                onClick={handleImportZerodha}
-                disabled={importing}
-                style={{ padding: "9px 14px", fontSize: 12, fontWeight: 500, borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "var(--text-secondary)", cursor: "pointer", opacity: importing ? 0.5 : 1 }}
-              >
-                {importing ? "Importing…" : "Import from Zerodha"}
-              </button>
-            )}
+      {/* Status bar */}
+      <div style={{ height: 44, background: "var(--surface-1)", borderBottom: "1px solid var(--border-subtle)", padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>Trading Journal</span>
+          {brokerConnected && (
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>↑ {brokerName}</span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {brokerConnected && brokerName === "zerodha" && (
             <button
-              onClick={openAddPanel}
-              style={{ padding: "10px 16px", fontSize: 12, fontWeight: 600, borderRadius: 999, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#0A1712", cursor: "pointer", boxShadow: "0 10px 24px rgba(86,215,193,0.18)" }}
+              onClick={handleImportZerodha}
+              disabled={importing}
+              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 500, borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", opacity: importing ? 0.5 : 1 }}
             >
-              + Log trade
+              {importing ? "Importing…" : "Import from Zerodha"}
             </button>
-          </div>
+          )}
+          <button
+            onClick={openAddPanel}
+            style={{ padding: "5px 14px", fontSize: 12, fontWeight: 600, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", cursor: "pointer" }}
+          >
+            + Log trade
+          </button>
         </div>
+      </div>
 
-        {/* Stat cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12, marginBottom: 20 }}>
-          <StatCard
-            label="Total P&L"
-            value={stats ? fmtCcy(stats.total_pnl) : "—"}
-            deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"}
-          />
-          <StatCard
-            label="Win rate"
-            value={stats ? `${stats.win_rate}%` : "—"}
-            deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"}
-          />
-          <StatCard label="Closed trades" value={String(stats?.total_trades ?? "—")} />
-          <StatCard label="Open trades" value={String(stats?.open_trades ?? "—")} />
-        </div>
+      {/* Stat cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+        <StatCard
+          label="Total P&L"
+          value={stats ? fmtCcy(stats.total_pnl) : "—"}
+          deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"}
+        />
+        <StatCard
+          label="Win rate"
+          value={stats ? `${stats.win_rate}%` : "—"}
+          deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"}
+        />
+        <StatCard label="Closed trades" value={String(stats?.total_trades ?? "—")} />
+        <StatCard label="Open trades" value={String(stats?.open_trades ?? "—")} />
+      </div>
 
-        {/* Tab bar */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {([{ id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "AI analysis" }] as { id: Tab; label: string }[]).map(({ id, label }) => (
-            <button key={id} onClick={() => setTab(id)} style={{
-              padding: "10px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer",
-              color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
-              background: tab === id ? "rgba(255,255,255,0.05)" : "transparent",
-              border: `1px solid ${tab === id ? 'rgba(86,215,193,0.16)' : 'transparent'}`,
-              borderRadius: 999,
-              position: "relative",
-            }}>
-              {label}
-            </button>
-          ))}
-        </div>
+      {/* Tab bar */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {([{ id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "AI analysis" }] as { id: Tab; label: string }[]).map(({ id, label }) => (
+          <button key={id} onClick={() => setTab(id)} style={{
+            padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer",
+            color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
+            background: tab === id ? "var(--surface-2)" : "transparent",
+            border: `1px solid ${tab === id ? "var(--border-default)" : "transparent"}`,
+            borderRadius: "var(--radius-md)",
+          }}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* ── Analytics ── */}
@@ -602,14 +592,14 @@ export default function JournalPage() {
                   finally { setAiLoading(false); }
                 }}
                 disabled={aiLoading}
-                style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-sm)", fontSize: 12, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
+                style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 700, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
               >
                 {aiLoading ? "Analysing…" : aiAnalysis ? "Re-analyse" : "Analyse my trades"}
               </button>
             </div>
 
             {aiError && (
-              <div style={{ fontSize: 13, color: "var(--loss)", background: "var(--loss-subtle)", border: "1px solid rgba(225,85,96,0.2)", borderRadius: "var(--radius-md)", padding: "10px 14px", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, color: "var(--loss)", background: "var(--loss-subtle)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "10px 14px", marginBottom: 12 }}>
                 {aiError}
               </div>
             )}
@@ -626,7 +616,7 @@ export default function JournalPage() {
             {aiAnalysis && !aiLoading && (
               <div>
                 <div className="caption" style={{ marginBottom: 12 }}>Based on {aiTradesCount} closed trades</div>
-                <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: "var(--radius-md)", fontSize: 11, lineHeight: 1.6, background: "var(--warn-subtle)", border: "1px solid rgba(232,163,59,0.25)", color: "var(--warn)" }}>
+                <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: "var(--radius-md)", fontSize: 11, lineHeight: 1.6, background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--warn)" }}>
                   AI analysis is for educational purposes only and does not constitute SEBI-registered investment advice.
                 </div>
                 <div style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-primary)" }}>
@@ -640,7 +630,7 @@ export default function JournalPage() {
                     if (line.startsWith("- ") || line.startsWith("* ")) {
                       return (
                         <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
-                          <span style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }}>•</span>
+                          <span style={{ color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }}>•</span>
                           <span dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") }} />
                         </div>
                       );
@@ -675,7 +665,7 @@ export default function JournalPage() {
                     style={{
                       padding: "4px 12px", fontSize: 12, borderRadius: "var(--radius-sm)", cursor: "pointer", textTransform: "capitalize",
                       background: filterStatus === s ? "var(--accent)" : "transparent",
-                      color: filterStatus === s ? "#0A1712" : "var(--text-tertiary)",
+                      color: filterStatus === s ? "var(--text-on-accent)" : "var(--text-tertiary)",
                       fontWeight: filterStatus === s ? 600 : 400,
                       transition: "all var(--motion-instant) var(--ease-out)",
                     }}>
@@ -687,17 +677,17 @@ export default function JournalPage() {
 
             {/* Free plan notice */}
             {journalPlan === "free" && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "var(--radius-md)", marginBottom: 12, fontSize: 12, background: "var(--warn-subtle)", border: "1px solid rgba(232,163,59,0.2)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "var(--radius-md)", marginBottom: 12, fontSize: 12, background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)" }}>
                 <span style={{ color: "var(--warn)" }}>Free plan shows last 3 months of trades only.</span>
                 <a href="/settings/billing" style={{ fontWeight: 600, color: "var(--accent)", marginLeft: 16 }}>Upgrade to Pro</a>
               </div>
             )}
 
             {/* Table */}
-            <div style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 22, overflow: "hidden", boxShadow: "var(--shadow-panel)" }}>
+            <div style={{ background: "var(--surface-1)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
               <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.03)" }}>
+                  <tr style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
                     {["Symbol", "Type", "Entry", "Entry px", "Exit px", "P&L", "Status", ""].map(h => (
                       <th key={h} className="label" style={{ textAlign: "left", padding: "10px 12px" }}>{h}</th>
                     ))}
@@ -791,7 +781,7 @@ export default function JournalPage() {
           {/* Side panel */}
           {panelMode && (
             <div style={{ width: 340, flexShrink: 0 }}>
-              <Card padding="lg" style={{ borderRadius: 22 }}>
+              <Card padding="lg" style={{ borderRadius: "var(--radius-lg)" }}>
                 {/* Header */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                   <div className="heading-card">
@@ -892,7 +882,7 @@ export default function JournalPage() {
                     </div>
 
                     <button onClick={handleAddTrade} disabled={saving}
-                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-sm)", background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
+                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
                       {saving ? "Saving…" : "Save trade"}
                     </button>
                   </div>
@@ -942,7 +932,7 @@ export default function JournalPage() {
                     </div>
 
                     <button onClick={handleCloseTrade} disabled={saving}
-                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-sm)", background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
+                      style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
                       {saving ? "Saving…" : "Close trade"}
                     </button>
                   </div>
@@ -995,7 +985,7 @@ export default function JournalPage() {
                     )}
 
                     {selectedEntry.lessons ? (
-                      <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--gain-subtle)", border: "1px solid rgba(45,181,116,0.2)" }}>
+                      <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--gain-subtle)", border: "1px solid var(--border-subtle)" }}>
                         <div className="label" style={{ marginBottom: 8, color: "var(--gain)" }}>AI lesson</div>
                         {selectedEntry.lessons.split("\n").map((line, i) => {
                           if (!line.trim()) return null;
@@ -1010,14 +1000,14 @@ export default function JournalPage() {
                       </div>
                     ) : selectedEntry.status === "closed" && (
                       <button onClick={() => handleGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
-                        style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-sm)", fontSize: 12, fontWeight: 500, border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>
+                        style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>
                         {lessonLoading === selectedEntry.id ? "Generating AI lesson…" : "Get AI lesson for this trade"}
                       </button>
                     )}
 
                     {selectedEntry.status === "open" && (
                       <button onClick={() => openClosePanel(selectedEntry)}
-                        style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-sm)", background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: "pointer" }}>
+                        style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer" }}>
                         Close this trade
                       </button>
                     )}

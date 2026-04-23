@@ -32,6 +32,7 @@
   --accent-muted:    rgba(86, 215, 193, 0.18);
   --accent-glow:     rgba(86, 215, 193, 0.28);
   --accent-strong:   #8CF0E1;
+  --text-on-accent:  #0A1712;   /* text on --accent background */
 
   /* Semantic — P&L ONLY. Never decorative. */
   --gain:            #2DB574;
