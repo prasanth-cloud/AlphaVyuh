@@ -142,7 +142,6 @@ This is not a hypothetical M5+ problem. Railway may restart or deploy a new repl
 | Redis pub/sub fan-out (enables multi-replica Railway) | M5 |
 | Upstox / Dhan broker WS adapters | M6 |
 | Historical tick storage (for backtest/replay) | M7 |
-| Watchlist row live prices via WS (poll at 5s is sufficient) | Post-M5 |
 
 ---
 
@@ -164,8 +163,9 @@ The M4 implementation will be Kite-specific at the WS relay layer. To prepare fo
 
 - The relay logic that speaks to Kite (`kiteconnect.KiteTicker`) must live entirely in `backend/app/brokers/kite/realtime.py`
 - The FastAPI route at `/api/v1/ws/prices` calls a broker-agnostic interface: `get_realtime_adapter(user_id) → RealtimeAdapter`
-- `RealtimeAdapter` ABC (in `backend/app/brokers/adapter.py`) defines: `subscribe(symbol)`, `unsubscribe(symbol)`, `on_tick(callback)`, `close()`
-- M6 adds `UphstoxRealtimeAdapter(RealtimeAdapter)` and `DhanRealtimeAdapter(RealtimeAdapter)`
+- `RealtimeAdapter` ABC (in `backend/app/brokers/adapter.py`) defines: `subscribe(symbol)`, `unsubscribe(symbol)`, `on_tick(callback: Callable[[TickEvent], None])`, `close()`
+- `TickEvent` is a dataclass with fields: `symbol: str`, `ltp: float`, `timestamp: datetime`, `bid: float`, `ask: float`, `volume: int`. M6 adapters must populate all fields; fields unavailable from a given broker's WS should be `None` (typed as `Optional`). The relay route passes `TickEvent` directly to the browser as JSON.
+- M6 adds `UpstoxRealtimeAdapter(RealtimeAdapter)` and `DhanRealtimeAdapter(RealtimeAdapter)`
 
 This mirrors the existing `BrokerAdapter` pattern from ADR 004. The WS relay route does not change between M4 and M6; only the adapter implementation swaps.
 
