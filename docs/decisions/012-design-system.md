@@ -78,7 +78,7 @@ The emerald `#56D7C1` is the single AlphaVyuh color. It means "this element is i
 |-------|-------|-------|
 | `--text-on-accent` | `#04120d` | Text rendered directly on `var(--accent)` backgrounds (primary buttons, active chips). This is the only hex value that does not need a CSS-variable equivalent because it is tied to the specific contrast ratio of the accent color — update it in lockstep if `--accent` changes. |
 
-**Note on accent-derived rgba tokens:** `--accent-subtle`, `--accent-muted`, `--accent-strong`, and `--border-focus` hardcode the RGB triple `86, 215, 193` (the decimal expansion of `#56D7C1`) in rgba() values. CSS does not yet support `rgba(var(--accent), 0.10)` in all targets. When `--accent` changes in v2, these four tokens **must also be updated manually** in `design-tokens.css`. They are listed together here so the lockstep requirement is explicit.
+**Note on accent-derived rgba tokens:** `--accent-subtle`, `--accent-muted`, `--accent-strong`, and `--border-focus` hardcode the RGB triple `86, 215, 193` (the decimal expansion of `#56D7C1`) in rgba() values. CSS does not yet support `rgba(var(--accent), 0.10)` in all targets. When `--accent` changes in v2, these four tokens **must also be updated manually** in `design-tokens.css`. They are listed together here so the lockstep requirement is explicit. Future enhancement: when browser support for `rgb(from var(--accent) r g b / alpha)` relative color syntax is reliable across all supported browsers (currently ~90% globally), migrate these tokens to that syntax to eliminate the manual update requirement.
 
 ### Semantic (P&L states — not decorative)
 
@@ -412,7 +412,7 @@ Use these tokens for all transition durations. Do not use ad-hoc millisecond val
 | `--duration-fast` | `180ms` | Element appear/disappear (opacity fades, dropdown appear) |
 | `--duration-normal` | `240ms` | Panel collapse/expand, height transitions |
 
-Nothing on authenticated screens should take longer than `--duration-normal` (240ms). The 300ms figure in earlier drafts is the maximum bound; `--duration-normal` is the design target.
+Nothing on authenticated screens should take longer than `--duration-normal` (240ms). If a transition seems to need longer, reconsider whether motion is the right communication channel — a state change that takes longer than 240ms to convey is usually better expressed as a visible UI update (label change, icon swap, color change) than an animation.
 
 ### Authenticated screens — permitted motion
 
@@ -433,7 +433,7 @@ Nothing on authenticated screens should take longer than `--duration-normal` (24
 - **Auto-playing animations** at rest — pulsing icons, wiggling indicators, attention-seeking badges.
 - **Progress bars** for operations that don't have a known completion percentage. An indeterminate progress bar is a spinner pretending to be informative.
 - **Skeleton loaders that animate** (the shimmer effect). Static skeleton shapes are acceptable. Animated shimmer is visual noise.
-- **Transition duration > 300ms** on any UI element. If a transition takes longer than 300ms to complete, the user has noticed it.
+- **Transition duration > 240ms** (`--duration-normal`) on any authenticated UI element. If a transition needs longer, reconsider whether motion is the right channel.
 - Any animation that does not respect `@media (prefers-reduced-motion: reduce)`.
 
 ### Landing page — permitted motion
@@ -502,7 +502,7 @@ This list is definitive. When something appears on this list, it is never correc
 | Progress bars for indeterminate operations | A spinner communicates "in progress" just as well and is honest about unknown duration |
 | Entrance animations on authenticated screens | The screen loads; content appears. It does not need to arrive dramatically. |
 | Scale-on-hover on cards or rows | Layout reflow on hover is disorienting; use background-color change only |
-| Motion > 300ms on authenticated elements | The user has noticed a 300ms transition; they don't need to |
+| Motion > 240ms (`--duration-normal`) on authenticated elements | If a transition needs longer than 240ms, reconsider whether motion is the right communication channel |
 | Ignoring `prefers-reduced-motion` | Accessibility — all transitions must be suppressed at the OS level |
 | Emoji in UI copy (button labels, error messages, toasts) | Not a professional tool aesthetic; never on authenticated screens |
 | Multiple accent colors | `--accent` is the one interactive color. `--info` is for non-interactive badges only. Do not introduce a second interactive color. |
