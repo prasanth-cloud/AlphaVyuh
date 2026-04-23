@@ -20,6 +20,8 @@ The competitive frame is: **TradingView + Chartink + a broker terminal + a tradi
 
 **Primary user:** Indian swing trader running a Minervini SEPA / Qullamaggie VCP style playbook. Not day traders, not options scalpers.
 
+**Strategic governing decision:** The AI-driven trade journal with closed-loop analysis is the primary product wedge. Scanner, broker integration, and community features are supporting infrastructure. See **ADR 013** (`docs/decisions/013-product-wedge.md`) before adding any feature not on the M4–M7 roadmap — it exists specifically to prevent scope drift.
+
 ---
 
 ## 2. Tech stack
