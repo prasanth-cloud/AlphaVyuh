@@ -19,6 +19,17 @@ export const metadata: Metadata = {
   title: "AlphaVyuh — Trading OS for Indian Markets",
   description: "Scan → Analyse → Trade → Journal → Improve. Built for NSE/BSE swing traders.",
   metadataBase: new URL("https://alphavyuh.com"),
+  openGraph: {
+    title: "AlphaVyuh — Trading OS for Indian Markets",
+    description: "Scan → Analyse → Trade → Journal → Improve. Built for NSE/BSE swing traders.",
+    images: ["/opengraph-image"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AlphaVyuh — Trading OS for Indian Markets",
+    description: "Scan → Analyse → Trade → Journal → Improve. Built for NSE/BSE swing traders.",
+    images: ["/opengraph-image"],
+  },
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",
