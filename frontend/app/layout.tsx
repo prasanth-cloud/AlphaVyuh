@@ -18,6 +18,7 @@ const jetbrainsMono = localFont({
 export const metadata: Metadata = {
   title: "AlphaVyuh — Trading OS for Indian Markets",
   description: "Scan → Analyse → Trade → Journal → Improve. Built for NSE/BSE swing traders.",
+  metadataBase: new URL("https://alphavyuh.com"),
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
+import { regionFromCountry } from "@/lib/market/region";
 
 const PUBLIC_PREFIXES = [
   "/login",
@@ -32,6 +33,13 @@ export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
   // Expose pathname to Server Components via a custom header
   response.headers.set("x-pathname", pathname);
+  if (!request.cookies.get("alphavyuh-region")?.value) {
+    response.cookies.set("alphavyuh-region", regionFromCountry(request.headers.get("x-vercel-ip-country")), {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
 
   if (isPublic(pathname)) return response;
 

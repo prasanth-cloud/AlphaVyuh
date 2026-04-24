@@ -85,6 +85,22 @@ function toMarketMover(quote: YahooQuoteLike): MarketMover {
   };
 }
 
+function isRegionSane(region: MarketRegion, quotes: YahooQuoteLike[]): boolean {
+  if (quotes.length === 0) return false;
+  if (region === "US") {
+    return quotes.some((quote) => quote.currency === "USD");
+  }
+
+  return quotes.some(
+    (quote) =>
+      quote.currency === "INR" ||
+      quote.symbol.endsWith(".NS") ||
+      quote.symbol.endsWith(".BO") ||
+      quote.exchange === "NSI" ||
+      quote.exchange === "BSE"
+  );
+}
+
 function mapChartBars(result: YahooChartLike): HistoryBar[] {
   const timestamps = result.timestamp ?? [];
   const quote = result.indicators.quote?.[0];
@@ -142,6 +158,15 @@ export async function getYahooMovers(region: MarketRegion): Promise<MoversRespon
     yahooFinance.screener({ scrIds: "day_losers", count: 5, region: config.queryRegion, lang: config.lang }),
     yahooFinance.screener({ scrIds: "most_actives", count: 5, region: config.queryRegion, lang: config.lang }),
   ]);
+
+  const sanityPool = [
+    ...(gainers.quotes as YahooQuoteLike[]),
+    ...(losers.quotes as YahooQuoteLike[]),
+    ...(mostActive.quotes as YahooQuoteLike[]),
+  ];
+  if (!isRegionSane(region, sanityPool)) {
+    throw new Error(`Yahoo screener returned non-${region} movers`);
+  }
 
   return {
     region,
