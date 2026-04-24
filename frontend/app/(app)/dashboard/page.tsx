@@ -165,41 +165,28 @@ export default function DashboardPage() {
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{
-        padding: '22px 24px',
-        borderRadius: 24,
-        border: '1px solid rgba(255,255,255,0.08)',
-        background:
-          'radial-gradient(circle at top right, rgba(90,139,232,0.14), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))',
-        boxShadow: 'var(--shadow-panel)',
-      }}>
-        <div className="label" style={{ color: 'var(--accent)', marginBottom: 10 }}>Market Overview</div>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8, gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.02, letterSpacing: '-0.04em', marginBottom: 8 }}>Read the market before you place the next trade.</h1>
-            <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: 'var(--text-secondary)' }}>
-              Track breadth, phase, sector rotation, and leadership in one calm surface before moving into scanner, charts, or execution.
-            </p>
-          </div>
-          {lastUpdated && (
-            <span className="caption">
-              Last updated {lastUpdated}
-              <span style={{ color: 'var(--accent)', marginLeft: 6 }}>●</span>
-            </span>
+      {/* Status bar */}
+      <div style={{ height: 44, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Dashboard</span>
+          {data?.trade_date && (
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD {data.trade_date}</span>
           )}
         </div>
-        <p className="body-secondary">NSE breadth and sector rotation{data?.trade_date ? ` · ${data.trade_date}` : ''}</p>
+        {lastUpdated && (
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated {lastUpdated}</span>
+        )}
       </div>
 
       {/* Onboarding banner */}
       {showOnboarding && (
-        <div style={{ padding: '14px 20px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-muted)', borderRadius: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '10px 16px', background: 'var(--accent-subtle)', border: '1px solid var(--accent-muted)', borderRadius: 'var(--radius-lg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--accent)', marginBottom: 2 }}>Welcome to AlphaVyuh</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>Set up your workflow</div>
             <div className="caption">Scan for stocks, add to watchlist, chart them, then log your first trade</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, flexShrink: 0 }}>
-            <a href="/scanner" style={{ padding: '6px 14px', borderRadius: 'var(--radius-md)', background: 'linear-gradient(180deg, var(--accent-strong), var(--accent))', color: '#04120d', border: '1px solid rgba(86,215,193,0.24)', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+            <a href="/scanner" style={{ padding: '5px 12px', borderRadius: 'var(--radius-md)', background: 'var(--accent)', color: 'var(--text-on-accent)', border: '1px solid var(--accent)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
               Start scanning
             </a>
             <button onClick={() => setShowOnboarding(false)} style={{ color: 'var(--text-tertiary)', fontSize: 18, lineHeight: 1 }}>×</button>
@@ -209,7 +196,7 @@ export default function DashboardPage() {
 
       {/* Error */}
       {error && (
-        <div style={{ padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid rgba(225,85,96,0.2)', borderRadius: 16, fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12 }}>
           {error}
           <button onClick={load} style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>Retry</button>
         </div>
