@@ -43,8 +43,6 @@ interface Watchlist { id: string; name: string }
 
 // ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
-  { id: 'sepa',         name: 'SEPA',
-    filters: { all_emas_bullish: true, rs_score_min: 70, week_52_high_pct_max: 25, w52l_pct_min: 30 } },
   { id: 'momentum',     name: 'Momentum',
     filters: { rsi_min: 55, rsi_max: 80, volume_ratio_min: 1.5, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 1.0 } },
   { id: 'breakout',     name: 'Breakout',

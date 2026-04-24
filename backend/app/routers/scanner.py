@@ -82,8 +82,8 @@ class ScanFilters(BaseModel):
     price_vs_ema50:  str | None = None
     price_vs_ema200: str | None = None
 
-    # ── Relative Strength (Minervini RS score, 1–99) ─────────────────────
-    rs_score_min:    float | None = None   # >= X (70+ is Minervini threshold)
+    # ── Relative Strength score (1–99) ──────────────────────────────────
+    rs_score_min:    float | None = None   # >= X
     rs_score_max:    float | None = None
 
     # ── MACD ─────────────────────────────────────────────────────────────
@@ -182,13 +182,6 @@ SORT_KEYS = {
 }
 
 PRESETS = [
-    {
-        "id": "sepa",
-        "name": "SEPA",
-        "description": "Minervini Stage 2: EMA stack bullish, RS Score ≥ 70, within 25% of 52W high, 30%+ above 52W low",
-        "color": "#56D7C1",
-        "filters": {"all_emas_bullish": True, "rs_score_min": 70, "w52h_pct_max": 25, "w52l_pct_min": 30, "series": ["EQ"]},
-    },
     {
         "id": "momentum",
         "name": "Momentum",
