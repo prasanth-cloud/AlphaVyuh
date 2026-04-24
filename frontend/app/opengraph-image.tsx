@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "alphavyuh — AI-powered trading journal for systematic traders";
+export const alt = "alphavyuh — Scanner, charts, broker execution, and AI trade review";
 export const size = {
   width: 1200,
   height: 630,
@@ -56,18 +56,18 @@ export default function OpenGraphImage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div style={{ fontSize: 18, textTransform: "uppercase", letterSpacing: "0.14em", color: "#9F988C" }}>
-              AI-powered trading journal
+              Trading workspace for systematic traders
             </div>
             <div style={{ fontSize: 74, lineHeight: 0.95, fontWeight: 700, letterSpacing: "-0.07em", maxWidth: 760 }}>
-              Your trades show the outcome. alphavyuh shows the pattern.
+              Scan, trade, and review in one loop.
             </div>
             <div style={{ fontSize: 28, lineHeight: 1.45, color: "#CAC4B8", maxWidth: 760 }}>
-              Built for systematic traders running SEPA, VCP, and momentum setups on NSE and BSE.
+              Scanner, charting, broker execution, journaling, and AI post-trade analysis for NSE and BSE traders.
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 14 }}>
-            {["Setup tagging", "AI pattern detection", "Rule adherence scoring"].map((item) => (
+            {["Scanner", "Broker trading", "AI trade review"].map((item) => (
               <div
                 key={item}
                 style={{

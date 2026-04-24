@@ -26,8 +26,15 @@ export default function HeroChart({
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const [data, setData] = useState(initialData);
   const [isLoading, setIsLoading] = useState(false);
+  const [livePrice, setLivePrice] = useState<number | null>(initialData.bars.at(-1)?.close ?? null);
 
   const seriesData = useMemo(() => toSeriesData(data.bars), [data.bars]);
+  const firstBar = data.bars[0];
+  const lastBar = data.bars.at(-1);
+  const dayChange = firstBar && lastBar ? lastBar.close - firstBar.open : 0;
+  const dayChangePercent = firstBar && lastBar && firstBar.open !== 0 ? (dayChange / firstBar.open) * 100 : 0;
+  const hi = data.bars.reduce((max, bar) => Math.max(max, bar.high), Number.NEGATIVE_INFINITY);
+  const lo = data.bars.reduce((min, bar) => Math.min(min, bar.low), Number.POSITIVE_INFINITY);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -93,7 +100,10 @@ export default function HeroChart({
         const response = await fetch(`/api/market/history/${encodeURIComponent(symbol)}`, { cache: "no-store" });
         if (!response.ok) return;
         const next = (await response.json()) as HistoryResponse;
-        if (!cancelled) setData(next);
+        if (!cancelled) {
+          setData(next);
+          setLivePrice(next.bars.at(-1)?.close ?? null);
+        }
       } catch {
         // quiet fallback
       } finally {
@@ -119,6 +129,7 @@ export default function HeroChart({
       const close = Number((basis + drift).toFixed(2));
       const high = Math.max(last.high, close);
       const low = Math.min(last.low, close);
+      setLivePrice(close);
       seriesRef.current?.update({
         ...last,
         close,
@@ -133,10 +144,66 @@ export default function HeroChart({
   return (
     <div className={styles.heroChartShell}>
       {isLoading && <div className={styles.heroChartSkeleton} />}
+      <div className={styles.heroChartTopbar}>
+        <div className={styles.heroChartTopbarLeft}>
+          <span className={styles.heroChartBadge}>Scanner linked</span>
+          <span className={styles.heroChartBadge}>Broker ready</span>
+          <span className={styles.heroChartBadge}>Journal sync</span>
+        </div>
+        <div className={styles.heroChartTopbarRight}>
+          <span>1D</span>
+          <span>15m</span>
+          <span>Indicators</span>
+        </div>
+      </div>
+      <div className={styles.heroChartSideRail}>
+        <span>+</span>
+        <span>/</span>
+        <span>□</span>
+        <span>T</span>
+      </div>
       <div ref={rootRef} className={styles.heroChartCanvas} />
       <div className={styles.heroChartMeta}>
         <span>{symbol}</span>
         <span>{data.isDemoData ? "Demo data" : "Live market feed"}</span>
+      </div>
+      <div className={styles.heroChartSnapshot}>
+        <div>
+          <span>Last</span>
+          <strong>{livePrice?.toLocaleString("en-IN", { maximumFractionDigits: 2 }) ?? "--"}</strong>
+        </div>
+        <div>
+          <span>Day</span>
+          <strong className={dayChange >= 0 ? styles.heroPositive : styles.heroNegative}>
+            {dayChange >= 0 ? "+" : ""}
+            {dayChange.toFixed(2)} ({dayChangePercent >= 0 ? "+" : ""}
+            {dayChangePercent.toFixed(2)}%)
+          </strong>
+        </div>
+        <div>
+          <span>Range</span>
+          <strong>
+            {Number.isFinite(lo) ? lo.toFixed(0) : "--"} - {Number.isFinite(hi) ? hi.toFixed(0) : "--"}
+          </strong>
+        </div>
+      </div>
+      <div className={styles.heroChartOrderCard}>
+        <div className={styles.heroChartOrderHeader}>
+          <strong>Execution plan</strong>
+          <span>Setup-linked</span>
+        </div>
+        <div className={styles.heroChartOrderRow}>
+          <span>Entry</span>
+          <strong>{livePrice?.toFixed(2) ?? "--"}</strong>
+        </div>
+        <div className={styles.heroChartOrderRow}>
+          <span>Risk</span>
+          <strong>0.75R</strong>
+        </div>
+        <div className={styles.heroChartOrderRow}>
+          <span>Review</span>
+          <strong>Auto-journal</strong>
+        </div>
       </div>
       <div className={styles.heroChartWatermark}>alphavyuh</div>
     </div>

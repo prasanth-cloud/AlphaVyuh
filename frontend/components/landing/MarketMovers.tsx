@@ -4,6 +4,31 @@ import { useEffect, useState } from "react";
 import styles from "./landing.module.css";
 import type { MarketMover, MoversResponse } from "@/lib/market/types";
 
+function nudgeRows(rows: MarketMover[]) {
+  return rows.map((row) => {
+    const priceMove = row.price * (Math.random() * 0.0014 - 0.0007);
+    const nextPrice = Number((row.price + priceMove).toFixed(2));
+    const nextChange = Number((row.change + priceMove).toFixed(2));
+    const base = nextPrice - nextChange;
+    const nextChangePercent = base !== 0 ? Number(((nextChange / base) * 100).toFixed(2)) : row.changePercent;
+    return {
+      ...row,
+      price: nextPrice,
+      change: nextChange,
+      changePercent: nextChangePercent,
+    };
+  });
+}
+
+function nudgeMovers(source: MoversResponse): MoversResponse {
+  return {
+    ...source,
+    gainers: nudgeRows(source.gainers),
+    losers: nudgeRows(source.losers),
+    mostActive: nudgeRows(source.mostActive),
+  };
+}
+
 function MoversColumn({
   title,
   rows,
@@ -51,6 +76,10 @@ export default function MarketMovers({
   const [data, setData] = useState(initialData);
 
   useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const refresh = async () => {
@@ -64,12 +93,21 @@ export default function MarketMovers({
       }
     };
 
+    refresh();
     const id = window.setInterval(refresh, 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
   }, [region]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setData((current) => nudgeMovers(current));
+    }, 2600);
+
+    return () => window.clearInterval(id);
+  }, []);
 
   return (
     <div className={styles.moversGrid}>

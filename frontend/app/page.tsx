@@ -13,21 +13,21 @@ import { normalizeRegion } from "@/lib/market/region";
 import type { MarketRegion } from "@/lib/market/types";
 
 export const metadata: Metadata = {
-  title: "alphavyuh — AI-Powered Trading Journal for Systematic Traders",
+  title: "alphavyuh — Scanner, Charts, Broker Trading, and AI Trade Review",
   description:
-    "The trading journal that tells you whether you followed your own rules. Built for NSE/BSE systematic traders running SEPA, VCP, and momentum setups. ₹100/month.",
+    "Scan, chart, trade, journal, and review in one trading workspace. Built for NSE/BSE systematic traders who want broker execution and AI post-trade analysis in one loop.",
   metadataBase: new URL("https://alphavyuh.com"),
   openGraph: {
-    title: "alphavyuh — AI-Powered Trading Journal for Systematic Traders",
+    title: "alphavyuh — Scanner, Charts, Broker Trading, and AI Trade Review",
     description:
-      "The trading journal that tells you whether you followed your own rules. Built for NSE/BSE systematic traders running SEPA, VCP, and momentum setups. ₹100/month.",
+      "Scan, chart, trade, journal, and review in one trading workspace. Built for NSE/BSE systematic traders who want broker execution and AI post-trade analysis in one loop.",
     images: ["/opengraph-image"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "alphavyuh — AI-Powered Trading Journal for Systematic Traders",
+    title: "alphavyuh — Scanner, Charts, Broker Trading, and AI Trade Review",
     description:
-      "The trading journal that tells you whether you followed your own rules. Built for NSE/BSE systematic traders running SEPA, VCP, and momentum setups. ₹100/month.",
+      "Scan, chart, trade, journal, and review in one trading workspace. Built for NSE/BSE systematic traders who want broker execution and AI post-trade analysis in one loop.",
   },
 };
 
@@ -44,7 +44,7 @@ function softwareApplicationSchema() {
       priceCurrency: "INR",
     },
     description:
-      "AI-powered trading journal for systematic traders running SEPA, VCP, and momentum setups on NSE and BSE.",
+      "Trading workspace for systematic traders with scanner, charting, broker execution, journaling, and AI post-trade analysis.",
   };
 }
 
@@ -73,12 +73,18 @@ export default async function LandingPage() {
         <section className={styles.hero}>
           <LandingReveal className={styles.heroCopy}>
             <div className={styles.eyebrow}>Built for systematic traders</div>
-            <h1 className={styles.heroTitle}>Your trades show the outcome. alphavyuh shows the pattern.</h1>
+            <h1 className={styles.heroTitle}>Scan, trade, and review in one loop.</h1>
             <p className={styles.heroSubhead}>
-              alphavyuh is the AI-powered trading journal for systematic traders running SEPA, VCP,
-              and momentum setups on NSE and BSE. It tracks whether you followed your own process,
-              then shows what is actually working in your journal.
+              alphavyuh brings together screening, chart analysis, broker-linked execution,
+              journaling, and AI post-trade review for systematic traders running SEPA, VCP,
+              momentum, and breakout workflows on NSE and BSE.
             </p>
+            <div className={styles.heroFeatureRow}>
+              <span>Scanner + watchlists</span>
+              <span>TradingView-style charts</span>
+              <span>Broker execution</span>
+              <span>AI review</span>
+            </div>
             <div className={styles.heroActions}>
               <Link href="/signup" className={styles.primaryCta}>
                 Start free trial
@@ -105,45 +111,44 @@ export default async function LandingPage() {
 
         <LandingReveal className={styles.section}>
           <div className={styles.sectionLabel}>Live market context</div>
-          <h2 className={styles.sectionTitle}>Stay close to the tape without leaving the journal wedge.</h2>
+          <h2 className={styles.sectionTitle}>Stay close to the tape without leaving the workflow.</h2>
           <p className={styles.sectionCopy}>
-            Use live indices and movers as context, then step back into the one question that compounds:
-            which setups actually work when you trade them, not when someone else screenshots them.
+            Track the live market, shortlist the names that matter, move into charts, and carry the same
+            symbols all the way through broker execution and post-trade review.
           </p>
           <MarketMovers region={region} initialData={movers} />
         </LandingReveal>
 
         <LandingReveal className={styles.section}>
           <div className={styles.sectionLabel}>The difference</div>
-          <h2 className={styles.sectionTitle}>Charts show the move. alphavyuh shows the mistake.</h2>
+          <h2 className={styles.sectionTitle}>Most tools stop at the trade. alphavyuh closes the loop.</h2>
           <p className={styles.sectionCopy}>
-            The chart can tell you where price went. It cannot tell you whether you took a low-quality
-            breakout again, ignored your own VCP checklist, or keep forcing setups that your own journal
-            already disproved.
+            A screener finds symbols. A chart shows price. A broker fills the order. alphavyuh ties those
+            pieces together, then shows what your execution and decision-making actually look like after the trade.
           </p>
           <div className={styles.differenceCardGrid}>
             <div className={styles.differenceCard}>
               <div className={styles.differenceIcon}>01</div>
-              <h3>Every trade, tagged to your setup</h3>
+              <h3>From scanner to execution</h3>
               <p>
-                Keep SEPA, VCP, breakout, pullback, and momentum trades organized by the actual setup
-                you were trying to execute, not by vague notes after the fact.
+                Screen the market, add names to watchlists, open charts fast, and place the trade from
+                the same workflow instead of stitching together five separate tools.
               </p>
             </div>
             <div className={styles.differenceCard}>
               <div className={styles.differenceIcon}>02</div>
-              <h3>AI pattern detection</h3>
+              <h3>Broker-linked trade capture</h3>
               <p>
-                Based on your last <CountUpValue value={50} suffix=" trades" />, alphavyuh can surface where
-                one setup family is outperforming another and where your edge is leaking.
+                Orders and fills stay tied to the setup, chart context, and review notes that produced
+                them, so your journal is built automatically instead of after memory fades.
               </p>
             </div>
             <div className={styles.differenceCard}>
               <div className={styles.differenceIcon}>03</div>
-              <h3>Setup adherence scoring</h3>
+              <h3>AI post-trade analysis</h3>
               <p>
-                Define your own trade rules, score each trade against them, and see whether discipline is
-                actually the variable holding your equity curve back.
+                Based on your last <CountUpValue value={50} suffix=" trades" />, alphavyuh can surface
+                which setups pay, where adherence breaks, and what mistakes keep repeating.
               </p>
             </div>
           </div>
@@ -151,27 +156,83 @@ export default async function LandingPage() {
 
         <LandingReveal className={styles.section} delay={0.04}>
           <div id="product" className={styles.sectionLabel}>Inside alphavyuh</div>
-          <h2 className={styles.sectionTitle}>The journal that learns from your trades.</h2>
+          <h2 className={styles.sectionTitle}>The trading workspace that learns from your trades.</h2>
           <p className={styles.sectionCopy}>
-            The product surface is built to connect broker imports, setup tagging, trade review, and AI
-            observations into one journal workflow that gets sharper as your sample size grows.
+            alphavyuh is built as one loop: scan, shortlist, analyze, execute, record, and review. The
+            journal is not a dead log at the end. It becomes the system that sharpens every decision after it.
           </p>
           <div className={styles.demoWrap}>
             <div className={styles.demoMock}>
               <div className={styles.demoSidebar}>
-                <div className={styles.demoSidebarBlock} />
-                <div className={styles.demoSidebarBlock} />
-                <div className={styles.demoSidebarBlock} />
+                <div className={styles.demoSidebarHeader}>Workspace</div>
+                <div className={styles.demoSidebarBlock}>
+                  <span>Scanner</span>
+                  <strong>Momentum + VCP</strong>
+                </div>
+                <div className={styles.demoSidebarBlock}>
+                  <span>Watchlist</span>
+                  <strong>RELIANCE, TCS, ICICIBANK</strong>
+                </div>
+                <div className={styles.demoSidebarBlock}>
+                  <span>Broker</span>
+                  <strong>Zerodha Kite linked</strong>
+                </div>
               </div>
               <div className={styles.demoMain}>
-                <div className={styles.demoToolbar} />
-                <div className={styles.demoInsightGrid}>
-                  <div className={styles.demoInsightCard} />
-                  <div className={styles.demoInsightCard} />
-                  <div className={styles.demoInsightCard} />
+                <div className={styles.demoToolbar}>
+                  <div className={styles.demoToolbarTitle}>
+                    <strong>AI review desk</strong>
+                    <span>Week 17 · 24 closed trades · 82% rule adherence</span>
+                  </div>
+                  <div className={styles.demoToolbarBadge}>Process improving</div>
                 </div>
-                <div className={styles.demoChartCard} />
-                <div className={styles.demoTable} />
+                <div className={styles.demoInsightGrid}>
+                  <div className={styles.demoInsightCard}>
+                    <span>Best setup</span>
+                    <strong>VCP continuation</strong>
+                    <p>+4.8R avg over the last 8 trades.</p>
+                  </div>
+                  <div className={styles.demoInsightCard}>
+                    <span>Leak</span>
+                    <strong>Late breakout entries</strong>
+                    <p>Win rate drops 19% when you chase after the trigger candle.</p>
+                  </div>
+                  <div className={styles.demoInsightCard}>
+                    <span>Execution</span>
+                    <strong>Stops respected</strong>
+                    <p>Risk containment improved across the last 3 weeks.</p>
+                  </div>
+                </div>
+                <div className={styles.demoChartCard}>
+                  <div className={styles.demoChartHeader}>
+                    <span>RELIANCE · 15m</span>
+                    <span>Trade linked to journal review</span>
+                  </div>
+                  <div className={styles.demoChartGraphic}>
+                    <div className={styles.demoChartArea} />
+                    <div className={styles.demoChartMarkerLong}>Entry</div>
+                    <div className={styles.demoChartMarkerStop}>Stop</div>
+                    <div className={styles.demoChartMarkerTarget}>Target</div>
+                  </div>
+                </div>
+                <div className={styles.demoTable}>
+                  <div className={styles.demoTableHeader}>
+                    <span>Recent reviewed trades</span>
+                    <span>Score</span>
+                  </div>
+                  <div className={styles.demoTableRow}>
+                    <span>RELIANCE · VCP continuation</span>
+                    <strong>92</strong>
+                  </div>
+                  <div className={styles.demoTableRow}>
+                    <span>ICICIBANK · Pullback entry</span>
+                    <strong>84</strong>
+                  </div>
+                  <div className={styles.demoTableRow}>
+                    <span>TCS · Breakout chase</span>
+                    <strong className={styles.demoTableNegative}>61</strong>
+                  </div>
+                </div>
               </div>
             </div>
             <div className={`${styles.demoAnnotation} ${styles.annotationOne}`}>
@@ -179,12 +240,12 @@ export default async function LandingPage() {
               <span>Highlights which setup families are compounding and which ones are diluting your process.</span>
             </div>
             <div className={`${styles.demoAnnotation} ${styles.annotationTwo}`}>
-              <strong>Trade-by-trade rule scoring</strong>
-              <span>Turns vague discipline into a measurable adherence score you can review weekly.</span>
+              <strong>Broker-linked execution trail</strong>
+              <span>Trades stay tied to the actual chart and setup context that created them.</span>
             </div>
             <div className={`${styles.demoAnnotation} ${styles.annotationThree}`}>
-              <strong>Setup-linked history</strong>
-              <span>Every imported trade stays attached to the setup and review context that produced it.</span>
+              <strong>Trade-by-trade rule scoring</strong>
+              <span>Turns vague discipline into a measurable adherence score you can review weekly.</span>
             </div>
           </div>
         </LandingReveal>
@@ -195,18 +256,18 @@ export default async function LandingPage() {
           <div className={styles.stepsGrid}>
             <div className={styles.stepCard}>
               <div className={styles.stepNumber}>1</div>
-              <h3>Connect your broker</h3>
-              <p>Zerodha Kite is the first broker integration, with more broker connectivity planned after launch.</p>
+              <h3>Scan and shortlist</h3>
+              <p>Run scans, screen the market, and move the best names into watchlists without leaving the platform.</p>
             </div>
             <div className={styles.stepCard}>
               <div className={styles.stepNumber}>2</div>
-              <h3>Trade normally</h3>
-              <p>alphavyuh captures journal context around your trades so setup tagging and review stay connected.</p>
+              <h3>Analyze and execute</h3>
+              <p>Work from the chart, use broker integration for execution, and keep the trade tied to setup and context.</p>
             </div>
             <div className={styles.stepCard}>
               <div className={styles.stepNumber}>3</div>
-              <h3>Review insights weekly</h3>
-              <p>Use AI observations and adherence analysis to see what is working, what is noise, and what keeps repeating.</p>
+              <h3>Review what actually happened</h3>
+              <p>Let the journal and AI analysis show which decisions are compounding and which habits need to go.</p>
             </div>
           </div>
         </LandingReveal>
@@ -225,12 +286,12 @@ export default async function LandingPage() {
                 <small>/month</small>
               </div>
               <ul className={styles.pricingList}>
-                <li>Broker-linked trade journal</li>
-                <li>Setup tagging for systematic workflows</li>
+                <li>Scanner and watchlist workflow</li>
+                <li>Chart analysis workspace</li>
+                <li>Broker-linked trade capture</li>
+                <li>Setup tagging and rule scoring</li>
                 <li>AI trade pattern detection</li>
-                <li>Setup adherence scoring</li>
-                <li>Weekly review workflow</li>
-                <li>Journal insights dashboard</li>
+                <li>Post-trade review dashboard</li>
                 <li>All features included</li>
               </ul>
               <Link href="/signup" className={styles.primaryCta}>
