@@ -256,7 +256,7 @@ If any of these go out of date, updating them is part of the task that broke the
 
 - **Phase:** Scaffolding → MVP
 - **Live:** Landing page at alphavyuh.com
-- **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) SEPA scanner on cached EOD data, (4) Chart with order placement UI
+- **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) EOD scanner (Momentum preset live), (4) Chart with order placement UI
 - **Staging:** `alphavyuh-staging` Supabase project live (`nltfedbnbbrclcufoaly`, `us-east-2`). Push migrations with `bun run db:push:staging`. See `docs/environments.md` for the full promotion flow.
 - **Known gaps:**
   - **Schema provenance drift (001–031):** Prod was built through mixed paths (local files, Supabase MCP, and dashboard SQL), producing 26 timestamp-based migration history entries with no local file equivalents. On 2026-04-23: repaired history via `migration repair` (marked 001–031 applied, 26 timestamps reverted), then pushed 032 cleanly. Schema objects on prod are correct and functional. **Object equivalence between prod and what a fresh `supabase db reset` would produce has NOT been verified** — see `docs/decisions/010-schema-provenance-drift.md` for the full risk list (RLS policy names, trigger names, function signatures) and the `pg_dump` diff procedure. **Deadline: 2026-05-31**, or before any migration that alters objects from 001–031, whichever comes first.

@@ -96,7 +96,7 @@ class TestMarketFilter:
 
 
 class TestRsScoreFilter:
-    """rs_score is a new M3-A column — 1-99 Minervini relative strength scale."""
+    """rs_score is a new M3-A column — 1-99 relative strength scale."""
 
     def test_above_threshold_passes(self):
         assert _apply_numeric_filter(75, 70, None) is True
