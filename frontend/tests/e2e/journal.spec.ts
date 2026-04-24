@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -82,17 +82,29 @@ const AI_PATTERNS = {
   by_direction: null,
 };
 
+// ── Trade fixture type (nullable fields can be null or a value) ───────────────
+
+type TradeFixture = {
+  id: string; symbol: string; company_name: string; trade_type: string;
+  entry_date: string; entry_price: number; quantity: number;
+  exit_price: number | null; exit_date: string | null;
+  stop_loss: number; target_price: number; setup_type: string;
+  status: string; pnl: number | null; risk_reward: number;
+  holding_days: number | null; entry_reason: string | null;
+  exit_reason: string | null; mistakes: string | null; lessons: string | null;
+};
+
 // ── Route helper — sets up all journal API mocks ──────────────────────────────
 
 async function mockJournalRoutes(
-  page: Parameters<Parameters<typeof test>[1]>[0]["page"],
+  page: Page,
   {
-    entries = [OPEN_TRADE, CLOSED_TRADE],
+    entries = [OPEN_TRADE, CLOSED_TRADE] as TradeFixture[],
     stats = STATS,
     analytics = ANALYTICS,
     brokerConnected = false,
   }: {
-    entries?: typeof OPEN_TRADE[];
+    entries?: TradeFixture[];
     stats?: typeof STATS;
     analytics?: typeof ANALYTICS;
     brokerConnected?: boolean;
