@@ -60,14 +60,14 @@ export default function MarketTickerStrip({
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      setData((current) => nudgeIndices(current));
+      setData((current) => (current.isDemoData ? nudgeIndices(current) : current));
     }, 2400);
 
     return () => window.clearInterval(id);
   }, []);
 
   return (
-    <section className={styles.tickerStrip} aria-label="Live market index ticker">
+    <section className={styles.tickerStrip} aria-label="Market index ticker">
       <div className={styles.tickerTrack}>
         {data.tickers.map((ticker) => (
           <div key={ticker.symbol} className={styles.tickerItem}>

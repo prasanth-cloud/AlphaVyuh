@@ -120,7 +120,7 @@ export default function HeroChart({
   }, [symbol]);
 
   useEffect(() => {
-    if (!seriesRef.current || seriesData.length === 0) return;
+    if (!data.isDemoData || !seriesRef.current || seriesData.length === 0) return;
     const id = window.setInterval(() => {
       const last = seriesData[seriesData.length - 1];
       if (!last) return;
@@ -139,7 +139,7 @@ export default function HeroChart({
     }, 3000);
 
     return () => window.clearInterval(id);
-  }, [seriesData]);
+  }, [data.isDemoData, seriesData]);
 
   return (
     <div className={styles.heroChartShell}>
@@ -165,7 +165,7 @@ export default function HeroChart({
       <div ref={rootRef} className={styles.heroChartCanvas} />
       <div className={styles.heroChartMeta}>
         <span>{symbol}</span>
-        <span>{data.isDemoData ? "Demo data" : "Live market feed"}</span>
+        <span>{data.isDemoData ? "Demo simulation" : "Market feed"}</span>
       </div>
       <div className={styles.heroChartSnapshot}>
         <div>

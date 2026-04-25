@@ -1,6 +1,6 @@
 # AlphaVyuh
 
-Trading OS for Indian NSE/BSE traders. Scan → Analyse → Trade → Journal → Review.
+Trading OS for Indian NSE/BSE swing traders. Scan → shortlist → chart → plan → journal → improve.
 
 ## Stack
 
@@ -15,10 +15,11 @@ Trading OS for Indian NSE/BSE traders. Scan → Analyse → Trade → Journal �
 
 ## Features
 
-- **Scanner** — TradingView-style stock screener with 35+ technical filters (EMA, RSI, ATR, volume, 52-week, gap, trend alignment). Save custom screens.
-- **Watchlist** — Multiple watchlists, drag-to-reorder, live quotes.
-- **Charts** — Interactive candlestick charts with EMA 20/50/200, RSI, MACD, Bollinger Bands, VWAP. Drawing tools. Saved layouts.
+- **Scanner** — EOD stock screener for NSE equities with technical filters, SEPA/VCP presets, RS score, and saved screens.
+- **Watchlist** — Multiple watchlists, drag-to-reorder, and quote surfaces with explicit data provenance.
+- **Charts** — Interactive candlestick charts with indicator context. Advanced drawing tools are gated by ADR 009 and TradingView licensing confirmation.
 - **Dashboard** — Market breadth strip (A/D ratio, 52W highs/lows, % above EMA).
+- **Journal** — Trade notes, outcome review, and AI feedback that should cite the exact trades used.
 - **Auth** — Supabase Auth (email + Google OAuth), free/pro plans.
 
 ## Project Structure
@@ -88,6 +89,6 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 - Phase 1 — Auth + User profiles + Subscriptions
 - Phase 2 — NSE Scanner + Watchlist + Bhavcopy pipeline
-- Phase 3 — Charts (Lightweight Charts v5, drawings, layouts)
-- Phase 4 — Broker connect (Zerodha Kite) + Trade journal
-- Phase 5 — AI MistakeEngine + Alerts + Mobile app
+- Phase 3 — Charts (Lightweight Charts v5 now; TradingView Advanced Charts pending ADR 009 licensing)
+- Phase 4 — Broker connect/import and trade journal, with broker execution marked beta until reconciliation is verified
+- Phase 5 — AI MistakeEngine, timestamped alerts, and mobile app

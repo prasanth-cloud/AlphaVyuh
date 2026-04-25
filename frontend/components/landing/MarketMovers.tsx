@@ -103,7 +103,7 @@ export default function MarketMovers({
 
   useEffect(() => {
     const id = window.setInterval(() => {
-      setData((current) => nudgeMovers(current));
+      setData((current) => (current.isDemoData ? nudgeMovers(current) : current));
     }, 2600);
 
     return () => window.clearInterval(id);
