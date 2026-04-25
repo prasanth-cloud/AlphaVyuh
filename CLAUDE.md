@@ -20,6 +20,8 @@ The competitive frame is: **TradingView + Chartink + a broker terminal + a tradi
 
 **Primary user:** Indian swing trader running a Minervini SEPA / Qullamaggie VCP style playbook. Not day traders, not options scalpers.
 
+**Strategic governing decision:** The AI-driven trade journal with closed-loop analysis is the primary product wedge. Scanner, broker integration, and community features are supporting infrastructure. See **ADR 013** (`docs/decisions/013-product-wedge.md`) before adding any feature not on the M4–M7 roadmap — it exists specifically to prevent scope drift.
+
 ---
 
 ## 2. Tech stack
@@ -143,6 +145,9 @@ If you cannot verify, say so explicitly. Do not claim completion.
 - **Use the typed client** from `lib/supabase/server.ts` or `lib/supabase/client.ts`. Never instantiate `createClient` ad-hoc in a route.
 - **Migrations are append-only.** To change an applied migration, write a new one that alters/drops.
 - **Regenerate types** (`bun run db:types`) after every migration. Commit the regenerated file.
+- **Migration PR process (enforced by `check-migration-drift.yml`):** Any PR touching `supabase/migrations/` must include, in the PR description, terminal output proving the migration was applied to both staging and production. The sequence is always: staging first → verify → prod. Merging a migration PR without this output is a process violation. Add `<!-- migration-applied-to-prod -->` to the PR description to pass the drift check after applying.
+- **Known gap:** The Stop hook checks for uncommitted code but does not check for unapplied migrations. The `check-migration-drift.yml` CI check is the compensating control. When working locally, run `supabase migration list --linked` before declaring a migration task done.
+- **Stub files for prod-only migrations:** If a migration was applied directly to prod (e.g., via Supabase MCP during an emergency) without a local file, create a stub `.sql` file in `supabase/migrations/` with a `⚠️ STUB — DO NOT APPLY` header and no executable SQL. This closes the local ↔ prod count gap and prevents false drift alerts.
 
 ### Broker code
 - Always go through `BrokerAdapter`. See `docs/broker-adapter.md` for the interface contract.
@@ -187,6 +192,9 @@ If we upgrade to Next.js 15, `cookies()` and `headers()` become async Promises �
 - Never hardcode broker-specific logic outside `lib/brokers/`
 - Never disable RLS to "make it work" — fix the policy instead
 - Never `await cookies()` or `await headers()` — see Next.js 14 dynamic API rule above
+- Never merge a PR that adds migration files without prod application evidence in the PR description — `check-migration-drift.yml` enforces this, but the human is the last gate
+- Never apply migrations directly to prod without first applying to staging (staging is the canary; a bad migration there is recoverable, a bad migration on prod is not)
+- Never edit an existing migration file — if you need to change something, write a new migration; the drift check will catch and block any modification to existing files
 
 ---
 
@@ -248,16 +256,22 @@ If any of these go out of date, updating them is part of the task that broke the
 
 - **Phase:** Scaffolding → MVP
 - **Live:** Landing page at alphavyuh.com
-- **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) SEPA scanner on cached EOD data, (4) Chart with order placement UI
+- **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) EOD scanner (Momentum preset live), (4) Chart with order placement UI
 - **Staging:** `alphavyuh-staging` Supabase project live (`nltfedbnbbrclcufoaly`, `us-east-2`). Push migrations with `bun run db:push:staging`. See `docs/environments.md` for the full promotion flow.
 - **Known gaps:**
+  - **Schema provenance drift (001–031):** Prod was built through mixed paths (local files, Supabase MCP, and dashboard SQL), producing 26 timestamp-based migration history entries with no local file equivalents. On 2026-04-23: repaired history via `migration repair` (marked 001–031 applied, 26 timestamps reverted), then pushed 032 cleanly. Schema objects on prod are correct and functional. **Object equivalence between prod and what a fresh `supabase db reset` would produce has NOT been verified** — see `docs/decisions/010-schema-provenance-drift.md` for the full risk list (RLS policy names, trigger names, function signatures) and the `pg_dump` diff procedure. **Deadline: 2026-05-31**, or before any migration that alters objects from 001–031, whichever comes first.
   - No production monitoring yet (Sentry to be added)
   - Broker adapter interface not finalized
   - **Email confirmation is OFF** in Supabase. Before enabling it (or adding magic links / OAuth), a `/auth/callback` Route Handler must be built to exchange the code for a session and set cookies. Without it, confirmation links will 404 and the user will not get a session.
   - **Broker credential key rotation is NOT implemented.** `scripts/rotate_broker_key.py.TODO` describes the spec. A rotation script and runbook MUST land before the first real broker credential is stored in production. This is a **hard blocker on exiting MVP** — see `docs/decisions/002-broker-credentials.md §Q3`.
-  - **All-NSE VCP scan at 5,327ms p95 — 6.5% over the 5,000ms soft target.** Dedicated perf PR after M3-F merges. Until fixed: all-NSE + VCP returns a hard API error; product UI defaults to Nifty 500 for VCP scans. See `docs/benchmarks/m3-phase1-baseline.md §All-NSE VCP: Open Performance Commitment`.
+  - **All-NSE VCP latency resolved.** `asyncio.gather` (concurrency cap 4) brought p95 from 5,327ms (marginal) to 3,059–3,655ms (+1,345–1,941ms headroom). See `docs/benchmarks/m3-production-env.md §8`.
   - **Fundamentals deferred to post-MVP.** PE and market cap refresh daily in bhavcopy; quarterly metrics (ROE, ROCE, PB, D/E) shown with "as of [date]". No external data source (FMP/XBRL) in M3. See ADR 006 §Decision 2.
   - **RS Score is alpha-version pending calibration.** (Field names: `rs_score_min/max` — not "RS Rating" to avoid IBD association.) Score distribution must be validated before public launch; see ADR 006 §Decision 5 for acceptance criteria.
+  - **Historical volume_ratio, w52h_pct, w52l_pct are NULL for ~414k older rows** where the underlying `week_52_high`, `week_52_low`, `avg_volume_20d` columns were never populated by the ingest job. Migration 032 only backfills rows where those underlying columns exist. Scanner is unaffected (queries `latest_date` only, which is fully populated). Full historical backfill would require a separate migration to first populate the underlying columns across all rows. Not blocking for MVP.
+  - **[M4 TODO] Verify Kite order webhook delivery mechanism.** ADR 011 assumes Kite delivers order status events via server-to-server webhook (POST to a FastAPI endpoint). Kite Connect may use postback URLs only (client-side redirect) rather than server-side webhooks. If postback-only, the order-events flow in ADR 011 needs rework before M4 implementation. Verify in Kite Connect docs / sandbox before building `broker_order_events` ingest.
+  - **[M4 TODO] Verify Railway 15-min timeout applies to WS upgrades.** ADR 011 §Hard constraints notes this is empirical. During M4 integration testing, hold a WS connection open for 16+ minutes with no heartbeat and confirm whether Railway drops it. If WS connections are exempt from the HTTP idle timeout, the 25s heartbeat can be relaxed (but should remain for ALB resilience).
+  - **[M4 TODO] Define Kite subscribe-error handling for persistent failures.** Current ADR 011 reconnect spec covers transient drops with exponential backoff. Persistent rejection (3 consecutive reconnect failures, or Kite returning an error code indicating invalid token / instrument not found) must surface a user-facing error message and stop retrying — not retry forever silently. Define the exact error codes and UI copy before M4 ships.
+  - **`scripts/deploy-migration.sh` is ready.** Run `bash scripts/deploy-migration.sh staging` then `bash scripts/deploy-migration.sh prod`. One-shot connection test with specific error messages for auth failures, IP bans, and bad hostnames. No retries — prevents the ban-through-retry loop that hit migration 033.
 
 ---
 

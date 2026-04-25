@@ -6,6 +6,7 @@ smaller candidate set returned by the DB push-filters.
 """
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -13,12 +14,13 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services.rate_limit import plan_cache, scanner_limiter
+from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 
-FREE_RESULT_LIMIT  = 25
-PRO_RESULT_LIMIT   = 500
+FREE_RESULT_LIMIT  = 200
+PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 
 
@@ -192,6 +194,8 @@ class ScanRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
     sort_by:    str = "volume_ratio"   # column key (see SORT_KEYS below)
     sort_order: str = "desc"           # "asc" | "desc"
+    page:       int = 1
+    page_size:  int = 25               # 25 | 50 | 150 | 200 | 0(all)
 
 
 class SaveScreenRequest(BaseModel):
@@ -361,7 +365,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         atr_v      = float(row["atr_14"])        if row.get("atr_14")       is not None else None
         w52h_v     = float(row["week_52_high"])  if row.get("week_52_high") is not None else None
         w52l_v     = float(row["week_52_low"])   if row.get("week_52_low")  is not None else None
-        rs_score_v = float(row["rs_rating"])     if row.get("rs_rating")    is not None else None
+        rs_score_v = float(row["rs_score"])      if row.get("rs_score")     is not None else None
 
         # Computed columns — prefer precomputed DB values when populated (M3-A columns)
         pct_change   = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
@@ -666,49 +670,65 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
     return results
 
 
-VCP_RPC_CHUNK = 500  # max symbols per get_vcp_lookback RPC call (avoids statement timeout)
+VCP_RPC_CHUNK = 500   # max symbols per get_vcp_lookback RPC call (avoids statement timeout)
+VCP_CONCURRENCY = 4  # simultaneous chunk fetches — keeps Supabase connection pool healthy
 
 
-def _run_vcp_pass2(
+async def _run_vcp_pass2(
     client,
     pass1_results: list[dict],
     latest_date: str,
     f: "ScanFilters",
 ) -> list[dict]:
     """
-    Pass 2 of VCP detection: fetch LOOKBACK_DAYS of daily OHLCV per candidate
-    via the get_vcp_lookback Postgres CTE function, then run detect_vcp() on each.
+    Pass 2 of VCP detection: fetch LOOKBACK_DAYS of OHLCV per candidate via the
+    get_vcp_lookback Postgres CTE, then run detect_vcp() on each.
 
-    Replaces 39 sequential PostgREST batches with a small number of chunked RPC
-    calls (ADR 005 §Hybrid). Chunking caps symbols per call at VCP_RPC_CHUNK to
-    stay within Supabase statement timeout; each call returns one JSONB row per
-    symbol so the PostgREST row cap is never hit.
+    Chunks run concurrently (asyncio.gather, cap=VCP_CONCURRENCY) rather than
+    sequentially, cutting wall time from sum(chunk_times) to
+    ~ceil(n_chunks/VCP_CONCURRENCY) × max(chunk_time). The sync supabase-py
+    client is wrapped in asyncio.to_thread so the event loop is not blocked.
     """
     from app.scanners.vcp import detect_vcp, LOOKBACK_DAYS
 
-    min_pivots           = f.vcp_min_pivots           or 2
-    max_depth_pct        = f.vcp_max_depth_pct        or 15.0
-    pivot_proximity_pct  = f.vcp_pivot_proximity_pct  or 10.0
+    min_pivots          = f.vcp_min_pivots          or 2
+    max_depth_pct       = f.vcp_max_depth_pct       or 15.0
+    pivot_proximity_pct = f.vcp_pivot_proximity_pct or 10.0
 
     candidate_symbols = [r["symbol"] for r in pass1_results if r.get("symbol")]
     if not candidate_symbols:
         return []
 
-    by_symbol: dict[str, list[dict]] = {}
-    for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK):
-        chunk = candidate_symbols[i : i + VCP_RPC_CHUNK]
-        rpc_rows = (
-            client.rpc(
-                "get_vcp_lookback",
-                {
-                    "p_symbols":  chunk,
-                    "p_ref_date": latest_date,
-                    "p_lookback": LOOKBACK_DAYS,
-                },
+    chunks = [
+        candidate_symbols[i : i + VCP_RPC_CHUNK]
+        for i in range(0, len(candidate_symbols), VCP_RPC_CHUNK)
+    ]
+
+    sem = asyncio.Semaphore(VCP_CONCURRENCY)
+
+    async def _fetch_chunk(chunk: list[str]) -> list[dict]:
+        async with sem:
+            return await asyncio.to_thread(
+                lambda: (
+                    client.rpc(
+                        "get_vcp_lookback",
+                        {
+                            "p_symbols":  chunk,
+                            "p_ref_date": latest_date,
+                            "p_lookback": LOOKBACK_DAYS,
+                        },
+                    )
+                    .execute()
+                    .data or []
+                )
             )
-            .execute()
-            .data or []
-        )
+
+    chunk_results = await asyncio.gather(*[_fetch_chunk(c) for c in chunks], return_exceptions=True)
+
+    by_symbol: dict[str, list[dict]] = {}
+    for rpc_rows in chunk_results:
+        if isinstance(rpc_rows, BaseException):
+            continue  # one chunk failure → skip, not a full abort
         for row in rpc_rows:
             if row.get("symbol") and row.get("history"):
                 by_symbol[row["symbol"]] = row["history"]
@@ -769,16 +789,9 @@ async def run_scanner(
     plan = _get_user_plan(user_id)
     hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
 
-    # Find last complete trading day (partial ingests have <200 rows; full days 2000+)
-    from collections import Counter
-    dr = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(5000).execute()
-    if not dr.data:
+    latest_date = get_latest_complete_trade_date(client)
+    if not latest_date:
         return {"trade_date": None, "total_matches": 0, "plan_limit": hard_limit, "results": []}
-    date_counts = Counter(r["trade_date"] for r in dr.data)
-    latest_date = next(
-        (d for d in sorted(date_counts, reverse=True) if date_counts[d] >= 1000),
-        dr.data[0]["trade_date"],
-    )
 
     # Build base query with series filter pushed to DB
     f = body.filters
@@ -793,7 +806,7 @@ async def run_scanner(
             "bb_upper,bb_middle,bb_lower,bb_width,"
             "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
             "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-            "rs_rating,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+            "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
             "momentum_5d,momentum_10d,momentum_20d,supertrend_direction,prev_macd_hist,"
             "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
         )
@@ -841,7 +854,7 @@ async def run_scanner(
     if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
     # M3-A columns: DB push deferred to ingest-job PR — all values currently NULL in production.
     # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
-    # Python fallback in _apply_filters handles rs_rating/volume_ratio/w52h_pct/w52l_pct
+    # Python fallback in _apply_filters handles rs_score/volume_ratio/w52h_pct/w52l_pct
     # until the ingest job populates these columns.
 
     # M3-F: push momentum + supertrend to DB (FREE, NULL-safe — only pushed when columns populated)
@@ -879,15 +892,28 @@ async def run_scanner(
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
     if f.vcp_contraction is True and results:
-        results = _run_vcp_pass2(client, results, latest_date, f)
+        if plan == "free":
+            raise HTTPException(403, "VCP scan requires Pro or Elite plan")
+        results = await _run_vcp_pass2(client, results, latest_date, f)
 
     # Sort
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
     reverse  = body.sort_order != "asc"
     results.sort(key=lambda x: (x.get(sort_key) is not None, x.get(sort_key) or 0), reverse=reverse)
 
-    total  = len(results)
+    total = len(results)
     capped = results[:hard_limit]
+    safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
+    safe_page = max(body.page, 1)
+
+    if safe_page_size == 0:
+        paged = capped
+        total_pages = 1
+    else:
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        paged = capped[start:end]
+        total_pages = max(1, (len(capped) + safe_page_size - 1) // safe_page_size)
 
     return {
         "trade_date":    latest_date,
@@ -895,7 +921,11 @@ async def run_scanner(
         "plan_limit":    hard_limit,
         "plan":          plan,
         "is_limited":    plan == "free" and total > hard_limit,
-        "results":       capped,
+        "page":          safe_page,
+        "page_size":     safe_page_size,
+        "total_pages":   total_pages,
+        "visible_count": len(paged),
+        "results":       paged,
     }
 
 

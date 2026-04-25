@@ -164,6 +164,9 @@ export type WatchlistItem = {
   pct_change?: number | null;
   volume_ratio?: number | null;
   rsi_14?: number | null;
+  pinned?: boolean;
+  tags?: string[];
+  note?: string | null;
 };
 
 export type Watchlist = {
@@ -284,6 +287,30 @@ export async function reorderWatchlist(
     headers,
     body: JSON.stringify({ items }),
   });
+}
+
+export type WatchlistItemMetadataUpdate = {
+  pinned?: boolean;
+  tags?: string[];
+  note?: string | null;
+};
+
+export async function updateWatchlistItemMetadata(
+  watchlistId: string,
+  symbol: string,
+  updates: WatchlistItemMetadataUpdate
+): Promise<WatchlistItem> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/${symbol}/metadata`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: "Metadata update failed" }));
+    throw new Error(body.detail ?? "Metadata update failed");
+  }
+  return res.json();
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
@@ -491,6 +518,21 @@ export async function saveDrawing(
   return res.json();
 }
 
+export async function updateDrawing(
+  symbol: string,
+  drawingId: string,
+  drawing: { tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe: string }
+): Promise<Drawing> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(drawing),
+  });
+  if (!res.ok) throw new Error("Update drawing failed");
+  return res.json();
+}
+
 export async function deleteDrawing(symbol: string, drawingId: string): Promise<void> {
   try {
     const headers = await authHeaders();
@@ -585,8 +627,8 @@ export type UpdateJournalEntry = {
   exit_reason?: string;
   mistakes?: string;
   lessons?: string;
-  stop_loss?: number;
-  target_price?: number;
+  stop_loss?: number | null;
+  target_price?: number | null;
   setup_type?: string;
   entry_reason?: string;
   status?: string;
@@ -953,6 +995,8 @@ export type PlaceOrderRequest = {
   target_price?: number;
   setup_type?:  string;
   notes?:       string;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual";
+  source_context?: string;
 };
 
 export type OrderResult = {
@@ -998,11 +1042,51 @@ export async function importZerodhaTrades(): Promise<{
 }
 
 export async function getBrokerStatus(): Promise<{
-  connected: boolean; broker: string | null; has_api_key: boolean; has_token: boolean; connected_at: string | null
+  connected: boolean;
+  broker: string | null;
+  mode: string;
+  has_api_key: boolean;
+  has_token: boolean;
+  token_expired: boolean;
+  connected_at: string | null;
+  token_expires_at: string | null;
 }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/broker/status`, { headers });
-  if (!res.ok) return { connected: false, broker: null, has_api_key: false, has_token: false, connected_at: null };
+  if (!res.ok) {
+    return {
+      connected: false,
+      broker: null,
+      mode: "simulated",
+      has_api_key: false,
+      has_token: false,
+      token_expired: false,
+      connected_at: null,
+      token_expires_at: null,
+    };
+  }
+  return res.json();
+}
+
+export type DataHealth = {
+  status: "healthy" | "degraded" | "stale";
+  latest_trade_date: string | null;
+  hours_since_refresh: number | null;
+  symbols_on_latest_date: number | null;
+  universe_active: number | null;
+  indicators_missing: {
+    rsi_14: number | null;
+    ema_200: number | null;
+  };
+  last_run: {
+    id: string | null;
+    errors: number | null;
+  };
+};
+
+export async function getDataHealth(): Promise<DataHealth | null> {
+  const res = await fetch(`${API}/api/v1/data/health`, { headers: publicHeaders });
+  if (!res.ok) return null;
   return res.json();
 }
 

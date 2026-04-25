@@ -18,27 +18,48 @@ type Props = {
   symbol:      string;
   currentPrice: number;
   defaultSide: "buy" | "sell";
+  initialPlan?: {
+    entry?: number | null;
+    stop?: number | null;
+    target?: number | null;
+  };
   onClose:     () => void;
   onFilled:    (result: OrderResult) => void;
 };
 
-export default function OrderModal({ symbol, currentPrice, defaultSide, onClose, onFilled }: Props) {
+export default function OrderModal({ symbol, currentPrice, defaultSide, initialPlan, onClose, onFilled }: Props) {
   const [side, setSide]             = useState<"buy" | "sell">(defaultSide);
   const [quantity, setQuantity]     = useState("1");
-  const [price, setPrice]           = useState(currentPrice.toFixed(2));
-  const [stopLoss, setStopLoss]     = useState("");
-  const [target, setTarget]         = useState("");
+  const [price, setPrice]           = useState((initialPlan?.entry ?? currentPrice).toFixed(2));
+  const [stopLoss, setStopLoss]     = useState(initialPlan?.stop != null ? initialPlan.stop.toFixed(2) : "");
+  const [target, setTarget]         = useState(initialPlan?.target != null ? initialPlan.target.toFixed(2) : "");
   const [setupType, setSetupType]   = useState("");
   const [notes, setNotes]           = useState("");
   const [placing, setPlacing]       = useState(false);
   const [error, setError]           = useState("");
   const [brokerName, setBrokerName] = useState<string | null>(null);
+  const [brokerLive, setBrokerLive] = useState(false);
+  const [brokerTokenExpired, setBrokerTokenExpired] = useState(false);
 
   useEffect(() => {
     getBrokerStatus()
-      .then(s => { if (s.connected && s.broker) setBrokerName(s.broker); })
+      .then(s => {
+        setBrokerLive(Boolean(s.connected && s.broker));
+        setBrokerTokenExpired(Boolean(s.token_expired));
+        if (s.broker) setBrokerName(s.broker);
+      })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setSide(defaultSide);
+  }, [defaultSide]);
+
+  useEffect(() => {
+    setPrice((initialPlan?.entry ?? currentPrice).toFixed(2));
+    setStopLoss(initialPlan?.stop != null ? initialPlan.stop.toFixed(2) : "");
+    setTarget(initialPlan?.target != null ? initialPlan.target.toFixed(2) : "");
+  }, [currentPrice, initialPlan?.entry, initialPlan?.stop, initialPlan?.target]);
 
   const priceNum = parseFloat(price) || 0;
   const slNum    = parseFloat(stopLoss) || 0;
@@ -64,6 +85,8 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, onClose,
         quantity: qtyNum,
         price:    priceNum,
         order_type: "market",
+        source_page: "chart",
+        source_context: symbol,
         ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
         ...(tgtNum > 0 ? { target_price: tgtNum } : {}),
         ...(setupType   ? { setup_type:  setupType } : {}),
@@ -236,9 +259,11 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, onClose,
           </button>
 
           <p className="text-[10px] text-[#ccc] text-center">
-            {brokerName
-              ? `Live order via ${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} — auto-recorded in your Journal`
-              : "Simulated order — auto-recorded in your Journal"}
+            {brokerLive && brokerName
+              ? `Live order via ${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} — auto-recorded in your Journal and ready for post-trade review`
+              : brokerTokenExpired
+                ? `Simulated order for now — your ${brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "broker"} token expired, so reconnect to go live again`
+                : "Simulated order — auto-recorded in your Journal and ready for post-trade review"}
           </p>
         </div>
       </div>

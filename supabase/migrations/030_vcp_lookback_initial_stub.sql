@@ -1,0 +1,19 @@
+-- ⚠️  STUB — DO NOT APPLY. Already applied to prod directly on 2026-04-21.
+--
+-- This file documents a migration that was applied to the production Supabase project
+-- (fyxltykqdvacbdgmeucf) directly via the MCP without a corresponding local file.
+-- It appears in prod migration history as:
+--   version: 20260421115213  name: vcp_lookback_function
+--
+-- The initial get_vcp_lookback() implementation was a first-pass CTE that
+-- was immediately followed by an optimisation pass (031) and then superseded
+-- entirely by the consolidated 029_vcp_lookback_rpc_function.sql which is the
+-- definitive version. The function currently in prod matches 029.
+--
+-- Do not run this against any database — the CREATE OR REPLACE would overwrite
+-- the optimised 029 version with the slower initial implementation.
+--
+-- This stub exists solely to close the local ↔ prod file count gap and to
+-- document the prod migration history accurately.
+
+-- (no executable SQL)

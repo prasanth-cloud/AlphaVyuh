@@ -95,8 +95,8 @@ class TestMarketFilter:
         assert _apply_market_filter("NSE", "NASDAQ") is False
 
 
-class TestRsRatingFilter:
-    """rs_rating is a new M3-A column — 1-99 Minervini relative strength scale."""
+class TestRsScoreFilter:
+    """rs_score is a new M3-A column — 1-99 relative strength scale."""
 
     def test_above_threshold_passes(self):
         assert _apply_numeric_filter(75, 70, None) is True
@@ -142,3 +142,26 @@ class TestVolumeRatioFallback:
     def test_db_zero_is_used_not_treated_as_null(self):
         result = _resolve_volume_ratio(db_value=0.0, volume=500_000, avg_vol=100_000)
         assert result == 0.0
+
+
+class TestVCPAsyncPass2:
+    """Structural tests for the async _run_vcp_pass2 — no DB required."""
+
+    def test_run_vcp_pass2_is_coroutine(self):
+        import asyncio
+        from app.routers.scanner import _run_vcp_pass2
+        assert asyncio.iscoroutinefunction(_run_vcp_pass2)
+
+    def test_vcp_concurrency_constant_in_safe_range(self):
+        from app.routers.scanner import VCP_CONCURRENCY
+        assert 1 <= VCP_CONCURRENCY <= 8, "concurrency cap should be between 1 and 8"
+
+    def test_empty_candidates_returns_immediately(self):
+        import asyncio
+        from pydantic import BaseModel
+
+        # Minimal ScanFilters stub — avoids importing DB-dependent modules
+        from app.routers.scanner import _run_vcp_pass2, ScanFilters
+        f = ScanFilters()
+        result = asyncio.run(_run_vcp_pass2(None, [], "2026-01-01", f))
+        assert result == []

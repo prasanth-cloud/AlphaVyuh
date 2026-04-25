@@ -11,21 +11,35 @@
 - `API` constant = `process.env.NEXT_PUBLIC_API_URL` — must be set in `.env.local`
 - Network errors from fire-and-forget calls (e.g. `deleteDrawing`) must be caught; unhandled promise rejections show as Next.js error overlays
 
-## Color palette (Tailwind inline styles)
-```
-#1c1c1a   dark text / headings
-#5b63f5   indigo accent (buttons, links, highlights)
-#26a65b   green (profit, success, bullish)
-#e5383b   red (loss, error, bearish)
-#f2f2f0   background
-```
-Use these as inline `style={{color: ...}}` or as Tailwind arbitrary values. Avoid inventing new colors.
+## Color palette — USE TOKENS, NOT HEX
+
+**The legacy hex values below are OUTDATED and must not be used in new code.** The current design system is governed by ADR 012 (`docs/decisions/012-design-system.md`). All colors are CSS custom properties in `frontend/app/design-tokens.css`, with Tailwind access via `ds-*` aliases.
+
+| Use case | Token | Tailwind class |
+|----------|-------|----------------|
+| Page background | `var(--surface-0)` | `bg-ds-bg` |
+| Panel / card background | `var(--surface-1)` | `bg-ds-surface` |
+| Input / nested background | `var(--surface-2)` | `bg-ds-surface2` |
+| Hover / selected state | `var(--surface-3)` | `bg-ds-surface3` |
+| Primary text | `var(--text-primary)` | `text-ds-t1` |
+| Secondary text | `var(--text-secondary)` | `text-ds-t2` |
+| Captions / headers | `var(--text-tertiary)` | `text-ds-t3` |
+| Brand accent (interactive only) | `var(--accent)` | `text-ds-accent` / `bg-ds-accent` |
+| Positive P&L | `var(--gain)` | `text-ds-gain` |
+| Negative P&L | `var(--loss)` | `text-ds-loss` |
+| Caution / plan limits | `var(--warn)` | `text-ds-warn` |
+| Panel border | `var(--border-default)` | `border-ds-border` |
+
+**Never write a hex value in a component file.** If a value can't be expressed as a `ds-*` class or `var(--)` CSS variable, it doesn't belong in the codebase — add it to `design-tokens.css` first.
+
+**Legacy values (do not use):** `#1c1c1a`, `#5b63f5`, `#26a65b`, `#e5383b`, `#f2f2f0`, `#888`, `#e2e2df`. These appear in older components and will be migrated in Phase 2B.
 
 ## Component conventions
-- Font: DM Sans via `--font-sans` CSS variable
-- Border radius: `rounded-[7px]` for inputs, `rounded-[10px]` for cards, `rounded-[8px]` for buttons
-- Cards: `bg-white border border-[#e2e2df] rounded-[10px] p-4`
-- Section labels: `text-[11px] font-semibold text-[#888] uppercase tracking-[0.5px]`
+- Font: **Inter** via `var(--font-sans)` CSS variable. DM Sans is deprecated.
+- All numeric data: `font-mono tabular-nums` (JetBrains Mono, `var(--font-mono)`)
+- Border radius: `rounded-ds-md` (6px) for inputs/buttons, `rounded-ds-lg` (8px) for cards/panels
+- Cards: `bg-ds-surface border border-ds-border rounded-ds-lg p-3` (padding 12px, **not** p-4/16px)
+- Section labels in tables: `text-[11px] font-semibold text-ds-t3 uppercase tracking-[0.06em]`
 - No emoji in UI unless explicitly requested
 
 ## Entitlements on frontend

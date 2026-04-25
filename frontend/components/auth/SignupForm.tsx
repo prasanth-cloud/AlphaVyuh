@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,31 +35,36 @@ export default function SignupForm() {
     }
 
     setLoading(true);
-    const supabase = createClient();
-    const { data, error: err } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: { data: { full_name: form.full_name } },
-    });
-    setLoading(false);
-
-    if (err) {
-      if (err.message.toLowerCase().includes("already")) {
-        setError("Email already in use. Please log in instead.");
-      } else {
-        setError(err.message);
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.email.trim().toLowerCase(),
+          password: form.password,
+          full_name: form.full_name,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.error?.toLowerCase().includes("already")) {
+          setError("Email already in use. Please log in instead.");
+        } else {
+          setError(data.error || "Signup failed");
+        }
+        return;
       }
-      return;
-    }
-
-    // If email confirmation is disabled, Supabase returns a session immediately
-    if (data.session) {
+      if (data.pending_confirmation) {
+        setDone(true);
+        return;
+      }
       const next = new URLSearchParams(window.location.search).get("next");
-      window.location.replace(isSafeRedirect(next) ? next : "/dashboard");
-      return;
+      window.location.replace(isSafeRedirect(next) ? next! : "/dashboard");
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setDone(true);
   }
 
   if (done) {

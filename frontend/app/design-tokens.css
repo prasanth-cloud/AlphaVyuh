@@ -7,41 +7,42 @@
   /* ── COLOR ─────────────────────────────────────────────────────────────── */
 
   /* Surface hierarchy (darkest to lightest) */
-  --surface-0:      #0B0D11;   /* page background */
-  --surface-1:      #12151C;   /* panels, cards */
-  --surface-2:      #1A1E27;   /* nested elements, hover */
-  --surface-3:      #232833;   /* active, selected */
-  --surface-float:  #1E222C;   /* dropdowns, modals */
+  --surface-0:      #040507;   /* page background */
+  --surface-1:      #0A0D12;   /* panels, cards */
+  --surface-2:      #11161D;   /* nested elements, hover */
+  --surface-3:      #191F28;   /* active, selected */
+  --surface-float:  #0D1118;   /* dropdowns, modals */
 
   /* Borders — all use alpha on white to stay adaptive */
   --border-subtle:   rgba(255, 255, 255, 0.06);
   --border-default:  rgba(255, 255, 255, 0.09);
   --border-strong:   rgba(255, 255, 255, 0.14);
-  --border-focus:    rgba(86, 215, 193, 0.40);
+  --border-focus:    rgba(214, 223, 232, 0.34);
 
   /* Text (4 levels — don't add more) */
-  --text-primary:    #F5F3EE;   /* headlines, primary data */
-  --text-secondary:  #CAC4B8;   /* body, secondary data */
-  --text-tertiary:   #9F988C;   /* labels, captions */
-  --text-disabled:   #6F6A61;
+  --text-primary:    #F4F7FB;   /* headlines, primary data */
+  --text-secondary:  #BAC4D1;   /* body, secondary data */
+  --text-tertiary:   #7A8695;   /* labels, captions */
+  --text-disabled:   #596372;
 
   /* Brand — single accent */
-  --accent:          #56D7C1;   /* the one color that says "AlphaVyuh" */
-  --accent-hover:    #6FE3CF;
-  --accent-subtle:   rgba(86, 215, 193, 0.10);
-  --accent-muted:    rgba(86, 215, 193, 0.18);
-  --accent-glow:     rgba(86, 215, 193, 0.28);
-  --accent-strong:   #8CF0E1;
+  --accent:          #D6DFE8;   /* monochrome focus accent */
+  --accent-hover:    #E7EDF4;
+  --accent-subtle:   rgba(214, 223, 232, 0.08);
+  --accent-muted:    rgba(214, 223, 232, 0.14);
+  --accent-glow:     rgba(214, 223, 232, 0.18);
+  --accent-strong:   #F2F6FA;
+  --text-on-accent:  #06080B;   /* text on --accent background */
 
   /* Semantic — P&L ONLY. Never decorative. */
-  --gain:            #2DB574;
+  --gain:            #2CCD7D;
   --gain-subtle:     rgba(45, 181, 116, 0.10);
-  --loss:            #E15560;
+  --loss:            #FF616F;
   --loss-subtle:     rgba(225, 85, 96, 0.10);
-  --warn:            #E8A33B;
+  --warn:            #F0B44A;
   --warn-subtle:     rgba(232, 163, 59, 0.10);
-  --info:            #5A8BE8;
-  --info-subtle:     rgba(90, 139, 232, 0.10);
+  --info:            #A7B6C8;
+  --info-subtle:     rgba(167, 182, 200, 0.10);
 
   /* ── TYPOGRAPHY ────────────────────────────────────────────────────────── */
 
@@ -108,7 +109,8 @@
   --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.32);
   --shadow-modal:    0 12px 40px rgba(0, 0, 0, 0.48);
   --shadow-panel:    0 24px 60px rgba(0, 0, 0, 0.32);
-  --shadow-glow:     0 0 0 1px rgba(86, 215, 193, 0.07), 0 18px 48px rgba(0, 0, 0, 0.32);
+  --overlay:         rgba(0, 0, 0, 0.60);   /* modal/drawer backdrop */
+  --shadow-glow:     0 0 0 1px rgba(214, 223, 232, 0.06), 0 18px 48px rgba(0, 0, 0, 0.32);
 
   /* ── LAYOUT ────────────────────────────────────────────────────────────── */
 

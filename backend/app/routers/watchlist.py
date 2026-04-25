@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
+from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/watchlists", tags=["watchlists"])
@@ -33,12 +35,9 @@ def _enrich_items(client, items: list) -> list:
 
     symbols = [i["symbol"] for i in items]
 
-    # Get latest trade date
-    date_res = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
-    if not date_res.data:
+    latest_date = get_latest_complete_trade_date(client)
+    if not latest_date:
         return [{**item, "close": None, "pct_change": None, "volume_ratio": None, "rsi_14": None} for item in items]
-
-    latest_date = date_res.data[0]["trade_date"]
 
     # Fetch quotes for all symbols
     quotes_res = client.table("daily_ohlcv") \
@@ -91,21 +90,26 @@ async def get_watchlists(user_id: str = Depends(get_current_user_id)):
     wl_ids = [wl["id"] for wl in watchlists]
 
     # 2 – all items across all watchlists in ONE query
-    items_res = client.table("watchlist_items") \
-        .select("watchlist_id, symbol, sort_order, added_at") \
-        .in_("watchlist_id", wl_ids) \
-        .order("sort_order") \
-        .execute()
+    try:
+        items_res = client.table("watchlist_items") \
+            .select("watchlist_id, symbol, sort_order, added_at, pinned, tags, note") \
+            .in_("watchlist_id", wl_ids) \
+            .order("sort_order") \
+            .execute()
+    except Exception:
+        items_res = client.table("watchlist_items") \
+            .select("watchlist_id, symbol, sort_order, added_at") \
+            .in_("watchlist_id", wl_ids) \
+            .order("sort_order") \
+            .execute()
     all_items = items_res.data or []
 
-    # 3 – latest trade date (once)
+    # 3 – latest complete trade date (once)
     quote_map: dict = {}
     all_symbols = list({item["symbol"] for item in all_items})
     if all_symbols:
-        date_res = client.table("daily_ohlcv") \
-            .select("trade_date").order("trade_date", desc=True).limit(1).execute()
-        if date_res.data:
-            latest_date = date_res.data[0]["trade_date"]
+        latest_date = get_latest_complete_trade_date(client)
+        if latest_date:
             # 4 – quotes for ALL symbols in ONE query
             quotes_res = client.table("daily_ohlcv") \
                 .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14,"
@@ -134,7 +138,13 @@ async def get_watchlists(user_id: str = Depends(get_current_user_id)):
     items_by_wl: dict = {}
     for item in all_items:
         wid = item["watchlist_id"]
-        items_by_wl.setdefault(wid, []).append({**item, **quote_map.get(item["symbol"], {})})
+        items_by_wl.setdefault(wid, []).append({
+            **item,
+            "pinned": bool(item.get("pinned", False)),
+            "tags": item.get("tags") or [],
+            "note": item.get("note"),
+            **quote_map.get(item["symbol"], {}),
+        })
 
     for wl in watchlists:
         wl["items"] = items_by_wl.get(wl["id"], [])
@@ -255,3 +265,60 @@ async def reorder_items(
             .eq("symbol", item.symbol.upper()) \
             .execute()
     return {"message": "Reordered"}
+
+
+class UpdateItemMetadataRequest(BaseModel):
+    pinned: bool | None = None
+    tags: list[str] | None = Field(default=None, max_length=6)
+    note: str | None = None
+
+
+@router.patch("/{watchlist_id}/items/{symbol}/metadata")
+async def update_item_metadata(
+    watchlist_id: UUID,
+    symbol: str,
+    body: UpdateItemMetadataRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    client = get_admin_client()
+    _verify_watchlist_ownership(client, str(watchlist_id), user_id)
+
+    existing = client.table("watchlist_items") \
+        .select("symbol") \
+        .eq("watchlist_id", str(watchlist_id)) \
+        .eq("symbol", symbol.upper()) \
+        .execute()
+    if not existing.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Watchlist item not found")
+
+    payload: dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.pinned is not None:
+        payload["pinned"] = body.pinned
+    if body.tags is not None:
+        normalized_tags: list[str] = []
+        seen: set[str] = set()
+        for raw in body.tags:
+            clean = raw.strip().lower()
+            if not clean or clean in seen:
+                continue
+            normalized_tags.append(clean[:24])
+            seen.add(clean)
+        payload["tags"] = normalized_tags[:6]
+    if body.note is not None:
+        cleaned_note = body.note.strip()
+        payload["note"] = cleaned_note[:280] if cleaned_note else None
+
+    try:
+        result = client.table("watchlist_items") \
+            .update(payload) \
+            .eq("watchlist_id", str(watchlist_id)) \
+            .eq("symbol", symbol.upper()) \
+            .execute()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Watchlist metadata fields are not available yet"
+        ) from exc
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to update watchlist item")
+    return result.data[0]

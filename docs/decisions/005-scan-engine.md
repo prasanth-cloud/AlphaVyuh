@@ -33,7 +33,7 @@ universe on-demand and on a daily schedule after market close.
 **The scan DSL filters divide into two classes:**
 
 *Single-day filters* operate on the precomputed row for a given symbol and date:
-`price_above_ma`, `rs_rating_min`, `distance_from_52w_high/low`, `all_emas_bullish`,
+`price_above_ma`, `rs_score_min`, `distance_from_52w_high/low`, `all_emas_bullish`,
 `rsi_min/max`, `volume_ratio_min`, `pct_change_min`, `ma_stack`.
 
 *Multi-day filters* require a time window — N recent rows per symbol:
