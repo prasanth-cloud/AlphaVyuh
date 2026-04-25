@@ -1,6 +1,34 @@
 import { createClient } from './supabase/client'
+import {
+  mockCandles,
+  mockIndicators,
+  mockJournalAnalytics,
+  mockJournalEntries,
+  mockJournalStats,
+  mockLiveQuote,
+  mockMarketMovers,
+  mockMarketOverview,
+  mockMarketSummary,
+  mockPortfolio,
+  mockPriceAlerts,
+  mockQuote,
+  mockRunScan,
+  mockSearchSymbols,
+  mockSectorBreadth,
+  mockWatchlists,
+} from './mock-data'
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
+const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
+export const isMockMode =
+  !forceLiveData &&
+  (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
+    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
+    process.env.NODE_ENV === "development");
+
+function shouldUseMockFallback(): boolean {
+  return isMockMode;
+}
 
 async function getToken(): Promise<string | null> {
   try {
@@ -61,6 +89,14 @@ export type ScanResult = {
   delivery_pct?: number | null;
   is_new_52w_high?: boolean;
   is_inside_bar?: boolean;
+  rs_score?: number | null;
+  market_cap_cr?: number | null;
+  pe_ratio?: number | null;
+  pb_ratio?: number | null;
+  eps?: number | null;
+  dividend_yield?: number | null;
+  roe?: number | null;
+  roce?: number | null;
 };
 
 export type ScanFilters = {
@@ -192,6 +228,7 @@ export async function runScan(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _limit?: number   // limit is enforced server-side by plan
 ): Promise<ScanResponse> {
+  if (shouldUseMockFallback()) return mockRunScan();
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/scanner/run`, {
     method: "POST",
@@ -231,11 +268,16 @@ export async function deleteScreen(id: string): Promise<void> {
 }
 
 export async function getWatchlists(): Promise<Watchlist[]> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/watchlists`, { headers });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.watchlists ?? [];
+  if (shouldUseMockFallback()) return mockWatchlists();
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/watchlists`, { headers });
+    if (!res.ok) return shouldUseMockFallback() ? mockWatchlists() : [];
+    const data = await res.json();
+    return data.watchlists ?? [];
+  } catch {
+    return shouldUseMockFallback() ? mockWatchlists() : [];
+  }
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
@@ -314,16 +356,26 @@ export async function updateWatchlistItemMetadata(
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
-  const res = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
-  if (!res.ok) return null;
-  return res.json();
+  if (shouldUseMockFallback()) return mockMarketSummary();
+  try {
+    const res = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
+    if (!res.ok) return shouldUseMockFallback() ? mockMarketSummary() : null;
+    return res.json();
+  } catch {
+    return shouldUseMockFallback() ? mockMarketSummary() : null;
+  }
 }
 
 export async function getQuote(symbol: string): Promise<ScanResult | null> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/stocks/${symbol}/quote`, { headers });
-  if (!res.ok) return null;
-  return res.json();
+  if (shouldUseMockFallback()) return mockQuote(symbol);
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/stocks/${symbol}/quote`, { headers });
+    if (!res.ok) return shouldUseMockFallback() ? mockQuote(symbol) : null;
+    return res.json();
+  } catch {
+    return shouldUseMockFallback() ? mockQuote(symbol) : null;
+  }
 }
 
 export type LiveQuote = {
@@ -343,10 +395,15 @@ export type LiveQuote = {
 };
 
 export async function getQuoteLive(symbol: string): Promise<LiveQuote | null> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/stocks/${symbol}/quote-live`, { headers });
-  if (!res.ok) return null;
-  return res.json();
+  if (shouldUseMockFallback()) return mockLiveQuote(symbol);
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/stocks/${symbol}/quote-live`, { headers });
+    if (!res.ok) return shouldUseMockFallback() ? mockLiveQuote(symbol) : null;
+    return res.json();
+  } catch {
+    return shouldUseMockFallback() ? mockLiveQuote(symbol) : null;
+  }
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────────
@@ -423,14 +480,23 @@ export async function getCandles(
   symbol: string,
   params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
 ): Promise<CandlesResponse> {
+  if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
   const qs = new URLSearchParams();
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.timeframe) qs.set("timeframe", params.timeframe);
-  const res = await fetch(`${API}/api/v1/charts/${symbol}/candles?${qs}`, { headers: publicHeaders });
-  if (!res.ok) throw new Error(`No data for ${symbol}`);
-  return res.json();
+  try {
+    const res = await fetch(`${API}/api/v1/charts/${symbol}/candles?${qs}`, { headers: publicHeaders });
+    if (!res.ok) {
+      if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
+      throw new Error(`No data for ${symbol}`);
+    }
+    return res.json();
+  } catch (error) {
+    if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
+    throw error;
+  }
 }
 
 export async function getIndicators(
@@ -438,12 +504,21 @@ export async function getIndicators(
   indicators: string[],
   timeframe = "D"
 ): Promise<IndicatorsResponse> {
-  const res = await fetch(
-    `${API}/api/v1/charts/${symbol}/indicators?indicators=${indicators.join(",")}&timeframe=${timeframe}`,
-    { headers: publicHeaders }
-  );
-  if (!res.ok) throw new Error("Indicator fetch failed");
-  return res.json();
+  if (shouldUseMockFallback()) return mockIndicators(symbol);
+  try {
+    const res = await fetch(
+      `${API}/api/v1/charts/${symbol}/indicators?indicators=${indicators.join(",")}&timeframe=${timeframe}`,
+      { headers: publicHeaders }
+    );
+    if (!res.ok) {
+      if (shouldUseMockFallback()) return mockIndicators(symbol);
+      throw new Error("Indicator fetch failed");
+    }
+    return res.json();
+  } catch (error) {
+    if (shouldUseMockFallback()) return mockIndicators(symbol);
+    throw error;
+  }
 }
 
 export type MarketMover = {
@@ -462,6 +537,7 @@ export type MarketMovers = {
 };
 
 export async function getMarketMovers(): Promise<MarketMovers | null> {
+  if (shouldUseMockFallback()) return mockMarketMovers();
   const res = await fetch(`${API}/api/v1/market/movers`, { headers: publicHeaders });
   if (!res.ok) return null;
   return res.json();
@@ -478,12 +554,14 @@ export type SectorBreadthItem = {
 };
 
 export async function getSectorBreadth(): Promise<{ trade_date: string; sectors: SectorBreadthItem[] } | null> {
+  if (shouldUseMockFallback()) return mockSectorBreadth();
   const res = await fetch(`${API}/api/v1/market/sector-breadth`, { headers: publicHeaders });
   if (!res.ok) return null;
   return res.json();
 }
 
 export async function getSectors(): Promise<string[]> {
+  if (shouldUseMockFallback()) return mockSectorBreadth().sectors.map((s) => s.sector);
   const res = await fetch(`${API}/api/v1/market/sectors`, { headers: publicHeaders });
   if (!res.ok) return [];
   const data = await res.json();
@@ -491,17 +569,27 @@ export async function getSectors(): Promise<string[]> {
 }
 
 export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
-  const res = await fetch(`${API}/api/v1/charts/search?q=${encodeURIComponent(q)}`, { headers: publicHeaders });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.results ?? [];
+  if (shouldUseMockFallback()) return mockSearchSymbols(q);
+  try {
+    const res = await fetch(`${API}/api/v1/charts/search?q=${encodeURIComponent(q)}`, { headers: publicHeaders });
+    if (!res.ok) return shouldUseMockFallback() ? mockSearchSymbols(q) : [];
+    const data = await res.json();
+    return data.results ?? [];
+  } catch {
+    return shouldUseMockFallback() ? mockSearchSymbols(q) : [];
+  }
 }
 
 export async function getDrawings(symbol: string, timeframe = "D"): Promise<Drawing[]> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings?timeframe=${timeframe}`, { headers });
-  if (!res.ok) return [];
-  return res.json();
+  if (shouldUseMockFallback()) return [];
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings?timeframe=${timeframe}`, { headers });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
 }
 
 export async function saveDrawing(
@@ -550,10 +638,15 @@ export async function deleteDrawing(symbol: string, drawingId: string): Promise<
 }
 
 export async function getChartLayout(symbol: string): Promise<ChartLayout> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/charts/${symbol}/layout`, { headers });
-  if (!res.ok) return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
-  return res.json();
+  if (shouldUseMockFallback()) return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/charts/${symbol}/layout`, { headers });
+    if (!res.ok) return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
+    return res.json();
+  } catch {
+    return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
+  }
 }
 
 export async function saveChartLayout(symbol: string, layout: Omit<ChartLayout, "symbol">): Promise<ChartLayout> {
@@ -637,6 +730,7 @@ export type UpdateJournalEntry = {
 export async function getJournalEntries(
   params?: { limit?: number; offset?: number; status?: string; symbol?: string }
 ): Promise<{ entries: JournalEntry[]; total: number; plan?: string; history_months?: number | null }> {
+  if (shouldUseMockFallback()) return mockJournalEntries();
   const headers = await authHeaders();
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
@@ -649,6 +743,7 @@ export async function getJournalEntries(
 }
 
 export async function getJournalStats(): Promise<JournalStats> {
+  if (shouldUseMockFallback()) return mockJournalStats();
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/journal/stats`, { headers });
   if (!res.ok) return {
@@ -712,6 +807,7 @@ export type JournalAnalytics = {
 };
 
 export async function getJournalAnalytics(): Promise<JournalAnalytics> {
+  if (shouldUseMockFallback()) return mockJournalAnalytics();
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
   if (!res.ok) return { equity_curve: [], setup_breakdown: [], monthly_pnl: [], drawdown_curve: [], max_drawdown: null, longest_dd_days: 0, recovery_factor: null, profit_factor: null };
@@ -751,10 +847,15 @@ export type PlanStatus = {
 };
 
 export async function getPlanStatus(): Promise<PlanStatus> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/payments/status`, { headers });
-  if (!res.ok) return { plan: "free", expires_at: null, active: false };
-  return res.json();
+  if (shouldUseMockFallback()) return { plan: "free", expires_at: null, active: false };
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/payments/status`, { headers });
+    if (!res.ok) return { plan: "free", expires_at: null, active: false };
+    return res.json();
+  } catch {
+    return { plan: "free", expires_at: null, active: false };
+  }
 }
 
 export async function createPaymentOrder(
@@ -814,6 +915,13 @@ export async function getPlanPrices(currency: "INR" | "USD" = "INR"): Promise<Pl
 }
 
 export async function analyseJournal(): Promise<{ analysis: string; trades_analysed: number; disclaimer?: string }> {
+  if (shouldUseMockFallback()) {
+    return {
+      analysis: "Your strongest trades came from planned breakout and pullback setups. Keep position sizing consistent, journal the invalidation level before entry, and avoid adding risk after the first failed confirmation.",
+      trades_analysed: 24,
+      disclaimer: "Mock analysis for local demo mode.",
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/ai/analyse`, { method: "POST", headers });
   if (!res.ok) {
@@ -1051,9 +1159,7 @@ export async function getBrokerStatus(): Promise<{
   connected_at: string | null;
   token_expires_at: string | null;
 }> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/broker/status`, { headers });
-  if (!res.ok) {
+  if (shouldUseMockFallback()) {
     return {
       connected: false,
       broker: null,
@@ -1065,7 +1171,34 @@ export async function getBrokerStatus(): Promise<{
       token_expires_at: null,
     };
   }
-  return res.json();
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/broker/status`, { headers });
+    if (!res.ok) {
+      return {
+        connected: false,
+        broker: null,
+        mode: "simulated",
+        has_api_key: false,
+        has_token: false,
+        token_expired: false,
+        connected_at: null,
+        token_expires_at: null,
+      };
+    }
+    return res.json();
+  } catch {
+    return {
+      connected: false,
+      broker: null,
+      mode: "simulated",
+      has_api_key: false,
+      has_token: false,
+      token_expired: false,
+      connected_at: null,
+      token_expires_at: null,
+    };
+  }
 }
 
 export type DataHealth = {
@@ -1103,6 +1236,20 @@ export type AiPatterns = {
 };
 
 export async function getAiPatterns(): Promise<AiPatterns> {
+  if (shouldUseMockFallback()) {
+    return {
+      ready: true,
+      total_trades: 24,
+      trades_available: 24,
+      min_trades_required: 10,
+      avg_hold_winners: 8,
+      avg_hold_losers: 4,
+      by_direction: [
+        { direction: "long", trades: 18, wins: 12, win_rate: 66.7, total_pnl: 58400 },
+        { direction: "short", trades: 6, wins: 3, win_rate: 50, total_pnl: 10020 },
+      ],
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/ai/patterns`, { headers });
   if (!res.ok) return { ready: false };
@@ -1139,12 +1286,21 @@ export async function getCandlesLive(
   symbol: string,
   params?: { limit?: number; timeframe?: string }
 ): Promise<CandlesResponse> {
+  if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.timeframe) qs.set("timeframe", params.timeframe);
-  const res = await fetch(`${API}/api/v1/charts/${symbol}/candles-live?${qs}`, { headers: publicHeaders });
-  if (!res.ok) throw new Error(`No live data for ${symbol}`);
-  return res.json();
+  try {
+    const res = await fetch(`${API}/api/v1/charts/${symbol}/candles-live?${qs}`, { headers: publicHeaders });
+    if (!res.ok) {
+      if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
+      throw new Error(`No live data for ${symbol}`);
+    }
+    return res.json();
+  } catch (error) {
+    if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
+    throw error;
+  }
 }
 
 // ── Price alerts ─────────────────────────────────────────────────────────────
@@ -1161,11 +1317,16 @@ export type PriceAlert = {
 };
 
 export async function getPriceAlerts(): Promise<PriceAlert[]> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
-  if (!res.ok) return [];
-  const d = await res.json();
-  return d.alerts ?? [];
+  if (shouldUseMockFallback()) return mockPriceAlerts();
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
+    if (!res.ok) return shouldUseMockFallback() ? mockPriceAlerts() : [];
+    const d = await res.json();
+    return d.alerts ?? [];
+  } catch {
+    return shouldUseMockFallback() ? mockPriceAlerts() : [];
+  }
 }
 
 export async function createPriceAlert(
@@ -1221,10 +1382,19 @@ export type PortfolioResponse = {
 };
 
 export async function getPortfolio(): Promise<PortfolioResponse> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/journal/portfolio`, { headers });
-  if (!res.ok) throw new Error("Failed to load portfolio");
-  return res.json();
+  if (shouldUseMockFallback()) return mockPortfolio();
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/journal/portfolio`, { headers });
+    if (!res.ok) {
+      if (shouldUseMockFallback()) return mockPortfolio();
+      throw new Error("Failed to load portfolio");
+    }
+    return res.json();
+  } catch (error) {
+    if (shouldUseMockFallback()) return mockPortfolio();
+    throw error;
+  }
 }
 
 // ── Backtest ──────────────────────────────────────────────────────────────────
@@ -1365,6 +1535,7 @@ export interface MarketOverview {
 }
 
 export async function getMarketOverview(): Promise<MarketOverview> {
+  if (shouldUseMockFallback()) return mockMarketOverview();
   const headers = await authHeaders();
   // Try new comprehensive endpoint first; fall back to legacy summary if not deployed yet
   const res = await fetch(`${API}/api/v1/market/overview`, { headers });
@@ -1422,6 +1593,15 @@ export async function getScannerPresets(): Promise<ScanPreset[]> {
 }
 
 export async function runScanner(filters: Record<string, unknown>, sort_by = "volume_ratio", sort_order = "desc"): Promise<{ trade_date: string; total_matches: number; plan: string; results: ScanResult[] }> {
+  if (shouldUseMockFallback()) {
+    const data = mockRunScan();
+    return {
+      trade_date: data.trade_date,
+      total_matches: data.total_matches,
+      plan: data.plan ?? "mock",
+      results: data.results,
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/scanner/run`, {
     method: "POST",

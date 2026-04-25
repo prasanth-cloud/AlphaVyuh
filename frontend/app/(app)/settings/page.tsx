@@ -39,7 +39,7 @@ export default function SettingsPage() {
     <Suspense fallback={
       <div className="min-h-full flex items-center justify-center py-20" style={{ background: "var(--app-bg)" }}>
         <div className="w-6 h-6 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+          style={{ borderColor: "#f4f7fb", borderTopColor: "transparent" }} />
       </div>
     }>
       <SettingsContent />
@@ -92,7 +92,7 @@ const PLAN_META: { id: PlanId; label: string; color: string; accentBg: string; f
     ],
   },
   {
-    id: "pro", label: "Pro", color: "#5b63f5", accentBg: "rgba(91,99,245,0.12)",
+    id: "pro", label: "Pro", color: "#f4f7fb", accentBg: "rgba(139,150,166,0.12)",
     features: [
       "Scanner — 500 results, unlimited",
       "Unlimited saved screens",
@@ -298,7 +298,7 @@ function SettingsContent() {
           description: order.label,
           order_id: order.order_id,
           prefill: { name: userName, email: userEmail },
-          theme: { color: planId === "pro" ? "#5b63f5" : "#d97706" },
+          theme: { color: planId === "pro" ? "#f4f7fb" : "#d97706" },
           handler: async (response: Record<string, string>) => {
             try {
               await verifyPayment({
@@ -378,7 +378,7 @@ function SettingsContent() {
               onClick={() => setTab(t.id)}
               className="px-4 py-2.5 text-[13px] font-medium transition-colors rounded-full border"
               style={tab === t.id
-                ? { borderColor: "rgba(86,215,193,0.16)", color: "var(--text-primary)", background: "rgba(255,255,255,0.05)" }
+                ? { borderColor: "rgba(244,247,251,0.16)", color: "var(--text-primary)", background: "rgba(255,255,255,0.05)" }
                 : { borderColor: "transparent", color: "var(--text-tertiary)", background: "transparent" }}
             >
               {t.label}
@@ -458,7 +458,7 @@ function SettingsContent() {
                   onClick={saveProfile}
                   disabled={saving}
                   className="px-5 py-2.5 text-white text-[13px] font-medium rounded-[8px] transition-opacity disabled:opacity-50"
-                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}
+                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}
                 >
                   {saving ? "Saving..." : "Save changes"}
                 </button>
@@ -555,7 +555,7 @@ function SettingsContent() {
                           onClick={handleZerodhaConnect}
                           disabled={connectingZerodha}
                           className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold transition-opacity disabled:opacity-50"
-                          style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}
+                          style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}
                         >
                           {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
                         </button>
@@ -573,7 +573,7 @@ function SettingsContent() {
                       onClick={saveBroker}
                       disabled={savingBroker}
                       className="px-4 py-2 rounded-[8px] text-[13px] font-medium transition-opacity disabled:opacity-50"
-                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}
+                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}
                     >
                       {savingBroker ? "Saving..." : "Save"}
                     </button>
@@ -590,7 +590,7 @@ function SettingsContent() {
         <div className="max-w-[900px]">
           {billingLoading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+              <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#f4f7fb", borderTopColor: "transparent" }} />
             </div>
           ) : (
             <>
@@ -730,7 +730,7 @@ function SettingsContent() {
                   </div>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 font-mono text-[14px] font-bold tracking-wider px-4 py-2.5 rounded-[8px]"
-                      style={{ background: "rgba(91,99,245,0.12)", border: "1px solid rgba(91,99,245,0.25)", color: "#5b63f5" }}>
+                      style={{ background: "rgba(139,150,166,0.12)", border: "1px solid rgba(139,150,166,0.25)", color: "#f4f7fb" }}>
                       {referralCode}
                     </code>
                     <button

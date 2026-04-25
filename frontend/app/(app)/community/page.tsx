@@ -92,14 +92,14 @@ export default function CommunityPage() {
           <div className="text-[13px] text-red-400 py-8">{error}</div>
         ) : sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <div className="w-14 h-14 rounded-full bg-[#eeeffe] flex items-center justify-center">
-              <ThumbsUp size={22} className="text-[#5b63f5]" />
+            <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
+              <ThumbsUp size={22} className="text-[#f4f7fb]" />
             </div>
             <div className="text-[15px] font-semibold text-[#555]">No shared screens yet</div>
             <div className="text-[13px] text-[#aaa] text-center max-w-xs">
               Be the first to share a scan strategy with the community.
               Go to the{" "}
-              <Link href="/scanner" className="text-[#5b63f5] hover:underline font-medium">Scanner</Link>
+              <Link href="/scanner" className="text-[#f4f7fb] hover:underline font-medium">Scanner</Link>
               {" "}and save a screen to share it here.
             </div>
           </div>
@@ -159,13 +159,13 @@ export default function CommunityPage() {
                 <button
                   onClick={() => handleUpvote(screen)}
                   disabled={voting === screen.id}
-                  className="flex flex-col items-center gap-1 px-3 py-2 rounded-[10px] border border-[#e2e2df] hover:border-[#5b63f5] hover:bg-[#eeeffe] transition-colors group shrink-0 disabled:opacity-50"
+                  className="flex flex-col items-center gap-1 px-3 py-2 rounded-[10px] border border-[#e2e2df] hover:border-[#f4f7fb] hover:bg-white/10 transition-colors group shrink-0 disabled:opacity-50"
                 >
                   <ThumbsUp
                     size={15}
-                    className="text-[#aaa] group-hover:text-[#5b63f5] transition-colors"
+                    className="text-[#aaa] group-hover:text-[#f4f7fb] transition-colors"
                   />
-                  <span className="text-[12px] font-bold text-[#888] group-hover:text-[#5b63f5]">
+                  <span className="text-[12px] font-bold text-[#888] group-hover:text-[#f4f7fb]">
                     {screen.upvotes}
                   </span>
                 </button>
@@ -176,7 +176,7 @@ export default function CommunityPage() {
 
         <div className="mt-6 text-center text-[11px] text-[#aaa]">
           Want to share a screen?{" "}
-          <Link href="/scanner" className="text-[#5b63f5] hover:underline">Go to Scanner</Link>
+          <Link href="/scanner" className="text-[#f4f7fb] hover:underline">Go to Scanner</Link>
           {" "}→ save a filter set → Share to Community
         </div>
       </div>

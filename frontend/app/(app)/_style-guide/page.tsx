@@ -240,7 +240,7 @@ export default function StyleGuidePage() {
             { name: "--surface-float", value: "#1E222C", swatch: "#1E222C" },
             { name: "--border-subtle", value: "rgba(255,255,255,0.06)", swatch: "rgba(255,255,255,0.06)" },
             { name: "--border-default", value: "rgba(255,255,255,0.09)", swatch: "rgba(255,255,255,0.09)" },
-            { name: "--border-focus", value: "rgba(86,215,193,0.40)", swatch: "rgba(86,215,193,0.40)" },
+            { name: "--border-focus", value: "rgba(244,247,251,0.40)", swatch: "rgba(244,247,251,0.40)" },
           ].map(t => <Token key={t.name} {...t} />)}
         </div>
       </Section>

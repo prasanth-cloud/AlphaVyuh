@@ -37,7 +37,7 @@ function BrokerCallbackContent() {
         {status === "loading" && (
           <>
             <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4"
-              style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+              style={{ borderColor: "#f4f7fb", borderTopColor: "transparent" }} />
             <p className="text-[14px]" style={{ color: "var(--app-text2)" }}>Connecting Zerodha…</p>
           </>
         )}
@@ -58,7 +58,7 @@ function BrokerCallbackContent() {
             <button
               onClick={() => router.replace("/settings?tab=profile")}
               className="px-4 py-2 rounded-[8px] text-[13px] font-semibold"
-              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)" }}>
+              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}>
               Back to Settings
             </button>
           </>
@@ -73,7 +73,7 @@ export default function BrokerCallbackPage() {
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
         <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+          style={{ borderColor: "#f4f7fb", borderTopColor: "transparent" }} />
       </div>
     }>
       <BrokerCallbackContent />

@@ -98,7 +98,7 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-[12px] text-[#666]">Vol Ratio</span>
-            <span className="text-[12px] font-medium tabular-nums" style={{ color: "#7c6af0" }}>
+            <span className="text-[12px] font-medium tabular-nums" style={{ color: "#d6dce5" }}>
               {stock.volume_ratio != null ? `${stock.volume_ratio.toFixed(2)}x` : "—"}
             </span>
           </div>
@@ -117,7 +117,7 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
           <div className="text-[10px] uppercase tracking-[0.4px] text-[#aaa] mb-2 font-medium">52-Week Range</div>
           <div className="relative h-[3px] bg-[#f0f0ee] rounded-full mx-1 my-3">
             <div
-              className="absolute h-[3px] bg-[#5b63f5] rounded-full"
+              className="absolute h-[3px] bg-[#f4f7fb] rounded-full"
               style={{ width: `${Math.min(100, Math.max(0, w52pct ?? 0))}%` }}
             />
             <div
@@ -189,7 +189,7 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
         )}
         <a
           href={`/charts/${stock.symbol}`}
-          className="block w-full py-2 rounded-[7px] border border-[#e2e2df] text-[13px] text-[#666] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors text-center"
+          className="block w-full py-2 rounded-[7px] border border-[#e2e2df] text-[13px] text-[#666] hover:border-[#f4f7fb] hover:text-[#f4f7fb] transition-colors text-center"
         >
           View chart →
         </a>

@@ -120,14 +120,14 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#0D0F14" },
-        textColor: "rgba(255,255,255,0.5)",
+        background: { type: ColorType.Solid, color: "#040507" },
+        textColor: "rgba(244,247,251,0.55)",
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.04)", style: 1 },
-        horzLines: { color: "rgba(255,255,255,0.04)", style: 1 },
+        vertLines: { color: "rgba(255,255,255,0.045)", style: 1 },
+        horzLines: { color: "rgba(255,255,255,0.045)", style: 1 },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
@@ -177,18 +177,18 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
     // EMA lines
     seriesRef.current.ema20 = chart.addSeries(LineSeries, {
-      color: "#5b63f5", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+      color: "#f4f7fb", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
     });
     seriesRef.current.ema50 = chart.addSeries(LineSeries, {
-      color: "#d97706", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+      color: "#bac4d1", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
     });
     seriesRef.current.ema200 = chart.addSeries(LineSeries, {
-      color: "#e5383b", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+      color: "#7a8695", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
     });
 
     // VWAP
     seriesRef.current.vwap = chart.addSeries(LineSeries, {
-      color: "#7c6af0", lineWidth: 2, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
+      color: "#d6dce5", lineWidth: 2, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
     });
 
     // BB bands
@@ -204,10 +204,10 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
     // Ichimoku lines
     seriesRef.current.ichiTenkan = chart.addSeries(LineSeries, {
-      color: "#e5383b", lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+      color: "#d6dce5", lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
     });
     seriesRef.current.ichiKijun = chart.addSeries(LineSeries, {
-      color: "#5b63f5", lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+      color: "#f4f7fb", lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
     });
     seriesRef.current.ichiSenkouA = chart.addSeries(LineSeries, {
       color: "#26a65b88", lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
@@ -216,7 +216,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       color: "#e5383b88", lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
     });
     seriesRef.current.ichiChikou = chart.addSeries(LineSeries, {
-      color: "#d97706", lineWidth: 1, lineStyle: 3, priceLineVisible: false, lastValueVisible: false,
+      color: "#9ca3af", lineWidth: 1, lineStyle: 3, priceLineVisible: false, lastValueVisible: false,
     });
 
     // ResizeObserver

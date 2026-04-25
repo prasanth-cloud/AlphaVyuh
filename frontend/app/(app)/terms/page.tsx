@@ -111,11 +111,11 @@ export default function TermsPage() {
 
         <div className="pt-4 border-t border-[#e2e2df] text-[12px] text-[#aaa]">
           Questions? Contact us at{" "}
-          <a href="mailto:support@alphavyuh.com" className="text-[#5b63f5] hover:underline">
+          <a href="mailto:support@alphavyuh.com" className="text-[#f4f7fb] hover:underline">
             support@alphavyuh.com
           </a>
           {" · "}
-          <Link href="/privacy" className="text-[#5b63f5] hover:underline">Privacy Policy</Link>
+          <Link href="/privacy" className="text-[#f4f7fb] hover:underline">Privacy Policy</Link>
         </div>
       </div>
     </div>

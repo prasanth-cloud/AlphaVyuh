@@ -421,8 +421,8 @@ function ChartPanel({
                     flex: 1,
                     padding: "6px 0",
                     borderRadius: 10,
-                    border: `1px solid ${orderType === type ? "rgba(86,215,193,0.3)" : "var(--border-subtle)"}`,
-                    background: orderType === type ? "rgba(86,215,193,0.08)" : "var(--surface-3)",
+                    border: `1px solid ${orderType === type ? "rgba(244,247,251,0.3)" : "var(--border-subtle)"}`,
+                    background: orderType === type ? "rgba(244,247,251,0.08)" : "var(--surface-3)",
                     color: orderType === type ? "var(--accent)" : "var(--text-secondary)",
                     fontSize: 11,
                     fontWeight: 700,
@@ -1242,7 +1242,7 @@ function WatchlistContent() {
                 )}
               </div>
               <button onClick={handleAddSymbol} disabled={adding || !symbolInput.trim()}
-                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(86,215,193,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
+                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
                 {adding ? "…" : "Add"}
               </button>
             </div>
@@ -1560,16 +1560,6 @@ function WatchlistContent() {
         )}
       </div>
 
-      <style>{`
-        .wl-item:hover .wl-delete { opacity: 1 !important; }
-        tr:hover .remove-btn { opacity: 1 !important; }
-        .watchlist-row:hover {
-          background: linear-gradient(90deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01));
-        }
-        .watchlist-row[data-pinned="true"] {
-          box-shadow: inset 2px 0 0 rgba(77,214,255,0.55);
-        }
-      `}</style>
       </div>
     </div>
   );

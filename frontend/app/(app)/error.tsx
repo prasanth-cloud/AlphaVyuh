@@ -27,7 +27,7 @@ export default function AppError({
         </div>
         <button
           onClick={reset}
-          className="px-5 py-2 bg-[#5b63f5] text-white text-[13px] font-semibold rounded-[8px] hover:opacity-90 transition-opacity"
+          className="px-5 py-2 bg-[#f4f7fb] text-white text-[13px] font-semibold rounded-[8px] hover:opacity-90 transition-opacity"
         >
           Try again
         </button>

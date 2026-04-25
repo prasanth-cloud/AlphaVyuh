@@ -24,15 +24,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="app-topbar-inner">
           <Link href="/dashboard" className="app-brand">
             <span className="app-brand-mark" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
-                  d="M4 24 L12 8 L16 16 L20 10 L28 24"
-                  stroke="var(--accent)"
-                  strokeWidth="2.5"
+                  d="M2 14L6.5 8L10 11L14.5 4L16 6"
+                  stroke="#050a08"
+                  strokeWidth="2.2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx="28" cy="24" r="2.5" fill="var(--accent)" />
+                <circle cx="16" cy="6" r="1.5" fill="#050a08" />
               </svg>
             </span>
             <span className="app-brand-copy">
@@ -61,6 +61,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="app-toolbar">
+            <DataModePill />
             <MarketStatus />
             <AccountMenuButton />
           </div>
@@ -70,6 +71,46 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <main className="app-content">{children}</main>
     </div>
+  )
+}
+
+/* ── DATA MODE ───────────────────────────────────────────────────────────── */
+function DataModePill() {
+  const forceLive = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === 'true'
+  const configuredMock = process.env.NEXT_PUBLIC_DATA_MODE === 'mock'
+  const allowFallback = process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === 'true'
+  const devMock = process.env.NODE_ENV === 'development' && !forceLive
+  const demo = !forceLive && (configuredMock || allowFallback || devMock)
+  const label = forceLive ? 'Live data' : demo ? 'Demo data' : 'Backend data'
+  const color = forceLive ? 'var(--gain)' : demo ? 'var(--warn)' : 'var(--text-tertiary)'
+  const title = forceLive
+    ? 'Forced live-data mode. No mock fallback is used.'
+    : demo
+      ? 'Demo data mode. Charts and market views use deterministic sample data when live data is unavailable.'
+      : 'Backend data mode. Data depends on configured API providers.'
+
+  return (
+    <Link
+      href="/data"
+      className="app-toolbar-pill"
+      title={title}
+      style={{ textDecoration: 'none' }}
+    >
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: color,
+        boxShadow: demo ? '0 0 0 3px rgba(217,119,6,0.14)' : undefined,
+        flexShrink: 0,
+      }} />
+      <span style={{
+        fontSize: 10, fontWeight: 700,
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+        color,
+        whiteSpace: 'nowrap',
+      }}>
+        {label}
+      </span>
+    </Link>
   )
 }
 
@@ -148,8 +189,8 @@ function AccountMenuButton() {
         style={{
           width: 34, height: 34,
           borderRadius: '50%',
-          background: 'linear-gradient(180deg, rgba(86,215,193,0.12), rgba(255,255,255,0.02)), var(--surface-2)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'linear-gradient(180deg, rgba(244,247,251,0.10), rgba(255,255,255,0.02)), var(--surface-2)',
+          border: '1px solid rgba(255,255,255,0.12)',
           color: 'var(--text-primary)',
           fontSize: 11, fontWeight: 600,
           cursor: 'pointer',
@@ -164,8 +205,8 @@ function AccountMenuButton() {
         <div style={{
           position: 'absolute', top: 'calc(100% + 8px)', right: 0,
           width: 180,
-          background: 'linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))',
-          border: '1px solid rgba(255,255,255,0.09)',
+          background: 'linear-gradient(180deg, rgba(17,20,25,0.98), rgba(8,10,13,0.98))',
+          border: '1px solid rgba(255,255,255,0.11)',
           borderRadius: 'var(--radius-md)',
           boxShadow: 'var(--shadow-panel)',
           padding: 4,

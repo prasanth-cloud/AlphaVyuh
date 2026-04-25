@@ -22,6 +22,10 @@ function isPublic(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname === "/") {
+    return NextResponse.rewrite(new URL("/landing.html", request.url));
+  }
+
   const response = NextResponse.next({ request });
   // Expose pathname to Server Components via a custom header
   response.headers.set("x-pathname", pathname);

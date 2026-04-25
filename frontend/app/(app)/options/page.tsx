@@ -90,7 +90,7 @@ function PayoffChart({ data, spot }: { data: PayoffPoint[]; spot: number }) {
       <path d={profitPath} fill="#26a65b" fillOpacity={0.12} />
       <path d={lossPath}   fill="#e5383b" fillOpacity={0.12} />
       {/* Main line */}
-      <path d={pathD} fill="none" stroke="#5b63f5" strokeWidth={2} />
+      <path d={pathD} fill="none" stroke="#f4f7fb" strokeWidth={2} />
       {/* Spot price vertical */}
       <line x1={spotX} y1={PAD.top} x2={spotX} y2={PAD.top + cH} stroke="#1c1c1a" strokeWidth={1} strokeDasharray="4 3" />
       <text x={spotX + 3} y={PAD.top + 10} fontSize={9} fill="#888">Spot</text>
@@ -270,7 +270,7 @@ export default function OptionsPage() {
           <div className="relative">
             <button
               onClick={() => setShowPresets(o => !o)}
-              className="flex items-center gap-1.5 text-[12px] font-medium text-[#5b63f5] border border-[#5b63f5] rounded-[7px] px-3 py-1.5 hover:bg-[#eeeffe] transition-colors"
+              className="flex items-center gap-1.5 text-[12px] font-medium text-[#f4f7fb] border border-[#f4f7fb] rounded-[7px] px-3 py-1.5 hover:bg-white/10 transition-colors"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                 <path d="M1 3h10M1 6h10M1 9h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -287,7 +287,7 @@ export default function OptionsPage() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="text-[13px] font-semibold text-[#1c1c1a]">{p.name}</div>
-                      <span className="text-[10px] text-[#5b63f5] font-medium">{p.legs_template.length}L</span>
+                      <span className="text-[10px] text-[#f4f7fb] font-medium">{p.legs_template.length}L</span>
                     </div>
                     <div className="text-[11px] text-[#aaa] mt-0.5">{p.description}</div>
                   </button>
@@ -310,14 +310,14 @@ export default function OptionsPage() {
                   value={symbol}
                   onChange={e => setSymbol(e.target.value.toUpperCase())}
                   placeholder="Symbol"
-                  className="w-[90px] text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                  className="w-[90px] text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#f4f7fb]"
                 />
                 <input
                   type="number"
                   value={spot}
                   onChange={e => setSpot(e.target.value === "" ? "" : Number(e.target.value))}
                   placeholder="Spot price"
-                  className="flex-1 text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                  className="flex-1 text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#f4f7fb]"
                 />
               </div>
               <div className="flex gap-3">
@@ -327,7 +327,7 @@ export default function OptionsPage() {
                     type="number"
                     value={iv}
                     onChange={e => setIv(Number(e.target.value))}
-                    className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                    className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#f4f7fb]"
                   />
                 </div>
                 <div className="flex-1">
@@ -336,7 +336,7 @@ export default function OptionsPage() {
                     type="number"
                     value={dte}
                     onChange={e => setDte(Number(e.target.value))}
-                    className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                    className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#f4f7fb]"
                   />
                 </div>
               </div>
@@ -348,7 +348,7 @@ export default function OptionsPage() {
                 <div className="text-[11px] font-semibold text-[#888] uppercase tracking-[0.5px]">Legs</div>
                 <button
                   onClick={() => setLegs(prev => [...prev, makeLeg()])}
-                  className="text-[11px] text-[#5b63f5] font-medium hover:underline"
+                  className="text-[11px] text-[#f4f7fb] font-medium hover:underline"
                 >
                   + Add leg
                 </button>
@@ -383,7 +383,7 @@ export default function OptionsPage() {
                           onClick={() => updateLeg(leg.id, { action: a })}
                           className="flex-1 text-[11px] font-medium py-1 rounded-[5px] capitalize transition-colors"
                           style={leg.action === a
-                            ? { background: "#eeeffe", color: "#5b63f5", border: "1px solid #5b63f544" }
+                            ? { background: "rgba(244,247,251,0.10)", color: "#f4f7fb", border: "1px solid #f4f7fb44" }
                             : { background: "#f7f7f5", color: "#aaa", border: "1px solid #e2e2df" }
                           }
                         >{a}</button>
@@ -399,7 +399,7 @@ export default function OptionsPage() {
                           value={leg.strike}
                           onChange={e => updateLeg(leg.id, { strike: e.target.value === "" ? "" : Number(e.target.value) })}
                           placeholder="e.g. 24000"
-                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#5b63f5]"
+                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#f4f7fb]"
                         />
                       </div>
                       <div className="flex-1">
@@ -409,7 +409,7 @@ export default function OptionsPage() {
                           value={leg.premium}
                           onChange={e => updateLeg(leg.id, { premium: e.target.value === "" ? "" : Number(e.target.value) })}
                           placeholder="e.g. 120"
-                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#5b63f5]"
+                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#f4f7fb]"
                         />
                       </div>
                     </div>
@@ -422,7 +422,7 @@ export default function OptionsPage() {
                           type="number" min={1}
                           value={leg.quantity}
                           onChange={e => updateLeg(leg.id, { quantity: Math.max(1, Number(e.target.value)) })}
-                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#5b63f5]"
+                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#f4f7fb]"
                         />
                       </div>
                       <div className="flex-1">
@@ -431,7 +431,7 @@ export default function OptionsPage() {
                           type="number" min={1}
                           value={leg.lot_size}
                           onChange={e => updateLeg(leg.id, { lot_size: Math.max(1, Number(e.target.value)) })}
-                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#5b63f5]"
+                          className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1 outline-none focus:border-[#f4f7fb]"
                         />
                       </div>
                     </div>
@@ -479,7 +479,7 @@ export default function OptionsPage() {
                     <div className="mt-3 flex items-center gap-2 flex-wrap">
                       <span className="text-[11px] text-[#888]">Breakeven{result.breakevens.length > 1 ? "s" : ""}:</span>
                       {result.breakevens.map((be, i) => (
-                        <span key={i} className="text-[11px] font-semibold text-[#5b63f5] bg-[#eeeffe] px-2 py-0.5 rounded-full">
+                        <span key={i} className="text-[11px] font-semibold text-[#f4f7fb] bg-white/10 px-2 py-0.5 rounded-full">
                           ₹{be.toLocaleString("en-IN")}
                         </span>
                       ))}
@@ -515,8 +515,8 @@ export default function OptionsPage() {
             )}
 
             {/* Info card */}
-            <div className="bg-[#eeeffe] border border-[#d0d3fb] rounded-[10px] px-4 py-3">
-              <div className="text-[12px] font-semibold text-[#5b63f5] mb-1">How to use</div>
+            <div className="bg-white/10 border border-[#d0d3fb] rounded-[10px] px-4 py-3">
+              <div className="text-[12px] font-semibold text-[#f4f7fb] mb-1">How to use</div>
               <ul className="text-[12px] text-[#555] space-y-1 leading-relaxed">
                 <li>• Enter the underlying spot price and days to expiry</li>
                 <li>• Add each option leg — type, action, strike, and the premium you see on NSE/your broker</li>
@@ -525,7 +525,7 @@ export default function OptionsPage() {
                 <li>• Greeks use Black-Scholes with your IV input</li>
               </ul>
               <div className="mt-2">
-                <Link href="/charts/NIFTY" className="text-[11px] text-[#5b63f5] underline">
+                <Link href="/charts/NIFTY" className="text-[11px] text-[#f4f7fb] underline">
                   View NIFTY chart →
                 </Link>
               </div>
@@ -576,7 +576,7 @@ export default function OptionsPage() {
                         value={presetDraft.spot}
                         onChange={e => setPresetDraft(d => d ? { ...d, spot: e.target.value === "" ? "" : Number(e.target.value) } : d)}
                         placeholder="e.g. 24000"
-                        className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                        className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#f4f7fb]"
                       />
                     </div>
                     <div>
@@ -585,10 +585,10 @@ export default function OptionsPage() {
                         type="date"
                         value={presetDraft.expiry}
                         onChange={e => setPresetDraft(d => d ? { ...d, expiry: e.target.value } : d)}
-                        className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#5b63f5]"
+                        className="w-full text-[13px] border border-[#e2e2df] rounded-[7px] px-2.5 py-1.5 outline-none focus:border-[#f4f7fb]"
                       />
                       {presetDraft.expiry && (
-                        <div className="text-[10px] text-[#5b63f5] mt-0.5">{dteFromExpiry(presetDraft.expiry)}d to expiry</div>
+                        <div className="text-[10px] text-[#f4f7fb] mt-0.5">{dteFromExpiry(presetDraft.expiry)}d to expiry</div>
                       )}
                     </div>
                   </div>
@@ -618,7 +618,7 @@ export default function OptionsPage() {
                               value={presetDraft.legs[i]?.strike ?? ""}
                               onChange={e => updatePresetLeg(i, { strike: e.target.value === "" ? "" : Number(e.target.value) })}
                               placeholder={presetDraft.spot ? String(presetDraft.spot) : "e.g. 24000"}
-                              className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1.5 outline-none focus:border-[#5b63f5]"
+                              className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1.5 outline-none focus:border-[#f4f7fb]"
                             />
                           </div>
                           <div>
@@ -628,7 +628,7 @@ export default function OptionsPage() {
                               value={presetDraft.legs[i]?.premium ?? ""}
                               onChange={e => updatePresetLeg(i, { premium: e.target.value === "" ? "" : Number(e.target.value) })}
                               placeholder="e.g. 120"
-                              className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1.5 outline-none focus:border-[#5b63f5]"
+                              className="w-full text-[12px] border border-[#e2e2df] rounded-[5px] px-2 py-1.5 outline-none focus:border-[#f4f7fb]"
                             />
                           </div>
                         </div>

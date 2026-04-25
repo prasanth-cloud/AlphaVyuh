@@ -30,7 +30,7 @@ function DevLoginInner() {
   return (
     <div className="min-h-screen bg-[#f2f2f0] flex items-center justify-center">
       <div className="bg-white rounded-[14px] border border-[#e2e2df] px-8 py-6 text-center shadow-sm">
-        <div className="w-6 h-6 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin mx-auto mb-4" />
+        <div className="w-6 h-6 rounded-full border-2 border-[#f4f7fb] border-t-transparent animate-spin mx-auto mb-4" />
         <p className="text-[14px] text-[#555]">{status}</p>
       </div>
     </div>
@@ -41,7 +41,7 @@ export default function DevLoginPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-[#f2f2f0] flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-[#5b63f5] border-t-transparent animate-spin" />
+        <div className="w-6 h-6 rounded-full border-2 border-[#f4f7fb] border-t-transparent animate-spin" />
       </div>
     }>
       <DevLoginInner />

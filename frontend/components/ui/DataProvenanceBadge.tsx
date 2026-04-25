@@ -6,7 +6,7 @@ const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; c
   eod: {
     label: "EOD",
     detail: "Latest complete end-of-day market data",
-    color: "#5b63f5",
+    color: "#f4f7fb",
     background: "rgba(91, 99, 245, 0.10)",
   },
   "live-beta": {
@@ -24,7 +24,7 @@ const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; c
   demo: {
     label: "Demo",
     detail: "Illustrative workflow preview, not live market data",
-    color: "#7c6af0",
+    color: "#d6dce5",
     background: "rgba(124, 106, 240, 0.12)",
   },
   "broker-beta": {

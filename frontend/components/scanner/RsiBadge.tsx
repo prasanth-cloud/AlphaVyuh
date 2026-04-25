@@ -2,7 +2,7 @@ export default function RsiBadge({ rsi }: { rsi: number | null }) {
   if (rsi == null) return <span className="text-[#aaa] text-xs">—</span>;
 
   let bg = "#edfaf3", color = "#26a65b";
-  if (rsi > 70)      { bg = "#f0efff"; color = "#5b63f5"; }
+  if (rsi > 70)      { bg = "rgba(244,247,251,0.10)"; color = "#f4f7fb"; }
   else if (rsi < 40) { bg = "#fff8ec"; color = "#d97706"; }
 
   return (

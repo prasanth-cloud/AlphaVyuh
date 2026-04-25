@@ -30,9 +30,11 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   background-image:
-    radial-gradient(circle at 12% 0%, rgba(214, 223, 232, 0.06), transparent 20%),
-    radial-gradient(circle at 96% 6%, rgba(214, 223, 232, 0.04), transparent 16%),
-    linear-gradient(180deg, #040507 0%, #05070a 34%, #05070a 100%);
+    linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px),
+    radial-gradient(circle at 12% 0%, rgba(244, 247, 251, 0.055), transparent 18%),
+    linear-gradient(180deg, #030405 0%, #06080b 42%, #040507 100%);
+  background-size: 40px 40px, 40px 40px, auto, auto;
 }
 
 /* Numbers are always monospaced and tabular */
@@ -220,9 +222,10 @@ input, textarea, select {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 12% 0%, rgba(214, 223, 232, 0.04), transparent 24%),
-    radial-gradient(circle at 88% 8%, rgba(214, 223, 232, 0.03), transparent 18%);
-  opacity: 0.55;
+    linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.42;
 }
 
 .app-topbar {
@@ -231,9 +234,9 @@ input, textarea, select {
   z-index: 50;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  background: linear-gradient(180deg, rgba(5, 8, 12, 0.96), rgba(7, 10, 14, 0.86));
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02), 0 14px 42px rgba(0, 0, 0, 0.22);
+  background: rgba(3, 4, 5, 0.92);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025), 0 14px 42px rgba(0, 0, 0, 0.28);
 }
 
 .reminder-strip {
@@ -242,14 +245,14 @@ input, textarea, select {
 }
 
 .reminder-strip-app {
-  background: linear-gradient(180deg, rgba(86, 215, 193, 0.05), rgba(255, 255, 255, 0.01));
+  background: linear-gradient(180deg, rgba(244, 247, 251, 0.045), rgba(255, 255, 255, 0.01));
 }
 
 .reminder-strip-landing {
   margin-top: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(86, 215, 193, 0.07), rgba(255, 255, 255, 0.02));
+  background: linear-gradient(180deg, rgba(244, 247, 251, 0.07), rgba(255, 255, 255, 0.02));
 }
 
 .reminder-strip-track {
@@ -291,13 +294,14 @@ input, textarea, select {
 
 .workspace-hero {
   padding: 22px 24px;
-  border-radius: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
   background:
-    radial-gradient(circle at top right, rgba(86, 215, 193, 0.12), transparent 24%),
-    radial-gradient(circle at bottom left, rgba(90, 139, 232, 0.12), transparent 22%),
-    linear-gradient(180deg, rgba(10, 18, 22, 0.96), rgba(8, 12, 16, 0.98));
-  box-shadow: var(--shadow-panel);
+    linear-gradient(rgba(255,255,255,0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.024) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(14, 17, 22, 0.98), rgba(7, 9, 12, 0.98));
+  background-size: 32px 32px, 32px 32px, auto;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
 }
 
 .workspace-hero-grid {
@@ -310,8 +314,8 @@ input, textarea, select {
 
 .workspace-title {
   font-size: clamp(30px, 4vw, 46px);
-  line-height: 0.98;
-  letter-spacing: -0.05em;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
   color: var(--text-primary);
 }
 
@@ -343,8 +347,9 @@ input, textarea, select {
 }
 
 .flow-chip-active {
-  background: rgba(86, 215, 193, 0.14);
-  color: var(--accent);
+  border-color: rgba(244, 247, 251, 0.24);
+  background: rgba(244, 247, 251, 0.10);
+  color: var(--text-primary);
 }
 
 .workspace-stat-grid {
@@ -376,8 +381,8 @@ input, textarea, select {
 }
 
 .workspace-card {
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
   background: var(--surface-1);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22);
   overflow: hidden;
@@ -523,12 +528,12 @@ input, textarea, select {
 .app-brand-mark {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(135deg, #f4f7fb, #8b96a6);
+  box-shadow: 0 10px 28px rgba(244, 247, 251, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
 
 .app-brand-copy {
@@ -566,7 +571,7 @@ input, textarea, select {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
-  border-radius: 999px;
+  border-radius: 7px;
   transition:
     background var(--motion-fast) var(--ease-out),
     color var(--motion-fast) var(--ease-out),
@@ -582,11 +587,11 @@ input, textarea, select {
 
 .app-navlink-active {
   color: var(--text-primary);
-  border-color: rgba(214, 223, 232, 0.12);
+  border-color: rgba(244, 247, 251, 0.18);
   background:
-    linear-gradient(180deg, rgba(214, 223, 232, 0.08), rgba(214, 223, 232, 0.03)),
+    linear-gradient(180deg, rgba(244, 247, 251, 0.10), rgba(244, 247, 251, 0.035)),
     rgba(255, 255, 255, 0.02);
-  box-shadow: 0 0 0 1px rgba(214, 223, 232, 0.04) inset;
+  box-shadow: 0 0 0 1px rgba(244, 247, 251, 0.05) inset;
 }
 
 .app-toolbar {
@@ -657,8 +662,8 @@ input, textarea, select {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at 15% 10%, rgba(86, 215, 193, 0.16), transparent 32%),
-    radial-gradient(circle at 85% 0%, rgba(90, 139, 232, 0.14), transparent 28%),
+    radial-gradient(circle at 15% 10%, rgba(244, 247, 251, 0.12), transparent 32%),
+    radial-gradient(circle at 85% 0%, rgba(244, 247, 251, 0.07), transparent 28%),
     linear-gradient(180deg, #071013 0%, #0b0d11 100%);
 }
 
@@ -680,8 +685,8 @@ input, textarea, select {
   position: relative;
   padding: 48px;
   background:
-    radial-gradient(circle at 20% 20%, rgba(86, 215, 193, 0.22), transparent 30%),
-    linear-gradient(180deg, rgba(7, 20, 23, 0.94), rgba(10, 13, 17, 0.96));
+    radial-gradient(circle at 20% 20%, rgba(244, 247, 251, 0.13), transparent 30%),
+    linear-gradient(180deg, rgba(13, 16, 21, 0.96), rgba(7, 9, 12, 0.96));
   border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -693,9 +698,9 @@ input, textarea, select {
   width: 180px;
   height: 180px;
   border-radius: 28px;
-  border: 1px solid rgba(86, 215, 193, 0.12);
+  border: 1px solid rgba(244, 247, 251, 0.12);
   background:
-    linear-gradient(180deg, rgba(86, 215, 193, 0.16), rgba(86, 215, 193, 0.03)),
+    linear-gradient(180deg, rgba(244, 247, 251, 0.12), rgba(244, 247, 251, 0.03)),
     rgba(255, 255, 255, 0.02);
   transform: rotate(14deg);
 }
@@ -780,4 +785,81 @@ input, textarea, select {
     width: 100%;
     justify-content: space-between;
   }
+}
+
+/* Legacy hardcoded-screen bridge.
+   Several older pages used light arbitrary Tailwind colors directly. These
+   scoped overrides keep them inside the same black/white terminal skin while
+   preserving semantic gain/loss colors. */
+.app-shell .bg-white,
+.app-shell [class*="bg-[#f2f2f0]"],
+.app-shell [class*="bg-[#f7f7f5]"],
+.app-shell [class*="bg-[#fafafa]"] {
+  background-color: var(--surface-1) !important;
+}
+
+.app-shell [class*="bg-[#f0f0ee]"] {
+  background-color: var(--surface-2) !important;
+}
+
+.app-shell [class*="text-[#1c1c1a]"],
+.app-shell [class*="text-[#444]"],
+.app-shell [class*="text-[#555]"],
+.app-shell [class*="text-[#555553]"] {
+  color: var(--text-primary) !important;
+}
+
+.app-shell [class*="text-[#666]"],
+.app-shell [class*="text-[#888]"],
+.app-shell [class*="text-[#999997]"],
+.app-shell [class*="text-[#aaa]"],
+.app-shell [class*="text-[#bbb]"],
+.app-shell [class*="text-[#ccc]"] {
+  color: var(--text-tertiary) !important;
+}
+
+.app-shell [class*="border-[#e2e2df]"],
+.app-shell [class*="border-[#f0f0ee]"],
+.app-shell [class*="border-[#f7f7f5]"],
+.app-shell [class*="border-[#1c1c1a]"],
+.app-shell [class*="border-[#333]"] {
+  border-color: var(--border-default) !important;
+}
+
+.app-shell [class*="bg-[#1c1c1a]"],
+.app-shell [class*="bg-[#1a1a18]"],
+.app-shell [class*="bg-[#0f0f0e]"] {
+  background-color: var(--surface-2) !important;
+}
+
+.app-shell [class*="text-[#5b63f5]"],
+.app-shell [class*="text-[#818cf8]"],
+.app-shell [class*="text-[#a5aaff]"] {
+  color: var(--accent) !important;
+}
+
+.app-shell [class*="bg-[#5b63f520]"],
+.app-shell [class*="bg-[#eeeffe]"] {
+  background-color: var(--accent-subtle) !important;
+}
+
+.app-shell [class*="border-[#5b63f5]"],
+.app-shell [class*="border-[#d0d3fb]"] {
+  border-color: var(--border-strong) !important;
+}
+
+.app-shell .wl-item:hover .wl-delete {
+  opacity: 1 !important;
+}
+
+.app-shell tr:hover .remove-btn {
+  opacity: 1 !important;
+}
+
+.app-shell .watchlist-row:hover {
+  background: linear-gradient(90deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01)) !important;
+}
+
+.app-shell .watchlist-row[data-pinned="true"] {
+  box-shadow: inset 2px 0 0 rgba(77,214,255,0.55);
 }

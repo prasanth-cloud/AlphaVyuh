@@ -5,12 +5,12 @@ from typing import Any
 from uuid import UUID
 
 import pandas as pd
-import yfinance as yf
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services import indicators as ta
+from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
@@ -63,6 +63,26 @@ def _fetch_ohlcv(symbol: str, limit: int = 500) -> pd.DataFrame:
     df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.date
     df = df.sort_values("trade_date").reset_index(drop=True)
     return df
+
+
+def _lookup_market_identity(symbol: str) -> MarketIdentity:
+    try:
+        r = (
+            get_admin_client()
+            .table("stock_universe")
+            .select("market,currency")
+            .eq("symbol", symbol.upper())
+            .maybe_single()
+            .execute()
+        )
+        if r and r.data:
+            return MarketIdentity(
+                market=r.data.get("market") or "NSE",
+                currency=r.data.get("currency") or "INR",
+            )
+    except Exception:
+        pass
+    return MarketIdentity()
 
 
 def _aggregate_to_timeframe(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
@@ -323,7 +343,7 @@ async def get_candles(
     }
 
 
-# ── Live candles via Yahoo Finance ───────────────────────────────────────────
+# ── Live candles via configured market data provider ─────────────────────────
 
 @router.get("/{symbol}/candles-live")
 async def get_candles_live(
@@ -331,74 +351,17 @@ async def get_candles_live(
     timeframe: str = Query("D"),
     limit: int = Query(500, ge=1, le=1000),
 ):
-    """OHLCV from Yahoo Finance for any NSE stock. Always fresh, no DB needed."""
+    """OHLCV from the configured market data provider."""
     sym = symbol.upper()
-    yf_sym = f"{sym}.NS"
-
     tf = timeframe.upper()
-    period_map  = {"D": "2y",  "W": "5y",  "M": "max"}
-    interval_map = {"D": "1d", "W": "1wk", "M": "1mo"}
-
     try:
-        ticker = yf.Ticker(yf_sym)
-        hist = ticker.history(
-            period=period_map.get(tf, "2y"),
-            interval=interval_map.get(tf, "1d"),
-            auto_adjust=True,
-        )
-        if hist.empty:
-            raise HTTPException(status_code=404, detail=f"No data from Yahoo Finance for {sym}")
-
-        hist = hist.tail(limit).reset_index()
-        hist.columns = [c.replace(" ", "_").lower() for c in hist.columns]
-
-        candles = []
-        for _, row in hist.iterrows():
-            dt = row["date"] if "date" in row else row["datetime"]
-            if hasattr(dt, "date"):
-                dt = dt.date()
-            candles.append({
-                "time":   str(dt),
-                "open":   round(float(row["open"]),  2),
-                "high":   round(float(row["high"]),  2),
-                "low":    round(float(row["low"]),   2),
-                "close":  round(float(row["close"]), 2),
-                "volume": int(row.get("volume", 0)),
-            })
-
-        if not candles:
-            raise HTTPException(status_code=404, detail=f"No candles for {sym}")
-
-        last = candles[-1]
-        prev_close = candles[-2]["close"] if len(candles) >= 2 else last["close"]
-        pct = round((last["close"] - prev_close) / prev_close * 100, 2) if prev_close else None
-
-        info = ticker.fast_info
-        return {
-            "symbol":       sym,
-            "company_name": sym,
-            "sector":       None,
-            "timeframe":    tf,
-            "source":       "yahoo_finance",
-            "candles":      candles,
-            "latest": {
-                "close":       last["close"],
-                "open":        last["open"],
-                "high":        last["high"],
-                "low":         last["low"],
-                "volume":      last["volume"],
-                "prev_close":  prev_close,
-                "pct_change":  pct,
-                "week_52_high": round(float(info.year_high), 2) if info.year_high else None,
-                "week_52_low":  round(float(info.year_low),  2) if info.year_low  else None,
-                "rsi_14": None, "ema_20": None, "ema_50": None,
-                "ema_200": None, "atr_14": None, "volume_ratio": None,
-            },
-        }
-    except HTTPException:
-        raise
+        return get_market_data_provider().live_candles(sym, tf, limit, _lookup_market_identity(sym))
+    except ProviderNotConfiguredError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    except MarketDataError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Yahoo Finance error: {e}")
+        raise HTTPException(status_code=502, detail=f"Market data provider error: {e}")
 
 
 # ── Indicators endpoint ───────────────────────────────────────────────────────

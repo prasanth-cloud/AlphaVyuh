@@ -98,11 +98,11 @@ export default function PrivacyPage() {
 
         <div className="pt-4 border-t border-[#e2e2df] text-[12px] text-[#aaa]">
           Questions? Contact us at{" "}
-          <a href="mailto:privacy@alphavyuh.com" className="text-[#5b63f5] hover:underline">
+          <a href="mailto:privacy@alphavyuh.com" className="text-[#f4f7fb] hover:underline">
             privacy@alphavyuh.com
           </a>
           {" · "}
-          <Link href="/terms" className="text-[#5b63f5] hover:underline">Terms of Service</Link>
+          <Link href="/terms" className="text-[#f4f7fb] hover:underline">Terms of Service</Link>
         </div>
       </div>
     </div>

@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { authHeaders } from '@/lib/api'
+import { authHeaders, isMockMode } from '@/lib/api'
+import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -267,19 +268,16 @@ export default function ScannerPage() {
     loadSavedScreens()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (bootstrapped) return
-    if (loading || hasRun || savedScreens.length > 0) return
-    setBootstrapped(true)
-    applyPreset(PRESETS[0])
-  }, [bootstrapped, loading, hasRun, savedScreens.length])
-
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
   }
 
   async function loadWatchlists() {
+    if (isMockMode) {
+      setWatchlists(mockWatchlists().map(({ id, name }) => ({ id, name })))
+      return
+    }
     try {
       const token = await getToken()
       const res = await fetch(`${API}/api/v1/watchlists`, { headers: { Authorization: `Bearer ${token}` } })
@@ -288,6 +286,13 @@ export default function ScannerPage() {
   }
 
   async function loadSavedScreens() {
+    if (isMockMode) {
+      setSavedScreens([
+        { id: 'mock-leaders', name: 'Leaders', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
+        { id: 'mock-breakout', name: 'Breakout Watch', filters: PRESETS[2].filters, created_at: '2026-04-24T09:20:00Z' },
+      ])
+      return
+    }
     try {
       const token = await getToken()
       const res = await fetch(`${API}/api/v1/scanner/screens`, { headers: { Authorization: `Bearer ${token}` } })
@@ -295,7 +300,7 @@ export default function ScannerPage() {
     } catch { /* ignore */ }
   }
 
-  function buildPayload(f: Filters, sb: string, sd: boolean) {
+  const buildPayload = useCallback((f: Filters, sb: string, sd: boolean) => {
     const fil: Record<string, unknown> = { series: f.series || ['EQ'] }
     const num = (v: string) => v !== '' ? parseFloat(v) : undefined
     const set = (key: string, v: unknown) => { if (v !== undefined && v !== '' && v !== null) fil[key] = v }
@@ -334,11 +339,22 @@ export default function ScannerPage() {
     set('roce_min', num(f.roce_min))
 
     return { filters: fil, sort_by: sb, sort_order: sd ? 'desc' : 'asc', limit: 200 }
-  }
+  }, [])
 
-  async function runScan(overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize) {
+  const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize) => {
     setLoading(true); setError(''); setResults([]); setExpandedSymbol(null)
     try {
+      if (isMockMode) {
+        const data = mockRunScan()
+        setResults(data.results as unknown as ScanResult[])
+        setTotalMatches(data.total_matches || 0)
+        setTotalPages(data.total_pages || 1)
+        setCurrentPage(data.page || page)
+        setTradeDate(data.trade_date || '')
+        setIsLimited(data.is_limited || false)
+        setHasRun(true)
+        return
+      }
       const token = await getToken()
       const payload = buildPayload(overrideFilters || filters, sb, sd)
       const res = await fetch(`${API}/api/v1/scanner/run`, {
@@ -358,15 +374,22 @@ export default function ScannerPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Scan failed')
     } finally { setLoading(false) }
-  }
+  }, [buildPayload, currentPage, filters, getToken, pageSize, sortBy, sortDesc])
 
-  function applyPreset(p: Preset) {
+  const applyPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
       Object.entries(p.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
     )
     const f = { ...emptyFilters(), ...normalizedFilters } as Filters
     setFilters(f); setActivePreset(p.id); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize)
-  }
+  }, [pageSize, runScan, sortBy, sortDesc])
+
+  useEffect(() => {
+    if (bootstrapped) return
+    if (loading || hasRun || savedScreens.length > 0) return
+    setBootstrapped(true)
+    applyPreset(PRESETS[0])
+  }, [applyPreset, bootstrapped, loading, hasRun, savedScreens.length])
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
@@ -375,6 +398,15 @@ export default function ScannerPage() {
 
   async function saveCurrentScreen() {
     if (!newScreenName.trim()) return
+    if (isMockMode) {
+      setSavedScreens(prev => [
+        ...prev,
+        { id: `mock-${Date.now()}`, name: newScreenName.trim(), filters, created_at: new Date().toISOString() },
+      ])
+      setNewScreenName(''); setShowSaveModal(false)
+      showToast('Screen saved in mock mode')
+      return
+    }
     try {
       const token = await getToken()
       const payload = buildPayload(filters, sortBy, sortDesc)
@@ -391,6 +423,11 @@ export default function ScannerPage() {
   }
 
   async function deleteScreen(id: string, name: string) {
+    if (isMockMode) {
+      setSavedScreens(prev => prev.filter(screen => screen.id !== id))
+      showToast(`"${name}" deleted`)
+      return
+    }
     const token = await getToken()
     await fetch(`${API}/api/v1/scanner/screens/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
     await loadSavedScreens()
@@ -398,6 +435,10 @@ export default function ScannerPage() {
   }
 
   async function addToWatchlist(symbol: string, wlId: string) {
+    if (isMockMode) {
+      showToast(`${symbol} added to mock watchlist`)
+      return
+    }
     const token = await getToken()
     await fetch(`${API}/api/v1/watchlists/${wlId}/items`, {
       method: 'POST',
@@ -409,6 +450,12 @@ export default function ScannerPage() {
 
   async function createWatchlistFromResults() {
     if (!newWlName.trim()) return
+    if (isMockMode) {
+      setShowWlModal(false); setNewWlName('')
+      showToast('Mock watchlist created')
+      router.push('/watchlist')
+      return
+    }
     const token = await getToken()
     const res = await fetch(`${API}/api/v1/watchlists`, {
       method: 'POST',

@@ -87,7 +87,7 @@ export default function OnboardingPage() {
           borderRadius: 24,
           border: "1px solid rgba(255,255,255,0.08)",
           background:
-            "radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
+            "radial-gradient(circle at top right, rgba(244,247,251,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
           boxShadow: "var(--shadow-panel)",
           marginBottom: 16,
         }}>

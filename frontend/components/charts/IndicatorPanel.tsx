@@ -60,8 +60,8 @@ export default function IndicatorPanel(props: Props) {
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#0D0F14" },
-        textColor: "rgba(255,255,255,0.3)",
+        background: { type: ColorType.Solid, color: "#040507" },
+        textColor: "rgba(244,247,251,0.38)",
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: 10,
       },
@@ -92,7 +92,7 @@ export default function IndicatorPanel(props: Props) {
 
     if (props.type === "rsi") {
       const rsiLine = chart.addSeries(LineSeries, {
-        color: "#5b63f5",
+        color: "#f4f7fb",
         lineWidth: 2,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -110,7 +110,7 @@ export default function IndicatorPanel(props: Props) {
     } else if (props.type === "atr") {
       const atrData = (props as ATRProps).data;
       const atrLine = chart.addSeries(LineSeries, {
-        color: "#d97706", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+        color: "#bac4d1", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
       });
       if (atrData.length) {
         atrLine.setData(atrData.map(p => ({ time: p.time as Time, value: p.value })));
@@ -119,10 +119,10 @@ export default function IndicatorPanel(props: Props) {
       const stochData = (props as StochProps).data;
 
       const kLine = chart.addSeries(LineSeries, {
-        color: "#26a65b", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+        color: "#f4f7fb", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
       });
       const dLine = chart.addSeries(LineSeries, {
-        color: "#e5383b", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
+        color: "#9ca3af", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
       });
 
       kLine.createPriceLine({ price: 80, color: "#e5383b", lineWidth: 1, lineStyle: 2, axisLabelVisible: false });
@@ -142,10 +142,10 @@ export default function IndicatorPanel(props: Props) {
         lastValueVisible: false,
       });
       const macdLine = chart.addSeries(LineSeries, {
-        color: "#5b63f5", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+        color: "#f4f7fb", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
       });
       const signalLine = chart.addSeries(LineSeries, {
-        color: "#d97706", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+        color: "#9ca3af", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
       });
 
       if (macdData.length) {

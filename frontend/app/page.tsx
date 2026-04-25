@@ -8,7 +8,7 @@ const LANDING_CSS = `
   min-height: 100vh;
   color: var(--text-primary);
   background:
-    radial-gradient(circle at 12% 0%, rgba(86,215,193,0.14), transparent 28%),
+    radial-gradient(circle at 12% 0%, rgba(244,247,251,0.14), transparent 28%),
     radial-gradient(circle at 92% 8%, rgba(90,139,232,0.16), transparent 22%),
     linear-gradient(180deg, #05090c 0%, #081116 42%, #09141a 100%);
 }
@@ -48,7 +48,7 @@ const LANDING_CSS = `
   place-items: center;
   background: linear-gradient(180deg, var(--accent-strong), var(--accent));
   color: #03110d;
-  box-shadow: 0 12px 30px rgba(86,215,193,0.24);
+  box-shadow: 0 12px 30px rgba(244,247,251,0.24);
 }
 .av-nav-links {
   display: flex;
@@ -81,8 +81,8 @@ const LANDING_CSS = `
 .av-btn {
   color: #04120d;
   background: linear-gradient(180deg, var(--accent-strong), var(--accent));
-  border: 1px solid rgba(86,215,193,0.22);
-  box-shadow: 0 18px 40px rgba(86,215,193,0.18);
+  border: 1px solid rgba(244,247,251,0.22);
+  box-shadow: 0 18px 40px rgba(244,247,251,0.18);
 }
 .av-btn-secondary {
   color: var(--text-primary);
@@ -104,8 +104,8 @@ const LANDING_CSS = `
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(86,215,193,0.22);
-  background: rgba(86,215,193,0.08);
+  border: 1px solid rgba(244,247,251,0.22);
+  background: rgba(244,247,251,0.08);
   color: var(--accent);
   font-size: 11px;
   font-weight: 800;
@@ -117,7 +117,7 @@ const LANDING_CSS = `
   height: 8px;
   border-radius: 999px;
   background: var(--accent);
-  box-shadow: 0 0 0 8px rgba(86,215,193,0.12);
+  box-shadow: 0 0 0 8px rgba(244,247,251,0.12);
 }
 .av-h1 {
   margin-top: 22px;
@@ -219,8 +219,8 @@ const LANDING_CSS = `
   background: rgba(255,255,255,0.025);
 }
 .av-watch-item.active {
-  border-color: rgba(86,215,193,0.24);
-  background: linear-gradient(90deg, rgba(86,215,193,0.12), rgba(255,255,255,0.025));
+  border-color: rgba(244,247,251,0.24);
+  background: linear-gradient(90deg, rgba(244,247,251,0.12), rgba(255,255,255,0.025));
 }
 .av-symbol {
   font-family: var(--font-mono);
@@ -239,7 +239,7 @@ const LANDING_CSS = `
   border: 1px solid rgba(255,255,255,0.06);
   background:
     linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
-    radial-gradient(circle at top, rgba(86,215,193,0.08), transparent 38%);
+    radial-gradient(circle at top, rgba(244,247,251,0.08), transparent 38%);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -398,7 +398,7 @@ const LANDING_CSS = `
   display: grid;
   place-items: center;
   margin-bottom: 12px;
-  background: rgba(86,215,193,0.14);
+  background: rgba(244,247,251,0.14);
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: 12px;
@@ -423,7 +423,7 @@ const LANDING_CSS = `
   padding: 18px;
   border-radius: 22px;
   border: 1px solid rgba(255,255,255,0.08);
-  background: linear-gradient(180deg, rgba(86,215,193,0.06), rgba(255,255,255,0.02));
+  background: linear-gradient(180deg, rgba(244,247,251,0.06), rgba(255,255,255,0.02));
 }
 .av-outcome-value {
   font-size: clamp(26px, 4vw, 42px);
@@ -637,8 +637,8 @@ export default function LandingPage() {
                       <svg className="av-chart-svg" viewBox="0 0 520 180" fill="none">
                         <defs>
                           <linearGradient id="av-area" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stopColor="rgba(86,215,193,0.34)" />
-                            <stop offset="100%" stopColor="rgba(86,215,193,0.02)" />
+                            <stop offset="0%" stopColor="rgba(244,247,251,0.34)" />
+                            <stop offset="100%" stopColor="rgba(244,247,251,0.02)" />
                           </linearGradient>
                         </defs>
                         <path d="M0 150H520" stroke="rgba(255,255,255,0.08)" />

@@ -49,16 +49,16 @@ const IndicatorPanel = dynamic(
 // ── Indicator config ──────────────────────────────────────────────────────────
 
 const INDICATOR_CONFIG = [
-  { id: "ema20",  label: "EMA 20",  color: "#5b63f5", bg: "#eeeffe" },
-  { id: "ema50",  label: "EMA 50",  color: "#d97706", bg: "#fff8ec" },
-  { id: "ema200", label: "EMA 200", color: "#e5383b", bg: "#fff0f0" },
-  { id: "bb",     label: "BB",      color: "#888888", bg: "#f7f7f5" },
-  { id: "vwap",   label: "VWAP",    color: "#7c6af0", bg: "#f0effb" },
-  { id: "rsi",    label: "RSI",     color: "#5b63f5", bg: "#eeeffe" },
-  { id: "macd",   label: "MACD",    color: "#5b63f5", bg: "#eeeffe" },
-  { id: "stoch",    label: "Stoch",    color: "#26a65b", bg: "#edfaf3" },
-  { id: "atr",      label: "ATR",      color: "#d97706", bg: "#fff8ec" },
-  { id: "ichimoku", label: "Ichimoku", color: "#7c6af0", bg: "#f0effb" },
+  { id: "ema20",  label: "EMA 20",  color: "#f4f7fb", bg: "rgba(244,247,251,0.10)" },
+  { id: "ema50",  label: "EMA 50",  color: "#bac4d1", bg: "rgba(186,196,209,0.10)" },
+  { id: "ema200", label: "EMA 200", color: "#7a8695", bg: "rgba(122,134,149,0.12)" },
+  { id: "bb",     label: "BB",      color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
+  { id: "vwap",   label: "VWAP",    color: "#d6dce5", bg: "rgba(214,220,229,0.10)" },
+  { id: "rsi",    label: "RSI",     color: "#f4f7fb", bg: "rgba(244,247,251,0.10)" },
+  { id: "macd",   label: "MACD",    color: "#bac4d1", bg: "rgba(186,196,209,0.10)" },
+  { id: "stoch",    label: "Stoch",    color: "#9ca3af", bg: "rgba(156,163,175,0.10)" },
+  { id: "atr",      label: "ATR",      color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
+  { id: "ichimoku", label: "Ichimoku", color: "#d6dce5", bg: "rgba(214,220,229,0.10)" },
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "Text"] as const;
@@ -159,7 +159,6 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<ChartDrawing[][]>([]);
   const [redoStack, setRedoStack] = useState<ChartDrawing[][]>([]);
-  const candleChartRef = useRef<ChartHandle>(null);
   const chartHandleRef = useRef<ChartHandle | null>(null);
 
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
@@ -297,70 +296,6 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     if (!snapToPrice) return price;
     return findNearestCandlePrice(data?.candles, time, price);
   }, [data?.candles, snapToPrice]);
-
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.target as HTMLElement | null)?.tagName === "INPUT" || (e.target as HTMLElement | null)?.tagName === "TEXTAREA") {
-        return;
-      }
-      const metaOrCtrl = e.metaKey || e.ctrlKey;
-      if (metaOrCtrl && e.key.toLowerCase() === "z") {
-        e.preventDefault();
-        if (e.shiftKey) {
-          setRedoStack((future) => {
-            if (!future.length) return future;
-            const next = cloneDrawings(future[future.length - 1]);
-            setUndoStack((history) => [...history.slice(-39), cloneDrawings(drawnLines)]);
-            setDrawnLines(next);
-            setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
-            return future.slice(0, -1);
-          });
-        } else {
-          setUndoStack((history) => {
-            if (!history.length) return history;
-            const next = cloneDrawings(history[history.length - 1]);
-            setRedoStack((future) => [...future.slice(-39), cloneDrawings(drawnLines)]);
-            setDrawnLines(next);
-            setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
-            return history.slice(0, -1);
-          });
-        }
-        return;
-      }
-      if (metaOrCtrl && e.key.toLowerCase() === "y") {
-        e.preventDefault();
-        setRedoStack((future) => {
-          if (!future.length) return future;
-          const next = cloneDrawings(future[future.length - 1]);
-          setUndoStack((history) => [...history.slice(-39), cloneDrawings(drawnLines)]);
-          setDrawnLines(next);
-          setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
-          return future.slice(0, -1);
-        });
-        return;
-      }
-      if (e.key === "Escape") {
-        setActiveDrawingTool(null);
-        setSelectedDrawingId(null);
-        setDrawingPreview(null);
-        drawingStartRef.current = null;
-        return;
-      }
-      const shortcut = e.key.toUpperCase();
-      const match = Object.entries(DRAW_TOOL_META).find(([, meta]) => meta.short === shortcut);
-      if (match) {
-        e.preventDefault();
-        setActiveDrawingTool(match[0] as DrawingTool);
-        setSelectedDrawingId(null);
-      }
-      if ((e.key === "Backspace" || e.key === "Delete") && selectedDrawingId) {
-        e.preventDefault();
-        void handleDeleteSingleDrawing(selectedDrawingId);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [drawnLines, selectedDrawingId]);
 
   // Load compare symbol data
   useEffect(() => {
@@ -506,7 +441,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           tool,
           p1: { time: pts[0].time, price: pts[0].price },
           p2: { time: pts[1].time ?? pts[0].time, price: pts[1].price ?? pts[0].price },
-          color: (d.style as { color?: string }).color ?? "#5b63f5",
+          color: (d.style as { color?: string }).color ?? "#f4f7fb",
           text: (d.style as { text?: string }).text,
           locked: Boolean((d.style as { locked?: boolean }).locked),
           hidden: Boolean((d.style as { hidden?: boolean }).hidden),
@@ -800,7 +735,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       tool: activeDrawingTool,
       p1: { time: time1, price: price1 },
       p2: { time: time2, price: finalPrice2 },
-      color: "#5b63f5",
+      color: "#f4f7fb",
     };
     if (activeDrawingTool === "Text") {
       line.text = "Note";
@@ -821,7 +756,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       const saved = await saveDrawing(symbol, {
         tool_type: activeDrawingTool.toLowerCase(),
         points: savedPoints,
-        style: { color: "#5b63f5", text: line.text ?? null },
+        style: { color: "#f4f7fb", text: line.text ?? null },
         timeframe,
       });
       setDrawings(prev => [...prev, saved]);
@@ -838,6 +773,70 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setDrawings(prev => prev.filter(item => item.id !== drawingId));
     await deleteDrawing(symbol, drawingId).catch(() => {});
   }, [drawnLines, symbol, updateDrawingsWithHistory]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.target as HTMLElement | null)?.tagName === "INPUT" || (e.target as HTMLElement | null)?.tagName === "TEXTAREA") {
+        return;
+      }
+      const metaOrCtrl = e.metaKey || e.ctrlKey;
+      if (metaOrCtrl && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          setRedoStack((future) => {
+            if (!future.length) return future;
+            const next = cloneDrawings(future[future.length - 1]);
+            setUndoStack((history) => [...history.slice(-39), cloneDrawings(drawnLines)]);
+            setDrawnLines(next);
+            setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+            return future.slice(0, -1);
+          });
+        } else {
+          setUndoStack((history) => {
+            if (!history.length) return history;
+            const next = cloneDrawings(history[history.length - 1]);
+            setRedoStack((future) => [...future.slice(-39), cloneDrawings(drawnLines)]);
+            setDrawnLines(next);
+            setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+            return history.slice(0, -1);
+          });
+        }
+        return;
+      }
+      if (metaOrCtrl && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        setRedoStack((future) => {
+          if (!future.length) return future;
+          const next = cloneDrawings(future[future.length - 1]);
+          setUndoStack((history) => [...history.slice(-39), cloneDrawings(drawnLines)]);
+          setDrawnLines(next);
+          setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+          return future.slice(0, -1);
+        });
+        return;
+      }
+      if (e.key === "Escape") {
+        setActiveDrawingTool(null);
+        setSelectedDrawingId(null);
+        setDrawingPreview(null);
+        drawingStartRef.current = null;
+        return;
+      }
+      const shortcut = e.key.toUpperCase();
+      const match = Object.entries(DRAW_TOOL_META).find(([, meta]) => meta.short === shortcut);
+      if (match) {
+        e.preventDefault();
+        setActiveDrawingTool(match[0] as DrawingTool);
+        setSelectedDrawingId(null);
+      }
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedDrawingId) {
+        e.preventDefault();
+        void handleDeleteSingleDrawing(selectedDrawingId);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawnLines, handleDeleteSingleDrawing, selectedDrawingId]);
 
   const clearDrawings = useCallback(async () => {
     const currentIds = drawnLines.filter(item => !item.locked).map(item => item.id);
@@ -1213,7 +1212,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               className={`workspace-chip-button ${INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id)) ? 'active' : ''} flex items-center gap-1`}
               style={
                 INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id))
-                  ? { background: "rgba(91,99,245,0.15)", color: "#818cf8", border: "1px solid rgba(91,99,245,0.3)" }
+                  ? { background: "rgba(139,150,166,0.15)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.3)" }
                   : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
               }
             >
@@ -1250,7 +1249,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               onClick={() => setShowDrawMenu(s => !s)}
               className={`workspace-chip-button ${activeDrawingTool ? 'active' : ''} flex items-center gap-1`}
               style={activeDrawingTool
-                ? { background: "rgba(91,99,245,0.2)", color: "#818cf8", border: "1px solid rgba(91,99,245,0.4)" }
+                ? { background: "rgba(139,150,166,0.2)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.4)" }
                 : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
               }
             >
@@ -1264,7 +1263,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                     key={tool}
                     onClick={() => { setActiveDrawingTool(t => t === tool ? null : tool); setShowDrawMenu(false); }}
                     className="w-full text-left px-3 py-1.5 text-[12px] transition-colors"
-                    style={{ color: activeDrawingTool === tool ? "#818cf8" : "var(--app-text2)" }}
+                    style={{ color: activeDrawingTool === tool ? "#bac4d1" : "var(--app-text2)" }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                   >
@@ -1455,7 +1454,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
         {/* Sidebar */}
         <aside className="w-[240px] flex-shrink-0 flex flex-col overflow-y-auto"
-          style={{ background: "linear-gradient(180deg, rgba(86,215,193,0.04), rgba(255,255,255,0.02)), var(--surface-1)", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
+          style={{ background: "linear-gradient(180deg, rgba(244,247,251,0.04), rgba(255,255,255,0.02)), var(--surface-1)", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
           {loading ? (
             <div className="p-4 space-y-3">
               {[80, 50, 60, 40, 70].map((w, i) => (
@@ -1742,7 +1741,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                               onClick={() => setActiveManagedPositionId(position.id)}
                               className="px-2.5 py-1.5 rounded-[8px] text-[10px] font-semibold"
                               style={activeManagedPositionId === position.id
-                                ? { background: "rgba(86,215,193,0.14)", color: "var(--accent)", border: "1px solid rgba(86,215,193,0.24)" }
+                                ? { background: "rgba(244,247,251,0.14)", color: "var(--accent)", border: "1px solid rgba(244,247,251,0.24)" }
                                 : { background: "var(--app-surface3)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}
                             >
                               {activeManagedPositionId === position.id ? "Managing on chart" : "Manage on chart"}
@@ -1915,8 +1914,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                           {latest?.rsi_14 != null ? (
                             <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded-full"
                               style={{
-                                background: latest.rsi_14 > 70 ? "rgba(91,99,245,0.2)" : latest.rsi_14 < 40 ? "rgba(217,119,6,0.2)" : "rgba(38,166,91,0.2)",
-                                color: latest.rsi_14 > 70 ? "#818cf8" : latest.rsi_14 < 40 ? "#d97706" : "#26a65b",
+                                background: latest.rsi_14 > 70 ? "rgba(139,150,166,0.2)" : latest.rsi_14 < 40 ? "rgba(217,119,6,0.2)" : "rgba(38,166,91,0.2)",
+                                color: latest.rsi_14 > 70 ? "#bac4d1" : latest.rsi_14 < 40 ? "#d97706" : "#26a65b",
                               }}>
                               {latest.rsi_14.toFixed(1)}
                             </span>
@@ -1924,7 +1923,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-[11px]" style={{ color: "var(--app-text3)" }}>Vol Ratio</span>
-                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "#7c6af0" }}>
+                          <span className="text-[11px] font-medium tabular-nums" style={{ color: "#d6dce5" }}>
                             {latest?.volume_ratio != null ? `${latest.volume_ratio.toFixed(2)}x` : "—"}
                           </span>
                         </div>
@@ -1942,8 +1941,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       <div className="text-[9px] uppercase tracking-[0.5px] mb-1.5 font-semibold" style={{ color: "var(--app-text3)" }}>EMA Levels</div>
                       <div className="space-y-1">
                         {([
-                          ["EMA 20",  latest?.ema_20,  "#00E5C4"],
-                          ["EMA 50",  latest?.ema_50,  "#818cf8"],
+                          ["EMA 20",  latest?.ema_20,  "#f4f7fb"],
+                          ["EMA 50",  latest?.ema_50,  "#bac4d1"],
                           ["EMA 200", latest?.ema_200, "#f59e0b"],
                         ] as [string, number | null | undefined, string][]).map(([label, ema, color]) => {
                           const above = ema != null && latest?.close != null && latest.close > ema;
@@ -2080,7 +2079,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 title={`${meta.label} (${meta.short})`}
                 className="w-full flex flex-col items-center gap-1 rounded-[14px] px-2 py-2 transition-colors"
                 style={active
-                  ? { background: "rgba(91,99,245,0.16)", border: "1px solid rgba(91,99,245,0.38)", color: "#a5b4fc" }
+                  ? { background: "rgba(139,150,166,0.16)", border: "1px solid rgba(139,150,166,0.38)", color: "#a5b4fc" }
                   : { background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--app-text3)" }}
               >
                 <Icon size={15} />
@@ -2122,7 +2121,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               )}
               {activeToolMeta && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: "rgba(91,99,245,0.14)", color: "#a5b4fc" }}>
+                  style={{ background: "rgba(139,150,166,0.14)", color: "#a5b4fc" }}>
                   {activeToolMeta.label} armed · press ESC to cancel
                 </div>
               )}
@@ -2270,7 +2269,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                         onClick={() => setSelectedDrawingId(item.id)}
                         className="w-full text-left rounded-[12px] px-3 py-2 transition-colors cursor-pointer"
                         style={selectedDrawingId === item.id
-                          ? { background: "rgba(91,99,245,0.16)", border: "1px solid rgba(91,99,245,0.34)" }
+                          ? { background: "rgba(139,150,166,0.16)", border: "1px solid rgba(139,150,166,0.34)" }
                           : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -2409,16 +2408,16 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       y={Math.min(drawingPreview.y1, drawingPreview.y2)}
                       width={Math.abs(drawingPreview.x2 - drawingPreview.x1)}
                       height={Math.abs(drawingPreview.y2 - drawingPreview.y1)}
-                      fill="rgba(91,99,245,0.12)"
-                      stroke="#5b63f5"
+                      fill="rgba(139,150,166,0.12)"
+                      stroke="#f4f7fb"
                       strokeWidth={1.5}
                       strokeDasharray="4 3"
                       rx={3}
                     />
                   ) : activeDrawingTool === "Text" ? (
                     <g>
-                      <circle cx={drawingPreview.x1} cy={drawingPreview.y1} r={4} fill="#5b63f5" />
-                      <rect x={drawingPreview.x1 + 8} y={drawingPreview.y1 - 24} width={92} height={20} rx={6} fill="rgba(13,15,20,0.9)" stroke="#5b63f5" />
+                      <circle cx={drawingPreview.x1} cy={drawingPreview.y1} r={4} fill="#f4f7fb" />
+                      <rect x={drawingPreview.x1 + 8} y={drawingPreview.y1 - 24} width={92} height={20} rx={6} fill="rgba(13,15,20,0.9)" stroke="#f4f7fb" />
                       <text x={drawingPreview.x1 + 14} y={drawingPreview.y1 - 11} fontSize="10" fill="#f8fafc" fontFamily="Inter, sans-serif">Text note</text>
                     </g>
                   ) : (
@@ -2426,7 +2425,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       x1={drawingPreview.x1} y1={drawingPreview.y1}
                       x2={drawingPreview.x2}
                       y2={(activeDrawingTool === "Horizontal" || activeDrawingTool === "HorizontalRay") ? drawingPreview.y1 : drawingPreview.y2}
-                      stroke="#5b63f5" strokeWidth={1.5} strokeDasharray="4 3"
+                      stroke="#f4f7fb" strokeWidth={1.5} strokeDasharray="4 3"
                     />
                   )}
                 </svg>
@@ -2588,7 +2587,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                   if (x1 == null || y1 == null) return null;
 
                   const selected = selectedDrawingId === line.id;
-                  const stroke = selected ? "#c4b5fd" : line.color;
+                  const stroke = selected ? "#e5e7eb" : line.color;
                   const strokeWidth = selected ? 2.2 : 1.5;
                   const editable = selected && !line.locked;
 
@@ -2607,7 +2606,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                             cy={y1}
                             r={5}
                             fill="#0D0F14"
-                            stroke="#c4b5fd"
+                            stroke="#e5e7eb"
                             strokeWidth={1.5}
                             style={{ pointerEvents: "all", cursor: "ns-resize" }}
 onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
@@ -2633,7 +2632,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
                               cy={y1}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "move" }}
 onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
@@ -2643,7 +2642,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
                               cy={y1}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "ew-resize" }}
 onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
@@ -2670,7 +2669,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               cy={y1}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "move" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
@@ -2680,7 +2679,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               cy={y2}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "move" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
@@ -2703,7 +2702,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                           y={rectY}
                           width={rectW}
                           height={rectH}
-                          fill={selected ? "rgba(196,181,253,0.16)" : "rgba(91,99,245,0.12)"}
+                          fill={selected ? "rgba(196,181,253,0.16)" : "rgba(139,150,166,0.12)"}
                           stroke={stroke}
                           strokeWidth={strokeWidth}
                           rx={3}
@@ -2715,7 +2714,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               cy={y1}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "nwse-resize" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
@@ -2725,7 +2724,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               cy={y2}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "nwse-resize" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
@@ -2746,14 +2745,14 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                           const yLvl = chartHandleRef.current?.priceToCoordinate(priceLvl) ?? null;
                           if (yLvl == null) return null;
                           const colors: Record<number, string> = {
-                            0: "#888", 0.236: "#5b63f5", 0.382: "#26a65b",
+                            0: "#888", 0.236: "#f4f7fb", 0.382: "#26a65b",
                             0.5: "#d97706", 0.618: "#e5383b", 1: "#888"
                           };
                           return (
                             <g key={lvl}>
                               <line x1={x1} y1={yLvl} x2={x2} y2={yLvl}
-                                stroke={selected ? "#c4b5fd" : (colors[lvl] || "#5b63f5")} strokeWidth={selected ? 1.5 : 1} strokeDasharray="3 2" />
-                              <text x={x2 + 4} y={yLvl + 4} fontSize="9" fill={selected ? "#c4b5fd" : (colors[lvl] || "#5b63f5")} fontFamily="monospace">
+                                stroke={selected ? "#e5e7eb" : (colors[lvl] || "#f4f7fb")} strokeWidth={selected ? 1.5 : 1} strokeDasharray="3 2" />
+                              <text x={x2 + 4} y={yLvl + 4} fontSize="9" fill={selected ? "#e5e7eb" : (colors[lvl] || "#f4f7fb")} fontFamily="monospace">
                                 {(lvl * 100).toFixed(1)}%
                               </text>
                             </g>
@@ -2766,7 +2765,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               cy={y1}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "move" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
@@ -2776,7 +2775,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               cy={y2}
                               r={5}
                               fill="#0D0F14"
-                              stroke="#c4b5fd"
+                              stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "move" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
@@ -2815,7 +2814,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                             cy={y1}
                             r={5}
                             fill="#0D0F14"
-                            stroke="#c4b5fd"
+                            stroke="#e5e7eb"
                             strokeWidth={1.5}
                             style={{ pointerEvents: "all", cursor: "move" }}
                             onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
@@ -2842,7 +2841,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                             cy={y1}
                             r={5}
                             fill="#0D0F14"
-                            stroke="#c4b5fd"
+                            stroke="#e5e7eb"
                             strokeWidth={1.5}
                             style={{ pointerEvents: "all", cursor: "move" }}
                             onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
@@ -2852,7 +2851,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                             cy={y2}
                             r={5}
                             fill="#0D0F14"
-                            stroke="#c4b5fd"
+                            stroke="#e5e7eb"
                             strokeWidth={1.5}
                             style={{ pointerEvents: "all", cursor: "move" }}
                             onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
@@ -2869,7 +2868,6 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
             {data && (
               <CandlestickChart
                 key={`${symbol}-${timeframe}-${liveMode ? "live" : "eod"}`}
-                ref={candleChartRef}
                 candles={data.candles}
                 indicators={indicatorData}
                 activeIndicators={activeIndicators}

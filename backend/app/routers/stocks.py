@@ -5,6 +5,13 @@ from fastapi import APIRouter, HTTPException, status
 import yfinance as yf
 
 from app.services.market_dates import get_latest_complete_trade_date
+from app.services.market_data import (
+    MarketDataError,
+    MarketIdentity,
+    ProviderNotConfiguredError,
+    get_market_data_provider,
+    yf_ticker_symbol,
+)
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
@@ -28,7 +35,7 @@ def _lookup_market(sym: str) -> tuple[str, str]:
 
 def _yf_ticker_symbol(sym: str, market: str) -> str:
     """Yahoo Finance uses .NS suffix for NSE stocks, bare symbol for US."""
-    return sym if market in ("NASDAQ", "NYSE") else f"{sym}.NS"
+    return yf_ticker_symbol(sym, market)
 
 
 @router.get("/stocks/{symbol}/quote")
@@ -406,41 +413,14 @@ async def get_fundamentals(symbol: str):
 
 @router.get("/stocks/{symbol}/quote-live")
 async def get_quote_live(symbol: str):
-    """Live quote from Yahoo Finance. NSE stocks use .NS suffix; US stocks use bare symbol.
-    Returns current price, day change, 52W range, volume — real-time 15-min delayed."""
+    """Live quote from the configured market data provider."""
     try:
         sym = symbol.upper()
         market, currency = _lookup_market(sym)
-        ticker = yf.Ticker(_yf_ticker_symbol(sym, market))
-        info = ticker.fast_info
-        hist = ticker.history(period="2d", interval="1d")
-
-        if hist.empty:
-            raise HTTPException(status_code=404, detail=f"No live data for {symbol}")
-
-        latest = hist.iloc[-1]
-        prev   = hist.iloc[-2] if len(hist) >= 2 else hist.iloc[-1]
-
-        close     = float(latest["Close"])
-        prev_close = float(prev["Close"])
-        pct_change = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
-
-        return {
-            "symbol": sym,
-            "market": market,
-            "currency": currency,
-            "close":      round(close, 2),
-            "open":       round(float(latest["Open"]), 2),
-            "high":       round(float(latest["High"]), 2),
-            "low":        round(float(latest["Low"]), 2),
-            "volume":     int(latest["Volume"]),
-            "prev_close": round(prev_close, 2),
-            "pct_change": pct_change,
-            "week_52_high": round(float(info.year_high), 2) if info.year_high else None,
-            "week_52_low":  round(float(info.year_low), 2)  if info.year_low  else None,
-            "source": "yahoo_finance",
-        }
-    except HTTPException:
-        raise
+        return get_market_data_provider().live_quote(sym, MarketIdentity(market=market, currency=currency))
+    except ProviderNotConfiguredError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    except MarketDataError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Yahoo Finance error: {e}")
+        raise HTTPException(status_code=502, detail=f"Market data provider error: {e}")

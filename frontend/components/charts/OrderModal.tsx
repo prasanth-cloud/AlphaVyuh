@@ -158,7 +158,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               value={price}
               onChange={e => setPrice(e.target.value)}
               step="0.05"
-              className="w-full text-[14px] font-semibold border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#5b63f5] tabular-nums"
+              className="w-full text-[14px] font-semibold border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#f4f7fb] tabular-nums"
               style={{ borderColor: accent + "66" }}
             />
           </div>
@@ -174,7 +174,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               onChange={e => setQuantity(e.target.value)}
               min="1"
               step="1"
-              className="w-full text-[14px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#5b63f5]"
+              className="w-full text-[14px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none focus:border-[#f4f7fb]"
             />
           </div>
 
@@ -237,7 +237,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <select
               value={setupType}
               onChange={e => setSetupType(e.target.value)}
-              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none bg-white focus:border-[#5b63f5]"
+              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2.5 outline-none bg-white focus:border-[#f4f7fb]"
             >
               {SETUP_TYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
@@ -253,7 +253,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               onChange={e => setNotes(e.target.value)}
               placeholder="Entry rationale, market context…"
               rows={2}
-              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none resize-none focus:border-[#5b63f5]"
+              className="w-full text-[13px] border border-[#e2e2df] rounded-[8px] px-3 py-2 outline-none resize-none focus:border-[#f4f7fb]"
             />
           </div>
 
