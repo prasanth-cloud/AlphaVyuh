@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { authHeaders } from '@/lib/api'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td } from '@/components/ui'
@@ -43,19 +43,45 @@ interface Watchlist { id: string; name: string }
 
 // ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
-  { id: 'momentum',     name: 'Momentum',
-    filters: { rsi_min: 55, rsi_max: 80, volume_ratio_min: 1.5, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 1.0 } },
-  { id: 'breakout',     name: 'Breakout',
-    filters: { volume_ratio_min: 2.0, pct_change_min: 2.0, week_52_high_pct_max: 8.0, price_vs_ema20: 'above' } },
-  { id: 'oversold',     name: 'Oversold',
-    filters: { rsi_min: 20, rsi_max: 35, price_vs_ema200: 'above' } },
-  { id: 'new_highs',    name: '52W Highs',
-    filters: { new_52w_high: true, volume_ratio_min: 1.2 } },
-  { id: 'high_volume',  name: 'High Vol',
-    filters: { volume_ratio_min: 3.0 } },
-  { id: 'golden_cross', name: 'Golden Cross',
-    filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above' } },
-]
+  {
+    id: 'leaders',
+    name: 'Leaders',
+    description: 'Broad, market-ready shortlist of stronger names above key averages.',
+    filters: { rsi_min: 50, rsi_max: 82, volume_ratio_min: 1.05, price_vs_ema20: 'above', price_vs_ema50: 'above' },
+  },
+  {
+    id: 'momentum',
+    name: 'Momentum',
+    description: 'Continuation names with improving participation.',
+    filters: { rsi_min: 55, rsi_max: 80, volume_ratio_min: 1.2, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
+  },
+  {
+    id: 'breakout',
+    name: 'Breakout',
+    description: 'Higher-energy setups pushing toward fresh highs.',
+    filters: { volume_ratio_min: 1.5, pct_change_min: 1.0, week_52_high_pct_max: 12.0, price_vs_ema20: 'above' },
+  },
+  {
+    id: 'new_highs',
+    name: '52W Highs',
+    description: 'Names already proving absolute strength.',
+    filters: { new_52w_high: true, volume_ratio_min: 1.0 },
+  },
+  {
+    id: 'golden_cross',
+    name: 'Golden Cross',
+    description: 'Trend transition ideas with medium-term structure support.',
+    filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above', volume_ratio_min: 1.0 },
+  },
+  {
+    id: 'oversold',
+    name: 'Oversold',
+    description: 'Recovery candidates still above the long-term trend.',
+    filters: { rsi_min: 20, rsi_max: 35, price_vs_ema200: 'above' },
+  },
+] as const
+
+type Preset = (typeof PRESETS)[number]
 
 type Filters = {
   price_min: string; price_max: string
@@ -180,6 +206,9 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
           <Button size="sm" variant="primary" onClick={() => onOpenChart(r.symbol)}>
             Open chart
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => window.location.assign(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`)}>
+            Review journal
+          </Button>
           {watchlists.length > 0 && (
             <select
               onChange={e => { if (e.target.value) { onAddToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
@@ -203,8 +232,12 @@ export default function ScannerPage() {
   const router = useRouter()
   const [filters, setFilters] = useState<Filters>(emptyFilters())
   const [activePreset, setActivePreset] = useState<string | null>(null)
+  const [bootstrapped, setBootstrapped] = useState(false)
   const [results, setResults] = useState<ScanResult[]>([])
   const [totalMatches, setTotalMatches] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState<25 | 50 | 150 | 200 | 0>(25)
   const [tradeDate, setTradeDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -233,6 +266,13 @@ export default function ScannerPage() {
     loadWatchlists()
     loadSavedScreens()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (bootstrapped) return
+    if (loading || hasRun || savedScreens.length > 0) return
+    setBootstrapped(true)
+    applyPreset(PRESETS[0])
+  }, [bootstrapped, loading, hasRun, savedScreens.length])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -296,7 +336,7 @@ export default function ScannerPage() {
     return { filters: fil, sort_by: sb, sort_order: sd ? 'desc' : 'asc', limit: 200 }
   }
 
-  async function runScan(overrideFilters?: Filters, sb = sortBy, sd = sortDesc) {
+  async function runScan(overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize) {
     setLoading(true); setError(''); setResults([]); setExpandedSymbol(null)
     try {
       const token = await getToken()
@@ -304,12 +344,14 @@ export default function ScannerPage() {
       const res = await fetch(`${API}/api/v1/scanner/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, page, page_size: size }),
       })
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
       const data = await res.json()
       setResults(data.results || [])
       setTotalMatches(data.total_matches || 0)
+      setTotalPages(data.total_pages || 1)
+      setCurrentPage(data.page || page)
       setTradeDate(data.trade_date || '')
       setIsLimited(data.is_limited || false)
       setHasRun(true)
@@ -318,14 +360,17 @@ export default function ScannerPage() {
     } finally { setLoading(false) }
   }
 
-  function applyPreset(p: typeof PRESETS[0]) {
-    const f = { ...emptyFilters(), ...p.filters } as Filters
-    setFilters(f); setActivePreset(p.id); runScan(f)
+  function applyPreset(p: Preset) {
+    const normalizedFilters = Object.fromEntries(
+      Object.entries(p.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
+    )
+    const f = { ...emptyFilters(), ...normalizedFilters } as Filters
+    setFilters(f); setActivePreset(p.id); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize)
   }
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
-    setFilters(f); setActivePreset(null); runScan(f)
+    setFilters(f); setActivePreset(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize)
   }
 
   async function saveCurrentScreen() {
@@ -446,58 +491,70 @@ export default function ScannerPage() {
     )
   }
 
-  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setResults([]); setError(''); setHasRun(false) }
+  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
+  const activePresetMeta = PRESETS.find(p => p.id === activePreset) ?? null
+  const pageSizeOptions = [
+    { value: 25, label: '25' },
+    { value: 50, label: '50' },
+    { value: 150, label: '150' },
+    { value: 200, label: '200' },
+    { value: 0, label: 'All' },
+  ] satisfies Array<{ value: 25 | 50 | 150 | 200 | 0; label: string }>;
+  const visibleStart = totalMatches === 0 ? 0 : pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1;
+  const visibleEnd = totalMatches === 0 ? 0 : pageSize === 0 ? totalMatches : Math.min(totalMatches, visibleStart + results.length - 1);
+  const paginationWindow = 2;
+  const pageWindowStart = Math.max(1, currentPage - paginationWindow);
+  const pageWindowEnd = Math.min(totalPages, currentPage + paginationWindow);
+  const pageNumbers = Array.from(
+    { length: pageSize === 0 ? 1 : Math.max(0, pageWindowEnd - pageWindowStart + 1) },
+    (_, idx) => (pageSize === 0 ? 1 : pageWindowStart + idx),
+  );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 'calc(100vh - 120px)' }}>
-      {/* Status bar */}
-      <div style={{ height: 44, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Scanner</span>
-          {tradeDate && (
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD {tradeDate}</span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-            {PRESETS.length} presets · {savedScreens.length} saved
-          </span>
-          {results.length > 0 && (
-            <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{results.length} visible</span>
-          )}
+    <div className="workspace-page">
+      <div className="workspace-card" style={{ padding: '14px 18px', marginBottom: 16 }}>
+        <div className="workspace-toolbar" style={{ minHeight: 'auto', padding: 0, border: 'none' }}>
+          <div>
+            <div className="workspace-card-title">Scanner</div>
+          </div>
+          <div className="workspace-pill-row">
+            <span className="workspace-pill">{activePresetMeta?.name ?? 'Custom view'}</span>
+            <span className="workspace-pill">{hasRun ? `${totalMatches || results.length} matches` : 'Ready to scan'}</span>
+            <span className="workspace-pill">{tradeDate ? `EOD ${tradeDate}` : 'Latest complete market day'}</span>
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, minHeight: 'calc(100vh - 180px)', overflow: 'visible', flexWrap: 'wrap' }}>
+      <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
 
       {/* ── LEFT PANEL ── */}
-      <div style={{
-        width: 292,
-        maxWidth: '100%',
-        flexShrink: 0,
-        background: 'var(--surface-1)',
-        border: '1px solid var(--border-default)',
-        borderRadius: 'var(--radius-lg)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}>
+      <div className="workspace-card workspace-card-muted" style={{ display: 'flex', flexDirection: 'column' }}>
 
         {/* Presets */}
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <div className="label" style={{ marginBottom: 10 }}>Presets</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+        <div className="workspace-card-header" style={{ display: 'block' }}>
+          <div className="label" style={{ marginBottom: 10 }}>Quick starts</div>
+          <div style={{ display: 'grid', gap: 8 }}>
             {PRESETS.map(p => {
               const active = activePreset === p.id
               return (
                 <button key={p.id} onClick={() => applyPreset(p)} style={{
-                  padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                  padding: '8px 10px',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: 'pointer',
                   border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                  background: active ? 'var(--accent-subtle)' : 'transparent',
+                  background: active ? 'var(--accent-subtle)' : 'var(--surface-2)',
                   color: active ? 'var(--accent)' : 'var(--text-secondary)',
                   transition: 'all var(--motion-instant) var(--ease-out)',
+                  textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
                 }}>
-                  {p.name}
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {p.name}
+                  </span>
+                  <span style={{ fontSize: 10, color: active ? 'var(--text-secondary)' : 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                    preset
+                  </span>
                 </button>
               )
             })}
@@ -506,7 +563,7 @@ export default function ScannerPage() {
 
         {/* Saved screens */}
         {savedScreens.length > 0 && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-subtle)', maxHeight: 120, overflowY: 'auto', flexShrink: 0 }}>
+          <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 156, overflowY: 'auto', flexShrink: 0 }}>
             <div className="label" style={{ marginBottom: 8 }}>My screens</div>
             {savedScreens.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
@@ -523,7 +580,7 @@ export default function ScannerPage() {
         )}
 
         {/* Filters toggle */}
-        <div style={{ padding: '8px 16px', borderBottom: filtersOpen ? '1px solid var(--border-subtle)' : 'none', flexShrink: 0 }}>
+        <div className="workspace-section" style={{ paddingTop: 12, paddingBottom: 12, borderBottom: filtersOpen ? '1px solid var(--border-subtle)' : 'none', flexShrink: 0 }}>
           <button onClick={() => setFiltersOpen(o => !o)} style={{
             width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
@@ -621,7 +678,7 @@ export default function ScannerPage() {
         </div>
 
         {/* Bottom actions */}
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+        <div className="workspace-section" style={{ borderTop: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
           <Button variant="primary" size="md" onClick={() => runScan()} loading={loading} fullWidth>
             Run scan
           </Button>
@@ -639,67 +696,59 @@ export default function ScannerPage() {
       </div>
 
       {/* ── CENTER: Results ── */}
-      <div style={{
-        flex: 1,
-        minWidth: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        background: 'var(--surface-1)',
-        border: '1px solid var(--border-default)',
-        borderRadius: 'var(--radius-lg)',
-      }}>
+      <div className="workspace-card" style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
 
         {/* Results header */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '16px 20px',
-          minHeight: 72,
-          borderBottom: '1px solid var(--border-subtle)',
-          flexShrink: 0,
-          background: 'var(--surface-2)',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}>
+        <div className="workspace-toolbar" style={{ minHeight: 64, alignItems: 'center' }}>
           {results.length > 0 ? (
             <>
               <div>
                 <span className="heading-card">{totalMatches > 0 ? `${totalMatches} stocks` : 'Scanner'}</span>
-                {tradeDate && <span className="caption" style={{ marginLeft: 8 }}>EOD {tradeDate} · showing {results.length}</span>}
+                {tradeDate && <span className="caption" style={{ marginLeft: 8 }}>EOD {tradeDate}</span>}
               </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div className="workspace-toolbar-group">
                 {isLimited && (
-                  <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--warn-subtle)', color: 'var(--warn)', border: '1px solid var(--border-subtle)' }}>
-                    Free plan · 50 cap
+                  <span className="workspace-pill" style={{ background: 'var(--warn-subtle)', color: 'var(--warn)' }}>
+                    Free plan · 200 cap
                   </span>
                 )}
                 {SORT_COLS.map(([col, lbl]) => {
                   const active = sortBy === col
                   return (
-                    <button key={col} onClick={() => {
+                    <button key={col} className={`workspace-chip-button${active ? ' active' : ''}`} onClick={() => {
                       const newDesc = col === sortBy ? !sortDesc : true
-                      setSortBy(col); setSortDesc(newDesc); runScan(undefined, col, newDesc)
-                    }} style={{
-                      padding: '3px 10px', borderRadius: 'var(--radius-sm)', fontSize: 11, fontWeight: 500, cursor: 'pointer',
-                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                      background: active ? 'var(--accent-subtle)' : 'transparent',
-                      color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                      setSortBy(col); setSortDesc(newDesc); setCurrentPage(1); runScan(undefined, col, newDesc, 1, pageSize)
                     }}>
                       {lbl}{active ? (sortDesc ? ' ↓' : ' ↑') : ''}
                     </button>
                   )
                 })}
+                <select
+                  value={String(pageSize)}
+                  onChange={e => {
+                    const nextSize = Number(e.target.value) as 25 | 50 | 150 | 200 | 0
+                    setPageSize(nextSize)
+                    setCurrentPage(1)
+                    if (hasRun) runScan(undefined, sortBy, sortDesc, 1, nextSize)
+                  }}
+                  style={{ fontSize: 11, padding: '7px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}
+                >
+                  {pageSizeOptions.map(option => (
+                    <option key={option.label} value={option.value}>{option.value === 0 ? 'All results' : `${option.label} / page`}</option>
+                  ))}
+                </select>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
                   + Watchlist
                 </Button>
               </div>
             </>
           ) : (
-            <span className="caption">
-              {loading ? 'Scanning…' : 'Pick a preset or configure filters, then click Run scan'}
-            </span>
+            <div>
+              <div className="workspace-card-title">Scanner queue</div>
+              <div className="workspace-card-copy">
+                {loading ? 'Scanning…' : 'Starting with a broad leaders scan so you land on a usable shortlist.'}
+              </div>
+            </div>
           )}
         </div>
 
@@ -723,8 +772,9 @@ export default function ScannerPage() {
         {!loading && !hasRun && !error && (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
-              title="Run your first scan"
-              description="Pick a preset on the left, or open Filters to set custom conditions."
+              title="Loading a practical starting list"
+              description="The scanner opens with a broader leaders preset first, then you can tighten filters only when you need a narrower setup list."
+              action={{ label: 'Run leaders preset', onClick: () => applyPreset(PRESETS[0]) }}
             />
           </div>
         )}
@@ -734,7 +784,7 @@ export default function ScannerPage() {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
               title="No stocks matched"
-              description="Your filters are too strict. Try widening the RSI range or reducing the volume ratio."
+              description="Your filters are too strict for the latest complete market day. Try widening RSI, lowering volume ratio, or starting from a preset."
               action={{ label: 'Reset filters', onClick: resetFilters }}
             />
           </div>
@@ -765,8 +815,23 @@ export default function ScannerPage() {
                     ? (r.rsi_14 > 70 ? 'accent' : r.rsi_14 > 40 ? 'gain' : 'warn')
                     : 'neutral'
                   return (
-                    <>
-                      <Tr key={r.symbol} onClick={() => setExpandedSymbol(expanded ? null : r.symbol)} selected={expanded}>
+                    <Fragment key={r.symbol}>
+                      <Tr
+                        onClick={() => setExpandedSymbol(expanded ? null : r.symbol)}
+                        onDoubleClick={() => router.push(`/charts/${r.symbol}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            router.push(`/charts/${r.symbol}`)
+                          }
+                          if (e.key === ' ') {
+                            e.preventDefault()
+                            setExpandedSymbol(expanded ? null : r.symbol)
+                          }
+                        }}
+                        tabIndex={0}
+                        selected={expanded}
+                      >
                         <Td>
                           <input type="checkbox" checked={selectedResults.has(r.symbol)} style={{ accentColor: 'var(--accent)' }}
                             onChange={e => { e.stopPropagation(); setSelectedResults(s => { const n = new Set(s); if (e.target.checked) { n.add(r.symbol) } else { n.delete(r.symbol) } return n }) }}
@@ -799,14 +864,28 @@ export default function ScannerPage() {
                           {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
                         </Td>
                         <Td>
-                          {watchlists.length > 0 && (
-                            <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
-                              onClick={e => e.stopPropagation()}
-                              style={{ fontSize: 10, padding: '2px 4px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                              <option value="">+WL</option>
-                              {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                            </select>
-                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
+                              style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}
+                            >
+                              Chart
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); router.push(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`) }}
+                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                            >
+                              Journal
+                            </button>
+                            {watchlists.length > 0 && (
+                              <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
+                                onClick={e => e.stopPropagation()}
+                                style={{ fontSize: 10, padding: '2px 4px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                <option value="">+WL</option>
+                                {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                              </select>
+                            )}
+                          </div>
                         </Td>
                       </Tr>
                       {expanded && (
@@ -817,11 +896,82 @@ export default function ScannerPage() {
                           onOpenChart={sym => router.push(`/charts/${sym}`)}
                         />
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
               </tbody>
             </DataTable>
+            <div className="workspace-toolbar" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none' }}>
+              <div className="workspace-card-copy">
+                Showing {visibleStart}-{visibleEnd} of {totalMatches} matches.
+              </div>
+              <div className="workspace-toolbar-group">
+                <button
+                  className="workspace-chip-button"
+                  disabled={currentPage <= 1}
+                  onClick={() => {
+                    const nextPage = Math.max(1, currentPage - 1)
+                    setCurrentPage(nextPage)
+                    runScan(undefined, sortBy, sortDesc, nextPage, pageSize)
+                  }}
+                  style={{ opacity: currentPage <= 1 ? 0.45 : 1 }}
+                >
+                  ← Prev
+                </button>
+                {pageSize !== 0 && pageNumbers[0] > 1 && (
+                  <>
+                    <button
+                      className={`workspace-chip-button${currentPage === 1 ? ' active' : ''}`}
+                      onClick={() => {
+                        setCurrentPage(1)
+                        runScan(undefined, sortBy, sortDesc, 1, pageSize)
+                      }}
+                    >
+                      1
+                    </button>
+                    {pageNumbers[0] > 2 && <span className="caption" style={{ padding: '0 2px' }}>…</span>}
+                  </>
+                )}
+                {pageSize !== 0 && pageNumbers.map(pageNumber => (
+                  <button
+                    key={pageNumber}
+                    className={`workspace-chip-button${currentPage === pageNumber ? ' active' : ''}`}
+                    onClick={() => {
+                      setCurrentPage(pageNumber)
+                      runScan(undefined, sortBy, sortDesc, pageNumber, pageSize)
+                    }}
+                  >
+                    {pageNumber}
+                  </button>
+                ))}
+                {pageSize !== 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
+                  <>
+                    {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && <span className="caption" style={{ padding: '0 2px' }}>…</span>}
+                    <button
+                      className={`workspace-chip-button${currentPage === totalPages ? ' active' : ''}`}
+                      onClick={() => {
+                        setCurrentPage(totalPages)
+                        runScan(undefined, sortBy, sortDesc, totalPages, pageSize)
+                      }}
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+                <button
+                  className="workspace-chip-button"
+                  disabled={pageSize === 0 || currentPage >= totalPages}
+                  onClick={() => {
+                    const nextPage = Math.min(totalPages, currentPage + 1)
+                    setCurrentPage(nextPage)
+                    runScan(undefined, sortBy, sortDesc, nextPage, pageSize)
+                  }}
+                  style={{ opacity: pageSize === 0 || currentPage >= totalPages ? 0.45 : 1 }}
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

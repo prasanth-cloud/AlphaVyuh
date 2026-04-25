@@ -10,6 +10,9 @@ interface JournalAiInsightsProps {
   aiTradesCount: number;
   aiLoading: boolean;
   aiError: string;
+  closedTrades: number;
+  reviewedTrades: number;
+  autoAnalysisStarted: boolean;
   onAnalyse: () => void;
 }
 
@@ -20,10 +23,34 @@ export function JournalAiInsights({
   aiTradesCount,
   aiLoading,
   aiError,
+  closedTrades,
+  reviewedTrades,
+  autoAnalysisStarted,
   onAnalyse,
 }: JournalAiInsightsProps) {
+  const reviewCoverage = closedTrades > 0 ? Math.round((reviewedTrades / closedTrades) * 100) : 0;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <Card padding="lg">
+        <h2 className="heading-card" style={{ marginBottom: 4 }}>Review loop</h2>
+        <div className="body-secondary" style={{ marginBottom: 16 }}>
+          AlphaVyuh should remove the friction after execution: chart order to journal, closed-trade review, then pattern analysis.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
+          {[
+            { label: "Closed trades", value: String(closedTrades), tone: "var(--text-primary)" },
+            { label: "Reviewed trades", value: String(reviewedTrades), tone: reviewedTrades > 0 ? "var(--gain)" : "var(--text-primary)" },
+            { label: "Coverage", value: `${reviewCoverage}%`, tone: reviewCoverage >= 70 ? "var(--gain)" : reviewCoverage >= 40 ? "var(--warn)" : "var(--text-primary)" },
+          ].map((item) => (
+            <div key={item.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+              <div className="label" style={{ marginBottom: 4 }}>{item.label}</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: item.tone }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       {/* Pattern stats */}
       <Card padding="lg">
         <h2 className="heading-card" style={{ marginBottom: 4 }}>Pattern stats</h2>
@@ -127,15 +154,15 @@ export function JournalAiInsights({
       <Card padding="lg">
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
-            <h2 className="heading-card" style={{ marginBottom: 4 }}>AI deep analysis</h2>
-            <div className="body-secondary">Claude reads your full journal and surfaces mistakes, patterns, and rules to add to your playbook.</div>
+            <h2 className="heading-card" style={{ marginBottom: 4 }}>AI review</h2>
+            <div className="body-secondary">Run a journal-wide review to surface repeat mistakes, strength areas, and process rules worth adding to your playbook.</div>
           </div>
           <button
             onClick={onAnalyse}
             disabled={aiLoading}
             style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 700, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
           >
-            {aiLoading ? "Analysing…" : aiAnalysis ? "Re-analyse" : "Analyse my trades"}
+            {aiLoading ? "Reviewing…" : aiAnalysis ? "Run review again" : "Review my journal"}
           </button>
         </div>
 
@@ -150,7 +177,7 @@ export function JournalAiInsights({
             <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid var(--surface-3)", borderTopColor: "var(--accent)", animation: "spin 1s linear infinite" }}>
               <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
             </div>
-            <div className="caption">Reading your journal and finding patterns…</div>
+            <div className="caption">{autoAnalysisStarted ? "Auto-review is reading your latest closed trades…" : "Reviewing your journal and looking for repeat patterns…"}</div>
           </div>
         )}
 
@@ -185,7 +212,11 @@ export function JournalAiInsights({
 
         {!aiAnalysis && !aiLoading && !aiError && (
           <div style={{ textAlign: "center", padding: "32px 0" }}>
-            <div className="body-secondary">Click &quot;Analyse my trades&quot; to get AI-powered insights on your trading patterns.</div>
+            <div className="body-secondary">
+              {closedTrades >= 3
+                ? "Your journal is ready for review. You can run it manually, and AlphaVyuh will also try to start it automatically once enough closed trades exist."
+                : "Close a few more trades to unlock journal-wide coaching."}
+            </div>
             <div className="caption" style={{ marginTop: 4 }}>Requires at least 3 closed trades.</div>
           </div>
         )}

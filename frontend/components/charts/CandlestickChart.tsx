@@ -63,6 +63,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const didInitialFitRef = useRef(false);
   const seriesRef = useRef<{
     candle: ISeriesApi<"Candlestick"> | null;
     volume: ISeriesApi<"Histogram"> | null;
@@ -120,7 +121,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     const chart = createChart(containerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: "#0D0F14" },
-        textColor: "rgba(255,255,255,0.35)",
+        textColor: "rgba(255,255,255,0.5)",
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: 11,
       },
@@ -136,13 +137,17 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       rightPriceScale: {
         borderColor: "rgba(255,255,255,0.07)",
         scaleMargins: { top: 0.08, bottom: 0.22 },
+        entireTextOnly: true,
       },
       timeScale: {
         borderColor: "rgba(255,255,255,0.07)",
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 6,
+        barSpacing: 10,
       },
-      handleScroll: { vertTouchDrag: false, mouseWheel: true, pressedMouseMove: true },
+      handleScroll: { vertTouchDrag: false, mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
+      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
     });
@@ -255,6 +260,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       ro.disconnect();
       chart.remove();
       chartRef.current = null;
+      didInitialFitRef.current = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -270,7 +276,10 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     s.volume.setData(
       candles.map(c => ({ time: c.time as Time, value: c.volume, color: candleToVolColor(c) }))
     );
-    chartRef.current?.timeScale().fitContent();
+    if (!didInitialFitRef.current) {
+      chartRef.current?.timeScale().fitContent();
+      didInitialFitRef.current = true;
+    }
   }, [candles]);
 
   // Crosshair move → notify parent

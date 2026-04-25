@@ -1,19 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { BookmarkPlus, Save } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Minus, MoveRight, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Trash2, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandlesResponse, Drawing, Fundamentals, OrderResult, PriceAlert,
+  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, OrderResult, PortfolioPosition, PriceAlert,
 } from "@/lib/api";
 import {
   getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
-  getFundamentals, getPlanStatus, getQuote, getBrokerStatus,
-  getPriceAlerts, createPriceAlert, deletePriceAlert,
+  getFundamentals, getPlanStatus, getQuote, getBrokerStatus, getPortfolio,
+  getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
+  closePosition, updateJournalEntry, getJournalEntries,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -23,12 +24,15 @@ type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
 type StochPoint = { time: string; k: number; d: number | null };
 
-type DrawnLine = {
+type ChartDrawing = {
   id: string;
-  tool: "Trendline" | "Horizontal" | "Fib";
+  tool: DrawingTool;
   p1: { time: string; price: number };
   p2: { time: string; price: number };
   color: string;
+  text?: string;
+  locked?: boolean;
+  hidden?: boolean;
 };
 
 // Dynamically import chart components (browser-only)
@@ -56,9 +60,19 @@ const INDICATOR_CONFIG = [
   { id: "ichimoku", label: "Ichimoku", color: "#7c6af0", bg: "#f0effb" },
 ];
 
-const DRAWING_TOOLS = ["Trendline", "Horizontal", "Fib", "Text"] as const;
+const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "Text"] as const;
 const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
 type DrawingTool = typeof DRAWING_TOOLS[number];
+
+const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: typeof PencilLine; hint: string }> = {
+  Trendline: { label: "Trendline", short: "T", icon: PencilLine, hint: "Two-point trendline" },
+  Ray: { label: "Ray", short: "R", icon: MoveRight, hint: "Extends to the right edge" },
+  Horizontal: { label: "Horizontal", short: "H", icon: Minus, hint: "Full-width support/resistance" },
+  HorizontalRay: { label: "H-Ray", short: "J", icon: MoveRight, hint: "Horizontal from anchor to the right" },
+  Rectangle: { label: "Zone", short: "Z", icon: RectangleHorizontal, hint: "Supply / demand box" },
+  Fib: { label: "Fib", short: "F", icon: Waves, hint: "Fibonacci retracement" },
+  Text: { label: "Text", short: "N", icon: Type, hint: "Chart annotation" },
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,11 +90,44 @@ function fmtPrice(v: number | null | undefined, currency = "INR"): string {
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
+  return drawings.map((item) => ({
+    ...item,
+    p1: { ...item.p1 },
+    p2: { ...item.p2 },
+  }));
+}
+
+function findNearestCandlePrice(
+  candles: CandleBar[] | undefined,
+  time: string,
+  price: number,
+): number {
+  if (!candles?.length) return price;
+  let nearest = candles[0];
+  let bestTimeDelta = Number.POSITIVE_INFINITY;
+  const targetMs = new Date(time).getTime();
+  for (const candle of candles) {
+    const delta = Math.abs(new Date(candle.time).getTime() - targetMs);
+    if (delta < bestTimeDelta) {
+      bestTimeDelta = delta;
+      nearest = candle;
+    }
+  }
+  const levels = [nearest.open, nearest.high, nearest.low, nearest.close];
+  return levels.reduce((best, candidate) => (
+    Math.abs(candidate - price) < Math.abs(best - price) ? candidate : best
+  ), levels[0]);
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ChartPage({ params }: { params: { symbol: string } }) {
   const symbol = params.symbol.toUpperCase();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const sourcePage = searchParams.get("from");
+  const sourceWatchlist = searchParams.get("watchlist");
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [liveMode, setLiveMode] = useState(true);
@@ -107,7 +154,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [activeIndicators, setActiveIndicators] = useState<string[]>(["ema20", "ema50"]);
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
   const [, setDrawings] = useState<Drawing[]>([]);
-  const [drawnLines, setDrawnLines] = useState<DrawnLine[]>([]);
+  const [drawnLines, setDrawnLines] = useState<ChartDrawing[]>([]);
+  const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
+  const [undoStack, setUndoStack] = useState<ChartDrawing[][]>([]);
+  const [redoStack, setRedoStack] = useState<ChartDrawing[][]>([]);
   const candleChartRef = useRef<ChartHandle>(null);
   const chartHandleRef = useRef<ChartHandle | null>(null);
 
@@ -132,16 +182,41 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
+  const [showTradePlan, setShowTradePlan] = useState(true);
+  const [showReviewPanel, setShowReviewPanel] = useState(false);
+  const [showPositionsPanel, setShowPositionsPanel] = useState(true);
   const [showFundamentals, setShowFundamentals] = useState(false);
   const [showTechnicals, setShowTechnicals] = useState(true);
 
   // Order modal
   const [showOrder, setShowOrder] = useState(false);
   const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
-  const [orderToast, setOrderToast] = useState("");
+  const [tradePlan, setTradePlan] = useState<{ entry: string; stop: string; target: string }>({ entry: "", stop: "", target: "" });
+  const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string } | null>(null);
+  const [symbolPositions, setSymbolPositions] = useState<PortfolioPosition[]>([]);
+  const [positionsLoading, setPositionsLoading] = useState(false);
+  const [closeBusyId, setCloseBusyId] = useState<string | null>(null);
+  const [manageBusyId, setManageBusyId] = useState<string | null>(null);
+  const [activeManagedPositionId, setActiveManagedPositionId] = useState<string | null>(null);
+  const [closeDraft, setCloseDraft] = useState<Record<string, { price: string; reason: string; stop: string; target: string }>>({});
 
   // Broker status
   const [brokerConnected, setBrokerConnected] = useState(false);
+  const [symbolReview, setSymbolReview] = useState<{
+    closed: number;
+    reviewed: number;
+    winRate: number | null;
+    latestLesson: string | null;
+    lastSetup: string | null;
+    entries: JournalEntry[];
+  }>({
+    closed: 0,
+    reviewed: 0,
+    winRate: null,
+    latestLesson: null,
+    lastSetup: null,
+    entries: [],
+  });
 
   // Plan (for indicator gating)
   const [userPlan, setUserPlan] = useState<string>("free");
@@ -152,6 +227,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   // Toolbar dropdowns
   const [showMoreIndicators, setShowMoreIndicators] = useState(false);
   const [showDrawMenu, setShowDrawMenu] = useState(false);
+  const [showObjectList, setShowObjectList] = useState(true);
   const moreIndRef = useRef<HTMLDivElement>(null);
   const drawMenuRef = useRef<HTMLDivElement>(null);
 
@@ -169,6 +245,121 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const drawingStartRef = useRef<{ x: number; y: number } | null>(null);
   const [drawingPreview, setDrawingPreview] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [dragState, setDragState] = useState<{
+    drawingId: string;
+    mode: "point" | "whole";
+    point?: "p1" | "p2";
+    startX: number;
+    startY: number;
+    original: ChartDrawing;
+  } | null>(null);
+  const [positionDragState, setPositionDragState] = useState<{
+    positionId: string;
+    field: "stop" | "target";
+  } | null>(null);
+  const [planDragState, setPlanDragState] = useState<{
+    field: "entry" | "stop" | "target";
+  } | null>(null);
+  const [snapToPrice, setSnapToPrice] = useState(true);
+  const [textEditor, setTextEditor] = useState<{ drawingId: string | null; value: string; x: number; y: number; isNew: boolean } | null>(null);
+
+  const updateDrawingsWithHistory = useCallback((mutator: (current: ChartDrawing[]) => ChartDrawing[]) => {
+    setDrawnLines((current) => {
+      const snapshot = cloneDrawings(current);
+      const next = mutator(current);
+      setUndoStack((stack) => [...stack.slice(-39), snapshot]);
+      setRedoStack([]);
+      return next;
+    });
+  }, []);
+
+  const persistEditedDrawing = useCallback(async (drawing: ChartDrawing) => {
+    try {
+      const savedPoints = drawing.tool === "Text"
+        ? [{ time: drawing.p1.time, price: drawing.p1.price }, { time: drawing.p1.time, price: drawing.p1.price }]
+        : [{ time: drawing.p1.time, price: drawing.p1.price }, { time: drawing.p2.time, price: drawing.p2.price }];
+      const saved = await updateDrawing(symbol, drawing.id, {
+        tool_type: drawing.tool.toLowerCase(),
+        points: savedPoints,
+        style: { color: drawing.color, text: drawing.text ?? null, locked: drawing.locked ?? false, hidden: drawing.hidden ?? false },
+        timeframe,
+      });
+      setDrawings((prev) => prev.map((item) => item.id === drawing.id ? saved : item));
+      setDrawnLines((prev) => prev.map((item) => item.id === drawing.id ? { ...item, id: saved.id } : item));
+      setSelectedDrawingId(saved.id);
+    } catch {
+      // keep local edit even if persistence fails
+    }
+  }, [symbol, timeframe]);
+
+  const getSnappedPrice = useCallback((time: string, price: number) => {
+    if (!snapToPrice) return price;
+    return findNearestCandlePrice(data?.candles, time, price);
+  }, [data?.candles, snapToPrice]);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.target as HTMLElement | null)?.tagName === "INPUT" || (e.target as HTMLElement | null)?.tagName === "TEXTAREA") {
+        return;
+      }
+      const metaOrCtrl = e.metaKey || e.ctrlKey;
+      if (metaOrCtrl && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          setRedoStack((future) => {
+            if (!future.length) return future;
+            const next = cloneDrawings(future[future.length - 1]);
+            setUndoStack((history) => [...history.slice(-39), cloneDrawings(drawnLines)]);
+            setDrawnLines(next);
+            setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+            return future.slice(0, -1);
+          });
+        } else {
+          setUndoStack((history) => {
+            if (!history.length) return history;
+            const next = cloneDrawings(history[history.length - 1]);
+            setRedoStack((future) => [...future.slice(-39), cloneDrawings(drawnLines)]);
+            setDrawnLines(next);
+            setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+            return history.slice(0, -1);
+          });
+        }
+        return;
+      }
+      if (metaOrCtrl && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        setRedoStack((future) => {
+          if (!future.length) return future;
+          const next = cloneDrawings(future[future.length - 1]);
+          setUndoStack((history) => [...history.slice(-39), cloneDrawings(drawnLines)]);
+          setDrawnLines(next);
+          setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+          return future.slice(0, -1);
+        });
+        return;
+      }
+      if (e.key === "Escape") {
+        setActiveDrawingTool(null);
+        setSelectedDrawingId(null);
+        setDrawingPreview(null);
+        drawingStartRef.current = null;
+        return;
+      }
+      const shortcut = e.key.toUpperCase();
+      const match = Object.entries(DRAW_TOOL_META).find(([, meta]) => meta.short === shortcut);
+      if (match) {
+        e.preventDefault();
+        setActiveDrawingTool(match[0] as DrawingTool);
+        setSelectedDrawingId(null);
+      }
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedDrawingId) {
+        e.preventDefault();
+        void handleDeleteSingleDrawing(selectedDrawingId);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawnLines, selectedDrawingId]);
 
   // Load compare symbol data
   useEffect(() => {
@@ -222,6 +413,69 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     getPriceAlerts().then(alerts => setPriceAlerts(alerts.filter(a => a.symbol === symbol && a.is_active))).catch(() => {});
   }, [symbol]);
 
+  useEffect(() => {
+    getJournalEntries({ limit: 100, symbol }).then((journal) => {
+      const closed = journal.entries.filter((entry) => entry.status === "closed");
+      const reviewed = closed.filter((entry) => Boolean(entry.lessons?.trim()));
+      const wins = closed.filter((entry) => (entry.pnl ?? 0) > 0).length;
+      setSymbolReview({
+        closed: closed.length,
+        reviewed: reviewed.length,
+        winRate: closed.length ? (wins / closed.length) * 100 : null,
+        latestLesson: reviewed[0]?.lessons?.trim() ?? null,
+        lastSetup: journal.entries[0]?.setup_type ?? null,
+        entries: journal.entries,
+      });
+    }).catch(() => {
+      setSymbolReview({ closed: 0, reviewed: 0, winRate: null, latestLesson: null, lastSetup: null, entries: [] });
+    });
+  }, [symbol]);
+
+  const loadSymbolPositions = useCallback(async () => {
+    setPositionsLoading(true);
+    try {
+      const portfolio = await getPortfolio();
+      const relevant = (portfolio.positions || []).filter((position) => position.symbol === symbol);
+      setSymbolPositions(relevant);
+      setCloseDraft((prev) => {
+        const next = { ...prev };
+        for (const position of relevant) {
+          if (!next[position.id]) {
+            next[position.id] = {
+              price: String(position.current_price || data?.latest?.close || position.entry_price),
+              reason: "",
+              stop: position.stop_loss != null ? String(position.stop_loss) : "",
+              target: position.target_price != null ? String(position.target_price) : "",
+            };
+          }
+        }
+        return next;
+      });
+    } catch {
+      setSymbolPositions([]);
+    } finally {
+      setPositionsLoading(false);
+    }
+  }, [data?.latest?.close, symbol]);
+
+  useEffect(() => {
+    void loadSymbolPositions();
+  }, [loadSymbolPositions]);
+
+  useEffect(() => {
+    if (!symbolPositions.length) {
+      setActiveManagedPositionId(null);
+      return;
+    }
+    if (!activeManagedPositionId || !symbolPositions.some((position) => position.id === activeManagedPositionId)) {
+      setActiveManagedPositionId(symbolPositions[0].id);
+    }
+  }, [activeManagedPositionId, symbolPositions]);
+
+  useEffect(() => {
+    setShowPositionsPanel(symbolPositions.length > 0);
+  }, [symbolPositions.length]);
+
   // Load fundamentals when sidebar fundamentals section is opened
   useEffect(() => {
     if (!showFundamentals || fundamentals?.symbol === symbol) return;
@@ -234,18 +488,33 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   useEffect(() => {
     getDrawings(symbol, timeframe).then(list => {
       setDrawings(list);
-      const lines: DrawnLine[] = list.flatMap(d => {
+      const lines: ChartDrawing[] = list.flatMap(d => {
         const pts = d.points as { time?: string; price?: number; x?: number; y?: number }[];
         if (pts.length < 2 || !pts[0].time || pts[0].price == null) return [];
+        const toolType = (d.tool_type || "").toLowerCase();
+        const tool: DrawingTool =
+          toolType === "horizontal" ? "Horizontal" :
+          toolType === "horizontalray" || toolType === "hray" ? "HorizontalRay" :
+          toolType === "fib" ? "Fib" :
+          toolType === "rectangle" ? "Rectangle" :
+          toolType === "ray" ? "Ray" :
+          toolType === "text" ? "Text" :
+          "Trendline";
         return [{
           id: d.id,
-          tool: d.tool_type === "horizontal" ? "Horizontal" : d.tool_type === "fib" ? "Fib" : "Trendline",
+          tool,
           p1: { time: pts[0].time, price: pts[0].price },
           p2: { time: pts[1].time ?? pts[0].time, price: pts[1].price ?? pts[0].price },
           color: (d.style as { color?: string }).color ?? "#5b63f5",
-        } as DrawnLine];
+          text: (d.style as { text?: string }).text,
+          locked: Boolean((d.style as { locked?: boolean }).locked),
+          hidden: Boolean((d.style as { hidden?: boolean }).hidden),
+        } as ChartDrawing];
       });
       setDrawnLines(lines);
+      setUndoStack([]);
+      setRedoStack([]);
+      setSelectedDrawingId(null);
     });
   }, [symbol, timeframe]);
 
@@ -292,7 +561,17 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   }, []);
 
   async function handleSaveLayout() {
-    await saveChartLayout(symbol, { timeframe, indicators: activeIndicators, drawing_tools: [] });
+    await saveChartLayout(symbol, {
+      timeframe,
+      indicators: activeIndicators,
+      drawing_tools: drawnLines.map(item => ({
+        id: item.id,
+        tool: item.tool,
+        color: item.color,
+        locked: Boolean(item.locked),
+        hidden: Boolean(item.hidden),
+      })),
+    });
   }
 
   async function handleAddWatchlist() {
@@ -342,6 +621,111 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   }
 
   function handleOverlayMouseMove(e: React.MouseEvent) {
+    if (planDragState && overlayRef.current) {
+      const rect = overlayRef.current.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const rawPrice = chartHandleRef.current?.coordinateToPrice(y) ?? null;
+      const anchorTime = data?.candles.at(-1)?.time ?? null;
+      if (rawPrice != null) {
+        const nextPrice = anchorTime ? getSnappedPrice(anchorTime, rawPrice) : rawPrice;
+        setTradePlan((current) => ({
+          ...current,
+          [planDragState.field]: nextPrice.toFixed(2),
+        }));
+      }
+      return;
+    }
+    if (positionDragState && overlayRef.current) {
+      const rect = overlayRef.current.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const rawPrice = chartHandleRef.current?.coordinateToPrice(y) ?? null;
+      const anchorTime = data?.candles.at(-1)?.time ?? null;
+      if (rawPrice != null) {
+        const nextPrice = anchorTime ? getSnappedPrice(anchorTime, rawPrice) : rawPrice;
+        setCloseDraft((prev) => {
+          const current = prev[positionDragState.positionId];
+          if (!current) return prev;
+          return {
+            ...prev,
+            [positionDragState.positionId]: {
+              ...current,
+              [positionDragState.field]: nextPrice.toFixed(2),
+            },
+          };
+        });
+      }
+      return;
+    }
+    if (dragState && overlayRef.current) {
+      const rect = overlayRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (dragState.mode === "point") {
+        const price = chartHandleRef.current?.coordinateToPrice(y) ?? null;
+        const time = chartHandleRef.current?.coordinateToTime(x) ?? null;
+        if (price != null && time != null) {
+          const snappedPrice = getSnappedPrice(time, price);
+          setDrawnLines((prev) => prev.map((item) => {
+            if (item.id !== dragState.drawingId) return item;
+            const next = {
+              ...item,
+              [dragState.point!]: { time, price: snappedPrice },
+            } as ChartDrawing;
+            if (item.tool === "Horizontal") {
+              next.p2 = { ...next.p2, price: next.p1.price };
+            }
+            if (item.tool === "HorizontalRay") {
+              next.p2 = { ...next.p2, price: next.p1.price };
+            }
+            if (item.tool === "Text") {
+              next.p2 = { ...next.p1 };
+            }
+            return next;
+          }));
+        }
+      } else {
+        const dx = x - dragState.startX;
+        const dy = y - dragState.startY;
+        const original = dragState.original;
+        const originalP1x = chartHandleRef.current?.timeToCoordinate(original.p1.time) ?? null;
+        const originalP1y = chartHandleRef.current?.priceToCoordinate(original.p1.price) ?? null;
+        const originalP2x = chartHandleRef.current?.timeToCoordinate(original.p2.time) ?? null;
+        const originalP2y = chartHandleRef.current?.priceToCoordinate(original.p2.price) ?? null;
+        if (originalP1x != null && originalP1y != null && originalP2x != null && originalP2y != null) {
+          const nextP1x = originalP1x + dx;
+          const nextP1y = originalP1y + dy;
+          const nextP2x = originalP2x + dx;
+          const nextP2y = originalP2y + dy;
+          const nextP1Time = chartHandleRef.current?.coordinateToTime(nextP1x) ?? null;
+          const nextP1Price = chartHandleRef.current?.coordinateToPrice(nextP1y) ?? null;
+          const nextP2Time = chartHandleRef.current?.coordinateToTime(nextP2x) ?? null;
+          const nextP2Price = chartHandleRef.current?.coordinateToPrice(nextP2y) ?? null;
+          if (nextP1Time != null && nextP1Price != null && nextP2Time != null && nextP2Price != null) {
+            const snappedP1 = getSnappedPrice(nextP1Time, nextP1Price);
+            const snappedP2 = getSnappedPrice(nextP2Time, nextP2Price);
+            setDrawnLines((prev) => prev.map((item) => {
+              if (item.id !== dragState.drawingId) return item;
+              const next: ChartDrawing = {
+                ...item,
+                p1: { time: nextP1Time, price: snappedP1 },
+                p2: { time: nextP2Time, price: snappedP2 },
+              };
+              if (item.tool === "Horizontal") {
+                next.p2 = { ...next.p2, price: next.p1.price };
+              }
+              if (item.tool === "HorizontalRay") {
+                next.p2 = { ...next.p2, price: next.p1.price };
+              }
+              if (item.tool === "Text") {
+                next.p2 = { ...next.p1 };
+              }
+              return next;
+            }));
+          }
+        }
+      }
+      return;
+    }
     if (!activeDrawingTool || !drawingStartRef.current || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
     const x2 = e.clientX - rect.left;
@@ -350,6 +734,47 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   }
 
   async function handleOverlayMouseUp(e: React.MouseEvent) {
+    if (planDragState) {
+      setPlanDragState(null);
+      return;
+    }
+    if (positionDragState) {
+      const positionId = positionDragState.positionId;
+      const draft = closeDraft[positionId];
+      setPositionDragState(null);
+      if (!draft) return;
+      const nextStop = draft.stop.trim() ? parseFloat(draft.stop) : null;
+      const nextTarget = draft.target.trim() ? parseFloat(draft.target) : null;
+      if ((draft.stop.trim() && (nextStop == null || Number.isNaN(nextStop) || nextStop <= 0))
+        || (draft.target.trim() && (nextTarget == null || Number.isNaN(nextTarget) || nextTarget <= 0))) {
+        setOrderToast({ message: "Dragged level is invalid. Adjust and try again.", journalId: positionId, broker: "simulated" });
+        setTimeout(() => setOrderToast(null), 3000);
+        return;
+      }
+      setManageBusyId(positionId);
+      try {
+        await updateJournalEntry(positionId, {
+          stop_loss: nextStop,
+          target_price: nextTarget,
+        });
+        setOrderToast({ message: "Position levels updated from chart drag.", journalId: positionId, broker: "simulated" });
+        await loadSymbolPositions();
+      } catch (error: unknown) {
+        setOrderToast({ message: error instanceof Error ? error.message : "Failed to update levels", journalId: positionId, broker: "simulated" });
+      } finally {
+        setManageBusyId(null);
+        setTimeout(() => setOrderToast(null), 4000);
+      }
+      return;
+    }
+    if (dragState) {
+      const edited = drawnLines.find((item) => item.id === dragState.drawingId);
+      setDragState(null);
+      if (edited) {
+        await persistEditedDrawing(edited);
+      }
+      return;
+    }
     if (!activeDrawingTool || !drawingStartRef.current || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
     const x2 = e.clientX - rect.left;
@@ -359,43 +784,168 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     setDrawingPreview(null);
 
     // Convert pixel → price/time using chart API
-    const price1 = chartHandleRef.current?.coordinateToPrice(start.y) ?? null;
+    const rawPrice1 = chartHandleRef.current?.coordinateToPrice(start.y) ?? null;
     const time1  = chartHandleRef.current?.coordinateToTime(start.x) ?? null;
-    const price2 = chartHandleRef.current?.coordinateToPrice(y2) ?? null;
+    const rawPrice2 = chartHandleRef.current?.coordinateToPrice(y2) ?? null;
     const time2  = chartHandleRef.current?.coordinateToTime(x2) ?? null;
 
-    if (price1 == null || time1 == null || price2 == null || time2 == null) return;
+    if (rawPrice1 == null || time1 == null || rawPrice2 == null || time2 == null) return;
+    const price1 = getSnappedPrice(time1, rawPrice1);
+    const price2 = getSnappedPrice(time2, rawPrice2);
 
-    const finalPrice2 = activeDrawingTool === "Horizontal" ? price1 : price2;
-    const line: DrawnLine = {
+    const finalPrice2 = activeDrawingTool === "Horizontal" || activeDrawingTool === "HorizontalRay" ? price1 : price2;
+    const line: ChartDrawing = {
       id: crypto.randomUUID(),
-      tool: activeDrawingTool as DrawnLine["tool"],
+      tool: activeDrawingTool,
       p1: { time: time1, price: price1 },
       p2: { time: time2, price: finalPrice2 },
       color: "#5b63f5",
     };
-    setDrawnLines(prev => [...prev, line]);
+    if (activeDrawingTool === "Text") {
+      line.text = "Note";
+      line.p2 = { time: time1, price: price1 };
+      const editorX = Math.min((overlayRef.current?.clientWidth ?? 360) - 220, start.x + 12);
+      const editorY = Math.max(12, start.y - 12);
+      setTextEditor({ drawingId: line.id, value: "Note", x: editorX, y: editorY, isNew: true });
+    }
+    updateDrawingsWithHistory((prev) => [...prev, line]);
+    setSelectedDrawingId(line.id);
     setActiveDrawingTool(null);
 
     // Persist to DB (non-blocking)
     try {
+      const savedPoints = line.tool === "Text"
+        ? [{ time: time1, price: price1 }, { time: time1, price: price1 }]
+        : [{ time: time1, price: price1 }, { time: time2, price: finalPrice2 }];
       const saved = await saveDrawing(symbol, {
         tool_type: activeDrawingTool.toLowerCase(),
-        points: [{ time: time1, price: price1 }, { time: time2, price: finalPrice2 }],
-        style: { color: "#5b63f5" },
+        points: savedPoints,
+        style: { color: "#5b63f5", text: line.text ?? null },
         timeframe,
       });
       setDrawings(prev => [...prev, saved]);
+      setDrawnLines(prev => prev.map(item => item.id === line.id ? { ...item, id: saved.id } : item));
+      setSelectedDrawingId(saved.id);
     } catch { /* ignore */ }
   }
 
-  function clearDrawings() {
-    setDrawnLines([]);
-    setDrawings([]);
-  }
+  const handleDeleteSingleDrawing = useCallback(async (drawingId: string) => {
+    const existing = drawnLines.find(item => item.id === drawingId);
+    if (!existing || existing.locked) return;
+    updateDrawingsWithHistory((prev) => prev.filter(item => item.id !== drawingId));
+    setSelectedDrawingId(prev => prev === drawingId ? null : prev);
+    setDrawings(prev => prev.filter(item => item.id !== drawingId));
+    await deleteDrawing(symbol, drawingId).catch(() => {});
+  }, [drawnLines, symbol, updateDrawingsWithHistory]);
+
+  const clearDrawings = useCallback(async () => {
+    const currentIds = drawnLines.filter(item => !item.locked).map(item => item.id);
+    if (!currentIds.length) return;
+    updateDrawingsWithHistory((prev) => prev.filter(item => item.locked));
+    setDrawings(prev => prev.filter(item => !currentIds.includes(item.id)));
+    setSelectedDrawingId(null);
+    await Promise.all(currentIds.map(id => deleteDrawing(symbol, id).catch(() => {})));
+  }, [drawnLines, symbol, updateDrawingsWithHistory]);
+
+  const toggleDrawingLock = useCallback((drawingId: string) => {
+    updateDrawingsWithHistory((prev) => prev.map((item) => item.id === drawingId ? { ...item, locked: !item.locked } : item));
+  }, [updateDrawingsWithHistory]);
+
+  const toggleDrawingHidden = useCallback((drawingId: string) => {
+    updateDrawingsWithHistory((prev) => prev.map((item) => item.id === drawingId ? { ...item, hidden: !item.hidden } : item));
+  }, [updateDrawingsWithHistory]);
+
+  const handleUndoDrawing = useCallback(() => {
+    setUndoStack((history) => {
+      if (!history.length) return history;
+      const next = cloneDrawings(history[history.length - 1]);
+      setRedoStack((future) => [...future.slice(-39), cloneDrawings(drawnLines)]);
+      setDrawnLines(next);
+      setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+      return history.slice(0, -1);
+    });
+  }, [drawnLines]);
+
+  const handleRedoDrawing = useCallback(() => {
+    setRedoStack((future) => {
+      if (!future.length) return future;
+      const next = cloneDrawings(future[future.length - 1]);
+      setUndoStack((history) => [...history.slice(-39), cloneDrawings(drawnLines)]);
+      setDrawnLines(next);
+      setSelectedDrawingId((prev) => next.some((item) => item.id === prev) ? prev : null);
+      return future.slice(0, -1);
+    });
+  }, [drawnLines]);
+
+  const beginWholeDrawingDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing) => {
+    if (drawing.locked || !overlayRef.current) return;
+    const rect = overlayRef.current.getBoundingClientRect();
+    updateDrawingsWithHistory((prev) => cloneDrawings(prev));
+    setSelectedDrawingId(drawing.id);
+    setDragState({
+      drawingId: drawing.id,
+      mode: "whole",
+      startX: e.clientX - rect.left,
+      startY: e.clientY - rect.top,
+      original: cloneDrawings([drawing])[0],
+    });
+  }, [updateDrawingsWithHistory]);
+
+  const beginPointDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing, point: "p1" | "p2") => {
+    if (drawing.locked || !overlayRef.current) return;
+    const rect = overlayRef.current.getBoundingClientRect();
+    updateDrawingsWithHistory((prev) => cloneDrawings(prev));
+    setSelectedDrawingId(drawing.id);
+    setDragState({
+      drawingId: drawing.id,
+      mode: "point",
+      point,
+      startX: e.clientX - rect.left,
+      startY: e.clientY - rect.top,
+      original: cloneDrawings([drawing])[0],
+    });
+  }, [updateDrawingsWithHistory]);
+
+  const editTextDrawing = useCallback((drawing: ChartDrawing) => {
+    if (drawing.tool !== "Text") return;
+    const x = chartHandleRef.current?.timeToCoordinate(drawing.p1.time) ?? 80;
+    const y = chartHandleRef.current?.priceToCoordinate(drawing.p1.price) ?? 80;
+    const editorX = Math.min((overlayRef.current?.clientWidth ?? 360) - 220, x + 12);
+    const editorY = Math.max(12, y - 12);
+    setTextEditor({ drawingId: drawing.id, value: drawing.text ?? "Note", x: editorX, y: editorY, isNew: false });
+  }, []);
+
+  const commitTextEditor = useCallback(async () => {
+    if (!textEditor?.drawingId) return;
+    const nextText = textEditor.value.trim();
+    const drawing = drawnLines.find((item) => item.id === textEditor.drawingId);
+    if (!drawing) {
+      setTextEditor(null);
+      return;
+    }
+    if (!nextText) {
+      if (textEditor.isNew) {
+        await handleDeleteSingleDrawing(drawing.id);
+      }
+      setTextEditor(null);
+      return;
+    }
+    updateDrawingsWithHistory((prev) => prev.map((item) => item.id === drawing.id ? { ...item, text: nextText } : item));
+    setTextEditor(null);
+    await persistEditedDrawing({ ...drawing, text: nextText });
+  }, [drawnLines, handleDeleteSingleDrawing, persistEditedDrawing, textEditor, updateDrawingsWithHistory]);
 
   const latest = data?.latest;
   const prevClose = latest?.prev_close;
+
+  useEffect(() => {
+    if (!latest?.close) return;
+    setTradePlan((current) => ({
+      entry: current.entry || latest.close.toFixed(2),
+      stop: current.stop,
+      target: current.target,
+    }));
+  }, [latest?.close]);
 
   // Stale data warning: show if last candle is > 1 trading day old
   const lastCandleDate = data?.candles?.at(-1)?.time ?? null;
@@ -420,51 +970,91 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const displayBar = legendBar || (data?.candles.at(-1) ? {
     ...data.candles.at(-1)!,
   } : null);
+  const activeManagedPosition = symbolPositions.find((position) => position.id === activeManagedPositionId) ?? null;
+  const activeManagedDraft = activeManagedPosition ? (closeDraft[activeManagedPosition.id] ?? {
+    price: String(activeManagedPosition.current_price || latest?.close || activeManagedPosition.entry_price),
+    reason: "",
+    stop: activeManagedPosition.stop_loss != null ? String(activeManagedPosition.stop_loss) : "",
+    target: activeManagedPosition.target_price != null ? String(activeManagedPosition.target_price) : "",
+  }) : null;
+  const planEntryValue = tradePlan.entry ? parseFloat(tradePlan.entry) : null;
+  const planStopValue = tradePlan.stop ? parseFloat(tradePlan.stop) : null;
+  const planTargetValue = tradePlan.target ? parseFloat(tradePlan.target) : null;
+  const planRiskReward = (
+    planEntryValue != null
+    && planStopValue != null
+    && planTargetValue != null
+    && !Number.isNaN(planEntryValue)
+    && !Number.isNaN(planStopValue)
+    && !Number.isNaN(planTargetValue)
+    && Math.abs(planEntryValue - planStopValue) > 0
+  )
+    ? Math.abs(planTargetValue - planEntryValue) / Math.abs(planEntryValue - planStopValue)
+    : null;
 
   const showRsi   = activeIndicators.includes("rsi");
   const showMacd  = activeIndicators.includes("macd");
   const showStoch = activeIndicators.includes("stoch");
   const showAtr   = activeIndicators.includes("atr");
+  const selectedDrawing = drawnLines.find(item => item.id === selectedDrawingId) ?? null;
+  const activeToolMeta = activeDrawingTool ? DRAW_TOOL_META[activeDrawingTool] : null;
+  const visibleDrawings = drawnLines.filter((item) => !item.hidden);
+  const hiddenCount = drawnLines.length - visibleDrawings.length;
+  const activeIndicatorLabels = INDICATOR_CONFIG
+    .filter((indicator) => activeIndicators.includes(indicator.id))
+    .map((indicator) => indicator.label);
+  const candleRange = displayBar ? displayBar.high - displayBar.low : null;
+  const candleBody = displayBar ? displayBar.close - displayBar.open : null;
+  const candleRangePct = displayBar && displayBar.open ? ((displayBar.high - displayBar.low) / displayBar.open) * 100 : null;
+  const candleBodyPct = displayBar && displayBar.open ? ((displayBar.close - displayBar.open) / displayBar.open) * 100 : null;
+  const latestVolumeRatio = latest?.volume_ratio ?? null;
+  const chartSnapshot = [
+    { label: "Last price", value: latest?.close != null ? fmtPrice(latest.close, symbolCurrency) : "Pending", tone: "var(--text-primary)" },
+    { label: "Session move", value: changePct != null ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%` : "Pending", tone: positive ? "var(--gain)" : "var(--loss)" },
+    { label: "From 52W high", value: pctFrom52H != null ? `${pctFrom52H.toFixed(1)}% below` : "Pending", tone: "var(--accent)" },
+    { label: "Broker", value: brokerConnected ? "Execution ready" : "Not linked", tone: brokerConnected ? "var(--gain)" : "var(--warn)" },
+  ];
+  const chartContextPills = [
+    sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
+    activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
+    selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `Objects · ${visibleDrawings.length}`,
+    symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
+  ].filter(Boolean) as string[];
 
   return (
-    <div className="flex flex-col overflow-hidden" style={{ minHeight: "calc(100vh - 120px)", gap: 16, background: "transparent" }}>
-      <div style={{
-        padding: "20px 24px",
-        borderRadius: 24,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "radial-gradient(circle at top right, rgba(86,215,193,0.12), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
-        boxShadow: "var(--shadow-panel)",
-      }}>
-        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Chart Desk</div>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+    <div className="workspace-page" style={{ background: "transparent" }}>
+      <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
+        <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
-            <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>{symbol} chart workspace</h1>
-            <p style={{ maxWidth: 760, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-              Inspect price structure, stack indicators, compare symbols, draw levels, route orders, and create alerts without leaving the same market surface.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {[
-              `${timeframe} timeframe`,
-              liveMode ? "Live mode on" : "EOD mode",
-              `${activeIndicators.length} indicators`,
-            ].map((item) => (
-              <div key={item} style={{
-                minWidth: 120,
-                padding: "12px 14px",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.03)",
-              }}>
-                <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>{item}</div>
+            <div className="workspace-card-title">{symbol} chart</div>
+            <div className="workspace-card-copy">
+              Read structure, plan the trade, manage the position, and move straight into journal review.
+            </div>
+            {sourcePage === "watchlist" && sourceWatchlist && (
+              <div className="caption" style={{ marginTop: 8 }}>
+                Opened from <span className="mono" style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</span>.
               </div>
+            )}
+          </div>
+          <div className="workspace-pill-row" style={{ gap: 8 }}>
+            {chartSnapshot.map((item) => (
+              <span key={item.label} className="workspace-pill" style={{ color: item.tone }}>
+                {item.label}: {item.value}
+              </span>
             ))}
           </div>
         </div>
+        <div className="workspace-pill-row" style={{ marginTop: 12, gap: 8 }}>
+          <Link href="/scanner" className="workspace-chip-button">Scanner</Link>
+          <Link href="/watchlist" className="workspace-chip-button">Watchlist</Link>
+          <Link href="/journal" className="workspace-chip-button">Journal</Link>
+          {chartContextPills.map((item) => (
+            <span key={item} className="workspace-pill">{item}</span>
+          ))}
+        </div>
       </div>
 
-      <div className="flex flex-col overflow-hidden" style={{ flex: 1, borderRadius: 24, border: "1px solid rgba(255,255,255,0.08)", boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)), var(--surface-1)" }}>
+      <div className="workspace-card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
 
       {/* Price alert modal */}
       {showAlertModal && (
@@ -561,10 +1151,9 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       )}
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-3 gap-4 flex-shrink-0"
-        style={{ background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+      <div className="workspace-toolbar" style={{ flexShrink: 0 }}>
         {/* Left: symbol search + name */}
-        <div className="flex items-center gap-3">
+        <div className="workspace-toolbar-group">
           <SymbolSearch
             value={symbol}
             onChange={sym => router.push(`/charts/${sym}`)}
@@ -577,14 +1166,14 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         </div>
 
         {/* Right: timeframe + indicators + drawing tools + save */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="workspace-toolbar-group">
           {/* Timeframe */}
-          <div className="flex items-center gap-0.5 mr-1 rounded-[6px] p-0.5" style={{ background: "var(--app-surface3)" }}>
+          <div className="flex items-center gap-0.5 mr-1 rounded-[999px] p-0.5" style={{ background: "var(--app-surface3)" }}>
             {(["D", "W", "M"] as const).map(tf => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className="text-[11px] px-2.5 py-1 rounded-[4px] font-semibold transition-colors"
+                className="text-[11px] px-3 py-1.5 rounded-[999px] font-semibold transition-colors"
                 style={timeframe === tf
                   ? { background: "var(--app-teal)", color: "#0D0F14" }
                   : { background: "transparent", color: "var(--app-text3)" }
@@ -595,9 +1184,6 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             ))}
           </div>
 
-          {/* Separator */}
-          <div className="w-px h-5" style={{ background: "var(--app-border)" }} />
-
           {/* Primary indicator toggles */}
           {INDICATOR_CONFIG.filter(ind => PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
             const active = activeIndicators.includes(ind.id);
@@ -607,7 +1193,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 key={ind.id}
                 onClick={() => toggleIndicator(ind.id)}
                 title={locked ? "Pro plan required" : undefined}
-                className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors flex items-center gap-1"
+                className={`workspace-chip-button ${active ? "active" : ""} flex items-center gap-1`}
                 style={active
                   ? { background: ind.color + "22", color: ind.color, border: `1px solid ${ind.color}44` }
                   : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
@@ -623,7 +1209,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           <div ref={moreIndRef} className="relative">
             <button
               onClick={() => setShowMoreIndicators(s => !s)}
-              className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors flex items-center gap-1"
+              className={`workspace-chip-button ${INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id)) ? 'active' : ''} flex items-center gap-1`}
               style={
                 INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id))
                   ? { background: "rgba(91,99,245,0.15)", color: "#818cf8", border: "1px solid rgba(91,99,245,0.3)" }
@@ -657,14 +1243,11 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             )}
           </div>
 
-          {/* Separator */}
-          <div className="w-px h-5" style={{ background: "var(--app-border)" }} />
-
           {/* Draw dropdown */}
           <div ref={drawMenuRef} className="relative">
             <button
               onClick={() => setShowDrawMenu(s => !s)}
-              className="text-[11px] px-2.5 py-1 rounded-[4px] font-medium transition-colors flex items-center gap-1"
+              className={`workspace-chip-button ${activeDrawingTool ? 'active' : ''} flex items-center gap-1`}
               style={activeDrawingTool
                 ? { background: "rgba(91,99,245,0.2)", color: "#818cf8", border: "1px solid rgba(91,99,245,0.4)" }
                 : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
@@ -705,11 +1288,29 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             )}
           </div>
 
+          <button
+            onClick={handleUndoDrawing}
+            disabled={undoStack.length === 0}
+            className="workspace-chip-button flex items-center gap-1.5 disabled:opacity-40"
+            title="Undo drawing change"
+          >
+            <RotateCcw size={11} />
+          </button>
+
+          <button
+            onClick={handleRedoDrawing}
+            disabled={redoStack.length === 0}
+            className="workspace-chip-button flex items-center gap-1.5 disabled:opacity-40"
+            title="Redo drawing change"
+          >
+            <RotateCw size={11} />
+          </button>
+
           {/* Clear drawings shortcut (when active) */}
           {drawnLines.length > 0 && !showDrawMenu && (
             <button
               onClick={clearDrawings}
-              className="text-[11px] px-2.5 py-1 rounded-[4px] transition-colors"
+              className="workspace-chip-button"
               style={{ border: "1px solid var(--app-border)", color: "var(--app-loss)" }}
             >
               Clear
@@ -741,14 +1342,14 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
               </div>
             ) : compareSymbol ? (
               <div className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] font-semibold"
-                style={{ background: "rgba(0,229,196,0.1)", border: "1px solid rgba(0,229,196,0.3)", color: "var(--app-teal)" }}>
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)", color: "var(--app-teal)" }}>
                 vs {compareSymbol}
                 <button onClick={() => { setCompareSymbol(""); setCompareData(null); }} className="ml-0.5 hover:text-[#e5383b] transition-colors">×</button>
               </div>
             ) : (
               <button
                 onClick={() => setShowCompareInput(true)}
-                className="text-[11px] px-2.5 py-1 rounded-[4px] border border-[#e8e8e6] text-[#888] hover:border-[#5b63f5] hover:text-[#5b63f5] transition-colors"
+                className="workspace-chip-button"
                 title="Compare with another symbol"
               >
                 Compare
@@ -759,10 +1360,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Live data toggle */}
           <button
             onClick={() => setLiveMode(m => !m)}
-            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] font-semibold transition-colors"
+            className="workspace-chip-button flex items-center gap-1.5"
             style={liveMode
-              ? { background: "rgba(38,166,91,0.15)", color: "#26a65b", border: "1px solid rgba(38,166,91,0.3)" }
-              : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
+              ? { background: "rgba(38,166,91,0.10)", color: "#26a65b", border: "1px solid rgba(38,166,91,0.22)" }
+              : undefined}
             title={liveMode ? "Live data (Yahoo Finance) — refresh every 5 min" : "Switch to live Yahoo Finance data"}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : ""}`}
@@ -773,10 +1374,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Price alert bell */}
           <button
             onClick={() => { setShowAlertModal(m => !m); setAlertMsg(""); }}
-            className="relative flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] transition-colors"
+            className="workspace-chip-button relative flex items-center gap-1"
             style={priceAlerts.length > 0
-              ? { background: "rgba(217,119,6,0.15)", color: "#d97706", border: "1px solid rgba(217,119,6,0.3)" }
-              : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
+              ? { background: "rgba(217,119,6,0.10)", color: "#d97706", border: "1px solid rgba(217,119,6,0.22)" }
+              : undefined}
             title="Price alerts"
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -792,10 +1393,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           {/* Save layout */}
           <button
             onClick={handleSaveLayout}
-            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-[4px] transition-colors"
-            style={{ background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--app-teal)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--app-teal)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--app-text3)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--app-border)"; }}
+            className="workspace-chip-button flex items-center gap-1.5"
           >
             <Save size={11} /> Save
           </button>
@@ -811,19 +1409,46 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             symbol={symbol}
             currentPrice={latest.close}
             defaultSide={orderSide}
+            initialPlan={{
+              entry: tradePlan.entry ? parseFloat(tradePlan.entry) : latest.close,
+              stop: tradePlan.stop ? parseFloat(tradePlan.stop) : null,
+              target: tradePlan.target ? parseFloat(tradePlan.target) : null,
+            }}
             onClose={() => setShowOrder(false)}
             onFilled={(result: OrderResult) => {
               setShowOrder(false);
-              setOrderToast(result.message);
-              setTimeout(() => setOrderToast(""), 5000);
+              setOrderToast({ message: result.message, journalId: result.journal_id, broker: result.broker });
+              void loadSymbolPositions();
+              setTimeout(() => setOrderToast(null), 6000);
             }}
           />
         )}
 
         {/* Order toast */}
         {orderToast && (
-          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 bg-[#1c1c1a] text-white text-[13px] px-4 py-2.5 rounded-full shadow-xl pointer-events-none">
-            {orderToast}
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 shadow-xl"
+            style={{
+              width: "min(520px, calc(100vw - 24px))",
+              borderRadius: 18,
+              padding: "12px 14px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "linear-gradient(180deg, rgba(20,29,33,0.98), rgba(13,20,24,0.98))",
+              color: "white",
+            }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{orderToast.message}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)" }}>
+                {orderToast.broker === "simulated" ? "Simulated fill" : `Broker routed via ${orderToast.broker}`} · journal capture completed
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Link href="/journal" style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
+                  Open journal
+                </Link>
+                <Link href="/journal?tab=ai" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.82)" }}>
+                  Review flow
+                </Link>
+              </div>
+            </div>
           </div>
         )}
 
@@ -907,7 +1532,128 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 </div>
               </div>
 
-              {/* Buy / Sell */}
+              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
+                <button
+                  onClick={() => setShowTradePlan((current) => !current)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
+                  style={{ color: "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Trade plan</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
+                      {planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set levels"}
+                    </span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showTradePlan ? "rotate(180deg)" : "rotate(0deg)" }}>
+                      <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </button>
+                {showTradePlan && (
+                  <div className="px-4 pb-4 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                        Drag the plan guides on the chart or enter the levels here.
+                      </div>
+                      <button
+                        onClick={() => setTradePlan({
+                          entry: latest?.close?.toFixed(2) ?? "",
+                          stop: "",
+                          target: "",
+                        })}
+                        className="px-2 py-1 rounded-[7px] text-[10px] font-semibold"
+                        style={{ background: "var(--app-surface3)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={tradePlan.entry}
+                        onChange={(e) => setTradePlan((current) => ({ ...current, entry: e.target.value }))}
+                        placeholder="Entry"
+                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
+                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                      />
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={tradePlan.stop}
+                        onChange={(e) => setTradePlan((current) => ({ ...current, stop: e.target.value }))}
+                        placeholder="Stop"
+                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
+                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                      />
+                      <input
+                        type="number"
+                        step="0.05"
+                        value={tradePlan.target}
+                        onChange={(e) => setTradePlan((current) => ({ ...current, target: e.target.value }))}
+                        placeholder="Target"
+                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
+                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
+                      <div className="text-[10px]" style={{ color: "var(--app-text3)" }}>
+                        Entry {planEntryValue != null && !Number.isNaN(planEntryValue) ? fmtPrice(planEntryValue, symbolCurrency) : "—"} · Stop {planStopValue != null && !Number.isNaN(planStopValue) ? fmtPrice(planStopValue, symbolCurrency) : "—"} · Target {planTargetValue != null && !Number.isNaN(planTargetValue) ? fmtPrice(planTargetValue, symbolCurrency) : "—"}
+                      </div>
+                      <div className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
+                        {planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set all 3"}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
+                <button
+                  onClick={() => setShowReviewPanel((current) => !current)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
+                  style={{ color: "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Review context</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px]" style={{ color: symbolReview.reviewed > 0 ? "#4ade80" : symbolReview.closed > 0 ? "#fbbf24" : "var(--app-text3)" }}>
+                      {symbolReview.reviewed > 0 ? "Reviewed" : symbolReview.closed > 0 ? "Needs review" : "No history"}
+                    </span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showReviewPanel ? "rotate(180deg)" : "rotate(0deg)" }}>
+                      <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </button>
+                {showReviewPanel && (
+                  <div className="px-4 pb-4 space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: "Closed", value: String(symbolReview.closed) },
+                        { label: "Reviewed", value: String(symbolReview.reviewed) },
+                        { label: "Win rate", value: symbolReview.winRate != null ? `${symbolReview.winRate.toFixed(0)}%` : "—" },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
+                          <div className="text-[9px] uppercase tracking-[0.4px]" style={{ color: "var(--app-text3)" }}>{item.label}</div>
+                          <div className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--app-text1)", marginTop: 2 }}>{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                      {symbolReview.closed > 0
+                        ? `${symbolReview.reviewed < symbolReview.closed ? `${symbolReview.closed - symbolReview.reviewed} closed trade${symbolReview.closed - symbolReview.reviewed === 1 ? "" : "s"} on ${symbol} still need lesson coverage.` : `Review coverage exists for ${symbol}.`}`
+                        : `No closed trades on ${symbol} yet.`}
+                      {symbolReview.lastSetup ? ` Last setup: ${symbolReview.lastSetup}.` : ""}
+                    </div>
+                    {symbolReview.latestLesson && (
+                      <div className="rounded-[8px] px-3 py-2 text-[10px] leading-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)", color: "var(--app-text2)" }}>
+                        Latest lesson: {symbolReview.latestLesson.slice(0, 140)}{symbolReview.latestLesson.length > 140 ? "…" : ""}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div className="px-4 py-3 flex gap-2" style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
                   onClick={() => { setOrderSide("buy"); setShowOrder(true); }}
@@ -921,6 +1667,204 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 >
                   SELL
                 </button>
+              </div>
+              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
+                <button
+                  onClick={() => setShowPositionsPanel((current) => !current)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
+                  style={{ color: "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Open trades</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px]" style={{ color: "var(--app-text3)" }}>{symbolPositions.length}</span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showPositionsPanel ? "rotate(180deg)" : "rotate(0deg)" }}>
+                      <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                </button>
+                {showPositionsPanel && (
+                <div className="px-4 pb-4 space-y-3">
+                  {positionsLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="h-12 rounded-[10px] animate-pulse" style={{ background: "var(--app-surface3)" }} />
+                      ))}
+                    </div>
+                  ) : symbolPositions.length === 0 ? (
+                    <div className="rounded-[10px] px-3 py-3 text-[11px] leading-5" style={{ background: "var(--app-surface2)", color: "var(--app-text3)" }}>
+                      No open positions in {symbol}. New orders placed here will auto-create journal entries and appear in this panel.
+                    </div>
+                  ) : (
+                    symbolPositions.map((position) => {
+                      const draft = closeDraft[position.id] ?? {
+                        price: String(position.current_price || latest?.close || position.entry_price),
+                        reason: "",
+                        stop: position.stop_loss != null ? String(position.stop_loss) : "",
+                        target: position.target_price != null ? String(position.target_price) : "",
+                      };
+                      const pnlPositive = position.unrealised_pnl >= 0;
+                      const stopValue = draft.stop ? parseFloat(draft.stop) : null;
+                      const targetValue = draft.target ? parseFloat(draft.target) : null;
+                      const stopDistance = stopValue != null ? Math.abs(position.entry_price - stopValue) : null;
+                      const targetDistance = targetValue != null ? Math.abs(targetValue - position.entry_price) : null;
+                      const riskReward = stopDistance && targetDistance && stopDistance > 0
+                        ? targetDistance / stopDistance
+                        : null;
+                      return (
+                        <div key={position.id} className="rounded-[12px] p-3 space-y-3" style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)" }}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-[12px] font-semibold" style={{ color: "var(--app-text1)" }}>
+                                {position.trade_type === "long" ? "Long" : "Short"} · {position.quantity} qty
+                              </div>
+                              <div className="text-[11px]" style={{ color: "var(--app-text3)" }}>
+                                Entry {fmtPrice(position.entry_price, symbolCurrency)} · Current {fmtPrice(position.current_price, symbolCurrency)}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[12px] font-semibold tabular-nums" style={{ color: pnlPositive ? "#26a65b" : "#e5383b" }}>
+                                {pnlPositive ? "+" : ""}{fmtPrice(position.unrealised_pnl, symbolCurrency)}
+                              </div>
+                              <div className="text-[10px] tabular-nums" style={{ color: pnlPositive ? "#26a65b" : "#e5383b" }}>
+                                {pnlPositive ? "+" : ""}{position.unrealised_pnl_pct.toFixed(2)}%
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-[10px]" style={{ color: "var(--app-text3)" }}>
+                              {activeManagedPositionId === position.id ? "Chart guides active" : "Use chart guides to drag levels"}
+                            </div>
+                            <button
+                              onClick={() => setActiveManagedPositionId(position.id)}
+                              className="px-2.5 py-1.5 rounded-[8px] text-[10px] font-semibold"
+                              style={activeManagedPositionId === position.id
+                                ? { background: "rgba(86,215,193,0.14)", color: "var(--accent)", border: "1px solid rgba(86,215,193,0.24)" }
+                                : { background: "var(--app-surface3)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}
+                            >
+                              {activeManagedPositionId === position.id ? "Managing on chart" : "Manage on chart"}
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              step="0.05"
+                              value={draft.stop}
+                              onChange={(e) => setCloseDraft((prev) => ({ ...prev, [position.id]: { ...draft, stop: e.target.value } }))}
+                              placeholder="Stop loss"
+                              className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
+                              style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                            />
+                            <input
+                              type="number"
+                              step="0.05"
+                              value={draft.target}
+                              onChange={(e) => setCloseDraft((prev) => ({ ...prev, [position.id]: { ...draft, target: e.target.value } }))}
+                              placeholder="Target price"
+                              className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
+                              style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                            />
+                            <input
+                              type="number"
+                              step="0.05"
+                              value={draft.price}
+                              onChange={(e) => setCloseDraft((prev) => ({ ...prev, [position.id]: { ...draft, price: e.target.value } }))}
+                              placeholder="Exit price"
+                              className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
+                              style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                            />
+                            <input
+                              type="text"
+                              value={draft.reason}
+                              onChange={(e) => setCloseDraft((prev) => ({ ...prev, [position.id]: { ...draft, reason: e.target.value } }))}
+                              placeholder="Exit reason"
+                              className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
+                              style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between gap-3 rounded-[10px] px-3 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
+                            <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                              Stop {stopValue != null ? fmtPrice(stopValue, symbolCurrency) : "—"} · Target {targetValue != null ? fmtPrice(targetValue, symbolCurrency) : "—"}
+                            </div>
+                            <div className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
+                              {riskReward != null ? `R:R ${riskReward.toFixed(2)}` : "Set both levels"}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                              Manage stop and target from chart, then close when the trade resolves.
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={async () => {
+                                  const nextStop = draft.stop.trim() ? parseFloat(draft.stop) : null;
+                                  const nextTarget = draft.target.trim() ? parseFloat(draft.target) : null;
+                                  if ((draft.stop.trim() && (nextStop == null || Number.isNaN(nextStop) || nextStop <= 0))
+                                    || (draft.target.trim() && (nextTarget == null || Number.isNaN(nextTarget) || nextTarget <= 0))) {
+                                    setOrderToast({ message: "Enter valid stop and target prices before saving levels.", journalId: position.id, broker: "simulated" });
+                                    setTimeout(() => setOrderToast(null), 3500);
+                                    return;
+                                  }
+                                  setManageBusyId(position.id);
+                                  try {
+                                    await updateJournalEntry(position.id, {
+                                      stop_loss: nextStop,
+                                      target_price: nextTarget,
+                                    });
+                                    setOrderToast({ message: "Position levels updated from chart.", journalId: position.id, broker: "simulated" });
+                                    await loadSymbolPositions();
+                                  } catch (e: unknown) {
+                                    setOrderToast({ message: e instanceof Error ? e.message : "Failed to update levels", journalId: position.id, broker: "simulated" });
+                                  } finally {
+                                    setManageBusyId(null);
+                                    setTimeout(() => setOrderToast(null), 4000);
+                                  }
+                                }}
+                                disabled={manageBusyId === position.id}
+                                className="px-3 py-2 rounded-[8px] text-[11px] font-bold transition-opacity"
+                                style={{ background: "var(--app-surface3)", color: "var(--app-text1)", border: "1px solid var(--app-border)", opacity: manageBusyId === position.id ? 0.5 : 1 }}
+                              >
+                                {manageBusyId === position.id ? "Saving…" : "Save levels"}
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  const exitPrice = parseFloat(draft.price);
+                                  if (!exitPrice || exitPrice <= 0) {
+                                    setOrderToast({ message: "Enter a valid exit price before closing the trade.", journalId: position.id, broker: "simulated" });
+                                    setTimeout(() => setOrderToast(null), 3500);
+                                    return;
+                                  }
+                                  setCloseBusyId(position.id);
+                                  try {
+                                    const result = await closePosition(position.id, exitPrice, draft.reason || undefined);
+                                    setOrderToast({ message: `${result.message} — journal updated and AI review queued.`, journalId: position.id, broker: "simulated" });
+                                    await loadSymbolPositions();
+                                  } catch (e: unknown) {
+                                    setOrderToast({ message: e instanceof Error ? e.message : "Failed to close position", journalId: position.id, broker: "simulated" });
+                                  } finally {
+                                    setCloseBusyId(null);
+                                    setTimeout(() => setOrderToast(null), 6000);
+                                  }
+                                }}
+                                disabled={closeBusyId === position.id}
+                                className="px-3 py-2 rounded-[8px] text-[11px] font-bold transition-opacity"
+                                style={{ background: "#e5383b", color: "white", opacity: closeBusyId === position.id ? 0.5 : 1 }}
+                              >
+                                {closeBusyId === position.id ? "Closing…" : "Close trade"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                )}
               </div>
 
               {/* ── Technicals accordion ─────────────────────────────── */}
@@ -1116,21 +2060,332 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           )}
         </aside>
 
+        <aside
+          className="w-[88px] flex-shrink-0 flex flex-col items-center gap-3 px-3 py-4"
+          style={{ borderRight: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
+        >
+          <div className="label" style={{ fontSize: 9, color: "var(--app-text3)" }}>Tools</div>
+          {DRAWING_TOOLS.map(tool => {
+            const meta = DRAW_TOOL_META[tool];
+            const Icon = meta.icon;
+            const active = activeDrawingTool === tool;
+            return (
+              <button
+                key={tool}
+                onClick={() => {
+                  setActiveDrawingTool(prev => prev === tool ? null : tool);
+                  setSelectedDrawingId(null);
+                }}
+                title={`${meta.label} (${meta.short})`}
+                className="w-full flex flex-col items-center gap-1 rounded-[14px] px-2 py-2 transition-colors"
+                style={active
+                  ? { background: "rgba(91,99,245,0.16)", border: "1px solid rgba(91,99,245,0.38)", color: "#a5b4fc" }
+                  : { background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--app-text3)" }}
+              >
+                <Icon size={15} />
+                <span style={{ fontSize: 10, fontWeight: 600 }}>{meta.label}</span>
+                <span className="mono" style={{ fontSize: 9, color: "var(--app-text3)" }}>{meta.short}</span>
+              </button>
+            );
+          })}
+
+          <div className="w-full h-px" style={{ background: "rgba(255,255,255,0.06)", margin: "2px 0" }} />
+
+          <button
+            onClick={() => setShowObjectList(prev => !prev)}
+            className="w-full rounded-[14px] px-2 py-2 transition-colors"
+            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--app-text2)" }}
+          >
+            <div className="flex justify-center"><Activity size={15} /></div>
+            <div style={{ fontSize: 10, fontWeight: 600, marginTop: 4 }}>Objects</div>
+            <div className="mono" style={{ fontSize: 9, color: "var(--app-text3)" }}>{drawnLines.length}</div>
+          </button>
+        </aside>
+
         {/* Chart area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "transparent" }}>
+          <div
+            className="flex items-center justify-between gap-3 px-4 py-2.5 flex-shrink-0"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
+          >
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={{ background: positive ? "rgba(38,166,91,0.14)" : "rgba(229,56,59,0.14)", color: positive ? "#4ade80" : "#f87171" }}>
+                {fmtPrice(latest?.close, symbolCurrency)} {changePct != null ? `${positive ? "+" : ""}${changePct.toFixed(2)}%` : ""}
+              </div>
+              {compareSymbol && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24" }}>
+                  Compared with {compareSymbol}
+                </div>
+              )}
+              {activeToolMeta && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(91,99,245,0.14)", color: "#a5b4fc" }}>
+                  {activeToolMeta.label} armed · press ESC to cancel
+                </div>
+              )}
+              <button
+                onClick={() => setSnapToPrice((prev) => !prev)}
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={snapToPrice
+                  ? { background: "rgba(0,229,196,0.12)", color: "var(--app-teal)", border: "1px solid rgba(0,229,196,0.22)" }
+                  : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                Magnet {snapToPrice ? "On" : "Off"}
+              </button>
+              {selectedDrawing && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)" }}>
+                  Selected: {DRAW_TOOL_META[selectedDrawing.tool].label}
+                </div>
+              )}
+              {selectedDrawing && (
+                <button
+                  onClick={() => toggleDrawingLock(selectedDrawing.id)}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  {selectedDrawing.locked ? <Unlock size={12} /> : <Lock size={12} />}
+                  {selectedDrawing.locked ? "Unlock" : "Lock"}
+                </button>
+              )}
+              {selectedDrawing && (
+                <button
+                  onClick={() => toggleDrawingHidden(selectedDrawing.id)}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  {selectedDrawing.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
+                  {selectedDrawing.hidden ? "Show" : "Hide"}
+                </button>
+              )}
+              {selectedDrawing && (
+                <button
+                  onClick={() => void handleDeleteSingleDrawing(selectedDrawing.id)}
+                  disabled={selectedDrawing.locked}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(229,56,59,0.14)", color: "#f87171", border: "1px solid rgba(229,56,59,0.24)", opacity: selectedDrawing.locked ? 0.45 : 1 }}
+                >
+                  Delete selected
+                </button>
+              )}
+              {activeIndicatorLabels.length > 0 && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  Indicators · {activeIndicatorLabels.join(" · ")}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowAlertModal(true)}
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.22)" }}
+              >
+                <Bell size={12} />
+                Alerts
+              </button>
+              <button
+                onClick={() => setLiveMode(prev => !prev)}
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                style={liveMode
+                  ? { background: "rgba(38,166,91,0.14)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }
+                  : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
+              >
+                <Activity size={12} />
+                {liveMode ? "Live feed" : "EOD feed"}
+              </button>
+            </div>
+          </div>
           {/* OHLCV legend / crosshair overlay */}
           <div className="relative flex-1 min-h-0">
             {/* Candle legend */}
             {displayBar && (
-              <div className="absolute top-2 left-3 z-10 pointer-events-none rounded px-2 py-1 text-[11px] font-mono"
-                style={{ background: "rgba(13,15,20,0.8)", color: "rgba(255,255,255,0.4)" }}>
-                <span className="font-semibold mr-2" style={{ color: "rgba(255,255,255,0.9)" }}>{symbol}</span>
-                <span className="mr-3">{displayBar.time}</span>
-                <span className="mr-2">O <span style={{ color: "rgba(255,255,255,0.85)" }}>{displayBar.open?.toFixed(2)}</span></span>
-                <span className="mr-2">H <span style={{ color: "rgba(255,255,255,0.85)" }}>{displayBar.high?.toFixed(2)}</span></span>
-                <span className="mr-2">L <span style={{ color: "rgba(255,255,255,0.85)" }}>{displayBar.low?.toFixed(2)}</span></span>
-                <span className="mr-2">C <span style={{ color: displayBar.close >= displayBar.open ? "#26a65b" : "#e5383b" }}>{displayBar.close?.toFixed(2)}</span></span>
-                <span>Vol <span style={{ color: "rgba(255,255,255,0.85)" }}>{fmtVol(displayBar.volume)}</span></span>
+              <>
+                <div className="absolute top-2 left-3 z-10 pointer-events-none rounded-[14px] px-3 py-2 text-[11px] font-mono"
+                  style={{ background: "rgba(13,15,20,0.82)", color: "rgba(255,255,255,0.48)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="font-semibold" style={{ color: "rgba(255,255,255,0.92)" }}>{symbol}</span>
+                    <span>{displayBar.time}</span>
+                    <span>O <span style={{ color: "rgba(255,255,255,0.88)" }}>{displayBar.open?.toFixed(2)}</span></span>
+                    <span>H <span style={{ color: "rgba(255,255,255,0.88)" }}>{displayBar.high?.toFixed(2)}</span></span>
+                    <span>L <span style={{ color: "rgba(255,255,255,0.88)" }}>{displayBar.low?.toFixed(2)}</span></span>
+                    <span>C <span style={{ color: displayBar.close >= displayBar.open ? "#26a65b" : "#e5383b" }}>{displayBar.close?.toFixed(2)}</span></span>
+                    <span>Vol <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtVol(displayBar.volume)}</span></span>
+                  </div>
+                </div>
+                <div
+                  className="absolute top-[58px] left-3 z-10 pointer-events-none rounded-[14px] px-3 py-2"
+                  style={{ background: "rgba(13,15,20,0.76)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(10px)" }}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      Range {candleRange != null ? fmtPrice(candleRange, symbolCurrency) : "—"}
+                    </span>
+                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)", color: candleBody != null && candleBody >= 0 ? "#4ade80" : "#f87171" }}>
+                      Body {candleBodyPct != null ? `${candleBodyPct >= 0 ? "+" : ""}${candleBodyPct.toFixed(2)}%` : "—"}
+                    </span>
+                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      Vol ratio {latestVolumeRatio != null ? `${latestVolumeRatio.toFixed(2)}x` : "—"}
+                    </span>
+                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      Range % {candleRangePct != null ? `${candleRangePct.toFixed(2)}%` : "—"}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {showObjectList && (
+              <div
+                className="absolute top-3 right-3 z-10 w-[220px] rounded-[16px] p-3"
+                style={{ background: "rgba(13,15,20,0.88)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(14px)" }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="label" style={{ fontSize: 9, marginBottom: 4 }}>Objects</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--app-text1)" }}>{visibleDrawings.length} visible · {drawnLines.length} total</div>
+                    {hiddenCount > 0 && (
+                      <div style={{ fontSize: 10, color: "var(--app-text3)", marginTop: 2 }}>{hiddenCount} hidden in this session</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowObjectList(false)}
+                    style={{ color: "var(--app-text3)", fontSize: 16, lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </div>
+                {drawnLines.length === 0 ? (
+                  <div style={{ fontSize: 11, lineHeight: 1.6, color: "var(--app-text3)" }}>
+                    Use the left tool rail to add levels, zones, rays, Fibonacci retracements, and notes.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
+                    {drawnLines.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        onClick={() => setSelectedDrawingId(item.id)}
+                        className="w-full text-left rounded-[12px] px-3 py-2 transition-colors cursor-pointer"
+                        style={selectedDrawingId === item.id
+                          ? { background: "rgba(91,99,245,0.16)", border: "1px solid rgba(91,99,245,0.34)" }
+                          : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--app-text1)" }}>
+                            {idx + 1}. {DRAW_TOOL_META[item.tool].label}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDrawingHidden(item.id);
+                              }}
+                              title={item.hidden ? "Show drawing" : "Hide drawing"}
+                              style={{ color: item.hidden ? "#fbbf24" : "var(--app-text3)", lineHeight: 0 }}
+                            >
+                              {item.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleDrawingLock(item.id);
+                              }}
+                              title={item.locked ? "Unlock drawing" : "Lock drawing"}
+                              style={{ color: item.locked ? "#a5b4fc" : "var(--app-text3)", lineHeight: 0 }}
+                            >
+                              {item.locked ? <Unlock size={12} /> : <Lock size={12} />}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void handleDeleteSingleDrawing(item.id);
+                              }}
+                              title="Delete drawing"
+                              disabled={item.locked}
+                              style={{ color: "#f87171", lineHeight: 0, opacity: item.locked ? 0.35 : 1 }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ marginTop: 5, fontSize: 10, color: item.hidden ? "#fbbf24" : "var(--app-text3)" }}>
+                          {item.text ?? `${item.p1.price.toFixed(2)} → ${item.p2.price.toFixed(2)}`}
+                        </div>
+                        <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {item.locked && (
+                            <span style={{ fontSize: 9, fontWeight: 700, color: "#a5b4fc", letterSpacing: "0.04em", textTransform: "uppercase" }}>Locked</span>
+                          )}
+                          {item.hidden && (
+                            <span style={{ fontSize: 9, fontWeight: 700, color: "#fbbf24", letterSpacing: "0.04em", textTransform: "uppercase" }}>Hidden</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div className="label" style={{ fontSize: 9, marginBottom: 6 }}>Desk shortcuts</div>
+                  <div style={{ display: "grid", gap: 5, fontSize: 10, color: "var(--app-text3)" }}>
+                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>T / R / H / J / Z / F / N</span> arm tools</div>
+                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Z</span> undo · <span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Y</span> redo</div>
+                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Esc</span> cancel tool · <span className="mono" style={{ color: "var(--app-text1)" }}>Delete</span> remove selection</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {textEditor && (
+              <div
+                className="absolute z-30 rounded-[14px] p-3"
+                style={{
+                  left: textEditor.x,
+                  top: textEditor.y,
+                  width: 220,
+                  background: "rgba(13,15,20,0.96)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  boxShadow: "var(--shadow-panel)",
+                }}
+              >
+                <div className="label" style={{ fontSize: 9, marginBottom: 6 }}>Text Note</div>
+                <textarea
+                  autoFocus
+                  value={textEditor.value}
+                  onChange={(e) => setTextEditor((prev) => prev ? { ...prev, value: e.target.value } : prev)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      void commitTextEditor();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setTextEditor(null);
+                    }
+                  }}
+                  rows={3}
+                  className="w-full rounded-[10px] px-3 py-2 text-[12px] outline-none resize-none"
+                  style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <div style={{ fontSize: 10, color: "var(--app-text3)" }}>Cmd/Ctrl+Enter to save</div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setTextEditor(null)}
+                      className="px-2.5 py-1 rounded-[8px] text-[11px]"
+                      style={{ color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => void commitTextEditor()}
+                      className="px-2.5 py-1 rounded-[8px] text-[11px] font-semibold"
+                      style={{ background: "var(--app-teal)", color: "#0D0F14" }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1138,40 +2393,225 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             <div
               ref={overlayRef}
               className="absolute inset-0 z-20"
-              style={{ cursor: activeDrawingTool ? "crosshair" : "default", pointerEvents: activeDrawingTool ? "all" : "none" }}
+              style={{ cursor: activeDrawingTool ? "crosshair" : dragState || positionDragState || planDragState ? "grabbing" : "default", pointerEvents: activeDrawingTool || selectedDrawing || dragState || positionDragState || planDragState || activeManagedPosition ? "all" : "none" }}
               onMouseDown={handleOverlayMouseDown}
               onMouseMove={handleOverlayMouseMove}
               onMouseUp={handleOverlayMouseUp}
+              onMouseLeave={() => { setDragState(null); setPositionDragState(null); setPlanDragState(null); }}
             >
               {/* Preview line while drawing */}
               {drawingPreview && (
                 <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                  <line
-                    x1={drawingPreview.x1} y1={drawingPreview.y1}
-                    x2={drawingPreview.x2}
-                    y2={activeDrawingTool === "Horizontal" ? drawingPreview.y1 : drawingPreview.y2}
-                    stroke="#5b63f5" strokeWidth={1.5} strokeDasharray="4 3"
-                  />
+                  {activeDrawingTool === "Rectangle" ? (
+                    <rect
+                      x={Math.min(drawingPreview.x1, drawingPreview.x2)}
+                      y={Math.min(drawingPreview.y1, drawingPreview.y2)}
+                      width={Math.abs(drawingPreview.x2 - drawingPreview.x1)}
+                      height={Math.abs(drawingPreview.y2 - drawingPreview.y1)}
+                      fill="rgba(91,99,245,0.12)"
+                      stroke="#5b63f5"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 3"
+                      rx={3}
+                    />
+                  ) : activeDrawingTool === "Text" ? (
+                    <g>
+                      <circle cx={drawingPreview.x1} cy={drawingPreview.y1} r={4} fill="#5b63f5" />
+                      <rect x={drawingPreview.x1 + 8} y={drawingPreview.y1 - 24} width={92} height={20} rx={6} fill="rgba(13,15,20,0.9)" stroke="#5b63f5" />
+                      <text x={drawingPreview.x1 + 14} y={drawingPreview.y1 - 11} fontSize="10" fill="#f8fafc" fontFamily="Inter, sans-serif">Text note</text>
+                    </g>
+                  ) : (
+                    <line
+                      x1={drawingPreview.x1} y1={drawingPreview.y1}
+                      x2={drawingPreview.x2}
+                      y2={(activeDrawingTool === "Horizontal" || activeDrawingTool === "HorizontalRay") ? drawingPreview.y1 : drawingPreview.y2}
+                      stroke="#5b63f5" strokeWidth={1.5} strokeDasharray="4 3"
+                    />
+                  )}
                 </svg>
               )}
 
               {/* Persisted drawings — projected from price/time coords each render */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                {drawnLines.map(line => {
+              <svg className="absolute inset-0 w-full h-full">
+                {(() => {
+                  const chartW = overlayRef.current?.clientWidth ?? 0;
+                  const planDefs = [
+                    { key: "entry", label: "Plan entry", price: tradePlan.entry ? parseFloat(tradePlan.entry) : null, color: "#a78bfa" },
+                    { key: "stop", label: "Plan stop", price: tradePlan.stop ? parseFloat(tradePlan.stop) : null, color: "#e5383b" },
+                    { key: "target", label: "Plan target", price: tradePlan.target ? parseFloat(tradePlan.target) : null, color: "#26a65b" },
+                  ] as const;
+                  return planDefs.map((line) => {
+                    if (line.price == null || Number.isNaN(line.price)) return null;
+                    const y = chartHandleRef.current?.priceToCoordinate(line.price) ?? null;
+                    if (y == null) return null;
+                    const glowId = `plan-glow-${line.key}`;
+                    return (
+                      <g key={line.key} style={{ pointerEvents: "all" }}>
+                        <defs>
+                          <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+                            <feGaussianBlur stdDeviation="2.2" result="blur" />
+                            <feMerge>
+                              <feMergeNode in="blur" />
+                              <feMergeNode in="SourceGraphic" />
+                            </feMerge>
+                          </filter>
+                        </defs>
+                        <line
+                          x1={0}
+                          y1={y}
+                          x2={chartW}
+                          y2={y}
+                          stroke={line.color}
+                          strokeWidth={1.8}
+                          strokeDasharray="6 4"
+                          opacity={0.92}
+                          filter={`url(#${glowId})`}
+                        />
+                        <rect
+                          x={8}
+                          y={y - 12}
+                          width={124}
+                          height={24}
+                          rx={10}
+                          fill="rgba(13,15,20,0.94)"
+                          stroke={line.color}
+                        />
+                        <text
+                          x={16}
+                          y={y + 5}
+                          fontSize="10.5"
+                          fill={line.color}
+                          fontFamily="Inter, sans-serif"
+                          fontWeight="700"
+                        >
+                          {line.label} {line.price.toFixed(2)}
+                        </text>
+                        <circle
+                          cx={138}
+                          cy={y}
+                          r={9}
+                          fill="rgba(13,15,20,0.96)"
+                          opacity={0.22}
+                        />
+                        <circle
+                          cx={138}
+                          cy={y}
+                          r={6.5}
+                          fill="#0D0F14"
+                          stroke={line.color}
+                          strokeWidth={1.8}
+                          style={{ cursor: "ns-resize" }}
+                          onMouseDown={(event) => {
+                            event.stopPropagation();
+                            setPlanDragState({ field: line.key });
+                          }}
+                        />
+                      </g>
+                    );
+                  });
+                })()}
+                {activeManagedPosition && activeManagedDraft && (() => {
+                  const chartW = overlayRef.current?.clientWidth ?? 0;
+                  const lineDefs = [
+                    { key: "entry", label: "Entry", price: activeManagedPosition.entry_price, color: "#94a3b8", draggable: false },
+                    { key: "stop", label: "Stop", price: activeManagedDraft.stop ? parseFloat(activeManagedDraft.stop) : null, color: "#e5383b", draggable: true },
+                    { key: "target", label: "Target", price: activeManagedDraft.target ? parseFloat(activeManagedDraft.target) : null, color: "#26a65b", draggable: true },
+                  ] as const;
+                  return lineDefs.map((line) => {
+                    if (line.price == null || Number.isNaN(line.price)) return null;
+                    const y = chartHandleRef.current?.priceToCoordinate(line.price) ?? null;
+                    if (y == null) return null;
+                    return (
+                      <g key={line.key} style={{ pointerEvents: "all" }}>
+                        <line
+                          x1={0}
+                          y1={y}
+                          x2={chartW}
+                          y2={y}
+                          stroke={line.color}
+                          strokeWidth={line.key === "entry" ? 1.2 : 1.6}
+                          strokeDasharray={line.key === "entry" ? "4 4" : "8 4"}
+                          opacity={0.92}
+                        />
+                        <rect
+                          x={Math.max(8, chartW - 104)}
+                          y={y - 12}
+                          width={104}
+                          height={24}
+                          rx={10}
+                          fill="rgba(13,15,20,0.94)"
+                          stroke={line.color}
+                        />
+                        <text
+                          x={Math.max(16, chartW - 96)}
+                          y={y + 5}
+                          fontSize="10.5"
+                          fill={line.color}
+                          fontFamily="Inter, sans-serif"
+                          fontWeight="700"
+                        >
+                          {line.label} {line.price.toFixed(2)}
+                        </text>
+                        {line.draggable && (
+                          <>
+                            <circle
+                              cx={chartW - 118}
+                              cy={y}
+                              r={9}
+                              fill="rgba(13,15,20,0.96)"
+                              opacity={0.22}
+                            />
+                            <circle
+                              cx={chartW - 118}
+                            cy={y}
+                            r={6.5}
+                            fill="#0D0F14"
+                            stroke={line.color}
+                            strokeWidth={1.8}
+                            style={{ cursor: "ns-resize" }}
+                            onMouseDown={(event) => {
+                              event.stopPropagation();
+                              setPositionDragState({ positionId: activeManagedPosition.id, field: line.key });
+                            }}
+                          />
+                          </>
+                        )}
+                      </g>
+                    );
+                  });
+                })()}
+                {visibleDrawings.map(line => {
                   const chartW = overlayRef.current?.clientWidth ?? 0;
                   const x1 = chartHandleRef.current?.timeToCoordinate(line.p1.time) ?? null;
                   const y1 = chartHandleRef.current?.priceToCoordinate(line.p1.price) ?? null;
                   if (x1 == null || y1 == null) return null;
 
+                  const selected = selectedDrawingId === line.id;
+                  const stroke = selected ? "#c4b5fd" : line.color;
+                  const strokeWidth = selected ? 2.2 : 1.5;
+                  const editable = selected && !line.locked;
+
                   if (line.tool === "Horizontal") {
                     return (
-                      <g key={line.id}>
+                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         <line x1={0} y1={y1} x2={chartW} y2={y1}
-                          stroke={line.color} strokeWidth={1.5} />
+                          stroke={stroke} strokeWidth={strokeWidth} />
                         <text x={chartW - 4} y={y1 - 4} textAnchor="end"
-                          fontSize="10" fill={line.color} fontFamily="monospace">
+                          fontSize="10" fill={stroke} fontFamily="monospace">
                           {line.p1.price.toFixed(2)}
                         </text>
+                        {editable && (
+                          <circle
+                            cx={chartW - 18}
+                            cy={y1}
+                            r={5}
+                            fill="#0D0F14"
+                            stroke="#c4b5fd"
+                            strokeWidth={1.5}
+                            style={{ pointerEvents: "all", cursor: "ns-resize" }}
+onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                          />
+                        )}
                       </g>
                     );
                   }
@@ -1180,11 +2620,126 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                   const y2 = chartHandleRef.current?.priceToCoordinate(line.p2.price) ?? null;
                   if (x2 == null || y2 == null) return null;
 
+                  if (line.tool === "HorizontalRay") {
+                    return (
+                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                        <line x1={x1} y1={y1} x2={chartW} y2={y1} stroke={stroke} strokeWidth={strokeWidth} />
+                        <circle cx={x1} cy={y1} r={3} fill={stroke} />
+                        {editable && (
+                          <>
+                            <circle
+                              cx={x1}
+                              cy={y1}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "move" }}
+onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                            />
+                            <circle
+                              cx={x2}
+                              cy={y1}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "ew-resize" }}
+onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                            />
+                          </>
+                        )}
+                      </g>
+                    );
+                  }
+
+                  if (line.tool === "Ray") {
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    const slope = dx === 0 ? 0 : dy / dx;
+                    const rayY = y1 + slope * (chartW - x1);
+                    return (
+                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                        <line x1={x1} y1={y1} x2={chartW} y2={rayY} stroke={stroke} strokeWidth={strokeWidth} />
+                        <circle cx={x1} cy={y1} r={3} fill={stroke} />
+                        {editable && (
+                          <>
+                            <circle
+                              cx={x1}
+                              cy={y1}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "move" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                            />
+                            <circle
+                              cx={x2}
+                              cy={y2}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "move" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                            />
+                          </>
+                        )}
+                      </g>
+                    );
+                  }
+
+                  if (line.tool === "Rectangle") {
+                    const rectX = Math.min(x1, x2);
+                    const rectY = Math.min(y1, y2);
+                    const rectW = Math.max(8, Math.abs(x2 - x1));
+                    const rectH = Math.max(8, Math.abs(y2 - y1));
+                    return (
+                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                        <rect
+                          x={rectX}
+                          y={rectY}
+                          width={rectW}
+                          height={rectH}
+                          fill={selected ? "rgba(196,181,253,0.16)" : "rgba(91,99,245,0.12)"}
+                          stroke={stroke}
+                          strokeWidth={strokeWidth}
+                          rx={3}
+                        />
+                        {editable && (
+                          <>
+                            <circle
+                              cx={x1}
+                              cy={y1}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "nwse-resize" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                            />
+                            <circle
+                              cx={x2}
+                              cy={y2}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "nwse-resize" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                            />
+                          </>
+                        )}
+                      </g>
+                    );
+                  }
+
                   if (line.tool === "Fib") {
                     const levels = [0, 0.236, 0.382, 0.5, 0.618, 1];
                     const priceRange = line.p2.price - line.p1.price;
                     return (
-                      <g key={line.id}>
+                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         {levels.map(lvl => {
                           const priceLvl = line.p1.price + priceRange * (1 - lvl);
                           const yLvl = chartHandleRef.current?.priceToCoordinate(priceLvl) ?? null;
@@ -1196,21 +2751,114 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                           return (
                             <g key={lvl}>
                               <line x1={x1} y1={yLvl} x2={x2} y2={yLvl}
-                                stroke={colors[lvl] || "#5b63f5"} strokeWidth={1} strokeDasharray="3 2" />
-                              <text x={x2 + 4} y={yLvl + 4} fontSize="9" fill={colors[lvl] || "#5b63f5"} fontFamily="monospace">
+                                stroke={selected ? "#c4b5fd" : (colors[lvl] || "#5b63f5")} strokeWidth={selected ? 1.5 : 1} strokeDasharray="3 2" />
+                              <text x={x2 + 4} y={yLvl + 4} fontSize="9" fill={selected ? "#c4b5fd" : (colors[lvl] || "#5b63f5")} fontFamily="monospace">
                                 {(lvl * 100).toFixed(1)}%
                               </text>
                             </g>
                           );
                         })}
+                        {editable && (
+                          <>
+                            <circle
+                              cx={x1}
+                              cy={y1}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "move" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                            />
+                            <circle
+                              cx={x2}
+                              cy={y2}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#c4b5fd"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "move" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                            />
+                          </>
+                        )}
+                      </g>
+                    );
+                  }
+
+                  if (line.tool === "Text") {
+                    return (
+                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onDoubleClick={() => editTextDrawing(line)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                        <circle cx={x1} cy={y1} r={3} fill={stroke} />
+                        <rect
+                          x={Math.min(chartW - 120, x1 + 8)}
+                          y={Math.max(6, y1 - 22)}
+                          width={110}
+                          height={20}
+                          rx={6}
+                          fill="rgba(13,15,20,0.9)"
+                          stroke={stroke}
+                        />
+                        <text
+                          x={Math.min(chartW - 112, x1 + 14)}
+                          y={Math.max(20, y1 - 9)}
+                          fontSize="10"
+                          fill="#f8fafc"
+                          fontFamily="Inter, sans-serif"
+                        >
+                          {line.text ?? "Note"}
+                        </text>
+                        {editable && (
+                          <circle
+                            cx={x1}
+                            cy={y1}
+                            r={5}
+                            fill="#0D0F14"
+                            stroke="#c4b5fd"
+                            strokeWidth={1.5}
+                            style={{ pointerEvents: "all", cursor: "move" }}
+                            onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                          />
+                        )}
                       </g>
                     );
                   }
 
                   // Trendline
                   return (
-                    <line key={line.id} x1={x1} y1={y1} x2={x2} y2={y2}
-                      stroke={line.color} strokeWidth={1.5} />
+                    <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth={strokeWidth} />
+                      {selected && (
+                        <>
+                          <circle cx={x1} cy={y1} r={3} fill={stroke} />
+                          <circle cx={x2} cy={y2} r={3} fill={stroke} />
+                        </>
+                      )}
+                      {editable && (
+                        <>
+                          <circle
+                            cx={x1}
+                            cy={y1}
+                            r={5}
+                            fill="#0D0F14"
+                            stroke="#c4b5fd"
+                            strokeWidth={1.5}
+                            style={{ pointerEvents: "all", cursor: "move" }}
+                            onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                          />
+                          <circle
+                            cx={x2}
+                            cy={y2}
+                            r={5}
+                            fill="#0D0F14"
+                            stroke="#c4b5fd"
+                            strokeWidth={1.5}
+                            style={{ pointerEvents: "all", cursor: "move" }}
+                            onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                          />
+                        </>
+                      )}
+                    </g>
                   );
                 })}
               </svg>
@@ -1219,6 +2867,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             {/* Main chart */}
             {data && (
               <CandlestickChart
+                key={`${symbol}-${timeframe}-${liveMode ? "live" : "eod"}`}
                 ref={candleChartRef}
                 candles={data.candles}
                 indicators={indicatorData}

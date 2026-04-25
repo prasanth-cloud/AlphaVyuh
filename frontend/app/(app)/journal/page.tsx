@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getJournalEntries, getJournalStats, getJournalAnalytics,
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
@@ -18,6 +19,7 @@ import { JournalAiInsights } from "./components/JournalAiInsights";
 import type { PanelMode, Tab } from "./components/types";
 
 export default function JournalPage() {
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("trades");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [journalPlan, setJournalPlan] = useState<string | null>(null);
@@ -25,6 +27,8 @@ export default function JournalPage() {
   const [aiTradesCount, setAiTradesCount] = useState(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [autoAnalysisStarted, setAutoAnalysisStarted] = useState(false);
+  const [autoAnalysisAttempted, setAutoAnalysisAttempted] = useState(false);
   const [patterns, setPatterns] = useState<AiPatterns | null>(null);
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [brokerConnected, setBrokerConnected] = useState(false);
@@ -52,6 +56,8 @@ export default function JournalPage() {
     exit_date: new Date().toISOString().split("T")[0],
   });
   const [closeSetupType, setCloseSetupType] = useState("");
+  const [symbolFocus, setSymbolFocus] = useState("");
+  const [reviewFocus, setReviewFocus] = useState<"all" | "needs-review" | "reviewed">("all");
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
@@ -70,6 +76,21 @@ export default function JournalPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    if (requestedTab === "analytics" || requestedTab === "ai" || requestedTab === "trades") {
+      setTab(requestedTab);
+    }
+    const requestedSymbol = searchParams.get("symbol");
+    setSymbolFocus(requestedSymbol?.toUpperCase() ?? "");
+    const requestedReview = searchParams.get("review");
+    if (requestedReview === "needs-review" || requestedReview === "reviewed") {
+      setReviewFocus(requestedReview);
+    } else {
+      setReviewFocus("all");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     getBrokerStatus().then(s => { setBrokerConnected(s.connected); setBrokerName(s.broker); }).catch(() => {});
   }, []);
 
@@ -78,6 +99,27 @@ export default function JournalPage() {
     setPatternsLoading(true);
     getAiPatterns().then(setPatterns).catch(() => {}).finally(() => setPatternsLoading(false));
   }, [tab, patterns]);
+
+  useEffect(() => {
+    if (autoAnalysisAttempted || aiLoading || aiAnalysis || aiError) return;
+    if ((stats?.total_trades ?? 0) < 3) return;
+    setAutoAnalysisStarted(true);
+    setAutoAnalysisAttempted(true);
+    setAiLoading(true);
+    setAiError("");
+    analyseJournal()
+      .then(r => {
+        setAiAnalysis(r.analysis);
+        setAiTradesCount(r.trades_analysed);
+      })
+      .catch((e: unknown) => {
+        setAiError(e instanceof Error ? e.message : "Analysis failed");
+      })
+      .finally(() => {
+        setAiLoading(false);
+        setAutoAnalysisStarted(false);
+      });
+  }, [autoAnalysisAttempted, aiAnalysis, aiError, aiLoading, stats?.total_trades]);
 
   useEffect(() => {
     if (symbolQ.length < 1) { setSymbolResults([]); return; }
@@ -111,6 +153,22 @@ export default function JournalPage() {
         return selectedEntry.trade_type === "long" ? (xp - ep) * qty : (ep - xp) * qty;
       })()
     : null;
+
+  const closedTrades = stats?.total_trades ?? 0;
+  const reviewedTrades = entries.filter(entry => entry.status === "closed" && Boolean(entry.lessons?.trim())).length;
+  const reviewReady = closedTrades >= 3;
+  const visibleEntries = useMemo(() => (
+    entries.filter((entry) => {
+      if (symbolFocus && entry.symbol !== symbolFocus) return false;
+      if (reviewFocus === "needs-review") {
+        return entry.status === "closed" && !entry.lessons?.trim();
+      }
+      if (reviewFocus === "reviewed") {
+        return entry.status === "closed" && Boolean(entry.lessons?.trim());
+      }
+      return true;
+    })
+  ), [entries, reviewFocus, symbolFocus]);
 
   const handleAddTrade = async () => {
     if (!selectedSymbol || !addForm.entry_price || !addForm.quantity || !addForm.entry_date || !addForm.trade_type) {
@@ -203,6 +261,9 @@ export default function JournalPage() {
         brokerConnected={brokerConnected}
         brokerName={brokerName}
         importing={importing}
+        closedTrades={closedTrades}
+        reviewedTrades={reviewedTrades}
+        reviewReady={reviewReady}
         onImport={handleImportZerodha}
         onAddTrade={openAddPanel}
       />
@@ -242,6 +303,9 @@ export default function JournalPage() {
           aiTradesCount={aiTradesCount}
           aiLoading={aiLoading}
           aiError={aiError}
+          closedTrades={closedTrades}
+          reviewedTrades={reviewedTrades}
+          autoAnalysisStarted={autoAnalysisStarted}
           onAnalyse={handleAnalyse}
         />
       )}
@@ -250,10 +314,16 @@ export default function JournalPage() {
       {tab === "trades" && (
         <div style={{ display: "flex", gap: 20 }}>
           <TradeTable
-            entries={entries}
+            entries={visibleEntries}
             loading={loading}
             filterStatus={filterStatus}
             onFilterChange={setFilterStatus}
+            symbolFocus={symbolFocus}
+            reviewFocus={reviewFocus}
+            onClearFocus={() => {
+              setSymbolFocus("");
+              setReviewFocus("all");
+            }}
             selectedEntry={selectedEntry}
             onSelectEntry={e => { setSelectedEntry(e); setPanelMode("view"); }}
             onCloseEntry={openClosePanel}

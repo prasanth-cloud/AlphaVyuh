@@ -39,6 +39,8 @@ class PlaceOrderRequest(BaseModel):
     target_price:   Optional[float] = None
     setup_type:     Optional[str]   = None
     notes:          Optional[str]   = None
+    source_page:    Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
+    source_context: Optional[str]   = None
 
 
 class ClosePositionRequest(BaseModel):
@@ -187,6 +189,31 @@ async def place_order(
         reward = abs(body.target_price - body.price)
         risk_reward = round(reward / risk, 2) if risk > 0 else None
 
+    broker_context = {
+        "simulated": "Simulated",
+        "zerodha": "Zerodha",
+        "upstox": "Upstox",
+    }.get(broker_used, broker_used.capitalize())
+
+    source_context = (body.source_context or "").strip()
+    source_label = {
+        "chart": "Chart",
+        "watchlist": "Watchlist",
+        "scanner": "Scanner",
+        "manual": "Manual",
+    }.get(body.source_page or "chart", "Chart")
+
+    base_reason = body.notes.strip() if body.notes else f"{body.side.upper()} via {source_label.lower()} — {body.order_type} order"
+    context_bits = [broker_context, source_label]
+    if source_context:
+        context_bits.append(source_context[:80])
+    if body.setup_type:
+        context_bits.append(f"Setup {body.setup_type}")
+
+    entry_reason = f"{base_reason} [{' · '.join(context_bits)}]"
+    if broker_order_id:
+        entry_reason = f"{entry_reason} [Order #{broker_order_id}]"
+
     entry = {
         "user_id":        user_id,
         "symbol":         sym,
@@ -198,12 +225,10 @@ async def place_order(
         "stop_loss":      body.stop_loss,
         "target_price":   body.target_price,
         "setup_type":     body.setup_type,
-        "entry_reason":   body.notes or f"{body.side.upper()} via chart — {body.order_type} order",
+        "entry_reason":   entry_reason,
         "risk_reward":    risk_reward,
         "status":         "open",
     }
-    if broker_order_id:
-        entry["entry_reason"] = (entry["entry_reason"] or "") + f" [Zerodha #{broker_order_id}]"
 
     result = sb.table("trade_journal").insert(entry).execute()
     if not result.data:
@@ -298,22 +323,40 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
     """Returns broker connection status for the current user."""
     sb = get_admin_client()
     u = sb.table("users").select(
-        "broker_type, broker_api_key, broker_access_token, broker_connected_at"
+        "broker_type, broker_api_key, broker_access_token, broker_connected_at, broker_token_expires_at"
     ).eq("id", user_id).maybe_single().execute()
 
     if not u.data:
-        return {"connected": False, "broker": None}
+        return {"connected": False, "broker": None, "mode": "simulated", "token_expired": False}
 
     bt  = u.data.get("broker_type")
     key = u.data.get("broker_api_key")
     tok = u.data.get("broker_access_token")
+    expires_at = u.data.get("broker_token_expires_at")
+
+    token_expired = False
+    if expires_at:
+        try:
+            from datetime import datetime, timezone
+
+            expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            token_expired = expiry <= datetime.now(timezone.utc)
+        except Exception:
+            token_expired = False
+
+    connected = bool(bt and key and tok and not token_expired)
 
     return {
-        "connected":    bool(bt and key and tok),
+        "connected":    connected,
         "broker":       bt,
+        "mode":         bt if connected else "simulated",
         "has_api_key":  bool(key),
         "has_token":    bool(tok),
+        "token_expired": token_expired,
         "connected_at": u.data.get("broker_connected_at"),
+        "token_expires_at": expires_at,
     }
 
 
@@ -396,7 +439,7 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             "entry_date":   str(date.today()),
             "entry_price":  avg_px,
             "quantity":     qty,
-            "entry_reason": f"Zerodha import — order #{order_id}",
+            "entry_reason": f"Zerodha import — order #{order_id} [Zerodha]",
             "status":       "open",
         }
         sb.table("trade_journal").insert(entry).execute()

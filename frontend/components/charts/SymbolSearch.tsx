@@ -107,18 +107,18 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="w-[200px] text-[13px] font-semibold rounded-[7px] pl-8 pr-3 py-1.5 outline-none"
+          className="w-[220px] text-[13px] font-semibold rounded-[12px] pl-9 pr-3 py-2 outline-none transition-colors"
           style={{
-            background: "var(--app-surface3)",
-            border: "1px solid var(--app-border)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), rgba(10,14,18,0.78)",
+            border: "1px solid rgba(255,255,255,0.08)",
             color: "var(--app-text1)",
           }}
         />
       </div>
 
       {open && results.length > 0 && (
-        <div className="absolute top-full mt-1 left-0 w-[320px] rounded-[8px] shadow-2xl z-50 overflow-hidden"
-          style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)" }}>
+        <div className="absolute top-full mt-2 left-0 w-[360px] rounded-[16px] shadow-2xl z-50 overflow-hidden"
+          style={{ background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)" }}>
           {results.slice(0, 8).map((r, i) => (
             <button
               key={r.symbol}

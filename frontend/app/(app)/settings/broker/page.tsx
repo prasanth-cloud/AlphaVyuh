@@ -1,185 +1,250 @@
 "use client";
+
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
 import {
-  startBrokerConnect,
-  getBrokerProfile,
-  getBrokerHoldings,
-  disconnectBroker,
-  type BrokerProfile,
-  type BrokerHolding,
+  getBrokerStatus,
+  getZerodhaLoginUrl,
+  importZerodhaTrades,
 } from "@/lib/api";
+
+type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
+
+function StatusDot({ tone }: { tone: "live" | "simulated" | "warning" }) {
+  const color =
+    tone === "live" ? "var(--gain)" : tone === "warning" ? "var(--warn)" : "var(--text-tertiary)";
+  return <span style={{ width: 8, height: 8, borderRadius: 999, background: color, display: "inline-block" }} />;
+}
 
 function BrokerSettingsContent() {
   const searchParams = useSearchParams();
-  const connectedParam = searchParams.get("connected");
-
+  const [state, setState] = useState<BrokerState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<BrokerProfile | null>(null);
-  const [holdings, setHoldings] = useState<BrokerHolding[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState<"connect" | "import" | null>(null);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
 
-  useEffect(() => {
-    getBrokerProfile("zerodha")
-      .then(p => { setProfile(p); return getBrokerHoldings("zerodha"); })
-      .then(h => setHoldings(h))
-      .catch(() => { setProfile(null); setHoldings([]); })
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (connectedParam) {
-      getBrokerProfile("zerodha")
-        .then(p => setProfile(p))
-        .catch(() => {});
-    }
-  }, [connectedParam]);
-
-  async function handleConnect() {
-    setErr(""); setBusy(true);
+  async function loadStatus() {
+    setLoading(true);
     try {
-      const { auth_url } = await startBrokerConnect("zerodha");
-      window.location.href = auth_url;
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Failed to start connection");
-      setBusy(false);
+      const next = await getBrokerStatus();
+      setState(next);
+    } catch {
+      setState(null);
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function handleDisconnect() {
-    setBusy(true);
-    setErr("");
+  useEffect(() => {
+    loadStatus();
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("connected")) {
+      loadStatus();
+      setToast("Broker connected. Orders placed from charts now route live when the token is valid.");
+    }
+  }, [searchParams]);
+
+  const mode = useMemo(() => {
+    if (!state?.has_api_key) return "credentials-missing" as const;
+    if (state.connected) return "live" as const;
+    if (state.token_expired) return "token-expired" as const;
+    return "simulated" as const;
+  }, [state]);
+
+  async function handleConnect() {
+    setBusy("connect");
+    setError("");
     try {
-      await disconnectBroker("zerodha");
-      setProfile(null);
-      setHoldings([]);
+      const url = await getZerodhaLoginUrl();
+      window.location.href = url;
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Failed to disconnect");
+      setError(e instanceof Error ? e.message : "Could not start Zerodha login");
+      setBusy(null);
+    }
+  }
+
+  async function handleImport() {
+    setBusy("import");
+    setError("");
+    try {
+      const result = await importZerodhaTrades();
+      setToast(result.message);
+      await loadStatus();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Import failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   const cardStyle: React.CSSProperties = {
-    background: "var(--app-surface)",
-    border: "1px solid var(--app-border)",
-    borderRadius: "12px",
+    background: "var(--surface-1)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-lg)",
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
-        <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
+        <div
+          className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+        />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen" style={{ background: "var(--app-bg)" }}>
-      <div className="max-w-[580px] mx-auto px-5 py-8">
-
-        <div className="flex items-center gap-2 text-[12px] mb-6" style={{ color: "var(--app-text3)" }}>
-          <Link href="/settings" className="hover:opacity-80" style={{ color: "var(--app-text2)" }}>Settings</Link>
+      <div className="max-w-[720px] mx-auto px-5 py-8">
+        <div className="flex items-center gap-2 text-[12px] mb-6" style={{ color: "var(--text-tertiary)" }}>
+          <Link href="/settings" className="hover:opacity-80" style={{ color: "var(--text-secondary)" }}>
+            Settings
+          </Link>
           <span>/</span>
-          <span style={{ color: "var(--app-text1)", fontWeight: 500 }}>Broker connection</span>
+          <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>Broker execution</span>
         </div>
 
-        <div className="mb-6">
-          <div className="text-[20px] font-semibold" style={{ color: "var(--app-text1)" }}>Broker connection</div>
-          <div className="text-[13px] mt-1" style={{ color: "var(--app-text2)" }}>
-            Connect Zerodha Kite to place orders directly from the chart.
+        <div style={{ marginBottom: 18 }}>
+          <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>
+            Broker execution
+          </div>
+          <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 560 }}>
+            Keep this flow simple: save your Zerodha API key and secret in settings, connect once per token cycle, then place live orders from charts. If the broker is not connected, AlphaVyuh stays in simulated mode and still journals the trade.
           </div>
         </div>
 
-        {profile ? (
-          /* Connected state */
-          <div style={cardStyle} className="p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-3 h-3 rounded-full" style={{ background: "#26a65b" }} />
-              <div>
-                <div data-testid="broker-status-connected" className="text-[15px] font-semibold" style={{ color: "var(--app-text1)" }}>
-                  Zerodha connected
+        <div style={{ ...cardStyle, padding: 20, marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 18 }}>
+            <div>
+              <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>
+                Current mode
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <StatusDot tone={mode === "live" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
+                <div className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {mode === "live"
+                    ? "Live execution via Zerodha"
+                    : mode === "token-expired"
+                      ? "Token expired — reconnect required"
+                      : mode === "credentials-missing"
+                        ? "Credentials missing"
+                        : "Simulated execution"}
                 </div>
-                <div className="text-[11px]" style={{ color: "var(--app-text3)" }}>
-                  Logged in as {profile.display_name} ({profile.user_id})
-                </div>
+              </div>
+              <div className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                {mode === "live"
+                  ? "Orders from chart and watchlist route live, then auto-record into the journal."
+                  : mode === "token-expired"
+                    ? "Your API key is saved, but the access token is no longer valid. Reconnect and you are back to live mode."
+                    : mode === "credentials-missing"
+                      ? "Save your Zerodha API key and secret first, then start the OAuth connect flow."
+                      : "Orders still work in simulated mode so you can test the full scan → chart → journal workflow."}
               </div>
             </div>
-
-            {holdings.length > 0 && (
-              <div className="mb-5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.5px] mb-2" style={{ color: "#888" }}>
-                  Holdings
-                </div>
-                <div className="space-y-1">
-                  {holdings.map(h => (
-                    <div key={h.symbol} className="flex items-center justify-between py-1.5 text-[13px]"
-                      style={{ borderBottom: "1px solid var(--app-border)" }}>
-                      <span className="font-medium" style={{ color: "var(--app-text1)" }}>{h.symbol}</span>
-                      <div className="flex items-center gap-4 text-[12px]">
-                        <span style={{ color: "var(--app-text2)" }}>{h.quantity} shares</span>
-                        <span style={{ color: h.pnl >= 0 ? "#26a65b" : "#e5383b" }}>
-                          {h.pnl >= 0 ? "+" : ""}{h.pnl.toFixed(0)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {err && <div className="text-[12px] mb-3" style={{ color: "#e5383b" }}>{err}</div>}
-
-            <button
-              data-testid="disconnect-btn"
-              onClick={handleDisconnect}
-              disabled={busy}
-              className="px-4 py-2 rounded-[8px] text-[12px] font-semibold disabled:opacity-50"
-              style={{ border: "1px solid rgba(229,56,59,0.3)", color: "#e5383b", background: "transparent" }}>
-              {busy ? "Disconnecting…" : "Disconnect"}
-            </button>
+            <div
+              className="mono"
+              style={{
+                fontSize: 11,
+                color: "var(--text-tertiary)",
+                padding: "6px 10px",
+                borderRadius: 999,
+                border: "1px solid var(--border-subtle)",
+                background: "var(--surface-2)",
+              }}
+            >
+              {state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : "No live session"}
+            </div>
           </div>
-        ) : (
-          /* Not connected state */
-          <div style={cardStyle} className="p-6">
-            <div data-testid="broker-status-disconnected" className="text-[14px] font-medium mb-2" style={{ color: "var(--app-text1)" }}>
-              Connect your Zerodha account
-            </div>
-            <div className="text-[12px] mb-5" style={{ color: "var(--app-text2)" }}>
-              Click below to open Kite Connect OAuth. You will be redirected back automatically after login.
-            </div>
 
-            <div className="space-y-2 mb-5 text-[12px]" style={{ color: "var(--app-text2)" }}>
-              {["Place Market, Limit, SL orders from charts", "Auto-import filled trades into journal", "Real-time order status tracking"].map(f => (
-                <div key={f} className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0"
-                    style={{ background: "rgba(91,99,245,0.12)", color: "#5b63f5" }}>✓</div>
-                  {f}
-                </div>
-              ))}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+              <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>API key</div>
+              <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
+                {state?.has_api_key ? "Saved" : "Missing"}
+              </div>
             </div>
+            <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+              <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>Access token</div>
+              <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
+                {state?.connected ? "Valid" : state?.has_token ? "Stored" : "Missing"}
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+              <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>Execution mode</div>
+              <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)", textTransform: "capitalize" }}>
+                {state?.mode ?? "simulated"}
+              </div>
+            </div>
+          </div>
 
-            {err && <div className="text-[12px] mb-3" style={{ color: "#e5383b" }}>{err}</div>}
-
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             <button
-              data-testid="connect-btn"
               onClick={handleConnect}
-              disabled={busy}
-              className="w-full py-2.5 rounded-[8px] text-[13px] font-bold disabled:opacity-50 transition-opacity"
-              style={{ background: "#5b63f5", color: "#fff" }}>
-              {busy ? "Redirecting to Kite…" : "Connect Zerodha via Kite"}
+              disabled={busy === "connect" || !state?.has_api_key}
+              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
+              style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
+            >
+              {busy === "connect"
+                ? "Opening Kite…"
+                : mode === "live"
+                  ? "Reconnect Zerodha"
+                  : "Connect Zerodha"}
             </button>
+
+            <button
+              onClick={handleImport}
+              disabled={busy === "import" || !state?.connected}
+              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
+              style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
+            >
+              {busy === "import" ? "Importing…" : "Import today’s filled trades"}
+            </button>
+
+            <Link
+              href="/settings?tab=broker"
+              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold"
+              style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
+            >
+              Edit broker credentials
+            </Link>
+          </div>
+        </div>
+
+        <div style={{ ...cardStyle, padding: 18, marginBottom: 14 }}>
+          <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 10 }}>
+            Simplest operating model
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {[
+              "1. Save your Zerodha API key and secret in Settings.",
+              "2. Connect Zerodha here to get a valid access token.",
+              "3. Place orders from chart or watchlist. AlphaVyuh journals every trade either way.",
+              "4. Use Import when you want today’s filled Zerodha orders pulled into the journal.",
+            ].map((line) => (
+              <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                {line}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {(toast || error) && (
+          <div
+            style={{
+              ...cardStyle,
+              padding: 14,
+              color: error ? "var(--loss)" : "var(--text-primary)",
+              background: error ? "rgba(255, 90, 101, 0.08)" : "var(--surface-1)",
+            }}
+          >
+            <div className="text-[12px]">{error || toast}</div>
           </div>
         )}
-
-        <div className="mt-3 p-4 opacity-50" style={cardStyle}>
-          <div className="text-[13px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>More brokers — coming soon</div>
-          <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>Upstox · Fyers · Angel One · ICICI Direct</div>
-        </div>
       </div>
     </div>
   );
@@ -187,12 +252,16 @@ function BrokerSettingsContent() {
 
 export default function BrokerSettingsPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
-        <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: "#5b63f5", borderTopColor: "transparent" }} />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
+          <div
+            className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
+            style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+          />
+        </div>
+      }
+    >
       <BrokerSettingsContent />
     </Suspense>
   );

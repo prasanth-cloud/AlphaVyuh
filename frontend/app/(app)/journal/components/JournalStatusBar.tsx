@@ -4,6 +4,9 @@ interface JournalStatusBarProps {
   brokerConnected: boolean;
   brokerName: string | null;
   importing: boolean;
+  closedTrades: number;
+  reviewedTrades: number;
+  reviewReady: boolean;
   onImport: () => void;
   onAddTrade: () => void;
 }
@@ -12,16 +15,27 @@ export function JournalStatusBar({
   brokerConnected,
   brokerName,
   importing,
+  closedTrades,
+  reviewedTrades,
+  reviewReady,
   onImport,
   onAddTrade,
 }: JournalStatusBarProps) {
   return (
-    <div style={{ height: 44, background: "var(--surface-1)", borderBottom: "1px solid var(--border-subtle)", padding: "0 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+    <div style={{ minHeight: 56, background: "var(--surface-1)", borderBottom: "1px solid var(--border-subtle)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>Trading Journal</span>
-        {brokerConnected && (
-          <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>↑ {brokerName}</span>
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: brokerConnected ? "var(--gain)" : "var(--text-tertiary)" }}>
+            {brokerConnected ? `Broker live${brokerName ? ` · ${brokerName}` : ""}` : "Manual logging active"}
+          </span>
+          <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+            {reviewedTrades}/{closedTrades} closed trades reviewed
+          </span>
+          <span style={{ fontSize: 12, color: reviewReady ? "var(--accent)" : "var(--text-tertiary)" }}>
+            {reviewReady ? "Journal coach ready" : `Coach unlocks at 3 closed trades`}
+          </span>
+        </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         {brokerConnected && brokerName === "zerodha" && (

@@ -14,12 +14,13 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services.rate_limit import plan_cache, scanner_limiter
+from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 
-FREE_RESULT_LIMIT  = 25
-PRO_RESULT_LIMIT   = 500
+FREE_RESULT_LIMIT  = 200
+PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 
 
@@ -165,6 +166,8 @@ class ScanRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
     sort_by:    str = "volume_ratio"   # column key (see SORT_KEYS below)
     sort_order: str = "desc"           # "asc" | "desc"
+    page:       int = 1
+    page_size:  int = 25               # 25 | 50 | 150 | 200 | 0(all)
 
 
 class SaveScreenRequest(BaseModel):
@@ -641,16 +644,9 @@ async def run_scanner(
     plan = _get_user_plan(user_id)
     hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
 
-    # Find last complete trading day (partial ingests have <200 rows; full days 2000+)
-    from collections import Counter
-    dr = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(5000).execute()
-    if not dr.data:
+    latest_date = get_latest_complete_trade_date(client)
+    if not latest_date:
         return {"trade_date": None, "total_matches": 0, "plan_limit": hard_limit, "results": []}
-    date_counts = Counter(r["trade_date"] for r in dr.data)
-    latest_date = next(
-        (d for d in sorted(date_counts, reverse=True) if date_counts[d] >= 1000),
-        dr.data[0]["trade_date"],
-    )
 
     # Build base query with series filter pushed to DB
     f = body.filters
@@ -731,8 +727,19 @@ async def run_scanner(
     reverse  = body.sort_order != "asc"
     results.sort(key=lambda x: (x.get(sort_key) is not None, x.get(sort_key) or 0), reverse=reverse)
 
-    total  = len(results)
+    total = len(results)
     capped = results[:hard_limit]
+    safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
+    safe_page = max(body.page, 1)
+
+    if safe_page_size == 0:
+        paged = capped
+        total_pages = 1
+    else:
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        paged = capped[start:end]
+        total_pages = max(1, (len(capped) + safe_page_size - 1) // safe_page_size)
 
     return {
         "trade_date":    latest_date,
@@ -740,7 +747,11 @@ async def run_scanner(
         "plan_limit":    hard_limit,
         "plan":          plan,
         "is_limited":    plan == "free" and total > hard_limit,
-        "results":       capped,
+        "page":          safe_page,
+        "page_size":     safe_page_size,
+        "total_pages":   total_pages,
+        "visible_count": len(paged),
+        "results":       paged,
     }
 
 
