@@ -150,6 +150,19 @@ If TradingView declines or does not respond within 10 business days: fall back t
 1. Email `platforms@tradingview.com` with: company name, product URL (alphavyuh.com), description of use (swing-trading analytics platform, subscription model, attribution displayed prominently)
 2. Await written confirmation
 
+#### Licensing Email Checklist
+
+The email must ask for explicit written confirmation on these points:
+
+- AlphaVyuh may use **Advanced Charts / Charting Library free tier** inside a subscription-gated SaaS product, not only on public marketing pages.
+- AlphaVyuh may display the required TradingView attribution/watermark to authenticated users.
+- AlphaVyuh may render its own external order ticket and broker workflow outside the TradingView widget without requiring the paid Trading Platform product.
+- AlphaVyuh may persist chart layouts/drawings in its own database for each authenticated user.
+- AlphaVyuh may serve the library from Vercel using the static `public/charting_library/` deployment pattern described below.
+- TradingView will provide access to `github.com/tradingview/charting_library` and clarify whether CI/CD access should use a personal, organization, or machine-user GitHub token.
+
+Do not start implementation until the response answers the subscription-gated SaaS question directly. If the response is ambiguous, treat the free-tier path as blocked and escalate to a paid-tier pricing conversation.
+
 ### Phase 2 — Integration Spike (2–3 days, post-confirmation)
 1. Get access to `github.com/tradingview/charting_library` (requires TV approval; comes with licensing response)
 2. Add private git dep to `package.json`:
