@@ -57,7 +57,7 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 ## Current Audit Notes
 
 - Frontend: `npm audit --audit-level=high` still reports Next.js 14 advisories and the related `eslint-config-next` `glob` advisory. The automated fix upgrades to Next 16, so treat this as a planned Next migration before production if self-hosting.
-- Backend: `pip-audit -r requirements.txt` is reduced to one remaining advisory from `kiteconnect` pinning `autobahn==19.11.2`. Do not enable Kite broker production flows until this is replaced, isolated, vendor-approved, or accepted in a formal risk review.
+- Backend: the legacy `kiteconnect` package was removed from production requirements. Kite routes use the internal HTTP wrapper in `app.brokers.kite.api`, avoiding the old `autobahn==19.11.2` dependency path.
 
 ## Data Checklist
 

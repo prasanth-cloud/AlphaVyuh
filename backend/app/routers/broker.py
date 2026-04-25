@@ -20,6 +20,8 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
+from app.brokers.kite import api as kite_api
+from app.brokers.kite.api import KiteApiError
 from app.services.supabase import get_admin_client
 
 logger = logging.getLogger(__name__)
@@ -49,18 +51,7 @@ class ClosePositionRequest(BaseModel):
     exit_reason: Optional[str] = None
 
 
-# ── Zerodha helpers ───────────────────────────────────────────────────────────
-
-def _get_kite(api_key: str, access_token: str):
-    """Return a KiteConnect instance with access token set, or None if unavailable."""
-    try:
-        from kiteconnect import KiteConnect  # type: ignore
-        kite = KiteConnect(api_key=api_key)
-        kite.set_access_token(access_token)
-        return kite
-    except Exception as e:
-        logger.warning(f"KiteConnect unavailable: {e}")
-        return None
+# ── Broker helpers ────────────────────────────────────────────────────────────
 
 
 def _place_upstox_order(
@@ -103,23 +94,34 @@ def _place_upstox_order(
     return None
 
 
-def _place_zerodha_order(kite, symbol: str, side: str, quantity: int, order_type: str) -> str | None:
+def _place_zerodha_order(
+    api_key: str,
+    access_token: str,
+    symbol: str,
+    side: str,
+    quantity: int,
+    order_type: str,
+) -> str | None:
     """Place order via Zerodha. Returns broker order ID or None on failure."""
     try:
-        txn = kite.TRANSACTION_TYPE_BUY if side == "buy" else kite.TRANSACTION_TYPE_SELL
-        otype = kite.ORDER_TYPE_MARKET if order_type == "market" else kite.ORDER_TYPE_LIMIT
-        order_id = kite.place_order(
-            variety=kite.VARIETY_REGULAR,
-            exchange=kite.EXCHANGE_NSE,
-            tradingsymbol=symbol,
-            transaction_type=txn,
-            quantity=quantity,
-            product=kite.PRODUCT_CNC,
-            order_type=otype,
+        data = kite_api.place_order(
+            access_token=access_token,
+            variety="regular",
+            api_key=api_key,
+            params={
+                "exchange": "NSE",
+                "tradingsymbol": symbol,
+                "transaction_type": "BUY" if side == "buy" else "SELL",
+                "quantity": quantity,
+                "product": "CNC",
+                "order_type": "MARKET" if order_type == "market" else "LIMIT",
+            },
         )
-        return str(order_id)
+        return str(data.get("order_id") or "")
+    except KiteApiError as e:
+        logger.error("Zerodha order failed: %s", e)
     except Exception as e:
-        logger.error(f"Zerodha order failed: {e}")
+        logger.error("Zerodha order error: %s", e)
         return None
 
 
@@ -167,11 +169,11 @@ async def place_order(
         bt = u.get("broker_type")
 
         if bt == "zerodha" and u.get("broker_api_key") and u.get("broker_access_token"):
-            kite = _get_kite(u["broker_api_key"], u["broker_access_token"])
-            if kite:
-                broker_order_id = _place_zerodha_order(kite, sym, body.side, body.quantity, body.order_type)
-                if broker_order_id:
-                    broker_used = "zerodha"
+            broker_order_id = _place_zerodha_order(
+                u["broker_api_key"], u["broker_access_token"], sym, body.side, body.quantity, body.order_type
+            )
+            if broker_order_id:
+                broker_used = "zerodha"
 
         elif bt == "upstox" and u.get("broker_api_key") and u.get("broker_access_token"):
             broker_order_id = _place_upstox_order(
@@ -390,14 +392,16 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
     if not u.data or not u.data.get("broker_api_key") or not u.data.get("broker_access_token"):
         raise HTTPException(status_code=400, detail="Zerodha not connected. Complete the OAuth login first.")
 
-    kite = _get_kite(u.data["broker_api_key"], u.data["broker_access_token"])
-    if not kite:
-        raise HTTPException(status_code=400, detail="Could not connect to Zerodha — check your credentials")
-
     try:
-        orders = kite.orders()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Zerodha API error: {e}")
+        orders = kite_api.list_orders(
+            access_token=u.data["broker_access_token"],
+            api_key=u.data["broker_api_key"],
+        )
+    except KiteApiError as e:
+        raise HTTPException(status_code=400, detail=f"Zerodha API error: {e.message}")
+    except Exception:
+        logger.exception("Zerodha import failed for user %s", user_id)
+        raise HTTPException(status_code=400, detail="Could not connect to Zerodha — check your credentials")
 
     filled = [o for o in orders if o.get("status") == "COMPLETE"]
     imported = 0
@@ -471,13 +475,18 @@ async def zerodha_callback(
     api_secret = u.data["broker_api_secret"]
 
     try:
-        from kiteconnect import KiteConnect  # type: ignore
-        kite = KiteConnect(api_key=api_key)
-        session_data = kite.generate_session(request_token, api_secret=api_secret)
+        session_data = kite_api.exchange_code(
+            request_token=request_token,
+            api_key=api_key,
+            api_secret=api_secret,
+        )
         access_token = session_data["access_token"]
-    except Exception as e:
+    except KiteApiError as e:
         # Never include `e` in the response — it may contain api_secret or request_token.
-        logger.error("Zerodha session generation failed for user %s: %s", user_id, e)
+        logger.error("Zerodha session generation failed for user %s: %s", user_id, e.message)
+        raise HTTPException(status_code=400, detail="Zerodha session failed — check your API key and secret")
+    except Exception:
+        logger.exception("Zerodha session generation failed for user %s", user_id)
         raise HTTPException(status_code=400, detail="Zerodha session failed — check your API key and secret")
 
     import datetime
