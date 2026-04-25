@@ -196,6 +196,8 @@ of selecting the top quartile).
 - Pre-launch task: calibration sprint as specified above. Tracked in
   `CLAUDE.md §8 Known gaps`.
 
+**Update 2026-04-23:** The Minervini SEPA preset originally planned here was implemented and shipped, then removed in `chore/remove-minervini-preset` due to trademark-risk considerations for public launch. The underlying filter fields (`rs_score_min`, `w52h_pct_max`, `w52l_pct_min`, `all_emas_bullish`) remain available via manual filter input.
+
 ---
 
 ## Latency budget after M3-F

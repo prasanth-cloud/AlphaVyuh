@@ -14,12 +14,13 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services.rate_limit import plan_cache, scanner_limiter
+from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 
-FREE_RESULT_LIMIT  = 25
-PRO_RESULT_LIMIT   = 500
+FREE_RESULT_LIMIT  = 200
+PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 
 
@@ -82,9 +83,9 @@ class ScanFilters(BaseModel):
     price_vs_ema50:  str | None = None
     price_vs_ema200: str | None = None
 
-    # ── Relative Strength (Minervini RS rating, 1–99) ────────────────────
-    rs_rating_min:   float | None = None   # >= X (70+ is Minervini threshold)
-    rs_rating_max:   float | None = None
+    # ── Relative Strength score (1–99) ──────────────────────────────────
+    rs_score_min:    float | None = None   # >= X
+    rs_score_max:    float | None = None
 
     # ── MACD ─────────────────────────────────────────────────────────────
     macd_signal:        str | None = None   # "bullish_cross"|"bearish_cross"|"above_signal"|"below_signal"
@@ -165,6 +166,8 @@ class ScanRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
     sort_by:    str = "volume_ratio"   # column key (see SORT_KEYS below)
     sort_order: str = "desc"           # "asc" | "desc"
+    page:       int = 1
+    page_size:  int = 25               # 25 | 50 | 150 | 200 | 0(all)
 
 
 class SaveScreenRequest(BaseModel):
@@ -301,7 +304,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         atr_v      = float(row["atr_14"])        if row.get("atr_14")       is not None else None
         w52h_v     = float(row["week_52_high"])  if row.get("week_52_high") is not None else None
         w52l_v     = float(row["week_52_low"])   if row.get("week_52_low")  is not None else None
-        rs_rating_v= float(row["rs_rating"])     if row.get("rs_rating")    is not None else None
+        rs_score_v = float(row["rs_score"])      if row.get("rs_score")     is not None else None
 
         # Computed columns — prefer precomputed DB values when populated (M3-A columns)
         pct_change   = round((close - prev_close) / prev_close * 100, 2) if prev_close else None
@@ -339,9 +342,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.rsi_min is not None and (rsi_v is None or rsi_v < f.rsi_min):  continue
         if f.rsi_max is not None and (rsi_v is None or rsi_v > f.rsi_max):  continue
 
-        # ── Relative Strength rating ───────────────────────────────────────
-        if f.rs_rating_min is not None and (rs_rating_v is None or rs_rating_v < f.rs_rating_min): continue
-        if f.rs_rating_max is not None and (rs_rating_v is None or rs_rating_v > f.rs_rating_max): continue
+        # ── Relative Strength score ────────────────────────────────────────
+        if f.rs_score_min is not None and (rs_score_v is None or rs_score_v < f.rs_score_min): continue
+        if f.rs_score_max is not None and (rs_score_v is None or rs_score_v > f.rs_score_max): continue
 
         # ── Trend / EMAs ─────────────────────────────────────────────────
         if f.above_ema20  and (ema20_v  is None or close <= ema20_v):  continue
@@ -536,7 +539,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "stoch_k":        float(row["stoch_k"]) if row.get("stoch_k") is not None else None,
             "adx_14":         float(row["adx_14"]) if row.get("adx_14") is not None else None,
             "delivery_pct":   float(row["delivery_pct"]) if row.get("delivery_pct") is not None else None,
-            "rs_rating":      rs_rating_v,
+            "rs_score":       rs_score_v,
             "is_new_52w_high": bool(row.get("is_new_52w_high")),
             "is_inside_bar":   bool(row.get("is_inside_bar")),
             # Fundamentals
@@ -641,16 +644,9 @@ async def run_scanner(
     plan = _get_user_plan(user_id)
     hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
 
-    # Find last complete trading day (partial ingests have <200 rows; full days 2000+)
-    from collections import Counter
-    dr = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(5000).execute()
-    if not dr.data:
+    latest_date = get_latest_complete_trade_date(client)
+    if not latest_date:
         return {"trade_date": None, "total_matches": 0, "plan_limit": hard_limit, "results": []}
-    date_counts = Counter(r["trade_date"] for r in dr.data)
-    latest_date = next(
-        (d for d in sorted(date_counts, reverse=True) if date_counts[d] >= 1000),
-        dr.data[0]["trade_date"],
-    )
 
     # Build base query with series filter pushed to DB
     f = body.filters
@@ -665,7 +661,7 @@ async def run_scanner(
             "bb_upper,bb_middle,bb_lower,bb_width,"
             "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
             "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-            "rs_rating,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+            "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
             "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
         )
         .eq("trade_date", latest_date)
@@ -712,7 +708,7 @@ async def run_scanner(
     if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
     # M3-A columns: DB push deferred to ingest-job PR — all values currently NULL in production.
     # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
-    # Python fallback in _apply_filters handles rs_rating/volume_ratio/w52h_pct/w52l_pct
+    # Python fallback in _apply_filters handles rs_score/volume_ratio/w52h_pct/w52l_pct
     # until the ingest job populates these columns.
 
     rows = q.limit(SCAN_ROW_CAP).execute().data or []
@@ -731,8 +727,19 @@ async def run_scanner(
     reverse  = body.sort_order != "asc"
     results.sort(key=lambda x: (x.get(sort_key) is not None, x.get(sort_key) or 0), reverse=reverse)
 
-    total  = len(results)
+    total = len(results)
     capped = results[:hard_limit]
+    safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
+    safe_page = max(body.page, 1)
+
+    if safe_page_size == 0:
+        paged = capped
+        total_pages = 1
+    else:
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        paged = capped[start:end]
+        total_pages = max(1, (len(capped) + safe_page_size - 1) // safe_page_size)
 
     return {
         "trade_date":    latest_date,
@@ -740,7 +747,11 @@ async def run_scanner(
         "plan_limit":    hard_limit,
         "plan":          plan,
         "is_limited":    plan == "free" and total > hard_limit,
-        "results":       capped,
+        "page":          safe_page,
+        "page_size":     safe_page_size,
+        "total_pages":   total_pages,
+        "visible_count": len(paged),
+        "results":       paged,
     }
 
 

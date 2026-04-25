@@ -95,8 +95,8 @@ class TestMarketFilter:
         assert _apply_market_filter("NSE", "NASDAQ") is False
 
 
-class TestRsRatingFilter:
-    """rs_rating is a new M3-A column — 1-99 Minervini relative strength scale."""
+class TestRsScoreFilter:
+    """rs_score is a new M3-A column — 1-99 relative strength scale."""
 
     def test_above_threshold_passes(self):
         assert _apply_numeric_filter(75, 70, None) is True

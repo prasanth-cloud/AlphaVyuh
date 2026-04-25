@@ -1,12 +1,13 @@
 name: Deploy to Vercel
 
-# Vercel's native GitHub integration handles production deploys automatically
-# when code is pushed to main. This workflow is intentionally disabled to
-# prevent duplicate deployments competing for the production slot.
+# Emergency manual deploy — used when Vercel's native GitHub integration
+# can't pick up an env var change without a new commit.
 #
-# Root cause: having both this workflow AND Vercel's git integration caused
-# two simultaneous production deployments per push — one always failed.
-# Fix: set rootDirectory=frontend on the Vercel project + use native integration only.
+# Root cause of rootDirectory trap: Vercel project has rootDirectory=frontend.
+# Running vercel CLI from working-directory: frontend makes it look for
+# frontend/frontend (double-path). Fix: copy .vercel/ to repo root and run
+# all vercel commands from the repo root; Vercel then resolves rootDirectory=frontend
+# relative to the repo root correctly.
 
 on:
   workflow_dispatch:  # manual trigger only — kept for emergency use
@@ -31,14 +32,19 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
+      # Pull env into frontend/ (where .vercel/project.json lives)
       - name: Pull Vercel env
         working-directory: frontend
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      # Copy .vercel config to repo root so build+deploy run from root.
+      # This fixes the rootDirectory=frontend double-path issue: running from
+      # the repo root with rootDirectory=frontend correctly resolves to frontend/.
+      - name: Copy .vercel config to repo root
+        run: cp -r frontend/.vercel ./
+
       - name: Build
-        working-directory: frontend
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Production
-        working-directory: frontend
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

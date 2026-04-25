@@ -117,16 +117,30 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
 
         ind: dict = {}
 
+        cur_close = _safe_float(close_s.iloc[-1])
+        cur_vol   = _safe_int(vol_s.iloc[-1])
+
         if n >= 2:
             pc = _safe_float(close_s.iloc[-2])
             ind["prev_close"] = pc
-            ind["avg_volume_20d"] = _safe_int(vol_s.iloc[:-1].tail(20).mean())
-            cur = _safe_float(close_s.iloc[-1])
-            if pc and pc > 0 and cur is not None:
-                ind["pct_change"] = round((cur - pc) / pc * 100, 2)
+            avg_vol_20 = _safe_float(vol_s.iloc[:-1].tail(20).mean())
+            ind["avg_volume_20d"] = _safe_int(avg_vol_20) if avg_vol_20 is not None else None
+            if pc and pc > 0 and cur_close is not None:
+                ind["pct_change"] = round((cur_close - pc) / pc * 100, 2)
+            # volume_ratio: today's volume / avg of previous 20 sessions
+            if avg_vol_20 and avg_vol_20 > 0 and cur_vol is not None:
+                ind["volume_ratio"] = round(cur_vol / avg_vol_20, 4)
 
         ind["week_52_high"] = _safe_float(high_s.max())
         ind["week_52_low"]  = _safe_float(low_s.min())
+
+        # w52h_pct / w52l_pct: % distance from 52w high/low
+        w52h = ind["week_52_high"]
+        w52l = ind["week_52_low"]
+        if w52h and w52h > 0 and cur_close is not None:
+            ind["w52h_pct"] = round((cur_close - w52h) / w52h * 100.0, 4)
+        if w52l and w52l > 0 and cur_close is not None:
+            ind["w52l_pct"] = round((cur_close - w52l) / w52l * 100.0, 4)
 
         try:
             if n >= 15:
@@ -136,8 +150,12 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
                 ind["ema_20"] = _safe_float(ta.ema(close_s, 20).iloc[-1])
             if n >= 50:
                 ind["ema_50"] = _safe_float(ta.ema(close_s, 50).iloc[-1])
+                ind["sma_50"] = _safe_float(close_s.rolling(50, min_periods=50).mean().iloc[-1])
+            if n >= 150:
+                ind["sma_150"] = _safe_float(close_s.rolling(150, min_periods=150).mean().iloc[-1])
             if n >= 200:
                 ind["ema_200"] = _safe_float(ta.ema(close_s, 200).iloc[-1])
+                ind["sma_200"] = _safe_float(close_s.rolling(200, min_periods=200).mean().iloc[-1])
         except Exception as e:
             logger.warning(f"indicator error for {symbol}: {e}")
 
@@ -274,6 +292,13 @@ async def download_and_ingest(trade_date: date) -> dict:
                     .execute()
             except Exception as upd_err:
                 logger.warning(f"Update error for {symbol}: {upd_err}")
+
+        # Compute rs_score: requires cross-symbol PERCENT_RANK — done via SQL
+        # after per-symbol updates so today's close + lag(close,252) are in place.
+        try:
+            client.rpc("compute_rs_score_for_date", {"p_trade_date": str(trade_date)}).execute()
+        except Exception as rs_err:
+            logger.warning(f"rs_score RPC failed for {trade_date}: {rs_err}")
 
         # 11. Log success
         client.table("bhavcopy_ingestion_log").upsert({

@@ -46,14 +46,20 @@ export function Th({ children, align = 'left', width }: {
   )
 }
 
-export function Tr({ children, onClick, selected }: {
+export function Tr({ children, onClick, onDoubleClick, onKeyDown, tabIndex, selected }: {
   children: React.ReactNode
   onClick?: () => void
+  onDoubleClick?: () => void
+  onKeyDown?: React.KeyboardEventHandler<HTMLTableRowElement>
+  tabIndex?: number
   selected?: boolean
 }) {
   return (
     <tr
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onKeyDown={onKeyDown}
+      tabIndex={tabIndex}
       style={{
         borderBottom: '1px solid var(--border-subtle)',
         background: selected ? 'var(--accent-subtle)' : 'transparent',

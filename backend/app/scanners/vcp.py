@@ -4,10 +4,10 @@ vcp.py — VCP (Volatility Contraction Pattern) detection.
 Implements ADR 005 §VCP Detection Specification.
 
 Usage (two-pass, called from scanner.py):
-  Pass 1: SEPA pre-filter via DB push-filters → candidate symbol list
+  Pass 1: push-filter pre-screen via DB push-filters → candidate symbol list
   Pass 2: Fetch last LOOKBACK_DAYS rows per candidate; call detect_vcp() per symbol
 
-Pattern criteria (Minervini / ADR 005):
+Pattern criteria (ADR 005):
   1. Price in uptrend  — close > sma_200 (enforced in Pass 1 pre-filter)
   2. Contracting bases — ≥ min_pivots consecutive pivot-high-to-pivot-high bases where
                          each base's depth (high-to-low % of pivot high) must be
@@ -111,7 +111,7 @@ def detect_vcp(
     Args:
         rows: list of OHLCV dicts sorted ascending by trade_date.
               Required keys: ``high``, ``low``, ``close``, ``volume``.
-        min_pivots: minimum number of contracting bases (Minervini default: 2).
+        min_pivots: minimum number of contracting bases (default: 2).
         max_depth_pct: maximum depth of the FINAL base as % of pivot high (default 15%).
         pivot_proximity_pct: |current_close - last_pivot_high| / last_pivot_high must
                              be ≤ this value (default 10%). Catches both below-pattern
@@ -121,7 +121,7 @@ def detect_vcp(
         True if a valid VCP is detected; False otherwise.
 
     Notes:
-        - Criterion 1 (uptrend / above 200-day MA) is enforced in the SEPA
+        - Criterion 1 (uptrend / above 200-day MA) is enforced in the
           Pass 1 pre-filter and is NOT re-checked here.
         - The function intentionally returns False for ambiguous / data-poor
           cases rather than raising exceptions, so callers can treat it as a

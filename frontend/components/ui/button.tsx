@@ -70,6 +70,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         width: fullWidth ? '100%' : 'auto',
         ...sizeStyles[size],
         ...variantStyles[variant],
+        color: variantStyles[variant].color,
         ...style,
       }}
       onMouseEnter={e => {

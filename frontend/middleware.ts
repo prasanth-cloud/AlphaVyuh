@@ -5,6 +5,7 @@ const PUBLIC_PREFIXES = [
   "/login",
   "/signup",
   "/reset-password",
+  "/update-password",
   "/dev-login",
   "/offline",
   "/privacy",
@@ -20,13 +21,6 @@ function isPublic(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  // Redirect /charts/* to /watchlist (preserve existing behaviour)
-  if (pathname.startsWith("/charts")) {
-    const symbol = pathname.split("/")[2];
-    const dest = symbol ? `/watchlist?symbol=${symbol}` : "/watchlist";
-    return NextResponse.redirect(new URL(dest, request.url));
-  }
 
   const response = NextResponse.next({ request });
   // Expose pathname to Server Components via a custom header
