@@ -282,6 +282,66 @@ const LANDING_CSS = `
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
+.av-market-pulse {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: 1.35fr repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.av-pulse-card {
+  min-width: 0;
+  padding: 14px 15px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.035);
+}
+.av-pulse-card.primary {
+  background: linear-gradient(135deg, rgba(244,247,251,0.11), rgba(255,255,255,0.025));
+}
+.av-pulse-label {
+  margin-bottom: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.av-pulse-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.av-pulse-name,
+.av-pulse-price,
+.av-pulse-change {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.av-pulse-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.av-pulse-price {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.av-pulse-change {
+  font-size: 12px;
+  font-weight: 800;
+}
+.av-pulse-copy {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.av-release-marker {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: rgba(255,255,255,0.34);
+}
 .av-chart-lower {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
@@ -500,7 +560,8 @@ const LANDING_CSS = `
   .av-steps,
   .av-chart-lower,
   .av-band-grid,
-  .av-mini-grid {
+  .av-mini-grid,
+  .av-market-pulse {
     grid-template-columns: 1fr;
   }
   .av-stat-row {
@@ -589,6 +650,33 @@ export default function LandingPage() {
                   <div className="av-proof-chip">Scanner, watchlist, chart, execution, and journal stay connected.</div>
                   <div className="av-proof-chip">Structured for NSE/BSE swing, positional, and process-driven retail workflows.</div>
                 </div>
+                <section className="av-market-pulse" aria-label="Market pulse">
+                  <div className="av-pulse-card primary">
+                    <div className="av-pulse-label">Market pulse</div>
+                    <div className="av-pulse-row">
+                      <span className="av-pulse-name">NIFTY50</span>
+                      <span className="av-pulse-price">22,147</span>
+                      <span className="av-pulse-change num-positive">+0.82%</span>
+                    </div>
+                  </div>
+                  <div className="av-pulse-card">
+                    <div className="av-pulse-label">Breadth</div>
+                    <div className="av-pulse-copy">Positive, led by banks and select momentum names.</div>
+                  </div>
+                  <div className="av-pulse-card">
+                    <div className="av-pulse-label">Risk</div>
+                    <div className="av-pulse-row">
+                      <span className="av-pulse-name">VIX</span>
+                      <span className="av-pulse-price">13.8</span>
+                      <span className="av-pulse-change num-negative">-1.6%</span>
+                    </div>
+                  </div>
+                  <div className="av-pulse-card">
+                    <div className="av-pulse-label">Signal</div>
+                    <div className="av-pulse-copy">Index above short-term trend; focus on clean bases.</div>
+                  </div>
+                </section>
+                <div className="av-release-marker">release d6a7f09-market-pulse</div>
                 <TraderReminderStrip tone="landing" />
               </div>
 
