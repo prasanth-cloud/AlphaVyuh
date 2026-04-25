@@ -142,16 +142,18 @@ h1{font-size:clamp(2.6rem,4.5vw,4rem);font-weight:900;line-height:1.08;letter-sp
 .notif-title{font-weight:700;color:var(--text);display:block;margin-bottom:1px}
 .notif-sub{color:var(--text2)}
 
-/* ── TICKER TAPE ── */
-#ticker{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(19,22,29,.8);padding:10px 0;overflow:hidden}
-.tape-track{display:flex;gap:0;animation:tape-scroll 30s linear infinite;width:max-content}
-.tape-track:hover{animation-play-state:paused}
-.tape-item{display:flex;align-items:center;gap:6px;padding:0 24px;border-right:1px solid var(--border);white-space:nowrap}
-.tape-sym{font-size:.78rem;font-weight:700;color:var(--text);font-family:var(--mono)}
-.tape-price{font-size:.78rem;color:var(--text2);font-family:var(--mono)}
-.tape-chg-pos{font-size:.75rem;font-weight:700;color:var(--green);font-family:var(--mono)}
-.tape-chg-neg{font-size:.75rem;font-weight:700;color:var(--red);font-family:var(--mono)}
-@keyframes tape-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+/* ── MARKET PULSE ── */
+#market-pulse{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(19,22,29,.72);padding:16px 0}
+.pulse-wrap{max-width:1200px;margin:0 auto;padding:0 28px;display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:10px;align-items:stretch}
+.pulse-card{border:1px solid var(--border);background:rgba(255,255,255,.025);border-radius:12px;padding:12px 14px;min-width:0}
+.pulse-card.primary{background:linear-gradient(135deg,rgba(244,247,251,.08),rgba(255,255,255,.02))}
+.pulse-label{font-size:.66rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.pulse-value{display:flex;align-items:baseline;gap:9px;min-width:0}
+.pulse-name{font-size:.84rem;font-weight:800;color:var(--text);font-family:var(--mono);white-space:nowrap}
+.pulse-price{font-size:.86rem;color:var(--text2);font-family:var(--mono);white-space:nowrap}
+.pulse-pos{font-size:.8rem;font-weight:800;color:var(--green);font-family:var(--mono);white-space:nowrap}
+.pulse-neg{font-size:.8rem;font-weight:800;color:var(--red);font-family:var(--mono);white-space:nowrap}
+.pulse-copy{font-size:.8rem;color:var(--text2);line-height:1.45}
 
 /* ── STATS ── */
 #stats{padding:80px 0;position:relative}
@@ -359,6 +361,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   .steps-grid{grid-template-columns:1fr 1fr;gap:32px}
   .steps-grid::before{display:none}
   .stats-grid{grid-template-columns:1fr 1fr}
+  .pulse-wrap{grid-template-columns:1fr 1fr}
   .stat-box:nth-child(2){border-right:none}
   .stat-box:nth-child(3){border-top:1px solid var(--border)}
   .hamburger{display:flex}
@@ -370,6 +373,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   .pricing-grid{grid-template-columns:1fr}
   .testi-grid{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr}
+  .pulse-wrap{grid-template-columns:1fr}
   .stat-box{border-right:none;border-top:1px solid var(--border)}
   .stat-box:first-child{border-top:none}
 }
@@ -500,10 +504,35 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   </div>
 </section>
 
-<!-- ── TICKER TAPE ── -->
-<div id="ticker">
-  <div class="tape-track" id="tapeTrack"></div>
-</div>
+<!-- ── MARKET PULSE ── -->
+<section id="market-pulse">
+  <div class="pulse-wrap">
+    <div class="pulse-card primary">
+      <div class="pulse-label">Market pulse</div>
+      <div class="pulse-value">
+        <span class="pulse-name">NIFTY50</span>
+        <span class="pulse-price">22,147</span>
+        <span class="pulse-pos">+0.82%</span>
+      </div>
+    </div>
+    <div class="pulse-card">
+      <div class="pulse-label">Breadth</div>
+      <div class="pulse-copy">Positive, led by banks and select momentum names.</div>
+    </div>
+    <div class="pulse-card">
+      <div class="pulse-label">Risk</div>
+      <div class="pulse-value">
+        <span class="pulse-name">VIX</span>
+        <span class="pulse-price">13.8</span>
+        <span class="pulse-neg">-1.6%</span>
+      </div>
+    </div>
+    <div class="pulse-card">
+      <div class="pulse-label">Signal</div>
+      <div class="pulse-copy">Index above short-term trend; focus on clean bases.</div>
+    </div>
+  </div>
+</section>
 
 <!-- ── STATS ── -->
 <section id="stats">
@@ -1076,33 +1105,6 @@ scanData.forEach((d,i)=>{
       <span class="rs-num">${d.rs}</span>
     </div>`;
   rowContainer.appendChild(row);
-});
-
-// ── Ticker tape ──
-const tickers=[
-  {sym:'NIFTY50',price:'22,147',chg:'+0.82%',pos:true},
-  {sym:'SENSEX',price:'73,158',chg:'+0.74%',pos:true},
-  {sym:'RELIANCE',price:'2,891',chg:'+1.24%',pos:true},
-  {sym:'INFY',price:'1,634',chg:'-0.38%',pos:false},
-  {sym:'HDFC',price:'1,714',chg:'+0.91%',pos:true},
-  {sym:'TCS',price:'3,824',chg:'+0.55%',pos:true},
-  {sym:'DEEPAKNTR',price:'2,847',chg:'+4.72%',pos:true},
-  {sym:'DIXON',price:'14,220',chg:'+3.18%',pos:true},
-  {sym:'ICICIBANK',price:'1,248',chg:'+1.14%',pos:true},
-  {sym:'SBIN',price:'786',chg:'-0.22%',pos:false},
-  {sym:'AXISBANK',price:'1,182',chg:'+0.68%',pos:true},
-  {sym:'PERSISTENT',price:'4,956',chg:'+2.84%',pos:true},
-  {sym:'BAJFINANCE',price:'7,240',chg:'-0.55%',pos:false},
-  {sym:'MARUTI',price:'12,640',chg:'+0.33%',pos:true},
-  {sym:'CAMS',price:'3,412',chg:'+2.31%',pos:true},
-  {sym:'BANKNIFTY',price:'47,820',chg:'+0.62%',pos:true},
-];
-const track=document.getElementById('tapeTrack');
-[...tickers,...tickers].forEach(t=>{
-  const el=document.createElement('div');
-  el.className='tape-item';
-  el.innerHTML=`<span class="tape-sym">${t.sym}</span><span class="tape-price">${t.price}</span><span class="${t.pos?'tape-chg-pos':'tape-chg-neg'}">${t.chg}</span>`;
-  track.appendChild(el);
 });
 
 // ── Stats counter ──

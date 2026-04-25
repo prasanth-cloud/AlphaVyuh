@@ -19,7 +19,7 @@ import {
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import { DataProvenanceBadge } from "@/components/ui";
-import type { IndicatorData, IchimokuPoint, ChartHandle } from "@/components/charts/CandlestickChart";
+import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -132,6 +132,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [liveMode, setLiveMode] = useState(true);
+  const [chartType, setChartType] = useState<ChartDisplayType>("candles");
 
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1180,6 +1181,26 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 }
               >
                 {tf}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-0.5 mr-1 rounded-[999px] p-0.5" style={{ background: "var(--app-surface3)" }}>
+            {[
+              { id: "candles", label: "Candles" },
+              { id: "bars", label: "Bars" },
+              { id: "line", label: "Line" },
+            ].map((type) => (
+              <button
+                key={type.id}
+                onClick={() => setChartType(type.id as ChartDisplayType)}
+                className="text-[11px] px-3 py-1.5 rounded-[999px] font-semibold transition-colors"
+                style={chartType === type.id
+                  ? { background: "var(--app-teal)", color: "#0D0F14" }
+                  : { background: "transparent", color: "var(--app-text3)" }
+                }
+              >
+                {type.label}
               </button>
             ))}
           </div>
@@ -2867,10 +2888,11 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
             {/* Main chart */}
             {data && (
               <CandlestickChart
-                key={`${symbol}-${timeframe}-${liveMode ? "live" : "eod"}`}
+                key={`${symbol}-${timeframe}-${chartType}-${liveMode ? "live" : "eod"}`}
                 candles={data.candles}
                 indicators={indicatorData}
                 activeIndicators={activeIndicators}
+                chartType={chartType}
                 onCrosshairMove={bar => setLegendBar(bar)}
                 onRangeChange={handleRangeChange}
                 onReady={handle => { chartHandleRef.current = handle; }}

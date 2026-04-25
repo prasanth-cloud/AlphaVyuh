@@ -5,6 +5,7 @@ import {
   createChart,
   ColorType,
   CrosshairMode,
+  BarSeries,
   CandlestickSeries,
   LineSeries,
 } from "lightweight-charts";
@@ -14,9 +15,10 @@ type Props = {
   candles: CandleBar[];
   height?: number;
   dark?: boolean;
+  chartType?: "candles" | "bars" | "line";
 };
 
-export default function MiniChart({ candles, height = 200, dark = true }: Props) {
+export default function MiniChart({ candles, height = 200, dark = true, chartType = "candles" }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,23 +47,40 @@ export default function MiniChart({ candles, height = 200, dark = true }: Props)
       handleScale: true,
     });
 
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#26a65b",
-      downColor: "#e5383b",
-      wickUpColor: "#26a65b",
-      wickDownColor: "#e5383b",
-      borderVisible: false,
-    });
+    const priceSeries = chartType === "bars"
+      ? chart.addSeries(BarSeries, {
+          upColor: "#26a65b",
+          downColor: "#e5383b",
+          thinBars: false,
+        })
+      : chartType === "line"
+        ? chart.addSeries(LineSeries, {
+            color: "#f4f7fb",
+            lineWidth: 2,
+            priceLineVisible: false,
+            lastValueVisible: false,
+          })
+        : chart.addSeries(CandlestickSeries, {
+            upColor: "#26a65b",
+            downColor: "#e5383b",
+            wickUpColor: "#26a65b",
+            wickDownColor: "#e5383b",
+            borderVisible: false,
+          });
 
-    series.setData(
-      candles.map(c => ({
-        time: c.time as import("lightweight-charts").Time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-      }))
-    );
+    const ohlcData = candles.map(c => ({
+      time: c.time as import("lightweight-charts").Time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
+    const lineData = candles.map(c => ({
+      time: c.time as import("lightweight-charts").Time,
+      value: c.close,
+    }));
+
+    priceSeries.setData(chartType === "line" ? lineData : ohlcData);
 
     // EMA overlays — only points where value is present
     const emaConfigs = [
@@ -98,7 +117,7 @@ export default function MiniChart({ candles, height = 200, dark = true }: Props)
       chart.remove();
       ro.disconnect();
     };
-  }, [candles, height, dark]);
+  }, [candles, height, dark, chartType]);
 
   return <div ref={containerRef} className="w-full" style={{ height }} />;
 }

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
 
 const PUBLIC_PREFIXES = [
+  "/landing.html",
   "/login",
   "/signup",
   "/reset-password",

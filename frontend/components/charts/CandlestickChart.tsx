@@ -5,6 +5,7 @@ import {
   createChart,
   ColorType,
   CrosshairMode,
+  BarSeries,
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
@@ -44,10 +45,13 @@ export type ChartHandle = {
   timeToCoordinate: (time: string) => number | null;
 };
 
+export type ChartDisplayType = "candles" | "bars" | "line";
+
 type Props = {
   candles: CandleBar[];
   indicators: IndicatorData;
   activeIndicators: string[];
+  chartType?: ChartDisplayType;
   onCrosshairMove?: (bar: CandleBar | null) => void;
   onRangeChange?: (range: LogicalRange | null) => void;
   onReady?: (handle: ChartHandle) => void;
@@ -58,14 +62,14 @@ function candleToVolColor(c: CandleBar): string {
 }
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
-  { candles, indicators, activeIndicators, onCrosshairMove, onRangeChange, onReady },
+  { candles, indicators, activeIndicators, chartType = "candles", onCrosshairMove, onRangeChange, onReady },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const didInitialFitRef = useRef(false);
   const seriesRef = useRef<{
-    candle: ISeriesApi<"Candlestick"> | null;
+    price: ISeriesApi<"Candlestick"> | ISeriesApi<"Bar"> | ISeriesApi<"Line"> | null;
     volume: ISeriesApi<"Histogram"> | null;
     ema20: ISeriesApi<"Line"> | null;
     ema50: ISeriesApi<"Line"> | null;
@@ -80,7 +84,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     ichiSenkouB: ISeriesApi<"Line"> | null;
     ichiChikou: ISeriesApi<"Line"> | null;
   }>({
-    candle: null, volume: null, ema20: null, ema50: null, ema200: null,
+    price: null, volume: null, ema20: null, ema50: null, ema200: null,
     vwap: null, bbUpper: null, bbMid: null, bbLower: null,
     ichiTenkan: null, ichiKijun: null, ichiSenkouA: null, ichiSenkouB: null, ichiChikou: null,
   });
@@ -93,8 +97,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     },
     updateLegend: () => {},
     coordinateToPrice: (y) => {
-      if (!seriesRef.current.candle) return null;
-      const v = seriesRef.current.candle.coordinateToPrice(y);
+      if (!seriesRef.current.price) return null;
+      const v = seriesRef.current.price.coordinateToPrice(y);
       return v != null ? v : null;
     },
     coordinateToTime: (x) => {
@@ -103,8 +107,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       return t != null ? String(t) : null;
     },
     priceToCoordinate: (price) => {
-      if (!seriesRef.current.candle) return null;
-      const v = seriesRef.current.candle.priceToCoordinate(price);
+      if (!seriesRef.current.price) return null;
+      const v = seriesRef.current.price.priceToCoordinate(price);
       return v != null ? v : null;
     },
     timeToCoordinate: (time) => {
@@ -154,16 +158,28 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
     chartRef.current = chart;
 
-    // Candlestick series
-    const candle = chart.addSeries(CandlestickSeries, {
-      upColor: "#26a65b",
-      downColor: "#e5383b",
-      borderUpColor: "#26a65b",
-      borderDownColor: "#e5383b",
-      wickUpColor: "#26a65b",
-      wickDownColor: "#e5383b",
-    } as Partial<CandlestickSeriesOptions>);
-    seriesRef.current.candle = candle;
+    const priceSeries = chartType === "bars"
+      ? chart.addSeries(BarSeries, {
+          upColor: "#26a65b",
+          downColor: "#e5383b",
+          thinBars: false,
+        })
+      : chartType === "line"
+        ? chart.addSeries(LineSeries, {
+            color: "#f4f7fb",
+            lineWidth: 2,
+            priceLineVisible: true,
+            lastValueVisible: true,
+          })
+        : chart.addSeries(CandlestickSeries, {
+            upColor: "#26a65b",
+            downColor: "#e5383b",
+            borderUpColor: "#26a65b",
+            borderDownColor: "#e5383b",
+            wickUpColor: "#26a65b",
+            wickDownColor: "#e5383b",
+          } as Partial<CandlestickSeriesOptions>);
+    seriesRef.current.price = priceSeries;
 
     // Volume histogram (overlay on same pane, bottom 20%)
     const volume = chart.addSeries(HistogramSeries, {
@@ -238,7 +254,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
         },
         updateLegend: () => {},
         coordinateToPrice: (y) => {
-          const v = seriesRef.current.candle?.coordinateToPrice(y);
+          const v = seriesRef.current.price?.coordinateToPrice(y);
           return v != null ? v : null;
         },
         coordinateToTime: (x) => {
@@ -246,7 +262,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
           return t != null ? String(t) : null;
         },
         priceToCoordinate: (price) => {
-          const v = seriesRef.current.candle?.priceToCoordinate(price);
+          const v = seriesRef.current.price?.priceToCoordinate(price);
           return v != null ? v : null;
         },
         timeToCoordinate: (time) => {
@@ -263,16 +279,16 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       didInitialFitRef.current = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [chartType]);
 
   // Feed candle + volume data
   useEffect(() => {
     const s = seriesRef.current;
-    if (!s.candle || !s.volume || !candles.length) return;
+    if (!s.price || !s.volume || !candles.length) return;
 
-    s.candle.setData(
-      candles.map(c => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close }))
-    );
+    const ohlcData = candles.map(c => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close }));
+    const lineData = candles.map(c => ({ time: c.time as Time, value: c.close }));
+    s.price.setData(chartType === "line" ? lineData : ohlcData);
     s.volume.setData(
       candles.map(c => ({ time: c.time as Time, value: c.volume, color: candleToVolColor(c) }))
     );
@@ -280,27 +296,24 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       chartRef.current?.timeScale().fitContent();
       didInitialFitRef.current = true;
     }
-  }, [candles]);
+  }, [candles, chartType]);
 
   // Crosshair move → notify parent
   useEffect(() => {
     if (!chartRef.current || !onCrosshairMove) return;
     const handler = (param: { time?: Time; seriesData?: Map<ISeriesApi<"Candlestick">, unknown> }) => {
-      if (!param.time || !seriesRef.current.candle) {
+      if (!param.time || !seriesRef.current.price) {
         onCrosshairMove(null);
         return;
       }
-      const d = param.seriesData?.get(seriesRef.current.candle) as
-        | { open: number; high: number; low: number; close: number }
-        | undefined;
-      if (!d) { onCrosshairMove(null); return; }
       const timeStr = typeof param.time === "string" ? param.time : String(param.time);
-      const vol = candles.find(c => c.time === timeStr)?.volume ?? 0;
-      onCrosshairMove({ time: timeStr, open: d.open, high: d.high, low: d.low, close: d.close, volume: vol });
+      const source = candles.find(c => c.time === timeStr);
+      if (!source) { onCrosshairMove(null); return; }
+      onCrosshairMove(source);
     };
     chartRef.current.subscribeCrosshairMove(handler as never);
     return () => chartRef.current?.unsubscribeCrosshairMove(handler as never);
-  }, [candles, onCrosshairMove]);
+  }, [candles, onCrosshairMove, chartType]);
 
   // Time range change → notify parent for sync
   useEffect(() => {

@@ -40,6 +40,8 @@ import {
 import type { SymbolSearchResult } from "@/lib/api";
 import { EmptyState } from "@/components/ui";
 
+type ChartDisplayType = "candles" | "bars" | "line";
+
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
 
 // ─── Sortable row ─────────────────────────────────────────────────────────────
@@ -215,6 +217,8 @@ function ChartPanel({
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
   const [tf, setTf] = useState("3M");
+  const [chartType, setChartType] = useState<ChartDisplayType>("candles");
+  const [showChartDetails, setShowChartDetails] = useState(false);
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -312,22 +316,14 @@ function ChartPanel({
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Topbar */}
-      <div className="workspace-card-header" style={{ background: "rgba(255,255,255,0.02)", paddingBottom: 10, flexShrink: 0 }}>
+      <div className="workspace-card-header" style={{ background: "rgba(255,255,255,0.02)", paddingBottom: 8, flexShrink: 0 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <span className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{symbol}</span>
-            <span className="caption">{tf} preview · EMA 20/50/200</span>
-          </div>
-          <div className="workspace-pill-row" style={{ marginTop: 8 }}>
-            <span className="workspace-pill">{referenceClose != null ? `Spot ${referenceClose.toFixed(2)}` : "Spot pending"}</span>
+            <span className="caption">{referenceClose != null ? `Spot ${referenceClose.toFixed(2)}` : "Spot pending"}</span>
             {previewChange != null && (
-              <span className="workspace-pill" style={{ color: previewChange >= 0 ? "var(--gain)" : "var(--loss)" }}>
+              <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: previewChange >= 0 ? "var(--gain)" : "var(--loss)" }}>
                 {previewChange >= 0 ? "+" : ""}{previewChange.toFixed(2)}%
-              </span>
-            )}
-            {latestBar && (
-              <span className="workspace-pill">
-                Range {latestBar.low.toFixed(0)}-{latestBar.high.toFixed(0)}
               </span>
             )}
           </div>
@@ -343,29 +339,44 @@ function ChartPanel({
             onClick={() => onOpenChart(symbol)}
             className="workspace-chip-button active"
           >
-            Open full chart
+            Full chart
           </button>
+          <button
+            onClick={() => setShowChartDetails((current) => !current)}
+            className={`workspace-chip-button${showChartDetails ? " active" : ""}`}
+          >
+            Details
+          </button>
+          <div style={{ display: "flex", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", padding: 2 }}>
+            {[
+              { id: "candles", label: "Candles" },
+              { id: "bars", label: "Bars" },
+              { id: "line", label: "Line" },
+            ].map((type) => (
+              <button
+                key={type.id}
+                onClick={() => setChartType(type.id as ChartDisplayType)}
+                style={{
+                  padding: "3px 9px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: chartType === type.id ? "var(--text-primary)" : "var(--text-tertiary)",
+                  background: chartType === type.id ? "var(--surface-3)" : "transparent",
+                  border: "none",
+                  borderRadius: "var(--radius-sm)",
+                  cursor: "pointer",
+                }}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
           <TimeframeTabs active={tf} onChange={setTf} />
         </div>
       </div>
 
       {/* Chart */}
-      <div style={{ padding: "0 14px 10px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
-          {[
-            { label: "Open", value: latestBar ? latestBar.open.toFixed(2) : "—" },
-            { label: "High", value: latestBar ? latestBar.high.toFixed(2) : "—" },
-            { label: "Low", value: latestBar ? latestBar.low.toFixed(2) : "—" },
-            { label: "Close", value: latestBar ? latestBar.close.toFixed(2) : "—" },
-          ].map((item) => (
-            <div key={item.label} style={{ padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>
-              <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{item.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: "10px 14px 0" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: "8px 14px 0" }}>
         {chartLoading ? (
           <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--surface-3)", borderTopColor: "var(--accent)", animation: "spin 1s linear infinite" }}>
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
@@ -373,9 +384,26 @@ function ChartPanel({
         ) : chartError ? (
           <span className="caption">No chart data</span>
         ) : (
-          <MiniChart candles={candles} height={320} dark />
+          <MiniChart candles={candles} height={320} dark chartType={chartType} />
         )}
       </div>
+      {showChartDetails && (
+        <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+            {[
+              { label: "Open", value: latestBar ? latestBar.open.toFixed(2) : "-" },
+              { label: "High", value: latestBar ? latestBar.high.toFixed(2) : "-" },
+              { label: "Low", value: latestBar ? latestBar.low.toFixed(2) : "-" },
+              { label: "Close", value: latestBar ? latestBar.close.toFixed(2) : "-" },
+            ].map((item) => (
+              <div key={item.label} style={{ padding: "7px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>
+                <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Order panel */}
       <div style={{ flexShrink: 0, padding: "14px 16px 16px", borderTop: "1px solid var(--border-subtle)", background: "rgba(255,255,255,0.025)" }}>
@@ -824,7 +852,6 @@ function WatchlistContent() {
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
-  const selectedIndex = visibleItems.findIndex(item => item.symbol === chartSymbol);
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
 
   const moveSelection = useCallback((direction: "prev" | "next") => {
@@ -989,13 +1016,6 @@ function WatchlistContent() {
     );
   }, [activeId]);
 
-  const watchlistStats = [
-    { label: 'Lists', value: String(watchlists.length) },
-    { label: 'Names', value: activeWl ? `${visibleItems.length}/${activeWl.items.length}` : '0' },
-    { label: 'Focus', value: chartSymbol || 'Pick one' },
-    { label: 'Queue', value: selectedIndex >= 0 ? `${selectedIndex + 1}/${visibleItems.length}` : 'Idle' },
-    { label: 'View', value: queueView === "needs-review" ? "Needs review" : queueView === "all" ? "All" : queueView[0].toUpperCase() + queueView.slice(1) },
-  ];
   const selectedMetrics = selectedItem ? [
     {
       label: "Last price",
@@ -1064,27 +1084,25 @@ function WatchlistContent() {
   }
 
   return (
-    <div className="workspace-page">
-      <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
+    <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
+      <div className="workspace-card" style={{ padding: "10px 14px" }}>
         <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
             <div className="workspace-card-title">Watchlist</div>
+            {activeWl && (
+              <div className="caption" style={{ marginTop: 2 }}>
+                {activeWl.name} · {visibleItems.length}/{activeWl.items.length} visible
+              </div>
+            )}
           </div>
-          <div className="workspace-pill-row" style={{ gap: 8 }}>
-            {watchlistStats.slice(1).map((item) => (
-              <span key={item.label} className="workspace-pill">
-                {item.label}: {item.value}
-              </span>
-            ))}
-          </div>
+          {chartSymbol && <span className="workspace-pill">Focus: {chartSymbol}</span>}
         </div>
         {activeWl && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
             <div className="workspace-pill-row" style={{ gap: 8 }}>
-              <span className="workspace-pill">All: {queueCounts.total}</span>
-              <span className="workspace-pill">Pinned: {queueCounts.pinned}</span>
-              <span className="workspace-pill">Tagged: {queueCounts.tagged}</span>
-              <span className="workspace-pill">Needs review: {queueCounts.needsReview}</span>
+              <span className="workspace-pill">All {queueCounts.total}</span>
+              {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned {queueCounts.pinned}</span>}
+              {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review {queueCounts.needsReview}</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
@@ -1100,7 +1118,7 @@ function WatchlistContent() {
         )}
       </div>
 
-      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)' }}>
+      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 178px)" }}>
       {/* Toast */}
       {toast && (
         <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
@@ -1251,13 +1269,20 @@ function WatchlistContent() {
 
         <div style={{ padding: "0 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
           {selectedItem ? (
-            <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: 12 }}>
+            <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: 10 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-                <div>
-                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{selectedItem.symbol}</div>
-                  <div className="caption" style={{ marginTop: 2, maxWidth: 260 }}>
-                    {selectedItem.company_name || "Active watchlist focus"}
-                    {selectedItem.sector ? ` · ${selectedItem.sector}` : ""}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                    <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{selectedItem.symbol}</div>
+                    <span className="mono" style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                      {selectedItem.close != null ? `₹${selectedItem.close.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
+                    </span>
+                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: (selectedItem.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                      {selectedItem.pct_change != null ? `${selectedItem.pct_change >= 0 ? "+" : ""}${selectedItem.pct_change.toFixed(2)}%` : "-"}
+                    </span>
+                  </div>
+                  <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {selectedItem.company_name || selectedItem.sector || "Active watchlist focus"}
                   </div>
                 </div>
                 <div className="workspace-pill-row" style={{ marginTop: 0 }}>
@@ -1268,38 +1293,38 @@ function WatchlistContent() {
                     Review journal
                   </button>
                   <button className={`workspace-chip-button${showSelectedMeta ? " active" : ""}`} onClick={() => setShowSelectedMeta((current) => !current)}>
-                    {showSelectedMeta ? "Hide notes" : "Organize"}
+                    {showSelectedMeta ? "Hide details" : "Details"}
                   </button>
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
-                {selectedMetrics.map((metric) => (
-                  <div key={metric.label} style={{ padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <div className="label" style={{ marginBottom: 3 }}>{metric.label}</div>
-                    <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metric.tone }}>{metric.value}</div>
-                  </div>
-                ))}
-              </div>
-              {selectedReviewState && (
-                <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                  <div className="label" style={{ marginBottom: 6 }}>Review context</div>
-                  <div className="caption" style={{ lineHeight: 1.65 }}>
-                    {selectedReviewState.state === "reviewed"
-                      ? `Reviewed ${selectedReviewState.reviewed}/${selectedReviewState.closed} closed trades on ${selectedItem.symbol}.`
-                      : selectedReviewState.state === "needs-review"
-                        ? `${selectedReviewState.closed} closed trades on ${selectedItem.symbol} still need review coverage.`
-                        : `No closed review history yet on ${selectedItem.symbol}.`}
-                    {selectedReviewState.lastSetup ? ` Last setup: ${selectedReviewState.lastSetup}.` : ""}
-                  </div>
-                  {selectedReviewState.latestLesson && (
-                    <div className="caption" style={{ marginTop: 8, color: "var(--text-secondary)" }}>
-                      Latest lesson: {selectedReviewState.latestLesson.slice(0, 120)}{selectedReviewState.latestLesson.length > 120 ? "…" : ""}
-                    </div>
-                  )}
-                </div>
-              )}
               {showSelectedMeta && (
                 <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
+                    {selectedMetrics.map((metric) => (
+                      <div key={metric.label} style={{ padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <div className="label" style={{ marginBottom: 3 }}>{metric.label}</div>
+                        <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metric.tone }}>{metric.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedReviewState && (
+                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                      <div className="label" style={{ marginBottom: 6 }}>Review context</div>
+                      <div className="caption" style={{ lineHeight: 1.65 }}>
+                        {selectedReviewState.state === "reviewed"
+                          ? `Reviewed ${selectedReviewState.reviewed}/${selectedReviewState.closed} closed trades on ${selectedItem.symbol}.`
+                          : selectedReviewState.state === "needs-review"
+                            ? `${selectedReviewState.closed} closed trades on ${selectedItem.symbol} still need review coverage.`
+                            : `No closed review history yet on ${selectedItem.symbol}.`}
+                        {selectedReviewState.lastSetup ? ` Last setup: ${selectedReviewState.lastSetup}.` : ""}
+                      </div>
+                      {selectedReviewState.latestLesson && (
+                        <div className="caption" style={{ marginTop: 8, color: "var(--text-secondary)" }}>
+                          Latest lesson: {selectedReviewState.latestLesson.slice(0, 120)}{selectedReviewState.latestLesson.length > 120 ? "..." : ""}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 10, marginTop: 10 }}>
                     <div style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                       <div className="label" style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
