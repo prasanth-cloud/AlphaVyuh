@@ -156,6 +156,9 @@ export function JournalAiInsights({
           <div>
             <h2 className="heading-card" style={{ marginBottom: 4 }}>AI review</h2>
             <div className="body-secondary">Run a journal-wide review to surface repeat mistakes, strength areas, and process rules worth adding to your playbook.</div>
+            <div className="caption" style={{ marginTop: 6 }}>
+              Grounded in your closed trades and journal notes; use it as a review aid, not a trade signal.
+            </div>
           </div>
           <button
             onClick={onAnalyse}

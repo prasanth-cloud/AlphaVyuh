@@ -16,7 +16,7 @@ import {
   type JournalEntry,
   type MarketOverview,
 } from '@/lib/api'
-import { Card, StatCard, EmptyState, Button } from '@/components/ui'
+import { Card, StatCard, EmptyState, Button, DataProvenanceBadge } from '@/components/ui'
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -55,7 +55,11 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
           {dataHealth?.status && (
             <Metric label="Data" value={dataHealth.status.toUpperCase()} />
           )}
-          <span className="caption">EOD {data.trade_date}</span>
+          <DataProvenanceBadge
+            kind={dataHealth?.status === 'degraded' ? 'fallback' : 'eod'}
+            asOf={data.trade_date}
+            compact
+          />
         </div>
       </div>
       {dataHealth && dataHealth.status !== 'healthy' && (
