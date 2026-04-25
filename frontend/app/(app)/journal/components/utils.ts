@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import type { JournalEntry } from "./types";
 
 export const SETUP_TYPES = [
   "VCP", "Breakout", "Stage 2", "Base Build", "Cup & Handle",
@@ -25,4 +26,55 @@ export function fmtDate(d: string | null | undefined): string {
   return new Date(d).toLocaleDateString("en-IN", {
     day: "2-digit", month: "short", year: "2-digit",
   });
+}
+
+export type TradeFlowMeta = {
+  sourceLabel: string;
+  brokerLabel: string | null;
+  autoRecorded: boolean;
+  reviewLabel: string;
+  reviewTone: "accent" | "gain" | "warn" | "neutral";
+};
+
+export function getTradeFlowMeta(entry: Pick<JournalEntry, "entry_reason" | "status" | "lessons">): TradeFlowMeta {
+  const reason = (entry.entry_reason || "").toLowerCase();
+
+  const sourceLabel =
+    reason.includes("via chart") ? "Chart order" :
+    reason.includes("import") ? "Broker import" :
+    "Manual log";
+
+  const brokerLabel =
+    reason.includes("zerodha") ? "Zerodha" :
+    reason.includes("upstox") ? "Upstox" :
+    reason.includes("simulated") ? "Simulated" :
+    null;
+
+  if (entry.status === "open") {
+    return {
+      sourceLabel,
+      brokerLabel,
+      autoRecorded: sourceLabel !== "Manual log",
+      reviewLabel: "Open",
+      reviewTone: "accent",
+    };
+  }
+
+  if (entry.lessons?.trim()) {
+    return {
+      sourceLabel,
+      brokerLabel,
+      autoRecorded: sourceLabel !== "Manual log",
+      reviewLabel: "Reviewed",
+      reviewTone: "gain",
+    };
+  }
+
+  return {
+    sourceLabel,
+    brokerLabel,
+    autoRecorded: sourceLabel !== "Manual log",
+    reviewLabel: "Needs review",
+    reviewTone: "warn",
+  };
 }

@@ -2,13 +2,16 @@
 
 import { Badge } from "@/components/ui";
 import type { JournalEntry } from "./types";
-import { fmtCcy, fmtDate } from "./utils";
+import { fmtCcy, fmtDate, getTradeFlowMeta } from "./utils";
 
 interface TradeTableProps {
   entries: JournalEntry[];
   loading: boolean;
   filterStatus: "all" | "open" | "closed";
   onFilterChange: (s: "all" | "open" | "closed") => void;
+  symbolFocus: string;
+  reviewFocus: "all" | "needs-review" | "reviewed";
+  onClearFocus: () => void;
   selectedEntry: JournalEntry | null;
   onSelectEntry: (e: JournalEntry) => void;
   onCloseEntry: (e: JournalEntry) => void;
@@ -22,6 +25,9 @@ export function TradeTable({
   loading,
   filterStatus,
   onFilterChange,
+  symbolFocus,
+  reviewFocus,
+  onClearFocus,
   selectedEntry,
   onSelectEntry,
   onCloseEntry,
@@ -47,6 +53,23 @@ export function TradeTable({
             </button>
           ))}
         </div>
+        {(symbolFocus || reviewFocus !== "all") && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {symbolFocus && (
+              <span className="mono" style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, background: "var(--accent-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
+                {symbolFocus}
+              </span>
+            )}
+            {reviewFocus !== "all" && (
+              <span style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, background: "var(--surface-2)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+                {reviewFocus === "needs-review" ? "Needs review" : "Reviewed"}
+              </span>
+            )}
+            <button onClick={onClearFocus} style={{ fontSize: 11, color: "var(--text-tertiary)", cursor: "pointer" }}>
+              Clear focus
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Free plan notice */}
@@ -62,7 +85,7 @@ export function TradeTable({
         <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
-              {["Symbol", "Type", "Entry", "Entry px", "Exit px", "P&L", "Status", ""].map(h => (
+              {["Symbol", "Type", "Entry", "Source", "P&L", "Review", "Status", ""].map(h => (
                 <th key={h} className="label" style={{ textAlign: "left", padding: "10px 12px" }}>{h}</th>
               ))}
             </tr>
@@ -88,7 +111,9 @@ export function TradeTable({
                 </td>
               </tr>
             ) : (
-              entries.map(e => (
+              entries.map(e => {
+                const flow = getTradeFlowMeta(e);
+                return (
                 <tr key={e.id}
                   onClick={() => onSelectEntry(e)}
                   style={{
@@ -111,10 +136,10 @@ export function TradeTable({
                   </td>
                   <td style={{ padding: "10px 12px", color: "var(--text-secondary)" }}>{fmtDate(e.entry_date)}</td>
                   <td style={{ padding: "10px 12px" }}>
-                    <span className="mono" style={{ fontWeight: 500, color: "var(--text-primary)" }}>₹{e.entry_price.toLocaleString("en-IN")}</span>
-                  </td>
-                  <td style={{ padding: "10px 12px", color: "var(--text-secondary)" }}>
-                    <span className="mono">{e.exit_price ? `₹${e.exit_price.toLocaleString("en-IN")}` : "—"}</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{flow.sourceLabel}</span>
+                      <span className="caption">{flow.brokerLabel ? `${flow.brokerLabel} • auto` : (flow.autoRecorded ? "Auto-recorded" : "Manual")}</span>
+                    </div>
                   </td>
                   <td style={{ padding: "10px 12px" }}>
                     {e.pnl == null ? (
@@ -124,6 +149,11 @@ export function TradeTable({
                         {e.pnl >= 0 ? "+" : ""}{fmtCcy(e.pnl)}
                       </span>
                     )}
+                  </td>
+                  <td style={{ padding: "10px 12px" }}>
+                    <Badge variant={flow.reviewTone}>
+                      {flow.reviewLabel}
+                    </Badge>
                   </td>
                   <td style={{ padding: "10px 12px" }}>
                     {e.status === "open" ? (
@@ -145,7 +175,7 @@ export function TradeTable({
                     </div>
                   </td>
                 </tr>
-              ))
+              )})
             )}
           </tbody>
         </table>

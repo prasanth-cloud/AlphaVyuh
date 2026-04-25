@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import TraderReminderStrip from '@/components/TraderReminderStrip'
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -64,6 +65,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <AccountMenuButton />
           </div>
         </div>
+        <TraderReminderStrip tone="app" />
       </nav>
 
       <main className="app-content">{children}</main>

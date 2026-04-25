@@ -6,6 +6,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.middleware.auth import get_current_user_id
+from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
@@ -15,16 +16,9 @@ router = APIRouter(prefix="/api/v1/market", tags=["market"])
 async def market_overview(user_id: str = Depends(get_current_user_id)):
     sb = get_admin_client()
 
-    # Find last complete trading day — partial ingests have <200 rows; full days have 2000+
-    from collections import Counter
-    dr = sb.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(5000).execute()
-    if not dr.data:
+    latest_date = get_latest_complete_trade_date(sb)
+    if not latest_date:
         return {"trade_date": None, "advances": 0, "declines": 0}
-    date_counts = Counter(r["trade_date"] for r in dr.data)
-    latest_date = next(
-        (d for d in sorted(date_counts, reverse=True) if date_counts[d] >= 1000),
-        dr.data[0]["trade_date"],
-    )
 
     # Fetch all NSE EQ rows for latest date
     rows = (

@@ -25,6 +25,13 @@ class DrawingCreate(BaseModel):
     timeframe: str = "D"
 
 
+class DrawingUpdate(BaseModel):
+    tool_type: str
+    points: list[Any]
+    style: dict[str, Any] = {}
+    timeframe: str = "D"
+
+
 class LayoutSave(BaseModel):
     timeframe: str = "D"
     indicators: list[str] = []
@@ -499,6 +506,43 @@ async def create_drawing(
     if not r.data:
         raise HTTPException(status_code=500, detail="Failed to save drawing")
     return r.data[0]
+
+
+@router.patch("/{symbol}/drawings/{drawing_id}")
+async def update_drawing(
+    symbol: str,
+    drawing_id: str,
+    body: DrawingUpdate,
+    user_id: str = Depends(get_current_user_id),
+):
+    sb = get_admin_client()
+    existing = (
+        sb.table("drawings")
+        .select("id,user_id")
+        .eq("id", drawing_id)
+        .eq("user_id", user_id)
+        .eq("symbol", symbol.upper())
+        .maybe_single()
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+
+    result = (
+        sb.table("drawings")
+        .update({
+            "tool_type": body.tool_type,
+            "points": body.points,
+            "style": body.style,
+            "timeframe": body.timeframe,
+        })
+        .eq("id", drawing_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to update drawing")
+    return result.data[0]
 
 
 @router.delete("/{symbol}/drawings/{drawing_id}")

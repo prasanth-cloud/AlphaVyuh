@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
-import { SETUP_TYPES, inputStyle, fmtCcy, fmtDate } from "./utils";
+import { SETUP_TYPES, inputStyle, fmtCcy, fmtDate, getTradeFlowMeta } from "./utils";
 
 // ── SetupChips ────────────────────────────────────────────────────────────────
 
@@ -88,6 +88,7 @@ export function TradePanel({
   onInitiateClose,
 }: TradePanelProps) {
   if (!mode) return null;
+  const flow = selectedEntry ? getTradeFlowMeta(selectedEntry) : null;
 
   return (
     <div style={{ width: 340, flexShrink: 0 }}>
@@ -251,6 +252,19 @@ export function TradePanel({
         {/* ── VIEW ── */}
         {mode === "view" && selectedEntry && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {flow && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                <div>
+                  <div className="label" style={{ marginBottom: 2 }}>Flow source</div>
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 12 }}>{flow.sourceLabel}</div>
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom: 2 }}>Execution</div>
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: 12 }}>{flow.brokerLabel ? `${flow.brokerLabel} broker` : "Manual journal"}</div>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
               {[
                 ["Direction", selectedEntry.trade_type === "long" ? "Long" : "Short"],
@@ -309,10 +323,15 @@ export function TradePanel({
                 })}
               </div>
             ) : selectedEntry.status === "closed" && (
-              <button onClick={() => onGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
-                style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>
-                {lessonLoading === selectedEntry.id ? "Generating AI lesson…" : "Get AI lesson for this trade"}
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.6 }}>
+                  This trade is closed but has not been reviewed yet. Generate a per-trade lesson now, and the full journal coach will become more useful as closed trades accumulate.
+                </div>
+                <button onClick={() => onGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
+                  style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>
+                  {lessonLoading === selectedEntry.id ? "Generating AI lesson…" : "Generate AI lesson for this trade"}
+                </button>
+              </div>
             )}
 
             {selectedEntry.status === "open" && (

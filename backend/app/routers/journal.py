@@ -328,7 +328,7 @@ async def update_entry(
         raise HTTPException(status_code=404, detail="Entry not found")
 
     entry = existing.data
-    update_data = {k: v for k, v in body.model_dump().items() if v is not None}
+    update_data = body.model_dump(exclude_unset=True)
 
     closing_now = bool(body.exit_price and body.exit_date)
 
