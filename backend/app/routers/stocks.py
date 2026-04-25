@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 import yfinance as yf
 
+from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
@@ -96,12 +97,10 @@ async def get_quote(symbol: str):
 async def get_market_summary():
     client = get_admin_client()
 
-    date_res = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
-    if not date_res.data:
+    latest_date = get_latest_complete_trade_date(client)
+    if not latest_date:
         return {"trade_date": None, "advances": 0, "declines": 0, "unchanged": 0,
                 "new_52w_highs": 0, "new_52w_lows": 0, "total_stocks": 0}
-
-    latest_date = date_res.data[0]["trade_date"]
 
     # Fetch all rows for latest date (paginate in 1000-row chunks)
     all_rows = []
@@ -174,11 +173,9 @@ async def get_market_movers():
     """Top 5 gainers, top 5 losers, top 5 volume surges for the latest trading date."""
     client = get_admin_client()
 
-    date_res = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
-    if not date_res.data:
+    latest_date = get_latest_complete_trade_date(client)
+    if not latest_date:
         return {"trade_date": None, "gainers": [], "losers": [], "volume_surge": []}
-
-    latest_date = date_res.data[0]["trade_date"]
 
     # Fetch all rows with needed columns, paginated
     all_rows: list[dict] = []
@@ -277,10 +274,9 @@ async def get_sector_breadth():
     """Advance/decline ratio and above-EMA200 % broken down by sector."""
     client = get_admin_client()
 
-    date_res = client.table("daily_ohlcv").select("trade_date").order("trade_date", desc=True).limit(1).execute()
-    if not date_res.data:
+    latest_date = get_latest_complete_trade_date(client)
+    if not latest_date:
         return {"sectors": []}
-    latest_date = date_res.data[0]["trade_date"]
 
     # Pull all rows with sector (paginated)
     all_rows: list[dict] = []

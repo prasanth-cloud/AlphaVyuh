@@ -1,0 +1,20 @@
+-- ⚠️  STUB — DO NOT APPLY. Already applied to prod directly on 2026-04-21.
+--
+-- This file documents a migration that was applied to the production Supabase project
+-- (fyxltykqdvacbdgmeucf) directly via the MCP without a corresponding local file.
+-- It appears in prod migration history as:
+--   version: 20260421120128  name: 030_vcp_lookback_optimise
+--
+-- This was the first optimisation pass on get_vcp_lookback() — added the
+-- make_interval(days => p_lookback * 2) lower-bound guard and the row_number()
+-- partition to enforce the p_lookback row cap per symbol without a Python-side
+-- slice. This version was then consolidated into 029_vcp_lookback_rpc_function.sql
+-- which is the definitive version currently live on prod.
+--
+-- Do not run this against any database — the CREATE OR REPLACE would overwrite
+-- the 029 version with an intermediate optimisation state.
+--
+-- This stub exists solely to close the local ↔ prod file count gap and to
+-- document the prod migration history accurately.
+
+-- (no executable SQL)

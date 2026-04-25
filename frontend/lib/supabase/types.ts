@@ -220,7 +220,7 @@ export type Database = {
           open: number
           pct_change: number | null
           prev_close: number | null
-          rs_rating: number | null
+          rs_score: number | null
           rsi_14: number | null
           sma_150: number | null
           sma_20: number | null
@@ -271,7 +271,7 @@ export type Database = {
           open: number
           pct_change?: number | null
           prev_close?: number | null
-          rs_rating?: number | null
+          rs_score?: number | null
           rsi_14?: number | null
           sma_150?: number | null
           sma_20?: number | null
@@ -322,7 +322,7 @@ export type Database = {
           open?: number
           pct_change?: number | null
           prev_close?: number | null
-          rs_rating?: number | null
+          rs_score?: number | null
           rsi_14?: number | null
           sma_150?: number | null
           sma_20?: number | null

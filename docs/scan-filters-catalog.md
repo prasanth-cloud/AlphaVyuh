@@ -135,17 +135,17 @@ consumes 910ms p95 of the 1,500ms budget; remaining headroom = 590ms.
 
 ---
 
-### 9. Minervini RS Rating (1–99)
+### 9. Minervini RS Score (1–99)
 
-| Field | `rs_rating_min`, `rs_rating_max` |
+| Field | `rs_score_min`, `rs_score_max` |
 |---|---|
 | Status | Implemented |
-| Column | `daily_ohlcv.rs_rating` |
+| Column | `daily_ohlcv.rs_score` |
 | Definition | Rank-percentile of the stock's 12-month price performance vs the full universe (heavier weight on the most recent quarter). RS = 99 means the stock outperformed 99% of all stocks. Computed daily at ingest. **This is NOT the IBD RS Rating** (which benchmarks against the S&P 500 specifically) — ours benchmarks against the NSE universe. |
 | Cost | FREE |
 | Latency | 0–3ms |
 | Competitive | Not available on Chartink, Tickertape, or Screener.in. This is a differentiator. |
-| Caveat | The definition is ours; the concept is Minervini's. The word "RS Rating" is associated with IBD/Investor's Business Daily. Consider calling it "Relative Performance Score" in the UI to avoid confusion. |
+| Caveat | Named "RS Score" (not "RS Rating") to avoid IBD trademark confusion — ADR 006 §Decision 5. |
 
 ---
 
@@ -381,7 +381,7 @@ fundamentals are worse than no fundamentals — they mislead users. See OQ2.
 | **SMA position (50/150/200)** | ✅ | ✅ | — | ❌ | ✅ M3 |
 | Delivery % | ✅ | — | — | ✅ | ✅ |
 | 52-week proximity | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Minervini RS Rating | Partial | — | — | ✅ | ✅ |
+| Minervini RS Score | Partial | — | — | ✅ | ✅ |
 | **VCP detection** | — | — | — | ✅ | ✅ **Differentiator** |
 | **Volume dry-up** | ✅ | — | — | ❌ | ✅ M3 |
 | **N-day momentum (5/10/20d)** | ✅ | ✅ | ✅ | ❌ | ✅ M3 (ingest) |
@@ -492,15 +492,9 @@ Filters #19 and #20 become FREE once precomputed columns exist. Both are computa
 
 ---
 
-### OQ6 — "RS Rating" naming
+### OQ6 — "RS Rating" naming — RESOLVED
 
-The term "RS Rating" is strongly associated with Investor's Business Daily (IBD) and their proprietary rating system. Our implementation is our own (rank percentile vs NSE universe, not vs S&P 500). Using the same name could create legal or reputational risk if IBD objects.
-
-Options:
-- (a) Rename to "Relative Performance Score" or "RS Score" in the UI
-- (b) Keep "RS Rating" and add a tooltip clarifying it is not the IBD rating
-
-*Decision needed before public launch.*
+**Decision (ADR 006 §Decision 5):** Ship as "RS Score". Field names: `rs_score_min` / `rs_score_max`. Column: `daily_ohlcv.rs_score`. The rename from `rs_rating` was applied in migration 033.
 
 ---
 

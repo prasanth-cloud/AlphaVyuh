@@ -66,7 +66,12 @@ export default function LoginForm() {
         </div>
 
         <div style={{ display: "grid", gap: 8 }}>
-          <Label htmlFor="password">Password</Label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <Label htmlFor="password">Password</Label>
+            <Link href="/reset-password" style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+              Forgot password?
+            </Link>
+          </div>
           <Input
             id="password" type="password" value={password}
             onChange={e => setPassword(e.target.value)}
