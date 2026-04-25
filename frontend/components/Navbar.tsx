@@ -65,6 +65,16 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: "/data", label: "Data", prefix: "/data",
+    icon: (active: boolean) => (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+        <ellipse cx="8" cy="3.2" rx="5.5" ry="2" stroke={active ? '#5b63f5' : '#555'} strokeWidth="1.3" />
+        <path d="M2.5 3.2v4.8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V3.2" stroke={active ? '#5b63f5' : '#555'} strokeWidth="1.3" />
+        <path d="M2.5 8v4c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V8" stroke={active ? '#5b63f5' : '#555'} strokeWidth="1.3" />
+      </svg>
+    ),
+  },
+  {
     href: "/options", label: "Options", prefix: "/options",
     icon: (active: boolean) => (
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
