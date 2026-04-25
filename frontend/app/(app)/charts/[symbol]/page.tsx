@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
+import { DataProvenanceBadge } from "@/components/ui";
 import type { IndicatorData, IchimokuPoint, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -1368,7 +1369,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           >
             <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : ""}`}
               style={!liveMode ? { background: "var(--app-text3)" } : {}} />
-            {liveMode ? "Live" : "EOD"}
+            <DataProvenanceBadge kind={liveMode ? "live-beta" : "eod"} compact />
           </button>
 
           {/* Price alert bell */}
@@ -2194,7 +2195,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                   : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 <Activity size={12} />
-                {liveMode ? "Live feed" : "EOD feed"}
+                <DataProvenanceBadge kind={liveMode ? "live-beta" : "eod"} compact />
               </button>
             </div>
           </div>

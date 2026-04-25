@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X } from "lucide-react";
 import { placeOrder, getBrokerStatus } from "@/lib/api";
 import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
+import { DataProvenanceBadge } from "@/components/ui";
 
 const SETUP_TYPES = [
   { value: "", label: "— Select setup —" },
@@ -120,6 +121,16 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         </div>
 
         <div className="px-5 py-4 space-y-4">
+          <div className="rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-[#9a5f07]">Execution guardrail</span>
+              <DataProvenanceBadge kind="broker-beta" compact />
+            </div>
+            <p className="text-[11px] leading-5 text-[#7b5a2b]">
+              Verify symbol, side, quantity, price, and risk before placing. Simulated orders still write to your journal for review.
+            </p>
+          </div>
+
           {/* BUY / SELL toggle */}
           <div className="flex gap-2">
             {(["buy", "sell"] as const).map(s => (
@@ -260,7 +271,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
 
           <p className="text-[10px] text-[#ccc] text-center">
             {brokerLive && brokerName
-              ? `Live order via ${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} — auto-recorded in your Journal and ready for post-trade review`
+              ? `Broker beta via ${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} — verify the order in your broker before relying on the journal record`
               : brokerTokenExpired
                 ? `Simulated order for now — your ${brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "broker"} token expired, so reconnect to go live again`
                 : "Simulated order — auto-recorded in your Journal and ready for post-trade review"}

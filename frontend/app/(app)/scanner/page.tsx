@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import { authHeaders } from '@/lib/api'
-import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td } from '@/components/ui'
+import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -520,7 +520,7 @@ export default function ScannerPage() {
           <div className="workspace-pill-row">
             <span className="workspace-pill">{activePresetMeta?.name ?? 'Custom view'}</span>
             <span className="workspace-pill">{hasRun ? `${totalMatches || results.length} matches` : 'Ready to scan'}</span>
-            <span className="workspace-pill">{tradeDate ? `EOD ${tradeDate}` : 'Latest complete market day'}</span>
+            <DataProvenanceBadge kind="eod" asOf={tradeDate || null} compact />
           </div>
         </div>
       </div>
@@ -704,7 +704,7 @@ export default function ScannerPage() {
             <>
               <div>
                 <span className="heading-card">{totalMatches > 0 ? `${totalMatches} stocks` : 'Scanner'}</span>
-                {tradeDate && <span className="caption" style={{ marginLeft: 8 }}>EOD {tradeDate}</span>}
+                {tradeDate && <DataProvenanceBadge kind="eod" asOf={tradeDate} compact className="ml-2" />}
               </div>
               <div className="workspace-toolbar-group">
                 {isLimited && (

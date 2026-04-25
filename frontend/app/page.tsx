@@ -594,8 +594,8 @@ export default function LandingPage() {
 
               <div className="av-panel">
                 <div className="av-panel-head">
-                  <div className="av-panel-title">Live Workflow Preview</div>
-                  <div className="av-panel-badge">Marketwatch + chart + journal logic</div>
+                  <div className="av-panel-title">Workflow Preview</div>
+                  <div className="av-panel-badge">Illustrative marketwatch + chart + journal loop</div>
                 </div>
                 <div className="av-window">
                   <div className="av-window-grid">
@@ -631,7 +631,7 @@ export default function LandingPage() {
                         <div className="av-chart-actions">
                           <span className="av-chip">Trendline</span>
                           <span className="av-chip">Fib</span>
-                          <span className="av-chip">Broker linked</span>
+                          <span className="av-chip">Broker beta</span>
                         </div>
                       </div>
                       <svg className="av-chart-svg" viewBox="0 0 520 180" fill="none">
@@ -672,8 +672,8 @@ export default function LandingPage() {
                           <div className="label" style={{ color: "var(--accent)" }}>Post-trade review</div>
                           <div className="av-review-list">
                             <div className="av-review-item">
-                              <strong>Execution stayed attached to context</strong>
-                              <span>The setup, chart markings, and trade record stay linked instead of splitting across tools.</span>
+                              <strong>Trade plan stayed attached to context</strong>
+                              <span>The setup, chart markings, and trade record can stay linked instead of splitting across tools.</span>
                             </div>
                             <div className="av-review-item">
                               <strong>Review becomes part of the workflow</strong>
@@ -696,7 +696,7 @@ export default function LandingPage() {
             </div>
             <div className="av-mini-card">
               <h3>Work from one active desk</h3>
-              <p>Watchlist, chart, and execution stay linked so the setup never loses context.</p>
+              <p>Watchlist, chart, and trade planning stay linked so the setup never loses context.</p>
             </div>
             <div className="av-mini-card">
               <h3>Review without friction</h3>
