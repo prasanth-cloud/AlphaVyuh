@@ -85,6 +85,15 @@ def _lookup_market_identity(symbol: str) -> MarketIdentity:
     return MarketIdentity()
 
 
+def _default_layout(symbol: str) -> dict[str, Any]:
+    return {
+        "symbol": symbol.upper(),
+        "timeframe": "D",
+        "indicators": [],
+        "drawing_tools": [],
+    }
+
+
 def _aggregate_to_timeframe(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     """
     Aggregate daily OHLCV into weekly (W) or monthly (M) bars.
@@ -538,15 +547,18 @@ async def get_layout(
     user_id: str = Depends(get_current_user_id),
 ):
     sb = get_admin_client()
-    r = (
-        sb.table("chart_layouts")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("symbol", symbol.upper())
-        .maybe_single()
-        .execute()
-    )
-    return r.data or {"symbol": symbol.upper(), "timeframe": "D", "indicators": [], "drawing_tools": []}
+    try:
+        r = (
+            sb.table("chart_layouts")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("symbol", symbol.upper())
+            .maybe_single()
+            .execute()
+        )
+    except Exception:
+        return _default_layout(symbol)
+    return (r.data if r else None) or _default_layout(symbol)
 
 
 @router.post("/{symbol}/layout")
