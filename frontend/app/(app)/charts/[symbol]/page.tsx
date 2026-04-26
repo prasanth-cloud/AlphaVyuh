@@ -140,7 +140,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const fullChartMode = searchParams.get("full") === "1";
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
-  const [liveMode, setLiveMode] = useState(true);
+  const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
 
   const [data, setData] = useState<CandlesResponse | null>(null);
@@ -330,7 +330,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
     const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
     const fetcher = liveMode
-      ? getCandlesLive(symbol, { limit, timeframe })
+      ? getCandlesLive(symbol, { limit, timeframe }).catch(() => {
+          setLiveMode(false);
+          return getCandles(symbol, { limit, timeframe });
+        })
       : getCandles(symbol, { limit, timeframe });
 
     fetcher
