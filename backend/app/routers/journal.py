@@ -230,7 +230,7 @@ async def get_stats(user_id: str = Depends(get_current_user_id)):
 
 @router.get("")
 async def list_entries(
-    limit: int = Query(default=50, le=200),
+    limit: int = Query(default=50, le=500),
     offset: int = 0,
     status: Optional[str] = None,
     symbol: Optional[str] = None,
