@@ -11,6 +11,8 @@ const PUBLIC_PREFIXES = [
   "/offline",
   "/privacy",
   "/terms",
+  "/sw.js",
+  "/manifest.json",
   "/api/",
   "/_next/",
 ];
