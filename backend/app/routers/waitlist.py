@@ -46,9 +46,16 @@ def _new_invite_code() -> str:
 async def join_waitlist(body: WaitlistRequest):
     client = get_admin_client()
     try:
-        client.table("waitlist").insert(
-            {"email": body.email, "source": body.source, "invite_code": body.invite_code}
-        ).execute()
+        payload = {"email": body.email, "source": body.source, "invite_code": body.invite_code}
+        try:
+            client.table("waitlist").insert(payload).execute()
+        except Exception as insert_exc:
+            # Production may briefly run before the launch-readiness migration is applied.
+            # Preserve the public signup path by falling back to the original schema.
+            if "invite_code" in str(insert_exc).lower() or "status" in str(insert_exc).lower():
+                client.table("waitlist").insert({"email": body.email, "source": body.source}).execute()
+            else:
+                raise
     except Exception as e:
         # Supabase raises an exception on unique constraint violation
         if "duplicate" in str(e).lower() or "unique" in str(e).lower() or "23505" in str(e):
