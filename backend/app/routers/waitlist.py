@@ -108,14 +108,20 @@ async def create_invite_code(body: InviteCreateRequest, user_id: str = Depends(g
 async def validate_invite_code(code: str):
     client = get_admin_client()
     normalized = code.strip().upper()
-    result = (
-        client.table("invite_codes")
-        .select("code,email,max_uses,uses,plan,expires_at,disabled")
-        .eq("code", normalized)
-        .maybe_single()
-        .execute()
-    )
-    data = result.data
+    try:
+        result = (
+            client.table("invite_codes")
+            .select("code,email,max_uses,uses,plan,expires_at,disabled")
+            .eq("code", normalized)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if "Missing response" in str(exc) or "'code': '204'" in str(exc):
+            raise HTTPException(status_code=404, detail="Invalid invite code") from exc
+        raise
+    rows = result.data or []
+    data = rows[0] if rows else None
     if not data or data.get("disabled") or int(data.get("uses") or 0) >= int(data.get("max_uses") or 1):
         raise HTTPException(status_code=404, detail="Invalid invite code")
     return {"valid": True, "code": data["code"], "plan": data.get("plan") or "founder"}
