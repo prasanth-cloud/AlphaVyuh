@@ -16,33 +16,33 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.alphavyuh.com"),
-  title: "AlphaVyuh — Trading OS for Indian Markets",
-  description: "Scan → Analyse → Trade → Journal → Improve. Built for NSE/BSE swing traders.",
+  metadataBase: new URL("https://alphavyuh.com"),
+  title: "AlphaVyuh — India’s Trading OS",
+  description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",
   },
   openGraph: {
-    type: "website",
-    url: "https://www.alphavyuh.com/",
-    siteName: "AlphaVyuh",
-    title: "AlphaVyuh — India's Trading OS",
+    title: "AlphaVyuh — India’s Trading OS",
     description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
+    url: "https://alphavyuh.com",
+    siteName: "AlphaVyuh",
     images: [
       {
-        url: "/og-image.png",
+        url: "https://alphavyuh.com/og-image.png",
         width: 1200,
         height: 630,
-        alt: "AlphaVyuh trading platform homepage preview",
+        alt: "AlphaVyuh Trading Platform",
       },
     ],
+    type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AlphaVyuh — India's Trading OS",
+    title: "AlphaVyuh — India’s Trading OS",
     description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
-    images: ["/og-image.png"],
+    images: ["https://alphavyuh.com/og-image.png"],
   },
   appleWebApp: {
     capable: true,
