@@ -6,20 +6,17 @@ export default function ServiceWorkerRegistrar() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    // Unregister all existing service workers first, then re-register fresh.
-    // This clears stale chunk caches that cause ChunkLoadError after deploys.
+    // Retire existing service workers. The app changes frequently during beta,
+    // and route-payload caching can interfere with Next.js navigation after deploys.
     navigator.serviceWorker.getRegistrations().then((registrations) => {
-      Promise.all(registrations.map((r) => r.unregister())).then(() => {
-        // Clear all caches
-        if ("caches" in window) {
-          caches.keys().then((keys) =>
-            Promise.all(keys.map((k) => caches.delete(k)))
-          );
-        }
-        // Re-register the service worker
-        navigator.serviceWorker.register("/sw.js").catch(() => {});
-      });
+      Promise.all(registrations.map((r) => r.unregister())).catch(() => {});
     });
+
+    if ("caches" in window) {
+      caches.keys().then((keys) => {
+        Promise.all(keys.map((k) => caches.delete(k))).catch(() => {});
+      });
+    }
   }, []);
 
   return null;
