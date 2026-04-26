@@ -4,6 +4,7 @@
   "scripts": {
     "typecheck": "cd frontend && bun run typecheck",
     "lint": "cd frontend && bun run lint",
+    "launch:check": "bash scripts/launch-readiness-check.sh",
     "db:start": "npx supabase start",
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",

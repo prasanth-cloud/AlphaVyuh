@@ -202,7 +202,7 @@ async def verify_payment(
         hashlib.sha256,
     ).hexdigest()
 
-    if expected != body.razorpay_signature:
+    if not hmac.compare_digest(expected, body.razorpay_signature):
         raise HTTPException(400, "Invalid payment signature")
 
     currency = (body.currency or "INR").upper()
@@ -242,6 +242,9 @@ async def verify_payment(
 
 @router.post("/webhook")
 async def razorpay_webhook(request: Request):
+    if not settings.razorpay_webhook_secret:
+        raise HTTPException(503, "Payment webhook is not configured")
+
     body = await request.body()
     signature = request.headers.get("X-Razorpay-Signature", "")
 
@@ -251,7 +254,7 @@ async def razorpay_webhook(request: Request):
         hashlib.sha256,
     ).hexdigest()
 
-    if expected != signature:
+    if not hmac.compare_digest(expected, signature):
         raise HTTPException(400, "Invalid webhook signature")
 
     payload = await request.json()

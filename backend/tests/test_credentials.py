@@ -11,6 +11,8 @@ import pytest
 # Set env var before importing the module under test
 _TEST_KEY = secrets.token_bytes(32).hex()
 os.environ["BROKER_CREDS_KEY"] = _TEST_KEY
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.brokers.credentials import (  # noqa: E402
     CredentialDecryptionError,

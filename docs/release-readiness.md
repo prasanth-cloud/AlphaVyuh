@@ -26,6 +26,8 @@ Use this checklist before every customer-facing release.
 Run these before release:
 
 ```bash
+npm run launch:check
+
 cd frontend
 npm run lint
 npm run test
@@ -39,6 +41,8 @@ cd ../backend
 .venv/bin/pip-audit -r requirements.txt
 MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data import get_market_data_provider; print(get_market_data_provider().name)"
 ```
+
+The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
 
 ## Security Checklist
 
