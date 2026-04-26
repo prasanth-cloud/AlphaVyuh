@@ -13,6 +13,45 @@ from app.services.supabase import get_admin_client
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
 
 
+def _finite_float(value, default=None):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number != number or number in (float("inf"), float("-inf")):
+        return default
+    return number
+
+
+def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices_live: bool) -> dict:
+    return {
+        "trade_date": latest_date,
+        "advances": 0,
+        "declines": 0,
+        "unchanged": 0,
+        "total": 0,
+        "advance_decline_ratio": 0,
+        "new_52w_highs": 0,
+        "new_52w_lows": 0,
+        "above_ema20_count": 0,
+        "above_ema20_pct": 0,
+        "above_ema50_count": 0,
+        "above_ema50_pct": 0,
+        "above_ema200_count": 0,
+        "above_ema200_pct": 0,
+        "market_phase": "Pending",
+        "market_phase_desc": "Market breadth will appear after the latest complete trading day is available.",
+        "sector_breadth": [],
+        "top_sectors": [],
+        "top_gainers": [],
+        "top_losers": [],
+        "most_active": [],
+        "indices": indices,
+        "market_data_source": quote_source,
+        "is_live": indices_live,
+    }
+
+
 def _index_quotes() -> tuple[list[dict], str, bool]:
     provider = get_market_data_provider()
     indexes = [
@@ -28,9 +67,9 @@ def _index_quotes() -> tuple[list[dict], str, bool]:
             quotes.append({
                 "symbol": symbol,
                 "label": label,
-                "close": q.get("close"),
-                "pct_change": q.get("pct_change"),
-                "prev_close": q.get("prev_close"),
+                "close": _finite_float(q.get("close")),
+                "pct_change": _finite_float(q.get("pct_change")),
+                "prev_close": _finite_float(q.get("prev_close")),
                 "source": q.get("source") or provider.name,
             })
         except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
@@ -54,15 +93,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
     latest_date = get_latest_complete_trade_date(sb)
     if not latest_date:
-        return {
-            "trade_date": None,
-            "advances": 0,
-            "declines": 0,
-            "indices": indices,
-            "top_sectors": [],
-            "market_data_source": quote_source,
-            "is_live": indices_live,
-        }
+        return _empty_overview(None, indices, quote_source, indices_live)
 
     # Fetch all NSE EQ rows for latest date
     rows = (
@@ -130,7 +161,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
     total = len(enriched)
     if total == 0:
-        return {"trade_date": latest_date, "total": 0}
+        return _empty_overview(latest_date, indices, quote_source, indices_live)
 
     # Breadth counts
     advances = sum(1 for r in enriched if r["pct_change"] > 0.05)

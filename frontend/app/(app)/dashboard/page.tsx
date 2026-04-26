@@ -29,6 +29,16 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
+function safeNumber(value: unknown, fallback = 0): number {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric : fallback
+}
+
+function formatPercent(value: unknown, digits = 0): string {
+  const numeric = safeNumber(value, NaN)
+  return Number.isFinite(numeric) ? `${numeric.toFixed(digits)}%` : '—'
+}
+
 function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: DataHealth | null }) {
   const phase = data.market_phase
   const phaseColor = phase === 'Bullish' ? 'var(--gain)'
@@ -50,8 +60,8 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Metric label="A/D ratio" value={data.advance_decline_ratio?.toFixed(2) ?? '—'} />
-          <Metric label="% above EMA 200" value={`${data.above_ema200_pct ?? '—'}%`} />
+          <Metric label="A/D ratio" value={safeNumber(data.advance_decline_ratio).toFixed(2)} />
+          <Metric label="% above EMA 200" value={formatPercent(data.above_ema200_pct)} />
           {dataHealth?.status && (
             <Metric label="Data" value={dataHealth.status.toUpperCase()} />
           )}
@@ -93,21 +103,21 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
     },
     {
       label: 'Breadth',
-      value: `${data.advances.toLocaleString()} / ${data.declines.toLocaleString()}`,
-      detail: `A/D ${data.advance_decline_ratio?.toFixed(2) ?? '-'}`,
+      value: `${safeNumber(data.advances).toLocaleString()} / ${safeNumber(data.declines).toLocaleString()}`,
+      detail: `A/D ${safeNumber(data.advance_decline_ratio).toFixed(2)}`,
       color: breadthTone,
     },
     {
       label: 'Trend',
-      value: `${data.above_ema200_pct ?? 0}%`,
+      value: formatPercent(data.above_ema200_pct),
       detail: 'Stocks above EMA 200',
       color: trendTone,
     },
     {
       label: 'Leadership',
       value: leadingSector?.sector ?? 'Pending',
-      detail: leadingSector ? `${leadingSector.breadth_pct.toFixed(0)}% breadth · ${leadingSector.avg_pct_change >= 0 ? '+' : ''}${leadingSector.avg_pct_change}% avg` : 'Sector breadth loads after market close',
-      color: leadingSector ? (leadingSector.avg_pct_change >= 0 ? 'var(--gain)' : 'var(--loss)') : 'var(--text-tertiary)',
+      detail: leadingSector ? `${safeNumber(leadingSector.breadth_pct).toFixed(0)}% breadth · ${safeNumber(leadingSector.avg_pct_change) >= 0 ? '+' : ''}${safeNumber(leadingSector.avg_pct_change).toFixed(2)}% avg` : 'Sector breadth loads after market close',
+      color: leadingSector ? (safeNumber(leadingSector.avg_pct_change) >= 0 ? 'var(--gain)' : 'var(--loss)') : 'var(--text-tertiary)',
     },
   ];
 
@@ -132,16 +142,18 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
       {!!data.indices?.length && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>
           {data.indices.map((idx) => {
-            const tone = (idx.pct_change ?? 0) >= 0 ? 'var(--gain)' : 'var(--loss)';
+            const pct = idx.pct_change == null ? null : safeNumber(idx.pct_change, NaN);
+            const close = idx.close == null ? null : safeNumber(idx.close, NaN);
+            const tone = (pct ?? 0) >= 0 ? 'var(--gain)' : 'var(--loss)';
             return (
               <div key={idx.symbol} style={{ minWidth: 0, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.018)' }}>
                 <div className="label" style={{ marginBottom: 4 }}>{idx.label}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
                   <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {idx.close != null ? idx.close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : 'Pending'}
+                    {close != null && Number.isFinite(close) ? close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : 'Pending'}
                   </span>
                   <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: idx.pct_change == null ? 'var(--text-tertiary)' : tone }}>
-                    {idx.pct_change != null ? `${idx.pct_change >= 0 ? '+' : ''}${idx.pct_change.toFixed(2)}%` : '-'}
+                    {pct != null && Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '-'}
                   </span>
                 </div>
               </div>
@@ -176,20 +188,22 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
 }
 
 function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; breadth_pct: number; avg_pct_change: number }) {
-  const color = breadth_pct > 60 ? 'var(--gain)' : breadth_pct > 40 ? 'var(--warn)' : 'var(--loss)'
+  const breadth = safeNumber(breadth_pct)
+  const avg = safeNumber(avg_pct_change)
+  const color = breadth > 60 ? 'var(--gain)' : breadth > 40 ? 'var(--warn)' : 'var(--loss)'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <span style={{ flex: '0 0 120px', fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {sector}
       </span>
       <div style={{ flex: 1, height: 5, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${Math.min(100, breadth_pct)}%`, background: color, transition: 'width 600ms var(--ease-out)' }} />
+        <div style={{ height: '100%', width: `${Math.min(100, breadth)}%`, background: color, transition: 'width 600ms var(--ease-out)' }} />
       </div>
       <span className="mono" style={{ flex: '0 0 40px', textAlign: 'right', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
-        {breadth_pct.toFixed(0)}%
+        {breadth.toFixed(0)}%
       </span>
-      <span className="mono" style={{ flex: '0 0 52px', textAlign: 'right', fontSize: 11, color: avg_pct_change >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
-        {avg_pct_change >= 0 ? '+' : ''}{avg_pct_change}%
+      <span className="mono" style={{ flex: '0 0 52px', textAlign: 'right', fontSize: 11, color: avg >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
+        {avg >= 0 ? '+' : ''}{avg.toFixed(2)}%
       </span>
     </div>
   )
@@ -197,27 +211,36 @@ function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; br
 
 function MoversCard({ title, items, variant }: { title: string; items: MarketOverview['top_gainers']; variant: 'gain' | 'loss' }) {
   const color = variant === 'gain' ? 'var(--gain)' : 'var(--loss)'
+  const safeItems = Array.isArray(items) ? items : []
   return (
     <Card padding="md">
       <h2 className="heading-card" style={{ marginBottom: 12 }}>{title}</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {items.slice(0, 5).map(item => (
-          <a key={item.symbol} href={`/watchlist?symbol=${item.symbol}`}
-             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-            <div style={{ minWidth: 0 }}>
-              <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.symbol}</div>
-              <div className="caption" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{item.company_name}</div>
-            </div>
-            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
-              <div className="mono" style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
-                ₹{item.close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-              </div>
-              <div className="mono" style={{ fontSize: 11, fontWeight: 600, color }}>
-                {item.pct_change >= 0 ? '+' : ''}{item.pct_change?.toFixed(2)}%
-              </div>
-            </div>
-          </a>
-        ))}
+        {safeItems.length === 0 ? (
+          <div className="caption" style={{ padding: '8px 0' }}>No movers available yet.</div>
+        ) : (
+          safeItems.slice(0, 5).map(item => {
+            const close = safeNumber(item.close, NaN)
+            const pct = safeNumber(item.pct_change, NaN)
+            return (
+              <a key={item.symbol} href={`/watchlist?symbol=${item.symbol}`}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.symbol}</div>
+                  <div className="caption" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{item.company_name}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+                    {Number.isFinite(close) ? `₹${close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
+                  </div>
+                  <div className="mono" style={{ fontSize: 11, fontWeight: 600, color }}>
+                    {Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'}
+                  </div>
+                </div>
+              </a>
+            )
+          })
+        )}
       </div>
     </Card>
   )
@@ -234,8 +257,8 @@ function EmaBreadthCard({ data }: { data: MarketOverview }) {
       <h2 className="heading-card" style={{ marginBottom: 12 }}>EMA breadth</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {items.map(e => {
-          const hasData = e.pct != null
-          const numericPct = e.pct ?? 0
+          const numericPct = safeNumber(e.pct, NaN)
+          const hasData = Number.isFinite(numericPct)
           const color = !hasData ? 'var(--text-tertiary)' : numericPct > 60 ? 'var(--gain)' : numericPct > 40 ? 'var(--warn)' : 'var(--loss)'
           return (
             <div key={e.label}>
@@ -598,6 +621,7 @@ export default function DashboardPage() {
   })
 
   async function load() {
+    setError('')
     try {
       const [d, health] = await Promise.all([
         getMarketOverview(),
@@ -636,7 +660,7 @@ export default function DashboardPage() {
       getAiPatterns().catch(() => null),
       getMe().catch(() => null),
     ]).then(async ([watchlists, journal, stats, broker, patterns, me]) => {
-      const trackedSymbols = watchlists.reduce((total, watchlist) => total + watchlist.items.length, 0)
+      const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
       const closedTrades = journal.entries.filter(entry => entry.status === 'closed').length || (stats?.total_trades ?? 0)
       const reviewedTrades = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
       const nextWorkflow: WorkflowState = {
@@ -648,7 +672,7 @@ export default function DashboardPage() {
         closedTrades,
         reviewedTrades,
         onboardingCompleted: Boolean(me?.onboarding_completed),
-        patterns,
+        patterns: patterns as AiPatterns | null,
       }
       setWorkflow(nextWorkflow)
       setReviewPrompts(deriveReviewPrompts(journal.entries))
@@ -720,24 +744,24 @@ export default function DashboardPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
             <StatCard
               label="Advances"
-              value={data.advances.toLocaleString()}
-              delta={`of ${data.total} stocks`}
+              value={safeNumber(data.advances).toLocaleString()}
+              delta={`of ${safeNumber(data.total).toLocaleString()} stocks`}
               deltaVariant="gain"
             />
             <StatCard
               label="Declines"
-              value={data.declines.toLocaleString()}
-              delta={`A/D ${data.advance_decline_ratio}`}
+              value={safeNumber(data.declines).toLocaleString()}
+              delta={`A/D ${safeNumber(data.advance_decline_ratio).toFixed(2)}`}
               deltaVariant="loss"
             />
             <StatCard
               label="New 52W highs"
-              value={String(data.new_52w_highs)}
+              value={String(safeNumber(data.new_52w_highs))}
               deltaVariant="gain"
             />
             <StatCard
               label="New 52W lows"
-              value={String(data.new_52w_lows)}
+              value={String(safeNumber(data.new_52w_lows))}
               deltaVariant="loss"
             />
           </div>
@@ -751,7 +775,7 @@ export default function DashboardPage() {
                 <span className="caption">% above EMA 20 · avg chg%</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(!data.sector_breadth || data.sector_breadth.length === 0) ? (
+                {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (
                   <div style={{ padding: '32px 0', textAlign: 'center' }}>
                     <div className="caption">No sector data yet — loads after market close</div>
                   </div>

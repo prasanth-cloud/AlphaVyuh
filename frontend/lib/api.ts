@@ -1559,7 +1559,7 @@ export async function createPaymentOrderFull(
 // ── Market overview ───────────────────────────────────────────────────────────
 
 export interface MarketOverview {
-  trade_date: string;
+  trade_date: string | null;
   advances: number;
   declines: number;
   unchanged: number;
@@ -1582,12 +1582,54 @@ export interface MarketOverview {
   most_active: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
 }
 
+function numberOr(value: unknown, fallback = 0): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined): MarketOverview {
+  const data = raw ?? {};
+  return {
+    trade_date: data.trade_date ?? null,
+    advances: numberOr(data.advances),
+    declines: numberOr(data.declines),
+    unchanged: numberOr(data.unchanged),
+    total: numberOr(data.total),
+    advance_decline_ratio: numberOr(data.advance_decline_ratio),
+    new_52w_highs: numberOr(data.new_52w_highs),
+    new_52w_lows: numberOr(data.new_52w_lows),
+    above_ema20_pct: numberOr(data.above_ema20_pct),
+    above_ema50_pct: numberOr(data.above_ema50_pct),
+    above_ema200_pct: numberOr(data.above_ema200_pct),
+    market_phase: data.market_phase ?? "Pending",
+    market_phase_desc: data.market_phase_desc ?? "Market breadth will appear after the latest complete trading day is available.",
+    indices: Array.isArray(data.indices) ? data.indices.map((idx) => ({
+      ...idx,
+      close: idx.close == null ? null : numberOr(idx.close, NaN),
+      pct_change: idx.pct_change == null ? null : numberOr(idx.pct_change, NaN),
+      prev_close: idx.prev_close == null ? null : numberOr(idx.prev_close, NaN),
+    })).map((idx) => ({
+      ...idx,
+      close: Number.isFinite(idx.close) ? idx.close : null,
+      pct_change: Number.isFinite(idx.pct_change) ? idx.pct_change : null,
+      prev_close: Number.isFinite(idx.prev_close) ? idx.prev_close : null,
+    })) : [],
+    top_sectors: Array.isArray(data.top_sectors) ? data.top_sectors : [],
+    market_data_source: data.market_data_source,
+    is_live: Boolean(data.is_live),
+    sector_breadth: Array.isArray(data.sector_breadth) ? data.sector_breadth : [],
+    top_gainers: Array.isArray(data.top_gainers) ? data.top_gainers : [],
+    top_losers: Array.isArray(data.top_losers) ? data.top_losers : [],
+    most_active: Array.isArray(data.most_active) ? data.most_active : [],
+  };
+}
+
 export async function getMarketOverview(): Promise<MarketOverview> {
   if (shouldUseMockFallback()) return mockMarketOverview();
   const headers = await authHeaders();
   // Try new comprehensive endpoint first; fall back to legacy summary if not deployed yet
   const res = await fetch(`${API}/api/v1/market/overview`, { headers });
-  if (res.ok) return res.json();
+  if (res.ok) return normalizeMarketOverview(await res.json());
 
   // Legacy fallback: compose from /market/summary
   const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
@@ -1603,7 +1645,7 @@ export async function getMarketOverview(): Promise<MarketOverview> {
     ? `Weak breadth — only ${ema200}% above EMA 200`
     : `Mixed market — ${ema200}% above EMA 200`;
 
-  return {
+  return normalizeMarketOverview({
     trade_date: s.trade_date,
     advances: s.advances,
     declines: s.declines,
@@ -1621,7 +1663,7 @@ export async function getMarketOverview(): Promise<MarketOverview> {
     top_gainers: [],
     top_losers: [],
     most_active: [],
-  };
+  });
 }
 
 export type WaitlistLead = {
