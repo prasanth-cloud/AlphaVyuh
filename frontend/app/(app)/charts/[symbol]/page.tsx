@@ -11,7 +11,7 @@ import type {
 } from "@/lib/api";
 import {
   getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
-  getChartLayout, saveChartLayout, getWatchlists, addToWatchlist,
+  getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
   getFundamentals, getPlanStatus, getQuote, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries,
@@ -154,6 +154,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [alertMsg, setAlertMsg] = useState("");
 
   const [activeIndicators, setActiveIndicators] = useState<string[]>(["ema20", "ema50"]);
+  const [layoutMsg, setLayoutMsg] = useState("");
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
   const [, setDrawings] = useState<Drawing[]>([]);
   const [drawnLines, setDrawnLines] = useState<ChartDrawing[]>([]);
@@ -342,6 +343,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   // Load saved layout + plan + alerts
   useEffect(() => {
     getChartLayout(symbol).then(layout => {
+      if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") setTimeframe(layout.timeframe);
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
@@ -509,6 +511,18 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         hidden: Boolean(item.hidden),
       })),
     });
+    setLayoutMsg("Saved for this symbol");
+    setTimeout(() => setLayoutMsg(""), 2500);
+  }
+
+  async function handleSaveDefaultLayout() {
+    await saveDefaultChartLayout({
+      timeframe,
+      indicators: activeIndicators,
+      drawing_tools: [],
+    });
+    setLayoutMsg("Default preset saved");
+    setTimeout(() => setLayoutMsg(""), 2500);
   }
 
   async function handleAddWatchlist() {
@@ -1416,6 +1430,16 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           >
             <Save size={11} /> Save
           </button>
+          <button
+            onClick={handleSaveDefaultLayout}
+            className="workspace-chip-button flex items-center gap-1.5"
+            title="Use this timeframe and indicator set for new charts"
+          >
+            <Save size={11} /> Preset
+          </button>
+          {layoutMsg && (
+            <span className="caption" style={{ color: "var(--gain)" }}>{layoutMsg}</span>
+          )}
         </div>
       </div>
 

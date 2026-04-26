@@ -6,19 +6,63 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.middleware.auth import get_current_user_id
+from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
 
 
+def _index_quotes() -> tuple[list[dict], str, bool]:
+    provider = get_market_data_provider()
+    indexes = [
+        ("NIFTY", "NIFTY 50", MarketIdentity(market="NSE", currency="INR")),
+        ("BANKNIFTY", "BANK NIFTY", MarketIdentity(market="NSE", currency="INR")),
+        ("VIX", "India VIX", MarketIdentity(market="NSE", currency="INR")),
+    ]
+    quotes: list[dict] = []
+    live = True
+    for symbol, label, identity in indexes:
+        try:
+            q = provider.live_quote(symbol, identity)
+            quotes.append({
+                "symbol": symbol,
+                "label": label,
+                "close": q.get("close"),
+                "pct_change": q.get("pct_change"),
+                "prev_close": q.get("prev_close"),
+                "source": q.get("source") or provider.name,
+            })
+        except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
+            live = False
+            quotes.append({
+                "symbol": symbol,
+                "label": label,
+                "close": None,
+                "pct_change": None,
+                "prev_close": None,
+                "source": provider.name,
+                "error": str(exc),
+            })
+    return quotes, provider.name, live
+
+
 @router.get("/overview")
 async def market_overview(user_id: str = Depends(get_current_user_id)):
     sb = get_admin_client()
+    indices, quote_source, indices_live = _index_quotes()
 
     latest_date = get_latest_complete_trade_date(sb)
     if not latest_date:
-        return {"trade_date": None, "advances": 0, "declines": 0}
+        return {
+            "trade_date": None,
+            "advances": 0,
+            "declines": 0,
+            "indices": indices,
+            "top_sectors": [],
+            "market_data_source": quote_source,
+            "is_live": indices_live,
+        }
 
     # Fetch all NSE EQ rows for latest date
     rows = (
@@ -181,7 +225,11 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "market_phase": phase,
         "market_phase_desc": phase_desc,
         "sector_breadth": sector_breadth[:12],
+        "top_sectors": sector_breadth[:5],
         "top_gainers": [_mover(r) for r in top_gainers],
         "top_losers":  [_mover(r) for r in top_losers],
         "most_active": [_mover(r) for r in most_active],
+        "indices": indices,
+        "market_data_source": quote_source,
+        "is_live": indices_live,
     }

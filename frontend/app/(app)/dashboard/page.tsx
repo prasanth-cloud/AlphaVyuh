@@ -118,12 +118,37 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
           <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
           <div className="caption">One glance summary before scanning, charting, or placing alerts.</div>
         </div>
-        <DataProvenanceBadge
-          kind={dataHealth?.status === 'degraded' ? 'fallback' : 'eod'}
-          asOf={data.trade_date}
-          compact
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {data.market_data_source && (
+            <span className="caption">{data.is_live ? 'Index live' : 'Index fallback'} · {data.market_data_source}</span>
+          )}
+          <DataProvenanceBadge
+            kind={dataHealth?.status === 'degraded' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
+            asOf={data.trade_date}
+            compact
+          />
+        </div>
       </div>
+      {!!data.indices?.length && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>
+          {data.indices.map((idx) => {
+            const tone = (idx.pct_change ?? 0) >= 0 ? 'var(--gain)' : 'var(--loss)';
+            return (
+              <div key={idx.symbol} style={{ minWidth: 0, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.018)' }}>
+                <div className="label" style={{ marginBottom: 4 }}>{idx.label}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                  <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                    {idx.close != null ? idx.close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : 'Pending'}
+                  </span>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: idx.pct_change == null ? 'var(--text-tertiary)' : tone }}>
+                    {idx.pct_change != null ? `${idx.pct_change >= 0 ? '+' : ''}${idx.pct_change.toFixed(2)}%` : '-'}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
         {cards.map((card) => (
           <div

@@ -642,8 +642,16 @@ export async function getChartLayout(symbol: string): Promise<ChartLayout> {
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${symbol}/layout`, { headers });
-    if (!res.ok) return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
-    return res.json();
+    if (res.ok) {
+      const layout: ChartLayout = await res.json();
+      if (layout.indicators?.length || layout.drawing_tools?.length || layout.timeframe !== "D") return layout;
+    }
+    const defaultRes = await fetch(`${API}/api/v1/charts/__DEFAULT__/layout`, { headers });
+    if (defaultRes.ok) {
+      const fallback: ChartLayout = await defaultRes.json();
+      return { ...fallback, symbol, drawing_tools: [] };
+    }
+    return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
   } catch {
     return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
   }
@@ -658,6 +666,10 @@ export async function saveChartLayout(symbol: string, layout: Omit<ChartLayout, 
   });
   if (!res.ok) throw new Error("Save layout failed");
   return res.json();
+}
+
+export async function saveDefaultChartLayout(layout: Omit<ChartLayout, "symbol">): Promise<ChartLayout> {
+  return saveChartLayout("__DEFAULT__", { ...layout, drawing_tools: [] });
 }
 
 // ── Journal ───────────────────────────────────────────────────────────────────
@@ -846,6 +858,24 @@ export type PlanStatus = {
   active: boolean;
 };
 
+export type PaymentConfig = {
+  gateway: "razorpay";
+  configured: boolean;
+  mode: "live" | "test" | "disabled";
+  key_prefix: string;
+  founder_plan_available: boolean;
+};
+
+export async function getPaymentConfig(): Promise<PaymentConfig> {
+  try {
+    const res = await fetch(`${API}/api/v1/payments/config`, { headers: publicHeaders });
+    if (!res.ok) throw new Error("Payment config unavailable");
+    return res.json();
+  } catch {
+    return { gateway: "razorpay", configured: false, mode: "disabled", key_prefix: "", founder_plan_available: false };
+  }
+}
+
 export async function getPlanStatus(): Promise<PlanStatus> {
   if (shouldUseMockFallback()) return { plan: "free", expires_at: null, active: false };
   try {
@@ -895,6 +925,20 @@ export async function verifyPayment(data: {
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error("Payment verification failed");
+  return res.json();
+}
+
+export async function applyFounderPlan(code: string): Promise<{ status: string; plan: string; expires_at: string; billing: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/payments/founder/apply`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: "Founder code failed" }));
+    throw new Error(body.detail ?? "Founder code failed");
+  }
   return res.json();
 }
 
@@ -1528,6 +1572,10 @@ export interface MarketOverview {
   above_ema200_pct: number;
   market_phase: string;
   market_phase_desc: string;
+  indices?: { symbol: string; label: string; close: number | null; pct_change: number | null; prev_close: number | null; source: string; error?: string }[];
+  top_sectors?: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
+  market_data_source?: string;
+  is_live?: boolean;
   sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
   top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
@@ -1574,6 +1622,34 @@ export async function getMarketOverview(): Promise<MarketOverview> {
     top_losers: [],
     most_active: [],
   };
+}
+
+export type WaitlistLead = {
+  id: string;
+  email: string;
+  source: string;
+  invite_code: string | null;
+  status: string;
+  created_at: string;
+};
+
+export async function getAdminWaitlist(): Promise<WaitlistLead[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/waitlist/admin`, { headers });
+  if (!res.ok) throw new Error("Admin waitlist unavailable");
+  const data = await res.json();
+  return data.waitlist ?? [];
+}
+
+export async function createInviteCode(payload: { email?: string; max_uses?: number; plan?: string }): Promise<{ code: string; email?: string | null; max_uses: number; uses: number; plan: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/invite-codes`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Could not create invite code");
+  return res.json();
 }
 
 // ── Scanner presets ───────────────────────────────────────────────────────────

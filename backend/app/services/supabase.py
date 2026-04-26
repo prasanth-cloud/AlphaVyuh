@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+    founder_plan_codes: str = "FOUNDER100"
+    admin_emails: str = ""
     anthropic_api_key: str = ""
     telegram_bot_token: str = ""    # set via Railway: TELEGRAM_BOT_TOKEN
 

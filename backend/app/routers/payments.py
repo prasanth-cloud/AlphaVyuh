@@ -35,12 +35,23 @@ PLAN_PRICES = {
 
 SUPPORTED_CURRENCIES = {"INR", "USD"}
 SUPPORTED_BILLINGS   = {"monthly", "annual"}
+FOUNDER_PLAN_DAYS = 90
 
 
 def _rzp_client():
+    if not settings.razorpay_key_id or not settings.razorpay_key_secret:
+        raise HTTPException(503, "Payment gateway is not configured")
     return razorpay.Client(
         auth=(settings.razorpay_key_id, settings.razorpay_key_secret)
     )
+
+
+def _enabled_founder_codes() -> set[str]:
+    return {
+        code.strip().upper()
+        for code in (settings.founder_plan_codes or "").split(",")
+        if code.strip()
+    }
 
 
 # ── Create Order ──────────────────────────────────────────────────────────────
@@ -49,6 +60,19 @@ class CreateOrderRequest(BaseModel):
     plan: str           # "pro" or "elite"
     currency: str = "INR"  # "INR" or "USD"
     billing: str = "monthly"  # "monthly" or "annual"
+
+
+@router.get("/config")
+async def payment_config():
+    """Public payment readiness flags used by the frontend before opening checkout."""
+    key = settings.razorpay_key_id or ""
+    return {
+        "gateway": "razorpay",
+        "configured": bool(settings.razorpay_key_id and settings.razorpay_key_secret),
+        "mode": "live" if key.startswith("rzp_live_") else "test" if key.startswith("rzp_test_") else "disabled",
+        "key_prefix": key[:12] if key else "",
+        "founder_plan_available": bool(_enabled_founder_codes()),
+    }
 
 
 @router.post("/create-order")
@@ -125,11 +149,52 @@ class VerifyRequest(BaseModel):
     billing: str = "monthly"
 
 
+class FounderApplyRequest(BaseModel):
+    code: str
+
+
+@router.post("/founder/apply")
+async def apply_founder_plan(
+    body: FounderApplyRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    code = (body.code or "").strip().upper()
+    if not code or code not in _enabled_founder_codes():
+        raise HTTPException(404, "Invalid founder code")
+
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=FOUNDER_PLAN_DAYS)).isoformat()
+    sb = get_admin_client()
+    sb.table("users").update({
+        "plan": "pro",
+        "plan_expires_at": expires_at,
+        "billing_period": "monthly",
+    }).eq("id", user_id).execute()
+
+    try:
+        sb.table("payment_logs").insert({
+            "user_id": user_id,
+            "razorpay_order_id": f"founder-{code}",
+            "razorpay_payment_id": f"founder-{user_id[:8]}",
+            "plan": "pro",
+            "amount": 0,
+            "currency": "INR",
+            "status": "founder",
+        }).execute()
+    except Exception:
+        logger.info("Founder plan applied without payment_logs row: user=%s", user_id)
+
+    logger.info("Founder plan applied: user=%s code=%s", user_id, code)
+    return {"status": "success", "plan": "pro", "expires_at": expires_at, "billing": "founder"}
+
+
 @router.post("/verify")
 async def verify_payment(
     body: VerifyRequest,
     user_id: str = Depends(get_current_user_id),
 ):
+    if not settings.razorpay_key_secret:
+        raise HTTPException(503, "Payment gateway is not configured")
+
     # Verify HMAC-SHA256 signature
     expected = hmac.new(
         settings.razorpay_key_secret.encode(),

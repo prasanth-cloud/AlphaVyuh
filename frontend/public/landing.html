@@ -1158,6 +1158,8 @@ if(betaForm){
       });
       if(res.ok){
         betaEmail.value='';
+        window.va?.('founder_waitlist_joined',{source:'landing-founder-beta'});
+        window.gtag?.('event','founder_waitlist_joined',{source:'landing-founder-beta'});
         setBetaMsg('You are on the founder list. We will reach out with onboarding details.','ok');
       } else if(res.status===409){
         setBetaMsg('This email is already on the launch list.','ok');

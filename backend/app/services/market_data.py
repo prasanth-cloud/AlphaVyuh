@@ -32,6 +32,20 @@ class MarketDataProvider(Protocol):
 
 
 def yf_ticker_symbol(symbol: str, market: str) -> str:
+    index_map = {
+        "NIFTY": "^NSEI",
+        "NIFTY50": "^NSEI",
+        "NIFTY_50": "^NSEI",
+        "BANKNIFTY": "^NSEBANK",
+        "NIFTYBANK": "^NSEBANK",
+        "NIFTY_BANK": "^NSEBANK",
+        "VIX": "^INDIAVIX",
+        "INDIAVIX": "^INDIAVIX",
+        "INDIA_VIX": "^INDIAVIX",
+    }
+    sym = symbol.upper().replace(" ", "_").replace("-", "_")
+    if sym in index_map:
+        return index_map[sym]
     return symbol if market in ("NASDAQ", "NYSE") else f"{symbol}.NS"
 
 

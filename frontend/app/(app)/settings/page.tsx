@@ -6,9 +6,11 @@ import { Check, Zap, Sparkles, Crown, Copy, Gift } from "lucide-react";
 import {
   getMe, updateMe, getZerodhaLoginUrl,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
-  type UserProfile, type PlanStatus,
+  getPaymentConfig, applyFounderPlan,
+  type UserProfile, type PlanStatus, type PaymentConfig,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
+import { trackEvent } from "@/lib/analytics";
 
 // ── Razorpay ─────────────────────────────────────────────────────────────────
 
@@ -233,9 +235,12 @@ function SettingsContent() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingLoaded, setBillingLoaded] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [billingCurrency, setBillingCurrency] = useState<Currency>("INR");
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const [referralCode, setReferralCode] = useState<string>("");
+  const [founderCode, setFounderCode] = useState("FOUNDER100");
+  const [applyingFounder, setApplyingFounder] = useState(false);
 
   useEffect(() => {
     const c = profile?.billing_currency;
@@ -265,13 +270,15 @@ function SettingsContent() {
 
   const loadBilling = useCallback(async () => {
     const supabase = createClient();
-    const [{ data: { user } }, planData] = await Promise.all([
+    const [{ data: { user } }, planData, paymentData] = await Promise.all([
       supabase.auth.getUser(),
       getPlanStatus(),
+      getPaymentConfig(),
     ]);
     setUserEmail(user?.email ?? "");
     setUserName(user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "");
     setPlanStatus(planData);
+    setPaymentConfig(paymentData);
     setBillingLoading(false);
     setBillingLoaded(true);
   }, []);
@@ -283,6 +290,7 @@ function SettingsContent() {
   }, [tab, billingLoaded, loadBilling]);
 
   const handleUpgrade = async (planId: "pro" | "elite") => {
+    if (paymentConfig && !paymentConfig.configured) { showToast("Payment gateway is not configured yet", false); return; }
     if (!RAZORPAY_KEY) { showToast("Payments not configured yet — coming soon!", false); return; }
     setPaying(planId);
     try {
@@ -310,6 +318,7 @@ function SettingsContent() {
                 billing: billingPeriod,
               });
               showToast(`${planId === "pro" ? "Pro" : "Elite"} plan activated!`, true);
+              trackEvent("payment_verified", { plan: planId, currency: billingCurrency, billing: billingPeriod });
               await loadBilling();
               resolve();
             } catch { reject(new Error("Verification failed")); }
@@ -325,6 +334,23 @@ function SettingsContent() {
       setPaying(null);
     }
   };
+
+  async function handleApplyFounder() {
+    const code = founderCode.trim();
+    if (!code) { showToast("Enter a founder code", false); return; }
+    setApplyingFounder(true);
+    try {
+      const result = await applyFounderPlan(code);
+      showToast("Founder plan activated", true);
+      trackEvent("founder_plan_applied", { code });
+      setPlanStatus({ plan: result.plan, expires_at: result.expires_at, active: true });
+      await loadBilling();
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Founder code failed", false);
+    } finally {
+      setApplyingFounder(false);
+    }
+  }
 
   const currentPlan = planStatus?.plan ?? "free";
   const expiresAt = planStatus?.expires_at
@@ -637,22 +663,49 @@ function SettingsContent() {
                       First 100 serious traders can request founder pricing and onboarding help.
                     </div>
                     <p className="text-[12px] leading-relaxed" style={{ color: "var(--app-text3)" }}>
-                      Use this during private onboarding. Checkout prices stay standard until founder access is approved.
+                      Apply an approved invite code here. Checkout prices stay standard for everyone else.
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText("FOUNDER100");
-                    showToast("Founder code copied!", true);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[13px] font-semibold"
-                  style={{ background: "rgba(244,247,251,0.08)", border: "1px solid rgba(244,247,251,0.14)", color: "var(--app-text1)" }}
-                >
-                  <Copy size={14} />
-                  FOUNDER100
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    value={founderCode}
+                    onChange={(event) => setFounderCode(event.target.value.toUpperCase())}
+                    className="rounded-[8px] px-3 py-2.5 text-[13px] font-mono outline-none"
+                    style={{ background: "rgba(244,247,251,0.06)", border: "1px solid rgba(244,247,251,0.14)", color: "var(--app-text1)", width: 140 }}
+                  />
+                  <button
+                    onClick={handleApplyFounder}
+                    disabled={applyingFounder}
+                    className="inline-flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60"
+                    style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
+                  >
+                    <Gift size={14} />
+                    {applyingFounder ? "Applying..." : "Apply"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(founderCode);
+                      showToast("Founder code copied!", true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-[8px] px-3 py-2.5 text-[13px] font-semibold"
+                    style={{ background: "rgba(244,247,251,0.08)", border: "1px solid rgba(244,247,251,0.14)", color: "var(--app-text1)" }}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
               </div>
+
+              {paymentConfig && (
+                <div className="mb-5 rounded-[12px] px-4 py-3 text-[12px] flex items-center justify-between gap-3 flex-wrap"
+                  style={{ background: paymentConfig.configured ? "rgba(38,166,91,0.08)" : "rgba(229,56,59,0.08)", border: "1px solid var(--app-border)", color: "var(--app-text2)" }}>
+                  <span>
+                    Razorpay mode: <strong style={{ color: "var(--app-text1)" }}>{paymentConfig.mode.toUpperCase()}</strong>
+                    {paymentConfig.key_prefix ? ` · ${paymentConfig.key_prefix}...` : ""}
+                  </span>
+                  <span>{paymentConfig.configured ? "Checkout can open." : "Live payments are disabled until keys are configured."}</span>
+                </div>
+              )}
 
               {/* Currency + period toggles */}
               <div className="flex flex-wrap items-center gap-3 mb-5">

@@ -21,6 +21,8 @@ test.describe("Release readiness — public and auth boundary", () => {
     expect(response.headers()["x-content-type-options"]).toBe("nosniff");
     expect(response.headers()["referrer-policy"]).toBe("strict-origin-when-cross-origin");
     expect(response.headers()["permissions-policy"]).toContain("camera=()");
+    expect(response.headers()["strict-transport-security"]).toContain("max-age=");
+    expect(response.headers()["cross-origin-opener-policy"]).toBe("same-origin");
   });
 
   test("protected app routes redirect logged-out users to login with next path", async ({ page }) => {
