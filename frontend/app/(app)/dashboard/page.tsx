@@ -73,6 +73,83 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
   )
 }
 
+function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHealth: DataHealth | null }) {
+  const phase = data.market_phase;
+  const phaseColor = phase === 'Bullish' ? 'var(--gain)'
+                   : phase === 'Bearish' ? 'var(--loss)'
+                   : 'var(--warn)';
+  const leadingSector = data.sector_breadth?.[0] ?? null;
+  const breadthTone = data.advances >= data.declines ? 'var(--gain)' : 'var(--loss)';
+  const trendTone = data.above_ema200_pct >= 60 ? 'var(--gain)'
+                  : data.above_ema200_pct <= 40 ? 'var(--loss)'
+                  : 'var(--warn)';
+
+  const cards = [
+    {
+      label: 'Regime',
+      value: phase,
+      detail: data.market_phase_desc,
+      color: phaseColor,
+    },
+    {
+      label: 'Breadth',
+      value: `${data.advances.toLocaleString()} / ${data.declines.toLocaleString()}`,
+      detail: `A/D ${data.advance_decline_ratio?.toFixed(2) ?? '-'}`,
+      color: breadthTone,
+    },
+    {
+      label: 'Trend',
+      value: `${data.above_ema200_pct ?? 0}%`,
+      detail: 'Stocks above EMA 200',
+      color: trendTone,
+    },
+    {
+      label: 'Leadership',
+      value: leadingSector?.sector ?? 'Pending',
+      detail: leadingSector ? `${leadingSector.breadth_pct.toFixed(0)}% breadth · ${leadingSector.avg_pct_change >= 0 ? '+' : ''}${leadingSector.avg_pct_change}% avg` : 'Sector breadth loads after market close',
+      color: leadingSector ? (leadingSector.avg_pct_change >= 0 ? 'var(--gain)' : 'var(--loss)') : 'var(--text-tertiary)',
+    },
+  ];
+
+  return (
+    <Card padding="md" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
+          <div className="caption">One glance summary before scanning, charting, or placing alerts.</div>
+        </div>
+        <DataProvenanceBadge
+          kind={dataHealth?.status === 'degraded' ? 'fallback' : 'eod'}
+          asOf={data.trade_date}
+          compact
+        />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+        {cards.map((card) => (
+          <div
+            key={card.label}
+            style={{
+              minWidth: 0,
+              padding: '12px 14px',
+              borderRadius: 12,
+              border: '1px solid var(--border-subtle)',
+              background: 'rgba(255,255,255,0.025)',
+            }}
+          >
+            <div className="label" style={{ marginBottom: 6 }}>{card.label}</div>
+            <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: card.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {card.value}
+            </div>
+            <div className="caption" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {card.detail}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
 function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; breadth_pct: number; avg_pct_change: number }) {
   const color = breadth_pct > 60 ? 'var(--gain)' : breadth_pct > 40 ? 'var(--warn)' : 'var(--loss)'
   return (
@@ -609,6 +686,8 @@ export default function DashboardPage() {
 
       {!loading && data && (
         <div>
+          <MarketPulsePanel data={data} dataHealth={dataHealth} />
+
           {/* Phase card */}
           <PhaseCard data={data} dataHealth={dataHealth} />
 
