@@ -302,6 +302,29 @@ h1{font-size:clamp(2.6rem,4.5vw,4rem);font-weight:900;line-height:1.08;letter-sp
 .pfc-on{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(244,247,251,.2)}
 .pfc-off{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
 
+/* ── FOUNDER BETA ── */
+#founder-beta{padding:86px 0;background:var(--bg);border-top:1px solid var(--border)}
+.beta-panel{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:center;background:linear-gradient(145deg,#101822,#080d12);border:1px solid rgba(244,247,251,.13);border-radius:18px;padding:34px;box-shadow:0 24px 70px rgba(0,0,0,.34)}
+.beta-kicker{display:inline-flex;align-items:center;gap:8px;padding:5px 12px;border-radius:999px;background:rgba(244,247,251,.08);border:1px solid rgba(244,247,251,.14);color:var(--accent);font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px}
+.beta-title{font-size:clamp(1.65rem,3vw,2.45rem);font-weight:900;letter-spacing:-.035em;line-height:1.08;margin-bottom:12px}
+.beta-copy{font-size:.94rem;line-height:1.75;color:var(--text2);max-width:620px}
+.beta-points{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:24px}
+.beta-point{border:1px solid var(--border);border-radius:12px;padding:13px;background:rgba(255,255,255,.025)}
+.beta-point strong{display:block;font-size:.82rem;margin-bottom:4px;color:var(--text)}
+.beta-point span{font-size:.75rem;color:var(--text2);line-height:1.45}
+.beta-form-card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.09);border-radius:14px;padding:22px}
+.beta-form-card h3{font-size:1rem;margin-bottom:8px}
+.beta-form-card p{font-size:.82rem;color:var(--text2);line-height:1.55;margin-bottom:18px}
+.beta-form{display:flex;flex-direction:column;gap:10px}
+.beta-input{width:100%;background:#050a08;border:1px solid rgba(244,247,251,.14);border-radius:9px;color:var(--text);padding:13px 14px;font:inherit;font-size:.9rem;outline:none;transition:border-color .2s,box-shadow .2s}
+.beta-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(244,247,251,.08)}
+.beta-submit{border:0;border-radius:9px;background:var(--accent);color:#050a08;font-size:.9rem;font-weight:800;padding:13px 16px;cursor:pointer;transition:opacity .2s,transform .2s}
+.beta-submit:hover{transform:translateY(-1px)}
+.beta-submit:disabled{opacity:.62;cursor:not-allowed;transform:none}
+.beta-msg{min-height:18px;font-size:.78rem;color:var(--text2);line-height:1.45}
+.beta-msg.ok{color:var(--green)}
+.beta-msg.err{color:#f87171}
+
 /* ── FAQ ── */
 #faq{padding:100px 0}
 .faq-list{max-width:720px;margin:56px auto 0;display:flex;flex-direction:column;gap:0}
@@ -359,6 +382,8 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   .tab-panel.active{grid-template-columns:1fr}
   .tab-panel-text{order:1}.tab-visual{order:2;display:none}
   .pricing-grid{grid-template-columns:1fr}
+  .beta-panel{grid-template-columns:1fr}
+  .beta-points{grid-template-columns:1fr}
   .testi-grid{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr 1fr}
   .steps-grid{grid-template-columns:1fr 1fr;gap:32px}
@@ -374,6 +399,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   h1{font-size:2.2rem}
   .steps-grid{grid-template-columns:1fr}
   .pricing-grid{grid-template-columns:1fr}
+  .beta-panel{padding:24px}
   .testi-grid{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr}
   .pulse-wrap{grid-template-columns:1fr}
@@ -938,6 +964,44 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   </div>
 </section>
 
+<!-- ── FOUNDER BETA ── -->
+<section id="founder-beta">
+  <div class="section-wrap">
+    <div class="beta-panel fade-up">
+      <div>
+        <div class="beta-kicker">Founder access</div>
+        <h2 class="beta-title">Give serious traders a private launch path.</h2>
+        <p class="beta-copy">
+          We are opening AlphaVyuh first to a small founder group so onboarding, broker setup, watchlists, and scanner workflows are configured properly before wider release.
+        </p>
+        <div class="beta-points">
+          <div class="beta-point">
+            <strong>Setup call</strong>
+            <span>Broker, watchlist, scanner presets, and chart defaults.</span>
+          </div>
+          <div class="beta-point">
+            <strong>Founder pricing</strong>
+            <span>Early-user pricing for the first customer cohort.</span>
+          </div>
+          <div class="beta-point">
+            <strong>Fast feedback</strong>
+            <span>Report issues directly before the public rollout.</span>
+          </div>
+        </div>
+      </div>
+      <div class="beta-form-card">
+        <h3>Request founder access</h3>
+        <p>Join the launch list. We will contact qualified traders before paid market data and broker go-live.</p>
+        <form class="beta-form" id="betaForm">
+          <input class="beta-input" id="betaEmail" type="email" autocomplete="email" placeholder="trader@example.com" required>
+          <button class="beta-submit" id="betaSubmit" type="submit">Join founder list</button>
+          <div class="beta-msg" id="betaMsg" role="status"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ── FAQ ── -->
 <section id="faq">
   <div class="section-wrap" style="text-align:center">
@@ -1064,6 +1128,50 @@ document.querySelectorAll('a,button,.tab-btn,.faq-q,.tilt,.price-card').forEach(
   el.addEventListener('mouseenter',()=>{cursor.classList.add('hover');ring.classList.add('hover')});
   el.addEventListener('mouseleave',()=>{cursor.classList.remove('hover');ring.classList.remove('hover')});
 });
+
+// ── Founder beta waitlist ──
+const betaForm=document.getElementById('betaForm');
+const betaEmail=document.getElementById('betaEmail');
+const betaSubmit=document.getElementById('betaSubmit');
+const betaMsg=document.getElementById('betaMsg');
+const waitlistApi=location.hostname==='localhost' || location.hostname==='127.0.0.1'
+  ? 'http://127.0.0.1:8000/api/v1/waitlist'
+  : 'https://alphavyuh-production.up.railway.app/api/v1/waitlist';
+function setBetaMsg(text,type){
+  if(!betaMsg) return;
+  betaMsg.textContent=text;
+  betaMsg.className='beta-msg'+(type?' '+type:'');
+}
+if(betaForm){
+  betaForm.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const email=(betaEmail.value||'').trim();
+    if(!email) return;
+    betaSubmit.disabled=true;
+    betaSubmit.textContent='Joining...';
+    setBetaMsg('Saving your founder access request...','');
+    try{
+      const res=await fetch(waitlistApi,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email,source:'landing-founder-beta'})
+      });
+      if(res.ok){
+        betaEmail.value='';
+        setBetaMsg('You are on the founder list. We will reach out with onboarding details.','ok');
+      } else if(res.status===409){
+        setBetaMsg('This email is already on the launch list.','ok');
+      } else {
+        setBetaMsg('Could not save this request. Please try again in a moment.','err');
+      }
+    } catch(_err){
+      setBetaMsg('Network issue while saving. Please try again.','err');
+    } finally {
+      betaSubmit.disabled=false;
+      betaSubmit.textContent='Join founder list';
+    }
+  });
+}
 
 // ── Nav scroll ──
 const nav=document.getElementById('nav');

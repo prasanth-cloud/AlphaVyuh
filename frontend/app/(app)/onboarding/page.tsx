@@ -53,7 +53,7 @@ export default function OnboardingPage() {
     );
   }
 
-  async function finish() {
+  async function finish(destination = "/dashboard") {
     setLoading(true);
     setError("");
     try {
@@ -70,7 +70,7 @@ export default function OnboardingPage() {
       }
 
       await updateMe(updates as Parameters<typeof updateMe>[0]);
-      window.location.replace("/dashboard");
+      window.location.replace(destination);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setLoading(false);
@@ -246,17 +246,23 @@ export default function OnboardingPage() {
               </p>
             </div>
 
-            <div className="space-y-2 mb-5 text-[13px]" style={{ color: "var(--text-secondary)" }}>
+            <div className="grid gap-3 mb-5 sm:grid-cols-3">
               {[
-                "Scan stocks with 35+ filters on the Scanner page",
-                "Add them to a Watchlist to track closely",
-                "Open a Chart, analyse, then click BUY or SELL",
-                "Every order auto-records in your Journal — AI reviews your mistakes",
-              ].map((text, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span className="font-bold mt-0.5" style={{ color: "var(--accent)" }}>{i + 1}.</span>
-                  <span>{text}</span>
-                </div>
+                { title: "Run a scan", text: "Find breakouts and high relative-strength stocks.", href: "/scanner" },
+                { title: "Build watchlist", text: "Track chart setups with the new chart-type selector.", href: "/watchlist" },
+                { title: "Open dashboard", text: "Review market pulse, breadth, and account status.", href: "/dashboard" },
+              ].map((item) => (
+                <button
+                  key={item.href}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => finish(item.href)}
+                  className="text-left rounded-[12px] p-4 transition-opacity disabled:opacity-60"
+                  style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
+                >
+                  <div className="text-[13px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>{item.title}</div>
+                  <div className="text-[12px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>{item.text}</div>
+                </button>
               ))}
             </div>
 
@@ -271,7 +277,7 @@ export default function OnboardingPage() {
               className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
               style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
               disabled={loading}
-              onClick={finish}>
+              onClick={() => finish("/dashboard")}>
               {loading ? "Setting up…" : "Go to Dashboard →"}
             </button>
           </div>

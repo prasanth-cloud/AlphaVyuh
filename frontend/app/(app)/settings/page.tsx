@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Check, Zap, Sparkles, Crown } from "lucide-react";
+import { Check, Zap, Sparkles, Crown, Copy, Gift } from "lucide-react";
 import {
   getMe, updateMe, getZerodhaLoginUrl,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
@@ -621,6 +621,37 @@ function SettingsContent() {
                   </div>
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>{userEmail}</div>
+              </div>
+
+              <div className="p-5 mb-6 flex items-start justify-between gap-4 flex-wrap" style={cardStyle}>
+                <div className="flex items-start gap-3 max-w-[640px]">
+                  <div className="w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0"
+                    style={{ background: "var(--accent-subtle)", border: "1px solid rgba(244,247,251,0.16)" }}>
+                    <Gift size={18} style={{ color: "var(--accent)" }} />
+                  </div>
+                  <div>
+                    <div className="text-[13px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: "var(--accent)" }}>
+                      Founder beta
+                    </div>
+                    <div className="text-[14px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>
+                      First 100 serious traders can request founder pricing and onboarding help.
+                    </div>
+                    <p className="text-[12px] leading-relaxed" style={{ color: "var(--app-text3)" }}>
+                      Use this during private onboarding. Checkout prices stay standard until founder access is approved.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText("FOUNDER100");
+                    showToast("Founder code copied!", true);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[13px] font-semibold"
+                  style={{ background: "rgba(244,247,251,0.08)", border: "1px solid rgba(244,247,251,0.14)", color: "var(--app-text1)" }}
+                >
+                  <Copy size={14} />
+                  FOUNDER100
+                </button>
               </div>
 
               {/* Currency + period toggles */}
