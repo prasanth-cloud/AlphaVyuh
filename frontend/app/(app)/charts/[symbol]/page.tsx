@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Minus, MoveRight, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Trash2, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, OrderResult, PortfolioPosition, PriceAlert,
+  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
 } from "@/lib/api";
 import {
   getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
@@ -34,6 +34,13 @@ type ChartDrawing = {
   text?: string;
   locked?: boolean;
   hidden?: boolean;
+};
+
+type PlaybookItem = {
+  key: string;
+  label: string;
+  status: "ready" | "watch" | "missing";
+  detail: string;
 };
 
 // Dynamically import chart components (browser-only)
@@ -129,6 +136,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const searchParams = useSearchParams();
   const sourcePage = searchParams.get("from");
   const sourceWatchlist = searchParams.get("watchlist");
+  const sourceWatchlistId = searchParams.get("watchlistId");
+  const fullChartMode = searchParams.get("full") === "1";
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [liveMode, setLiveMode] = useState(true);
@@ -152,6 +161,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [alertNote, setAlertNote] = useState("");
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertMsg, setAlertMsg] = useState("");
+  const [quickAlertMsg, setQuickAlertMsg] = useState("");
 
   const [activeIndicators, setActiveIndicators] = useState<string[]>(["ema20", "ema50"]);
   const [layoutMsg, setLayoutMsg] = useState("");
@@ -181,6 +191,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [wlMsg, setWlMsg] = useState("");
   const [showWlPicker, setShowWlPicker] = useState(false);
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
+  const [sourceQueue, setSourceQueue] = useState<Watchlist | null>(null);
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
@@ -351,6 +362,19 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     getBrokerStatus().then(s => setBrokerConnected(s.connected)).catch(() => {});
     getPriceAlerts().then(alerts => setPriceAlerts(alerts.filter(a => a.symbol === symbol && a.is_active))).catch(() => {});
   }, [symbol]);
+
+  useEffect(() => {
+    if (sourcePage !== "watchlist" || (!sourceWatchlistId && !sourceWatchlist)) {
+      setSourceQueue(null);
+      return;
+    }
+    getWatchlists().then((lists) => {
+      const matched = sourceWatchlistId
+        ? lists.find((watchlist) => watchlist.id === sourceWatchlistId)
+        : lists.find((watchlist) => watchlist.name === sourceWatchlist);
+      setSourceQueue(matched ?? null);
+    }).catch(() => setSourceQueue(null));
+  }, [sourcePage, sourceWatchlist, sourceWatchlistId]);
 
   useEffect(() => {
     getJournalEntries({ limit: 100, symbol }).then((journal) => {
@@ -546,6 +570,31 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       setAlertMsg(e instanceof Error ? e.message : "Failed");
     }
     setAlertSaving(false);
+  }
+
+  async function handleQuickAlert(condition: "above" | "below", target: number | null | undefined, note: string) {
+    if (target == null || !Number.isFinite(target) || target <= 0) {
+      setQuickAlertMsg("Level unavailable");
+      setTimeout(() => setQuickAlertMsg(""), 2500);
+      return;
+    }
+    setAlertSaving(true);
+    setQuickAlertMsg("");
+    try {
+      const created = await createPriceAlert({
+        symbol,
+        condition,
+        target_price: Number(target.toFixed(2)),
+        note,
+      });
+      setPriceAlerts(prev => [created, ...prev]);
+      setQuickAlertMsg(`Alert set ${condition} ${fmtPrice(target, symbolCurrency)}`);
+    } catch (e: unknown) {
+      setQuickAlertMsg(e instanceof Error ? e.message : "Alert failed");
+    } finally {
+      setAlertSaving(false);
+      setTimeout(() => setQuickAlertMsg(""), 3000);
+    }
   }
 
   async function handleDeleteAlert(id: string) {
@@ -952,6 +1001,49 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
   const latest = data?.latest;
   const prevClose = latest?.prev_close;
+  const sourceQueueSymbols = (sourceQueue?.items ?? []).map((item) => item.symbol);
+  const sourceQueueIndex = sourceQueueSymbols.findIndex((item) => item === symbol);
+  const sourceQueueName = sourceQueue?.name ?? sourceWatchlist ?? null;
+  const sourceQueueCount = sourceQueueSymbols.length;
+  const buildQueueChartHref = useCallback((nextSymbol: string, full = fullChartMode) => {
+    const params = new URLSearchParams();
+    if (sourcePage) params.set("from", sourcePage);
+    if (sourceQueue?.id ?? sourceWatchlistId) params.set("watchlistId", sourceQueue?.id ?? sourceWatchlistId ?? "");
+    if (sourceQueueName) params.set("watchlist", sourceQueueName);
+    if (full) params.set("full", "1");
+    return `/charts/${nextSymbol}${params.toString() ? `?${params.toString()}` : ""}`;
+  }, [fullChartMode, sourcePage, sourceQueue?.id, sourceQueueName, sourceWatchlistId]);
+  const stepQueueSymbol = useCallback((direction: "prev" | "next") => {
+    if (!sourceQueueSymbols.length) return;
+    const currentIndex = sourceQueueIndex >= 0 ? sourceQueueIndex : 0;
+    const nextIndex = direction === "next"
+      ? (currentIndex + 1) % sourceQueueSymbols.length
+      : (currentIndex - 1 + sourceQueueSymbols.length) % sourceQueueSymbols.length;
+    const nextSymbol = sourceQueueSymbols[nextIndex];
+    if (nextSymbol && nextSymbol !== symbol) {
+      router.push(buildQueueChartHref(nextSymbol, fullChartMode));
+    }
+  }, [buildQueueChartHref, fullChartMode, router, sourceQueueIndex, sourceQueueSymbols, symbol]);
+
+  useEffect(() => {
+    if (!fullChartMode || sourceQueueSymbols.length <= 1) return;
+    function handleQueueKeys(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName ?? "";
+      const isTyping = tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT" || Boolean(target?.closest("[contenteditable='true']"));
+      if (isTyping) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        stepQueueSymbol("next");
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        stepQueueSymbol("prev");
+      }
+    }
+    window.addEventListener("keydown", handleQueueKeys);
+    return () => window.removeEventListener("keydown", handleQueueKeys);
+  }, [fullChartMode, sourceQueueSymbols.length, stepQueueSymbol]);
 
   useEffect(() => {
     if (!latest?.close) return;
@@ -1023,6 +1115,65 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const candleRangePct = displayBar && displayBar.open ? ((displayBar.high - displayBar.low) / displayBar.open) * 100 : null;
   const candleBodyPct = displayBar && displayBar.open ? ((displayBar.close - displayBar.open) / displayBar.open) * 100 : null;
   const latestVolumeRatio = latest?.volume_ratio ?? null;
+  const recentCandles = data?.candles?.slice(-40) ?? [];
+  const recentHigh = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : null;
+  const recentLow = recentCandles.length ? Math.min(...recentCandles.map((c) => c.low)) : null;
+  const ema20Latest = indicatorData.ema20?.at(-1)?.value ?? data?.candles?.at(-1)?.ema_20 ?? null;
+  const ema50Latest = indicatorData.ema50?.at(-1)?.value ?? data?.candles?.at(-1)?.ema_50 ?? null;
+  const rsiLatest = rsiData.at(-1)?.value ?? null;
+  const macdLatest = macdData.at(-1) ?? null;
+  const structureReady = latest?.close != null && ema20Latest != null && ema50Latest != null && latest.close >= ema20Latest && ema20Latest >= ema50Latest;
+  const nearSupport = latest?.close != null && recentLow != null && recentLow > 0
+    ? ((latest.close - recentLow) / recentLow) * 100
+    : null;
+  const nearResistance = latest?.close != null && recentHigh != null && recentHigh > 0
+    ? ((recentHigh - latest.close) / recentHigh) * 100
+    : null;
+  const stopReady = planEntryValue != null && planStopValue != null && !Number.isNaN(planEntryValue) && !Number.isNaN(planStopValue);
+  const targetReady = planEntryValue != null && planTargetValue != null && !Number.isNaN(planEntryValue) && !Number.isNaN(planTargetValue);
+  const setupLabel = (() => {
+    if (structureReady && latestVolumeRatio != null && latestVolumeRatio >= 1.4 && nearResistance != null && nearResistance <= 3) return "Breakout watch";
+    if (structureReady && nearSupport != null && nearSupport <= 4) return "Pullback watch";
+    if (!structureReady && rsiLatest != null && rsiLatest < 40) return "Reversal watch";
+    if (latestVolumeRatio != null && latestVolumeRatio >= 1.8) return "Volume expansion";
+    return "Needs confirmation";
+  })();
+  const playbookItems: PlaybookItem[] = [
+    {
+      key: "trend",
+      label: "Trend",
+      status: structureReady ? "ready" : latest?.close != null && ema20Latest != null ? "watch" : "missing",
+      detail: structureReady ? "Price above EMA stack" : ema20Latest != null ? "EMA stack not aligned" : "Add EMA 20/50",
+    },
+    {
+      key: "level",
+      label: "Level",
+      status: nearSupport != null && nearSupport <= 4 || nearResistance != null && nearResistance <= 4 ? "ready" : recentHigh && recentLow ? "watch" : "missing",
+      detail: recentHigh && recentLow
+        ? `S ${fmtPrice(recentLow, symbolCurrency)} · R ${fmtPrice(recentHigh, symbolCurrency)}`
+        : "Need more candles",
+    },
+    {
+      key: "volume",
+      label: "Volume",
+      status: latestVolumeRatio != null && latestVolumeRatio >= 1.4 ? "ready" : latestVolumeRatio != null ? "watch" : "missing",
+      detail: latestVolumeRatio != null ? `${latestVolumeRatio.toFixed(2)}x average` : "Volume ratio pending",
+    },
+    {
+      key: "momentum",
+      label: "Momentum",
+      status: (rsiLatest != null && rsiLatest >= 55) || (macdLatest?.histogram != null && macdLatest.histogram > 0) ? "ready" : rsiLatest != null ? "watch" : "missing",
+      detail: rsiLatest != null ? `RSI ${rsiLatest.toFixed(0)}${macdLatest?.histogram != null ? ` · MACD ${macdLatest.histogram >= 0 ? "+" : ""}${macdLatest.histogram.toFixed(2)}` : ""}` : "Enable RSI/MACD",
+    },
+    {
+      key: "risk",
+      label: "Risk",
+      status: stopReady && targetReady && planRiskReward != null && planRiskReward >= 2 ? "ready" : stopReady || targetReady ? "watch" : "missing",
+      detail: planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set entry, stop, target",
+    },
+  ];
+  const playbookReadyCount = playbookItems.filter((item) => item.status === "ready").length;
+  const playbookScore = Math.round((playbookReadyCount / playbookItems.length) * 100);
   const chartSnapshot = [
     { label: "Last price", value: latest?.close != null ? fmtPrice(latest.close, symbolCurrency) : "Pending", tone: "var(--text-primary)" },
     { label: "Session move", value: changePct != null ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%` : "Pending", tone: positive ? "var(--gain)" : "var(--loss)" },
@@ -1037,7 +1188,13 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="workspace-page" style={{ background: "transparent" }}>
+    <div
+      className="workspace-page"
+      style={fullChartMode
+        ? { background: "transparent", height: "100vh", minHeight: "100vh", gap: 0 }
+        : { background: "transparent" }}
+    >
+      {!fullChartMode && (
       <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
         <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
@@ -1068,8 +1225,14 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           ))}
         </div>
       </div>
+      )}
 
-      <div className="workspace-card" style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <div
+        className="workspace-card"
+        style={fullChartMode
+          ? { flex: 1, display: "flex", flexDirection: "column", height: "100vh", borderRadius: 0, borderLeft: 0, borderRight: 0, borderTop: 0, borderBottom: 0 }
+          : { flex: 1, display: "flex", flexDirection: "column" }}
+      >
 
       {/* Price alert modal */}
       {showAlertModal && (
@@ -1171,12 +1334,34 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
         <div className="workspace-toolbar-group">
           <SymbolSearch
             value={symbol}
-            onChange={sym => router.push(`/charts/${sym}`)}
+            onChange={sym => router.push(buildQueueChartHref(sym, fullChartMode))}
           />
           {data && (
             <span className="text-[12px] text-[#aaa] hidden sm:block truncate max-w-[200px]">
               {data.company_name}
             </span>
+          )}
+          {sourceQueueCount > 0 && (
+            <div className="hidden md:flex items-center gap-1.5 rounded-full px-2 py-1"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <button
+                onClick={() => stepQueueSymbol("prev")}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ color: "var(--app-text2)", background: "rgba(255,255,255,0.04)" }}
+              >
+                ↑
+              </button>
+              <span className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
+                {sourceQueueName ?? "Watchlist"} {sourceQueueIndex >= 0 ? sourceQueueIndex + 1 : "-"} / {sourceQueueCount}
+              </span>
+              <button
+                onClick={() => stepQueueSymbol("next")}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ color: "var(--app-text2)", background: "rgba(255,255,255,0.04)" }}
+              >
+                ↓
+              </button>
+            </div>
           )}
         </div>
 
@@ -1423,6 +1608,19 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             )}
           </button>
 
+          {fullChartMode ? (
+            <Link href={sourceQueue?.id ? `/watchlist?symbol=${symbol}` : "/watchlist"} className="workspace-chip-button">
+              Exit full
+            </Link>
+          ) : (
+            <button
+              onClick={() => router.push(buildQueueChartHref(symbol, true))}
+              className="workspace-chip-button"
+            >
+              Full chart
+            </button>
+          )}
+
           {/* Save layout */}
           <button
             onClick={handleSaveLayout}
@@ -1571,6 +1769,59 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--app-border)"; (e.currentTarget as HTMLElement).style.color = "var(--app-text2)"; }}>
                       <BookmarkPlus size={12} /> Add to watchlist
                     </button>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
+                <div className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Chart playbook</div>
+                      <div className="text-[13px] font-semibold mt-1" style={{ color: "var(--app-text1)" }}>{setupLabel}</div>
+                    </div>
+                    <div className="rounded-full px-2.5 py-1 text-[11px] font-bold tabular-nums"
+                      style={{ background: playbookScore >= 80 ? "rgba(38,166,91,0.14)" : playbookScore >= 50 ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.05)", color: playbookScore >= 80 ? "#4ade80" : playbookScore >= 50 ? "#fbbf24" : "var(--app-text2)" }}>
+                      {playbookScore}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {playbookItems.map((item) => (
+                      <div key={item.key} className="rounded-[10px] px-3 py-2"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-semibold" style={{ color: "var(--app-text1)" }}>{item.label}</span>
+                          <span className="text-[9px] uppercase tracking-[0.4px] font-bold"
+                            style={{ color: item.status === "ready" ? "#4ade80" : item.status === "watch" ? "#fbbf24" : "var(--app-text3)" }}>
+                            {item.status === "ready" ? "Ready" : item.status === "watch" ? "Watch" : "Missing"}
+                          </span>
+                        </div>
+                        <div className="text-[10px] leading-4 mt-1" style={{ color: "var(--app-text3)" }}>{item.detail}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <button
+                      onClick={() => void handleQuickAlert("above", recentHigh, `${symbol} breakout above recent resistance`)}
+                      disabled={alertSaving || recentHigh == null}
+                      className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
+                      style={{ background: "rgba(38,166,91,0.12)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }}
+                    >
+                      Alert breakout
+                    </button>
+                    <button
+                      onClick={() => void handleQuickAlert("below", recentLow, `${symbol} lost recent support`)}
+                      disabled={alertSaving || recentLow == null}
+                      className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
+                      style={{ background: "rgba(229,56,59,0.12)", color: "#f87171", border: "1px solid rgba(229,56,59,0.22)" }}
+                    >
+                      Alert support
+                    </button>
+                  </div>
+                  {quickAlertMsg && (
+                    <div className="text-[10px] mt-2" style={{ color: quickAlertMsg.includes("failed") || quickAlertMsg.includes("unavailable") ? "#f87171" : "#4ade80" }}>
+                      {quickAlertMsg}
+                    </div>
                   )}
                 </div>
               </div>

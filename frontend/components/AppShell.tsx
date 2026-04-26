@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import TraderReminderStrip from '@/components/TraderReminderStrip'
 
 const NAV_LINKS = [
@@ -15,11 +15,14 @@ type SymbolResult = { symbol: string; company_name: string; sector: string }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const fullChart = pathname.startsWith('/charts/') && searchParams.get('full') === '1'
 
   if (pathname.startsWith('/onboarding')) return <>{children}</>
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${fullChart ? ' app-shell-full-chart' : ''}`}>
+      {!fullChart && (
       <nav className="app-topbar">
         <div className="app-topbar-inner">
           <Link href="/dashboard" className="app-brand">
@@ -68,8 +71,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <TraderReminderStrip tone="app" />
       </nav>
+      )}
 
-      <main className="app-content">{children}</main>
+      <main className={fullChart ? 'app-content app-content-full-chart' : 'app-content'}>{children}</main>
     </div>
   )
 }

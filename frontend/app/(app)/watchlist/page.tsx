@@ -45,6 +45,7 @@ type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
+const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
 
 function getSetupSignal(item: WatchlistItem): SetupSignal {
   const move = item.pct_change ?? 0;
@@ -63,6 +64,17 @@ function setupToneColor(tone: SetupSignal["tone"]) {
   if (tone === "loss") return "var(--loss)";
   if (tone === "accent") return "var(--accent)";
   return "var(--text-secondary)";
+}
+
+function formatCompactVolume(value: number): string {
+  if (value >= 10_000_000) return `${(value / 10_000_000).toFixed(1)}Cr`;
+  if (value >= 100_000) return `${(value / 100_000).toFixed(1)}L`;
+  return value.toLocaleString("en-IN");
+}
+
+function formatNullablePrice(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ─── Sortable row ─────────────────────────────────────────────────────────────
@@ -258,6 +270,7 @@ function ChartPanel({
   const [tf, setTf] = useState("3M");
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
   const [showChartDetails, setShowChartDetails] = useState(false);
+  const [showOrderTicket, setShowOrderTicket] = useState(false);
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -279,6 +292,48 @@ function ChartPanel({
     if (!qtyN || !priceN) return null;
     return qtyN * priceN;
   })();
+  const chartStats = useMemo(() => {
+    if (candles.length < 2) return null;
+    const closes = candles.map((c) => c.close).filter((value) => Number.isFinite(value));
+    const highs = candles.map((c) => c.high).filter((value) => Number.isFinite(value));
+    const lows = candles.map((c) => c.low).filter((value) => Number.isFinite(value));
+    const volumes = candles.map((c) => c.volume).filter((value) => Number.isFinite(value));
+    if (!closes.length || !highs.length || !lows.length) return null;
+    const last = candles[candles.length - 1];
+    const first = candles[0];
+    const high = Math.max(...highs);
+    const low = Math.min(...lows);
+    const avgVolume = volumes.reduce((sum, value) => sum + value, 0) / Math.max(volumes.length, 1);
+    const change = first.close ? ((last.close - first.close) / first.close) * 100 : null;
+    const range = low ? ((high - low) / low) * 100 : null;
+    const volumeVsAvg = avgVolume ? last.volume / avgVolume : null;
+    const ema20 = last.ema_20 ?? null;
+    const ema50 = last.ema_50 ?? null;
+    const trend =
+      ema20 != null && ema50 != null
+        ? last.close >= ema20 && ema20 >= ema50
+          ? "Uptrend"
+          : last.close <= ema20 && ema20 <= ema50
+            ? "Downtrend"
+            : "Mixed"
+        : change != null && change > 0
+          ? "Positive"
+          : "Neutral";
+    const latestVolume = volumes[volumes.length - 1] ?? null;
+    return {
+      change,
+      range,
+      high,
+      low,
+      trend,
+      latestVolume,
+      volumeVsAvg,
+      support: low,
+      resistance: high,
+      sampleSize: closes.length,
+    };
+  }, [candles]);
+  const chartHeight = showOrderTicket ? 300 : showChartDetails ? 380 : 440;
 
   useEffect(() => {
     setChartLoading(true);
@@ -384,7 +439,13 @@ function ChartPanel({
             onClick={() => setShowChartDetails((current) => !current)}
             className={`workspace-chip-button${showChartDetails ? " active" : ""}`}
           >
-            Details
+            Analysis
+          </button>
+          <button
+            onClick={() => setShowOrderTicket((current) => !current)}
+            className={`workspace-chip-button${showOrderTicket ? " active" : ""}`}
+          >
+            Order
           </button>
           <label className="caption" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             Chart
@@ -411,15 +472,30 @@ function ChartPanel({
       </div>
 
       {/* Chart */}
+      {chartStats && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, padding: "10px 14px 2px", flexShrink: 0 }}>
+          {[
+            { label: "Structure", value: chartStats.trend, tone: chartStats.trend === "Uptrend" ? "var(--gain)" : chartStats.trend === "Downtrend" ? "var(--loss)" : "var(--text-secondary)" },
+            { label: `${tf} move`, value: chartStats.change != null ? `${chartStats.change >= 0 ? "+" : ""}${chartStats.change.toFixed(2)}%` : "-", tone: (chartStats.change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" },
+            { label: "Range", value: chartStats.range != null ? `${chartStats.range.toFixed(1)}%` : "-", tone: "var(--text-secondary)" },
+            { label: "Volume", value: chartStats.volumeVsAvg != null ? `${chartStats.volumeVsAvg.toFixed(2)}x avg` : "-", tone: (chartStats.volumeVsAvg ?? 0) >= 1.2 ? "var(--accent)" : "var(--text-secondary)" },
+          ].map((item) => (
+            <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: item.tone, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: "8px 14px 0" }}>
         {chartLoading ? (
           <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--surface-3)", borderTopColor: "var(--accent)", animation: "spin 1s linear infinite" }}>
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
           </div>
-        ) : chartError ? (
+        ) : chartError || candles.length === 0 ? (
           <span className="caption">No chart data</span>
         ) : (
-          <MiniChart candles={candles} height={320} dark chartType={chartType} />
+          <MiniChart candles={candles} height={chartHeight} dark chartType={chartType} />
         )}
       </div>
       {showChartDetails && (
@@ -430,6 +506,10 @@ function ChartPanel({
               { label: "High", value: latestBar ? latestBar.high.toFixed(2) : "-" },
               { label: "Low", value: latestBar ? latestBar.low.toFixed(2) : "-" },
               { label: "Close", value: latestBar ? latestBar.close.toFixed(2) : "-" },
+              { label: "Support", value: chartStats ? formatNullablePrice(chartStats.support) : "-" },
+              { label: "Resistance", value: chartStats ? formatNullablePrice(chartStats.resistance) : "-" },
+              { label: "Last volume", value: chartStats?.latestVolume != null ? formatCompactVolume(chartStats.latestVolume) : "-" },
+              { label: "Bars", value: chartStats ? String(chartStats.sampleSize) : "-" },
             ].map((item) => (
               <div key={item.label} style={{ padding: "7px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
                 <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>
@@ -441,7 +521,8 @@ function ChartPanel({
       )}
 
       {/* Order panel */}
-      <div style={{ flexShrink: 0, padding: "14px 16px 16px", borderTop: "1px solid var(--border-subtle)", background: "rgba(255,255,255,0.025)" }}>
+      {showOrderTicket && (
+        <div style={{ flexShrink: 0, padding: "14px 16px 16px", borderTop: "1px solid var(--border-subtle)", background: "rgba(255,255,255,0.025)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
@@ -573,7 +654,8 @@ function ChartPanel({
           }}>
           {orderBusy ? "Placing…" : `Place ${side === "buy" ? "buy" : "sell"} order`}
         </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -794,6 +876,12 @@ function WatchlistContent() {
   }, [symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
+  const chartHref = useCallback((symbol: string) => {
+    const params = new URLSearchParams({ from: "watchlist", full: "1" });
+    if (activeWl?.id) params.set("watchlistId", activeWl.id);
+    if (activeWl?.name) params.set("watchlist", activeWl.name);
+    return `/charts/${symbol}?${params.toString()}`;
+  }, [activeWl?.id, activeWl?.name]);
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
     for (const item of activeWl?.items ?? []) {
@@ -820,6 +908,19 @@ function WatchlistContent() {
       needsReview,
     };
   }, [activeId, activeWl?.items, getItemMeta]);
+  const setupDesk = useMemo(() => {
+    const items = activeWl?.items ?? [];
+    const ranked = items
+      .map((item) => ({ item, setup: getSetupSignal(item) }))
+      .sort((a, b) => b.setup.score - a.setup.score);
+    return {
+      top: ranked.slice(0, 3),
+      ready: ranked.filter((entry) => entry.setup.score >= 80).length,
+      watch: ranked.filter((entry) => entry.setup.score >= 55 && entry.setup.score < 80).length,
+      weak: ranked.filter((entry) => entry.setup.score < 55).length,
+      average: ranked.length ? Math.round(ranked.reduce((sum, entry) => sum + entry.setup.score, 0) / ranked.length) : 0,
+    };
+  }, [activeWl?.items]);
   const symbolReviewMap = useMemo(() => {
     const next = new Map<string, { state: "reviewed" | "needs-review" | "new"; closed: number; reviewed: number; latestLesson: string | null; lastSetup: string | null }>();
     for (const entry of journalEntries) {
@@ -936,12 +1037,12 @@ function WatchlistContent() {
       }
       if (e.key === "Enter" && chartSymbol) {
         e.preventDefault();
-        router.push(`/charts/${chartSymbol}`);
+        router.push(chartHref(chartSymbol));
       }
     }
     window.addEventListener("keydown", handleDeskKeys);
     return () => window.removeEventListener("keydown", handleDeskKeys);
-  }, [chartSymbol, moveSelection, router, visibleItems]);
+  }, [chartHref, chartSymbol, moveSelection, router, visibleItems]);
 
   async function handleDeleteWatchlist(id: string) {
     if (!confirm("Delete this watchlist and all its stocks?")) return;
@@ -998,6 +1099,35 @@ function WatchlistContent() {
       setChartSymbol(symbol);
       setSymbolInput("");
       setAddMsg("Added");
+    } catch (e: unknown) {
+      setAddMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setAdding(false);
+      setTimeout(() => setAddMsg(""), 2500);
+    }
+  }
+
+  async function addStarterSymbols() {
+    if (!activeId) return;
+    setAdding(true);
+    setAddMsg("");
+    try {
+      const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
+      const symbols = STARTER_SYMBOLS.filter((symbol) => !existing.has(symbol));
+      const newItems: WatchlistItem[] = [];
+      for (const symbol of symbols) {
+        await addToWatchlist(activeId, symbol).catch(() => {});
+        const quote = await getQuote(symbol).catch(() => null);
+        newItems.push(quote
+          ? { symbol: quote.symbol, sort_order: newItems.length, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
+          : { symbol, sort_order: newItems.length, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" }
+        );
+      }
+      if (newItems.length) {
+        setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
+        setChartSymbol(newItems[0].symbol);
+      }
+      setAddMsg(newItems.length ? "Starter list added" : "Already added");
     } catch (e: unknown) {
       setAddMsg(e instanceof Error ? e.message : "Error");
     } finally {
@@ -1148,6 +1278,9 @@ function WatchlistContent() {
               <span className="workspace-pill">All {queueCounts.total}</span>
               {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned {queueCounts.pinned}</span>}
               {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review {queueCounts.needsReview}</span>}
+              {queueCounts.total > 0 && <span className="workspace-pill">Setup avg {setupDesk.average}</span>}
+              {setupDesk.ready > 0 && <span className="workspace-pill" style={{ color: "var(--gain)" }}>Ready {setupDesk.ready}</span>}
+              {setupDesk.watch > 0 && <span className="workspace-pill" style={{ color: "var(--warn)" }}>Watch {setupDesk.watch}</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
@@ -1155,10 +1288,41 @@ function WatchlistContent() {
                   Reset
                 </button>
               )}
+              {activeWl.items.length > 0 && (
+                <button className={`workspace-chip-button${sortMode === "setup" ? " active" : ""}`} onClick={() => setSortMode("setup")}>
+                  Best setups
+                </button>
+              )}
               <button className={`workspace-chip-button${showDeskControls ? " active" : ""}`} onClick={() => setShowDeskControls((current) => !current)}>
                 {showDeskControls ? "Hide controls" : "Desk controls"}
               </button>
             </div>
+          </div>
+        )}
+        {activeWl && setupDesk.top.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
+            {setupDesk.top.map(({ item, setup }) => (
+              <button
+                key={item.symbol}
+                onClick={() => setChartSymbol(item.symbol)}
+                style={{
+                  textAlign: "left",
+                  padding: "8px 10px",
+                  borderRadius: 12,
+                  background: chartSymbol === item.symbol ? "rgba(77,214,255,0.12)" : "rgba(255,255,255,0.03)",
+                  border: chartSymbol === item.symbol ? "1px solid rgba(77,214,255,0.28)" : "1px solid rgba(255,255,255,0.07)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)" }}>{item.symbol}</span>
+                  <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: setupToneColor(setup.tone) }}>{setup.score}</span>
+                </div>
+                <div className="caption" style={{ marginTop: 3 }}>{setup.label}</div>
+                <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginTop: 7 }}>
+                  <div style={{ width: `${setup.score}%`, height: "100%", background: setupToneColor(setup.tone) }} />
+                </div>
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -1348,7 +1512,7 @@ function WatchlistContent() {
                   </div>
                 </div>
                 <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-                  <button className="workspace-chip-button" onClick={() => router.push(`/charts/${selectedItem.symbol}?from=watchlist&watchlist=${encodeURIComponent(activeWl?.name ?? "")}`)}>
+                  <button className="workspace-chip-button" onClick={() => router.push(chartHref(selectedItem.symbol))}>
                     Open chart
                   </button>
                   <button className="workspace-chip-button" onClick={() => router.push(`/journal?symbol=${selectedItem.symbol}`)}>
@@ -1551,8 +1715,8 @@ function WatchlistContent() {
           ) : activeWl.items.length === 0 ? (
             <EmptyState
               title="No stocks yet"
-              description="Add stocks from the scanner, or type a symbol above. The chart panel will react as soon as the list has names."
-              action={{ label: "Go to scanner", href: "/scanner" }}
+              description="Start with a liquid sample queue, then replace it with your own names as your scanner finds better setups."
+              action={{ label: adding ? "Adding..." : "Add starter queue", onClick: () => void addStarterSymbols() }}
             />
           ) : visibleItems.length === 0 ? (
             <EmptyState
@@ -1586,7 +1750,7 @@ function WatchlistContent() {
                           reviewState={symbolReviewMap.get(item.symbol)?.state}
                           onRemove={handleRemove}
                           onSelect={setChartSymbol}
-                          onOpenChart={(sym) => router.push(`/charts/${sym}?from=watchlist&watchlist=${encodeURIComponent(activeWl?.name ?? "")}`)}
+                          onOpenChart={(sym) => router.push(chartHref(sym))}
                           dense={denseRows}
                         />
                         );
@@ -1618,7 +1782,7 @@ function WatchlistContent() {
                         reviewState={symbolReviewMap.get(item.symbol)?.state}
                       onRemove={handleRemove}
                       onSelect={setChartSymbol}
-                      onOpenChart={(sym) => router.push(`/charts/${sym}?from=watchlist&watchlist=${encodeURIComponent(activeWl?.name ?? "")}`)}
+                      onOpenChart={(sym) => router.push(chartHref(sym))}
                       dense={denseRows}
                     />
                     );
@@ -1636,7 +1800,7 @@ function WatchlistContent() {
           <ChartPanel key={chartSymbol} symbol={chartSymbol}
             latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
             watchlistName={activeWl?.name ?? null}
-            onOpenChart={(sym) => router.push(`/charts/${sym}?from=watchlist&watchlist=${encodeURIComponent(activeWl?.name ?? "")}`)}
+            onOpenChart={(sym) => router.push(chartHref(sym))}
             onStepSymbol={moveSelection} />
         ) : (
           <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>

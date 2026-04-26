@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { updateMe } from "@/lib/api";
+import { addToWatchlist, createWatchlist, updateMe } from "@/lib/api";
 
 const STEPS = ["About you", "Your broker", "Get started"];
 
@@ -21,6 +21,7 @@ const BROKERS = [
   { value: "other",    label: "Other",     logo: "?" },
   { value: "none",     label: "None yet",  logo: "–" },
 ];
+const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
 
 const cardStyle = {
   background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)",
@@ -53,7 +54,7 @@ export default function OnboardingPage() {
     );
   }
 
-  async function finish(destination = "/dashboard") {
+  async function finish(destination = "/dashboard", seedStarterQueue = false) {
     setLoading(true);
     setError("");
     try {
@@ -70,6 +71,12 @@ export default function OnboardingPage() {
       }
 
       await updateMe(updates as Parameters<typeof updateMe>[0]);
+      if (seedStarterQueue) {
+        const starter = await createWatchlist("Starter setup queue").catch(() => null);
+        if (starter?.id) {
+          await Promise.all(STARTER_SYMBOLS.map((symbol) => addToWatchlist(starter.id, symbol).catch(() => null)));
+        }
+      }
       window.location.replace(destination);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");
@@ -249,14 +256,14 @@ export default function OnboardingPage() {
             <div className="grid gap-3 mb-5 sm:grid-cols-3">
               {[
                 { title: "Run a scan", text: "Find breakouts and high relative-strength stocks.", href: "/scanner" },
-                { title: "Build watchlist", text: "Track chart setups with the new chart-type selector.", href: "/watchlist" },
+                { title: "Starter queue", text: "Create a sample watchlist with liquid names and setup scoring.", href: "/watchlist", seed: true },
                 { title: "Open dashboard", text: "Review market pulse, breadth, and account status.", href: "/dashboard" },
               ].map((item) => (
                 <button
                   key={item.href}
                   type="button"
                   disabled={loading}
-                  onClick={() => finish(item.href)}
+                  onClick={() => finish(item.href, Boolean(item.seed))}
                   className="text-left rounded-[12px] p-4 transition-opacity disabled:opacity-60"
                   style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}
                 >
