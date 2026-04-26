@@ -1,7 +1,5 @@
-const CACHE_NAME = "alphavyuh-v2";
+const CACHE_NAME = "alphavyuh-v3";
 const STATIC_ASSETS = [
-  "/",
-  "/dashboard",
   "/offline",
 ];
 
@@ -16,6 +14,14 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    ).then(() =>
+      caches.open(CACHE_NAME).then((cache) =>
+        Promise.all([
+          cache.delete("/"),
+          cache.delete("/landing.html"),
+          cache.delete("/dashboard"),
+        ])
+      )
     )
   );
   self.clients.claim();
@@ -37,7 +43,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For navigation requests: network-first, fall back to offline page
+  // For navigation requests: network-first. Never serve cached landing HTML.
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request).catch(() =>

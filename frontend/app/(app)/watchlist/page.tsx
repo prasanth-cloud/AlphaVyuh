@@ -34,6 +34,7 @@ import {
   getCandles,
   placeOrder,
   getQuoteLive,
+  isMockMode,
   type PlaceOrderRequest,
   type WatchlistItemMetadataUpdate,
 } from "@/lib/api";
@@ -41,8 +42,28 @@ import type { SymbolSearchResult } from "@/lib/api";
 import { EmptyState } from "@/components/ui";
 
 type ChartDisplayType = "candles" | "bars" | "line";
+type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
+
+function getSetupSignal(item: WatchlistItem): SetupSignal {
+  const move = item.pct_change ?? 0;
+  const volume = item.volume_ratio ?? 0;
+  const rsi = item.rsi_14 ?? 50;
+
+  if (move >= 2 && volume >= 1.5 && rsi >= 58) return { label: "Breakout", tone: "gain", score: 95 };
+  if (move >= 0.5 && volume >= 1.2 && rsi >= 55) return { label: "Momentum", tone: "accent", score: 82 };
+  if (move <= -2 && volume >= 1.3) return { label: "Weak", tone: "loss", score: 28 };
+  if (move > -1 && move < 1 && rsi >= 42 && rsi <= 58) return { label: "Pullback", tone: "neutral", score: 64 };
+  return { label: "Watch", tone: "neutral", score: 50 };
+}
+
+function setupToneColor(tone: SetupSignal["tone"]) {
+  if (tone === "gain") return "var(--gain)";
+  if (tone === "loss") return "var(--loss)";
+  if (tone === "accent") return "var(--accent)";
+  return "var(--text-secondary)";
+}
 
 // ─── Sortable row ─────────────────────────────────────────────────────────────
 
@@ -68,6 +89,8 @@ function SortableRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.symbol });
   const priceTone = (item.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)";
+  const setup = getSetupSignal(item);
+  const setupColor = setupToneColor(setup.tone);
 
   return (
     <tr
@@ -120,6 +143,22 @@ function SortableRow({
               {item.sector}
             </span>
           )}
+          <span
+            title={`Setup score ${setup.score}`}
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              textTransform: "uppercase",
+              color: setupColor,
+              padding: "2px 6px",
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.035)",
+              border: `1px solid ${setupColor}`,
+            }}
+          >
+            {setup.label}
+          </span>
         </div>
         {item.company_name && (
           <div className="caption" style={{ maxWidth: dense ? 160 : 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: dense ? 0 : 2, fontSize: dense ? 10 : 11 }}>
@@ -347,30 +386,26 @@ function ChartPanel({
           >
             Details
           </button>
-          <div style={{ display: "flex", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", padding: 2 }}>
-            {[
-              { id: "candles", label: "Candles" },
-              { id: "bars", label: "Bars" },
-              { id: "line", label: "Line" },
-            ].map((type) => (
-              <button
-                key={type.id}
-                onClick={() => setChartType(type.id as ChartDisplayType)}
-                style={{
-                  padding: "3px 9px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: chartType === type.id ? "var(--text-primary)" : "var(--text-tertiary)",
-                  background: chartType === type.id ? "var(--surface-3)" : "transparent",
-                  border: "none",
-                  borderRadius: "var(--radius-sm)",
-                  cursor: "pointer",
-                }}
-              >
-                {type.label}
-              </button>
-            ))}
-          </div>
+          <label className="caption" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            Chart
+            <select
+              value={chartType}
+              onChange={(event) => setChartType(event.target.value as ChartDisplayType)}
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                borderRadius: "var(--radius-sm)",
+                padding: "5px 9px",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--text-primary)",
+              }}
+            >
+              <option value="candles">Candles</option>
+              <option value="bars">Bars</option>
+              <option value="line">Line</option>
+            </select>
+          </label>
           <TimeframeTabs active={tf} onChange={setTf} />
         </div>
       </div>
@@ -571,7 +606,7 @@ function WatchlistContent() {
   const [noteDraft, setNoteDraft] = useState("");
   const [queueView, setQueueView] = useState<"all" | "pinned" | "tagged" | "needs-review">("all");
   const [activeTagFilter, setActiveTagFilter] = useState<string>("all");
-  const [sortMode, setSortMode] = useState<"manual" | "move" | "volume" | "rsi">("manual");
+  const [sortMode, setSortMode] = useState<"manual" | "setup" | "move" | "volume" | "rsi">("manual");
   const [showDeskControls, setShowDeskControls] = useState(false);
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -837,6 +872,10 @@ function WatchlistContent() {
         const changeDiff = (b.pct_change ?? 0) - (a.pct_change ?? 0);
         if (changeDiff !== 0) return changeDiff;
       }
+      if (sortMode === "setup") {
+        const setupDiff = getSetupSignal(b).score - getSetupSignal(a).score;
+        if (setupDiff !== 0) return setupDiff;
+      }
       if (sortMode === "volume") {
         const volumeDiff = (b.volume_ratio ?? 0) - (a.volume_ratio ?? 0);
         if (volumeDiff !== 0) return volumeDiff;
@@ -1038,6 +1077,7 @@ function WatchlistContent() {
       tone: "var(--text-secondary)",
     },
   ] : [];
+  const selectedSetup = selectedItem ? getSetupSignal(selectedItem) : null;
 
   useEffect(() => {
     if (activeTagFilter !== "all" && !availableTags.includes(activeTagFilter)) {
@@ -1095,7 +1135,12 @@ function WatchlistContent() {
               </div>
             )}
           </div>
-          {chartSymbol && <span className="workspace-pill">Focus: {chartSymbol}</span>}
+          <div className="workspace-pill-row" style={{ gap: 8 }}>
+            <span className="workspace-pill" title={isMockMode ? "Using mock or fallback market data" : "Using configured market data source"}>
+              Data: {isMockMode ? "Mock/fallback" : "Live configured"}
+            </span>
+            {chartSymbol && <span className="workspace-pill">Focus: {chartSymbol}</span>}
+          </div>
         </div>
         {activeWl && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
@@ -1280,6 +1325,23 @@ function WatchlistContent() {
                     <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: (selectedItem.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
                       {selectedItem.pct_change != null ? `${selectedItem.pct_change >= 0 ? "+" : ""}${selectedItem.pct_change.toFixed(2)}%` : "-"}
                     </span>
+                    {selectedSetup && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          letterSpacing: "0.04em",
+                          textTransform: "uppercase",
+                          color: setupToneColor(selectedSetup.tone),
+                          padding: "2px 7px",
+                          borderRadius: 999,
+                          background: "rgba(255,255,255,0.04)",
+                          border: `1px solid ${setupToneColor(selectedSetup.tone)}`,
+                        }}
+                      >
+                        {selectedSetup.label} {selectedSetup.score}
+                      </span>
+                    )}
                   </div>
                   <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedItem.company_name || selectedItem.sector || "Active watchlist focus"}
@@ -1469,6 +1531,7 @@ function WatchlistContent() {
                   style={{ fontSize: 12, borderRadius: 999, padding: "7px 12px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
                 >
                   <option value="manual">Manual order</option>
+                  <option value="setup">Sort by setup</option>
                   <option value="move">Sort by move</option>
                   <option value="volume">Sort by volume ratio</option>
                   <option value="rsi">Sort by RSI</option>

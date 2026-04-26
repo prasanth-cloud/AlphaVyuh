@@ -1185,25 +1185,23 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             ))}
           </div>
 
-          <div className="flex items-center gap-0.5 mr-1 rounded-[999px] p-0.5" style={{ background: "var(--app-surface3)" }}>
-            {[
-              { id: "candles", label: "Candles" },
-              { id: "bars", label: "Bars" },
-              { id: "line", label: "Line" },
-            ].map((type) => (
-              <button
-                key={type.id}
-                onClick={() => setChartType(type.id as ChartDisplayType)}
-                className="text-[11px] px-3 py-1.5 rounded-[999px] font-semibold transition-colors"
-                style={chartType === type.id
-                  ? { background: "var(--app-teal)", color: "#0D0F14" }
-                  : { background: "transparent", color: "var(--app-text3)" }
-                }
-              >
-                {type.label}
-              </button>
-            ))}
-          </div>
+          <label className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--app-text3)" }}>
+            Chart
+            <select
+              value={chartType}
+              onChange={(event) => setChartType(event.target.value as ChartDisplayType)}
+              className="text-[11px] rounded-[999px] px-3 py-1.5 font-semibold outline-none"
+              style={{
+                background: "var(--app-surface3)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "var(--app-text1)",
+              }}
+            >
+              <option value="candles">Candles</option>
+              <option value="bars">Bars</option>
+              <option value="line">Line</option>
+            </select>
+          </label>
 
           {/* Primary indicator toggles */}
           {INDICATOR_CONFIG.filter(ind => PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
