@@ -34,7 +34,7 @@ export function useSession() {
     supabaseAuth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
 
     const { data: listener } = supabaseAuth.onAuthStateChange((_event, s) => {
       setSession(s);

@@ -94,7 +94,7 @@ export default function Navbar() {
     createClient().auth.getUser().then(({ data }) => {
       const email = data.user?.email ?? "";
       setInitials(email[0]?.toUpperCase() ?? "U");
-    });
+    }).catch(() => {});
   }, []);
 
   async function signOut() {

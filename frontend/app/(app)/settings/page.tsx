@@ -270,11 +270,12 @@ function SettingsContent() {
 
   const loadBilling = useCallback(async () => {
     const supabase = createClient();
-    const [{ data: { user } }, planData, paymentData] = await Promise.all([
-      supabase.auth.getUser(),
+    const [authData, planData, paymentData] = await Promise.all([
+      supabase.auth.getUser().catch(() => ({ data: { user: null } })),
       getPlanStatus(),
       getPaymentConfig(),
     ]);
+    const user = authData.data.user;
     setUserEmail(user?.email ?? "");
     setUserName(user?.user_metadata?.full_name ?? user?.email?.split("@")[0] ?? "");
     setPlanStatus(planData);
