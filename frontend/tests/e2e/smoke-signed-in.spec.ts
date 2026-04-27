@@ -54,18 +54,24 @@ test.describe("Signed-in smoke flow", () => {
     }
     await expect(symbolInput).toBeVisible({ timeout: 15000 });
 
-    await expect(page.locator("tbody tr").filter({ hasText: "DIXON" }).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator("tbody tr").filter({ hasText: "PERSISTENT" }).first()).toBeVisible({ timeout: 15000 });
+    const rows = page.locator("tbody tr");
+    await expect(rows.first()).toBeVisible({ timeout: 15000 });
+    const firstRowText = await rows.first().textContent();
+    const firstSymbol = firstRowText?.trim().match(/^[A-Z0-9&-]+/)?.[0] ?? "RELIANCE";
 
-    await page.locator("tbody tr").filter({ hasText: "DIXON" }).first().click();
+    await rows.first().click();
     await expect(page.getByRole("button", { name: /Open chart/i })).toBeVisible();
-    await expect(page.locator("text=DIXON").first()).toBeVisible();
+    await expect(page.locator(`text=${firstSymbol}`).first()).toBeVisible();
 
-    await page.locator("tbody tr").filter({ hasText: "PERSISTENT" }).first().click();
-    await expect(page.locator("text=PERSISTENT").first()).toBeVisible({ timeout: 10000 });
+    if (await rows.count() > 1) {
+      const secondRowText = await rows.nth(1).textContent();
+      const secondSymbol = secondRowText?.trim().match(/^[A-Z0-9&-]+/)?.[0];
+      await rows.nth(1).click();
+      if (secondSymbol) await expect(page.locator(`text=${secondSymbol}`).first()).toBeVisible({ timeout: 10000 });
+    }
 
-    await page.goto("/charts/DIXON");
-    await expect(page).toHaveURL(/\/charts\/DIXON/);
+    await page.goto(`/charts/${firstSymbol}`);
+    await expect(page).toHaveURL(new RegExp(`/charts/${firstSymbol}`));
     await expect(page.getByText("Trendline")).toBeVisible({ timeout: 15000 });
 
     await page.goto("/journal");

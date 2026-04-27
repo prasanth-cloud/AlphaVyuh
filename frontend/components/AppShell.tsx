@@ -170,8 +170,8 @@ function AccountMenuButton() {
       createClient().auth.getUser().then(({ data }) => {
         const email = data.user?.email ?? ''
         setInitials(email[0]?.toUpperCase() ?? 'P')
-      })
-    })
+      }).catch(() => {})
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
