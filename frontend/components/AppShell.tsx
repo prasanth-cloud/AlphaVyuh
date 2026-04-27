@@ -25,7 +25,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {!fullChart && (
       <nav className="app-topbar">
         <div className="app-topbar-inner">
-          <Link href="/dashboard" className="app-brand">
+          <Link href="/dashboard" prefetch={false} className="app-brand">
             <span className="app-brand-mark" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
@@ -51,6 +51,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={link.href}
                   href={link.href}
+                  prefetch={false}
                   className={`app-navlink ${active ? 'app-navlink-active' : ''}`}
                 >
                   {link.label}
@@ -96,6 +97,7 @@ function DataModePill() {
   return (
     <Link
       href="/data"
+      prefetch={false}
       className="app-toolbar-pill"
       title={title}
       style={{ textDecoration: 'none' }}
@@ -224,6 +226,7 @@ function AccountMenuButton() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               onClick={() => setOpen(false)}
               style={{
                 display: 'block',

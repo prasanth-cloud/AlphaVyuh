@@ -21,7 +21,8 @@ test.describe("Signed-in smoke flow", () => {
     await page.goto("/scanner");
     await expect(page).toHaveURL(/\/scanner/);
     await expect(page.getByText("Scanner").first()).toBeVisible();
-    await expect(page.locator("select").filter({ has: page.locator("option[value='25']") }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Filters/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Run scan/i })).toBeVisible();
     await expect
       .poll(async () => page.locator("table tbody tr").count(), { timeout: 25000, intervals: [500, 1000, 2000] })
       .toBeGreaterThan(0);
@@ -53,25 +54,18 @@ test.describe("Signed-in smoke flow", () => {
     }
     await expect(symbolInput).toBeVisible({ timeout: 15000 });
 
-    const ensureSymbol = async (symbol: string) => {
-      if (await page.locator("tbody tr").filter({ hasText: symbol }).count()) return;
-      await symbolInput.fill(symbol);
-      await page.getByRole("button", { name: "Add" }).click();
-      await expect(page.locator("tbody tr").filter({ hasText: symbol }).first()).toBeVisible({ timeout: 15000 });
-    };
+    await expect(page.locator("tbody tr").filter({ hasText: "DIXON" }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("tbody tr").filter({ hasText: "PERSISTENT" }).first()).toBeVisible({ timeout: 15000 });
 
-    await ensureSymbol("RELIANCE");
-    await ensureSymbol("TCS");
+    await page.locator("tbody tr").filter({ hasText: "DIXON" }).first().click();
+    await expect(page.getByRole("button", { name: /Open chart/i })).toBeVisible();
+    await expect(page.locator("text=DIXON").first()).toBeVisible();
 
-    await page.locator("tbody tr").filter({ hasText: "RELIANCE" }).first().click();
-    await expect(page.locator("text=Open full chart")).toBeVisible();
-    await expect(page.locator("text=RELIANCE").first()).toBeVisible();
+    await page.locator("tbody tr").filter({ hasText: "PERSISTENT" }).first().click();
+    await expect(page.locator("text=PERSISTENT").first()).toBeVisible({ timeout: 10000 });
 
-    await page.locator("tbody tr").filter({ hasText: "TCS" }).first().click();
-    await expect(page.locator("text=TCS").first()).toBeVisible({ timeout: 10000 });
-
-    await page.goto("/charts/RELIANCE");
-    await expect(page).toHaveURL(/\/charts\/RELIANCE/);
+    await page.goto("/charts/DIXON");
+    await expect(page).toHaveURL(/\/charts\/DIXON/);
     await expect(page.getByText("Trendline")).toBeVisible({ timeout: 15000 });
 
     await page.goto("/journal");

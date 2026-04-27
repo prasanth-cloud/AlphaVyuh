@@ -1220,9 +1220,9 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           </div>
         </div>
         <div className="workspace-pill-row" style={{ marginTop: 12, gap: 8 }}>
-          <Link href="/scanner" className="workspace-chip-button">Scanner</Link>
-          <Link href="/watchlist" className="workspace-chip-button">Watchlist</Link>
-          <Link href="/journal" className="workspace-chip-button">Journal</Link>
+          <Link href="/scanner" prefetch={false} className="workspace-chip-button">Scanner</Link>
+          <Link href="/watchlist" prefetch={false} className="workspace-chip-button">Watchlist</Link>
+          <Link href="/journal" prefetch={false} className="workspace-chip-button">Journal</Link>
           {chartContextPills.map((item) => (
             <span key={item} className="workspace-pill">{item}</span>
           ))}
@@ -1612,7 +1612,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           </button>
 
           {fullChartMode ? (
-            <Link href={sourceQueue?.id ? `/watchlist?symbol=${symbol}` : "/watchlist"} className="workspace-chip-button">
+            <Link href={sourceQueue?.id ? `/watchlist?symbol=${symbol}` : "/watchlist"} prefetch={false} className="workspace-chip-button">
               Exit full
             </Link>
           ) : (
@@ -1685,10 +1685,10 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 {orderToast.broker === "simulated" ? "Simulated fill" : `Broker routed via ${orderToast.broker}`} · journal capture completed
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <Link href="/journal" style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
+                <Link href="/journal" prefetch={false} style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
                   Open journal
                 </Link>
-                <Link href="/journal?tab=ai" style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.82)" }}>
+                <Link href="/journal?tab=ai" prefetch={false} style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.82)" }}>
                   Review flow
                 </Link>
               </div>
