@@ -318,7 +318,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Load compare symbol data
   useEffect(() => {
     if (!compareSymbol) { setCompareData(null); return; }
-    const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
+    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
     getCandles(compareSymbol, { limit, timeframe }).then(setCompareData).catch(() => setCompareData(null));
   }, [compareSymbol, timeframe]);
 
@@ -333,9 +333,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     setAtrData([]);
     setIndicatorData({});
 
-    const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
+    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
     const fetcher = liveMode
-      ? getCandlesLive(symbol, { limit, timeframe }).catch(() => {
+      ? getCandlesLive(symbol, { limit: Math.min(limit, 1000), timeframe }).catch(() => {
           setLiveMode(false);
           return getCandles(symbol, { limit, timeframe });
         })
@@ -351,7 +351,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   useEffect(() => {
     if (!liveMode) return;
     const interval = setInterval(() => {
-      const limit = timeframe === "D" ? 500 : timeframe === "W" ? 260 : 120;
+      const limit = timeframe === "D" ? 1000 : timeframe === "W" ? 620 : 180;
       getCandlesLive(symbol, { limit, timeframe })
         .then(d => { setData(d); setLegendBar(null); })
         .catch(() => {});

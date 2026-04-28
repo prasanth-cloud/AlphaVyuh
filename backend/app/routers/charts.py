@@ -239,7 +239,7 @@ async def get_candles(
     timeframe: str = Query("D"),
     from_date: str | None = Query(None),
     to_date: str | None = Query(None),
-    limit: int = Query(365, ge=1, le=1000),
+    limit: int = Query(365, ge=1, le=3000),
 ):
     sym = symbol.upper()
     sb = get_admin_client()
@@ -251,10 +251,10 @@ async def get_candles(
     # For W/M we need more raw daily bars to aggregate into enough candles
     tf = timeframe.upper()
     raw_limit = limit if tf == "D" else (limit * 7 if tf == "W" else limit * 31)
-    raw_limit = min(raw_limit, 1000)
+    raw_limit = min(raw_limit, 3000)
 
     td = date.today()
-    fd = date.fromisoformat(from_date) if from_date else (td - timedelta(days=365 * 5))
+    fd = date.fromisoformat(from_date) if from_date else (td - timedelta(days=365 * 12))
     td2 = date.fromisoformat(to_date) if to_date else td
 
     q = (

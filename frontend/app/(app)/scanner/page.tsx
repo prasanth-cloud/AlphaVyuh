@@ -556,6 +556,33 @@ export default function ScannerPage() {
     { length: pageSize === 0 ? 1 : Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => (pageSize === 0 ? 1 : pageWindowStart + idx),
   );
+  const presetStrip = (
+    <div className="workspace-card" style={{ padding: 10, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', paddingBottom: 1 }}>
+        <span className="label" style={{ flexShrink: 0, paddingInline: 4 }}>Presets</span>
+        {PRESETS.map(p => {
+          const active = activePreset === p.id
+          return (
+            <button
+              key={p.id}
+              onClick={() => applyPreset(p)}
+              title={p.description}
+              className={`workspace-chip-button${active ? ' active' : ''}`}
+              style={{
+                flexShrink: 0,
+                minHeight: 34,
+                padding: '7px 12px',
+                borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
+                color: active ? 'var(--accent)' : 'var(--text-secondary)',
+              }}
+            >
+              {p.name}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 
   return (
     <div className="workspace-page">
@@ -571,42 +598,12 @@ export default function ScannerPage() {
           </div>
         </div>
       </div>
+      {presetStrip}
 
       <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
 
       {/* ── LEFT PANEL ── */}
       <div className="workspace-card workspace-card-muted" style={{ display: 'flex', flexDirection: 'column' }}>
-
-        {/* Presets */}
-        <div className="workspace-card-header" style={{ display: 'block' }}>
-          <div className="label" style={{ marginBottom: 10 }}>Quick starts</div>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {PRESETS.map(p => {
-              const active = activePreset === p.id
-              return (
-                <button key={p.id} onClick={() => applyPreset(p)} style={{
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: 11,
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                  background: active ? 'var(--accent-subtle)' : 'var(--surface-2)',
-                  color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                  transition: 'all var(--motion-instant) var(--ease-out)',
-                  textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {p.name}
-                  </span>
-                  <span style={{ fontSize: 10, color: active ? 'var(--text-secondary)' : 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
-                    preset
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
 
         {/* Saved screens */}
         {savedScreens.length > 0 && (
