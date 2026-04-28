@@ -71,6 +71,7 @@ const INDICATOR_CONFIG = [
 
 const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "Text"] as const;
 const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
+const DRAWING_DEFAULT_COLOR = "#f4f7fb";
 type DrawingTool = typeof DRAWING_TOOLS[number];
 
 const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: typeof PencilLine; hint: string }> = {
@@ -105,6 +106,23 @@ function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
     p1: { ...item.p1 },
     p2: { ...item.p2 },
   }));
+}
+
+function normalizeDrawingColor(color?: string | null): string {
+  const value = color?.trim().toLowerCase();
+  if (!value) return DRAWING_DEFAULT_COLOR;
+
+  const invisibleOnDark = new Set([
+    "#000",
+    "#000000",
+    "black",
+    "rgb(0,0,0)",
+    "rgb(0, 0, 0)",
+    "rgba(0,0,0,1)",
+    "rgba(0, 0, 0, 1)",
+  ]);
+
+  return invisibleOnDark.has(value) ? DRAWING_DEFAULT_COLOR : color!;
 }
 
 function findNearestCandlePrice(
@@ -505,7 +523,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           tool,
           p1: { time: pts[0].time, price: pts[0].price },
           p2: { time: pts[1].time ?? pts[0].time, price: pts[1].price ?? pts[0].price },
-          color: (d.style as { color?: string }).color ?? "#f4f7fb",
+          color: normalizeDrawingColor((d.style as { color?: string }).color),
           text: (d.style as { text?: string }).text,
           locked: Boolean((d.style as { locked?: boolean }).locked),
           hidden: Boolean((d.style as { hidden?: boolean }).hidden),
@@ -836,7 +854,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       tool: activeDrawingTool,
       p1: { time: time1, price: price1 },
       p2: { time: time2, price: finalPrice2 },
-      color: "#f4f7fb",
+      color: DRAWING_DEFAULT_COLOR,
     };
     if (activeDrawingTool === "Text") {
       line.text = "Note";
@@ -857,7 +875,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       const saved = await saveDrawing(symbol, {
         tool_type: activeDrawingTool.toLowerCase(),
         points: savedPoints,
-        style: { color: "#f4f7fb", text: line.text ?? null },
+        style: { color: DRAWING_DEFAULT_COLOR, text: line.text ?? null },
         timeframe,
       });
       setDrawings(prev => [...prev, saved]);
