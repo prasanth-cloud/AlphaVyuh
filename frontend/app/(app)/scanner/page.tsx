@@ -258,10 +258,7 @@ export default function ScannerPage() {
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
 
-  const getToken = useCallback(async () => {
-    const h = await authHeaders() as Record<string, string>
-    return (h['Authorization'] || '').replace('Bearer ', '')
-  }, [])
+  const getAuthHeaders = useCallback(() => authHeaders(), [])
 
   useEffect(() => {
     loadWatchlists()
@@ -279,8 +276,8 @@ export default function ScannerPage() {
       return
     }
     try {
-      const token = await getToken()
-      const res = await fetch(`${API}/api/v1/watchlists`, { headers: { Authorization: `Bearer ${token}` } })
+      const headers = await getAuthHeaders()
+      const res = await fetch(`${API}/api/v1/watchlists`, { headers })
       if (res.ok) { const d = await res.json(); setWatchlists(d.watchlists || []) }
     } catch { /* ignore */ }
   }
@@ -294,8 +291,8 @@ export default function ScannerPage() {
       return
     }
     try {
-      const token = await getToken()
-      const res = await fetch(`${API}/api/v1/scanner/screens`, { headers: { Authorization: `Bearer ${token}` } })
+      const headers = await getAuthHeaders()
+      const res = await fetch(`${API}/api/v1/scanner/screens`, { headers })
       if (res.ok) { const d = await res.json(); setSavedScreens(d.screens || []) }
     } catch { /* ignore */ }
   }
@@ -355,11 +352,11 @@ export default function ScannerPage() {
         setHasRun(true)
         return
       }
-      const token = await getToken()
+      const headers = await getAuthHeaders()
       const payload = buildPayload(overrideFilters || filters, sb, sd)
       const res = await fetch(`${API}/api/v1/scanner/run`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ ...payload, page, page_size: size }),
       })
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
@@ -374,7 +371,7 @@ export default function ScannerPage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Scan failed')
     } finally { setLoading(false) }
-  }, [buildPayload, currentPage, filters, getToken, pageSize, sortBy, sortDesc])
+  }, [buildPayload, currentPage, filters, getAuthHeaders, pageSize, sortBy, sortDesc])
 
   const applyPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
@@ -408,11 +405,11 @@ export default function ScannerPage() {
       return
     }
     try {
-      const token = await getToken()
+      const headers = await getAuthHeaders()
       const payload = buildPayload(filters, sortBy, sortDesc)
       const res = await fetch(`${API}/api/v1/scanner/screens`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ name: newScreenName.trim(), filters: payload.filters }),
       })
       if (!res.ok) { const e = await res.json(); throw new Error((e as { detail?: string }).detail || 'Save failed') }
@@ -428,8 +425,8 @@ export default function ScannerPage() {
       showToast(`"${name}" deleted`)
       return
     }
-    const token = await getToken()
-    await fetch(`${API}/api/v1/scanner/screens/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    const headers = await getAuthHeaders()
+    await fetch(`${API}/api/v1/scanner/screens/${id}`, { method: 'DELETE', headers })
     await loadSavedScreens()
     showToast(`"${name}" deleted`)
   }
@@ -439,10 +436,10 @@ export default function ScannerPage() {
       showToast(`${symbol} added to mock watchlist`)
       return
     }
-    const token = await getToken()
+    const headers = await getAuthHeaders()
     await fetch(`${API}/api/v1/watchlists/${wlId}/items`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers,
       body: JSON.stringify({ symbol }),
     })
     showToast(`${symbol} added`)
@@ -456,10 +453,10 @@ export default function ScannerPage() {
       router.push('/watchlist')
       return
     }
-    const token = await getToken()
+    const headers = await getAuthHeaders()
     const res = await fetch(`${API}/api/v1/watchlists`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers,
       body: JSON.stringify({ name: newWlName.trim() }),
     })
     const wl = await res.json() as { id: string }
@@ -467,7 +464,7 @@ export default function ScannerPage() {
     for (const s of toAdd.slice(0, 50)) {
       await fetch(`${API}/api/v1/watchlists/${wl.id}/items`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers,
         body: JSON.stringify({ symbol: s.symbol }),
       })
     }
