@@ -30,7 +30,7 @@ export default function PrivacyPage() {
             <li>To operate and maintain the Platform</li>
             <li>To process payments and manage subscriptions</li>
             <li>To send scan alert notifications (only if opted in)</li>
-            <li>To generate AI analysis of your trade journal (using Anthropic Claude API)</li>
+            <li>To generate trade reviews from your journal records inside AlphaVyuh</li>
             <li>To improve Platform features and fix bugs</li>
           </ul>
         </section>
@@ -41,13 +41,12 @@ export default function PrivacyPage() {
           <ul className="list-disc list-inside space-y-1">
             <li><strong>Supabase</strong> — Database and authentication (servers in AWS ap-south-1)</li>
             <li><strong>Razorpay</strong> — Payment processing (PCI-DSS compliant)</li>
-            <li><strong>Anthropic (Claude API)</strong> — AI analysis of your trade journal</li>
             <li><strong>Yahoo Finance / NSE</strong> — Market data</li>
             <li><strong>Telegram</strong> — Optional scan alert notifications</li>
           </ul>
           <p className="mt-2 text-[12px] text-[#888]">
-            Your trade journal data is sent to Anthropic only when you explicitly request AI analysis.
-            Anthropic&apos;s privacy policy governs how they process this data.
+            Journal-wide reviews are generated from your recorded trades and notes inside AlphaVyuh.
+            We do not send your journal to an external AI provider for this feature.
           </p>
         </section>
 

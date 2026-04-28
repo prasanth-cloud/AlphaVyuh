@@ -387,7 +387,7 @@ test.describe("Journal — view trade details", () => {
 
     await expect(page.getByText("Entry reason")).toBeVisible();
     await expect(page.getByText("Exit reason")).toBeVisible();
-    await expect(page.getByText("AI lesson")).toBeVisible();
+    await expect(page.getByText("Trade lesson")).toBeVisible();
   });
 
   test("view panel for open trade shows 'Close this trade' button", async ({
@@ -446,18 +446,18 @@ test.describe("Journal — tab navigation", () => {
     await expect(page.getByText("Equity curve")).toBeVisible();
   });
 
-  test("AI analysis tab switch shows 'Pattern stats' heading", async ({
+  test("Trade review tab switch shows 'Pattern stats' heading", async ({
     page,
   }) => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "AI analysis" }).click();
+    await page.getByRole("button", { name: "Trade review" }).click();
     await expect(page.getByText("Pattern stats")).toBeVisible();
-    await expect(page.getByText("AI deep analysis")).toBeVisible();
+    await expect(page.getByText("Trade review")).toBeVisible();
   });
 
-  test("AI tab triggers getAiPatterns call", async ({ page }) => {
+  test("Trade review tab triggers getAiPatterns call", async ({ page }) => {
     let patternsCalled = false;
     await page.route(`${API}/api/v1/ai/patterns`, async (route) => {
       patternsCalled = true;
@@ -471,7 +471,7 @@ test.describe("Journal — tab navigation", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "AI analysis" }).click();
+    await page.getByRole("button", { name: "Trade review" }).click();
     await expect(page.getByText("Pattern stats")).toBeVisible();
     await expect(patternsCalled).toBe(true);
   });

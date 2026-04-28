@@ -963,14 +963,14 @@ export async function analyseJournal(): Promise<{ analysis: string; trades_analy
     return {
       analysis: "Your strongest trades came from planned breakout and pullback setups. Keep position sizing consistent, journal the invalidation level before entry, and avoid adding risk after the first failed confirmation.",
       trades_analysed: 24,
-      disclaimer: "Mock analysis for local demo mode.",
+      disclaimer: "Mock trade review for local demo mode.",
     };
   }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/ai/analyse`, { method: "POST", headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-    throw new Error(typeof body.detail === "string" ? body.detail : "Analysis failed");
+    throw new Error(typeof body.detail === "string" ? body.detail : "Trade review failed");
   }
   return res.json();
 }
@@ -1305,7 +1305,7 @@ export async function triggerTradeLesson(entryId: string): Promise<JournalEntry>
   const res = await fetch(`${API}/api/v1/journal/${entryId}/lessons`, { method: "POST", headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-    throw new Error(body.detail ?? "AI lesson generation failed");
+    throw new Error(body.detail ?? "Trade lesson generation failed");
   }
   return res.json();
 }

@@ -7,7 +7,7 @@ Zerodha Kite v3:   routes through Kite Connect when API key + access token exist
 
 Workflow:
   Chart → Place Order → Journal entry (status=open)
-  Journal → Close Trade → P&L computed → AI analysis stored in lessons field
+  Journal → Close Trade → P&L computed → local trade lesson stored
 """
 from __future__ import annotations
 
@@ -278,7 +278,7 @@ async def close_position(
     body: ClosePositionRequest,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Close an open trade, compute P&L, trigger AI analysis."""
+    """Close an open trade, compute P&L, and generate a local trade lesson."""
     sb = get_admin_client()
 
     r = sb.table("trade_journal").select("*") \
@@ -528,45 +528,13 @@ async def zerodha_callback(
     return {"status": "connected", "message": "Zerodha connected successfully"}
 
 
-# ── AI analysis helper ────────────────────────────────────────────────────────
+# ── Trade analysis helper ─────────────────────────────────────────────────────
 
 def _trigger_ai_analysis(sb, entry: dict) -> None:
     try:
-        import anthropic
-        client = anthropic.Anthropic()
+        from app.routers.ai import generate_trade_lesson
 
-        pnl = entry.get("pnl", 0)
-        outcome = "WIN" if pnl >= 0 else "LOSS"
-
-        prompt = f"""You are an expert trading coach analysing a trade for an Indian stock market trader.
-
-Trade summary:
-- Symbol: {entry['symbol']} ({entry.get('company_name','')})
-- Direction: {entry['trade_type'].upper()}
-- Entry: ₹{entry['entry_price']} on {entry['entry_date']}
-- Exit: ₹{entry['exit_price']} on {entry['exit_date']}
-- Quantity: {entry['quantity']}
-- P&L: ₹{pnl:,.2f} ({entry.get('pnl_pct',0):+.2f}%) — {outcome}
-- Holding period: {entry.get('holding_days','?')} days
-- Setup: {entry.get('setup_type') or 'Not specified'}
-- Entry reason: {entry.get('entry_reason') or 'Not specified'}
-- Exit reason: {entry.get('exit_reason') or 'Not specified'}
-- Stop loss: {entry.get('stop_loss') or 'Not set'}
-- Target: {entry.get('target_price') or 'Not set'}
-- Risk/Reward: {entry.get('risk_reward') or 'Not calculated'}
-
-In 3–5 concise bullet points, identify:
-1. What was done correctly
-2. What mistake(s) were made (if any)
-3. One specific lesson to improve future trades
-Keep each point under 20 words. Be direct and actionable."""
-
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        analysis = resp.content[0].text if resp.content else ""
+        analysis = generate_trade_lesson(entry)
         sb.table("trade_journal").update({"lessons": analysis}).eq("id", entry["id"]).execute()
     except Exception:
-        pass
+        logger.exception("Trade lesson generation failed for journal entry %s", entry.get("id"))

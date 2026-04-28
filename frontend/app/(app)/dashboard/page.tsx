@@ -643,54 +643,62 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    Promise.all([
-      getWatchlists().catch(() => []),
-      getJournalEntries({ limit: 250 }).catch(() => ({ entries: [], total: 0 })),
-      getJournalStats().catch(() => null),
-      getBrokerStatus().catch(() => ({
-        connected: false,
-        broker: null,
-        mode: 'simulated',
-        has_api_key: false,
-        has_token: false,
-        token_expired: false,
-        connected_at: null,
-        token_expires_at: null,
-      })),
-      getAiPatterns().catch(() => null),
-      getMe().catch(() => null),
-    ]).then(async ([watchlists, journal, stats, broker, patterns, me]) => {
-      const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
-      const closedTrades = journal.entries.filter(entry => entry.status === 'closed').length || (stats?.total_trades ?? 0)
-      const reviewedTrades = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
-      const nextWorkflow: WorkflowState = {
-        watchlists: watchlists.length,
-        trackedSymbols,
-        totalTrades: stats?.total_trades ?? journal.entries.length,
-        brokerConnected: Boolean(broker.connected),
-        brokerName: broker.broker,
-        closedTrades,
-        reviewedTrades,
-        onboardingCompleted: Boolean(me?.onboarding_completed),
-        patterns: patterns as AiPatterns | null,
-      }
-      setWorkflow(nextWorkflow)
-      setReviewPrompts(deriveReviewPrompts(journal.entries))
-
-      const allComplete = nextWorkflow.watchlists > 0
-        && nextWorkflow.trackedSymbols > 0
-        && nextWorkflow.brokerConnected
-        && nextWorkflow.closedTrades >= 3
-
-      if (allComplete && me && !me.onboarding_completed) {
-        try {
-          await updateMe({ onboarding_completed: true })
-          setWorkflow(current => ({ ...current, onboardingCompleted: true }))
-        } catch {
-          // Ignore profile sync failures; local product state still reflects progress.
+    const timer = window.setTimeout(() => {
+      Promise.all([
+        getWatchlists().catch(() => []),
+        getJournalEntries({ limit: 75 }).catch(() => ({ entries: [], total: 0 })),
+        getJournalStats().catch(() => null),
+        getBrokerStatus().catch(() => ({
+          connected: false,
+          broker: null,
+          mode: 'simulated',
+          has_api_key: false,
+          has_token: false,
+          token_expired: false,
+          connected_at: null,
+          token_expires_at: null,
+        })),
+        getMe().catch(() => null),
+      ]).then(async ([watchlists, journal, stats, broker, me]) => {
+        const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
+        const closedTrades = journal.entries.filter(entry => entry.status === 'closed').length || (stats?.total_trades ?? 0)
+        const reviewedTrades = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
+        const nextWorkflow: WorkflowState = {
+          watchlists: watchlists.length,
+          trackedSymbols,
+          totalTrades: stats?.total_trades ?? journal.entries.length,
+          brokerConnected: Boolean(broker.connected),
+          brokerName: broker.broker,
+          closedTrades,
+          reviewedTrades,
+          onboardingCompleted: Boolean(me?.onboarding_completed),
+          patterns: null,
         }
-      }
-    })
+        setWorkflow(nextWorkflow)
+        setReviewPrompts(deriveReviewPrompts(journal.entries))
+
+        if (closedTrades >= 3) {
+          getAiPatterns()
+            .then((patterns) => setWorkflow(current => ({ ...current, patterns: patterns as AiPatterns | null })))
+            .catch(() => {})
+        }
+
+        const allComplete = nextWorkflow.watchlists > 0
+          && nextWorkflow.trackedSymbols > 0
+          && nextWorkflow.brokerConnected
+          && nextWorkflow.closedTrades >= 3
+
+        if (allComplete && me && !me.onboarding_completed) {
+          try {
+            await updateMe({ onboarding_completed: true })
+            setWorkflow(current => ({ ...current, onboardingCompleted: true }))
+          } catch {
+            // Ignore profile sync failures; local product state still reflects progress.
+          }
+        }
+      })
+    }, 250)
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {

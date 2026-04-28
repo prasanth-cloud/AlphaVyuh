@@ -100,7 +100,7 @@ const PLAN_META: { id: PlanId; label: string; color: string; accentBg: string; f
       "Unlimited saved screens",
       "Unlimited watchlists",
       "All chart indicators (BB, VWAP, MACD…)",
-      "Full journal + AI mistake analysis",
+      "Full journal + trade mistake analysis",
       "Sector breadth overlay",
       "Options strategy builder",
       "US stocks (NASDAQ + NYSE)",

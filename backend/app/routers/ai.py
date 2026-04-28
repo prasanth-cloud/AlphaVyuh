@@ -1,19 +1,22 @@
 """
-AI MistakeEngine — analyses the user's trade journal and surfaces
-recurring patterns, mistakes, and actionable improvements using Claude.
+Trade analysis routes.
+
+These endpoints analyse the user's closed trade journal locally. No journal data
+is sent to a third-party AI provider.
 """
 from __future__ import annotations
 
 import datetime
 import logging
 from collections import defaultdict
+from statistics import mean
+from typing import Any
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.middleware.auth import get_current_user_id
 from app.services.rate_limit import ai_limiter
-from app.services.supabase import get_admin_client, settings
+from app.services.supabase import get_admin_client
 
 logger = logging.getLogger(__name__)
 
@@ -22,65 +25,238 @@ router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 MIN_TRADES = 3
 
 
-def _build_prompt(trades: list[dict]) -> str:
-    lines = []
-    for t in trades:
-        parts = [
-            f"Symbol: {t['symbol']}",
-            f"Type: {t['trade_type']}",
-            f"Setup: {t.get('setup_type') or 'untagged'}",
-            f"Entry: {t['entry_date']} @ ₹{t['entry_price']}",
-        ]
-        if t.get("exit_date"):
-            parts.append(f"Exit: {t['exit_date']} @ ₹{t.get('exit_price', '?')}")
-        if t.get("pnl") is not None:
-            pnl_str = f"₹{t['pnl']:+.0f} ({t.get('pnl_pct', 0):+.1f}%)"
-            parts.append(f"P&L: {pnl_str}")
-        if t.get("holding_days"):
-            parts.append(f"Holding: {t['holding_days']}d")
-        if t.get("entry_reason"):
-            parts.append(f"Entry reason: {t['entry_reason']}")
-        if t.get("exit_reason"):
-            parts.append(f"Exit reason: {t['exit_reason']}")
-        if t.get("mistakes"):
-            parts.append(f"Noted mistakes: {t['mistakes']}")
-        lines.append(" | ".join(parts))
-
-    trade_text = "\n".join(f"- {l}" for l in lines)
-
-    return f"""You are an experienced Indian stock market trading coach and performance analyst.
-
-The trader has given you their complete trade journal. Analyse it carefully and provide:
-
-1. **Key Patterns** (2-4 bullet points): What recurring behaviours — both good and bad — do you see? Look at setups, timing, holding periods, position management.
-
-2. **Top Mistakes** (2-3 bullet points): Specific, concrete mistakes this trader keeps repeating. Be direct.
-
-3. **What's Working** (1-2 bullet points): Positive patterns worth reinforcing.
-
-4. **Actionable Rules** (2-3 bullet points): Specific rules this trader should add to their trading plan right now. Make them concrete and measurable (e.g., "Never hold a loss more than 3 days" not "Manage risk better").
-
-Keep each bullet point to 1-2 sentences. Be direct and specific — use the actual symbols and numbers from their journal. Don't give generic advice.
-
-Trade Journal:
-{trade_text}
-
-Respond in clean markdown with the four sections above. No preamble."""
-
-
 _DISCLAIMER = (
-    "AI analysis is for educational purposes only and does not constitute "
-    "SEBI-registered investment advice. Past performance is not indicative of future results."
+    "Trade analysis is generated from your closed journal records for education "
+    "and review. It is not SEBI-registered investment advice."
 )
+
+
+def _num(value: Any, fallback: float = 0.0) -> float:
+    try:
+        if value is None:
+            return fallback
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _date(value: Any) -> datetime.date | None:
+    if not value:
+        return None
+    try:
+        return datetime.date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _win_rate(trades: list[dict]) -> float:
+    if not trades:
+        return 0.0
+    wins = sum(1 for trade in trades if _num(trade.get("pnl")) > 0)
+    return round(wins / len(trades) * 100, 1)
+
+
+def _total_pnl(trades: list[dict]) -> float:
+    return round(sum(_num(trade.get("pnl")) for trade in trades), 2)
+
+
+def _best_and_worst(trades: list[dict]) -> tuple[dict | None, dict | None]:
+    with_pnl = [trade for trade in trades if trade.get("pnl") is not None]
+    if not with_pnl:
+        return None, None
+    return max(with_pnl, key=lambda t: _num(t.get("pnl"))), min(with_pnl, key=lambda t: _num(t.get("pnl")))
+
+
+def _group_by(trades: list[dict], key: str, fallback: str = "Untagged") -> dict[str, list[dict]]:
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for trade in trades:
+        value = str(trade.get(key) or fallback).strip() or fallback
+        grouped[value].append(trade)
+    return grouped
+
+
+def _format_pct(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    sign = "+" if value > 0 else ""
+    return f"{sign}{value:.1f}%"
+
+
+def _format_money(value: float) -> str:
+    sign = "+" if value > 0 else ""
+    return f"{sign}Rs {value:,.0f}"
+
+
+def _holding_bucket(days: int) -> str:
+    if days <= 0:
+        return "Intraday (0d)"
+    if days <= 3:
+        return "Short (1-3d)"
+    if days <= 10:
+        return "Swing (4-10d)"
+    return "Position (11d+)"
+
+
+def generate_trade_lesson(entry: dict) -> str:
+    """Create a concise, local lesson for a single closed trade."""
+    pnl = _num(entry.get("pnl"))
+    pnl_pct = _num(entry.get("pnl_pct"))
+    holding_days = int(_num(entry.get("holding_days")))
+    trade_type = str(entry.get("trade_type") or "long").lower()
+    entry_price = _num(entry.get("entry_price"))
+    stop_loss = _num(entry.get("stop_loss"), fallback=0.0)
+    target = _num(entry.get("target_price"), fallback=0.0)
+    setup = entry.get("setup_type") or "untagged setup"
+
+    lines: list[str] = []
+    outcome = "winner" if pnl > 0 else "loser" if pnl < 0 else "flat trade"
+    lines.append(
+        f"- {entry.get('symbol', 'Trade')} was a {outcome}: {_format_money(pnl)} ({_format_pct(pnl_pct)})."
+    )
+
+    if setup != "untagged setup":
+        lines.append(f"- Setup tagged as {setup}; keep comparing this setup's win rate against your journal average.")
+    else:
+        lines.append("- Setup was not tagged; add a setup label so future reviews can find repeat patterns.")
+
+    if stop_loss and entry_price:
+        stopped = (trade_type == "long" and pnl < 0 and _num(entry.get("exit_price")) <= stop_loss) or (
+            trade_type == "short" and pnl < 0 and _num(entry.get("exit_price")) >= stop_loss
+        )
+        if stopped:
+            lines.append("- Loss stayed close to the planned stop; that protects capital for the next setup.")
+        else:
+            lines.append("- Compare the exit with the planned stop; tighten execution notes if the stop was not followed.")
+    else:
+        lines.append("- Add a stop loss before entry so every closed trade has a measurable risk point.")
+
+    if target and pnl > 0:
+        lines.append("- Winner had a target recorded; review whether exit matched the planned reward.")
+    elif pnl > 0:
+        lines.append("- Winner lacked a target; record the intended exit zone before the next entry.")
+
+    if holding_days > 10 and pnl < 0:
+        lines.append("- Losing trade was held more than 10 days; define a time stop for stalled positions.")
+    elif holding_days <= 3 and pnl > 0:
+        lines.append("- Quick winner; check whether this setup works best with faster profit-taking.")
+
+    return "\n".join(lines[:5])
+
+
+def generate_journal_analysis(trades: list[dict]) -> str:
+    """Build a markdown journal review using only recorded trade data."""
+    total = len(trades)
+    winners = [trade for trade in trades if _num(trade.get("pnl")) > 0]
+    losers = [trade for trade in trades if _num(trade.get("pnl")) < 0]
+    win_rate = _win_rate(trades)
+    total_pnl = _total_pnl(trades)
+    best, worst = _best_and_worst(trades)
+
+    setup_stats = []
+    for setup, group in _group_by(trades, "setup_type").items():
+        if len(group) < 2:
+            continue
+        setup_stats.append((setup, len(group), _win_rate(group), _total_pnl(group)))
+    setup_stats.sort(key=lambda item: (item[3], item[2], item[1]), reverse=True)
+
+    day_stats = []
+    by_day: dict[str, list[dict]] = defaultdict(list)
+    for trade in trades:
+        entry_day = _date(trade.get("entry_date"))
+        if entry_day:
+            by_day[entry_day.strftime("%A")].append(trade)
+    for day, group in by_day.items():
+        day_stats.append((day, len(group), _win_rate(group), _total_pnl(group)))
+    day_stats.sort(key=lambda item: item[3])
+
+    hold_winners = [int(_num(t.get("holding_days"))) for t in winners if t.get("holding_days") is not None]
+    hold_losers = [int(_num(t.get("holding_days"))) for t in losers if t.get("holding_days") is not None]
+    avg_win_hold = round(mean(hold_winners), 1) if hold_winners else None
+    avg_loss_hold = round(mean(hold_losers), 1) if hold_losers else None
+
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for trade in trades:
+        buckets[_holding_bucket(int(_num(trade.get("holding_days"))))].append(trade)
+    bucket_rows = sorted(
+        ((bucket, len(group), _win_rate(group), _total_pnl(group)) for bucket, group in buckets.items()),
+        key=lambda item: item[3],
+    )
+
+    key_patterns = [
+        f"- **Overall edge:** {total} closed trades, {win_rate}% win rate, total realised P&L {_format_money(total_pnl)}.",
+    ]
+    if best:
+        key_patterns.append(
+            f"- **Best trade:** {best.get('symbol')} contributed {_format_money(_num(best.get('pnl')))} ({_format_pct(_num(best.get('pnl_pct')))})."
+        )
+    if worst:
+        key_patterns.append(
+            f"- **Largest drag:** {worst.get('symbol')} cost {_format_money(_num(worst.get('pnl')))} ({_format_pct(_num(worst.get('pnl_pct')))})."
+        )
+    if avg_win_hold is not None and avg_loss_hold is not None:
+        key_patterns.append(
+            f"- **Holding behaviour:** winners average {avg_win_hold} days; losers average {avg_loss_hold} days."
+        )
+
+    mistakes: list[str] = []
+    weak_setups = [row for row in setup_stats if row[2] < win_rate and row[3] < 0]
+    if weak_setups:
+        setup, count, rate, pnl = weak_setups[0]
+        mistakes.append(f"- **Weak setup cluster:** {setup} has {count} trades, {rate}% win rate, {_format_money(pnl)} P&L.")
+    worst_bucket = bucket_rows[0] if bucket_rows else None
+    if worst_bucket and worst_bucket[3] < 0:
+        mistakes.append(
+            f"- **Holding period leak:** {worst_bucket[0]} is the weakest bucket with {_format_money(worst_bucket[3])} P&L."
+        )
+    if day_stats and day_stats[0][3] < 0:
+        day, count, rate, pnl = day_stats[0]
+        mistakes.append(f"- **Timing issue:** {day} entries show {count} trades, {rate}% win rate, {_format_money(pnl)} P&L.")
+    untagged = sum(1 for trade in trades if not trade.get("setup_type"))
+    if untagged:
+        mistakes.append(f"- **Review quality:** {untagged} closed trades have no setup tag, which weakens pattern detection.")
+    if not mistakes:
+        mistakes.append("- No repeated loss cluster is clear yet; keep logging setup, stop, target, and exit reason consistently.")
+
+    working: list[str] = []
+    strong_setups = [row for row in setup_stats if row[2] >= win_rate and row[3] > 0]
+    if strong_setups:
+        setup, count, rate, pnl = strong_setups[0]
+        working.append(f"- **Best setup:** {setup} has {count} trades, {rate}% win rate, {_format_money(pnl)} P&L.")
+    profitable_buckets = [row for row in bucket_rows if row[3] > 0]
+    if profitable_buckets:
+        bucket, count, rate, pnl = profitable_buckets[-1]
+        working.append(f"- **Best holding bucket:** {bucket} produced {_format_money(pnl)} across {count} trades.")
+    if winners:
+        working.append(f"- **Winner count:** {len(winners)} trades closed positive; review those screenshots before adding new risk.")
+    if not working:
+        working.append("- Positive sample is still thin; focus on smaller risk and cleaner post-trade notes until a repeatable edge appears.")
+
+    rules: list[str] = []
+    if weak_setups:
+        setup = weak_setups[0][0]
+        rules.append(f"- Cap {setup} trades to half-size until the next 5 closed examples are net positive.")
+    if avg_loss_hold is not None and avg_win_hold is not None and avg_loss_hold > avg_win_hold:
+        rules.append("- Add a time stop: if a losing position lasts longer than your average winner, force a review before holding overnight.")
+    if worst:
+        rules.append(f"- Before entering a new {worst.get('symbol')} style trade, write the invalidation price and max loss in the journal.")
+    rules.append("- Every closed trade must have setup type, entry reason, exit reason, and one lesson before the next weekly review.")
+
+    return "\n\n".join([
+        "## Key Patterns",
+        "\n".join(key_patterns[:4]),
+        "## Top Mistakes",
+        "\n".join(mistakes[:4]),
+        "## What's Working",
+        "\n".join(working[:3]),
+        "## Actionable Rules",
+        "\n".join(rules[:4]),
+    ])
 
 
 @router.post("/analyse")
 async def analyse_journal(user_id: str = Depends(get_current_user_id)):
     if not ai_limiter.is_allowed(user_id):
-        raise HTTPException(429, "Too many AI requests — max 5 per 5 minutes")
-
-    if not settings.anthropic_api_key:
-        raise HTTPException(503, "AI analysis not available — contact support")
+        raise HTTPException(429, "Too many review requests - max 5 per 5 minutes")
 
     sb = get_admin_client()
     result = (
@@ -100,34 +276,11 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
     if len(trades) < MIN_TRADES:
         raise HTTPException(
             400,
-            f"Need at least {MIN_TRADES} closed trades for analysis. You have {len(trades)}."
+            f"Need at least {MIN_TRADES} closed trades for analysis. You have {len(trades)}.",
         )
-
-    prompt = _build_prompt(trades)
-
-    try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        message = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        analysis = message.content[0].text
-    except anthropic.BadRequestError as e:
-        err_body = str(e)
-        logger.error(f"Claude API error: {e}")
-        if "credit balance" in err_body.lower() or "too low" in err_body.lower():
-            raise HTTPException(503, "AI service is temporarily unavailable — please try again later")
-        raise HTTPException(500, "AI analysis failed — please try again")
-    except anthropic.AuthenticationError:
-        logger.error("Anthropic API key invalid or expired")
-        raise HTTPException(503, "AI service is temporarily unavailable — please try again later")
-    except Exception as e:
-        logger.error(f"Claude API error: {e}")
-        raise HTTPException(500, "AI analysis failed — please try again")
 
     return {
-        "analysis": analysis,
+        "analysis": generate_journal_analysis(trades),
         "trades_analysed": len(trades),
         "disclaimer": _DISCLAIMER,
     }
@@ -136,7 +289,7 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
 @router.get("/patterns")
 async def get_patterns(user_id: str = Depends(get_current_user_id)):
     """
-    Compute statistical patterns from closed trades without calling the AI.
+    Compute statistical patterns from closed trades.
     Returns win rates by day of week, direction, holding period bucket, and time-in-trade stats.
     """
     sb = get_admin_client()
@@ -160,8 +313,8 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
     direction_stats: dict = defaultdict(lambda: {"trades": 0, "wins": 0, "total_pnl": 0.0})
     holding_buckets: dict = {
         "Intraday (0d)": {"trades": 0, "wins": 0},
-        "Short (1–3d)":  {"trades": 0, "wins": 0},
-        "Swing (4–10d)": {"trades": 0, "wins": 0},
+        "Short (1-3d)":  {"trades": 0, "wins": 0},
+        "Swing (4-10d)": {"trades": 0, "wins": 0},
         "Position (11d+)": {"trades": 0, "wins": 0},
     }
 
@@ -169,50 +322,34 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
     loss_hold: list[int] = []
 
     for t in trades:
-        pnl = float(t["pnl"]) if t.get("pnl") is not None else 0.0
+        pnl = _num(t.get("pnl"))
         win = pnl > 0
 
-        # Day of week at entry
-        if t.get("entry_date"):
-            try:
-                dt = datetime.date.fromisoformat(t["entry_date"])
-                day_name = dt.strftime("%A")
-                day_stats[day_name]["trades"] += 1
-                day_stats[day_name]["total_pnl"] += pnl
-                if win:
-                    day_stats[day_name]["wins"] += 1
-            except Exception:
-                pass
+        entry_day = _date(t.get("entry_date"))
+        if entry_day:
+            day_name = entry_day.strftime("%A")
+            day_stats[day_name]["trades"] += 1
+            day_stats[day_name]["total_pnl"] += pnl
+            if win:
+                day_stats[day_name]["wins"] += 1
 
-        # Long vs Short
         direction = t.get("trade_type") or "long"
         direction_stats[direction]["trades"] += 1
         direction_stats[direction]["total_pnl"] += pnl
         if win:
             direction_stats[direction]["wins"] += 1
 
-        # Holding period buckets
-        hd = int(t.get("holding_days") or 0)
-        if hd == 0:
-            bucket = "Intraday (0d)"
-        elif hd <= 3:
-            bucket = "Short (1–3d)"
-        elif hd <= 10:
-            bucket = "Swing (4–10d)"
-        else:
-            bucket = "Position (11d+)"
+        hd = int(_num(t.get("holding_days")))
+        bucket = _holding_bucket(hd)
         holding_buckets[bucket]["trades"] += 1
         if win:
             holding_buckets[bucket]["wins"] += 1
 
-        # Avg holding: win vs loss
-        if hd is not None:
-            if win:
-                win_hold.append(hd)
-            else:
-                loss_hold.append(hd)
+        if win:
+            win_hold.append(hd)
+        else:
+            loss_hold.append(hd)
 
-    # Sort days in calendar order
     day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     day_of_week = [
         {
@@ -220,7 +357,7 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
             "trades": day_stats[day]["trades"],
             "wins": day_stats[day]["wins"],
             "win_rate": round(day_stats[day]["wins"] / day_stats[day]["trades"] * 100, 1)
-                        if day_stats[day]["trades"] > 0 else 0,
+            if day_stats[day]["trades"] > 0 else 0,
             "total_pnl": round(day_stats[day]["total_pnl"], 2),
         }
         for day in day_order if day_stats[day]["trades"] > 0

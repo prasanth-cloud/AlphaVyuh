@@ -49,5 +49,5 @@ class PlanCache:
 
 # Singletons
 scanner_limiter = RateLimiter(max_calls=30, period=60.0)   # 30 scans/minute per user
-ai_limiter      = RateLimiter(max_calls=5,  period=300.0)  # 5 AI calls per 5 min per user
+ai_limiter      = RateLimiter(max_calls=5,  period=300.0)  # 5 trade-review calls per 5 min per user
 plan_cache      = PlanCache(ttl=60.0)

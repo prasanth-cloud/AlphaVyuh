@@ -150,14 +150,14 @@ export function JournalAiInsights({
         )}
       </Card>
 
-      {/* AI deep analysis */}
+      {/* Trade review */}
       <Card padding="lg">
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
-            <h2 className="heading-card" style={{ marginBottom: 4 }}>AI review</h2>
+            <h2 className="heading-card" style={{ marginBottom: 4 }}>Trade review</h2>
             <div className="body-secondary">Run a journal-wide review to surface repeat mistakes, strength areas, and process rules worth adding to your playbook.</div>
             <div className="caption" style={{ marginTop: 6 }}>
-              Grounded in your closed trades and journal notes; use it as a review aid, not a trade signal.
+              Generated inside AlphaVyuh from your closed trades and journal notes; use it as a review aid, not a trade signal.
             </div>
           </div>
           <button
@@ -188,7 +188,7 @@ export function JournalAiInsights({
           <div>
             <div className="caption" style={{ marginBottom: 12 }}>Based on {aiTradesCount} closed trades</div>
             <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: "var(--radius-md)", fontSize: 11, lineHeight: 1.6, background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--warn)" }}>
-              AI analysis is for educational purposes only and does not constitute SEBI-registered investment advice.
+              Trade analysis is for educational purposes only and does not constitute SEBI-registered investment advice.
             </div>
             <div style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-primary)" }}>
               {aiAnalysis.split("\n").map((line, i) => {
@@ -217,8 +217,8 @@ export function JournalAiInsights({
           <div style={{ textAlign: "center", padding: "32px 0" }}>
             <div className="body-secondary">
               {closedTrades >= 3
-                ? "Your journal is ready for review. You can run it manually, and AlphaVyuh will also try to start it automatically once enough closed trades exist."
-                : "Close a few more trades to unlock journal-wide coaching."}
+                ? "Your journal is ready for review. AlphaVyuh will analyse only your recorded closed trades and notes."
+                : "Close a few more trades to unlock journal-wide review."}
             </div>
             <div className="caption" style={{ marginTop: 4 }}>Requires at least 3 closed trades.</div>
           </div>

@@ -27,8 +27,7 @@ export default function JournalPage() {
   const [aiTradesCount, setAiTradesCount] = useState(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
-  const [autoAnalysisStarted, setAutoAnalysisStarted] = useState(false);
-  const [autoAnalysisAttempted, setAutoAnalysisAttempted] = useState(false);
+  const [autoAnalysisStarted] = useState(false);
   const [patterns, setPatterns] = useState<AiPatterns | null>(null);
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [brokerConnected, setBrokerConnected] = useState(false);
@@ -65,11 +64,11 @@ export default function JournalPage() {
     setLoading(true);
     try {
       const params = filterStatus === "all" ? {} : { status: filterStatus };
-      const [e, s, a] = await Promise.all([getJournalEntries(params), getJournalStats(), getJournalAnalytics()]);
+      const [e, s] = await Promise.all([getJournalEntries(params), getJournalStats()]);
       setEntries(e.entries);
       setJournalPlan(e.plan ?? null);
       setStats(s);
-      setAnalytics(a);
+      getJournalAnalytics().then(setAnalytics).catch(() => {});
     } catch { /* ignore */ } finally { setLoading(false); }
   }, [filterStatus]);
 
@@ -99,27 +98,6 @@ export default function JournalPage() {
     setPatternsLoading(true);
     getAiPatterns().then(setPatterns).catch(() => {}).finally(() => setPatternsLoading(false));
   }, [tab, patterns]);
-
-  useEffect(() => {
-    if (autoAnalysisAttempted || aiLoading || aiAnalysis || aiError) return;
-    if ((stats?.total_trades ?? 0) < 3) return;
-    setAutoAnalysisStarted(true);
-    setAutoAnalysisAttempted(true);
-    setAiLoading(true);
-    setAiError("");
-    analyseJournal()
-      .then(r => {
-        setAiAnalysis(r.analysis);
-        setAiTradesCount(r.trades_analysed);
-      })
-      .catch((e: unknown) => {
-        setAiError(e instanceof Error ? e.message : "Analysis failed");
-      })
-      .finally(() => {
-        setAiLoading(false);
-        setAutoAnalysisStarted(false);
-      });
-  }, [autoAnalysisAttempted, aiAnalysis, aiError, aiLoading, stats?.total_trades]);
 
   useEffect(() => {
     if (symbolQ.length < 1) { setSymbolResults([]); return; }
@@ -192,7 +170,7 @@ export default function JournalPage() {
     try {
       await updateJournalEntry(selectedEntry.id, { ...closeForm, ...(closeSetupType ? { setup_type: closeSetupType } : {}) } as UpdateJournalEntry);
       setPanelMode(null); setSelectedEntry(null);
-      showToast("Trade closed — AI analysing…"); load();
+      showToast("Trade closed - review generated"); load();
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Failed to close"); }
     finally { setSaving(false); }
   };
@@ -203,8 +181,8 @@ export default function JournalPage() {
       const updated = await triggerTradeLesson(entry.id);
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       if (selectedEntry?.id === updated.id) setSelectedEntry(updated);
-      showToast("AI lesson generated");
-    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "AI lesson failed"); }
+      showToast("Trade lesson generated");
+    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Trade lesson failed"); }
     finally { setLessonLoading(null); }
   };
 
@@ -278,7 +256,7 @@ export default function JournalPage() {
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {([{ id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "AI analysis" }] as { id: Tab; label: string }[]).map(({ id, label }) => (
+        {([{ id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "Trade review" }] as { id: Tab; label: string }[]).map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer",
             color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
@@ -294,7 +272,7 @@ export default function JournalPage() {
       {/* ── Analytics tab ── */}
       {tab === "analytics" && <JournalAnalyticsTab analytics={analytics} />}
 
-      {/* ── AI tab ── */}
+      {/* ── Trade review tab ── */}
       {tab === "ai" && (
         <JournalAiInsights
           patterns={patterns}

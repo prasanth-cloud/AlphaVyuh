@@ -350,7 +350,7 @@ async def update_entry(
     result = sb.table("trade_journal").update(update_data).eq("id", entry_id).execute()
     updated_entry = result.data[0]
 
-    # Trigger AI analysis when a trade is closed
+    # Generate a local trade lesson when a trade is closed.
     if closing_now:
         try:
             from app.routers.broker import _trigger_ai_analysis
@@ -366,7 +366,7 @@ async def generate_lessons(
     entry_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Trigger AI analysis for a specific closed trade on demand."""
+    """Generate a local lesson for a specific closed trade on demand."""
     sb = get_admin_client()
     r = sb.table("trade_journal").select("*").eq("id", entry_id).eq("user_id", user_id).maybe_single().execute()
     if not r.data:
@@ -378,7 +378,7 @@ async def generate_lessons(
         from app.routers.broker import _trigger_ai_analysis
         _trigger_ai_analysis(sb, r.data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Trade lesson failed: {e}")
 
     updated = sb.table("trade_journal").select("*").eq("id", entry_id).maybe_single().execute()
     from app.routers.ai import _DISCLAIMER

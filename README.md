@@ -108,4 +108,4 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 - Phase 2 — NSE Scanner + Watchlist + Bhavcopy pipeline
 - Phase 3 — Charts (Lightweight Charts v5, drawings, layouts)
 - Phase 4 — Broker connect (Zerodha Kite) + Trade journal
-- Phase 5 — AI MistakeEngine + Alerts + Mobile app
+- Phase 5 — Trade review engine + Alerts + Mobile app

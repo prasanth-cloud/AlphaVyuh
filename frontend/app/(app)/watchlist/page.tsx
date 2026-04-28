@@ -796,59 +796,13 @@ function WatchlistContent() {
   useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    getJournalEntries({ limit: 250 }).catch(() => ({ entries: [], total: 0 })).then((journal) => {
-      setJournalEntries(journal.entries);
-    });
+    const timer = window.setTimeout(() => {
+      getJournalEntries({ limit: 75 }).catch(() => ({ entries: [], total: 0 })).then((journal) => {
+        setJournalEntries(journal.entries);
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
   }, []);
-
-  const activeSymbolsKey = (watchlists.find(w => w.id === activeId)?.items ?? [])
-    .map(item => item.symbol)
-    .join(",");
-
-  useEffect(() => {
-    if (!activeId) return;
-    const active = watchlists.find(w => w.id === activeId);
-    if (!active?.items?.length) return;
-    const activeItems = active.items;
-
-    let cancelled = false;
-
-    async function refreshLiveQuotes() {
-      const updates = await Promise.all(
-        activeItems.map(async (item) => {
-          const live = await getQuoteLive(item.symbol).catch(() => null);
-          return live ? {
-            symbol: item.symbol,
-            close: live.close,
-            pct_change: live.pct_change,
-          } : null;
-        })
-      );
-
-      if (cancelled) return;
-      const liveMap = new Map(updates.filter(Boolean).map((u) => [u!.symbol, u!]));
-      setWatchlists(prev => prev.map(w => (
-        w.id !== activeId
-          ? w
-          : {
-              ...w,
-              items: w.items.map(item => {
-                const live = liveMap.get(item.symbol);
-                return live ? { ...item, close: live.close, pct_change: live.pct_change } : item;
-              }),
-            }
-      )));
-    }
-
-    refreshLiveQuotes();
-    const id = setInterval(refreshLiveQuotes, 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  // We intentionally refresh only when the active watchlist or its symbol set changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, activeSymbolsKey]);
 
   const symbolParam = searchParams.get("symbol");
   useEffect(() => {
@@ -994,10 +948,52 @@ function WatchlistContent() {
   const queuePageCount = Math.max(1, Math.ceil(visibleItems.length / WATCHLIST_PAGE_SIZE));
   const pageStart = Math.min(queuePage, queuePageCount - 1) * WATCHLIST_PAGE_SIZE;
   const pageItems = visibleItems.slice(pageStart, pageStart + WATCHLIST_PAGE_SIZE);
+  const pageSymbolsKey = pageItems.map(item => item.symbol).join(",");
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
+
+  useEffect(() => {
+    if (!activeId || !pageItems.length) return;
+    let cancelled = false;
+
+    async function refreshLiveQuotes() {
+      const updates = await Promise.all(
+        pageItems.map(async (item) => {
+          const live = await getQuoteLive(item.symbol).catch(() => null);
+          return live ? {
+            symbol: item.symbol,
+            close: live.close,
+            pct_change: live.pct_change,
+          } : null;
+        })
+      );
+
+      if (cancelled) return;
+      const liveMap = new Map(updates.filter(Boolean).map((u) => [u!.symbol, u!]));
+      setWatchlists(prev => prev.map(w => (
+        w.id !== activeId
+          ? w
+          : {
+              ...w,
+              items: w.items.map(item => {
+                const live = liveMap.get(item.symbol);
+                return live ? { ...item, close: live.close, pct_change: live.pct_change } : item;
+              }),
+            }
+      )));
+    }
+
+    refreshLiveQuotes();
+    const id = window.setInterval(refreshLiveQuotes, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  // We intentionally refresh only the visible five-symbol queue page.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, pageSymbolsKey]);
 
   const moveSelection = useCallback((direction: "prev" | "next") => {
     if (!visibleItems.length) return;
