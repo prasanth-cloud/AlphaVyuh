@@ -46,6 +46,7 @@ type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
 const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
+const WATCHLIST_PAGE_SIZE = 5;
 
 function getSetupSignal(item: WatchlistItem): SetupSignal {
   const move = item.pct_change ?? 0;
@@ -692,6 +693,7 @@ function WatchlistContent() {
   const [showDeskControls, setShowDeskControls] = useState(false);
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [queuePage, setQueuePage] = useState(0);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -989,6 +991,9 @@ function WatchlistContent() {
       return a.sort_order - b.sort_order;
     });
   }, [activeId, activeWl?.items, deskFilter, listQuery, getItemMeta, queueView, activeTagFilter, sortMode]);
+  const queuePageCount = Math.max(1, Math.ceil(visibleItems.length / WATCHLIST_PAGE_SIZE));
+  const pageStart = Math.min(queuePage, queuePageCount - 1) * WATCHLIST_PAGE_SIZE;
+  const pageItems = visibleItems.slice(pageStart, pageStart + WATCHLIST_PAGE_SIZE);
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
@@ -1020,6 +1025,26 @@ function WatchlistContent() {
       setChartSymbol(visibleItems[0].symbol);
     }
   }, [activeId, chartSymbol, visibleItems]);
+
+  useEffect(() => {
+    setQueuePage(0);
+  }, [activeId, deskFilter, listQuery, queueView, activeTagFilter, sortMode]);
+
+  useEffect(() => {
+    if (queuePage > queuePageCount - 1) {
+      setQueuePage(queuePageCount - 1);
+    }
+  }, [queuePage, queuePageCount]);
+
+  useEffect(() => {
+    if (!chartSymbol) return;
+    const selectedIndex = visibleItems.findIndex(item => item.symbol === chartSymbol);
+    if (selectedIndex === -1) return;
+    const selectedPage = Math.floor(selectedIndex / WATCHLIST_PAGE_SIZE);
+    if (selectedPage !== queuePage) {
+      setQueuePage(selectedPage);
+    }
+  }, [chartSymbol, queuePage, visibleItems]);
 
   useEffect(() => {
     function handleDeskKeys(e: KeyboardEvent) {
@@ -1703,13 +1728,15 @@ function WatchlistContent() {
               </>
             )}
             <div className="caption">
-              {canReorder ? "Drag to reprioritize. Enter opens chart." : "Filtered or ranked view active."}
+              {visibleItems.length > 0
+                ? `Showing ${pageStart + 1}-${Math.min(pageStart + WATCHLIST_PAGE_SIZE, visibleItems.length)} of ${visibleItems.length}. Arrow keys move through the full queue.`
+                : canReorder ? "Drag to reprioritize. Enter opens chart." : "Filtered or ranked view active."}
             </div>
           </div>
         </div>
 
         {/* Stock rows */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {!activeWl ? (
             <EmptyState title="No watchlist selected" description="Create or select a watchlist from the sidebar, then use it as the bridge from scanner ideas to chart review." />
           ) : activeWl.items.length === 0 ? (
@@ -1727,7 +1754,7 @@ function WatchlistContent() {
           ) : (
             canReorder ? (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={visibleItems.map(i => i.symbol)} strategy={verticalListSortingStrategy}>
+                <SortableContext items={pageItems.map(i => i.symbol)} strategy={verticalListSortingStrategy}>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead style={{ position: "sticky", top: 0, zIndex: 10, background: "rgba(10,16,20,0.96)", backdropFilter: "blur(12px)", borderBottom: "1px solid var(--border-subtle)" }}>
                       <tr>
@@ -1739,7 +1766,7 @@ function WatchlistContent() {
                       </tr>
                     </thead>
                     <tbody>
-                      {visibleItems.map(item => {
+                      {pageItems.map(item => {
                         const meta = getItemMeta(activeId, item.symbol);
                         return (
                         <SortableRow
@@ -1771,7 +1798,7 @@ function WatchlistContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleItems.map(item => {
+                  {pageItems.map(item => {
                     const meta = getItemMeta(activeId, item.symbol);
                     return (
                       <SortableRow
@@ -1790,6 +1817,40 @@ function WatchlistContent() {
                 </tbody>
               </table>
             )
+          )}
+          {activeWl && visibleItems.length > WATCHLIST_PAGE_SIZE && (
+            <div
+              style={{
+                marginTop: "auto",
+                padding: "10px 14px",
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                flexShrink: 0,
+              }}
+            >
+              <button
+                className="workspace-chip-button"
+                onClick={() => setQueuePage(page => Math.max(0, page - 1))}
+                disabled={queuePage === 0}
+                style={{ opacity: queuePage === 0 ? 0.45 : 1 }}
+              >
+                ← 5
+              </button>
+              <div className="caption" style={{ textAlign: "center" }}>
+                Page {queuePage + 1} / {queuePageCount}
+              </div>
+              <button
+                className="workspace-chip-button"
+                onClick={() => setQueuePage(page => Math.min(queuePageCount - 1, page + 1))}
+                disabled={queuePage >= queuePageCount - 1}
+                style={{ opacity: queuePage >= queuePageCount - 1 ? 0.45 : 1 }}
+              >
+                5 →
+              </button>
+            </div>
           )}
         </div>
       </div>
