@@ -89,6 +89,61 @@ def list_orders(access_token: str, api_key: str | None = None) -> list[dict[str,
     return _get("/orders", access_token, api_key=api_key)["data"]
 
 
+def get_instruments(exchange: str | None = None, access_token: str | None = None, api_key: str | None = None) -> str:
+    path = f"/instruments/{exchange}" if exchange else "/instruments"
+    url = f"{BASE_URL}{path}"
+    headers = _headers(access_token, api_key=api_key)
+    try:
+        with httpx.Client(timeout=_TIMEOUT) as client:
+            resp = client.get(url, headers=headers)
+    except httpx.RequestError as exc:
+        raise KiteApiError(status=503, error_type="NetworkException", message=str(exc)) from exc
+    if not resp.is_success:
+        body: dict[str, Any] = {}
+        try:
+            body = resp.json()
+        except Exception:
+            pass
+        raise KiteApiError(
+            status=resp.status_code,
+            error_type=body.get("error_type", "NetworkException"),
+            message=body.get("message", resp.text),
+        )
+    return resp.text
+
+
+def get_quote_ohlc(instruments: list[str], access_token: str, api_key: str | None = None) -> dict[str, Any]:
+    return _get("/quote/ohlc", access_token, api_key=api_key, params={"i": instruments})["data"]
+
+
+def get_quote(instruments: list[str], access_token: str, api_key: str | None = None) -> dict[str, Any]:
+    return _get("/quote", access_token, api_key=api_key, params={"i": instruments})["data"]
+
+
+def get_historical_data(
+    access_token: str,
+    instrument_token: int | str,
+    interval: str,
+    from_date: str,
+    to_date: str,
+    api_key: str | None = None,
+    continuous: bool = False,
+    oi: bool = False,
+) -> list[list[Any]]:
+    data = _get(
+        f"/instruments/historical/{instrument_token}/{interval}",
+        access_token,
+        api_key=api_key,
+        params={
+            "from": from_date,
+            "to": to_date,
+            "continuous": 1 if continuous else 0,
+            "oi": 1 if oi else 0,
+        },
+    )
+    return data["data"]["candles"]
+
+
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
 
@@ -103,8 +158,13 @@ def _headers(access_token: str | None, api_key: str | None = None) -> dict[str, 
     return h
 
 
-def _get(path: str, access_token: str, api_key: str | None = None) -> dict[str, Any]:
-    return _request("GET", path, access_token=access_token, api_key=api_key)
+def _get(
+    path: str,
+    access_token: str,
+    api_key: str | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return _request("GET", path, access_token=access_token, api_key=api_key, params=params)
 
 
 def _post(
@@ -130,13 +190,19 @@ def _request(
     access_token: str | None,
     data: dict[str, Any] | None = None,
     api_key: str | None = None,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     url = f"{BASE_URL}{path}"
     headers = _headers(access_token, api_key=api_key)
 
     for attempt in range(3):
-        with httpx.Client(timeout=_TIMEOUT) as client:
-            resp = client.request(method, url, headers=headers, data=data)
+        try:
+            with httpx.Client(timeout=_TIMEOUT) as client:
+                resp = client.request(method, url, headers=headers, data=data, params=params)
+        except httpx.RequestError as exc:
+            if attempt < 2:
+                continue
+            raise KiteApiError(status=503, error_type="NetworkException", message=str(exc)) from exc
 
         if resp.status_code in _RETRY_STATUSES and attempt < 2:
             continue

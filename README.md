@@ -75,7 +75,25 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_JWT_SECRET=your-jwt-secret
 FRONTEND_URL=http://localhost:3000
 INGEST_SERVICE_KEY=generate-with-secrets.token_hex(32)
+MARKET_DATA_PROVIDER=yahoo
 ```
+
+For Zerodha-backed chart candles/quotes, set:
+
+```
+MARKET_DATA_PROVIDER=kite
+KITE_API_KEY=your-kite-api-key
+KITE_API_SECRET=your-kite-api-secret
+KITE_ACCESS_TOKEN=your-daily-kite-access-token
+```
+
+The chart page uses TradingView Lightweight Charts at `/charts/[symbol]`.
+Daily, weekly, and monthly candles come through `/api/v1/charts/{symbol}/candles-live`
+when live mode is enabled. Indicators are computed server-side with the existing
+`backend/app/services/indicators.py` pandas/numpy library.
+
+Kite access tokens expire daily around 06:00 IST, so `KITE_ACCESS_TOKEN` must be
+refreshed after login before using `MARKET_DATA_PROVIDER=kite`.
 
 ### Frontend (`frontend/.env.local`)
 ```

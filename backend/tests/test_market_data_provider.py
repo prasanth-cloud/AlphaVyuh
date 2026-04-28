@@ -1,6 +1,9 @@
 import pytest
+import pandas as pd
 
 from app.services.market_data import (
+    KiteMarketDataProvider,
+    MarketIdentity,
     MockMarketDataProvider,
     PlaceholderLicensedProvider,
     ProviderNotConfiguredError,
@@ -27,7 +30,17 @@ def test_market_data_provider_selects_mock(monkeypatch):
     assert provider.name == "mock"
 
 
-@pytest.mark.parametrize("name", ["kite", "truedata", "globaldatafeeds"])
+@pytest.mark.parametrize("name", ["kite", "zerodha"])
+def test_market_data_provider_selects_kite(monkeypatch, name):
+    monkeypatch.setenv("MARKET_DATA_PROVIDER", name)
+
+    provider = get_market_data_provider()
+
+    assert isinstance(provider, KiteMarketDataProvider)
+    assert provider.name == "kite"
+
+
+@pytest.mark.parametrize("name", ["truedata", "globaldatafeeds"])
 def test_market_data_provider_selects_placeholder_for_licensed_sources(monkeypatch, name):
     monkeypatch.setenv("MARKET_DATA_PROVIDER", name)
 
@@ -42,3 +55,20 @@ def test_market_data_provider_rejects_unknown_provider(monkeypatch):
 
     with pytest.raises(ProviderNotConfiguredError):
         get_market_data_provider()
+
+
+def test_kite_provider_maps_common_index_aliases(monkeypatch):
+    instruments = pd.DataFrame([
+        {
+            "instrument_token": 256265,
+            "exchange": "NSE",
+            "tradingsymbol": "NIFTY 50",
+            "name": "NIFTY 50",
+        }
+    ])
+    monkeypatch.setattr("app.services.market_data._kite_instruments", lambda exchange: instruments)
+
+    instrument = KiteMarketDataProvider()._instrument("NIFTY", MarketIdentity())
+
+    assert instrument["instrument_token"] == 256265
+    assert instrument["tradingsymbol"] == "NIFTY 50"

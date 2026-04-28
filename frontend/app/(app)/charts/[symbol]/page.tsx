@@ -1585,7 +1585,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             style={liveMode
               ? { background: "rgba(38,166,91,0.10)", color: "#26a65b", border: "1px solid rgba(38,166,91,0.22)" }
               : undefined}
-            title={liveMode ? "Live data (Yahoo Finance) — refresh every 5 min" : "Switch to live Yahoo Finance data"}
+            title={liveMode ? "Live provider data — refresh every 5 min" : "Switch to configured live provider data"}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : ""}`}
               style={!liveMode ? { background: "var(--app-text3)" } : {}} />
