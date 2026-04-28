@@ -64,6 +64,7 @@ export default function IndicatorPanel(props: Props) {
         textColor: "rgba(244,247,251,0.38)",
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: 10,
+        attributionLogo: true,
       },
       grid: {
         vertLines: { color: "rgba(255,255,255,0.03)", style: 1 },

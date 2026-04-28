@@ -35,6 +35,7 @@ export default function MiniChart({ candles, height = 200, dark = true, chartTyp
         background: { type: ColorType.Solid, color: bg },
         textColor: text,
         fontSize: 10,
+        attributionLogo: true,
       },
       grid: {
         vertLines: { visible: false },

@@ -75,7 +75,19 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">8. Prohibited Uses</h2>
+          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">8. Third-Party Notices</h2>
+          <p>
+            AlphaVyuh charting uses{" "}
+            <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer" className="text-[#1c1c1a] underline">
+              TradingView
+            </a>
+            {" "}Lightweight Charts, licensed under the Apache License, Version 2.0.
+            TradingView is the product creator of Lightweight Charts.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">9. Prohibited Uses</h2>
           <p>You may not use the Platform to:</p>
           <ul className="list-disc list-inside mt-2 space-y-1">
             <li>Violate any applicable law or regulation</li>
@@ -86,7 +98,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">9. Limitation of Liability</h2>
+          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">10. Limitation of Liability</h2>
           <p>
             To the maximum extent permitted by law, AlphaVyuh shall not be liable for any indirect, incidental,
             special, or consequential damages arising from your use of the Platform, including any trading losses.
@@ -94,7 +106,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">10. Governing Law</h2>
+          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">11. Governing Law</h2>
           <p>
             These terms are governed by the laws of India. Any disputes shall be subject to the exclusive
             jurisdiction of courts in Bengaluru, Karnataka, India.
@@ -102,7 +114,7 @@ export default function TermsPage() {
         </section>
 
         <section>
-          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">11. Changes to Terms</h2>
+          <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">12. Changes to Terms</h2>
           <p>
             We may update these terms at any time. Continued use of the Platform after changes constitutes
             acceptance of the new terms. We will notify registered users of material changes by email.

@@ -128,6 +128,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
         textColor: "rgba(244,247,251,0.55)",
         fontFamily: "Inter, system-ui, sans-serif",
         fontSize: 11,
+        attributionLogo: true,
       },
       grid: {
         vertLines: { color: "rgba(255,255,255,0.045)", style: 1 },
