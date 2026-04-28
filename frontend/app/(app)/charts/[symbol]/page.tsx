@@ -7,12 +7,12 @@ import Link from "next/link";
 import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Minus, MoveRight, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Trash2, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
+  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
 } from "@/lib/api";
 import {
   getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
-  getFundamentals, getPlanStatus, getQuote, getBrokerStatus, getPortfolio,
+  getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries,
 } from "@/lib/api";
@@ -24,6 +24,7 @@ import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
 type StochPoint = { time: string; k: number; d: number | null };
+type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
 type ChartDrawing = {
   id: string;
@@ -146,6 +147,8 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [liveQuote, setLiveQuote] = useState<LiveQuote | null>(null);
+  const [liveQuoteUpdatedAt, setLiveQuoteUpdatedAt] = useState<string | null>(null);
 
   // Compare symbol
   const [compareSymbol, setCompareSymbol] = useState("");
@@ -215,6 +218,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
   // Broker status
   const [brokerConnected, setBrokerConnected] = useState(false);
+  const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [symbolReview, setSymbolReview] = useState<{
     closed: number;
     reviewed: number;
@@ -362,8 +366,37 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
     getQuote(symbol).then(q => { if (q?.currency) setSymbolCurrency(q.currency); }).catch(() => {});
-    getBrokerStatus().then(s => setBrokerConnected(s.connected)).catch(() => {});
+    getBrokerStatus()
+      .then(s => {
+        setBrokerStatus(s);
+        setBrokerConnected(Boolean(s.connected && !s.token_expired));
+      })
+      .catch(() => {
+        setBrokerStatus(null);
+        setBrokerConnected(false);
+      });
     getPriceAlerts().then(alerts => setPriceAlerts(alerts.filter(a => a.symbol === symbol && a.is_active))).catch(() => {});
+  }, [symbol]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLiveQuote(null);
+    setLiveQuoteUpdatedAt(null);
+
+    async function refreshLiveQuote() {
+      const quote = await getQuoteLive(symbol);
+      if (cancelled || !quote) return;
+      setLiveQuote(quote);
+      if (quote.currency) setSymbolCurrency(quote.currency);
+      setLiveQuoteUpdatedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
+    }
+
+    refreshLiveQuote();
+    const id = window.setInterval(refreshLiveQuote, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
   }, [symbol]);
 
   useEffect(() => {
@@ -1003,6 +1036,12 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   }, [drawnLines, handleDeleteSingleDrawing, persistEditedDrawing, textEditor, updateDrawingsWithHistory]);
 
   const latest = data?.latest;
+  const displayClose = liveQuote?.close ?? latest?.close ?? null;
+  const displayPrevClose = liveQuote?.prev_close ?? latest?.prev_close ?? null;
+  const displayPctChange = liveQuote?.pct_change ?? (
+    displayClose != null && displayPrevClose ? ((displayClose - displayPrevClose) / displayPrevClose) * 100 : null
+  );
+  const displayPositive = (displayPctChange ?? 0) >= 0;
   const prevClose = latest?.prev_close;
   const sourceQueueSymbols = (sourceQueue?.items ?? []).map((item) => item.symbol);
   const sourceQueueIndex = sourceQueueSymbols.findIndex((item) => item === symbol);
@@ -1049,13 +1088,13 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   }, [fullChartMode, sourceQueueSymbols.length, stepQueueSymbol]);
 
   useEffect(() => {
-    if (!latest?.close) return;
+    if (!displayClose) return;
     setTradePlan((current) => ({
-      entry: current.entry || latest.close.toFixed(2),
+      entry: current.entry || displayClose.toFixed(2),
       stop: current.stop,
       target: current.target,
     }));
-  }, [latest?.close]);
+  }, [displayClose]);
 
   // Stale data warning: show if last candle is > 1 trading day old
   const lastCandleDate = data?.candles?.at(-1)?.time ?? null;
@@ -1064,16 +1103,16 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     : null;
   // Don't show stale warning in live mode or on weekends that are expected
   const showStaleWarning = !liveMode && dataAgeDays != null && dataAgeDays > 2;
-  const changeAmt = latest && prevClose ? latest.close - prevClose : null;
-  const changePct = latest?.pct_change;
-  const positive = changePct != null ? changePct >= 0 : true;
+  const changeAmt = displayClose != null && displayPrevClose ? displayClose - displayPrevClose : null;
+  const changePct = displayPctChange;
+  const positive = displayPositive;
 
   const w52pct = latest?.week_52_high && latest?.week_52_low
-    ? ((latest.close - latest.week_52_low) / (latest.week_52_high - latest.week_52_low)) * 100
+    ? (((displayClose ?? latest.close) - latest.week_52_low) / (latest.week_52_high - latest.week_52_low)) * 100
     : null;
 
   const pctFrom52H = latest?.week_52_high
-    ? ((latest.week_52_high - latest.close) / latest.week_52_high) * 100
+    ? ((latest.week_52_high - (displayClose ?? latest.close)) / latest.week_52_high) * 100
     : null;
 
   // Build crosshair legend text
@@ -1178,10 +1217,18 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
   const playbookReadyCount = playbookItems.filter((item) => item.status === "ready").length;
   const playbookScore = Math.round((playbookReadyCount / playbookItems.length) * 100);
   const chartSnapshot = [
-    { label: "Last price", value: latest?.close != null ? fmtPrice(latest.close, symbolCurrency) : "Pending", tone: "var(--text-primary)" },
+    { label: liveQuote ? "Live price" : "Last price", value: displayClose != null ? fmtPrice(displayClose, symbolCurrency) : "Pending", tone: "var(--text-primary)" },
     { label: "Session move", value: changePct != null ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%` : "Pending", tone: positive ? "var(--gain)" : "var(--loss)" },
     { label: "From 52W high", value: pctFrom52H != null ? `${pctFrom52H.toFixed(1)}% below` : "Pending", tone: "var(--accent)" },
-    { label: "Broker", value: brokerConnected ? "Execution ready" : "Not linked", tone: brokerConnected ? "var(--gain)" : "var(--warn)" },
+    {
+      label: "Broker",
+      value: brokerConnected
+        ? `${brokerStatus?.broker ?? "Broker"} ready`
+        : brokerStatus?.token_expired
+          ? "Reconnect required"
+          : "Not linked",
+      tone: brokerConnected ? "var(--gain)" : "var(--warn)",
+    },
   ];
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
@@ -1223,9 +1270,17 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
           <Link href="/scanner" prefetch={false} className="workspace-chip-button">Scanner</Link>
           <Link href="/watchlist" prefetch={false} className="workspace-chip-button">Watchlist</Link>
           <Link href="/journal" prefetch={false} className="workspace-chip-button">Journal</Link>
+          {!brokerConnected && (
+            <Link href="/settings/broker" prefetch={false} className="workspace-chip-button">
+              {brokerStatus?.token_expired ? "Reconnect broker" : "Connect broker"}
+            </Link>
+          )}
           {chartContextPills.map((item) => (
             <span key={item} className="workspace-pill">{item}</span>
           ))}
+          {liveQuoteUpdatedAt && (
+            <span className="workspace-pill">Quote · {liveQuote?.source ?? "live"} · {liveQuoteUpdatedAt}</span>
+          )}
         </div>
       </div>
       )}
@@ -1284,7 +1339,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 type="number"
                 value={alertPrice}
                 onChange={e => setAlertPrice(e.target.value)}
-                placeholder={`Target price${latest?.close ? ` (current ₹${latest.close.toFixed(2)})` : ""}`}
+                placeholder={`Target price${displayClose ? ` (current ₹${displayClose.toFixed(2)})` : ""}`}
                 className="w-full rounded-[7px] px-3 py-2 text-[13px] outline-none"
                 style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
               />
@@ -1648,13 +1703,13 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
       <div className="flex flex-1 min-h-0 overflow-hidden">
 
         {/* Order modal */}
-        {showOrder && latest?.close != null && (
+        {showOrder && displayClose != null && (
           <OrderModal
             symbol={symbol}
-            currentPrice={latest.close}
+            currentPrice={displayClose}
             defaultSide={orderSide}
             initialPlan={{
-              entry: tradePlan.entry ? parseFloat(tradePlan.entry) : latest.close,
+              entry: tradePlan.entry ? parseFloat(tradePlan.entry) : displayClose,
               stop: tradePlan.stop ? parseFloat(tradePlan.stop) : null,
               target: tradePlan.target ? parseFloat(tradePlan.target) : null,
             }}
@@ -1724,7 +1779,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
 
                 <div className="mt-2">
                   <div className="text-[22px] font-bold tracking-[-0.8px] tabular-nums" style={{ color: "var(--app-text1)" }}>
-                    {fmtPrice(latest?.close, symbolCurrency)}
+                    {fmtPrice(displayClose, symbolCurrency)}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[12px] font-semibold tabular-nums" style={{ color: positive ? "#26a65b" : "#e5383b" }}>
@@ -2139,7 +2194,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                                   setCloseBusyId(position.id);
                                   try {
                                     const result = await closePosition(position.id, exitPrice, draft.reason || undefined);
-                                    setOrderToast({ message: `${result.message} — journal updated and AI review queued.`, journalId: position.id, broker: "simulated" });
+                                    setOrderToast({ message: `${result.message} - journal updated and trade review generated.`, journalId: position.id, broker: "simulated" });
                                     await loadSymbolPositions();
                                   } catch (e: unknown) {
                                     setOrderToast({ message: e instanceof Error ? e.message : "Failed to close position", journalId: position.id, broker: "simulated" });
@@ -2191,7 +2246,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                           ["Open",   fmtPrice(latest?.open,  symbolCurrency)],
                           ["High",   fmtPrice(latest?.high,  symbolCurrency)],
                           ["Low",    fmtPrice(latest?.low,   symbolCurrency)],
-                          ["Close",  fmtPrice(latest?.close, symbolCurrency)],
+                          ["Close",  fmtPrice(displayClose, symbolCurrency)],
                           ["Volume", latest?.volume ? fmtVol(latest.volume) : "—"],
                         ] as [string, string][]).map(([label, val]) => (
                           <div key={label} className="flex items-center justify-between">
@@ -2341,14 +2396,20 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
                 <div className="p-4" style={{ borderTop: "1px solid var(--app-border)" }}>
                   <div className="text-[10px] uppercase tracking-[0.5px] mb-2 font-semibold" style={{ color: "var(--app-text3)" }}>Quick order</div>
                   <div className="rounded-[8px] p-3 text-center" style={{ background: "rgba(0,229,196,0.08)", border: "1px solid rgba(0,229,196,0.2)" }}>
-                    <div className="text-[12px] font-semibold mb-0.5" style={{ color: "var(--app-teal)" }}>Connect your broker</div>
-                    <div className="text-[11px] mb-2.5" style={{ color: "var(--app-text2)" }}>Trade directly from the chart</div>
+                    <div className="text-[12px] font-semibold mb-0.5" style={{ color: "var(--app-teal)" }}>
+                      {brokerStatus?.token_expired ? "Reconnect your broker" : "Connect your broker"}
+                    </div>
+                    <div className="text-[11px] mb-2.5" style={{ color: "var(--app-text2)" }}>
+                      {brokerStatus?.token_expired
+                        ? "Your broker session expired. Reconnect to route live orders."
+                        : "Trade directly from the chart"}
+                    </div>
                     <Link
-                      href="/settings?tab=profile"
+                      href="/settings/broker"
                       className="inline-block text-[11px] font-semibold px-3 py-1.5 rounded-[6px] hover:opacity-85 transition-opacity"
                       style={{ background: "var(--app-teal)", color: "#0D0F14" }}
                     >
-                      Connect Zerodha
+                      {brokerStatus?.token_expired ? "Reconnect Zerodha" : "Connect Zerodha"}
                     </Link>
                   </div>
                 </div>
@@ -2408,7 +2469,7 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
             <div className="flex items-center gap-2 flex-wrap">
               <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                 style={{ background: positive ? "rgba(38,166,91,0.14)" : "rgba(229,56,59,0.14)", color: positive ? "#4ade80" : "#f87171" }}>
-                {fmtPrice(latest?.close, symbolCurrency)} {changePct != null ? `${positive ? "+" : ""}${changePct.toFixed(2)}%` : ""}
+                {fmtPrice(displayClose, symbolCurrency)} {changePct != null ? `${positive ? "+" : ""}${changePct.toFixed(2)}%` : ""}
               </div>
               {compareSymbol && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
