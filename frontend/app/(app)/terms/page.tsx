@@ -60,17 +60,19 @@ export default function TermsPage() {
         <section>
           <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">6. Broker Integrations</h2>
           <p>
-            Broker connections (Zerodha, Upstox, etc.) are provided as a convenience. AlphaVyuh is not
-            responsible for order execution, slippage, or any losses arising from trades placed through
-            broker integrations. Always verify orders on your broker&apos;s platform.
+            Broker connections are beta features provided as a convenience. AlphaVyuh is not responsible
+            for order execution, slippage, token expiry, rejected orders, or any losses arising from trades
+            placed through broker integrations. Always verify orders on your broker&apos;s platform.
           </p>
         </section>
 
         <section>
           <h2 className="text-[15px] font-semibold text-[#1c1c1a] mb-2">7. Data Accuracy</h2>
           <p>
-            Market data is sourced from NSE Bhavcopy and Yahoo Finance. We do not guarantee the accuracy,
-            completeness, or timeliness of any data. Do not rely solely on this data for trading decisions.
+            Market data may come from exchange files, exchange-authorized vendors, broker APIs, or fallback
+            sources depending on configuration and plan. End-of-day, delayed, fallback, and live-beta data
+            are not interchangeable. We do not guarantee the accuracy, completeness, or timeliness of any
+            data. Do not rely solely on this data for trading decisions.
           </p>
         </section>
 

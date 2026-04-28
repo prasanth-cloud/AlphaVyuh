@@ -4,18 +4,18 @@
 
 ## What AlphaVyuh is
 
-AlphaVyuh is India's Trading OS — the end-to-end workbench for NSE swing traders who want to scan, chart, trade, journal, and learn from their mistakes in one connected platform, without switching between Chartink, TradingView, Zerodha, and a spreadsheet.
+AlphaVyuh is a founder-beta trading workflow desk for NSE/BSE swing and positional traders who want to scan, chart, plan, journal, and review decisions in one connected platform.
 
-**One-line pitch:** "Replace Chartink + TradingView + Screener + Kite with one connected platform. Scan, chart, trade, and let AI review your journal."
+**One-line pitch:** "One connected workspace to scan the market, build a focused watchlist, plan trades on charts, and review every decision in Indian equities."
 
 ## Who it's for
 
 Indian retail swing traders, specifically:
 - Active swing traders trading NSE/BSE equities
-- Using Zerodha or Upstox as broker
+- Using Zerodha or planning to connect Zerodha once the beta broker flow is stable
 - Following momentum, VCP, Stage 2, breakout methodologies (Minervini, Qullamaggie)
 - Serious about improving — journals their trades, reviews mistakes
-- Currently paying for 3-4 tools separately (Chartink ₹480/mo, TradingView ₹1200/mo, etc.)
+- Currently managing scanner, charts, watchlists, broker context, and journal notes across multiple tools
 
 Not for: day traders, F&O-only traders, US market traders (until Elite tier launches).
 
@@ -38,8 +38,8 @@ The product's entire thesis is: **these 10 steps must feel like one continuous f
 
 Everything else is table stakes. These are what get us talked about:
 
-1. **One-click orders from scanner → Zerodha/Upstox** — click stock, click Buy, done. No tab-switching.
-2. **AI journal review with persistent memory** — Claude remembers your top 3 mistakes across weeks. Week 4's analysis references Week 1's patterns.
+1. **Connected workflow context** — a symbol should carry scan reason, watchlist state, chart notes, broker context, and journal history.
+2. **Journal review with persistent memory** — review should identify repeated mistakes across weeks, not just summarize one trade.
 3. **Market breadth analytics** — sector rotation, % above EMAs, A/D ratios. The macro view most retail platforms skip.
 
 **Cut for launch:** Telegram alerts (can add post-launch), US markets, backtesting, options.
@@ -75,7 +75,7 @@ These rules apply to EVERY surface — landing, app, emails, onboarding.
 - **Confident, not salesy.** "India's Trading OS." not "The best trading platform ever!"
 - **Technical, not dumbed-down.** Uses VCP, Stage 2, RS without explaining — audience knows.
 - **Short sentences.** "Scan for stocks, add to watchlist, chart them, log your trade." Not paragraphs.
-- **Specific numbers over adjectives.** "120ms scan time" not "fast scanning".
+- **Specific but honest numbers over adjectives.** Use measured data only; avoid fake user counts, SLA claims, or scan-speed claims before production telemetry exists.
 - **Lowercase product terms:** "scanner", "watchlist", "journal". Not "Scanner", not "SCANNER".
 
 ### Layout rhythm
@@ -102,7 +102,7 @@ These rules apply to EVERY surface — landing, app, emails, onboarding.
 - No animations except micro-interactions (hover transitions < 200ms)
 - No Title Case. Always sentence case. "Start free" not "Start Free"
 
-## Product pricing (live on landing page, must match app)
+## Product pricing (founder beta)
 
 | Plan | Price/mo | Key limits |
 |------|----------|-----------|
@@ -114,29 +114,22 @@ Annual = 30% off monthly.
 
 ## Current product state (as of Apr 2026)
 
-**Working:**
-- Dashboard loads breadth data (advances/declines/EMA %)
-- Scanner has filters but backend auth is broken
-- Watchlist + chart views exist but broker integration stubbed
-- Journal has 3 tabs, setup chips, manual entry
-- Design system tokens + primitives exist in `frontend/components/ui/`
-- Daily data refresh cron live (GitHub Actions at 4:30 PM IST)
-- Data health endpoint `/api/v1/data/health`
+**Working for private beta:**
+- Dashboard loads market breadth and data provenance.
+- Scanner supports presets, saved screens, 52-week filters, and backend auth headers.
+- Watchlist, chart views, journal, and manual/simulated trade flow are usable.
+- Zerodha broker flow exists as beta and must be verified per account before execution.
+- Data health endpoint `/api/v1/data/health` and data freshness center exist.
+- Landing/public footer pages use beta-safe copy and avoid fake social proof.
 
-**Broken:**
-- Login → "Invalid credentials" for some users (Supabase config)
-- Scanner/watchlist/journal show "Not authenticated" (auth header not attached)
-- Sector breadth data empty on dashboard
-- Primary button text invisible (dark-on-dark contrast bug)
-
-**Missing:**
-- Broker integration end-to-end flow (Zerodha OAuth stubbed)
-- AI journal review with memory (the #1 differentiator — not built yet)
-- Payment flow with Razorpay (stubbed)
-- App pages matching landing page design identity (app still feels generic)
+**Still beta-risky:**
+- Market data licensing for production realtime/delayed display is not finalized.
+- Broker order flow needs small-group verification before wider launch.
+- AI journal review memory should be hardened before paid public positioning.
+- Payment mode and pricing should stay founder-beta until Razorpay and data costs are final.
 
 ## Launch target
 
 25 days from Apr 19, 2026 → **May 14, 2026**
 
-Success = 20 real traders signed up, 5 paying Pro, all 10 user-journey steps work without a bug.
+Private beta success = 10-25 serious traders onboarded manually, scanner/chart/watchlist/journal used across real routines, and every data/broker issue captured before public launch.

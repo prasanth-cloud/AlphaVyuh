@@ -148,7 +148,7 @@ function BrokerSettingsContent() {
         <div style={{ marginBottom: 18 }}>
           <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>Broker Connect Hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is live first; Upstox and Dhan are staged as the next adapters.
+            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is the beta adapter first; Upstox and Dhan are staged as the next adapters after small-group verification.
           </div>
         </div>
 
