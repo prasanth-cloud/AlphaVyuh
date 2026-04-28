@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { CheckCircle2, Clock3, KeyRound, LockKeyhole, PlugZap, ShieldCheck } from "lucide-react";
 import {
   getBrokerStatus,
   getZerodhaLoginUrl,
@@ -10,6 +11,41 @@ import {
 } from "@/lib/api";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
+type BrokerCard = {
+  id: "zerodha" | "upstox" | "dhan";
+  name: string;
+  status: "active" | "next" | "planned";
+  auth: string;
+  token: string;
+  scope: string;
+};
+
+const BROKERS: BrokerCard[] = [
+  {
+    id: "zerodha",
+    name: "Zerodha Kite",
+    status: "active",
+    auth: "Kite Connect request-token flow",
+    token: "Daily token, expires around 06:00 IST",
+    scope: "Profile, holdings, orders, filled-trade import, chart-backed execution",
+  },
+  {
+    id: "upstox",
+    name: "Upstox",
+    status: "next",
+    auth: "OAuth 2.0 authorization-code flow",
+    token: "Standard token expires at 03:30 AM next day; extended read token available by approval",
+    scope: "Holdings, positions, order book, execution after adapter is added",
+  },
+  {
+    id: "dhan",
+    name: "Dhan",
+    status: "planned",
+    auth: "Access-token flow, partner path for multi-user platforms",
+    token: "User-controlled validity from 8 hours to 30 days",
+    scope: "Good candidate after Upstox because token validity is more flexible",
+  },
+];
 
 function StatusDot({ tone }: { tone: "live" | "simulated" | "warning" }) {
   const color =
@@ -28,8 +64,7 @@ function BrokerSettingsContent() {
   async function loadStatus() {
     setLoading(true);
     try {
-      const next = await getBrokerStatus();
-      setState(next);
+      setState(await getBrokerStatus());
     } catch {
       setState(null);
     } finally {
@@ -44,7 +79,7 @@ function BrokerSettingsContent() {
   useEffect(() => {
     if (searchParams.get("connected")) {
       loadStatus();
-      setToast("Broker connected. Orders placed from charts now route live when the token is valid.");
+      setToast("Zerodha connected. Live execution and trade import are enabled while the token is valid.");
     }
   }, [searchParams]);
 
@@ -87,146 +122,167 @@ function BrokerSettingsContent() {
     borderRadius: "var(--radius-lg)",
   };
 
+  const healthCards = [
+    { label: "Credentials", value: state?.has_api_key ? "Saved" : "Missing", icon: KeyRound },
+    { label: "Session", value: state?.connected ? "Live" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
+    { label: "Expiry", value: state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
+  ];
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
-        <div
-          className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-          style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
-        />
+        <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen" style={{ background: "var(--app-bg)" }}>
-      <div className="max-w-[720px] mx-auto px-5 py-8">
+      <div className="max-w-[1040px] mx-auto px-5 py-8">
         <div className="flex items-center gap-2 text-[12px] mb-6" style={{ color: "var(--text-tertiary)" }}>
-          <Link href="/settings" className="hover:opacity-80" style={{ color: "var(--text-secondary)" }}>
-            Settings
-          </Link>
+          <Link href="/settings" className="hover:opacity-80" style={{ color: "var(--text-secondary)" }}>Settings</Link>
           <span>/</span>
-          <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>Broker execution</span>
+          <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>Broker connect</span>
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>
-            Broker execution
-          </div>
-          <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 560 }}>
-            Keep this flow simple: save your Zerodha API key and secret in settings, connect once per token cycle, then place live orders from charts. If the broker is not connected, AlphaVyuh stays in simulated mode and still journals the trade.
+          <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>Broker Connect Hub</div>
+          <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
+            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is live first; Upstox and Dhan are staged as the next adapters.
           </div>
         </div>
 
-        <div style={{ ...cardStyle, padding: 20, marginBottom: 14 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 18 }}>
-            <div>
-              <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>
-                Current mode
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                <StatusDot tone={mode === "live" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
-                <div className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.05fr) minmax(320px, 0.95fr)", gap: 14, alignItems: "start" }}>
+          <div style={{ ...cardStyle, padding: 20 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 18 }}>
+              <div>
+                <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Current mode</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                  <StatusDot tone={mode === "live" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
+                  <div className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                    {mode === "live"
+                      ? "Live via Zerodha"
+                      : mode === "token-expired"
+                        ? "Token expired"
+                        : mode === "credentials-missing"
+                          ? "Credentials needed"
+                          : "Simulated mode"}
+                  </div>
+                </div>
+                <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {mode === "live"
-                    ? "Live execution via Zerodha"
+                    ? "Orders from charts and watchlists route to Zerodha, then AlphaVyuh records them in the journal."
                     : mode === "token-expired"
-                      ? "Token expired — reconnect required"
+                      ? "Your API key is saved, but Kite needs a fresh daily access token."
                       : mode === "credentials-missing"
-                        ? "Credentials missing"
-                        : "Simulated execution"}
+                        ? "Save the Zerodha API key and secret, then connect Kite from this hub."
+                        : "Orders remain simulated and journaling still works until a broker session is connected."}
                 </div>
               </div>
-              <div className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
-                {mode === "live"
-                  ? "Orders from chart and watchlist route live, then auto-record into the journal."
-                  : mode === "token-expired"
-                    ? "Your API key is saved, but the access token is no longer valid. Reconnect and you are back to live mode."
-                    : mode === "credentials-missing"
-                      ? "Save your Zerodha API key and secret first, then start the OAuth connect flow."
-                      : "Orders still work in simulated mode so you can test the full scan → chart → journal workflow."}
+              <div className="mono" style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                {state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : "No live session"}
               </div>
             </div>
-            <div
-              className="mono"
-              style={{
-                fontSize: 11,
-                color: "var(--text-tertiary)",
-                padding: "6px 10px",
-                borderRadius: 999,
-                border: "1px solid var(--border-subtle)",
-                background: "var(--surface-2)",
-              }}
-            >
-              {state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : "No live session"}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
+              {healthCards.map(({ label, value, icon: Icon }) => (
+                <div key={label} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-tertiary)", marginBottom: 5 }}>
+                    <Icon size={13} />
+                    <div className="text-[11px]">{label}</div>
+                  </div>
+                  <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <button
+                onClick={handleConnect}
+                disabled={busy === "connect" || !state?.has_api_key}
+                className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
+              >
+                {busy === "connect" ? "Opening Kite..." : mode === "live" ? "Reconnect Zerodha" : "Connect Zerodha"}
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={busy === "import" || !state?.connected}
+                className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
+                style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
+              >
+                {busy === "import" ? "Importing..." : "Import today's filled trades"}
+              </button>
+              <Link href="/settings?tab=broker" className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
+                Edit Zerodha keys
+              </Link>
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
-            <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
-              <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>API key</div>
-              <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
-                {state?.has_api_key ? "Saved" : "Missing"}
-              </div>
+          <div style={{ ...cardStyle, padding: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+              <ShieldCheck size={17} style={{ color: "var(--accent)" }} />
+              <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>Production broker rules</div>
             </div>
-            <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
-              <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>Access token</div>
-              <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>
-                {state?.connected ? "Valid" : state?.has_token ? "Stored" : "Missing"}
-              </div>
+            <div style={{ display: "grid", gap: 9 }}>
+              {[
+                "Secrets stay server-side and are written through the encrypted broker credential path.",
+                "The frontend only asks for connection status and never receives broker tokens.",
+                "Expired sessions fall back to simulated mode instead of blocking chart/journal workflows.",
+                "Every live order should still create a journal entry with broker context.",
+              ].map((line) => (
+                <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
+                  {line}
+                </div>
+              ))}
             </div>
-            <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
-              <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>Execution mode</div>
-              <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)", textTransform: "capitalize" }}>
-                {state?.mode ?? "simulated"}
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-            <button
-              onClick={handleConnect}
-              disabled={busy === "connect" || !state?.has_api_key}
-              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
-            >
-              {busy === "connect"
-                ? "Opening Kite…"
-                : mode === "live"
-                  ? "Reconnect Zerodha"
-                  : "Connect Zerodha"}
-            </button>
-
-            <button
-              onClick={handleImport}
-              disabled={busy === "import" || !state?.connected}
-              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
-              style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
-            >
-              {busy === "import" ? "Importing…" : "Import today’s filled trades"}
-            </button>
-
-            <Link
-              href="/settings?tab=broker"
-              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold"
-              style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
-            >
-              Edit broker credentials
-            </Link>
           </div>
         </div>
 
-        <div style={{ ...cardStyle, padding: 18, marginBottom: 14 }}>
-          <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 10 }}>
-            Simplest operating model
+        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
+          {BROKERS.map((broker) => {
+            const active = broker.id === "zerodha";
+            return (
+              <div key={broker.id} style={{ ...cardStyle, padding: 18, opacity: active ? 1 : 0.78 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                  <div className="text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>{broker.name}</div>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase", color: active ? "var(--gain)" : broker.status === "next" ? "var(--warn)" : "var(--text-tertiary)", padding: "3px 8px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                    {broker.status}
+                  </span>
+                </div>
+                <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+                  <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Auth:</b> {broker.auth}</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Token:</b> {broker.token}</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Scope:</b> {broker.scope}</div>
+                </div>
+                {active ? (
+                  <button onClick={handleConnect} disabled={busy === "connect" || !state?.has_api_key} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
+                    {state?.connected ? "Reconnect" : "Connect"}
+                  </button>
+                ) : (
+                  <button disabled className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
+                    Adapter pending
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ ...cardStyle, padding: 18, marginTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+            <LockKeyhole size={16} style={{ color: "var(--accent)" }} />
+            <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>Rollout plan</div>
           </div>
           <div style={{ display: "grid", gap: 8 }}>
             {[
-              "1. Save your Zerodha API key and secret in Settings.",
-              "2. Connect Zerodha here to get a valid access token.",
-              "3. Place orders from chart or watchlist. AlphaVyuh journals every trade either way.",
-              "4. Use Import when you want today’s filled Zerodha orders pulled into the journal.",
+              "1. Stabilize Zerodha connect, reconnect, holdings, import, and chart/watchlist order flow.",
+              "2. Add a shared broker token status API so every adapter reports connected, expired, and permissions consistently.",
+              "3. Add Upstox OAuth adapter next because its authorization-code flow maps cleanly to the current hub.",
+              "4. Add Dhan after Upstox, using longer token validity for easier beta-user onboarding.",
             ].map((line) => (
-              <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
+                <CheckCircle2 size={13} style={{ display: "inline", marginRight: 7, color: "var(--gain)" }} />
                 {line}
               </div>
             ))}
@@ -234,14 +290,7 @@ function BrokerSettingsContent() {
         </div>
 
         {(toast || error) && (
-          <div
-            style={{
-              ...cardStyle,
-              padding: 14,
-              color: error ? "var(--loss)" : "var(--text-primary)",
-              background: error ? "rgba(255, 90, 101, 0.08)" : "var(--surface-1)",
-            }}
-          >
+          <div style={{ ...cardStyle, padding: 14, marginTop: 14, color: error ? "var(--loss)" : "var(--text-primary)", background: error ? "rgba(255, 90, 101, 0.08)" : "var(--surface-1)" }}>
             <div className="text-[12px]">{error || toast}</div>
           </div>
         )}
@@ -252,16 +301,11 @@ function BrokerSettingsContent() {
 
 export default function BrokerSettingsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
-          <div
-            className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
-          />
-        </div>
-      }
-    >
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--app-bg)" }}>
+        <div className="w-5 h-5 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }} />
+      </div>
+    }>
       <BrokerSettingsContent />
     </Suspense>
   );

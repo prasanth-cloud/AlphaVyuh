@@ -84,6 +84,7 @@ async def update_me(
     body: UpdateUserRequest,
     user_id: str = Depends(get_current_user_id),
 ):
+    client = get_admin_client()
     updates: dict = {}
     if body.full_name is not None:
         updates["full_name"] = body.full_name
@@ -134,7 +135,6 @@ async def update_me(
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
 
-    client = get_admin_client()
     client.table("users").update(updates).eq("id", user_id).execute()
     result = client.table("users").select(_SELECT).eq("id", user_id).single().execute()
     if not result.data:

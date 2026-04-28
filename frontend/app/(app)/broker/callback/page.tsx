@@ -22,7 +22,7 @@ function BrokerCallbackContent() {
       .then(() => {
         setStatus("success");
         setMessage("Zerodha connected! Redirecting to settings…");
-        setTimeout(() => router.replace("/settings?tab=profile&broker=connected"), 2000);
+        setTimeout(() => router.replace("/settings/broker?connected=zerodha"), 2000);
       })
       .catch((e: Error) => {
         setStatus("error");
@@ -56,7 +56,7 @@ function BrokerCallbackContent() {
             <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Connection failed</h2>
             <p className="text-[13px] mb-4" style={{ color: "var(--app-text3)" }}>{message}</p>
             <button
-              onClick={() => router.replace("/settings?tab=profile")}
+              onClick={() => router.replace("/settings/broker")}
               className="px-4 py-2 rounded-[8px] text-[13px] font-semibold"
               style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}>
               Back to Settings
