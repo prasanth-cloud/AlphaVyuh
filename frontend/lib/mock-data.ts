@@ -114,6 +114,7 @@ export function mockMarketSummary(): MarketSummary {
     new_52w_highs: 47,
     new_52w_lows: 12,
     above_ema20_pct: 58,
+    above_ema50_pct: 54,
     above_ema200_pct: 63,
     total_stocks: 2097,
   };

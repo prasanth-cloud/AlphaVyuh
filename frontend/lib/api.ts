@@ -186,6 +186,7 @@ export type MarketSummary = {
   new_52w_highs: number;
   new_52w_lows: number;
   above_ema20_pct: number | null;
+  above_ema50_pct: number | null;
   above_ema200_pct: number | null;
   total_stocks: number;
 };
@@ -1631,8 +1632,13 @@ export async function getMarketOverview(): Promise<MarketOverview> {
   const res = await fetch(`${API}/api/v1/market/overview`, { headers });
   if (res.ok) return normalizeMarketOverview(await res.json());
 
-  // Legacy fallback: compose from /market/summary
-  const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
+  // Legacy fallback: compose from public endpoints so dashboard still renders
+  // sector and EMA breadth if the authenticated overview endpoint is blocked.
+  const [legacyRes, sectorRes, moversRes] = await Promise.all([
+    fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders }),
+    getSectorBreadth().catch(() => null),
+    getMarketMovers().catch(() => null),
+  ]);
   if (!legacyRes.ok) throw new Error("Failed to fetch market overview");
   const s: MarketSummary = await legacyRes.json();
 
@@ -1655,14 +1661,29 @@ export async function getMarketOverview(): Promise<MarketOverview> {
     new_52w_highs: s.new_52w_highs,
     new_52w_lows: s.new_52w_lows,
     above_ema20_pct: s.above_ema20_pct ?? 0,
-    above_ema50_pct: 0,
+    above_ema50_pct: s.above_ema50_pct ?? 0,
     above_ema200_pct: ema200,
     market_phase: phase,
     market_phase_desc: phaseDesc,
-    sector_breadth: [],
-    top_gainers: [],
-    top_losers: [],
-    most_active: [],
+    sector_breadth: (sectorRes?.sectors ?? []).map((sector) => ({
+      sector: sector.sector,
+      total: sector.total,
+      advances: sector.advances,
+      declines: sector.declines,
+      avg_pct_change: 0,
+      breadth_pct: sector.total ? Number(((sector.advances / sector.total) * 100).toFixed(1)) : 0,
+    })),
+    top_sectors: (sectorRes?.sectors ?? []).slice(0, 5).map((sector) => ({
+      sector: sector.sector,
+      total: sector.total,
+      advances: sector.advances,
+      declines: sector.declines,
+      avg_pct_change: 0,
+      breadth_pct: sector.total ? Number(((sector.advances / sector.total) * 100).toFixed(1)) : 0,
+    })),
+    top_gainers: moversRes?.gainers ?? [],
+    top_losers: moversRes?.losers ?? [],
+    most_active: moversRes?.volume_surge ?? [],
   });
 }
 

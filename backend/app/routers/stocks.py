@@ -114,7 +114,7 @@ async def get_market_summary():
     offset = 0
     while True:
         chunk = client.table("daily_ohlcv") \
-            .select("close, prev_close, week_52_high, week_52_low, ema_20, ema_200") \
+            .select("close, prev_close, week_52_high, week_52_low, ema_20, ema_50, ema_200") \
             .eq("trade_date", latest_date) \
             .range(offset, offset + 999) \
             .execute()
@@ -126,7 +126,9 @@ async def get_market_summary():
         offset += 1000
 
     advances = declines = unchanged = 0
-    new_highs = new_lows = above_ema20 = above_ema200 = valid_ema20 = valid_ema200 = 0
+    new_highs = new_lows = 0
+    above_ema20 = above_ema50 = above_ema200 = 0
+    valid_ema20 = valid_ema50 = valid_ema200 = 0
 
     for row in all_rows:
         close = float(row["close"] or 0)
@@ -134,6 +136,7 @@ async def get_market_summary():
         w52h = float(row["week_52_high"]) if row["week_52_high"] is not None else None
         w52l = float(row["week_52_low"]) if row["week_52_low"] is not None else None
         ema20 = float(row["ema_20"]) if row["ema_20"] is not None else None
+        ema50 = float(row["ema_50"]) if row["ema_50"] is not None else None
         ema200 = float(row["ema_200"]) if row["ema_200"] is not None else None
 
         if prev:
@@ -153,6 +156,10 @@ async def get_market_summary():
             valid_ema20 += 1
             if close > ema20:
                 above_ema20 += 1
+        if ema50 is not None:
+            valid_ema50 += 1
+            if close > ema50:
+                above_ema50 += 1
         if ema200 is not None:
             valid_ema200 += 1
             if close > ema200:
@@ -170,6 +177,7 @@ async def get_market_summary():
         "new_52w_highs": new_highs,
         "new_52w_lows": new_lows,
         "above_ema20_pct": round(above_ema20 / valid_ema20 * 100, 1) if valid_ema20 else None,
+        "above_ema50_pct": round(above_ema50 / valid_ema50 * 100, 1) if valid_ema50 else None,
         "above_ema200_pct": round(above_ema200 / valid_ema200 * 100, 1) if valid_ema200 else None,
         "total_stocks": total,
     }

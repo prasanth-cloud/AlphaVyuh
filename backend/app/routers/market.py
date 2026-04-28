@@ -175,15 +175,20 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
     ad_ratio = round(advances / declines, 2) if declines else float(advances)
 
-    # EMA breadth
-    above_ema20  = sum(1 for r in enriched if r["ema_20"]  and r["close"] > r["ema_20"])
-    above_ema50  = sum(1 for r in enriched if r["ema_50"]  and r["close"] > r["ema_50"])
+    # EMA breadth. Use valid indicator counts as the denominator so a partial
+    # ingest cannot display 0% just because some EMA columns are still empty.
+    valid_ema20 = sum(1 for r in enriched if r["ema_20"])
+    valid_ema50 = sum(1 for r in enriched if r["ema_50"])
+    valid_ema200 = sum(1 for r in enriched if r["ema_200"])
+    above_ema20 = sum(1 for r in enriched if r["ema_20"] and r["close"] > r["ema_20"])
+    above_ema50 = sum(1 for r in enriched if r["ema_50"] and r["close"] > r["ema_50"])
     above_ema200 = sum(1 for r in enriched if r["ema_200"] and r["close"] > r["ema_200"])
 
-    def pct(n): return round(n / total * 100, 1) if total else 0
+    def pct(n, denominator=total): return round(n / denominator * 100, 1) if denominator else 0
 
-    above_ema200_pct = pct(above_ema200)
-    above_ema20_pct  = pct(above_ema20)
+    above_ema200_pct = pct(above_ema200, valid_ema200)
+    above_ema20_pct = pct(above_ema20, valid_ema20)
+    above_ema50_pct = pct(above_ema50, valid_ema50)
 
     # Market phase
     if above_ema200_pct >= 60:
@@ -250,7 +255,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "above_ema20_count": above_ema20,
         "above_ema20_pct": above_ema20_pct,
         "above_ema50_count": above_ema50,
-        "above_ema50_pct": pct(above_ema50),
+        "above_ema50_pct": above_ema50_pct,
         "above_ema200_count": above_ema200,
         "above_ema200_pct": above_ema200_pct,
         "market_phase": phase,
