@@ -20,6 +20,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
+from app.brokers.credentials import CredentialNotFoundError, get_broker_credential, upsert_broker_credential
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.services.supabase import get_admin_client
@@ -134,6 +135,38 @@ def _zerodha_token_expiry() -> str:
     return expiry.isoformat()
 
 
+def _get_stored_credential(user_id: str, broker: str, key_name: str) -> str | None:
+    try:
+        return get_broker_credential(user_id, broker, key_name)
+    except CredentialNotFoundError:
+        return None
+    except Exception:
+        logger.exception("Failed to read %s credential for %s", key_name, broker)
+        return None
+
+
+def _get_user_broker_credentials(user_id: str, broker: str) -> dict[str, str | None]:
+    sb = get_admin_client()
+    user = (
+        sb.table("users")
+        .select("broker_type, broker_api_key, broker_api_secret, broker_access_token, broker_token_expires_at, broker_connected_at")
+        .eq("id", user_id)
+        .maybe_single()
+        .execute()
+    )
+    row = user.data or {}
+    if row.get("broker_type") and row.get("broker_type") != broker:
+        return {"broker_type": row.get("broker_type")}
+    return {
+        "broker_type": row.get("broker_type"),
+        "api_key": _get_stored_credential(user_id, broker, "api_key") or row.get("broker_api_key"),
+        "api_secret": _get_stored_credential(user_id, broker, "api_secret") or row.get("broker_api_secret"),
+        "access_token": _get_stored_credential(user_id, broker, "access_token") or row.get("broker_access_token"),
+        "expires_at": _get_stored_credential(user_id, broker, "expires_at") or row.get("broker_token_expires_at"),
+        "connected_at": row.get("broker_connected_at"),
+    }
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/orders", status_code=status.HTTP_201_CREATED)
@@ -160,28 +193,16 @@ async def place_order(
     broker_order_id: str | None = None
     broker_used = "simulated"
 
-    user_res = sb.table("users").select(
-        "broker_type, broker_api_key, broker_access_token"
-    ).eq("id", user_id).maybe_single().execute()
+    creds = _get_user_broker_credentials(user_id, "zerodha")
+    bt = creds.get("broker_type")
 
-    if user_res.data:
-        u = user_res.data
-        bt = u.get("broker_type")
-
-        if bt == "zerodha" and u.get("broker_api_key") and u.get("broker_access_token"):
+    if bt:
+        if bt == "zerodha" and creds.get("api_key") and creds.get("access_token"):
             broker_order_id = _place_zerodha_order(
-                u["broker_api_key"], u["broker_access_token"], sym, body.side, body.quantity, body.order_type
+                str(creds["api_key"]), str(creds["access_token"]), sym, body.side, body.quantity, body.order_type
             )
             if broker_order_id:
                 broker_used = "zerodha"
-
-        elif bt == "upstox" and u.get("broker_api_key") and u.get("broker_access_token"):
-            broker_order_id = _place_upstox_order(
-                u["broker_api_key"], u["broker_access_token"],
-                sym, body.side, body.quantity, body.price, body.order_type
-            )
-            if broker_order_id:
-                broker_used = "upstox"
 
     trade_type = "long" if body.side == "buy" else "short"
 
@@ -325,16 +346,16 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
     """Returns broker connection status for the current user."""
     sb = get_admin_client()
     u = sb.table("users").select(
-        "broker_type, broker_api_key, broker_access_token, broker_connected_at, broker_token_expires_at"
+        "broker_type, broker_api_key, broker_connected_at, broker_token_expires_at"
     ).eq("id", user_id).maybe_single().execute()
 
     if not u.data:
         return {"connected": False, "broker": None, "mode": "simulated", "token_expired": False}
 
-    bt  = u.data.get("broker_type")
-    key = u.data.get("broker_api_key")
-    tok = u.data.get("broker_access_token")
-    expires_at = u.data.get("broker_token_expires_at")
+    bt  = u.data.get("broker_type") or "zerodha"
+    key = _get_stored_credential(user_id, bt, "api_key") or u.data.get("broker_api_key")
+    tok = _get_stored_credential(user_id, bt, "access_token")
+    expires_at = _get_stored_credential(user_id, bt, "expires_at") or u.data.get("broker_token_expires_at")
 
     token_expired = False
     if expires_at:
@@ -370,11 +391,11 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     to /broker/zerodha/callback with request_token.
     """
     sb = get_admin_client()
-    u = sb.table("users").select("broker_api_key").eq("id", user_id).maybe_single().execute()
-    if not u.data or not u.data.get("broker_api_key"):
+    creds = _get_user_broker_credentials(user_id, "zerodha")
+    api_key = creds.get("api_key")
+    if not api_key:
         raise HTTPException(status_code=400, detail="Broker API key not configured")
 
-    api_key = u.data["broker_api_key"]
     login_url = f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3"
     return {"login_url": login_url}
 
@@ -387,15 +408,14 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
     Requires a valid daily access token set via /broker/zerodha/callback.
     """
     sb = get_admin_client()
-    u = sb.table("users").select("broker_api_key, broker_access_token") \
-        .eq("id", user_id).maybe_single().execute()
-    if not u.data or not u.data.get("broker_api_key") or not u.data.get("broker_access_token"):
+    creds = _get_user_broker_credentials(user_id, "zerodha")
+    if not creds.get("api_key") or not creds.get("access_token"):
         raise HTTPException(status_code=400, detail="Zerodha not connected. Complete the OAuth login first.")
 
     try:
         orders = kite_api.list_orders(
-            access_token=u.data["broker_access_token"],
-            api_key=u.data["broker_api_key"],
+            access_token=str(creds["access_token"]),
+            api_key=str(creds["api_key"]),
         )
     except KiteApiError as e:
         raise HTTPException(status_code=400, detail=f"Zerodha API error: {e.message}")
@@ -467,12 +487,14 @@ async def zerodha_callback(
     Called after user authorises the Kite login.
     """
     sb = get_admin_client()
-    u = sb.table("users").select("broker_api_key, broker_api_secret").eq("id", user_id).maybe_single().execute()
-    if not u.data or not u.data.get("broker_api_key"):
+    creds = _get_user_broker_credentials(user_id, "zerodha")
+    if not creds.get("api_key"):
         raise HTTPException(status_code=400, detail="Broker credentials not configured")
 
-    api_key    = u.data["broker_api_key"]
-    api_secret = u.data["broker_api_secret"]
+    api_key    = str(creds["api_key"])
+    api_secret = str(creds.get("api_secret") or "")
+    if not api_secret:
+        raise HTTPException(status_code=400, detail="Broker API secret not configured")
 
     try:
         session_data = kite_api.exchange_code(
@@ -492,20 +514,14 @@ async def zerodha_callback(
     import datetime
     now_iso = datetime.datetime.utcnow().isoformat()
 
-    # Store the access token encrypted in broker_credentials.
-    # Also update users.broker_access_token (deprecated plaintext column) and
-    # broker_token_expires_at so existing order-placement code continues to work
-    # until the full migration to get_broker_credential() is complete.
-    sb.rpc("upsert_broker_credential", {
-        "p_user_id":  user_id,
-        "p_broker":   "zerodha",
-        "p_key_name": "access_token",
-        "p_value":    access_token,
-    }).execute()
+    expiry = _zerodha_token_expiry()
+    upsert_broker_credential(user_id, "zerodha", "access_token", access_token)
+    upsert_broker_credential(user_id, "zerodha", "expires_at", expiry)
 
     sb.table("users").update({
-        "broker_access_token":    access_token,           # deprecated — remove after feat/kite-adapter
-        "broker_token_expires_at": _zerodha_token_expiry(),
+        "broker_type":            "zerodha",
+        "broker_access_token":    None,
+        "broker_token_expires_at": expiry,
         "broker_connected_at":    now_iso,
     }).eq("id", user_id).execute()
 

@@ -6,6 +6,7 @@ import string
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from app.brokers.credentials import upsert_broker_credential
 from app.middleware.auth import get_current_user_id
 from app.services.supabase import get_admin_client
 
@@ -99,25 +100,13 @@ async def update_me(
         import datetime
         updates["broker_connected_at"] = datetime.datetime.utcnow().isoformat()
 
-    # Credentials are stored encrypted in broker_credentials via upsert_broker_credential().
-    # The plaintext columns on users are deprecated — do NOT write to them here.
-    # broker_api_key/secret writes below keep the deprecated columns in sync during transition;
-    # remove this block when feat/kite-adapter migrates the reads.
+    # Credentials are stored encrypted in broker_credentials. Plaintext columns
+    # are kept only as a temporary compatibility fallback for older routes.
     if broker and body.broker_api_key is not None:
-        client.rpc("upsert_broker_credential", {
-            "p_user_id":  user_id,
-            "p_broker":   broker,
-            "p_key_name": "api_key",
-            "p_value":    body.broker_api_key,
-        }).execute()
+        upsert_broker_credential(user_id, broker, "api_key", body.broker_api_key)
         updates["broker_api_key"] = body.broker_api_key or None  # deprecated sync
     if broker and body.broker_api_secret is not None:
-        client.rpc("upsert_broker_credential", {
-            "p_user_id":  user_id,
-            "p_broker":   broker,
-            "p_key_name": "api_secret",
-            "p_value":    body.broker_api_secret,
-        }).execute()
+        upsert_broker_credential(user_id, broker, "api_secret", body.broker_api_secret)
         updates["broker_api_secret"] = body.broker_api_secret or None  # deprecated sync
     if body.billing_region is not None:
         if body.billing_region not in ("IN", "NRI", "US", "INTL"):
