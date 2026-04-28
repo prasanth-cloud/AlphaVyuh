@@ -1,5 +1,10 @@
 """Tests for scanner filter logic (no DB required)."""
+import os
+
 import pytest
+
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 
 def _apply_numeric_filter(value, min_val, max_val):
@@ -142,6 +147,73 @@ class TestVolumeRatioFallback:
     def test_db_zero_is_used_not_treated_as_null(self):
         result = _resolve_volume_ratio(db_value=0.0, volume=500_000, avg_vol=100_000)
         assert result == 0.0
+
+
+def _scanner_row(**overrides):
+    row = {
+        "symbol": "TEST",
+        "open": 101,
+        "high": 110,
+        "low": 99,
+        "close": 105,
+        "prev_close": 100,
+        "volume": 100_000,
+        "avg_volume_20d": 100_000,
+        "turnover": 10_000_000,
+        "rsi_14": 60,
+        "ema_20": 100,
+        "ema_50": 95,
+        "ema_200": 90,
+        "atr_14": 2,
+        "week_52_high": 110,
+        "week_52_low": 70,
+        "rs_score": 80,
+        "volume_ratio": 1.0,
+        "w52h_pct": None,
+        "w52l_pct": None,
+        "stock_universe": {
+            "company_name": "Test Ltd",
+            "series": "EQ",
+            "sector": "Test",
+            "is_active": True,
+            "market": "NSE",
+            "currency": "INR",
+        },
+    }
+    row.update(overrides)
+    return row
+
+
+class TestScanner52WeekFilters:
+    def test_new_52w_high_uses_intraday_high_when_flag_missing(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(close=105, high=110, week_52_high=110, is_new_52w_high=None)]
+        results = _apply_filters(rows, ScanFilters(new_52w_high=True))
+
+        assert len(results) == 1
+        assert results[0]["is_new_52w_high"] is True
+
+    def test_new_52w_high_rejects_rows_below_high(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(close=104, high=108, week_52_high=110, is_new_52w_high=False)]
+
+        assert _apply_filters(rows, ScanFilters(new_52w_high=True)) == []
+
+    def test_week_52_high_pct_accepts_negative_db_distance(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(w52h_pct=-2.0)]
+
+        assert len(_apply_filters(rows, ScanFilters(week_52_high_pct_max=5))) == 1
+
+    def test_week_52_high_pct_rejects_negative_db_distance_over_limit(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(w52h_pct=-8.0)]
+
+        assert _apply_filters(rows, ScanFilters(week_52_high_pct_max=5)) == []
 
 
 class TestVCPAsyncPass2:

@@ -8,6 +8,15 @@ echo "== AlphaVyuh launch readiness check =="
 echo "Root: $ROOT"
 echo
 
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if [[ -x "$ROOT/backend/.venv/bin/python" ]]; then
+    PYTHON_BIN="$ROOT/backend/.venv/bin/python"
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  fi
+fi
+
 run_step() {
   local name="$1"
   shift
@@ -23,23 +32,25 @@ run_step "Frontend unit tests" npm --prefix frontend run test
 run_step "Frontend production build" npm --prefix frontend run build
 
 if [[ -d backend ]]; then
-  if command -v python3 >/dev/null 2>&1; then
-    run_step "Backend focused tests" python3 -m pytest \
+  if [[ -n "$PYTHON_BIN" ]]; then
+    run_step "Backend focused tests" "$PYTHON_BIN" -m pytest \
       backend/tests/test_market_data_provider.py \
       backend/tests/test_payments.py \
       backend/tests/test_rate_limit.py \
       backend/tests/test_credentials.py
   else
-    echo "Skipping backend tests: python3 is not available."
+    echo "Skipping backend tests: no Python interpreter is available."
     echo
   fi
 fi
 
-if python3 -m pip_audit --version >/dev/null 2>&1; then
-  run_step "Backend dependency audit" python3 -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m pip_audit --version >/dev/null 2>&1; then
+  run_step "Backend dependency audit" "$PYTHON_BIN" -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off
 else
   echo "Skipping backend dependency audit: pip-audit is not installed."
-  echo "Install with: python3 -m pip install pip-audit"
+  if [[ -n "$PYTHON_BIN" ]]; then
+    echo "Install with: $PYTHON_BIN -m pip install pip-audit"
+  fi
   echo
 fi
 

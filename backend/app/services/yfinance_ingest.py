@@ -183,8 +183,8 @@ def fetch_and_ingest(symbol: str, period: str = "1y") -> dict:
         df["week_52_high"]   = high.rolling(min(252, len(df))).max().round(2)
         df["week_52_low"]    = low.rolling(min(252, len(df))).min().round(2)
         df["avg_volume_20d"] = volume.rolling(min(20, len(df))).mean().round(0).astype("Int64")
-        df["is_new_52w_high"] = close >= df["week_52_high"]
-        df["is_new_52w_low"]  = close <= df["week_52_low"]
+        df["is_new_52w_high"] = high >= df["week_52_high"]
+        df["is_new_52w_low"]  = low <= df["week_52_low"]
 
         # ── Inside / outside bar ───────────────────────────────────────────
         prev_high = high.shift(1)

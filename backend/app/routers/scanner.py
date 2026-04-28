@@ -75,8 +75,8 @@ class ScanFilters(BaseModel):
     w52h_pct_max:         float | None = None   # (high-close)/close*100 ≤ X  (within X% of 52W high)
     week_52_high_pct_max: float | None = None   # alias for w52h_pct_max (new scanner UI)
     w52l_pct_min:         float | None = None   # (close-low)/low*100  ≥ X  (X% above 52W low)
-    new_52w_high:         bool | None = None    # close >= week_52_high
-    new_52w_low:          bool | None = None    # close <= week_52_low
+    new_52w_high:         bool | None = None    # day high >= week_52_high
+    new_52w_low:          bool | None = None    # day low <= week_52_low
 
     # ── EMA position aliases (new scanner UI: 'above' | 'below' | '') ───
     price_vs_ema20:  str | None = None   # 'above' | 'below'
@@ -221,7 +221,7 @@ PRESETS = [
         "name": "New 52W Highs",
         "description": "Fresh yearly highs today",
         "color": "#7c6af0",
-        "filters": {"new_52w_high": True, "volume_ratio_min": 1.2, "series": ["EQ"]},
+        "filters": {"new_52w_high": True, "series": ["EQ"]},
     },
     {
         "id": "high_volume",
@@ -316,9 +316,11 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         _db_vr   = float(row["volume_ratio"]) if row.get("volume_ratio") is not None else None
         volume_ratio = _db_vr if _db_vr is not None else (round(volume / avg_vol, 2) if avg_vol else None)
         _db_w52h = float(row["w52h_pct"])     if row.get("w52h_pct")     is not None else None
-        w52h_pct = _db_w52h if _db_w52h is not None else (round((w52h_v - close) / close * 100, 2) if w52h_v and close else None)
+        w52h_pct = abs(_db_w52h) if _db_w52h is not None else (round((w52h_v - close) / close * 100, 2) if w52h_v and close else None)
         _db_w52l = float(row["w52l_pct"])     if row.get("w52l_pct")     is not None else None
         w52l_pct = _db_w52l if _db_w52l is not None else (round((close - w52l_v) / w52l_v * 100, 2) if w52l_v and close else None)
+        row_new_52w_high = bool(row.get("is_new_52w_high")) or (w52h_v is not None and high >= w52h_v)
+        row_new_52w_low = bool(row.get("is_new_52w_low")) or (w52l_v is not None and low <= w52l_v)
 
         # ── Price & Performance ──────────────────────────────────────────
         if f.price_min       is not None and close < f.price_min:            continue
@@ -378,8 +380,8 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
         if w52h_limit is not None and (w52h_pct is None or w52h_pct > w52h_limit): continue
         if f.w52l_pct_min  is not None and (w52l_pct is None or w52l_pct < f.w52l_pct_min): continue
-        if f.new_52w_high  and (w52h_v is None or close < w52h_v):  continue
-        if f.new_52w_low   and (w52l_v is None or close > w52l_v):  continue
+        if f.new_52w_high and not row_new_52w_high: continue
+        if f.new_52w_low and not row_new_52w_low: continue
 
         # ── EMA position aliases (price_vs_ema*) ─────────────────────────
         if f.price_vs_ema20 == "above"  and (ema20_v  is None or close <= ema20_v):  continue
@@ -540,7 +542,8 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "adx_14":         float(row["adx_14"]) if row.get("adx_14") is not None else None,
             "delivery_pct":   float(row["delivery_pct"]) if row.get("delivery_pct") is not None else None,
             "rs_score":       rs_score_v,
-            "is_new_52w_high": bool(row.get("is_new_52w_high")),
+            "is_new_52w_high": row_new_52w_high,
+            "is_new_52w_low":  row_new_52w_low,
             "is_inside_bar":   bool(row.get("is_inside_bar")),
             # Fundamentals
             "market_cap_cr":   su.get("market_cap_cr"),
@@ -638,7 +641,12 @@ async def run_scanner(
     user_id: str = Depends(get_current_user_id),
 ):
     if not scanner_limiter.is_allowed(user_id):
-        raise HTTPException(429, "Too many requests — max 30 scans per minute")
+        retry_after = scanner_limiter.retry_after(user_id)
+        raise HTTPException(
+            429,
+            f"Too many requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
     client  = get_admin_client()
     plan = _get_user_plan(user_id)
@@ -700,8 +708,8 @@ async def run_scanner(
     if f.bb_width_max     is not None: q = q.lte("bb_width",    f.bb_width_max)
     if f.delivery_pct_min is not None: q = q.gte("delivery_pct", f.delivery_pct_min)
     if f.delivery_pct_max is not None: q = q.lte("delivery_pct", f.delivery_pct_max)
-    if f.new_52w_high is True:  q = q.eq("is_new_52w_high", True)
-    if f.new_52w_low  is True:  q = q.eq("is_new_52w_low",  True)
+    # 52-week high/low flags can be absent for bhavcopy-ingested rows, so let
+    # _apply_filters derive them from daily high/low and the rolling 52w bounds.
     if f.is_inside_bar  is True: q = q.eq("is_inside_bar",  True)
     if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
     if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)

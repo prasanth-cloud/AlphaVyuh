@@ -16,6 +16,12 @@ class TestRateLimiter:
         for _ in range(3):
             limiter.is_allowed("user1")
         assert limiter.is_allowed("user1") is False
+        assert 0 < limiter.retry_after("user1") <= 60
+
+    def test_retry_after_is_zero_when_under_limit(self):
+        limiter = RateLimiter(max_calls=3, period=60.0)
+        limiter.is_allowed("user1")
+        assert limiter.retry_after("user1") == 0
 
     def test_different_users_independent(self):
         limiter = RateLimiter(max_calls=2, period=60.0)

@@ -256,7 +256,12 @@ def generate_journal_analysis(trades: list[dict]) -> str:
 @router.post("/analyse")
 async def analyse_journal(user_id: str = Depends(get_current_user_id)):
     if not ai_limiter.is_allowed(user_id):
-        raise HTTPException(429, "Too many review requests - max 5 per 5 minutes")
+        retry_after = ai_limiter.retry_after(user_id)
+        raise HTTPException(
+            429,
+            f"Too many review requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
     sb = get_admin_client()
     result = (

@@ -26,18 +26,39 @@ export const isMockMode =
     process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
     process.env.NODE_ENV === "development");
 
+let tokenCache: { token: string | null; expiresAt: number } | null = null;
+let tokenPromise: Promise<string | null> | null = null;
+
 function shouldUseMockFallback(): boolean {
   return isMockMode;
 }
 
 async function getToken(): Promise<string | null> {
-  try {
-    const sb = createClient()
-    const { data } = await sb.auth.getSession()
-    return data.session?.access_token ?? null
-  } catch {
-    return null
-  }
+  const now = Date.now();
+  if (tokenCache && tokenCache.expiresAt > now) return tokenCache.token;
+  if (tokenPromise) return tokenPromise;
+
+  tokenPromise = (async () => {
+    try {
+      const sb = createClient()
+      const { data } = await sb.auth.getSession()
+      const token = data.session?.access_token ?? null
+      tokenCache = { token, expiresAt: Date.now() + 30_000 }
+      return token
+    } catch {
+      tokenCache = { token: null, expiresAt: Date.now() + 5_000 }
+      return null
+    } finally {
+      tokenPromise = null
+    }
+  })();
+
+  return tokenPromise;
+}
+
+export function clearAuthHeaderCache() {
+  tokenCache = null;
+  tokenPromise = null;
 }
 
 export async function authHeaders(): Promise<HeadersInit> {

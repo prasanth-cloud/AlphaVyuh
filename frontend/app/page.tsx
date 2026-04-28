@@ -442,6 +442,37 @@ const LANDING_CSS = `
   gap: 18px;
   flex-wrap: wrap;
 }
+.av-footer {
+  padding: 28px 0 32px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.av-footer-grid {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.av-footer-brand {
+  max-width: 320px;
+  line-height: 1.7;
+}
+.av-footer-col {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+}
+.av-footer-col strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.av-footer-col a {
+  color: var(--text-tertiary);
+}
+.av-footer-col a:hover {
+  color: var(--text-primary);
+}
 .av-band {
   margin-top: 18px;
   padding: 18px;
@@ -500,7 +531,8 @@ const LANDING_CSS = `
   .av-steps,
   .av-chart-lower,
   .av-band-grid,
-  .av-mini-grid {
+  .av-mini-grid,
+  .av-footer-grid {
     grid-template-columns: 1fr;
   }
   .av-stat-row {
@@ -585,8 +617,8 @@ export default function LandingPage() {
                   <a href="#workflow" className="av-btn-secondary">See the full loop</a>
                 </div>
                 <div className="av-proof">
-                  <div className="av-proof-chip">Built around the real trading loop, not disconnected widgets.</div>
-                  <div className="av-proof-chip">Scanner, watchlist, chart, execution, and journal stay connected.</div>
+                  <div className="av-proof-chip">A calmer trading desk for discovery, planning, execution, and review.</div>
+                  <div className="av-proof-chip">Your shortlist, chart context, trade plan, and journal stay connected.</div>
                   <div className="av-proof-chip">Structured for NSE/BSE swing, positional, and process-driven retail workflows.</div>
                 </div>
                 <TraderReminderStrip tone="landing" />
@@ -595,7 +627,7 @@ export default function LandingPage() {
               <div className="av-panel">
                 <div className="av-panel-head">
                   <div className="av-panel-title">Workflow Preview</div>
-                  <div className="av-panel-badge">Illustrative marketwatch + chart + journal loop</div>
+                  <div className="av-panel-badge">One desk for the daily trading workflow</div>
                 </div>
                 <div className="av-window">
                   <div className="av-window-grid">
@@ -652,12 +684,12 @@ export default function LandingPage() {
                       <div className="av-chart-lower">
                         <div className="av-stat-row">
                           <div className="av-stat">
-                            <div className="label">Scan preset</div>
-                            <div className="av-stat-value">Leaders</div>
+                            <div className="label">Shortlist</div>
+                            <div className="av-stat-value">Focused</div>
                           </div>
                           <div className="av-stat">
-                            <div className="label">Trade state</div>
-                            <div className="av-stat-value">Ready</div>
+                            <div className="label">Setup context</div>
+                            <div className="av-stat-value">Attached</div>
                           </div>
                           <div className="av-stat">
                             <div className="label">Journal link</div>
@@ -721,8 +753,36 @@ export default function LandingPage() {
           </section>
         </main>
 
-        <footer className="av-shell" style={{ paddingBottom: 32, color: "var(--text-tertiary)", fontSize: 12 }}>
-          AlphaVyuh © {year}. Trading workflow software for serious retail market participants.
+        <footer className="av-shell av-footer">
+          <div className="av-footer-grid">
+            <div className="av-footer-brand">
+              <strong style={{ display: "block", color: "var(--text-primary)", marginBottom: 8 }}>AlphaVyuh</strong>
+              Trading workflow software for serious retail market participants. © {year}.
+            </div>
+            <div className="av-footer-col">
+              <strong>Product</strong>
+              <Link href="/products">Products</Link>
+              <Link href="/products#scanner">Scanner</Link>
+              <Link href="/products#journal">Journal</Link>
+            </div>
+            <div className="av-footer-col">
+              <strong>Company</strong>
+              <Link href="/blog">Blog</Link>
+              <Link href="/careers">Careers</Link>
+              <Link href="/contact">Contact</Link>
+            </div>
+            <div className="av-footer-col">
+              <strong>Policies</strong>
+              <Link href="/policies">Policies</Link>
+              <Link href="/policies#privacy">Privacy</Link>
+              <Link href="/policies#terms">Terms</Link>
+            </div>
+            <div className="av-footer-col">
+              <strong>Access</strong>
+              <Link href="/login">Sign in</Link>
+              <Link href="/signup">Start free</Link>
+            </div>
+          </div>
         </footer>
       </div>
     </>

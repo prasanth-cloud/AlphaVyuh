@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import TraderReminderStrip from '@/components/TraderReminderStrip'
+import { clearAuthHeaderCache } from '@/lib/api'
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -17,6 +18,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const fullChart = pathname.startsWith('/charts/') && searchParams.get('full') === '1'
+  const router = useRouter()
+
+  useEffect(() => {
+    const prefetchCoreRoutes = () => {
+      for (const link of NAV_LINKS) {
+        if (link.href !== pathname) router.prefetch(link.href)
+      }
+    }
+
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(prefetchCoreRoutes, { timeout: 1500 })
+      return () => window.cancelIdleCallback(id)
+    }
+
+    const id = globalThis.setTimeout(prefetchCoreRoutes, 600)
+    return () => globalThis.clearTimeout(id)
+  }, [pathname, router])
 
   if (pathname.startsWith('/onboarding')) return <>{children}</>
 
@@ -25,7 +43,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {!fullChart && (
       <nav className="app-topbar">
         <div className="app-topbar-inner">
-          <Link href="/dashboard" prefetch={false} className="app-brand">
+          <Link href="/dashboard" className="app-brand">
             <span className="app-brand-mark" aria-hidden="true">
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
@@ -51,7 +69,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={link.href}
                   href={link.href}
-                  prefetch={false}
                   className={`app-navlink ${active ? 'app-navlink-active' : ''}`}
                 >
                   {link.label}
@@ -97,7 +114,6 @@ function DataModePill() {
   return (
     <Link
       href="/data"
-      prefetch={false}
       className="app-toolbar-pill"
       title={title}
       style={{ textDecoration: 'none' }}
@@ -184,6 +200,7 @@ function AccountMenuButton() {
 
   async function signOut() {
     const { createClient } = await import('@/lib/supabase/client')
+    clearAuthHeaderCache()
     await createClient().auth.signOut()
     router.push('/login')
   }
@@ -226,7 +243,6 @@ function AccountMenuButton() {
             <Link
               key={item.href}
               href={item.href}
-              prefetch={false}
               onClick={() => setOpen(false)}
               style={{
                 display: 'block',

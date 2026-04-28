@@ -118,6 +118,8 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
         ind: dict = {}
 
         cur_close = _safe_float(close_s.iloc[-1])
+        cur_high  = _safe_float(high_s.iloc[-1])
+        cur_low   = _safe_float(low_s.iloc[-1])
         cur_vol   = _safe_int(vol_s.iloc[-1])
 
         if n >= 2:
@@ -138,9 +140,13 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
         w52h = ind["week_52_high"]
         w52l = ind["week_52_low"]
         if w52h and w52h > 0 and cur_close is not None:
-            ind["w52h_pct"] = round((cur_close - w52h) / w52h * 100.0, 4)
+            ind["w52h_pct"] = round((w52h - cur_close) / cur_close * 100.0, 4) if cur_close > 0 else None
+        if w52h is not None and cur_high is not None:
+            ind["is_new_52w_high"] = cur_high >= w52h
         if w52l and w52l > 0 and cur_close is not None:
             ind["w52l_pct"] = round((cur_close - w52l) / w52l * 100.0, 4)
+        if w52l is not None and cur_low is not None:
+            ind["is_new_52w_low"] = cur_low <= w52l
 
         try:
             if n >= 15:

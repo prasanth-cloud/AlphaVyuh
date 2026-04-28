@@ -66,7 +66,7 @@ const PRESETS = [
     id: 'new_highs',
     name: '52W Highs',
     description: 'Names already proving absolute strength.',
-    filters: { new_52w_high: true, volume_ratio_min: 1.0 },
+    filters: { new_52w_high: true },
   },
   {
     id: 'golden_cross',

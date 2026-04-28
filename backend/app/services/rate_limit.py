@@ -23,6 +23,16 @@ class RateLimiter:
             self._calls[key].append(now)
             return True
 
+    def retry_after(self, key: str) -> int:
+        now = time.time()
+        with self._lock:
+            cutoff = now - self.period
+            calls = [t for t in self._calls[key] if t > cutoff]
+            self._calls[key] = calls
+            if len(calls) < self.max_calls:
+                return 0
+            return max(1, int(self.period - (now - min(calls))) + 1)
+
 
 class PlanCache:
     def __init__(self, ttl: float = 60.0):

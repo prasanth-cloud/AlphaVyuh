@@ -173,6 +173,13 @@ h1{font-size:clamp(2.6rem,4.5vw,4rem);font-weight:900;line-height:1.08;letter-sp
 .pulse-pos{font-size:.8rem;font-weight:800;color:var(--green);font-family:var(--mono);white-space:nowrap}
 .pulse-neg{font-size:.8rem;font-weight:800;color:var(--red);font-family:var(--mono);white-space:nowrap}
 .pulse-copy{font-size:.8rem;color:var(--text2);line-height:1.45}
+.status-strip{max-width:1200px;margin:0 auto;padding:0 28px 22px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.status-card{border:1px solid var(--border);background:rgba(255,255,255,.025);border-radius:12px;padding:13px 14px}
+.status-card strong{display:block;font-size:.76rem;color:var(--text);margin-bottom:5px}
+.status-card span{display:block;font-size:.76rem;color:var(--text2);line-height:1.5}
+.status-live{color:var(--green)!important}
+.status-beta{color:var(--yellow)!important}
+.status-planned{color:var(--accent2)!important}
 
 /* ── STATS ── */
 #stats{padding:80px 0;position:relative}
@@ -405,7 +412,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   .steps-grid{grid-template-columns:1fr 1fr;gap:32px}
   .steps-grid::before{display:none}
   .stats-grid{grid-template-columns:1fr 1fr}
-  .pulse-wrap{grid-template-columns:1fr 1fr}
+  .pulse-wrap,.status-strip{grid-template-columns:1fr 1fr}
   .stat-box:nth-child(2){border-right:none}
   .stat-box:nth-child(3){border-top:1px solid var(--border)}
   .hamburger{display:flex}
@@ -418,7 +425,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   .beta-panel{padding:24px}
   .testi-grid{grid-template-columns:1fr}
   .footer-grid{grid-template-columns:1fr}
-  .pulse-wrap{grid-template-columns:1fr}
+  .pulse-wrap,.status-strip{grid-template-columns:1fr}
   .stat-box{border-right:none;border-top:1px solid var(--border)}
   .stat-box:first-child{border-top:none}
 }
@@ -433,7 +440,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
 <!-- ── NAV ── -->
 <nav id="nav">
   <div class="nav-wrap">
-    <a href="#" class="nav-logo">
+    <a href="/" class="nav-logo">
       <div class="logo-mark">
         <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="#050a08" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -477,7 +484,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
     <!-- Text -->
     <div class="hero-text">
       <div class="hero-eyebrow">
-        <div class="live-pill"><div class="pulse"></div>Live on NSE &amp; BSE</div>
+        <div class="live-pill"><div class="pulse"></div>Private beta for NSE &amp; BSE workflows</div>
       </div>
       <h1>
         <span class="hero-h1-static">India's Trading OS.</span>
@@ -486,7 +493,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
           <span style="color:var(--text2)">with conviction.</span>
         </span>
       </h1>
-      <p class="hero-sub">Replace Chartink + TradingView + Screener + Kite with one connected platform. Scan the market, chart breakouts, execute trades, and review your journal.</p>
+      <p class="hero-sub">One connected workspace to scan the market, build a focused watchlist, plan trades on charts, and review every decision in Indian equities.</p>
       <div class="hero-ctas">
         <a href="/signup" class="btn-primary">Start free — no card needed <span>→</span></a>
         <a href="#features" class="btn-secondary">
@@ -495,15 +502,9 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
         </a>
       </div>
       <div class="hero-proof">
-        <div class="avatars">
-          <div class="av" style="background:#2D3A2D">RK</div>
-          <div class="av" style="background:#2A2D3E">AP</div>
-          <div class="av" style="background:#3A2A2A">SM</div>
-          <div class="av" style="background:#2A3A38">VR</div>
-        </div>
         <div>
-          <div class="proof-copy"><strong>2,400+ traders</strong> joined this week</div>
-          <div class="stars-row">★★★★★ <span style="color:var(--text2);font-size:.74rem">4.9 / 5</span></div>
+          <div class="proof-copy"><strong>Private beta now open</strong></div>
+          <div class="stars-row" style="color:var(--text2);font-size:.74rem">Built for NSE/BSE traders who want one disciplined workflow from shortlist to review.</div>
         </div>
       </div>
     </div>
@@ -549,6 +550,22 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   </div>
 </section>
 
+<!-- ── PRODUCT STATUS ── -->
+<section class="status-strip" aria-label="Product availability">
+  <div class="status-card">
+    <strong class="status-live">Available now</strong>
+    <span>Scanner, watchlists, charts, journal, saved screens, and EOD market workflow.</span>
+  </div>
+  <div class="status-card">
+    <strong class="status-beta">In beta</strong>
+    <span>Zerodha broker flow, founder onboarding, and data-quality transparency surfaces.</span>
+  </div>
+  <div class="status-card">
+    <strong class="status-planned">Planned</strong>
+    <span>Upstox adapter, intraday exchange-grade feeds, and deeper automation after beta feedback.</span>
+  </div>
+</section>
+
 <!-- ── MARKET PULSE ── -->
 <section id="market-pulse">
   <div class="pulse-wrap">
@@ -584,24 +601,24 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
   <div class="stats-wrap">
     <div class="stats-grid">
       <div class="stat-box fade-up">
-        <div class="stat-num" data-target="2400" data-suffix="+">0</div>
-        <div class="stat-label">Active traders</div>
-        <div class="stat-sub">joined last 30 days</div>
+        <div class="stat-num" data-target="1" data-suffix="">0</div>
+        <div class="stat-label">Connected desk</div>
+        <div class="stat-sub">shortlist, chart, order context, and journal</div>
       </div>
       <div class="stat-box fade-up fade-up-d1">
-        <div class="stat-num" data-target="5000" data-suffix="+">0</div>
-        <div class="stat-label">NSE &amp; BSE stocks</div>
-        <div class="stat-sub">updated daily at 4PM IST</div>
+        <div class="stat-num" data-target="5" data-suffix="">0</div>
+        <div class="stat-label">Workflow stages</div>
+        <div class="stat-sub">scan, watchlist, chart, execute, review</div>
       </div>
       <div class="stat-box fade-up fade-up-d2">
-        <div class="stat-num" data-target="120" data-suffix="ms">0</div>
-        <div class="stat-label">Avg scan time</div>
-        <div class="stat-sub">across full NSE EQ universe</div>
+        <div class="stat-num" data-target="20" data-suffix="+">0</div>
+        <div class="stat-label">Ready scan presets</div>
+        <div class="stat-sub">leaders, breakouts, VCP, trend and recovery setups</div>
       </div>
       <div class="stat-box fade-up fade-up-d3">
-        <div class="stat-num" data-target="98" data-suffix="%">0</div>
-        <div class="stat-label">Uptime SLA</div>
-        <div class="stat-sub">on Railway + Vercel infra</div>
+        <div class="stat-num" data-target="1" data-suffix="">0</div>
+        <div class="stat-label">Data status</div>
+        <div class="stat-sub">source and freshness shown where it matters</div>
       </div>
     </div>
   </div>
@@ -619,7 +636,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
       <div class="step" style="transition-delay:.0s">
         <div class="step-num">01</div>
         <h3>Scan</h3>
-        <p>Filter 5000+ stocks by pattern, RS score, volume surge, sector, and 20+ indicators in under 200ms.</p>
+        <p>Filter NSE/BSE stocks by pattern, RS score, volume surge, sector, and 20+ indicators without leaving your daily workflow.</p>
       </div>
       <div class="step" style="transition-delay:.12s">
         <div class="step-num">02</div>
@@ -629,12 +646,12 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
       <div class="step" style="transition-delay:.24s">
         <div class="step-num">03</div>
         <h3>Chart</h3>
-        <p>Full TradingView-style charting with RS line, pivot zones, earnings markers, and drawing tools.</p>
+        <p>Chart context with RS line, pivot zones, earnings markers, and drawing tools.</p>
       </div>
       <div class="step" style="transition-delay:.36s">
         <div class="step-num">04</div>
         <h3>Order</h3>
-        <p>Place trades directly via Zerodha Kite or Upstox from the chart. No tab-switching required.</p>
+        <p>Use Zerodha broker flow in beta, or keep execution separate while still preserving the trade plan and journal context.</p>
       </div>
       <div class="step" style="transition-delay:.48s">
         <div class="step-num">05</div>
@@ -663,8 +680,8 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
     <div class="tab-panel active" id="tab-scanner">
       <div class="tab-panel-text">
         <span class="feat-label">Scanner</span>
-        <h3>Chartink-killer scanner, built for momentum traders</h3>
-        <p>Run complex multi-condition scans across all NSE/BSE equities in real-time. 20+ presets for VCP, Stage 2, breakout, RS leaders, and more. Results in under 200ms.</p>
+        <h3>A focused scanner built for process-driven traders</h3>
+        <p>Run multi-condition scans across NSE/BSE equities with presets for VCP, Stage 2, breakout, RS leaders, and more. Move only the best names into your active workflow.</p>
         <ul class="feat-list">
           <li class="feat-item"><div class="feat-check">✓</div>20+ technical filter conditions — RSI, MACD, ATR, volume, EMA confluence</li>
           <li class="feat-item"><div class="feat-check">✓</div>Relative Strength score vs Nifty 50 for every stock</li>
@@ -704,13 +721,13 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
       <div class="tab-panel-text">
         <span class="feat-label">Charts</span>
         <h3>Professional charts with RS line and pivot zones</h3>
-        <p>TradingView Lightweight Charts v4 powered. Full drawing toolkit, precomputed indicators, earnings overlays, and one-click broker order entry — all on a single screen.</p>
+        <p>Lightweight charting with drawing tools, precomputed indicators, earnings overlays, and broker-aware planning on a single screen.</p>
         <ul class="feat-list">
           <li class="feat-item"><div class="feat-check">✓</div>Candlestick with 20+ overlay indicators precomputed server-side</li>
           <li class="feat-item"><div class="feat-check">✓</div>Relative Strength line vs Nifty plotted on every chart</li>
           <li class="feat-item"><div class="feat-check">✓</div>Pivot highs/lows marked automatically as horizontal zones</li>
           <li class="feat-item"><div class="feat-check">✓</div>Drawing tools: trendline, Fibonacci, horizontal, text</li>
-          <li class="feat-item"><div class="feat-check">✓</div>One-click "Buy / Sell" → sends order to Zerodha / Upstox</li>
+          <li class="feat-item"><div class="feat-check">✓</div>Zerodha order flow in beta; Upstox adapter planned</li>
         </ul>
       </div>
       <div class="tab-visual tilt">
@@ -751,7 +768,7 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
         <h3>Your trading diary — auto-filled, trade-reviewed</h3>
         <p>Every trade you place via AlphaVyuh is automatically logged. AlphaVyuh reviews your closed trades, spots patterns in your mistakes, and gives you specific feedback to improve.</p>
         <ul class="feat-list">
-          <li class="feat-item"><div class="feat-check">✓</div>Auto-import trades from Zerodha &amp; Upstox — no manual entry</li>
+          <li class="feat-item"><div class="feat-check">✓</div>Broker-assisted logging starting with Zerodha beta</li>
           <li class="feat-item"><div class="feat-check">✓</div>P&amp;L by stock, sector, time-of-day, holding period</li>
           <li class="feat-item"><div class="feat-check">✓</div>Trade review identifies your top recurring mistakes</li>
           <li class="feat-item"><div class="feat-check">✓</div>Lessons saved per trade — searchable, filterable</li>
@@ -784,10 +801,10 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
       <div class="tab-panel-text">
         <span class="feat-label">Alerts</span>
         <h3>Get notified the moment a scan triggers</h3>
-        <p>Set your scan conditions once. When any stock matches — whether you're watching or not — AlphaVyuh pings you via Telegram instantly. Never miss a setup again.</p>
+        <p>Set your scan conditions once and receive Telegram alerts when stocks match your saved setup criteria.</p>
         <ul class="feat-list">
           <li class="feat-item"><div class="feat-check">✓</div>Any saved scan can become an alert — one toggle</li>
-          <li class="feat-item"><div class="feat-check">✓</div>Telegram delivery — instant, reliable, zero noise</li>
+          <li class="feat-item"><div class="feat-check">✓</div>Low-noise Telegram delivery for saved scan matches</li>
           <li class="feat-item"><div class="feat-check">✓</div>Price alerts — above / below a level</li>
           <li class="feat-item"><div class="feat-check">✓</div>Up to 20 alerts active simultaneously (Pro)</li>
           <li class="feat-item"><div class="feat-check">✓</div>Alert history with match details and chart link</li>
@@ -835,61 +852,61 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
 <!-- ── SOCIAL PROOF / ACTIVITY ── -->
 <section id="social">
   <div class="section-wrap" style="text-align:center">
-    <span class="section-label">Community</span>
-    <h2 class="section-title">Traders are running scans right now</h2>
-    <p class="section-sub" style="margin:12px auto 0">See what's happening on AlphaVyuh in real-time.</p>
+    <span class="section-label">Built for</span>
+    <h2 class="section-title">A calmer process for serious retail traders</h2>
+    <p class="section-sub" style="margin:12px auto 0">AlphaVyuh is being shaped around real workflows, not vanity metrics or noisy signals.</p>
     <div class="activity-feed">
-      <div class="af-item"><div class="af-av" style="background:#2D3A2D">RK</div><div class="af-text"><strong>Rahul K.</strong> just ran a <span class="highlight">VCP Momentum scan</span> · found 23 matches</div><div class="af-time">just now</div></div>
-      <div class="af-item"><div class="af-av" style="background:#2A2D3E">AP</div><div class="af-text"><strong>Ananya P.</strong> added <span class="highlight">DIXON</span> to her watchlist after scanning</div><div class="af-time">2m ago</div></div>
-      <div class="af-item"><div class="af-av" style="background:#3A2A2A">SM</div><div class="af-text"><strong>Suresh M.</strong> got trade feedback: <span class="highlight">"Cutting winners too early — avg hold 1.8 days"</span></div><div class="af-time">5m ago</div></div>
+      <div class="af-item"><div class="af-av" style="background:#2D3A2D">01</div><div class="af-text"><strong>Swing traders</strong> who want a daily <span class="highlight">scan to watchlist</span> routine without scattered context.</div><div class="af-time">Fit</div></div>
+      <div class="af-item"><div class="af-av" style="background:#2A2D3E">02</div><div class="af-text"><strong>Process-driven traders</strong> who want every setup, chart note, and journal entry to stay connected.</div><div class="af-time">Fit</div></div>
+      <div class="af-item"><div class="af-av" style="background:#3A2A2A">03</div><div class="af-text"><strong>Active retail traders</strong> who review mistakes and want fewer decisions lost between tools.</div><div class="af-time">Fit</div></div>
       <div class="af-divider">· · ·</div>
-      <div class="af-item"><div class="af-av" style="background:#2A3A38">VR</div><div class="af-text"><strong>Vijay R.</strong> placed a buy order on <span class="highlight">DEEPAKNTR ₹2,830</span> via Zerodha from the chart</div><div class="af-time">8m ago</div></div>
-      <div class="af-item"><div class="af-av" style="background:#3A3020">MT</div><div class="af-text"><strong>Meera T.</strong> set a <span class="highlight">VCP Breakout alert</span> for NSE Large Cap</div><div class="af-time">12m ago</div></div>
+      <div class="af-item"><div class="af-av" style="background:#2A3A38">04</div><div class="af-text"><strong>Founder beta users</strong> who can help us tune market data, broker setup, and scanner workflows before wider launch.</div><div class="af-time">Open</div></div>
+      <div class="af-item"><div class="af-av" style="background:#3A3020">05</div><div class="af-text"><strong>Indian equity traders</strong> working across NSE/BSE watchlists, charts, alerts, and journals.</div><div class="af-time">Focus</div></div>
     </div>
   </div>
 </section>
 
-<!-- ── TESTIMONIALS ── -->
+<!-- ── WORKFLOW PRINCIPLES ── -->
 <section id="testimonials">
   <div class="section-wrap">
     <div style="text-align:center">
-      <span class="section-label">Reviews</span>
-      <h2 class="section-title">Traders switched. They never looked back.</h2>
+      <span class="section-label">Principles</span>
+      <h2 class="section-title">What the product is designed to protect</h2>
     </div>
     <div class="testi-grid">
       <div class="testi-card tilt">
-        <div class="testi-stars">★★★★★</div>
-        <p class="testi-quote">"I used to have Chartink, TradingView, Zerodha, and a spreadsheet open. AlphaVyuh replaced all four. The scanner is faster and the journal feedback changed how I think about trades."</p>
+        <div class="testi-stars">01</div>
+        <p class="testi-quote">Fewer disconnected decisions. A symbol should carry its scan reason, chart context, trade plan, and journal history with it.</p>
         <div class="testi-author">
           <div class="t-av" style="background:#2D3A2D;color:var(--green)">RK</div>
           <div>
-            <div class="t-name">Rahul Krishnamurthy</div>
-            <div class="t-role">Full-time trader · Bangalore</div>
-            <div class="t-returns">+38% in 90 days on Pro plan</div>
+            <div class="t-name">Context first</div>
+            <div class="t-role">Shortlist → chart → review</div>
+            <div class="t-returns">Built into the workflow</div>
           </div>
         </div>
       </div>
       <div class="testi-card tilt" style="transition-delay:.1s">
-        <div class="testi-stars">★★★★★</div>
-        <p class="testi-quote">"The VCP scanner finds breakouts I was manually hunting for hours. I set alerts, go about my day, and get a Telegram ping when a setup is ready. This is how trading software should work."</p>
+        <div class="testi-stars">02</div>
+        <p class="testi-quote">Less noise in discovery. The scanner should narrow attention, not create a bigger pile of symbols to manually chase.</p>
         <div class="testi-author">
           <div class="t-av" style="background:#2A2D3E;color:var(--accent2)">AP</div>
           <div>
-            <div class="t-name">Ananya Patel</div>
-            <div class="t-role">Swing trader · Mumbai</div>
-            <div class="t-returns">2.4× hit rate improvement</div>
+            <div class="t-name">Attention control</div>
+            <div class="t-role">Presets, filters, and watchlists</div>
+            <div class="t-returns">Designed for repeatable routines</div>
           </div>
         </div>
       </div>
       <div class="testi-card tilt" style="transition-delay:.2s">
-        <div class="testi-stars">★★★★★</div>
-        <p class="testi-quote">"As a data scientist, I love that everything is in one DB. The charts load instantly, indicators are precomputed, and the review actually cites specific trades when it gives feedback. Impressive engineering."</p>
+        <div class="testi-stars">03</div>
+        <p class="testi-quote">Review should not be optional. Closed trades need to become lessons while the setup, entry reason, and exit behavior are still visible.</p>
         <div class="testi-author">
           <div class="t-av" style="background:#2A3A38;color:var(--accent)">VR</div>
           <div>
-            <div class="t-name">Vijay Reddy</div>
-            <div class="t-role">Quant / Trader · Hyderabad</div>
-            <div class="t-returns">Elite plan · 6 months</div>
+            <div class="t-name">Feedback loop</div>
+            <div class="t-role">Journal and trade review</div>
+            <div class="t-returns">Built for improvement</div>
           </div>
         </div>
       </div>
@@ -901,8 +918,8 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
 <section id="pricing">
   <div class="section-wrap" style="text-align:center">
     <span class="section-label">Pricing</span>
-    <h2 class="section-title">Straightforward pricing. No hidden fees.</h2>
-    <p class="section-sub" style="margin:12px auto 0">Start free. Upgrade when you're ready. Cancel anytime.</p>
+    <h2 class="section-title">Founder beta pricing. No hidden fees.</h2>
+    <p class="section-sub" style="margin:12px auto 0">Start free during beta. Paid plans open as broker, payment, and market-data operations mature.</p>
 
     <div class="pricing-toggle">
       <span class="pt-label active" id="ptMonthly">Monthly</span>
@@ -952,11 +969,11 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
           <div class="pf-item on"><div class="pf-check pfc-on">✓</div>500 scanner results per scan</div>
           <div class="pf-item on"><div class="pf-check pfc-on">✓</div>Unlimited saved screens</div>
           <div class="pf-item on"><div class="pf-check pfc-on">✓</div>10 watchlists · 200 stocks each</div>
-          <div class="pf-item on"><div class="pf-check pfc-on">✓</div>Full charting + broker orders</div>
+          <div class="pf-item on"><div class="pf-check pfc-on">✓</div>Full charting + Zerodha beta orders</div>
           <div class="pf-item on"><div class="pf-check pfc-on">✓</div>Unlimited journal history</div>
           <div class="pf-item on"><div class="pf-check pfc-on">✓</div>20 scan alerts via Telegram</div>
           <div class="pf-item on"><div class="pf-check pfc-on">✓</div>Journal trade review weekly</div>
-          <div class="pf-item on"><div class="pf-check pfc-on">✓</div>Zerodha &amp; Upstox integration</div>
+          <div class="pf-item on"><div class="pf-check pfc-on">✓</div>Zerodha beta integration; Upstox planned</div>
         </div>
       </div>
 
@@ -1030,12 +1047,12 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
     <h2 class="section-title">Common questions</h2>
     <div class="faq-list">
       <div class="faq-item">
-        <div class="faq-q"><span>Does AlphaVyuh provide real-time stock data?</span><div class="faq-icon">+</div></div>
+        <div class="faq-q"><span>What market data does AlphaVyuh use?</span><div class="faq-icon">+</div></div>
         <div class="faq-a"><p>AlphaVyuh uses end-of-day (EOD) OHLCV data updated daily at 4 PM IST via NSE bhavcopy. Scanner results are based on the previous trading day's close. Live intraday price feeds are on the roadmap.</p></div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><span>Which brokers are supported?</span><div class="faq-icon">+</div></div>
-        <div class="faq-a"><p>Zerodha Kite Connect v3 and Upstox v2 are supported for placing orders directly from the chart. More brokers are on the roadmap. You can use AlphaVyuh for scanning and journaling without a broker connected.</p></div>
+        <div class="faq-a"><p>Zerodha Kite Connect is in beta for broker-linked workflows. Upstox is planned after the Zerodha flow is stable. You can use AlphaVyuh for scanning, watchlists, charts, and journaling without a broker connected.</p></div>
       </div>
       <div class="faq-item">
         <div class="faq-q"><span>How does the journal review work?</span><div class="faq-icon">+</div></div>
@@ -1060,9 +1077,9 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
 <!-- ── FINAL CTA ── -->
 <section id="cta-final">
   <div class="cta-inner">
-    <div class="cta-badge"><div class="pulse" style="margin-right:2px"></div>Join 2,400+ traders</div>
+    <div class="cta-badge"><div class="pulse" style="margin-right:2px"></div>Private beta now open</div>
     <h2 class="cta-h2">Your edge is<br>one scan away.</h2>
-    <p class="cta-sub">Set up your account in 60 seconds. Run your first VCP scan. See who's breaking out today.</p>
+    <p class="cta-sub">Set up your account, run your first scan, and start building a cleaner trading workflow before wider launch.</p>
     <a href="/signup" class="btn-cta-big">Start free — no credit card <span>→</span></a>
     <p class="cta-note">Free plan · No card needed · Upgrade anytime</p>
   </div>
@@ -1079,37 +1096,37 @@ footer{background:var(--surface);border-top:1px solid var(--border);padding:64px
         </div>
         <p>India's Trading OS. Scan, chart, trade, and journal — connected in one platform for Indian equity traders.</p>
         <div class="footer-social">
-          <a href="#" class="soc-btn" title="Twitter">𝕏</a>
-          <a href="#" class="soc-btn" title="Telegram">✈</a>
-          <a href="#" class="soc-btn" title="GitHub">⌥</a>
+          <a href="/contact" class="soc-btn" title="Contact">𝕏</a>
+          <a href="/contact" class="soc-btn" title="Contact">✈</a>
+          <a href="/contact" class="soc-btn" title="Contact">⌥</a>
         </div>
       </div>
       <div class="footer-col">
         <h5>Product</h5>
         <ul>
-          <li><a href="#features">Scanner</a></li>
-          <li><a href="#features">Charts</a></li>
-          <li><a href="#features">Journal</a></li>
-          <li><a href="#features">Alerts</a></li>
+          <li><a href="/products#scanner">Scanner</a></li>
+          <li><a href="/products">Charts</a></li>
+          <li><a href="/products#journal">Journal</a></li>
+          <li><a href="/products">Alerts</a></li>
           <li><a href="#pricing">Pricing</a></li>
         </ul>
       </div>
       <div class="footer-col">
         <h5>Company</h5>
         <ul>
-          <li><a href="#">About</a></li>
-          <li><a href="#">Blog</a></li>
-          <li><a href="#">Careers</a></li>
-          <li><a href="#">Contact</a></li>
+          <li><a href="/products">About</a></li>
+          <li><a href="/blog">Blog</a></li>
+          <li><a href="/careers">Careers</a></li>
+          <li><a href="/contact">Contact</a></li>
         </ul>
       </div>
       <div class="footer-col">
         <h5>Legal</h5>
         <ul>
-          <li><a href="/privacy">Privacy Policy</a></li>
-          <li><a href="/terms">Terms of Service</a></li>
-          <li><a href="#">Refund Policy</a></li>
-          <li><a href="#">Disclaimer</a></li>
+          <li><a href="/policies#privacy">Privacy Policy</a></li>
+          <li><a href="/policies#terms">Terms of Service</a></li>
+          <li><a href="/policies">Refund Policy</a></li>
+          <li><a href="/policies">Disclaimer</a></li>
         </ul>
       </div>
     </div>

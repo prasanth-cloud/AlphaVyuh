@@ -220,6 +220,12 @@ def _compute_and_update_indicators(client):
                 ind["week_52_high"]   = _safe_float(high_s.max())
                 ind["week_52_low"]    = _safe_float(low_s.min())
                 ind["avg_volume_20d"] = _safe_int(vol_s.iloc[:-1].tail(20).mean())
+                latest_high = _safe_float(high_s.iloc[-1])
+                latest_low = _safe_float(low_s.iloc[-1])
+                if ind["week_52_high"] is not None and latest_high is not None:
+                    ind["is_new_52w_high"] = latest_high >= ind["week_52_high"]
+                if ind["week_52_low"] is not None and latest_low is not None:
+                    ind["is_new_52w_low"] = latest_low <= ind["week_52_low"]
 
                 if n >= 15:
                     ind["rsi_14"] = _safe_float(ta.rsi(close_s, 14).iloc[-1])
