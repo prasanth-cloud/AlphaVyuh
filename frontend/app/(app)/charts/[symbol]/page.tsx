@@ -1042,7 +1042,6 @@ export default function ChartPage({ params }: { params: { symbol: string } }) {
     displayClose != null && displayPrevClose ? ((displayClose - displayPrevClose) / displayPrevClose) * 100 : null
   );
   const displayPositive = (displayPctChange ?? 0) >= 0;
-  const prevClose = latest?.prev_close;
   const sourceQueueSymbols = (sourceQueue?.items ?? []).map((item) => item.symbol);
   const sourceQueueIndex = sourceQueueSymbols.findIndex((item) => item === symbol);
   const sourceQueueName = sourceQueue?.name ?? sourceWatchlist ?? null;
