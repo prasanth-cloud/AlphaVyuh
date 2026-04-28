@@ -2,9 +2,13 @@ import { test, expect } from "@playwright/test";
 
 const EMAIL = process.env.PLAYWRIGHT_QA_EMAIL ?? "alphavyuh.qa.admin@proton.me";
 const PASSWORD = process.env.PLAYWRIGHT_QA_PASSWORD ?? "QaPass123x";
+const ACCESS_URL = process.env.PLAYWRIGHT_ACCESS_URL;
 
 async function login(page: import("@playwright/test").Page) {
   await page.context().clearCookies();
+  if (ACCESS_URL) {
+    await page.goto(ACCESS_URL);
+  }
   await page.goto("/login");
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
