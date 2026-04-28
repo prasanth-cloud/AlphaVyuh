@@ -46,6 +46,6 @@ Legacy market summary now includes `above_ema50_pct`, frontend fallback preserve
 **Tags:** DESIGN, FEATURE
 **Discovered:** 2026-04-19
 **Closed:** 2026-04-28
-**Commit:** bc5353c
+**Commit:** 283e3be
 
 Dashboard primary CTA now uses the shared primary button treatment. Added Playwright coverage in `smoke-signed-in.spec.ts` to assert the CTA renders visibly with dark text on the teal gradient.
