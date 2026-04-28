@@ -62,7 +62,6 @@ test.describe("Broker settings — not connected", () => {
     const connectBtn = page.getByTestId("connect-btn");
     await expect(connectBtn).toBeVisible();
 
-    const navPromise = page.waitForURL(mockAuthUrl, { timeout: 3000 }).catch(() => null);
     await connectBtn.click();
     // Button shows loading state
     await expect(connectBtn).toHaveText(/Redirecting/);

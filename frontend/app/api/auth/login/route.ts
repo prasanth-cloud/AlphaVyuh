@@ -6,7 +6,7 @@ export async function POST(request: Request) {
 
   // Create the response first — the supabase client writes sb-* cookies onto it
   const response = NextResponse.json({ success: true });
-  const supabase = createRouteHandlerClient(response);
+  const supabase = await createRouteHandlerClient(response);
 
   const { data, error } = await supabase.auth.signInWithPassword({
     email,

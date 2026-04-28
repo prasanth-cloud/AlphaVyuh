@@ -97,7 +97,7 @@ test.describe("/charts redirect", () => {
   test("/charts/RELIANCE redirects to /watchlist?symbol=RELIANCE", async ({ page }) => {
     await page.context().clearCookies();
     // Middleware redirects /charts/* before auth gate, so unauthenticated is fine here
-    const response = await page.goto("/charts/RELIANCE", { waitUntil: "commit" });
+    await page.goto("/charts/RELIANCE", { waitUntil: "commit" });
     // Should have been redirected to watchlist (then bounced to login since not authed)
     expect(page.url()).toMatch(/\/watchlist|\/login/);
   });

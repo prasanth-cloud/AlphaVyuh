@@ -27,7 +27,6 @@ export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const supabaseAuth = supabase.auth;
 
   useEffect(() => {

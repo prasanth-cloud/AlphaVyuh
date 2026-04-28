@@ -7,6 +7,7 @@ Strategy: patch app.brokers.kite.api._request to return fixture data.
 from __future__ import annotations
 
 import os
+import asyncio
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +19,10 @@ os.environ.setdefault("KITE_API_SECRET", "test_api_secret")
 from app.brokers.adapter import BrokerCredentials, BrokerError
 from app.brokers.kite.adapter import KiteAdapter, _map_kite_status
 from app.brokers.kite.api import KiteApiError
+
+
+def _run(coro):
+    return asyncio.run(coro)
 
 
 def _creds() -> BrokerCredentials:
@@ -80,10 +85,7 @@ class TestGetAuthUrl:
 class TestRefreshRaisesAuthExpired:
     def test_refresh_always_raises(self):
         with pytest.raises(BrokerError) as exc_info:
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(
-                KiteAdapter().refresh(_creds())
-            )
+            _run(KiteAdapter().refresh(_creds()))
         err = exc_info.value
         assert err.kind == "AUTH_EXPIRED"
         assert err.broker_id == "zerodha"
@@ -101,10 +103,7 @@ class TestGetProfile:
 
     def test_maps_profile_fields(self):
         with patch("app.brokers.kite.api._request", return_value={"data": self._raw_profile}):
-            import asyncio
-            profile = asyncio.get_event_loop().run_until_complete(
-                KiteAdapter().get_profile(_creds())
-            )
+            profile = _run(KiteAdapter().get_profile(_creds()))
         assert profile.broker_id == "zerodha"
         assert profile.user_id == "AB1234"
         assert profile.display_name == "Test User"
@@ -115,11 +114,8 @@ class TestGetProfile:
             "app.brokers.kite.api._request",
             side_effect=KiteApiError(403, "TokenException", "Invalid token"),
         ):
-            import asyncio
             with pytest.raises(BrokerError) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
-                    KiteAdapter().get_profile(_creds())
-                )
+                _run(KiteAdapter().get_profile(_creds()))
         assert exc_info.value.kind == "AUTH_EXPIRED"
 
     def test_network_error_raises_broker_error(self):
@@ -127,11 +123,8 @@ class TestGetProfile:
             "app.brokers.kite.api._request",
             side_effect=KiteApiError(503, "NetworkException", "Service unavailable"),
         ):
-            import asyncio
             with pytest.raises(BrokerError) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
-                    KiteAdapter().get_profile(_creds())
-                )
+                _run(KiteAdapter().get_profile(_creds()))
         assert exc_info.value.kind == "NETWORK"
         assert exc_info.value.retryable is True
 
@@ -154,10 +147,7 @@ class TestGetHoldings:
 
     def test_maps_holding_fields(self):
         with patch("app.brokers.kite.api._request", return_value={"data": self._raw_holdings}):
-            import asyncio
-            holdings = asyncio.get_event_loop().run_until_complete(
-                KiteAdapter().get_holdings(_creds())
-            )
+            holdings = _run(KiteAdapter().get_holdings(_creds()))
         assert len(holdings) == 1
         h = holdings[0]
         assert h.symbol == "RELIANCE"
@@ -169,10 +159,7 @@ class TestGetHoldings:
 
     def test_empty_holdings(self):
         with patch("app.brokers.kite.api._request", return_value={"data": []}):
-            import asyncio
-            holdings = asyncio.get_event_loop().run_until_complete(
-                KiteAdapter().get_holdings(_creds())
-            )
+            holdings = _run(KiteAdapter().get_holdings(_creds()))
         assert holdings == []
 
 
@@ -194,10 +181,7 @@ class TestGetPositions:
 
     def test_maps_net_positions(self):
         with patch("app.brokers.kite.api._request", return_value={"data": self._raw_positions}):
-            import asyncio
-            positions = asyncio.get_event_loop().run_until_complete(
-                KiteAdapter().get_positions(_creds())
-            )
+            positions = _run(KiteAdapter().get_positions(_creds()))
         assert len(positions) == 1
         p = positions[0]
         assert p.symbol == "INFY"
@@ -209,29 +193,25 @@ class TestGetPositions:
 class TestOrderMethodsNotImplemented:
     """Order methods are stubbed until feat/broker-connect-ui."""
 
-    def _run(self, coro):
-        import asyncio
-        return asyncio.get_event_loop().run_until_complete(coro)
-
     def test_place_order_not_implemented(self):
         with pytest.raises(NotImplementedError):
-            self._run(KiteAdapter().place_order(_creds(), MagicMock()))
+            _run(KiteAdapter().place_order(_creds(), MagicMock()))
 
     def test_modify_order_not_implemented(self):
         with pytest.raises(NotImplementedError):
-            self._run(KiteAdapter().modify_order(_creds(), "ord_123", MagicMock()))
+            _run(KiteAdapter().modify_order(_creds(), "ord_123", MagicMock()))
 
     def test_cancel_order_not_implemented(self):
         with pytest.raises(NotImplementedError):
-            self._run(KiteAdapter().cancel_order(_creds(), "ord_123"))
+            _run(KiteAdapter().cancel_order(_creds(), "ord_123"))
 
     def test_get_order_not_implemented(self):
         with pytest.raises(NotImplementedError):
-            self._run(KiteAdapter().get_order(_creds(), "ord_123"))
+            _run(KiteAdapter().get_order(_creds(), "ord_123"))
 
     def test_list_orders_not_implemented(self):
         with pytest.raises(NotImplementedError):
-            self._run(KiteAdapter().list_orders(_creds()))
+            _run(KiteAdapter().list_orders(_creds()))
 
     def test_subscribe_fills_returns_callable(self):
         unsubscribe = KiteAdapter().subscribe_fills(_creds(), lambda fill: None)
@@ -245,11 +225,8 @@ class TestErrorWrapping:
             "app.brokers.kite.api._request",
             side_effect=KiteApiError(429, "RateLimitException", "Too many requests"),
         ):
-            import asyncio
             with pytest.raises(BrokerError) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
-                    KiteAdapter().get_profile(_creds())
-                )
+                _run(KiteAdapter().get_profile(_creds()))
         err = exc_info.value
         assert err.kind == "RATE_LIMITED"
         assert err.retryable is True
@@ -260,11 +237,8 @@ class TestErrorWrapping:
             "app.brokers.kite.api._request",
             side_effect=KiteApiError(400, "DataException", "Bad symbol"),
         ):
-            import asyncio
             with pytest.raises(BrokerError) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
-                    KiteAdapter().get_profile(_creds())
-                )
+                _run(KiteAdapter().get_profile(_creds()))
         err = exc_info.value
         assert err.kind == "UNKNOWN"
         assert err.retryable is False

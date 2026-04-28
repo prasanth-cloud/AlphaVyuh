@@ -8,10 +8,9 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // headers() is synchronous in Next.js 14 — no await (see lib/supabase/server.ts)
-  const pathname = headers().get("x-pathname") ?? "/";
+  const pathname = (await headers()).get("x-pathname") ?? "/";
 
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
 
   // getUser() validates JWT server-side — never trust getSession() here
   const {

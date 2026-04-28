@@ -1,11 +1,13 @@
 import os
 import secrets
+import asyncio
 
 os.environ.setdefault("BROKER_CREDS_KEY", secrets.token_bytes(32).hex())
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import broker as broker_router  # noqa: E402
+from app.routers import users as users_router  # noqa: E402
 
 
 class _MaybeSingleQuery:
@@ -31,6 +33,58 @@ class _FakeSupabase:
 
     def table(self, _name):
         return _MaybeSingleQuery(self._data)
+
+
+class _UpdateQuery:
+    def __init__(self, client):
+        self.client = client
+        self._selecting = False
+
+    def update(self, updates):
+        self.client.updated = updates
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        if self._selecting:
+            return type("Result", (), {"data": self.client.user_row})()
+        return type("Result", (), {"data": None})()
+
+    def select(self, *_args, **_kwargs):
+        self._selecting = True
+        return self
+
+    def single(self):
+        return self
+
+
+class _FakeUsersSupabase:
+    def __init__(self):
+        self.updated = None
+        self.user_row = {
+            "id": "user-123",
+            "email": "user@example.com",
+            "full_name": None,
+            "avatar_url": None,
+            "plan": "free",
+            "plan_expires_at": None,
+            "onboarding_completed": False,
+            "telegram_chat_id": None,
+            "broker_type": "zerodha",
+            "broker_api_key": "kite-key",
+            "broker_connected_at": "2026-04-28T00:00:00",
+            "billing_region": "IN",
+            "billing_currency": "INR",
+            "billing_period": "monthly",
+            "referral_code": None,
+            "referred_by": None,
+            "created_at": "2026-04-28T00:00:00",
+        }
+
+    def table(self, _name):
+        return _UpdateQuery(self)
 
 
 def test_user_broker_credentials_prefer_encrypted_store(monkeypatch):
@@ -92,3 +146,26 @@ def test_user_broker_credentials_fall_back_to_legacy_columns(monkeypatch):
     assert creds["api_secret"] == "plain-secret"
     assert creds["access_token"] == "plain-token"
     assert creds["expires_at"] == "plain-expiry"
+
+
+def test_update_me_does_not_write_plaintext_broker_secret(monkeypatch):
+    client = _FakeUsersSupabase()
+    saved: dict[tuple[str, str], str] = {}
+
+    monkeypatch.setattr(users_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(
+        users_router,
+        "upsert_broker_credential",
+        lambda _user_id, broker, key_name, value: saved.__setitem__((broker, key_name), value),
+    )
+
+    request = users_router.UpdateUserRequest(
+        broker_type="zerodha",
+        broker_api_key="kite-key",
+        broker_api_secret="kite-secret",
+    )
+
+    asyncio.run(users_router.update_me(request, user_id="user-123"))
+
+    assert saved[("zerodha", "api_secret")] == "kite-secret"
+    assert client.updated["broker_api_secret"] is None

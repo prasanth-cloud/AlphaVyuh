@@ -705,7 +705,7 @@ export default function DashboardPage() {
     load()
     const t = setInterval(load, 5 * 60 * 1000)
     return () => clearInterval(t)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>

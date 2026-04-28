@@ -16,6 +16,28 @@ interface JournalAiInsightsProps {
   onAnalyse: () => void;
 }
 
+function renderReviewLine(line: string, key: number, bullet = false) {
+  const parts = line.split(/(\*\*.*?\*\*)/g).filter(Boolean);
+  const content = (
+    <span>
+      {parts.map((part, index) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={index}>{part.slice(2, -2)}</strong>;
+        }
+        return <span key={index}>{part}</span>;
+      })}
+    </span>
+  );
+
+  if (!bullet) return <div key={key}>{content}</div>;
+  return (
+    <div key={key} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
+      <span style={{ color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }}>•</span>
+      {content}
+    </div>
+  );
+}
+
 export function JournalAiInsights({
   patterns,
   patternsLoading,
@@ -199,15 +221,10 @@ export function JournalAiInsights({
                   return <div key={i} style={{ fontSize: 13, fontWeight: 700, marginTop: 12, marginBottom: 4 }}>{line.replace(/\*\*/g, "")}</div>;
                 }
                 if (line.startsWith("- ") || line.startsWith("* ")) {
-                  return (
-                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
-                      <span style={{ color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }}>•</span>
-                      <span dangerouslySetInnerHTML={{ __html: line.slice(2).replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") }} />
-                    </div>
-                  );
+                  return renderReviewLine(line.slice(2), i, true);
                 }
                 if (line.trim() === "") return <div key={i} style={{ height: 6 }} />;
-                return <div key={i} dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") }} />;
+                return renderReviewLine(line, i);
               })}
             </div>
           </div>

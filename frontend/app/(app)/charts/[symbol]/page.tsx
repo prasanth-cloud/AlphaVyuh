@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -131,8 +131,9 @@ function findNearestCandlePrice(
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ChartPage({ params }: { params: { symbol: string } }) {
-  const symbol = params.symbol.toUpperCase();
+export default function ChartPage({ params }: { params: Promise<{ symbol: string }> }) {
+  const { symbol: routeSymbol } = use(params);
+  const symbol = routeSymbol.toUpperCase();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sourcePage = searchParams.get("from");

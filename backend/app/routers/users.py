@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import string
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -97,17 +98,16 @@ async def update_me(
     if body.broker_type is not None:
         updates["broker_type"] = broker
     if body.broker_type or body.broker_api_key:
-        import datetime
-        updates["broker_connected_at"] = datetime.datetime.utcnow().isoformat()
+        updates["broker_connected_at"] = datetime.now(UTC).isoformat()
 
-    # Credentials are stored encrypted in broker_credentials. Plaintext columns
-    # are kept only as a temporary compatibility fallback for older routes.
+    # Credentials are stored encrypted in broker_credentials. Deprecated plaintext
+    # secret columns are explicitly cleared so new writes cannot reintroduce them.
     if broker and body.broker_api_key is not None:
         upsert_broker_credential(user_id, broker, "api_key", body.broker_api_key)
         updates["broker_api_key"] = body.broker_api_key or None  # deprecated sync
     if broker and body.broker_api_secret is not None:
         upsert_broker_credential(user_id, broker, "api_secret", body.broker_api_secret)
-        updates["broker_api_secret"] = body.broker_api_secret or None  # deprecated sync
+        updates["broker_api_secret"] = None
     if body.billing_region is not None:
         if body.billing_region not in ("IN", "NRI", "US", "INTL"):
             raise HTTPException(400, "Invalid billing_region")

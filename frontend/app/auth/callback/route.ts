@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     // receives Set-Cookie headers. Using cookieStore.set() alone (the previous
     // approach) writes to the Next.js internal store but not onto an explicitly
     // returned NextResponse object, meaning cookies were dropped.
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

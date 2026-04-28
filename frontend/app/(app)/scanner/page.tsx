@@ -173,6 +173,16 @@ function Section({ title, children, open: def = false }: { title: string; childr
   )
 }
 
+function MetricCell({ label, value, direction }: { label: string; value: string; direction?: 'above' | 'below' }) {
+  const color = direction === 'above' ? 'var(--gain)' : direction === 'below' ? 'var(--loss)' : 'var(--text-secondary)'
+  return (
+    <div>
+      <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 13, fontWeight: 500, color }}>{value}</div>
+    </div>
+  )
+}
+
 // Inline detail expansion for a selected row
 function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
   r: ScanResult
@@ -180,16 +190,6 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
   onAddToWatchlist: (symbol: string, wlId: string) => void
   onOpenChart: (symbol: string) => void
 }) {
-  function MetricCell({ label, value, direction }: { label: string; value: string; direction?: 'above' | 'below' }) {
-    const color = direction === 'above' ? 'var(--gain)' : direction === 'below' ? 'var(--loss)' : 'var(--text-secondary)'
-    return (
-      <div>
-        <div className="label" style={{ marginBottom: 4 }}>{label}</div>
-        <div className="mono" style={{ fontSize: 13, fontWeight: 500, color }}>{value}</div>
-      </div>
-    )
-  }
-
   return (
     <tr>
       <td colSpan={8} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>

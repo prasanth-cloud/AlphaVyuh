@@ -31,6 +31,39 @@ const cardStyle = {
 };
 const inputStyle = { background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), var(--surface-2)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" };
 
+function Radio({
+  name,
+  value,
+  label,
+  checked,
+  onSelect,
+}: {
+  name: keyof FormState;
+  value: string;
+  label: string;
+  checked: boolean;
+  onSelect: (name: keyof FormState, value: string) => void;
+}) {
+  return (
+    <label
+      className="flex items-center gap-3 p-3 rounded-[8px] border cursor-pointer transition-colors"
+      style={checked
+        ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
+        : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}
+    >
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={() => onSelect(name, value)}
+        className="accent-[var(--accent)]"
+      />
+      <span className="text-[14px]" style={{ color: "var(--text-primary)" }}>{label}</span>
+    </label>
+  );
+}
+
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -39,20 +72,9 @@ export default function OnboardingPage() {
     experience: "", trades: "", broker: "", broker_api_key: "", broker_api_secret: "",
   });
 
-  function Radio({ name, value, label }: { name: keyof FormState; value: string; label: string }) {
-    const checked = form[name] === value;
-    return (
-      <label className="flex items-center gap-3 p-3 rounded-[8px] border cursor-pointer transition-colors"
-        style={checked
-          ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
-          : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}>
-        <input type="radio" name={name} value={value} checked={checked}
-          onChange={() => setForm((f) => ({ ...f, [name]: value }))}
-          className="accent-[var(--accent)]" />
-        <span className="text-[14px]" style={{ color: "var(--text-primary)" }}>{label}</span>
-      </label>
-    );
-  }
+  const selectRadio = (name: keyof FormState, value: string) => {
+    setForm((f) => ({ ...f, [name]: value }));
+  };
 
   async function finish(destination = "/dashboard", seedStarterQueue = false) {
     setLoading(true);
@@ -135,17 +157,17 @@ export default function OnboardingPage() {
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--text-tertiary)" }}>Experience level</p>
                 <div className="space-y-2">
-                  <Radio name="experience" value="beginner" label="Beginner — new to trading" />
-                  <Radio name="experience" value="intermediate" label="Intermediate — 1–3 years" />
-                  <Radio name="experience" value="expert" label="Expert — 3+ years" />
+                  <Radio name="experience" value="beginner" label="Beginner — new to trading" checked={form.experience === "beginner"} onSelect={selectRadio} />
+                  <Radio name="experience" value="intermediate" label="Intermediate — 1–3 years" checked={form.experience === "intermediate"} onSelect={selectRadio} />
+                  <Radio name="experience" value="expert" label="Expert — 3+ years" checked={form.experience === "expert"} onSelect={selectRadio} />
                 </div>
               </div>
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--text-tertiary)" }}>What do you trade?</p>
                 <div className="space-y-2">
-                  <Radio name="trades" value="equity" label="Equity (stocks)" />
-                  <Radio name="trades" value="fno" label="F&O (futures & options)" />
-                  <Radio name="trades" value="both" label="Both" />
+                  <Radio name="trades" value="equity" label="Equity (stocks)" checked={form.trades === "equity"} onSelect={selectRadio} />
+                  <Radio name="trades" value="fno" label="F&O (futures & options)" checked={form.trades === "fno"} onSelect={selectRadio} />
+                  <Radio name="trades" value="both" label="Both" checked={form.trades === "both"} onSelect={selectRadio} />
                 </div>
               </div>
               <button

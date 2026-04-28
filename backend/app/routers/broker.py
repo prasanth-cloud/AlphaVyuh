@@ -512,7 +512,7 @@ async def zerodha_callback(
         raise HTTPException(status_code=400, detail="Zerodha session failed — check your API key and secret")
 
     import datetime
-    now_iso = datetime.datetime.utcnow().isoformat()
+    now_iso = datetime.datetime.now(datetime.UTC).isoformat()
 
     expiry = _zerodha_token_expiry()
     upsert_broker_credential(user_id, "zerodha", "access_token", access_token)

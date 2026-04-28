@@ -5,7 +5,7 @@ export async function POST(request: Request) {
   const { email, password, full_name } = await request.json();
 
   const response = NextResponse.json({ success: true });
-  const supabase = createRouteHandlerClient(response);
+  const supabase = await createRouteHandlerClient(response);
 
   const { data, error } = await supabase.auth.signUp({
     email: (email as string).trim().toLowerCase(),

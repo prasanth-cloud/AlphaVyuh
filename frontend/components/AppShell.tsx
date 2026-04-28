@@ -270,7 +270,7 @@ function SymbolSearch() {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const timer = useRef<ReturnType<typeof setTimeout>>()
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -305,7 +305,7 @@ function SymbolSearch() {
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const q = e.target.value.toUpperCase()
     setQuery(q)
-    clearTimeout(timer.current)
+    if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => search(q), 200)
   }
 
