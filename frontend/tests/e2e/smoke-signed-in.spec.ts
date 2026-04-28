@@ -18,6 +18,19 @@ test.describe("Signed-in smoke flow", () => {
   test("scanner, watchlist, charts, and journal load in a usable state", async ({ page }) => {
     await login(page);
 
+    const dashboardCta = page
+      .locator("div")
+      .filter({ hasText: /Next best action:/ })
+      .getByRole("button")
+      .last();
+    await expect(dashboardCta).toBeVisible();
+    const ctaStyle = await dashboardCta.evaluate((node) => {
+      const style = window.getComputedStyle(node);
+      return { color: style.color, backgroundImage: style.backgroundImage };
+    });
+    expect(ctaStyle.color).toBe("rgb(4, 18, 13)");
+    expect(ctaStyle.backgroundImage).toContain("linear-gradient");
+
     await page.goto("/scanner");
     await expect(page).toHaveURL(/\/scanner/);
     await expect(page.getByText("Scanner").first()).toBeVisible();

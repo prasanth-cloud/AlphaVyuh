@@ -12,22 +12,6 @@ Close a bug by moving it to ## Closed section with a commit SHA.
 
 ## Open
 
-### BUG-002: Dashboard "Start scanning" button text invisible
-**Severity:** P1
-**Tags:** DESIGN, FEATURE
-**Discovered:** 2026-04-19
-
-**Reproduction**
-1. Login, view dashboard
-2. Observe welcome banner "Welcome to AlphaVyuh"
-3. Look at CTA button on right
-
-**Expected:** "Start scanning" text clearly readable
-
-**Actual:** Text is same color as background (dark-on-dark)
-
-**Assigned to:** FEATURE (fix button to use <Button variant="primary"> primitive)
-
 ## Closed
 
 ### BUG-001: Scanner/Watchlist/Journal return "Not authenticated"
@@ -56,3 +40,12 @@ Dashboard fallback now composes sector breadth from `/api/v1/market/sector-bread
 **Commit:** 4dffdaa
 
 Legacy market summary now includes `above_ema50_pct`, frontend fallback preserves it, and overview EMA breadth uses valid EMA rows as denominators to avoid misleading 0% values from partial indicator data.
+
+### BUG-002: Dashboard "Start scanning" button text invisible
+**Severity:** P1
+**Tags:** DESIGN, FEATURE
+**Discovered:** 2026-04-19
+**Closed:** 2026-04-28
+**Commit:** bc5353c
+
+Dashboard primary CTA now uses the shared primary button treatment. Added Playwright coverage in `smoke-signed-in.spec.ts` to assert the CTA renders visibly with dark text on the teal gradient.
