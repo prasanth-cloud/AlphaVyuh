@@ -18,7 +18,6 @@ const config = [
       "node_modules/**",
       "test-results/**",
       "playwright-report/**",
-      "public/landing.html",
     ],
   },
 ];

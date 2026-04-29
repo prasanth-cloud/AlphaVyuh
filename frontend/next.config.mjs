@@ -28,15 +28,6 @@ const nextConfig = {
         ],
       },
       {
-        source: "/landing.html",
-        headers: [
-          ...securityHeaders,
-          { key: "Cache-Control", value: "no-store, no-cache, must-revalidate, proxy-revalidate" },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-        ],
-      },
-      {
         source: "/sw.js",
         headers: [
           ...securityHeaders,

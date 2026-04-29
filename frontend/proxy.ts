@@ -3,7 +3,6 @@ import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
 
 const PUBLIC_PREFIXES = [
   "/favicon.ico",
-  "/landing.html",
   "/login",
   "/signup",
   "/reset-password",
@@ -31,8 +30,8 @@ function isPublic(pathname: string): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (pathname === "/") {
-    const response = NextResponse.rewrite(new URL("/landing.html", request.url));
+  if (pathname === "/landing.html") {
+    const response = NextResponse.redirect(new URL("/", request.url), 308);
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     response.headers.set("CDN-Cache-Control", "no-store");
     response.headers.set("Vercel-CDN-Cache-Control", "no-store");
@@ -46,11 +45,6 @@ export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
   // Expose pathname to Server Components via a custom header
   response.headers.set("x-pathname", pathname);
-  if (pathname === "/landing.html") {
-    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-    response.headers.set("CDN-Cache-Control", "no-store");
-    response.headers.set("Vercel-CDN-Cache-Control", "no-store");
-  }
 
   if (isPublic(pathname)) return response;
 

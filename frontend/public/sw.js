@@ -18,7 +18,6 @@ self.addEventListener("activate", (event) => {
       caches.open(CACHE_NAME).then((cache) =>
         Promise.all([
           cache.delete("/"),
-          cache.delete("/landing.html"),
           cache.delete("/dashboard"),
         ])
       )
@@ -43,7 +42,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For navigation requests: network-first. Never serve cached landing HTML.
+  // For navigation requests: network-first. Never serve cached app HTML.
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request).catch(() =>
