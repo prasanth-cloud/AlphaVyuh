@@ -36,6 +36,7 @@ export default function SignupForm() {
 
     setLoading(true);
     try {
+      const next = new URLSearchParams(window.location.search).get("next");
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -43,6 +44,7 @@ export default function SignupForm() {
           email: form.email.trim().toLowerCase(),
           password: form.password,
           full_name: form.full_name,
+          next: isSafeRedirect(next) ? next : "/dashboard",
         }),
       });
       const data = await res.json();
@@ -58,7 +60,6 @@ export default function SignupForm() {
         setDone(true);
         return;
       }
-      const next = new URLSearchParams(window.location.search).get("next");
       window.location.replace(isSafeRedirect(next) ? next! : "/dashboard");
     } catch {
       setError("Network error — please try again.");
@@ -75,9 +76,18 @@ export default function SignupForm() {
           <CardTitle>Check your email</CardTitle>
           <CardDescription>
             We sent a confirmation link to <strong style={{ color: "var(--text-primary)" }}>{form.email}</strong>.
-            Click it to activate your account.
+            Click it to activate your account and continue into your AlphaVyuh workspace.
           </CardDescription>
         </CardHeader>
+        <CardContent>
+          <p style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-secondary)" }}>
+            Keep this tab open if you want. After verification, the link signs you in and redirects you to your account automatically.
+          </p>
+          <p style={{ marginTop: 14, fontSize: 13, color: "var(--text-tertiary)" }}>
+            Already verified?{" "}
+            <Link href="/login" style={{ color: "var(--accent)" }}>Sign in</Link>
+          </p>
+        </CardContent>
       </Card>
     );
   }

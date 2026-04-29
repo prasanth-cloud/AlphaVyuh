@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import { isSafeRedirect } from "@/lib/safe-redirect";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
-  const { email, password, full_name } = await request.json();
+  const { email, password, full_name, next } = await request.json();
+  const requestUrl = new URL(request.url);
+  const safeNext = isSafeRedirect(next) ? next : "/dashboard";
+  const emailRedirectTo = `${requestUrl.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 
   const response = NextResponse.json({ success: true });
   const supabase = await createRouteHandlerClient(response);
@@ -10,7 +14,10 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.auth.signUp({
     email: (email as string).trim().toLowerCase(),
     password,
-    options: { data: { full_name } },
+    options: {
+      data: { full_name },
+      emailRedirectTo,
+    },
   });
 
   if (error) {
