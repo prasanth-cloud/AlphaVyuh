@@ -20,6 +20,8 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
+export const liveQuotePollingEnabled =
+  forceLiveData || process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES === "true";
 export const isMockMode =
   !forceLiveData &&
   (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||

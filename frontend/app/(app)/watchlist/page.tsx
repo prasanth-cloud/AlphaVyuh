@@ -38,6 +38,7 @@ import {
   placeOrder,
   getQuoteLive,
   isMockMode,
+  liveQuotePollingEnabled,
   type PlaceOrderRequest,
   type WatchlistItemMetadataUpdate,
 } from "@/lib/api";
@@ -1214,6 +1215,7 @@ function WatchlistContent() {
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
 
   useEffect(() => {
+    if (!liveQuotePollingEnabled) return;
     if (!activeId || !pageItems.length) return;
     let cancelled = false;
 

@@ -14,7 +14,7 @@ import {
   getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
-  closePosition, updateJournalEntry, getJournalEntries,
+  closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -398,9 +398,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }, [symbol]);
 
   useEffect(() => {
-    let cancelled = false;
     setLiveQuote(null);
     setLiveQuoteUpdatedAt(null);
+    if (!liveMode && !liveQuotePollingEnabled) return;
+    let cancelled = false;
 
     async function refreshLiveQuote() {
       const quote = await getQuoteLive(symbol);
@@ -416,7 +417,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [symbol]);
+  }, [liveMode, symbol]);
 
   useEffect(() => {
     if (sourcePage !== "watchlist" || (!sourceWatchlistId && !sourceWatchlist)) {
