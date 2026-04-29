@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { addToWatchlist, createWatchlist, updateMe } from "@/lib/api";
 
-const STEPS = ["About you", "Your broker", "Get started"];
+const STEPS = ["About you", "Capture", "Get started"];
 
 type FormState = {
   experience: string;
@@ -11,6 +11,7 @@ type FormState = {
   broker: string;
   broker_api_key: string;
   broker_api_secret: string;
+  first_value: string;
 };
 
 const BROKERS = [
@@ -69,7 +70,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<FormState>({
-    experience: "", trades: "", broker: "", broker_api_key: "", broker_api_secret: "",
+    experience: "", trades: "", broker: "", broker_api_key: "", broker_api_secret: "", first_value: "journal",
   });
 
   const selectRadio = (name: keyof FormState, value: string) => {
@@ -121,9 +122,9 @@ export default function OnboardingPage() {
           marginBottom: 16,
         }}>
           <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Onboarding</div>
-          <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Set up your desk before the first real workflow.</h1>
+          <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Get to your first trading insight quickly.</h1>
           <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-            Tell AlphaVyuh how you trade, connect your preferred broker, and start with the same visual language as the public site and product workspace.
+            Tell AlphaVyuh how you trade, choose your fastest starting point, and begin with one captured trade or setup queue.
           </p>
         </div>
         {/* Progress */}
@@ -181,11 +182,34 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* Step 2 — Broker */}
+        {/* Step 2 — Capture */}
         {step === 1 && (
           <div className="p-6" style={cardStyle}>
-            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>Connect your broker</h2>
-            <p className="text-[13px] mb-5" style={{ color: "var(--text-secondary)" }}>Orders placed on AlphaVyuh will route through your broker</p>
+            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>Choose your first value</h2>
+            <p className="text-[13px] mb-5" style={{ color: "var(--text-secondary)" }}>Most traders should start by logging one recent trade. Broker connection can wait.</p>
+
+            <div className="grid gap-2 mb-5 sm:grid-cols-3">
+              {[
+                { value: "journal", title: "Log first trade", text: "Fastest path to review, win rate, and mistake tracking." },
+                { value: "scanner", title: "Run scanner", text: "Find a shortlist before moving into chart review." },
+                { value: "broker", title: "Connect broker", text: "Use this only if you are ready with API credentials." },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, first_value: item.value }))}
+                  className="text-left rounded-[12px] p-4 transition-all"
+                  style={form.first_value === item.value
+                    ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
+                    : { border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}
+                >
+                  <div className="text-[13px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>{item.title}</div>
+                  <div className="text-[12px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>{item.text}</div>
+                </button>
+              ))}
+            </div>
+
+            <h3 className="text-[14px] font-bold mb-2" style={{ color: "var(--text-primary)" }}>Optional broker connection</h3>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
               {BROKERS.map((b) => (
@@ -278,8 +302,8 @@ export default function OnboardingPage() {
             <div className="grid gap-3 mb-5 sm:grid-cols-3">
               {[
                 { title: "Run a scan", text: "Find breakouts and high relative-strength stocks.", href: "/scanner" },
+                { title: "Log first trade", text: "Capture one recent trade and unlock your first review habit.", href: "/journal" },
                 { title: "Starter queue", text: "Create a sample watchlist with liquid names and setup scoring.", href: "/watchlist", seed: true },
-                { title: "Open dashboard", text: "Review market pulse, breadth, and account status.", href: "/dashboard" },
               ].map((item) => (
                 <button
                   key={item.href}
@@ -306,8 +330,8 @@ export default function OnboardingPage() {
               className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
               style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
               disabled={loading}
-              onClick={() => finish("/dashboard")}>
-              {loading ? "Setting up…" : "Go to Dashboard →"}
+              onClick={() => finish(form.first_value === "scanner" ? "/scanner" : form.first_value === "broker" ? "/settings/broker" : "/journal")}>
+              {loading ? "Setting up…" : form.first_value === "scanner" ? "Run first scan →" : form.first_value === "broker" ? "Connect broker →" : "Log first trade →"}
             </button>
           </div>
         )}

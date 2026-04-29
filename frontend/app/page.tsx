@@ -603,23 +603,23 @@ export default function LandingPage() {
               <div>
                 <div className="av-kicker">
                   <span className="av-dot" />
-                  Built for Indian market workflows
+                  Trading journal, scanner, and review desk
                 </div>
                 <h1 className="av-h1">
-                  <span className="av-gradient">Scan.</span> Focus. Execute. Improve.
+                  <span className="av-gradient">Find better setups.</span> Fix repeat mistakes.
                 </h1>
                 <p className="av-sub">
-                  AlphaVyuh brings scanner, watchlist, charting, trade execution, journaling, and post-trade review
-                  into one trading operating system so serious retail traders stop leaking edge between tools.
+                  AlphaVyuh connects stock discovery, charts, trade capture, and post-trade review so Indian equity
+                  traders can see what they did, why it worked, and which habits are costing them money.
                 </p>
                 <div className="av-cta-row">
-                  <Link href="/signup" className="av-btn">Open the platform →</Link>
-                  <a href="#workflow" className="av-btn-secondary">See the full loop</a>
+                  <Link href="/signup" className="av-btn">Start journaling →</Link>
+                  <a href="#edge" className="av-btn-secondary">Why AlphaVyuh</a>
                 </div>
                 <div className="av-proof">
-                  <div className="av-proof-chip">A calmer trading desk for discovery, planning, execution, and review.</div>
-                  <div className="av-proof-chip">Your shortlist, chart context, trade plan, and journal stay connected.</div>
-                  <div className="av-proof-chip">Structured for NSE/BSE swing, positional, and process-driven retail workflows.</div>
+                  <div className="av-proof-chip">Log trades manually or from chart and broker workflows.</div>
+                  <div className="av-proof-chip">Review win rate, P&L, setup quality, and repeated mistakes.</div>
+                  <div className="av-proof-chip">Built for NSE/BSE swing, positional, and process-driven traders.</div>
                 </div>
                 <TraderReminderStrip tone="landing" />
               </div>
@@ -684,32 +684,32 @@ export default function LandingPage() {
                       <div className="av-chart-lower">
                         <div className="av-stat-row">
                           <div className="av-stat">
-                            <div className="label">Shortlist</div>
-                            <div className="av-stat-value">Focused</div>
+                            <div className="label">First trade</div>
+                            <div className="av-stat-value">Fast</div>
                           </div>
                           <div className="av-stat">
-                            <div className="label">Setup context</div>
-                            <div className="av-stat-value">Attached</div>
+                            <div className="label">Trade context</div>
+                            <div className="av-stat-value">Saved</div>
                           </div>
                           <div className="av-stat">
-                            <div className="label">Journal link</div>
-                            <div className="av-stat-value">Auto</div>
+                            <div className="label">Mistake notes</div>
+                            <div className="av-stat-value">Tracked</div>
                           </div>
                           <div className="av-stat">
-                            <div className="label">Review pulse</div>
-                            <div className="av-stat-value">Visible</div>
+                            <div className="label">Review habit</div>
+                            <div className="av-stat-value">Built in</div>
                           </div>
                         </div>
                         <div className="av-review-card">
                           <div className="label" style={{ color: "var(--accent)" }}>Post-trade review</div>
                           <div className="av-review-list">
                             <div className="av-review-item">
-                              <strong>Trade plan stayed attached to context</strong>
-                              <span>The setup, chart markings, and trade record can stay linked instead of splitting across tools.</span>
+                              <strong>Your losing patterns become visible</strong>
+                              <span>Closed trades can carry the setup, exit reason, mistake notes, and lesson in one place.</span>
                             </div>
                             <div className="av-review-item">
-                              <strong>Review becomes part of the workflow</strong>
-                              <span>Closed trades can move straight into post-trade analysis so learning stops being optional.</span>
+                              <strong>Review stops being an afterthought</strong>
+                              <span>The workflow pushes every trade back into learning instead of leaving it in screenshots and memory.</span>
                             </div>
                           </div>
                         </div>
@@ -723,16 +723,45 @@ export default function LandingPage() {
 
           <section className="av-mini-grid" id="workflow">
             <div className="av-mini-card">
-              <h3>Discover with less noise</h3>
-              <p>Run a clean scan, sort quickly, and move only the names worth chart time.</p>
+              <h3>Start with one trade</h3>
+              <p>Log symbol, direction, entry, risk, setup, and reason without building a spreadsheet first.</p>
             </div>
             <div className="av-mini-card">
-              <h3>Work from one active desk</h3>
-              <p>Watchlist, chart, and trade planning stay linked so the setup never loses context.</p>
+              <h3>Keep the setup connected</h3>
+              <p>Move from scanner to watchlist to chart while keeping the reason for the trade visible.</p>
             </div>
             <div className="av-mini-card">
-              <h3>Review without friction</h3>
-              <p>Journal and post-trade learning stay attached to execution instead of being skipped.</p>
+              <h3>Find the mistake loop</h3>
+              <p>Use win rate, P&L, setup stats, and review notes to see what repeatedly hurts performance.</p>
+            </div>
+          </section>
+
+          <section className="av-sections" id="edge">
+            <div className="av-section-card">
+              <div className="av-section-head">
+                <div>
+                  <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Why AlphaVyuh</div>
+                  <div className="av-section-title">Not another chart tab. A feedback loop.</div>
+                  <div className="av-section-copy">
+                    TradingView helps you chart. Excel and Notion help you record. Broker reports show transactions.
+                    AlphaVyuh is built around the missing step: turning each trade into a reviewable decision.
+                  </div>
+                </div>
+              </div>
+              <div className="av-three">
+                <div className="av-feature">
+                  <h3>Before the trade</h3>
+                  <p>Scan, shortlist, and capture the setup so the entry has a written reason before emotion takes over.</p>
+                </div>
+                <div className="av-feature">
+                  <h3>During execution</h3>
+                  <p>Use chart context, broker beta workflows, and journal handoff without switching between disconnected tools.</p>
+                </div>
+                <div className="av-feature">
+                  <h3>After the exit</h3>
+                  <p>Close the trade, write what went wrong, and use review insights to identify repeat behavior.</p>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -740,15 +769,15 @@ export default function LandingPage() {
             <div>
               <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Workflow</div>
               <div className="av-section-title" style={{ fontSize: "clamp(24px, 4vw, 38px)" }}>
-                Built for scan to watchlist to chart to review.
+                Get to your first useful insight in under a minute.
               </div>
               <div className="av-section-copy" style={{ maxWidth: 620 }}>
-                Open the platform, build a shortlist fast, and keep the full decision chain inside one connected product.
+                Start by logging one recent trade, then use scanner and chart workflows as your process matures.
               </div>
             </div>
             <div className="av-nav-actions">
               <Link href="/login" className="av-btn-secondary">Sign in</Link>
-              <Link href="/signup" className="av-btn">Start free →</Link>
+              <Link href="/signup" className="av-btn">Log first trade →</Link>
             </div>
           </section>
         </main>

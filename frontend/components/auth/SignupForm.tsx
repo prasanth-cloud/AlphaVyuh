@@ -142,7 +142,7 @@ export default function SignupForm() {
         <div style={{ marginBottom: 10, fontSize: 30, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
           Create your account
         </div>
-        <CardDescription>Start your free trading edge in the same workspace you saw on the landing page.</CardDescription>
+        <CardDescription>Start by logging one trade, then review setups, mistakes, and repeat patterns.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
