@@ -9,18 +9,28 @@ export default function LoginForm() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError]       = useState("");
+  const [notice, setNotice]     = useState("");
+  const [showResend, setShowResend] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("error") === "auth_callback_failed") {
       setError("Confirmation link expired or could not be verified. Please sign in, or request a fresh link.");
+      setShowResend(true);
     }
   }, []);
+
+  function safeNext() {
+    const next = new URLSearchParams(window.location.search).get("next");
+    return isSafeRedirect(next) ? next : "/dashboard";
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setNotice("");
     setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -33,12 +43,34 @@ export default function LoginForm() {
         setError(data.error || "Login failed");
         return;
       }
-      const next = new URLSearchParams(window.location.search).get("next");
-      window.location.replace(isSafeRedirect(next) ? next! : "/dashboard");
+      window.location.replace(safeNext());
     } catch {
       setError("Network error — please try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function resendConfirmation() {
+    setError("");
+    setNotice("");
+    setResending(true);
+    try {
+      const res = await fetch("/api/auth/resend-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), next: safeNext() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not resend confirmation email.");
+        return;
+      }
+      setNotice("If this account is waiting for verification, a fresh link has been sent.");
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -87,6 +119,19 @@ export default function LoginForm() {
         </div>
 
         {error && <p style={{ fontSize: 13, color: "var(--loss)" }}>{error}</p>}
+        {notice && <p style={{ fontSize: 13, color: "var(--gain)" }}>{notice}</p>}
+        {showResend && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            disabled={resending || !email}
+            onClick={resendConfirmation}
+            fullWidth
+          >
+            {resending ? "Sending..." : "Resend confirmation email"}
+          </Button>
+        )}
 
         <Button
           type="submit" disabled={loading || !email || !password}

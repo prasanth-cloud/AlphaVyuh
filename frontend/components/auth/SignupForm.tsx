@@ -12,8 +12,10 @@ import { Eye, EyeOff } from "lucide-react";
 export default function SignupForm() {
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const [form, setForm] = useState({
     full_name: "",
@@ -24,6 +26,11 @@ export default function SignupForm() {
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  function safeNext() {
+    const next = new URLSearchParams(window.location.search).get("next");
+    return isSafeRedirect(next) ? next : "/dashboard";
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +43,7 @@ export default function SignupForm() {
 
     setLoading(true);
     try {
-      const next = new URLSearchParams(window.location.search).get("next");
+      const next = safeNext();
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -44,7 +51,7 @@ export default function SignupForm() {
           email: form.email.trim().toLowerCase(),
           password: form.password,
           full_name: form.full_name,
-          next: isSafeRedirect(next) ? next : "/dashboard",
+          next,
         }),
       });
       const data = await res.json();
@@ -60,11 +67,34 @@ export default function SignupForm() {
         setDone(true);
         return;
       }
-      window.location.replace(isSafeRedirect(next) ? next! : "/dashboard");
+      window.location.replace(next);
     } catch {
       setError("Network error — please try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function resendConfirmation() {
+    setError("");
+    setNotice("");
+    setResending(true);
+    try {
+      const res = await fetch("/api/auth/resend-confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), next: safeNext() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not resend confirmation email.");
+        return;
+      }
+      setNotice("A fresh confirmation link has been sent.");
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -83,6 +113,19 @@ export default function SignupForm() {
           <p style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-secondary)" }}>
             Keep this tab open if you want. After verification, the link signs you in and redirects you to your account automatically.
           </p>
+          {notice && <p style={{ marginTop: 12, fontSize: 13, color: "var(--gain)" }}>{notice}</p>}
+          {error && <p style={{ marginTop: 12, fontSize: 13, color: "var(--loss)" }}>{error}</p>}
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            fullWidth
+            disabled={resending}
+            onClick={resendConfirmation}
+            style={{ marginTop: 16 }}
+          >
+            {resending ? "Sending..." : "Resend confirmation email"}
+          </Button>
           <p style={{ marginTop: 14, fontSize: 13, color: "var(--text-tertiary)" }}>
             Already verified?{" "}
             <Link href="/login" style={{ color: "var(--accent)" }}>Sign in</Link>
