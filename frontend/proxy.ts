@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
 
 const PUBLIC_PREFIXES = [
+  "/favicon.ico",
   "/landing.html",
   "/login",
   "/signup",
@@ -38,6 +39,10 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  if (pathname === "/favicon.ico") {
+    return NextResponse.rewrite(new URL("/favicon.svg", request.url));
+  }
+
   const response = NextResponse.next({ request });
   // Expose pathname to Server Components via a custom header
   response.headers.set("x-pathname", pathname);
@@ -70,6 +75,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

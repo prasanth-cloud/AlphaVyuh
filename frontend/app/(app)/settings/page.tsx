@@ -292,7 +292,7 @@ function SettingsContent() {
 
   const handleUpgrade = async (planId: "pro" | "elite") => {
     if (paymentConfig && !paymentConfig.configured) { showToast("Payment gateway is not configured yet", false); return; }
-    if (!RAZORPAY_KEY) { showToast("Payments not configured yet — coming soon!", false); return; }
+    if (!RAZORPAY_KEY) { showToast("Founder beta billing is not open yet", false); return; }
     setPaying(planId);
     try {
       const loaded = await loadRazorpay();
@@ -577,7 +577,7 @@ function SettingsContent() {
                 {brokerType && brokerType !== "zerodha" && (
                   <div className="flex items-center justify-between">
                     <p className="text-[12px]" style={{ color: "var(--app-text3)" }}>
-                      {brokerType === "other" ? "Orders will be simulated." : `${brokerType} integration coming soon.`}
+                      {brokerType === "other" ? "Orders will be simulated." : `${brokerType} adapter is planned after Zerodha beta verification.`}
                     </p>
                     <button
                       onClick={saveBroker}
