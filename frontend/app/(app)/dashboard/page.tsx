@@ -17,6 +17,7 @@ import {
   type MarketOverview,
 } from '@/lib/api'
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge } from '@/components/ui'
+import DataFreshnessStrip from '@/components/DataFreshnessStrip'
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -721,6 +722,8 @@ export default function DashboardPage() {
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated {lastUpdated}</span>
         )}
       </div>
+
+      <DataFreshnessStrip health={dataHealth} tradeDate={data?.trade_date ?? null} />
 
       <WorkflowChecklistCard
         workflow={workflow}

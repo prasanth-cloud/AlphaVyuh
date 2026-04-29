@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { authHeaders, createFeedbackReport, isMockMode } from '@/lib/api'
+import { authHeaders, createFeedbackReport, getDataHealth, isMockMode, type DataHealth } from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
+import DataFreshnessStrip from '@/components/DataFreshnessStrip'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -257,12 +258,14 @@ export default function ScannerPage() {
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
+  const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
   useEffect(() => {
     loadWatchlists()
     loadSavedScreens()
+    getDataHealth().then(setDataHealth).catch(() => setDataHealth(null))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg: string) {
@@ -612,6 +615,9 @@ export default function ScannerPage() {
             <DataProvenanceBadge kind="eod" asOf={tradeDate || null} compact />
           </div>
         </div>
+      </div>
+      <div style={{ marginBottom: 16 }}>
+        <DataFreshnessStrip health={dataHealth} tradeDate={tradeDate || null} compact />
       </div>
       {presetStrip}
 

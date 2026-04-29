@@ -15,7 +15,9 @@ async def data_health():
     hours_stale = h.get("hours_since_last_run") or 999
     null_rsi = h.get("null_rsi_latest") or 0
     total_syms = max(h.get("symbols_latest") or 1, 1)
+    active_universe = h.get("universe_active") or total_syms
     last_run_errors = h.get("last_run_errors") or 0
+    coverage_pct = round((total_syms / max(active_universe, 1)) * 100, 1)
 
     if hours_stale > 28:
         status = "stale"
@@ -24,12 +26,28 @@ async def data_health():
     else:
         status = "healthy"
 
+    mode = "eod"
+    if status == "degraded":
+        mode = "fallback"
+    elif status == "stale":
+        mode = "unknown"
+
+    if status == "healthy":
+        message = "Latest complete market day is available."
+    elif status == "degraded":
+        message = "Newest ingest has gaps; product views use the latest complete market day."
+    else:
+        message = "Market data refresh is overdue; verify before acting."
+
     return {
         "status": status,
         "latest_trade_date": h.get("latest_trade_date"),
         "hours_since_refresh": round(float(hours_stale), 1) if hours_stale != 999 else None,
         "symbols_on_latest_date": h.get("symbols_latest"),
         "universe_active": h.get("universe_active"),
+        "coverage_pct": coverage_pct,
+        "mode": mode,
+        "message": message,
         "indicators_missing": {
             "rsi_14": h.get("null_rsi_latest"),
             "ema_200": h.get("null_ema200_latest"),

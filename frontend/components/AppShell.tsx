@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import TraderReminderStrip from '@/components/TraderReminderStrip'
 import FeedbackWidget from '@/components/FeedbackWidget'
-import { clearAuthHeaderCache } from '@/lib/api'
+import { clearAuthHeaderCache, warmCoreMarketData } from '@/lib/api'
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -26,6 +26,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       for (const link of NAV_LINKS) {
         if (link.href !== pathname) router.prefetch(link.href)
       }
+      warmCoreMarketData()
     }
 
     if ('requestIdleCallback' in window) {
