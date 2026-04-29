@@ -17,16 +17,16 @@ const jetbrainsMono = localFont({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://alphavyuh.com"),
-  title: "AlphaVyuh — Find Better Setups. Fix Repeat Mistakes.",
-  description: "Scan stocks, log trades, review mistakes, and improve your trading process in one connected workspace for Indian equity traders.",
+  title: "AlphaVyuh — India’s Trading OS",
+  description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
   manifest: "/manifest.json",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
   openGraph: {
-    title: "AlphaVyuh — Find Better Setups. Fix Repeat Mistakes.",
-    description: "Scan stocks, log trades, review mistakes, and improve your trading process in one connected workspace for Indian equity traders.",
+    title: "AlphaVyuh — India’s Trading OS",
+    description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
     url: "https://alphavyuh.com",
     siteName: "AlphaVyuh",
     images: [
@@ -41,8 +41,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "AlphaVyuh — Find Better Setups. Fix Repeat Mistakes.",
-    description: "Scan stocks, log trades, review mistakes, and improve your trading process in one connected workspace for Indian equity traders.",
+    title: "AlphaVyuh — India’s Trading OS",
+    description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
     images: ["https://alphavyuh.com/og-image.png"],
   },
   appleWebApp: {
