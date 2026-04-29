@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import TraderReminderStrip from "@/components/TraderReminderStrip";
 
 const LANDING_CSS = `
 .av-landing {
@@ -587,7 +586,7 @@ export default function LandingPage() {
             <div className="av-nav-links">
               <a href="#platform">Platform</a>
               <a href="#workflow">Workflow</a>
-              <a href="#edge">Why it wins</a>
+              <a href="#edge">Connected desk</a>
               <a href="#launch">Launch</a>
             </div>
             <div className="av-nav-actions">
@@ -603,25 +602,24 @@ export default function LandingPage() {
               <div>
                 <div className="av-kicker">
                   <span className="av-dot" />
-                  Built for Indian market workflows
+                  Built for Indian equity traders
                 </div>
                 <h1 className="av-h1">
-                  <span className="av-gradient">Scan.</span> Focus. Execute. Improve.
+                  <span className="av-gradient">India&apos;s Trading OS.</span> Scan, chart, trade, journal.
                 </h1>
                 <p className="av-sub">
-                  AlphaVyuh brings scanner, watchlist, charting, trade execution, journaling, and post-trade review
-                  into one trading operating system so serious retail traders stop leaking edge between tools.
+                  AlphaVyuh connects stock screening, watchlists, charts, broker-ready execution, and post-trade review
+                  in one focused workspace for NSE/BSE traders.
                 </p>
                 <div className="av-cta-row">
                   <Link href="/signup" className="av-btn">Open the platform →</Link>
-                  <a href="#workflow" className="av-btn-secondary">See the full loop</a>
+                  <a href="#workflow" className="av-btn-secondary">See the workflow</a>
                 </div>
                 <div className="av-proof">
-                  <div className="av-proof-chip">A calmer trading desk for discovery, planning, execution, and review.</div>
-                  <div className="av-proof-chip">Your shortlist, chart context, trade plan, and journal stay connected.</div>
-                  <div className="av-proof-chip">Structured for NSE/BSE swing, positional, and process-driven retail workflows.</div>
+                  <div className="av-proof-chip">Scanner, chart, watchlist, execution context, and journal in one flow.</div>
+                  <div className="av-proof-chip">Built for swing, positional, and process-driven Indian market workflows.</div>
+                  <div className="av-proof-chip">Review-ready trade records instead of scattered screenshots and spreadsheets.</div>
                 </div>
-                <TraderReminderStrip tone="landing" />
               </div>
 
               <div className="av-panel">
@@ -738,9 +736,9 @@ export default function LandingPage() {
 
           <section className="av-footer-cta" id="launch">
             <div>
-              <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Workflow</div>
+              <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>India&apos;s Trading OS</div>
               <div className="av-section-title" style={{ fontSize: "clamp(24px, 4vw, 38px)" }}>
-                Built for scan to watchlist to chart to review.
+                Built for scan to watchlist to chart to trade to review.
               </div>
               <div className="av-section-copy" style={{ maxWidth: 620 }}>
                 Open the platform, build a shortlist fast, and keep the full decision chain inside one connected product.
