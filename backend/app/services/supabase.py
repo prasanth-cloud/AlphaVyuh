@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     founder_plan_codes: str = "FOUNDER100"
     admin_emails: str = ""
     telegram_bot_token: str = ""    # set via Railway: TELEGRAM_BOT_TOKEN
+    feedback_storage_mode: str = "auto"  # auto, table, or waitlist
 
     class Config:
         env_file = ".env"

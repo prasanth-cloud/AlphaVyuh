@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
 from app.routers.waitlist import _require_admin
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, settings
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
 
@@ -35,11 +35,29 @@ def _is_missing_feedback_table(exc: Exception) -> bool:
     return "feedback_reports" in text and ("does not exist" in text or "could not find" in text or "schema cache" in text)
 
 
+def _feedback_storage_mode() -> str:
+    mode = settings.feedback_storage_mode.strip().lower()
+    return mode if mode in {"auto", "table", "waitlist"} else "auto"
+
+
+def _use_waitlist_feedback() -> bool:
+    return _feedback_storage_mode() == "waitlist"
+
+
 def _waitlist_feedback_row(row: dict) -> dict:
     source = row.get("source") or "feedback-general"
     category = source.replace("feedback-", "", 1) if source.startswith("feedback-") else "general"
     notes = row.get("notes") or ""
     message = notes.split("\n\ncontext=", 1)[0]
+    context = {"fallback_storage": "waitlist", "email": row.get("email")}
+    if "\n\ncontext=" in notes:
+        _, raw_context = notes.split("\n\ncontext=", 1)
+        try:
+            parsed_context = json.loads(raw_context)
+            if isinstance(parsed_context, dict):
+                context.update(parsed_context)
+        except json.JSONDecodeError:
+            pass
     status_map = {
         "new": "new",
         "invited": "triaged",
@@ -50,11 +68,11 @@ def _waitlist_feedback_row(row: dict) -> dict:
         "id": row.get("id"),
         "user_id": None,
         "category": category,
-        "page": None,
-        "symbol": None,
-        "severity": "normal",
+        "page": context.get("page"),
+        "symbol": context.get("symbol"),
+        "severity": context.get("severity") or "normal",
         "message": message,
-        "context": {"fallback_storage": "waitlist", "email": row.get("email")},
+        "context": context,
         "status": status_map.get(row.get("status"), "new"),
         "created_at": row.get("created_at"),
     }
@@ -77,9 +95,48 @@ def _feedback_to_waitlist_status(feedback_status: str) -> str:
     }[feedback_status]
 
 
+def _create_waitlist_feedback(client, body: FeedbackCreateRequest, user_id: str) -> dict:
+    user_email = _fallback_email(client, user_id)
+    fallback_context = {
+        "user_id": user_id,
+        "user_email": user_email,
+        "page": body.page,
+        "symbol": body.symbol.upper() if body.symbol else None,
+        "severity": body.severity,
+        "client": body.context,
+    }
+    fallback = {
+        "email": _feedback_fallback_email(user_email),
+        "source": f"feedback-{body.category}",
+        "status": "new",
+        "notes": f"{body.message.strip()}\n\ncontext={json.dumps(fallback_context, default=str)}",
+    }
+    row = client.table("waitlist").insert(fallback).execute().data[0]
+    return _waitlist_feedback_row(row)
+
+
+def _list_waitlist_feedback(client, status_filter: str | None = None) -> list[dict]:
+    rows = (
+        client.table("waitlist")
+        .select("id,email,source,notes,status,created_at")
+        .like("source", "feedback-%")
+        .order("created_at", desc=True)
+        .limit(200)
+        .execute()
+        .data or []
+    )
+    feedback = [_waitlist_feedback_row(row) for row in rows]
+    if status_filter:
+        feedback = [row for row in feedback if row["status"] == status_filter]
+    return feedback
+
+
 @router.post("")
 async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(get_current_user_id)):
     client = get_admin_client()
+    if _use_waitlist_feedback():
+        return {"feedback": _create_waitlist_feedback(client, body, user_id)}
+
     payload = {
         "user_id": user_id,
         "category": body.category,
@@ -92,23 +149,8 @@ async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(ge
     try:
         result = client.table("feedback_reports").insert(payload).execute()
     except Exception as exc:
-        if _is_missing_feedback_table(exc):
-            user_email = _fallback_email(client, user_id)
-            fallback_context = {
-                "user_email": user_email,
-                "page": body.page,
-                "symbol": body.symbol,
-                "severity": body.severity,
-                "client": body.context,
-            }
-            fallback = {
-                "email": _feedback_fallback_email(user_email),
-                "source": f"feedback-{body.category}",
-                "status": "new",
-                "notes": f"{body.message.strip()}\n\ncontext={json.dumps(fallback_context, default=str)}",
-            }
-            row = client.table("waitlist").insert(fallback).execute().data[0]
-            return {"feedback": _waitlist_feedback_row(row)}
+        if _feedback_storage_mode() == "auto" and _is_missing_feedback_table(exc):
+            return {"feedback": _create_waitlist_feedback(client, body, user_id)}
         raise HTTPException(status_code=500, detail="Could not save feedback") from exc
     if not result.data:
         raise HTTPException(status_code=500, detail="Could not save feedback")
@@ -119,6 +161,9 @@ async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(ge
 async def list_feedback(status_filter: str | None = None, user_id: str = Depends(get_current_user_id)):
     _require_admin(user_id)
     client = get_admin_client()
+    if _use_waitlist_feedback():
+        return {"feedback": _list_waitlist_feedback(client, status_filter)}
+
     try:
         query = (
             client.table("feedback_reports")
@@ -130,20 +175,9 @@ async def list_feedback(status_filter: str | None = None, user_id: str = Depends
             query = query.eq("status", status_filter)
         return {"feedback": query.execute().data or []}
     except Exception as exc:
-        if not _is_missing_feedback_table(exc):
+        if _feedback_storage_mode() != "auto" or not _is_missing_feedback_table(exc):
             raise
-        rows = (
-            client.table("waitlist")
-            .select("id,email,source,notes,status,created_at")
-            .like("source", "feedback-%")
-            .order("created_at", desc=True)
-            .limit(200)
-            .execute()
-            .data or []
-        )
-        if status_filter:
-            rows = [row for row in rows if _waitlist_feedback_row(row)["status"] == status_filter]
-        return {"feedback": [_waitlist_feedback_row(row) for row in rows]}
+        return {"feedback": _list_waitlist_feedback(client, status_filter)}
 
 
 @router.patch("/admin/{feedback_id}")
@@ -154,6 +188,17 @@ async def update_feedback_status(
 ):
     _require_admin(user_id)
     client = get_admin_client()
+    if _use_waitlist_feedback():
+        result = (
+            client.table("waitlist")
+            .update({"status": _feedback_to_waitlist_status(body.status)})
+            .eq("id", feedback_id)
+            .execute()
+        )
+        if not result.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feedback not found")
+        return {"feedback": _waitlist_feedback_row(result.data[0])}
+
     try:
         result = (
             client.table("feedback_reports")
@@ -162,7 +207,7 @@ async def update_feedback_status(
             .execute()
         )
     except Exception as exc:
-        if not _is_missing_feedback_table(exc):
+        if _feedback_storage_mode() != "auto" or not _is_missing_feedback_table(exc):
             raise
         result = (
             client.table("waitlist")
