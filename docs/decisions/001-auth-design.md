@@ -93,17 +93,13 @@ Falls through to `/dashboard` on any failure. Middleware only ever writes bare p
 
 ---
 
-## Q7 — No `/auth/callback` route; email confirmation off
+## Q7 — Email confirmation and `/auth/callback`
 
 **Context.** Magic links, email confirmation, and OAuth all redirect to `<site>/auth/callback` to exchange a code for a session. Without a handler, the user clicks a confirmation link and gets a 404 and no session.
 
-**Decision.** Email confirmation is **OFF** in Supabase for now. Signup returns a session immediately. `/auth/callback` is not implemented.
-
-**Before enabling email confirmation, magic links, or OAuth:**
-1. Build `app/api/auth/callback/route.ts` — exchanges `code` for session using `supabase.auth.exchangeCodeForSession(code)`, writes cookies onto `NextResponse`, redirects to `/dashboard`.
-2. Set `EMAIL_REDIRECT_TO` in Supabase dashboard to `<domain>/api/auth/callback`.
-3. Add a Playwright spec: click confirmation link → lands on `/dashboard` with session set.
+**Decision.** Email confirmation is supported. Signup passes `emailRedirectTo=<origin>/auth/callback?next=...`; `/auth/callback` exchanges the code for a session using `supabase.auth.exchangeCodeForSession(code)`, writes cookies onto the redirect response, validates `next` with `isSafeRedirect()`, and redirects into the app. Local Supabase email templates live in `supabase/templates/` and are wired through `supabase/config.toml`.
 
 **Consequences.**
-- Turning on email confirmation without the callback route will silently break all signups.
-- This gap is tracked in `CLAUDE.md §8 Known gaps`.
+- Hosted Supabase email templates are dashboard-managed; keep them in sync with `docs/auth-email-templates.md`.
+- Confirmation link failures redirect to `/login?error=auth_callback_failed`, where the user can request a fresh confirmation email.
+- Any future magic-link or invite flow must use the same callback and safe redirect rules.
