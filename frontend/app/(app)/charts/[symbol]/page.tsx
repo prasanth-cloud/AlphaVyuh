@@ -14,7 +14,7 @@ import {
   getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
-  closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled,
+  closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -1256,6 +1256,23 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
   ].filter(Boolean) as string[];
 
+  async function reportChartDataIssue() {
+    setOrderToast({ message: "Reporting data issue...", journalId: null, broker: "simulated" });
+    try {
+      await createFeedbackReport({
+        category: "data_issue",
+        page: `/charts/${symbol}`,
+        symbol,
+        severity: "high",
+        message: `Chart data issue reported for ${symbol}.`,
+        context: { timeframe, live_mode: liveMode, latest_time: data?.candles.at(-1)?.time },
+      });
+      setOrderToast({ message: "Data issue reported.", journalId: null, broker: "simulated" });
+    } catch (error) {
+      setOrderToast({ message: error instanceof Error ? error.message : "Could not report data issue.", journalId: null, broker: "simulated" });
+    }
+  }
+
   return (
     <div
       className="workspace-page"
@@ -1289,6 +1306,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <Link href="/scanner" prefetch={false} className="workspace-chip-button">Scanner</Link>
           <Link href="/watchlist" prefetch={false} className="workspace-chip-button">Watchlist</Link>
           <Link href="/journal" prefetch={false} className="workspace-chip-button">Journal</Link>
+          <button onClick={reportChartDataIssue} className="workspace-chip-button">Report data</button>
           {!brokerConnected && (
             <Link href="/settings/broker" prefetch={false} className="workspace-chip-button">
               {brokerStatus?.token_expired ? "Reconnect broker" : "Connect broker"}

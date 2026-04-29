@@ -1738,6 +1738,58 @@ export async function createInviteCode(payload: { email?: string; max_uses?: num
   return res.json();
 }
 
+export type FeedbackReport = {
+  id: string;
+  user_id: string | null;
+  category: "general" | "bug" | "data_issue" | "feature_request";
+  page: string | null;
+  symbol: string | null;
+  severity: "low" | "normal" | "high";
+  message: string;
+  context: Record<string, unknown>;
+  status: "new" | "triaged" | "resolved" | "closed";
+  created_at: string;
+};
+
+export async function createFeedbackReport(payload: {
+  category?: FeedbackReport["category"];
+  page?: string | null;
+  symbol?: string | null;
+  severity?: FeedbackReport["severity"];
+  message: string;
+  context?: Record<string, unknown>;
+}): Promise<FeedbackReport> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/feedback`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error("Could not send feedback");
+  const data = await res.json();
+  return data.feedback;
+}
+
+export async function getAdminFeedback(): Promise<FeedbackReport[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/feedback/admin`, { headers });
+  if (!res.ok) throw new Error("Admin feedback unavailable");
+  const data = await res.json();
+  return data.feedback ?? [];
+}
+
+export async function updateAdminFeedbackStatus(id: string, status: FeedbackReport["status"]): Promise<FeedbackReport> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/feedback/admin/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) throw new Error("Could not update feedback");
+  const data = await res.json();
+  return data.feedback;
+}
+
 // ── Scanner presets ───────────────────────────────────────────────────────────
 
 export interface ScanPreset {

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { authHeaders, isMockMode } from '@/lib/api'
+import { authHeaders, createFeedbackReport, isMockMode } from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 
@@ -280,6 +280,24 @@ export default function ScannerPage() {
       const res = await fetch(`${API}/api/v1/watchlists`, { headers })
       if (res.ok) { const d = await res.json(); setWatchlists(d.watchlists || []) }
     } catch { /* ignore */ }
+  }
+
+  async function reportScannerDataIssue(symbol?: string) {
+    try {
+      await createFeedbackReport({
+        category: 'data_issue',
+        page: '/scanner',
+        symbol,
+        severity: 'high',
+        message: symbol
+          ? `Scanner data issue reported for ${symbol}.`
+          : `Scanner returned no matches for filters that may need data review.`,
+        context: { filters: buildPayload(filters, sortBy, sortDesc).filters, trade_date: tradeDate, total_matches: totalMatches },
+      });
+      showToast('Data issue reported')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not report issue')
+    }
   }
 
   async function loadSavedScreens() {
@@ -811,7 +829,7 @@ export default function ScannerPage() {
 
         {/* Empty — no scan run yet */}
         {!loading && !hasRun && !error && (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
               title="Loading a practical starting list"
               description="The scanner opens with a broader leaders preset first, then you can tighten filters only when you need a narrower setup list."
@@ -825,9 +843,12 @@ export default function ScannerPage() {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
               title="No stocks matched"
-              description="Your filters are too strict for the latest complete market day. Try widening RSI, lowering volume ratio, or starting from a preset."
+              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Widen RSI/volume filters, start from a preset, or report it if this looks like a data issue.` : 'No matches yet. Try a broader preset, or report it if this looks like a data issue.'}
               action={{ label: 'Reset filters', onClick: resetFilters }}
             />
+            <button className="workspace-chip-button" style={{ marginTop: 12 }} onClick={() => reportScannerDataIssue()}>
+              Report data issue
+            </button>
           </div>
         )}
 
@@ -917,6 +938,12 @@ export default function ScannerPage() {
                               style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
                             >
                               Journal
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); reportScannerDataIssue(r.symbol) }}
+                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
+                            >
+                              Report
                             </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}

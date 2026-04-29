@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { Copy, RefreshCw, Ticket } from "lucide-react";
-import { createInviteCode, getAdminWaitlist, type WaitlistLead } from "@/lib/api";
+import { createInviteCode, getAdminFeedback, getAdminWaitlist, updateAdminFeedbackStatus, type FeedbackReport, type WaitlistLead } from "@/lib/api";
 
 export default function BetaAdminPage() {
   const [leads, setLeads] = useState<WaitlistLead[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [email, setEmail] = useState("");
@@ -15,13 +16,29 @@ export default function BetaAdminPage() {
   async function load() {
     setLoading(true);
     setError("");
-    try {
-      setLeads(await getAdminWaitlist());
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Admin waitlist unavailable");
-    } finally {
-      setLoading(false);
+    const [leadResult, feedbackResult] = await Promise.allSettled([
+      getAdminWaitlist(),
+      getAdminFeedback(),
+    ]);
+    if (leadResult.status === "fulfilled") {
+      setLeads(leadResult.value);
+    } else {
+      setError(leadResult.reason instanceof Error ? leadResult.reason.message : "Admin waitlist unavailable");
     }
+    if (feedbackResult.status === "fulfilled") {
+      setFeedback(feedbackResult.value);
+    } else {
+      setError((current) => {
+        const message = feedbackResult.reason instanceof Error ? feedbackResult.reason.message : "Admin feedback unavailable";
+        return current ? `${current}. ${message}` : message;
+      });
+    }
+    setLoading(false);
+  }
+
+  async function setFeedbackStatus(id: string, status: FeedbackReport["status"]) {
+    const updated = await updateAdminFeedbackStatus(id, status);
+    setFeedback((items) => items.map((item) => item.id === id ? updated : item));
   }
 
   useEffect(() => { void load(); }, []);
@@ -54,6 +71,51 @@ export default function BetaAdminPage() {
         <p style={{ maxWidth: 740, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
           Review landing-page beta leads and issue invite codes before activating founder-plan access.
         </p>
+      </div>
+
+      <div className="rounded-[18px] p-5" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="heading-card">Feedback and data issues</div>
+            <div className="caption">{feedback.length} latest reports</div>
+          </div>
+          <button onClick={load} className="workspace-chip-button flex items-center gap-2">
+            <RefreshCw size={13} />
+            Refresh
+          </button>
+        </div>
+        {loading ? (
+          <div className="caption">Loading...</div>
+        ) : feedback.length === 0 ? (
+          <div className="caption">No reports yet.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {feedback.slice(0, 12).map((item) => (
+              <div key={item.id} className="rounded-[12px] p-3" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {item.category.replace("_", " ")}{item.symbol ? ` · ${item.symbol}` : ""} · {item.severity}
+                    </div>
+                    <div className="caption">{item.page ?? "Unknown page"} · {new Date(item.created_at).toLocaleString()}</div>
+                  </div>
+                  <select
+                    value={item.status}
+                    onChange={(event) => setFeedbackStatus(item.id, event.target.value as FeedbackReport["status"])}
+                    className="rounded-[8px] px-2 py-1 text-[11px]"
+                    style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)", color: "var(--accent)" }}
+                  >
+                    <option value="new">new</option>
+                    <option value="triaged">triaged</option>
+                    <option value="resolved">resolved</option>
+                    <option value="closed">closed</option>
+                  </select>
+                </div>
+                <div className="text-[12px] mt-2" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}>{item.message}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 360px) 1fr", gap: 16 }}>

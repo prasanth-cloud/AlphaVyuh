@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import TraderReminderStrip from '@/components/TraderReminderStrip'
+import FeedbackWidget from '@/components/FeedbackWidget'
 import { clearAuthHeaderCache } from '@/lib/api'
 
 const NAV_LINKS = [
@@ -92,6 +93,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <main className={fullChart ? 'app-content app-content-full-chart' : 'app-content'}>{children}</main>
+      {!fullChart && <FeedbackWidget />}
     </div>
   )
 }
