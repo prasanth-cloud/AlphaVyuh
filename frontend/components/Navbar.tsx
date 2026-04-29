@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LogoFull } from "@/components/ui/Logo";
 
 const NAV_ITEMS = [
@@ -88,14 +88,6 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
-  const [initials, setInitials] = useState("U");
-
-  useEffect(() => {
-    createClient().auth.getUser().then(({ data }) => {
-      const email = data.user?.email ?? "";
-      setInitials(email[0]?.toUpperCase() ?? "U");
-    }).catch(() => {});
-  }, []);
 
   async function signOut() {
     setSigningOut(true);
@@ -156,7 +148,7 @@ export default function Navbar() {
 
         {/* User avatar */}
         <div className="w-[28px] h-[28px] rounded-full bg-[#1a1a18] border border-[#333] flex items-center justify-center text-[11px] font-bold text-[#888]">
-          {initials}
+            A
         </div>
 
         {/* Sign out */}

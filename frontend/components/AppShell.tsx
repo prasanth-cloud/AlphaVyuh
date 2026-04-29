@@ -177,18 +177,8 @@ function MarketStatus() {
 /* ── ACCOUNT MENU ────────────────────────────────────────────────────────── */
 function AccountMenuButton() {
   const [open, setOpen] = useState(false)
-  const [initials, setInitials] = useState('P')
   const ref = useRef<HTMLDivElement>(null)
   const router = useRouter()
-
-  useEffect(() => {
-    import('@/lib/supabase/client').then(({ createClient }) => {
-      createClient().auth.getUser().then(({ data }) => {
-        const email = data.user?.email ?? ''
-        setInitials(email[0]?.toUpperCase() ?? 'P')
-      }).catch(() => {})
-    }).catch(() => {})
-  }, [])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -221,7 +211,7 @@ function AccountMenuButton() {
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
         }}
       >
-        {initials}
+        A
       </button>
 
       {open && (
