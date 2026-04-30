@@ -388,6 +388,7 @@ export default function LandingPage() {
               {n:"02",h:"Watchlist",p:"Add breakout candidates to your watchlist. Hover to preview a chart. Sort and rank by custom fields."},
               {n:"03",h:"Chart",p:"Full TradingView-style charting with RS line, pivot zones, earnings markers, and drawing tools."},
               {n:"04",h:"Order",p:"Place trades directly via Zerodha or Upstox from the chart. No tab-switching required."},
+              {n:"05",h:"Review",p:"Close the trade, capture mistakes and lessons, then turn journal history into a better process."},
             ].map((s,i) => (
               <div key={s.n} className="lp-step" style={{transitionDelay: (i*0.12)+"s"}}>
                 <div className="lp-step-num">{s.n}</div>

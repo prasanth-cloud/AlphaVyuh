@@ -12,8 +12,8 @@ Use this checklist before every customer-facing release.
 
 2. Live internal beta
    - Frontend: `NEXT_PUBLIC_FORCE_LIVE_DATA=true`
-   - Backend: `MARKET_DATA_PROVIDER=yahoo` or `kite`
-   - Purpose: internal validation with real-ish market movement and broker flows.
+   - Backend: official/free EOD bhavcopy as primary store; `MARKET_DATA_PROVIDER=kite` only for user-connected broker quote/order workflows.
+   - Purpose: internal validation with reliable EOD scanner/chart data and broker flows.
    - App badge should show `Live data`.
 
 3. Licensed production data
@@ -66,7 +66,9 @@ The release owner should also complete `docs/customer-launch-runbook.md` before 
 ## Data Checklist
 
 - Mock mode works without Supabase market rows or live vendor credentials.
-- Yahoo fallback works for local validation.
+- Official/free EOD bhavcopy ingest populates `daily_ohlcv` for scanners, watchlists, daily charts, alerts, and RS/indicator columns.
+- `ENABLE_YFINANCE_REFRESH=false` in production unless explicitly validating fallback data.
+- Yahoo fallback works for local validation only.
 - Kite mode is used only for connected broker users.
 - TrueData/GlobalDatafeeds mode is used only after data redistribution terms are approved.
 - Chart candles, quotes, scanner, watchlists, journal, alerts, and portfolio have visible non-empty states.

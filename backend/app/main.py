@@ -122,12 +122,13 @@ async def start_scheduler():
         id="daily_bhavcopy",
         replace_existing=True,
     )
-    _scheduler.add_job(
-        _trigger_yfinance_refresh,
-        CronTrigger(hour=16, minute=15, day_of_week="mon-fri", timezone=ist),
-        id="daily_yfinance_refresh",
-        replace_existing=True,
-    )
+    if settings.enable_yfinance_refresh:
+        _scheduler.add_job(
+            _trigger_yfinance_refresh,
+            CronTrigger(hour=16, minute=15, day_of_week="mon-fri", timezone=ist),
+            id="daily_yfinance_refresh",
+            replace_existing=True,
+        )
     _scheduler.add_job(
         price_alerts_router.check_price_alerts,
         "interval",
@@ -136,7 +137,10 @@ async def start_scheduler():
         replace_existing=True,
     )
     _scheduler.start()
-    logger.info("APScheduler started — bhavcopy 16:00, yfinance refresh 16:15, price alerts every 5 min")
+    logger.info(
+        "APScheduler started — bhavcopy 16:00, yfinance refresh %s, price alerts every 5 min",
+        "enabled at 16:15" if settings.enable_yfinance_refresh else "disabled",
+    )
 
 
 @app.on_event("shutdown")
