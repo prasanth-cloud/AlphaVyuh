@@ -13,6 +13,18 @@ const NAV_LINKS = [
   { href: '/journal',   label: 'Journal' },
 ]
 
+const IDLE_PREFETCH_ROUTES = [
+  '/dashboard',
+  '/scanner',
+  '/watchlist',
+  '/charts/RELIANCE',
+  '/journal',
+  '/alerts',
+  '/data',
+  '/settings',
+  '/settings/broker',
+]
+
 type SymbolResult = { symbol: string; company_name: string; sector: string }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -23,8 +35,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const prefetchCoreRoutes = () => {
-      for (const link of NAV_LINKS) {
-        if (link.href !== pathname) router.prefetch(link.href)
+      for (const href of IDLE_PREFETCH_ROUTES) {
+        if (href !== pathname) {
+          router.prefetch(href)
+        }
       }
       warmCoreMarketData()
     }

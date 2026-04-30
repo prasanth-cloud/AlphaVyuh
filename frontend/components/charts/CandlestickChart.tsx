@@ -58,7 +58,19 @@ type Props = {
 };
 
 function candleToVolColor(c: CandleBar): string {
-  return c.close >= c.open ? "#26a65b22" : "#e5383b22";
+  return c.close >= c.open ? "rgba(34,197,94,0.34)" : "rgba(239,68,68,0.34)";
+}
+
+function applyDefaultVisibleRange(chart: IChartApi, candles: CandleBar[]) {
+  if (!candles.length) return;
+  if (candles.length <= 120) {
+    chart.timeScale().fitContent();
+    return;
+  }
+  const to = candles.length - 1;
+  const visibleBars = Math.min(candles.length, 170);
+  const from = Math.max(0, to - visibleBars);
+  chart.timeScale().setVisibleLogicalRange({ from, to: to + 10 });
 }
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
@@ -124,32 +136,34 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#040507" },
-        textColor: "rgba(244,247,251,0.55)",
+        background: { type: ColorType.Solid, color: "#05070b" },
+        textColor: "rgba(209,213,219,0.72)",
         fontFamily: "Inter, system-ui, sans-serif",
-        fontSize: 11,
+        fontSize: 12,
         attributionLogo: true,
       },
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.045)", style: 1 },
-        horzLines: { color: "rgba(255,255,255,0.045)", style: 1 },
+        vertLines: { color: "rgba(148,163,184,0.08)", style: 1 },
+        horzLines: { color: "rgba(148,163,184,0.08)", style: 1 },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(255,255,255,0.2)", width: 1, style: 3 },
-        horzLine: { color: "rgba(255,255,255,0.2)", width: 1, style: 3 },
+        vertLine: { color: "rgba(226,232,240,0.34)", width: 1, style: 3, labelBackgroundColor: "#111827" },
+        horzLine: { color: "rgba(226,232,240,0.34)", width: 1, style: 3, labelBackgroundColor: "#111827" },
       },
       rightPriceScale: {
-        borderColor: "rgba(255,255,255,0.07)",
-        scaleMargins: { top: 0.08, bottom: 0.22 },
+        borderColor: "rgba(148,163,184,0.16)",
+        scaleMargins: { top: 0.06, bottom: 0.2 },
         entireTextOnly: true,
       },
       timeScale: {
-        borderColor: "rgba(255,255,255,0.07)",
+        borderColor: "rgba(148,163,184,0.16)",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 6,
-        barSpacing: 10,
+        rightOffset: 10,
+        barSpacing: 8,
+        minBarSpacing: 3,
+        lockVisibleTimeRangeOnResize: true,
       },
       handleScroll: { vertTouchDrag: false, mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true },
       handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
@@ -168,17 +182,21 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       : chartType === "line"
         ? chart.addSeries(LineSeries, {
             color: "#f4f7fb",
-            lineWidth: 2,
+          lineWidth: 2,
+          priceLineVisible: true,
+          lastValueVisible: true,
+          priceLineColor: "#f8fafc",
+        })
+        : chart.addSeries(CandlestickSeries, {
+            upColor: "#22c55e",
+            downColor: "#ef4444",
+            borderUpColor: "#22c55e",
+            borderDownColor: "#ef4444",
+            wickUpColor: "#22c55e",
+            wickDownColor: "#ef4444",
+            priceLineColor: "#e5e7eb",
             priceLineVisible: true,
             lastValueVisible: true,
-          })
-        : chart.addSeries(CandlestickSeries, {
-            upColor: "#26a65b",
-            downColor: "#e5383b",
-            borderUpColor: "#26a65b",
-            borderDownColor: "#e5383b",
-            wickUpColor: "#26a65b",
-            wickDownColor: "#e5383b",
           } as Partial<CandlestickSeriesOptions>);
     seriesRef.current.price = priceSeries;
 
@@ -294,7 +312,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       candles.map(c => ({ time: c.time as Time, value: c.volume, color: candleToVolColor(c) }))
     );
     if (!didInitialFitRef.current) {
-      chartRef.current?.timeScale().fitContent();
+      if (chartRef.current) applyDefaultVisibleRange(chartRef.current, candles);
       didInitialFitRef.current = true;
     }
   }, [candles, chartType]);

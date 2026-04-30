@@ -30,6 +30,44 @@ export const isMockMode =
 
 let tokenCache: { token: string | null; expiresAt: number } | null = null;
 let tokenPromise: Promise<string | null> | null = null;
+type ClientCacheEntry<T> = { value: T; expiresAt: number };
+const clientCache = new Map<string, ClientCacheEntry<unknown>>();
+const clientCachePromises = new Map<string, Promise<unknown>>();
+
+function readClientCache<T>(key: string): T | null {
+  const cached = clientCache.get(key);
+  if (!cached || cached.expiresAt <= Date.now()) return null;
+  return cached.value as T;
+}
+
+function writeClientCache<T>(key: string, value: T, ttlMs: number): T {
+  clientCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  return value;
+}
+
+async function cachedClientRequest<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
+  const cached = readClientCache<T>(key);
+  if (cached !== null) return cached;
+
+  const pending = clientCachePromises.get(key) as Promise<T> | undefined;
+  if (pending) return pending;
+
+  const promise = fetcher()
+    .then((value) => writeClientCache(key, value, ttlMs))
+    .finally(() => {
+      clientCachePromises.delete(key);
+    });
+  clientCachePromises.set(key, promise);
+  return promise;
+}
+
+function invalidateClientCache(prefixes: string[]) {
+  for (const key of clientCache.keys()) {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) {
+      clientCache.delete(key);
+    }
+  }
+}
 
 function shouldUseMockFallback(): boolean {
   return isMockMode;
@@ -61,6 +99,8 @@ async function getToken(): Promise<string | null> {
 export function clearAuthHeaderCache() {
   tokenCache = null;
   tokenPromise = null;
+  clientCache.clear();
+  clientCachePromises.clear();
 }
 
 export async function authHeaders(): Promise<HeadersInit> {
@@ -293,15 +333,17 @@ export async function deleteScreen(id: string): Promise<void> {
 
 export async function getWatchlists(): Promise<Watchlist[]> {
   if (shouldUseMockFallback()) return mockWatchlists();
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/watchlists`, { headers });
-    if (!res.ok) return shouldUseMockFallback() ? mockWatchlists() : [];
-    const data = await res.json();
-    return data.watchlists ?? [];
-  } catch {
-    return shouldUseMockFallback() ? mockWatchlists() : [];
-  }
+  return cachedClientRequest("watchlists", 30_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/watchlists`, { headers });
+      if (!res.ok) return shouldUseMockFallback() ? mockWatchlists() : [];
+      const data = await res.json();
+      return data.watchlists ?? [];
+    } catch {
+      return shouldUseMockFallback() ? mockWatchlists() : [];
+    }
+  });
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
@@ -316,12 +358,15 @@ export async function createWatchlist(name: string): Promise<Watchlist> {
     const msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     throw new Error(msg || `HTTP ${res.status}`);
   }
-  return res.json();
+  const created = await res.json();
+  invalidateClientCache(["watchlists"]);
+  return created;
 }
 
 export async function deleteWatchlist(watchlistId: string): Promise<void> {
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
+  invalidateClientCache(["watchlists"]);
 }
 
 export async function addToWatchlist(watchlistId: string, symbol: string): Promise<void> {
@@ -333,6 +378,7 @@ export async function addToWatchlist(watchlistId: string, symbol: string): Promi
   });
   if (res.status === 409) throw new Error("Already in watchlist");
   if (!res.ok) throw new Error("Add failed");
+  invalidateClientCache(["watchlists"]);
 }
 
 export async function removeFromWatchlist(watchlistId: string, symbol: string): Promise<void> {
@@ -341,6 +387,7 @@ export async function removeFromWatchlist(watchlistId: string, symbol: string): 
     method: "DELETE",
     headers,
   });
+  invalidateClientCache(["watchlists"]);
 }
 
 export async function reorderWatchlist(
@@ -353,6 +400,7 @@ export async function reorderWatchlist(
     headers,
     body: JSON.stringify({ items }),
   });
+  invalidateClientCache(["watchlists"]);
 }
 
 export type WatchlistItemMetadataUpdate = {
@@ -376,7 +424,9 @@ export async function updateWatchlistItemMetadata(
     const body = await res.json().catch(() => ({ detail: "Metadata update failed" }));
     throw new Error(body.detail ?? "Metadata update failed");
   }
-  return res.json();
+  const updated = await res.json();
+  invalidateClientCache(["watchlists"]);
+  return updated;
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
@@ -392,14 +442,17 @@ export async function getMarketSummary(): Promise<MarketSummary | null> {
 
 export async function getQuote(symbol: string): Promise<ScanResult | null> {
   if (shouldUseMockFallback()) return mockQuote(symbol);
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/stocks/${symbol}/quote`, { headers });
-    if (!res.ok) return shouldUseMockFallback() ? mockQuote(symbol) : null;
-    return res.json();
-  } catch {
-    return shouldUseMockFallback() ? mockQuote(symbol) : null;
-  }
+  const sym = symbol.toUpperCase();
+  return cachedClientRequest(`quote:${sym}`, 20_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/stocks/${sym}/quote`, { headers });
+      if (!res.ok) return shouldUseMockFallback() ? mockQuote(sym) : null;
+      return res.json();
+    } catch {
+      return shouldUseMockFallback() ? mockQuote(sym) : null;
+    }
+  });
 }
 
 export type LiveQuote = {
@@ -767,26 +820,31 @@ export async function getJournalEntries(
   params?: { limit?: number; offset?: number; status?: string; symbol?: string }
 ): Promise<{ entries: JournalEntry[]; total: number; plan?: string; history_months?: number | null }> {
   if (shouldUseMockFallback()) return mockJournalEntries();
-  const headers = await authHeaders();
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
   if (params?.status) qs.set("status", params.status);
   if (params?.symbol) qs.set("symbol", params.symbol);
-  const res = await fetch(`${API}/api/v1/journal?${qs}`, { headers });
-  if (!res.ok) return { entries: [], total: 0 };
-  return res.json();
+  const cacheKey = `journal:entries:${qs.toString()}`;
+  return cachedClientRequest(cacheKey, 20_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/journal?${qs}`, { headers });
+    if (!res.ok) return { entries: [], total: 0 };
+    return res.json();
+  });
 }
 
 export async function getJournalStats(): Promise<JournalStats> {
   if (shouldUseMockFallback()) return mockJournalStats();
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/journal/stats`, { headers });
-  if (!res.ok) return {
-    total_trades: 0, open_trades: 0, total_pnl: 0, win_rate: 0,
-    avg_pnl: 0, avg_win: 0, avg_loss: 0, best_trade: 0, worst_trade: 0, avg_holding_days: 0,
-  };
-  return res.json();
+  return cachedClientRequest("journal:stats", 30_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/journal/stats`, { headers });
+    if (!res.ok) return {
+      total_trades: 0, open_trades: 0, total_pnl: 0, win_rate: 0,
+      avg_pnl: 0, avg_win: 0, avg_loss: 0, best_trade: 0, worst_trade: 0, avg_holding_days: 0,
+    };
+    return res.json();
+  });
 }
 
 export async function createJournalEntry(entry: CreateJournalEntry): Promise<JournalEntry> {
@@ -801,7 +859,9 @@ export async function createJournalEntry(entry: CreateJournalEntry): Promise<Jou
     const msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     throw new Error(msg || `HTTP ${res.status}`);
   }
-  return res.json();
+  const created = await res.json();
+  invalidateClientCache(["journal:", "portfolio"]);
+  return created;
 }
 
 export async function updateJournalEntry(id: string, update: UpdateJournalEntry): Promise<JournalEntry> {
@@ -816,12 +876,15 @@ export async function updateJournalEntry(id: string, update: UpdateJournalEntry)
     const msg = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     throw new Error(msg || `HTTP ${res.status}`);
   }
-  return res.json();
+  const updated = await res.json();
+  invalidateClientCache(["journal:", "portfolio"]);
+  return updated;
 }
 
 export async function deleteJournalEntry(id: string): Promise<void> {
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/journal/${id}`, { method: "DELETE", headers });
+  invalidateClientCache(["journal:", "portfolio"]);
 }
 
 export type JournalAnalytics = {
@@ -844,10 +907,12 @@ export type JournalAnalytics = {
 
 export async function getJournalAnalytics(): Promise<JournalAnalytics> {
   if (shouldUseMockFallback()) return mockJournalAnalytics();
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
-  if (!res.ok) return { equity_curve: [], setup_breakdown: [], monthly_pnl: [], drawdown_curve: [], max_drawdown: null, longest_dd_days: 0, recovery_factor: null, profit_factor: null };
-  return res.json();
+  return cachedClientRequest("journal:analytics", 30_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
+    if (!res.ok) return { equity_curve: [], setup_breakdown: [], monthly_pnl: [], drawdown_curve: [], max_drawdown: null, longest_dd_days: 0, recovery_factor: null, profit_factor: null };
+    return res.json();
+  });
 }
 
 // ── Fundamentals ──────────────────────────────────────────────────────────────
@@ -902,14 +967,16 @@ export async function getPaymentConfig(): Promise<PaymentConfig> {
 
 export async function getPlanStatus(): Promise<PlanStatus> {
   if (shouldUseMockFallback()) return { plan: "free", expires_at: null, active: false };
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/payments/status`, { headers });
-    if (!res.ok) return { plan: "free", expires_at: null, active: false };
-    return res.json();
-  } catch {
-    return { plan: "free", expires_at: null, active: false };
-  }
+  return cachedClientRequest("payments:status", 60_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/payments/status`, { headers });
+      if (!res.ok) return { plan: "free", expires_at: null, active: false };
+      return res.json();
+    } catch {
+      return { plan: "free", expires_at: null, active: false };
+    }
+  });
 }
 
 export async function createPaymentOrder(
@@ -1202,7 +1269,9 @@ export async function closePosition(
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? `Close failed (${res.status})`);
   }
-  return res.json();
+  const closed = await res.json();
+  invalidateClientCache(["journal:", "portfolio"]);
+  return closed;
 }
 
 export async function importZerodhaTrades(): Promise<{
@@ -1214,7 +1283,9 @@ export async function importZerodhaTrades(): Promise<{
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? "Import failed");
   }
-  return res.json();
+  const imported = await res.json();
+  invalidateClientCache(["journal:", "portfolio"]);
+  return imported;
 }
 
 export async function getBrokerStatus(): Promise<{
@@ -1239,10 +1310,24 @@ export async function getBrokerStatus(): Promise<{
       token_expires_at: null,
     };
   }
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/broker/status`, { headers });
-    if (!res.ok) {
+  return cachedClientRequest("broker:status", 20_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/broker/status`, { headers });
+      if (!res.ok) {
+        return {
+          connected: false,
+          broker: null,
+          mode: "simulated",
+          has_api_key: false,
+          has_token: false,
+          token_expired: false,
+          connected_at: null,
+          token_expires_at: null,
+        };
+      }
+      return res.json();
+    } catch {
       return {
         connected: false,
         broker: null,
@@ -1254,19 +1339,7 @@ export async function getBrokerStatus(): Promise<{
         token_expires_at: null,
       };
     }
-    return res.json();
-  } catch {
-    return {
-      connected: false,
-      broker: null,
-      mode: "simulated",
-      has_api_key: false,
-      has_token: false,
-      token_expired: false,
-      connected_at: null,
-      token_expires_at: null,
-    };
-  }
+  });
 }
 
 export type DataHealth = {
@@ -1368,7 +1441,9 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? `Order failed (${res.status})`);
   }
-  return res.json();
+  const result = await res.json();
+  invalidateClientCache(["journal:", "portfolio"]);
+  return result;
 }
 
 // ── Live candles (Yahoo Finance, no DB) ──────────────────────────────────────
@@ -1409,15 +1484,17 @@ export type PriceAlert = {
 
 export async function getPriceAlerts(): Promise<PriceAlert[]> {
   if (shouldUseMockFallback()) return mockPriceAlerts();
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
-    if (!res.ok) return shouldUseMockFallback() ? mockPriceAlerts() : [];
-    const d = await res.json();
-    return d.alerts ?? [];
-  } catch {
-    return shouldUseMockFallback() ? mockPriceAlerts() : [];
-  }
+  return cachedClientRequest("price-alerts", 20_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
+      if (!res.ok) return shouldUseMockFallback() ? mockPriceAlerts() : [];
+      const d = await res.json();
+      return d.alerts ?? [];
+    } catch {
+      return shouldUseMockFallback() ? mockPriceAlerts() : [];
+    }
+  });
 }
 
 export async function createPriceAlert(
@@ -1431,12 +1508,15 @@ export async function createPriceAlert(
     const b = await res.json().catch(() => ({ detail: "Failed" }));
     throw new Error(b.detail ?? "Failed to create alert");
   }
-  return res.json();
+  const created = await res.json();
+  invalidateClientCache(["price-alerts"]);
+  return created;
 }
 
 export async function deletePriceAlert(id: string): Promise<void> {
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/price-alerts/${id}`, { method: "DELETE", headers });
+  invalidateClientCache(["price-alerts"]);
 }
 
 // ── Portfolio ─────────────────────────────────────────────────────────────────
@@ -1474,18 +1554,20 @@ export type PortfolioResponse = {
 
 export async function getPortfolio(): Promise<PortfolioResponse> {
   if (shouldUseMockFallback()) return mockPortfolio();
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/journal/portfolio`, { headers });
-    if (!res.ok) {
+  return cachedClientRequest("portfolio", 20_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/journal/portfolio`, { headers });
+      if (!res.ok) {
+        if (shouldUseMockFallback()) return mockPortfolio();
+        throw new Error("Failed to load portfolio");
+      }
+      return res.json();
+    } catch (error) {
       if (shouldUseMockFallback()) return mockPortfolio();
-      throw new Error("Failed to load portfolio");
+      throw error;
     }
-    return res.json();
-  } catch (error) {
-    if (shouldUseMockFallback()) return mockPortfolio();
-    throw error;
-  }
+  });
 }
 
 // ── Backtest ──────────────────────────────────────────────────────────────────
@@ -1755,6 +1837,13 @@ export async function getMarketOverview(): Promise<MarketOverview> {
 export function warmCoreMarketData() {
   void getDataHealth().catch(() => null);
   void getMarketOverview().catch(() => null);
+  void getWatchlists().catch(() => null);
+  void getJournalEntries({ limit: 75 }).catch(() => null);
+  void getJournalStats().catch(() => null);
+  void getBrokerStatus().catch(() => null);
+  void getPlanStatus().catch(() => null);
+  void getPriceAlerts().catch(() => null);
+  void getPortfolio().catch(() => null);
 }
 
 export type WaitlistLead = {

@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Minus, MoveRight, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Trash2, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Trash2, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -31,6 +31,7 @@ type ChartDrawing = {
   tool: DrawingTool;
   p1: { time: string; price: number };
   p2: { time: string; price: number };
+  p3?: { time: string; price: number };
   color: string;
   text?: string;
   locked?: boolean;
@@ -69,10 +70,19 @@ const INDICATOR_CONFIG = [
   { id: "ichimoku", label: "Ichimoku", color: "#d6dce5", bg: "rgba(214,220,229,0.10)" },
 ];
 
-const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "Text"] as const;
+const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "LongPosition", "ShortPosition", "Text"] as const;
 const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
 type DrawingTool = typeof DRAWING_TOOLS[number];
+type ChartDataCacheEntry = {
+  data: CandlesResponse;
+  indicatorData: IndicatorData;
+  rsiData: LinePoint[];
+  macdData: MACDPoint[];
+  stochData: StochPoint[];
+  atrData: LinePoint[];
+  loadedAt: number;
+};
 
 const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: typeof PencilLine; hint: string }> = {
   Trendline: { label: "Trendline", short: "T", icon: PencilLine, hint: "Two-point trendline" },
@@ -81,8 +91,13 @@ const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: 
   HorizontalRay: { label: "H-Ray", short: "J", icon: MoveRight, hint: "Horizontal from anchor to the right" },
   Rectangle: { label: "Zone", short: "Z", icon: RectangleHorizontal, hint: "Supply / demand box" },
   Fib: { label: "Fib", short: "F", icon: Waves, hint: "Fibonacci retracement" },
+  LongPosition: { label: "Long Position", short: "L", icon: TrendingUp, hint: "Entry, stop, target risk box" },
+  ShortPosition: { label: "Short Position", short: "S", icon: TrendingDown, hint: "Entry, stop, target risk box" },
   Text: { label: "Text", short: "N", icon: Type, hint: "Chart annotation" },
 };
+
+const chartDataCache = new Map<string, ChartDataCacheEntry>();
+const CHART_CACHE_TTL_MS = 60_000;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -105,7 +120,59 @@ function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
     ...item,
     p1: { ...item.p1 },
     p2: { ...item.p2 },
+    p3: item.p3 ? { ...item.p3 } : undefined,
   }));
+}
+
+function isPositionDrawingTool(tool: DrawingTool): tool is "LongPosition" | "ShortPosition" {
+  return tool === "LongPosition" || tool === "ShortPosition";
+}
+
+function buildPositionDrawingPoints(
+  tool: "LongPosition" | "ShortPosition",
+  entry: { time: string; price: number },
+  stopDraft: { time: string; price: number },
+) {
+  let stopPrice = stopDraft.price;
+  if (tool === "LongPosition" && stopPrice >= entry.price) {
+    stopPrice = entry.price * 0.98;
+  }
+  if (tool === "ShortPosition" && stopPrice <= entry.price) {
+    stopPrice = entry.price * 1.02;
+  }
+  const risk = Math.max(Math.abs(entry.price - stopPrice), entry.price * 0.0025);
+  const targetPrice = tool === "LongPosition" ? entry.price + risk * 2 : entry.price - risk * 2;
+  return {
+    p2: { time: stopDraft.time, price: stopPrice },
+    p3: { time: stopDraft.time, price: Math.max(0.01, targetPrice) },
+  };
+}
+
+function getDrawingToolType(tool: DrawingTool): string {
+  if (tool === "LongPosition") return "long_position";
+  if (tool === "ShortPosition") return "short_position";
+  return tool.toLowerCase();
+}
+
+function getPersistedDrawingPoints(drawing: ChartDrawing) {
+  if (drawing.tool === "Text") {
+    return [{ time: drawing.p1.time, price: drawing.p1.price }, { time: drawing.p1.time, price: drawing.p1.price }];
+  }
+  const points = [{ time: drawing.p1.time, price: drawing.p1.price }, { time: drawing.p2.time, price: drawing.p2.price }];
+  if (isPositionDrawingTool(drawing.tool) && drawing.p3) {
+    points.push({ time: drawing.p3.time, price: drawing.p3.price });
+  }
+  return points;
+}
+
+function formatDrawingSummary(item: ChartDrawing): string {
+  if (isPositionDrawingTool(item.tool)) {
+    const risk = Math.abs(item.p1.price - item.p2.price);
+    const reward = item.p3 ? Math.abs(item.p3.price - item.p1.price) : 0;
+    const rr = risk > 0 && reward > 0 ? ` · R:R ${(reward / risk).toFixed(2)}` : "";
+    return `Entry ${item.p1.price.toFixed(2)} · Stop ${item.p2.price.toFixed(2)} · Target ${(item.p3?.price ?? item.p1.price).toFixed(2)}${rr}`;
+  }
+  return item.text ?? `${item.p1.price.toFixed(2)} → ${item.p2.price.toFixed(2)}`;
 }
 
 function normalizeDrawingColor(color?: string | null): string {
@@ -145,6 +212,35 @@ function findNearestCandlePrice(
   return levels.reduce((best, candidate) => (
     Math.abs(candidate - price) < Math.abs(best - price) ? candidate : best
   ), levels[0]);
+}
+
+function constrainDrawingPoint(
+  tool: DrawingTool,
+  start: { x: number; y: number },
+  point: { x: number; y: number },
+  shiftKey: boolean,
+): { x: number; y: number } {
+  if (tool === "Text") return start;
+  if (tool === "Horizontal" || tool === "HorizontalRay") return { x: point.x, y: start.y };
+  if (!shiftKey) return point;
+
+  const dx = point.x - start.x;
+  const dy = point.y - start.y;
+  if (tool === "Rectangle") {
+    const size = Math.max(Math.abs(dx), Math.abs(dy));
+    return {
+      x: start.x + Math.sign(dx || 1) * size,
+      y: start.y + Math.sign(dy || 1) * size,
+    };
+  }
+
+  const distance = Math.hypot(dx, dy);
+  if (!distance) return point;
+  const snappedAngle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+  return {
+    x: start.x + Math.cos(snappedAngle) * distance,
+    y: start.y + Math.sin(snappedAngle) * distance,
+  };
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -194,6 +290,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [undoStack, setUndoStack] = useState<ChartDrawing[][]>([]);
   const [redoStack, setRedoStack] = useState<ChartDrawing[][]>([]);
   const chartHandleRef = useRef<ChartHandle | null>(null);
+  const dataRef = useRef<CandlesResponse | null>(null);
+  const lastBaseChartKeyRef = useRef<string | null>(null);
 
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
@@ -260,6 +358,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
   const FREE_INDICATORS = ["ema20", "ema50", "ema200", "rsi"];
 
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
   // Toolbar dropdowns
   const [showMoreIndicators, setShowMoreIndicators] = useState(false);
   const [showDrawMenu, setShowDrawMenu] = useState(false);
@@ -311,12 +413,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   const persistEditedDrawing = useCallback(async (drawing: ChartDrawing) => {
     try {
-      const savedPoints = drawing.tool === "Text"
-        ? [{ time: drawing.p1.time, price: drawing.p1.price }, { time: drawing.p1.time, price: drawing.p1.price }]
-        : [{ time: drawing.p1.time, price: drawing.p1.price }, { time: drawing.p2.time, price: drawing.p2.price }];
       const saved = await updateDrawing(symbol, drawing.id, {
-        tool_type: drawing.tool.toLowerCase(),
-        points: savedPoints,
+        tool_type: getDrawingToolType(drawing.tool),
+        points: getPersistedDrawingPoints(drawing),
         style: { color: drawing.color, text: drawing.text ?? null, locked: drawing.locked ?? false, hidden: drawing.hidden ?? false },
         timeframe,
       });
@@ -333,6 +432,30 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return findNearestCandlePrice(data?.candles, time, price);
   }, [data?.candles, snapToPrice]);
 
+  const applyIndicatorPayload = useCallback((resp: Awaited<ReturnType<typeof getIndicators>> | null) => {
+    const ind = (resp?.indicators ?? {}) as Record<string, unknown[]>;
+    const nextIndicatorData: IndicatorData = {
+      ema20:    ind.ema20    as LinePoint[] | undefined,
+      ema50:    ind.ema50    as LinePoint[] | undefined,
+      ema200:   ind.ema200   as LinePoint[] | undefined,
+      vwap:     ind.vwap     as LinePoint[] | undefined,
+      bb:       ind.bb       as never,
+      ichimoku: ind.ichimoku as IchimokuPoint[] | undefined,
+    };
+    const nextRsi = (ind.rsi as LinePoint[] | undefined) ?? [];
+    const nextMacd = (ind.macd as MACDPoint[] | undefined) ?? [];
+    const nextStoch = (ind.stoch as StochPoint[] | undefined) ?? [];
+    const nextAtr = (ind.atr as LinePoint[] | undefined) ?? [];
+
+    setIndicatorData(nextIndicatorData);
+    setRsiData(nextRsi);
+    setMacdData(nextMacd);
+    setStochData(nextStoch);
+    setAtrData(nextAtr);
+
+    return { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr };
+  }, []);
+
   // Load compare symbol data
   useEffect(() => {
     if (!compareSymbol) { setCompareData(null); return; }
@@ -342,28 +465,81 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   // Load chart data
   useEffect(() => {
+    let cancelled = false;
+    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
+    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap", "ichimoku"].includes(i));
+    const panelInds = activeIndicators.filter(i => ["rsi", "macd", "stoch", "atr"].includes(i));
+    const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
+    const baseCacheKey = [symbol, timeframe, liveMode ? "live" : "eod"].join(":");
+    const cacheKey = [baseCacheKey, allInds.sort().join(",")].join(":");
+    const cached = chartDataCache.get(cacheKey);
+    const freshCached = cached && Date.now() - cached.loadedAt < CHART_CACHE_TTL_MS ? cached : null;
+    const canKeepVisibleChart = dataRef.current && lastBaseChartKeyRef.current === baseCacheKey;
+
     setLoading(true);
     setError("");
-    setData(null);
-    setRsiData([]);
-    setMacdData([]);
-    setStochData([]);
-    setAtrData([]);
-    setIndicatorData({});
+    if (freshCached) {
+      setData(freshCached.data);
+      lastBaseChartKeyRef.current = baseCacheKey;
+      setLegendBar(null);
+      setIndicatorData(freshCached.indicatorData);
+      setRsiData(freshCached.rsiData);
+      setMacdData(freshCached.macdData);
+      setStochData(freshCached.stochData);
+      setAtrData(freshCached.atrData);
+    } else if (canKeepVisibleChart) {
+      setIndicatorData({});
+      setRsiData([]);
+      setMacdData([]);
+      setStochData([]);
+      setAtrData([]);
+    } else {
+      setData(null);
+      setRsiData([]);
+      setMacdData([]);
+      setStochData([]);
+      setAtrData([]);
+      setIndicatorData({});
+    }
 
-    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
-    const fetcher = liveMode
+    const candlesPromise = liveMode
       ? getCandlesLive(symbol, { limit: Math.min(limit, 1000), timeframe }).catch(() => {
-          setLiveMode(false);
+          if (!cancelled) setLiveMode(false);
           return getCandles(symbol, { limit, timeframe });
         })
       : getCandles(symbol, { limit, timeframe });
+    const indicatorsPromise = allInds.length
+      ? getIndicators(symbol, allInds, timeframe).catch(() => null)
+      : Promise.resolve(null);
 
-    fetcher
-      .then(d => { setData(d); setLegendBar(null); })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [symbol, timeframe, liveMode]);
+    Promise.all([candlesPromise, indicatorsPromise])
+      .then(([nextData, indicatorsResp]) => {
+        if (cancelled) return;
+        setData(nextData);
+        lastBaseChartKeyRef.current = baseCacheKey;
+        setLegendBar(null);
+        const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp);
+        chartDataCache.set(cacheKey, {
+          data: nextData,
+          indicatorData: nextIndicatorData,
+          rsiData: nextRsi,
+          macdData: nextMacd,
+          stochData: nextStoch,
+          atrData: nextAtr,
+          loadedAt: Date.now(),
+        });
+      })
+      .catch(e => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Chart data failed");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeIndicators, applyIndicatorPayload, liveMode, symbol, timeframe]);
 
   // Auto-refresh every 5 minutes in live mode
   useEffect(() => {
@@ -516,14 +692,22 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           toolType === "horizontalray" || toolType === "hray" ? "HorizontalRay" :
           toolType === "fib" ? "Fib" :
           toolType === "rectangle" ? "Rectangle" :
+          toolType === "longposition" || toolType === "long_position" || toolType === "long" ? "LongPosition" :
+          toolType === "shortposition" || toolType === "short_position" || toolType === "short" ? "ShortPosition" :
           toolType === "ray" ? "Ray" :
           toolType === "text" ? "Text" :
           "Trendline";
+        const p1 = { time: pts[0].time, price: pts[0].price };
+        const p2 = { time: pts[1].time ?? pts[0].time, price: pts[1].price ?? pts[0].price };
+        const p3 = pts[2]?.time && pts[2].price != null
+          ? { time: pts[2].time, price: pts[2].price }
+          : isPositionDrawingTool(tool) ? buildPositionDrawingPoints(tool, p1, p2).p3 : undefined;
         return [{
           id: d.id,
           tool,
-          p1: { time: pts[0].time, price: pts[0].price },
-          p2: { time: pts[1].time ?? pts[0].time, price: pts[1].price ?? pts[0].price },
+          p1,
+          p2: isPositionDrawingTool(tool) ? buildPositionDrawingPoints(tool, p1, p2).p2 : p2,
+          p3,
           color: normalizeDrawingColor((d.style as { color?: string }).color),
           text: (d.style as { text?: string }).text,
           locked: Boolean((d.style as { locked?: boolean }).locked),
@@ -536,32 +720,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setSelectedDrawingId(null);
     });
   }, [symbol, timeframe]);
-
-  // Fetch indicators when active set changes or data loads
-  useEffect(() => {
-    if (!data) return;
-    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap", "ichimoku"].includes(i));
-    const panelInds = activeIndicators.filter(i => ["rsi", "macd", "stoch", "atr"].includes(i));
-    const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
-    if (!allInds.length) return;
-
-    getIndicators(symbol, allInds, timeframe).then(resp => {
-      const ind = resp.indicators as Record<string, unknown[]>;
-      setIndicatorData({
-        ema20:    ind.ema20    as LinePoint[] | undefined,
-        ema50:    ind.ema50    as LinePoint[] | undefined,
-        ema200:   ind.ema200   as LinePoint[] | undefined,
-        vwap:     ind.vwap     as LinePoint[] | undefined,
-        bb:       ind.bb       as never,
-        ichimoku: ind.ichimoku as IchimokuPoint[] | undefined,
-      });
-      if (ind.rsi)   setRsiData(ind.rsi as LinePoint[]);
-      if (ind.macd)  setMacdData(ind.macd as MACDPoint[]);
-      if (ind.stoch) setStochData(ind.stoch as StochPoint[]);
-      if (ind.atr)   setAtrData(ind.atr as LinePoint[]);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, timeframe, data, activeIndicators.join(",")]);
 
   function toggleIndicator(id: string) {
     const isPro = !FREE_INDICATORS.includes(id);
@@ -683,7 +841,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       const rawPrice = chartHandleRef.current?.coordinateToPrice(y) ?? null;
       const anchorTime = data?.candles.at(-1)?.time ?? null;
       if (rawPrice != null) {
-        const nextPrice = anchorTime ? getSnappedPrice(anchorTime, rawPrice) : rawPrice;
+        const nextPrice = anchorTime && !e.altKey ? getSnappedPrice(anchorTime, rawPrice) : rawPrice;
         setTradePlan((current) => ({
           ...current,
           [planDragState.field]: nextPrice.toFixed(2),
@@ -697,7 +855,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       const rawPrice = chartHandleRef.current?.coordinateToPrice(y) ?? null;
       const anchorTime = data?.candles.at(-1)?.time ?? null;
       if (rawPrice != null) {
-        const nextPrice = anchorTime ? getSnappedPrice(anchorTime, rawPrice) : rawPrice;
+        const nextPrice = anchorTime && !e.altKey ? getSnappedPrice(anchorTime, rawPrice) : rawPrice;
         setCloseDraft((prev) => {
           const current = prev[positionDragState.positionId];
           if (!current) return prev;
@@ -720,7 +878,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         const price = chartHandleRef.current?.coordinateToPrice(y) ?? null;
         const time = chartHandleRef.current?.coordinateToTime(x) ?? null;
         if (price != null && time != null) {
-          const snappedPrice = getSnappedPrice(time, price);
+          const snappedPrice = e.altKey ? price : getSnappedPrice(time, price);
           setDrawnLines((prev) => prev.map((item) => {
             if (item.id !== dragState.drawingId) return item;
             const next = {
@@ -735,6 +893,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             }
             if (item.tool === "Text") {
               next.p2 = { ...next.p1 };
+            }
+            if (isPositionDrawingTool(item.tool)) {
+              const built = buildPositionDrawingPoints(item.tool, next.p1, next.p2);
+              next.p2 = built.p2;
+              next.p3 = built.p3;
             }
             return next;
           }));
@@ -757,8 +920,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           const nextP2Time = chartHandleRef.current?.coordinateToTime(nextP2x) ?? null;
           const nextP2Price = chartHandleRef.current?.coordinateToPrice(nextP2y) ?? null;
           if (nextP1Time != null && nextP1Price != null && nextP2Time != null && nextP2Price != null) {
-            const snappedP1 = getSnappedPrice(nextP1Time, nextP1Price);
-            const snappedP2 = getSnappedPrice(nextP2Time, nextP2Price);
+            const snappedP1 = e.altKey ? nextP1Price : getSnappedPrice(nextP1Time, nextP1Price);
+            const snappedP2 = e.altKey ? nextP2Price : getSnappedPrice(nextP2Time, nextP2Price);
             setDrawnLines((prev) => prev.map((item) => {
               if (item.id !== dragState.drawingId) return item;
               const next: ChartDrawing = {
@@ -766,6 +929,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 p1: { time: nextP1Time, price: snappedP1 },
                 p2: { time: nextP2Time, price: snappedP2 },
               };
+              if (original.p3 && isPositionDrawingTool(item.tool)) {
+                const originalP3x = chartHandleRef.current?.timeToCoordinate(original.p3.time) ?? null;
+                const originalP3y = chartHandleRef.current?.priceToCoordinate(original.p3.price) ?? null;
+                if (originalP3x != null && originalP3y != null) {
+                  const nextP3Time = chartHandleRef.current?.coordinateToTime(originalP3x + dx) ?? null;
+                  const nextP3Price = chartHandleRef.current?.coordinateToPrice(originalP3y + dy) ?? null;
+                  if (nextP3Time != null && nextP3Price != null) {
+                    next.p3 = { time: nextP3Time, price: e.altKey ? nextP3Price : getSnappedPrice(nextP3Time, nextP3Price) };
+                  }
+                }
+              }
               if (item.tool === "Horizontal") {
                 next.p2 = { ...next.p2, price: next.p1.price };
               }
@@ -784,9 +958,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     }
     if (!activeDrawingTool || !drawingStartRef.current || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
-    const x2 = e.clientX - rect.left;
-    const y2 = e.clientY - rect.top;
-    setDrawingPreview({ x1: drawingStartRef.current.x, y1: drawingStartRef.current.y, x2, y2 });
+    const constrained = constrainDrawingPoint(
+      activeDrawingTool,
+      drawingStartRef.current,
+      { x: e.clientX - rect.left, y: e.clientY - rect.top },
+      e.shiftKey,
+    );
+    setDrawingPreview({ x1: drawingStartRef.current.x, y1: drawingStartRef.current.y, x2: constrained.x, y2: constrained.y });
   }
 
   async function handleOverlayMouseUp(e: React.MouseEvent) {
@@ -833,9 +1011,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     }
     if (!activeDrawingTool || !drawingStartRef.current || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
-    const x2 = e.clientX - rect.left;
-    const y2 = e.clientY - rect.top;
     const start = drawingStartRef.current;
+    const constrained = constrainDrawingPoint(
+      activeDrawingTool,
+      start,
+      { x: e.clientX - rect.left, y: e.clientY - rect.top },
+      e.shiftKey,
+    );
+    const x2 = constrained.x;
+    const y2 = constrained.y;
     drawingStartRef.current = null;
     setDrawingPreview(null);
 
@@ -846,8 +1030,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     const time2  = chartHandleRef.current?.coordinateToTime(x2) ?? null;
 
     if (rawPrice1 == null || time1 == null || rawPrice2 == null || time2 == null) return;
-    const price1 = getSnappedPrice(time1, rawPrice1);
-    const price2 = getSnappedPrice(time2, rawPrice2);
+    const price1 = e.altKey ? rawPrice1 : getSnappedPrice(time1, rawPrice1);
+    const price2 = e.altKey ? rawPrice2 : getSnappedPrice(time2, rawPrice2);
 
     const finalPrice2 = activeDrawingTool === "Horizontal" || activeDrawingTool === "HorizontalRay" ? price1 : price2;
     const line: ChartDrawing = {
@@ -855,8 +1039,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       tool: activeDrawingTool,
       p1: { time: time1, price: price1 },
       p2: { time: time2, price: finalPrice2 },
-      color: DRAWING_DEFAULT_COLOR,
+      color: activeDrawingTool === "LongPosition" ? "#22c55e" : activeDrawingTool === "ShortPosition" ? "#ef4444" : DRAWING_DEFAULT_COLOR,
     };
+    if (isPositionDrawingTool(activeDrawingTool)) {
+      const built = buildPositionDrawingPoints(activeDrawingTool, line.p1, { time: time2, price: price2 });
+      line.p2 = built.p2;
+      line.p3 = built.p3;
+    }
     if (activeDrawingTool === "Text") {
       line.text = "Note";
       line.p2 = { time: time1, price: price1 };
@@ -870,13 +1059,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
     // Persist to DB (non-blocking)
     try {
-      const savedPoints = line.tool === "Text"
-        ? [{ time: time1, price: price1 }, { time: time1, price: price1 }]
-        : [{ time: time1, price: price1 }, { time: time2, price: finalPrice2 }];
       const saved = await saveDrawing(symbol, {
-        tool_type: activeDrawingTool.toLowerCase(),
-        points: savedPoints,
-        style: { color: DRAWING_DEFAULT_COLOR, text: line.text ?? null },
+        tool_type: getDrawingToolType(activeDrawingTool),
+        points: getPersistedDrawingPoints(line),
+        style: { color: line.color, text: line.text ?? null },
         timeframe,
       });
       setDrawings(prev => [...prev, saved]);
@@ -968,12 +1154,20 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }, [drawnLines, symbol, updateDrawingsWithHistory]);
 
   const toggleDrawingLock = useCallback((drawingId: string) => {
-    updateDrawingsWithHistory((prev) => prev.map((item) => item.id === drawingId ? { ...item, locked: !item.locked } : item));
-  }, [updateDrawingsWithHistory]);
+    const drawing = drawnLines.find((item) => item.id === drawingId);
+    if (!drawing) return;
+    const next = { ...drawing, locked: !drawing.locked };
+    updateDrawingsWithHistory((prev) => prev.map((item) => item.id === drawingId ? next : item));
+    void persistEditedDrawing(next);
+  }, [drawnLines, persistEditedDrawing, updateDrawingsWithHistory]);
 
   const toggleDrawingHidden = useCallback((drawingId: string) => {
-    updateDrawingsWithHistory((prev) => prev.map((item) => item.id === drawingId ? { ...item, hidden: !item.hidden } : item));
-  }, [updateDrawingsWithHistory]);
+    const drawing = drawnLines.find((item) => item.id === drawingId);
+    if (!drawing) return;
+    const next = { ...drawing, hidden: !drawing.hidden };
+    updateDrawingsWithHistory((prev) => prev.map((item) => item.id === drawingId ? next : item));
+    void persistEditedDrawing(next);
+  }, [drawnLines, persistEditedDrawing, updateDrawingsWithHistory]);
 
   const handleUndoDrawing = useCallback(() => {
     setUndoStack((history) => {
@@ -1570,19 +1764,37 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             </button>
             {showDrawMenu && (
               <div className="absolute top-full left-0 mt-1 z-50 rounded-[8px] py-1 shadow-xl"
-                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 120 }}>
-                {DRAWING_TOOLS.map(tool => (
-                  <button
-                    key={tool}
-                    onClick={() => { setActiveDrawingTool(t => t === tool ? null : tool); setShowDrawMenu(false); }}
-                    className="w-full text-left px-3 py-1.5 text-[12px] transition-colors"
-                    style={{ color: activeDrawingTool === tool ? "#bac4d1" : "var(--app-text2)" }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                  >
-                    {tool}
-                  </button>
-                ))}
+                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 190 }}>
+                <button
+                  onClick={() => { setActiveDrawingTool(null); setShowDrawMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
+                  style={{ color: !activeDrawingTool ? "#bac4d1" : "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  <MousePointer2 size={14} />
+                  <span className="flex-1">Select / move</span>
+                  <span className="text-[10px] opacity-60">Esc</span>
+                </button>
+                <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
+                {DRAWING_TOOLS.map(tool => {
+                  const meta = DRAW_TOOL_META[tool];
+                  const Icon = meta.icon;
+                  return (
+                    <button
+                      key={tool}
+                      onClick={() => { setActiveDrawingTool(t => t === tool ? null : tool); setShowDrawMenu(false); }}
+                      className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
+                      style={{ color: activeDrawingTool === tool ? "#bac4d1" : "var(--app-text2)" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                    >
+                      <Icon size={14} />
+                      <span className="flex-1">{meta.label}</span>
+                      <span className="text-[10px] opacity-60">{meta.short}</span>
+                    </button>
+                  );
+                })}
                 {drawnLines.length > 0 && (
                   <>
                     <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
@@ -1791,13 +2003,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         {/* Sidebar */}
         <aside className="w-[240px] flex-shrink-0 flex flex-col overflow-y-auto"
           style={{ background: "linear-gradient(180deg, rgba(244,247,251,0.04), rgba(255,255,255,0.02)), var(--surface-1)", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
-          {loading ? (
+          {loading && !data ? (
             <div className="p-4 space-y-3">
               {[80, 50, 60, 40, 70].map((w, i) => (
                 <div key={i} className="h-3 rounded animate-pulse" style={{ background: "var(--app-surface3)", width: `${w}%` }} />
               ))}
             </div>
-          ) : error ? (
+          ) : error && !data ? (
             <div className="p-4 text-[12px]" style={{ color: "var(--app-loss)" }}>{error}</div>
           ) : data && (
             <>
@@ -2522,11 +2734,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               )}
               <button
                 onClick={() => setSnapToPrice((prev) => !prev)}
-                className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
                 style={snapToPrice
                   ? { background: "rgba(0,229,196,0.12)", color: "var(--app-teal)", border: "1px solid rgba(0,229,196,0.22)" }
                   : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
+                title="Snap drawings to nearby OHLC prices. Hold Alt while drawing to bypass."
               >
+                <Magnet size={12} />
                 Magnet {snapToPrice ? "On" : "Off"}
               </button>
               {selectedDrawing && (
@@ -2595,6 +2809,22 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           </div>
           {/* OHLCV legend / crosshair overlay */}
           <div className="relative flex-1 min-h-0">
+            {loading && data && (
+              <div
+                className="absolute top-3 left-1/2 -translate-x-1/2 z-30 rounded-full px-3 py-1.5 text-[11px] font-semibold pointer-events-none"
+                style={{ background: "rgba(13,15,20,0.86)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(10px)" }}
+              >
+                Refreshing chart...
+              </div>
+            )}
+            {error && data && (
+              <div
+                className="absolute top-3 left-1/2 -translate-x-1/2 z-30 rounded-full px-3 py-1.5 text-[11px] font-semibold pointer-events-none"
+                style={{ background: "rgba(127,29,29,0.82)", color: "#fecaca", border: "1px solid rgba(248,113,113,0.22)", backdropFilter: "blur(10px)" }}
+              >
+                Could not refresh; showing cached chart
+              </div>
+            )}
             {/* Candle legend */}
             {displayBar && (
               <>
@@ -2706,7 +2936,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                           </div>
                         </div>
                         <div style={{ marginTop: 5, fontSize: 10, color: item.hidden ? "#fbbf24" : "var(--app-text3)" }}>
-                          {item.text ?? `${item.p1.price.toFixed(2)} → ${item.p2.price.toFixed(2)}`}
+                          {formatDrawingSummary(item)}
                         </div>
                         <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
                           {item.locked && (
@@ -2723,9 +2953,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                   <div className="label" style={{ fontSize: 9, marginBottom: 6 }}>Desk shortcuts</div>
                   <div style={{ display: "grid", gap: 5, fontSize: 10, color: "var(--app-text3)" }}>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>T / R / H / J / Z / F / N</span> arm tools</div>
+                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>T / R / H / J / Z / F / L / S / N</span> arm tools</div>
                     <div><span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Z</span> undo · <span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Y</span> redo</div>
                     <div><span className="mono" style={{ color: "var(--app-text1)" }}>Esc</span> cancel tool · <span className="mono" style={{ color: "var(--app-text1)" }}>Delete</span> remove selection</div>
+                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Shift</span> lock angle/box · <span className="mono" style={{ color: "var(--app-text1)" }}>Alt</span> bypass magnet</div>
                   </div>
                 </div>
               </div>
@@ -2815,6 +3046,24 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       <rect x={drawingPreview.x1 + 8} y={drawingPreview.y1 - 24} width={92} height={20} rx={6} fill="rgba(13,15,20,0.9)" stroke="#f4f7fb" />
                       <text x={drawingPreview.x1 + 14} y={drawingPreview.y1 - 11} fontSize="10" fill="#f8fafc" fontFamily="Inter, sans-serif">Text note</text>
                     </g>
+                  ) : activeDrawingTool === "LongPosition" || activeDrawingTool === "ShortPosition" ? (
+                    (() => {
+                      const x = Math.min(drawingPreview.x1, drawingPreview.x2);
+                      const w = Math.max(72, Math.abs(drawingPreview.x2 - drawingPreview.x1));
+                      const rewardY = activeDrawingTool === "LongPosition"
+                        ? drawingPreview.y1 - Math.abs(drawingPreview.y2 - drawingPreview.y1) * 2
+                        : drawingPreview.y1 + Math.abs(drawingPreview.y2 - drawingPreview.y1) * 2;
+                      const rewardTop = Math.min(drawingPreview.y1, rewardY);
+                      const riskTop = Math.min(drawingPreview.y1, drawingPreview.y2);
+                      return (
+                        <g>
+                          <rect x={x} y={rewardTop} width={w} height={Math.abs(rewardY - drawingPreview.y1)} fill="rgba(34,197,94,0.14)" stroke="#22c55e" strokeDasharray="4 3" />
+                          <rect x={x} y={riskTop} width={w} height={Math.abs(drawingPreview.y2 - drawingPreview.y1)} fill="rgba(239,68,68,0.14)" stroke="#ef4444" strokeDasharray="4 3" />
+                          <line x1={x} y1={drawingPreview.y1} x2={x + w} y2={drawingPreview.y1} stroke="#e5e7eb" strokeWidth={1.4} />
+                          <text x={x + 8} y={drawingPreview.y1 - 6} fontSize="10" fill="#e5e7eb" fontFamily="Inter, sans-serif">{activeDrawingTool === "LongPosition" ? "Long" : "Short"} entry</text>
+                        </g>
+                      );
+                    })()
                   ) : (
                     <line
                       x1={drawingPreview.x1} y1={drawingPreview.y1}
@@ -3173,6 +3422,65 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               stroke="#e5e7eb"
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "move" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                            />
+                          </>
+                        )}
+                      </g>
+                    );
+                  }
+
+                  if (isPositionDrawingTool(line.tool)) {
+                    const targetY = line.p3 ? chartHandleRef.current?.priceToCoordinate(line.p3.price) ?? null : null;
+                    if (targetY == null) return null;
+                    const x = Math.min(x1, x2);
+                    const rectW = Math.max(88, Math.abs(x2 - x1));
+                    const rewardTop = Math.min(y1, targetY);
+                    const rewardH = Math.max(4, Math.abs(targetY - y1));
+                    const riskTop = Math.min(y1, y2);
+                    const riskH = Math.max(4, Math.abs(y2 - y1));
+                    const risk = Math.abs(line.p1.price - line.p2.price);
+                    const reward = Math.abs((line.p3?.price ?? line.p1.price) - line.p1.price);
+                    const rr = risk > 0 ? reward / risk : 0;
+                    const tagX = Math.max(4, Math.min(chartW - 112, x + rectW + 6));
+
+                    return (
+                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                        <rect x={x} y={rewardTop} width={rectW} height={rewardH} fill="rgba(34,197,94,0.16)" stroke={selected ? "#bbf7d0" : "#22c55e"} strokeWidth={strokeWidth} />
+                        <rect x={x} y={riskTop} width={rectW} height={riskH} fill="rgba(239,68,68,0.16)" stroke={selected ? "#fecaca" : "#ef4444"} strokeWidth={strokeWidth} />
+                        <line x1={x} y1={y1} x2={x + rectW} y2={y1} stroke="#e5e7eb" strokeWidth={1.4} />
+                        <line x1={x} y1={y2} x2={x + rectW} y2={y2} stroke="#ef4444" strokeWidth={1.2} strokeDasharray="5 3" />
+                        <line x1={x} y1={targetY} x2={x + rectW} y2={targetY} stroke="#22c55e" strokeWidth={1.2} strokeDasharray="5 3" />
+                        <rect x={tagX} y={Math.max(6, y1 - 34)} width={108} height={50} rx={8} fill="rgba(13,15,20,0.92)" stroke={selected ? "#e5e7eb" : "rgba(255,255,255,0.12)"} />
+                        <text x={tagX + 8} y={Math.max(20, y1 - 18)} fontSize="10" fill={line.tool === "LongPosition" ? "#22c55e" : "#ef4444"} fontFamily="Inter, sans-serif" fontWeight="700">
+                          {line.tool === "LongPosition" ? "Long" : "Short"} · {rr.toFixed(2)}R
+                        </text>
+                        <text x={tagX + 8} y={Math.max(34, y1 - 4)} fontSize="9" fill="#e5e7eb" fontFamily="Inter, sans-serif">
+                          Entry {line.p1.price.toFixed(2)}
+                        </text>
+                        <text x={tagX + 8} y={Math.max(48, y1 + 10)} fontSize="9" fill="#94a3b8" fontFamily="Inter, sans-serif">
+                          Stop {line.p2.price.toFixed(2)}
+                        </text>
+                        {editable && (
+                          <>
+                            <circle
+                              cx={x1}
+                              cy={y1}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#e5e7eb"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "move" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
+                            />
+                            <circle
+                              cx={x2}
+                              cy={y2}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#e5e7eb"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "ns-resize" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                             />
                           </>
