@@ -40,7 +40,7 @@ import {
   type WatchlistItemMetadataUpdate,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
-import { EmptyState } from "@/components/ui";
+import { DataProvenanceBadge, EmptyState } from "@/components/ui";
 import IndicatorMenu from "@/components/charts/IndicatorMenu";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 
@@ -447,6 +447,7 @@ function ChartPanel({
                 {previewChange >= 0 ? "+" : ""}{previewChange.toFixed(2)}%
               </span>
             )}
+            <DataProvenanceBadge kind="eod" asOf={latestBar?.time ? String(latestBar.time) : null} compact />
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>

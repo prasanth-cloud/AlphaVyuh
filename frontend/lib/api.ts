@@ -1768,6 +1768,9 @@ export interface MarketOverview {
   top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   most_active: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
+  as_of?: string | null;
+  generated_at?: string | null;
+  cache_status?: "hit" | "miss" | string;
 }
 
 function numberOr(value: unknown, fallback = 0): number {
@@ -1809,6 +1812,9 @@ function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined
     top_gainers: Array.isArray(data.top_gainers) ? data.top_gainers : [],
     top_losers: Array.isArray(data.top_losers) ? data.top_losers : [],
     most_active: Array.isArray(data.most_active) ? data.most_active : [],
+    as_of: data.as_of ?? data.trade_date ?? null,
+    generated_at: data.generated_at ?? null,
+    cache_status: data.cache_status,
   };
 }
 
@@ -1893,9 +1899,36 @@ export async function getMarketOverview(): Promise<MarketOverview> {
   return marketOverviewPromise;
 }
 
+export type MarketSnapshot = {
+  overview: MarketOverview;
+  health: DataHealth | null;
+  asOf: string | null;
+  mode: DataHealth["mode"] | "live" | "eod" | "fallback" | "unknown";
+  source: string;
+  generatedAt: string;
+  cacheStatus: string;
+};
+
+export async function getMarketSnapshot(): Promise<MarketSnapshot> {
+  return cachedClientRequest("market-snapshot", 30_000, async () => {
+    const [overview, health] = await Promise.all([
+      getMarketOverview(),
+      getDataHealth().catch(() => null),
+    ]);
+    return {
+      overview,
+      health,
+      asOf: overview.as_of ?? overview.trade_date ?? health?.latest_trade_date ?? null,
+      mode: overview.is_live ? "live" : health?.mode ?? "eod",
+      source: overview.market_data_source ?? "AlphaVyuh market snapshot",
+      generatedAt: overview.generated_at ?? new Date().toISOString(),
+      cacheStatus: overview.cache_status ?? "client",
+    };
+  });
+}
+
 export function warmCoreMarketData() {
-  void getDataHealth().catch(() => null);
-  void getMarketOverview().catch(() => null);
+  void getMarketSnapshot().catch(() => null);
   void getWatchlists().catch(() => null);
   void getJournalEntries({ limit: 75 }).catch(() => null);
   void getJournalStats().catch(() => null);

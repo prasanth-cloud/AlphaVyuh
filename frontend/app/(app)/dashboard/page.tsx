@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import {
-  getDataHealth,
   getAiPatterns,
   getBrokerStatus,
   getJournalEntries,
   getJournalStats,
-  getMarketOverview,
+  getMarketSnapshot,
   getMe,
   getWatchlists,
   updateMe,
@@ -624,12 +623,9 @@ export default function DashboardPage() {
   async function load() {
     setError('')
     try {
-      const [d, health] = await Promise.all([
-        getMarketOverview(),
-        getDataHealth().catch(() => null),
-      ])
-      setData(d)
-      setDataHealth(health)
+      const snapshot = await getMarketSnapshot()
+      setData(snapshot.overview)
+      setDataHealth(snapshot.health)
       setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data')

@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { authHeaders, createFeedbackReport, getDataHealth, isMockMode, type DataHealth } from '@/lib/api'
+import { authHeaders, createFeedbackReport, getMarketSnapshot, getWatchlists as getCachedWatchlists, isMockMode, type DataHealth } from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 import DataFreshnessStrip from '@/components/DataFreshnessStrip'
@@ -265,7 +265,7 @@ export default function ScannerPage() {
   useEffect(() => {
     loadWatchlists()
     loadSavedScreens()
-    getDataHealth().then(setDataHealth).catch(() => setDataHealth(null))
+    getMarketSnapshot().then(snapshot => setDataHealth(snapshot.health)).catch(() => setDataHealth(null))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg: string) {
@@ -279,9 +279,8 @@ export default function ScannerPage() {
       return
     }
     try {
-      const headers = await getAuthHeaders()
-      const res = await fetch(`${API}/api/v1/watchlists`, { headers })
-      if (res.ok) { const d = await res.json(); setWatchlists(d.watchlists || []) }
+      const lists = await getCachedWatchlists()
+      setWatchlists(lists.map(({ id, name }) => ({ id, name })))
     } catch { /* ignore */ }
   }
 
