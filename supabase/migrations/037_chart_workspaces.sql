@@ -26,16 +26,11 @@ left join (
     jsonb_agg(
       jsonb_build_object(
         'id', id,
-        'kind', case
-          when lower(tool_type) in ('horizontal', 'hline', 'horizontalray', 'hray') then 'hline'
-          else 'trendline'
-        end,
-        'p1', points->0,
-        'p2', points->1,
-        'price', coalesce((points->0->>'price')::numeric, (points->1->>'price')::numeric),
-        'color', coalesce(style->>'color', '#f4f7fb'),
-        'width', coalesce((style->>'width')::int, 2),
-        'label', style->>'label'
+        'timeframe', timeframe,
+        'tool_type', tool_type,
+        'points', points,
+        'style', style,
+        'created_at', created_at
       )
       order by created_at
     ) as drawings
@@ -56,16 +51,11 @@ select
   jsonb_agg(
     jsonb_build_object(
       'id', id,
-      'kind', case
-        when lower(tool_type) in ('horizontal', 'hline', 'horizontalray', 'hray') then 'hline'
-        else 'trendline'
-      end,
-      'p1', points->0,
-      'p2', points->1,
-      'price', coalesce((points->0->>'price')::numeric, (points->1->>'price')::numeric),
-      'color', coalesce(style->>'color', '#f4f7fb'),
-      'width', coalesce((style->>'width')::int, 2),
-      'label', style->>'label'
+      'timeframe', timeframe,
+      'tool_type', tool_type,
+      'points', points,
+      'style', style,
+      'created_at', created_at
     )
     order by created_at
   ),

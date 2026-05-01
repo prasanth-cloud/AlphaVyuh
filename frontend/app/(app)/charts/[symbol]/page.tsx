@@ -71,7 +71,7 @@ const INDICATOR_CONFIG = [
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "LongPosition", "ShortPosition", "Text"] as const;
-const FULL_CHART_DRAWING_TOOLS = ["Trendline", "Horizontal"] as const;
+const FULL_CHART_DRAWING_TOOLS = DRAWING_TOOLS;
 const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
 type DrawingTool = typeof DRAWING_TOOLS[number];

@@ -128,6 +128,18 @@ def _drawing_row_to_workspace(row: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _workspace_drawing_to_row(drawing: dict[str, Any], timeframe: str) -> dict[str, Any]:
+    if "tool_type" in drawing:
+        return {
+            "id": drawing.get("id"),
+            "user_id": "",
+            "symbol": "",
+            "timeframe": drawing.get("timeframe") or timeframe,
+            "tool_type": drawing.get("tool_type") or "trendline",
+            "points": drawing.get("points") or [],
+            "style": drawing.get("style") or {},
+            "created_at": drawing.get("created_at") or "",
+        }
+
     drawing_id = drawing.get("id")
     if drawing.get("kind") == "hline":
         price = drawing.get("price")
@@ -157,18 +169,15 @@ def _workspace_drawing_to_row(drawing: dict[str, Any], timeframe: str) -> dict[s
 def _old_drawing_to_workspace(drawing_id: str, body: DrawingCreate | DrawingUpdate) -> dict[str, Any] | None:
     points = body.points or []
     style = body.style or {}
-    tool = body.tool_type.lower()
-    color = style.get("color") or "#f4f7fb"
-    width = int(style.get("width") or 2)
-    if tool in {"horizontal", "horizontalray", "hray", "hline"}:
-        point = points[0] if points and isinstance(points[0], dict) else {}
-        price = point.get("price")
-        if price is None:
-            return None
-        return {"id": drawing_id, "kind": "hline", "price": price, "color": color, "width": width, "label": style.get("label")}
-    if len(points) < 2:
+    if len(points) == 0:
         return None
-    return {"id": drawing_id, "kind": "trendline", "p1": points[0], "p2": points[1], "color": color, "width": width}
+    return {
+        "id": drawing_id,
+        "timeframe": body.timeframe,
+        "tool_type": body.tool_type,
+        "points": points,
+        "style": style,
+    }
 
 
 def _get_workspace_row(symbol: str, timeframe: str, user_id: str) -> dict[str, Any]:
