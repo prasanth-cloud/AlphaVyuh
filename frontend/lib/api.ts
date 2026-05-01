@@ -61,6 +61,13 @@ async function cachedClientRequest<T>(key: string, ttlMs: number, fetcher: () =>
   return promise;
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Request timed out")), timeoutMs);
+    promise.then(resolve, reject).finally(() => clearTimeout(timeout));
+  });
+}
+
 function invalidateClientCache(prefixes: string[]) {
   for (const key of clientCache.keys()) {
     if (prefixes.some((prefix) => key.startsWith(prefix))) {
@@ -553,6 +560,22 @@ export type ChartLayout = {
   drawing_tools: unknown[];
 };
 
+export type ChartWorkspaceIndicator = {
+  type: "ema" | "sma" | "vwap" | "rsi" | "macd" | "volume";
+  params?: Record<string, unknown>;
+};
+
+export type ChartWorkspaceDrawing =
+  | { id: string; kind: "trendline"; p1: { time: string; price: number }; p2: { time: string; price: number }; color: string; width: number }
+  | { id: string; kind: "hline"; price: number; color: string; width: number; label?: string };
+
+export type ChartWorkspace = {
+  symbol: string;
+  timeframe: string;
+  indicators: ChartWorkspaceIndicator[];
+  drawings: ChartWorkspaceDrawing[];
+};
+
 export async function getCandles(
   symbol: string,
   params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
@@ -669,6 +692,29 @@ export async function getDrawings(symbol: string, timeframe = "D"): Promise<Draw
   }
 }
 
+export async function getChartWorkspace(symbol: string, timeframe = "D"): Promise<ChartWorkspace> {
+  if (shouldUseMockFallback()) return { symbol, timeframe, indicators: [], drawings: [] };
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace?timeframe=${timeframe}`, { headers });
+    if (!res.ok) return { symbol, timeframe, indicators: [], drawings: [] };
+    return res.json();
+  } catch {
+    return { symbol, timeframe, indicators: [], drawings: [] };
+  }
+}
+
+export async function saveChartWorkspace(symbol: string, workspace: Omit<ChartWorkspace, "symbol">): Promise<ChartWorkspace> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(workspace),
+  });
+  if (!res.ok) throw new Error("Save chart workspace failed");
+  return res.json();
+}
+
 export async function saveDrawing(
   symbol: string,
   drawing: { tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe: string }
@@ -716,16 +762,29 @@ export async function deleteDrawing(symbol: string, drawingId: string): Promise<
 
 export async function getChartLayout(symbol: string): Promise<ChartLayout> {
   if (shouldUseMockFallback()) return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
+  const normalizeLayoutIndicators = (value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item) => {
+      if (typeof item === "string") return [item];
+      if (!item || typeof item !== "object" || !("type" in item)) return [];
+      const raw = item as { type?: string; params?: { period?: unknown } };
+      if (raw.type === "ema") return [`ema${raw.params?.period ?? 20}`];
+      if (raw.type === "vwap" || raw.type === "rsi" || raw.type === "macd" || raw.type === "volume") return [raw.type];
+      return [];
+    });
+  };
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${symbol}/layout`, { headers });
-    if (res.ok) {
+    if (res?.ok) {
       const layout: ChartLayout = await res.json();
+      layout.indicators = normalizeLayoutIndicators(layout.indicators);
       if (layout.indicators?.length || layout.drawing_tools?.length || layout.timeframe !== "D") return layout;
     }
     const defaultRes = await fetch(`${API}/api/v1/charts/__DEFAULT__/layout`, { headers });
     if (defaultRes.ok) {
       const fallback: ChartLayout = await defaultRes.json();
+      fallback.indicators = normalizeLayoutIndicators(fallback.indicators);
       return { ...fallback, symbol, drawing_tools: [] };
     }
     return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
@@ -1765,8 +1824,8 @@ export async function getMarketOverview(): Promise<MarketOverview> {
   marketOverviewPromise = (async () => {
     const headers = await authHeaders();
     // Try new comprehensive endpoint first; fall back to legacy summary if not deployed yet
-    const res = await fetch(`${API}/api/v1/market/overview`, { headers });
-    if (res.ok) {
+    const res = await withTimeout(fetch(`${API}/api/v1/market/overview`, { headers }), 2500).catch(() => null);
+    if (res?.ok) {
       const value = normalizeMarketOverview(await res.json());
       marketOverviewCache = { value, expiresAt: Date.now() + 45_000 };
       return value;

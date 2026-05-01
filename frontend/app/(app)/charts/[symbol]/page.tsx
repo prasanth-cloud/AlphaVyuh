@@ -71,6 +71,7 @@ const INDICATOR_CONFIG = [
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "LongPosition", "ShortPosition", "Text"] as const;
+const FULL_CHART_DRAWING_TOOLS = ["Trendline", "Horizontal"] as const;
 const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
 type DrawingTool = typeof DRAWING_TOOLS[number];
@@ -254,6 +255,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const sourceWatchlist = searchParams.get("watchlist");
   const sourceWatchlistId = searchParams.get("watchlistId");
   const fullChartMode = searchParams.get("full") === "1";
+  const initialDrawMode = searchParams.get("draw");
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [liveMode, setLiveMode] = useState(false);
@@ -400,6 +402,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   } | null>(null);
   const [snapToPrice, setSnapToPrice] = useState(true);
   const [textEditor, setTextEditor] = useState<{ drawingId: string | null; value: string; x: number; y: number; isNew: boolean } | null>(null);
+
+  useEffect(() => {
+    if (initialDrawMode === "trendline") {
+      setActiveDrawingTool("Trendline");
+    } else if (initialDrawMode === "hline" || initialDrawMode === "horizontal") {
+      setActiveDrawingTool("Horizontal");
+    }
+  }, [initialDrawMode]);
 
   const updateDrawingsWithHistory = useCallback((mutator: (current: ChartDrawing[]) => ChartDrawing[]) => {
     setDrawnLines((current) => {
@@ -1777,7 +1787,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   <span className="text-[10px] opacity-60">Esc</span>
                 </button>
                 <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
-                {DRAWING_TOOLS.map(tool => {
+                {FULL_CHART_DRAWING_TOOLS.map(tool => {
                   const meta = DRAW_TOOL_META[tool];
                   const Icon = meta.icon;
                   return (
@@ -3018,6 +3028,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             {/* Drawing SVG overlay */}
             <div
               ref={overlayRef}
+              data-testid="chart-drawing-overlay"
               className="absolute inset-0 z-20"
               style={{ cursor: activeDrawingTool ? "crosshair" : dragState || positionDragState || planDragState ? "grabbing" : "default", pointerEvents: activeDrawingTool || selectedDrawing || dragState || positionDragState || planDragState || activeManagedPosition ? "all" : "none" }}
               onMouseDown={handleOverlayMouseDown}

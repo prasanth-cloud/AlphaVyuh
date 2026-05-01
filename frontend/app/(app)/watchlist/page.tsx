@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   DndContext,
@@ -17,9 +17,9 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDownRight, ArrowUpRight, Eraser, Minus, PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag, Undo2 } from "lucide-react";
+import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag } from "lucide-react";
 import dynamic from "next/dynamic";
-import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Drawing } from "@/lib/api";
+import type { Watchlist, WatchlistItem, CandleBar, JournalEntry } from "@/lib/api";
 import {
   getWatchlists,
   getJournalEntries,
@@ -32,9 +32,6 @@ import {
   getQuote,
   searchSymbols,
   getCandles,
-  getDrawings,
-  saveDrawing,
-  deleteDrawing,
   placeOrder,
   getQuoteLive,
   isMockMode,
@@ -44,18 +41,11 @@ import {
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
 import { EmptyState } from "@/components/ui";
+import IndicatorMenu from "@/components/charts/IndicatorMenu";
+import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
-type WatchlistDrawingTool = "trendline" | "horizontal" | "long" | "short";
-type WatchlistDrawingPoint = { time: string; price: number };
-type WatchlistOverlayDrawing = {
-  id: string;
-  tool: WatchlistDrawingTool;
-  p1: WatchlistDrawingPoint;
-  p2?: WatchlistDrawingPoint;
-  color: string;
-};
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
 const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
@@ -263,28 +253,6 @@ function TimeframeTabs({ active, onChange }: { active: string; onChange: (v: str
   );
 }
 
-function normalizeWatchlistDrawing(drawing: Drawing): WatchlistOverlayDrawing | null {
-  const toolType = String(drawing.tool_type || "").toLowerCase();
-  const tool: WatchlistDrawingTool | null =
-    toolType === "trendline" ? "trendline" :
-    toolType === "horizontal" ? "horizontal" :
-    toolType === "long" ? "long" :
-    toolType === "short" ? "short" :
-    null;
-  if (!tool) return null;
-  const points = drawing.points as Array<{ time?: string; price?: number }>;
-  const first = points[0];
-  if (!first?.time || first.price == null) return null;
-  const second = points[1];
-  return {
-    id: drawing.id,
-    tool,
-    p1: { time: first.time, price: first.price },
-    p2: second?.time && second.price != null ? { time: second.time, price: second.price } : undefined,
-    color: (drawing.style as { color?: string })?.color ?? (tool === "short" ? "#e5383b" : tool === "long" ? "#1bbf72" : "#f4f7fb"),
-  };
-}
-
 // ─── Chart + order panel ──────────────────────────────────────────────────────
 
 function ChartPanel({
@@ -292,15 +260,16 @@ function ChartPanel({
   latestClose,
   watchlistName,
   onOpenChart,
+  onOpenChartDraw,
   onStepSymbol,
 }: {
   symbol: string;
   latestClose?: number | null;
   watchlistName?: string | null;
   onOpenChart: (symbol: string) => void;
+  onOpenChartDraw: (symbol: string) => void;
   onStepSymbol: (direction: "prev" | "next") => void;
 }) {
-  const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
@@ -308,11 +277,6 @@ function ChartPanel({
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
   const [showChartDetails, setShowChartDetails] = useState(false);
   const [showOrderTicket, setShowOrderTicket] = useState(false);
-  const [activeTool, setActiveTool] = useState<WatchlistDrawingTool | null>(null);
-  const [drawings, setDrawings] = useState<WatchlistOverlayDrawing[]>([]);
-  const [pendingPoint, setPendingPoint] = useState<WatchlistDrawingPoint | null>(null);
-  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
-  const [toolMsg, setToolMsg] = useState("");
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -376,10 +340,10 @@ function ChartPanel({
     };
   }, [candles]);
   const chartHeight = showOrderTicket ? 300 : showChartDetails ? 380 : 440;
-  const drawingTimeframe = useMemo(() => {
+  const workspaceTimeframe = useMemo(() => {
     const timeframeMap: Record<string, "D" | "W" | "M"> = {
       "1D": "D",
-      "1W": "D",
+      "1W": "W",
       "1M": "D",
       "3M": "D",
       "6M": "W",
@@ -390,46 +354,7 @@ function ChartPanel({
     };
     return timeframeMap[tf] ?? "D";
   }, [tf]);
-
-  const chartScale = useMemo(() => {
-    if (!candles.length || overlaySize.width <= 0 || overlaySize.height <= 0) return null;
-    const highs = candles.map((c) => c.high).filter(Number.isFinite);
-    const lows = candles.map((c) => c.low).filter(Number.isFinite);
-    if (!highs.length || !lows.length) return null;
-    const rawHigh = Math.max(...highs);
-    const rawLow = Math.min(...lows);
-    const pad = Math.max((rawHigh - rawLow) * 0.08, rawHigh * 0.002, 1);
-    const high = rawHigh + pad;
-    const low = rawLow - pad;
-    const range = high - low || 1;
-    const indexByTime = new Map(candles.map((c, index) => [c.time, index]));
-    return { high, low, range, indexByTime };
-  }, [candles, overlaySize.height, overlaySize.width]);
-
-  const pointToCoord = useCallback((point: WatchlistDrawingPoint) => {
-    if (!chartScale || candles.length === 0) return null;
-    const index = chartScale.indexByTime.get(point.time);
-    if (index == null) return null;
-    const x = candles.length === 1 ? overlaySize.width / 2 : (index / (candles.length - 1)) * overlaySize.width;
-    const y = ((chartScale.high - point.price) / chartScale.range) * overlaySize.height;
-    return { x, y };
-  }, [candles.length, chartScale, overlaySize.height, overlaySize.width]);
-
-  const coordToPoint = useCallback((clientX: number, clientY: number): WatchlistDrawingPoint | null => {
-    const rect = chartWrapRef.current?.getBoundingClientRect();
-    if (!rect || !chartScale || candles.length === 0) return null;
-    const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
-    const y = Math.min(Math.max(clientY - rect.top, 0), rect.height);
-    const index = candles.length === 1 ? 0 : Math.round((x / Math.max(rect.width, 1)) * (candles.length - 1));
-    const candle = candles[Math.min(Math.max(index, 0), candles.length - 1)];
-    const price = chartScale.high - (y / Math.max(rect.height, 1)) * chartScale.range;
-    return { time: candle.time, price: Math.max(0, price) };
-  }, [candles, chartScale]);
-
-  const flashToolMsg = useCallback((message: string) => {
-    setToolMsg(message);
-    window.setTimeout(() => setToolMsg(""), 2500);
-  }, []);
+  const chartWorkspace = useChartWorkspace(symbol, workspaceTimeframe);
 
   useEffect(() => {
     setChartLoading(true);
@@ -470,76 +395,6 @@ function ChartPanel({
   useEffect(() => {
     if (latestClose) setPrice(String(latestClose));
   }, [latestClose]);
-
-  useEffect(() => {
-    setDrawings([]);
-    setPendingPoint(null);
-    getDrawings(symbol, drawingTimeframe)
-      .then((list) => setDrawings(list.map(normalizeWatchlistDrawing).filter((drawing): drawing is WatchlistOverlayDrawing => Boolean(drawing))))
-      .catch(() => setDrawings([]));
-  }, [drawingTimeframe, symbol]);
-
-  useEffect(() => {
-    const node = chartWrapRef.current;
-    if (!node) return;
-    const syncSize = () => setOverlaySize({ width: node.clientWidth, height: node.clientHeight });
-    syncSize();
-    const observer = new ResizeObserver(syncSize);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [chartHeight, candles.length]);
-
-  async function handleChartToolClick(event: React.MouseEvent<HTMLDivElement>) {
-    if (!activeTool || chartLoading || chartError || candles.length === 0) return;
-    const point = coordToPoint(event.clientX, event.clientY);
-    if (!point) return;
-
-    if (activeTool === "trendline" && !pendingPoint) {
-      setPendingPoint(point);
-      flashToolMsg("Select second point");
-      return;
-    }
-
-    const p1 = pendingPoint ?? point;
-    const p2 = activeTool === "trendline" ? point : point;
-    const color = activeTool === "short" ? "#e5383b" : activeTool === "long" ? "#1bbf72" : "#f4f7fb";
-    const local: WatchlistOverlayDrawing = {
-      id: `local-${Date.now()}`,
-      tool: activeTool,
-      p1,
-      p2,
-      color,
-    };
-    setDrawings((current) => [...current, local]);
-    setPendingPoint(null);
-    setActiveTool(null);
-
-    try {
-      const saved = await saveDrawing(symbol, {
-        tool_type: activeTool,
-        points: activeTool === "trendline"
-          ? [{ time: p1.time, price: p1.price }, { time: p2.time, price: p2.price }]
-          : [{ time: p1.time, price: p1.price }, { time: p1.time, price: p1.price }],
-        style: { color, source: "watchlist" },
-        timeframe: drawingTimeframe,
-      });
-      const normalized = normalizeWatchlistDrawing(saved);
-      if (normalized) {
-        setDrawings((current) => current.map((drawing) => drawing.id === local.id ? normalized : drawing));
-      }
-      flashToolMsg(activeTool === "long" ? "Long marker saved" : activeTool === "short" ? "Short marker saved" : "Drawing saved");
-    } catch {
-      flashToolMsg("Saved locally for this session");
-    }
-  }
-
-  async function clearWatchlistDrawings() {
-    const current = drawings;
-    setDrawings([]);
-    setPendingPoint(null);
-    await Promise.all(current.filter((drawing) => !drawing.id.startsWith("local-")).map((drawing) => deleteDrawing(symbol, drawing.id).catch(() => {})));
-    flashToolMsg("Chart marks cleared");
-  }
 
   async function handleOrder() {
     const qtyN = parseInt(qty, 10);
@@ -608,6 +463,14 @@ function ChartPanel({
             Full chart
           </button>
           <button
+            onClick={() => onOpenChartDraw(symbol)}
+            className="workspace-chip-button"
+            title="Open full chart drawing mode"
+            style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <PencilLine size={13} />
+          </button>
+          <button
             onClick={() => setShowChartDetails((current) => !current)}
             className={`workspace-chip-button${showChartDetails ? " active" : ""}`}
           >
@@ -619,46 +482,7 @@ function ChartPanel({
           >
             Order
           </button>
-          {([
-            ["trendline", PencilLine, "Trendline"],
-            ["horizontal", Minus, "Support / resistance"],
-            ["long", ArrowUpRight, "Long marker"],
-            ["short", ArrowDownRight, "Short marker"],
-          ] as const).map(([tool, Icon, label]) => (
-            <button
-              key={tool}
-              onClick={() => {
-                setActiveTool((current) => current === tool ? null : tool);
-                setPendingPoint(null);
-                if (activeTool !== tool) flashToolMsg(tool === "trendline" ? "Select first point" : "Click chart to place");
-              }}
-              className={`workspace-chip-button${activeTool === tool ? " active" : ""}`}
-              title={label}
-              style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-            >
-              <Icon size={13} />
-            </button>
-          ))}
-          {pendingPoint && (
-            <button
-              onClick={() => setPendingPoint(null)}
-              className="workspace-chip-button"
-              title="Undo pending point"
-              style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-            >
-              <Undo2 size={13} />
-            </button>
-          )}
-          {drawings.length > 0 && (
-            <button
-              onClick={clearWatchlistDrawings}
-              className="workspace-chip-button"
-              title="Clear visible chart marks"
-              style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-            >
-              <Eraser size={13} />
-            </button>
-          )}
+          <IndicatorMenu selected={chartWorkspace.indicators} onChange={chartWorkspace.setIndicators} />
           <label className="caption" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             Chart
             <select
@@ -699,11 +523,6 @@ function ChartPanel({
           ))}
         </div>
       )}
-      {toolMsg && (
-        <div className="caption" style={{ padding: "5px 14px 0", color: activeTool ? "var(--accent)" : "var(--text-tertiary)", flexShrink: 0 }}>
-          {toolMsg}
-        </div>
-      )}
       <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: "8px 14px 0" }}>
         {chartLoading ? (
           <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--surface-3)", borderTopColor: "var(--accent)", animation: "spin 1s linear infinite" }}>
@@ -712,51 +531,7 @@ function ChartPanel({
         ) : chartError || candles.length === 0 ? (
           <span className="caption">No chart data</span>
         ) : (
-          <div
-            ref={chartWrapRef}
-            onClick={handleChartToolClick}
-            style={{ width: "100%", height: chartHeight, position: "relative", cursor: activeTool ? "crosshair" : "default" }}
-          >
-            <MiniChart candles={candles} height={chartHeight} dark chartType={chartType} />
-            <svg
-              width="100%"
-              height="100%"
-              viewBox={`0 0 ${Math.max(1, overlaySize.width)} ${Math.max(1, overlaySize.height)}`}
-              preserveAspectRatio="none"
-              style={{ position: "absolute", inset: 0, pointerEvents: activeTool ? "auto" : "none" }}
-            >
-              {drawings.map((drawing) => {
-                const p1 = pointToCoord(drawing.p1);
-                const p2 = drawing.p2 ? pointToCoord(drawing.p2) : p1;
-                if (!p1 || !p2) return null;
-                if (drawing.tool === "horizontal") {
-                  return <line key={drawing.id} x1={0} y1={p1.y} x2={overlaySize.width} y2={p1.y} stroke={drawing.color} strokeWidth={1.25} strokeDasharray="5 5" opacity={0.9} />;
-                }
-                if (drawing.tool === "trendline") {
-                  return <line key={drawing.id} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={drawing.color} strokeWidth={1.5} opacity={0.95} />;
-                }
-                const isLong = drawing.tool === "long";
-                const label = isLong ? "LONG" : "SHORT";
-                const y = p1.y + (isLong ? -10 : 18);
-                return (
-                  <g key={drawing.id}>
-                    <path
-                      d={isLong
-                        ? `M ${p1.x} ${p1.y - 15} L ${p1.x - 6} ${p1.y - 3} L ${p1.x + 6} ${p1.y - 3} Z`
-                        : `M ${p1.x} ${p1.y + 15} L ${p1.x - 6} ${p1.y + 3} L ${p1.x + 6} ${p1.y + 3} Z`}
-                      fill={drawing.color}
-                      opacity={0.95}
-                    />
-                    <text x={p1.x + 8} y={y} fill={drawing.color} fontSize={10} fontWeight={700}>{label}</text>
-                  </g>
-                );
-              })}
-              {pendingPoint && (() => {
-                const p = pointToCoord(pendingPoint);
-                return p ? <circle cx={p.x} cy={p.y} r={4} fill="var(--accent)" /> : null;
-              })()}
-            </svg>
-          </div>
+          <MiniChart candles={candles} height={chartHeight} dark chartType={chartType} indicators={chartWorkspace.indicators} />
         )}
       </div>
       {showChartDetails && (
@@ -1092,8 +867,9 @@ function WatchlistContent() {
   }, [symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
-  const chartHref = useCallback((symbol: string) => {
+  const chartHref = useCallback((symbol: string, draw?: "trendline") => {
     const params = new URLSearchParams({ from: "watchlist", full: "1" });
+    if (draw) params.set("draw", draw);
     if (activeWl?.id) params.set("watchlistId", activeWl.id);
     if (activeWl?.name) params.set("watchlist", activeWl.name);
     return `/charts/${symbol}?${params.toString()}`;
@@ -2119,6 +1895,7 @@ function WatchlistContent() {
             latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
             watchlistName={activeWl?.name ?? null}
             onOpenChart={(sym) => router.push(chartHref(sym))}
+            onOpenChartDraw={(sym) => router.push(chartHref(sym, "trendline"))}
             onStepSymbol={moveSelection} />
         ) : (
           <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>

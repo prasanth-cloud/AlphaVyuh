@@ -397,15 +397,15 @@ function WorkflowChecklistCard({
         </span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 18 }}>
         {steps.map((step) => (
           <div
             key={step.label}
             style={{
               display: 'flex',
               alignItems: 'flex-start',
-              gap: 12,
-              padding: '12px 14px',
+              gap: 10,
+              padding: '10px 11px',
               borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-subtle)',
               background: step.completed ? 'var(--gain-subtle)' : 'var(--surface-2)',
@@ -430,7 +430,7 @@ function WorkflowChecklistCard({
               {step.completed ? '✓' : '•'}
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>{step.label}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3, lineHeight: 1.25 }}>{step.label}</div>
               <div className="caption" style={{ lineHeight: 1.55 }}>{step.description}</div>
             </div>
           </div>
