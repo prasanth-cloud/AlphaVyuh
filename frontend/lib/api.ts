@@ -567,7 +567,8 @@ export type ChartWorkspaceIndicator = {
 
 export type ChartWorkspaceDrawing =
   | { id: string; kind: "trendline"; p1: { time: string; price: number }; p2: { time: string; price: number }; color: string; width: number }
-  | { id: string; kind: "hline"; price: number; color: string; width: number; label?: string };
+  | { id: string; kind: "hline"; price: number; color: string; width: number; label?: string }
+  | { id: string; tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe?: string; created_at?: string };
 
 export type ChartWorkspace = {
   symbol: string;
@@ -1311,13 +1312,17 @@ export type OrderResult = {
   price:            number;
   broker:           string;          // "simulated" | "zerodha" | "upstox"
   broker_order_id:  string | null;
+  execution_mode?:  string;
+  journal_status?:  string;
+  risk_reward?:     number | null;
+  next_actions?:    string[];
 };
 
 export async function closePosition(
   journalId: string,
   exitPrice: number,
   exitReason?: string
-): Promise<{ status: string; pnl: number; pnl_pct: number; message: string }> {
+): Promise<{ status: string; pnl: number; pnl_pct: number; message: string; lesson_generated?: boolean; review_tip?: string }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/orders/close`, {
     method: "POST",

@@ -327,7 +327,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [showOrder, setShowOrder] = useState(false);
   const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
   const [tradePlan, setTradePlan] = useState<{ entry: string; stop: string; target: string }>({ entry: "", stop: "", target: "" });
-  const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string } | null>(null);
+  const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string; nextActions?: string[]; riskReward?: number | null } | null>(null);
   const [symbolPositions, setSymbolPositions] = useState<PortfolioPosition[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [closeBusyId, setCloseBusyId] = useState<string | null>(null);
@@ -819,6 +819,25 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setAlertSaving(false);
       setTimeout(() => setQuickAlertMsg(""), 3000);
     }
+  }
+
+  async function handleAlertFromSelectedDrawing() {
+    if (!selectedDrawing) {
+      setQuickAlertMsg("Select a drawing first");
+      setTimeout(() => setQuickAlertMsg(""), 2500);
+      return;
+    }
+    const target = isPositionDrawingTool(selectedDrawing.tool)
+      ? selectedDrawing.p3?.price ?? selectedDrawing.p1.price
+      : selectedDrawing.tool === "Horizontal" || selectedDrawing.tool === "HorizontalRay"
+        ? selectedDrawing.p1.price
+        : selectedDrawing.p2.price;
+    const condition = displayClose != null && target > displayClose ? "above" : "below";
+    await handleQuickAlert(
+      condition,
+      target,
+      `${DRAW_TOOL_META[selectedDrawing.tool].label} alert from saved drawing`,
+    );
   }
 
   async function handleDeleteAlert(id: string) {
@@ -1975,9 +1994,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             onClose={() => setShowOrder(false)}
             onFilled={(result: OrderResult) => {
               setShowOrder(false);
-              setOrderToast({ message: result.message, journalId: result.journal_id, broker: result.broker });
+              setOrderToast({
+                message: result.message,
+                journalId: result.journal_id,
+                broker: result.broker,
+                nextActions: result.next_actions,
+                riskReward: result.risk_reward,
+              });
               void loadSymbolPositions();
-              setTimeout(() => setOrderToast(null), 6000);
+              setTimeout(() => setOrderToast(null), 9000);
             }}
           />
         )}
@@ -1997,6 +2022,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)" }}>
                 {orderToast.broker === "simulated" ? "Simulated fill" : `Broker routed via ${orderToast.broker}`} · journal capture completed
+                {orderToast.riskReward != null ? ` · R:R ${orderToast.riskReward.toFixed(2)}` : ""}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <Link href="/journal" prefetch={false} style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
@@ -2007,6 +2033,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </Link>
               </div>
             </div>
+            {orderToast.nextActions?.length ? (
+              <div style={{ marginTop: 10, display: "grid", gap: 5 }}>
+                {orderToast.nextActions.slice(0, 3).map((action) => (
+                  <div key={action} style={{ fontSize: 11, color: "rgba(255,255,255,0.68)", lineHeight: 1.45 }}>
+                    {action}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -2758,6 +2793,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)" }}>
                   Selected: {DRAW_TOOL_META[selectedDrawing.tool].label}
                 </div>
+              )}
+              {selectedDrawing && (
+                <button
+                  onClick={() => void handleAlertFromSelectedDrawing()}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.22)" }}
+                >
+                  <Bell size={12} />
+                  Alert from drawing
+                </button>
               )}
               {selectedDrawing && (
                 <button

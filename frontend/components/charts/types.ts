@@ -41,7 +41,8 @@ export type DrawingPoint = { time: string; price: number };
 
 export type WorkspaceDrawing =
   | { id: string; kind: "trendline"; p1: DrawingPoint; p2: DrawingPoint; color: string; width: number }
-  | { id: string; kind: "hline"; price: number; color: string; width: number; label?: string };
+  | { id: string; kind: "hline"; price: number; color: string; width: number; label?: string }
+  | { id: string; tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe?: string; created_at?: string };
 
 export type ChartWorkspace = {
   symbol: string;

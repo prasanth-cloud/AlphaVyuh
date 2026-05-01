@@ -101,6 +101,7 @@ def _place_zerodha_order(
     symbol: str,
     side: str,
     quantity: int,
+    price: float,
     order_type: str,
 ) -> str | None:
     """Place order via Zerodha. Returns broker order ID or None on failure."""
@@ -116,6 +117,7 @@ def _place_zerodha_order(
                 "quantity": quantity,
                 "product": "CNC",
                 "order_type": "MARKET" if order_type == "market" else "LIMIT",
+                **({"price": price} if order_type == "limit" else {}),
             },
         )
         return str(data.get("order_id") or "")
@@ -199,10 +201,22 @@ async def place_order(
     if bt:
         if bt == "zerodha" and creds.get("api_key") and creds.get("access_token"):
             broker_order_id = _place_zerodha_order(
-                str(creds["api_key"]), str(creds["access_token"]), sym, body.side, body.quantity, body.order_type
+                str(creds["api_key"]), str(creds["access_token"]), sym, body.side, body.quantity, body.price, body.order_type
             )
             if broker_order_id:
                 broker_used = "zerodha"
+        elif bt == "upstox" and creds.get("api_key") and creds.get("access_token"):
+            broker_order_id = _place_upstox_order(
+                str(creds["api_key"]),
+                str(creds["access_token"]),
+                sym,
+                body.side,
+                body.quantity,
+                body.price,
+                body.order_type,
+            )
+            if broker_order_id:
+                broker_used = "upstox"
 
     trade_type = "long" if body.side == "buy" else "short"
 
@@ -258,18 +272,31 @@ async def place_order(
         raise HTTPException(status_code=500, detail="Failed to create journal entry")
 
     journal_entry = result.data[0]
+    next_actions = [
+        "Journal draft created with setup, stop, target, and source context.",
+        "When the trade is closed, AlphaVyuh will compute P&L and generate a trade lesson.",
+        "Use the Journal AI tab after a few closed trades to surface repeat mistakes and process tips.",
+    ]
+    if broker_used == "simulated":
+        next_actions.insert(0, "Simulated execution used because no live broker session was available.")
+    else:
+        next_actions.insert(0, f"Order routed to {broker_context}; verify final status in the broker terminal.")
 
     return {
         "status":      "filled",
         "order_type":  body.order_type,
         "broker":      broker_used,
+        "execution_mode": broker_used if broker_used != "simulated" else "simulated",
         "broker_order_id": broker_order_id,
         "symbol":      sym,
         "side":        body.side,
         "quantity":    body.quantity,
         "price":       body.price,
+        "risk_reward": risk_reward,
         "message":     f"{body.side.upper()} {body.quantity} × {sym} @ ₹{body.price:,.2f} — recorded in Journal",
         "journal_id":  journal_entry["id"],
+        "journal_status": "open",
+        "next_actions": next_actions,
     }
 
 
@@ -316,8 +343,10 @@ async def close_position(
     }
     sb.table("trade_journal").update(update).eq("id", body.journal_id).execute()
 
+    lesson_generated = False
     try:
         _trigger_ai_analysis(sb, {**entry, **update})
+        lesson_generated = True
     except Exception:
         pass
 
@@ -325,6 +354,8 @@ async def close_position(
         "status":  "closed",
         "pnl":     round(pnl, 2),
         "pnl_pct": pnl_pct,
+        "lesson_generated": lesson_generated,
+        "review_tip": "Open the journal review after close to inspect the generated lesson and tag execution mistakes.",
         "message": f"Trade closed: {'profit' if pnl >= 0 else 'loss'} ₹{abs(pnl):,.2f} ({pnl_pct:+.2f}%)",
     }
 
