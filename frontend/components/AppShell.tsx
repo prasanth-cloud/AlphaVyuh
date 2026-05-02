@@ -121,8 +121,7 @@ function DataModePill() {
   const forceLive = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === 'true'
   const configuredMock = process.env.NEXT_PUBLIC_DATA_MODE === 'mock'
   const allowFallback = process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === 'true'
-  const devMock = process.env.NODE_ENV === 'development' && !forceLive
-  const demo = !forceLive && (configuredMock || allowFallback || devMock)
+  const demo = !forceLive && (configuredMock || allowFallback)
   const label = forceLive ? 'Live data' : demo ? 'Demo data' : 'Backend data'
   const color = forceLive ? 'var(--gain)' : demo ? 'var(--warn)' : 'var(--text-tertiary)'
   const title = forceLive

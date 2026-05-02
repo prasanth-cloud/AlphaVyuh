@@ -25,8 +25,7 @@ export const liveQuotePollingEnabled =
 export const isMockMode =
   !forceLiveData &&
   (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
-    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
-    process.env.NODE_ENV === "development");
+    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true");
 
 let tokenCache: { token: string | null; expiresAt: number } | null = null;
 let tokenPromise: Promise<string | null> | null = null;
