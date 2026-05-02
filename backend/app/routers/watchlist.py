@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
@@ -74,7 +74,10 @@ def _enrich_items(client, items: list) -> list:
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("")
-async def get_watchlists(user_id: str = Depends(get_current_user_id)):
+async def get_watchlists(
+    lite: bool = Query(False, description="Return watchlist structure without OHLCV enrichment for fast shell loads."),
+    user_id: str = Depends(get_current_user_id),
+):
     client = get_admin_client()
 
     # 1 – all watchlists
@@ -103,6 +106,20 @@ async def get_watchlists(user_id: str = Depends(get_current_user_id)):
             .order("sort_order") \
             .execute()
     all_items = items_res.data or []
+
+    if lite:
+        items_by_wl: dict = {}
+        for item in all_items:
+            wid = item["watchlist_id"]
+            items_by_wl.setdefault(wid, []).append({
+                **item,
+                "pinned": bool(item.get("pinned", False)),
+                "tags": item.get("tags") or [],
+                "note": item.get("note"),
+            })
+        for wl in watchlists:
+            wl["items"] = items_by_wl.get(wl["id"], [])
+        return {"watchlists": watchlists, "mode": "lite"}
 
     # 3 – latest complete trade date (once)
     quote_map: dict = {}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   getAiPatterns,
   getBrokerStatus,
@@ -318,6 +318,36 @@ type ReviewPrompts = {
   latestLesson: string | null
 }
 
+const DASHBOARD_SNAPSHOT_CACHE_KEY = 'alphavyuh-dashboard-snapshot-v1'
+
+type DashboardSnapshotCache = {
+  data: MarketOverview
+  dataHealth: DataHealth | null
+  savedAt: number
+}
+
+function readDashboardSnapshotCache(): DashboardSnapshotCache | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(DASHBOARD_SNAPSHOT_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as DashboardSnapshotCache
+    if (!parsed?.data || Date.now() - parsed.savedAt > 10 * 60 * 1000) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeDashboardSnapshotCache(data: MarketOverview, dataHealth: DataHealth | null) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(DASHBOARD_SNAPSHOT_CACHE_KEY, JSON.stringify({ data, dataHealth, savedAt: Date.now() }))
+  } catch {
+    // Cache is a performance hint only.
+  }
+}
+
 function WorkflowChecklistCard({
   workflow,
   dismissed,
@@ -620,29 +650,55 @@ export default function DashboardPage() {
     latestLesson: null,
   })
 
-  async function load() {
+  const load = useCallback(async () => {
     setError('')
+    const pendingSnapshot = getMarketSnapshot()
     try {
-      const snapshot = await getMarketSnapshot()
+      const snapshot = await Promise.race([
+        pendingSnapshot,
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), data ? 1800 : 900)),
+      ])
+      if (!snapshot) {
+        if (!data) {
+          setLoading(false)
+        }
+        pendingSnapshot
+          .then((lateSnapshot) => {
+            setData(lateSnapshot.overview)
+            setDataHealth(lateSnapshot.health)
+            writeDashboardSnapshotCache(lateSnapshot.overview, lateSnapshot.health)
+            setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
+          })
+          .catch(() => {})
+        return
+      }
       setData(snapshot.overview)
       setDataHealth(snapshot.health)
+      writeDashboardSnapshotCache(snapshot.overview, snapshot.health)
       setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data')
     } finally {
       setLoading(false)
     }
-  }
+  }, [data])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     setChecklistDismissed(window.localStorage.getItem('alphavyuh-onboarding-dismissed') === '1')
+    const cached = readDashboardSnapshotCache()
+    if (cached) {
+      setData(cached.data)
+      setDataHealth(cached.dataHealth)
+      setLastUpdated('cached')
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       Promise.all([
-        getWatchlists().catch(() => []),
+        getWatchlists({ lite: true }).catch(() => []),
         getJournalEntries({ limit: 75 }).catch(() => ({ entries: [], total: 0 })),
         getJournalStats().catch(() => null),
         getBrokerStatus().catch(() => ({
@@ -702,7 +758,7 @@ export default function DashboardPage() {
     load()
     const t = setInterval(load, 5 * 60 * 1000)
     return () => clearInterval(t)
-  }, [])
+  }, [load])
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
