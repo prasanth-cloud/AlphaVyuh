@@ -1116,7 +1116,7 @@ export async function getPlanPrices(currency: "INR" | "USD" = "INR"): Promise<Pl
 export async function analyseJournal(): Promise<{ analysis: string; trades_analysed: number; disclaimer?: string }> {
   if (shouldUseMockFallback()) {
     return {
-      analysis: "Your strongest trades came from planned breakout and pullback setups. Keep position sizing consistent, journal the invalidation level before entry, and avoid adding risk after the first failed confirmation.",
+      analysis: "Closed-trade sample: planned breakout and pullback setups had the highest realised P&L. Trades with missing invalidation notes showed larger average drawdowns after failed confirmation.",
       trades_analysed: 24,
       disclaimer: "Mock trade review for local demo mode.",
     };

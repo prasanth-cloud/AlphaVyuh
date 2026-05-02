@@ -56,10 +56,10 @@ function getSetupSignal(item: WatchlistItem): SetupSignal {
   const volume = item.volume_ratio ?? 0;
   const rsi = item.rsi_14 ?? 50;
 
-  if (move >= 2 && volume >= 1.5 && rsi >= 58) return { label: "Breakout", tone: "gain", score: 95 };
-  if (move >= 0.5 && volume >= 1.2 && rsi >= 55) return { label: "Momentum", tone: "accent", score: 82 };
-  if (move <= -2 && volume >= 1.3) return { label: "Weak", tone: "loss", score: 28 };
-  if (move > -1 && move < 1 && rsi >= 42 && rsi <= 58) return { label: "Pullback", tone: "neutral", score: 64 };
+  if (move >= 2 && volume >= 1.5 && rsi >= 58) return { label: "2% up + vol", tone: "gain", score: 95 };
+  if (move >= 0.5 && volume >= 1.2 && rsi >= 55) return { label: "RSI 55+ + vol", tone: "accent", score: 82 };
+  if (move <= -2 && volume >= 1.3) return { label: "2% down + vol", tone: "loss", score: 28 };
+  if (move > -1 && move < 1 && rsi >= 42 && rsi <= 58) return { label: "Flat range", tone: "neutral", score: 64 };
   return { label: "Watch", tone: "neutral", score: 50 };
 }
 
@@ -160,7 +160,7 @@ function SortableRow({
             </span>
           )}
           <span
-            title={`Setup score ${setup.score}`}
+            title={`Metric match ${setup.score}`}
             style={{
               fontSize: 9,
               fontWeight: 800,
@@ -1360,7 +1360,6 @@ function WatchlistContent() {
               {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned {queueCounts.pinned}</span>}
               {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review {queueCounts.needsReview}</span>}
               {queueCounts.total > 0 && <span className="workspace-pill">Setup avg {setupDesk.average}</span>}
-              {setupDesk.ready > 0 && <span className="workspace-pill" style={{ color: "var(--gain)" }}>Ready {setupDesk.ready}</span>}
               {setupDesk.watch > 0 && <span className="workspace-pill" style={{ color: "var(--warn)" }}>Watch {setupDesk.watch}</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1371,7 +1370,7 @@ function WatchlistContent() {
               )}
               {activeWl.items.length > 0 && (
                 <button className={`workspace-chip-button${sortMode === "setup" ? " active" : ""}`} onClick={() => setSortMode("setup")}>
-                  Best setups
+                  Sort by metrics
                 </button>
               )}
               <button className={`workspace-chip-button${showDeskControls ? " active" : ""}`} onClick={() => setShowDeskControls((current) => !current)}>
@@ -1558,12 +1557,12 @@ function WatchlistContent() {
                           border: `1px solid ${setupToneColor(selectedSetup.tone)}`,
                         }}
                       >
-                        {selectedSetup.label} {selectedSetup.score}
+                        {selectedSetup.label}
                       </span>
                     )}
                   </div>
                   <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {selectedItem.company_name || selectedItem.sector || "Active watchlist focus"}
+                    {selectedItem.company_name || selectedItem.sector || "Active watchlist symbol"}
                   </div>
                 </div>
                 <div className="workspace-pill-row" style={{ marginTop: 0 }}>
@@ -1898,7 +1897,7 @@ function WatchlistContent() {
           <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <EmptyState
               title="Click any stock to load its chart"
-              description="Use the watchlist as your decision queue. Select the symbol you want to work on, then open the full chart when the setup deserves deeper analysis."
+              description="Use the watchlist as your analysis workspace. Select a symbol, then open the full chart for price, volume, and indicator context."
             />
           </div>
         )}

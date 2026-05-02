@@ -153,9 +153,9 @@ function BrokerSettingsContent() {
         </div>
 
         <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(244,247,251,0.16)" }}>
-          <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Recommended lowest-friction path</div>
+          <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Broker adapter path</div>
           <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>
-            Start with Zerodha OAuth, keep simulated fallback, then add Upstox on the same adapter contract.
+            Zerodha OAuth is active first. Simulated fallback remains available. Upstox uses the same adapter contract later.
           </div>
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
             This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every order can still auto-create a journal draft before AI review after close.

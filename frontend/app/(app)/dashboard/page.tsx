@@ -39,6 +39,12 @@ function formatPercent(value: unknown, digits = 0): string {
   return Number.isFinite(numeric) ? `${numeric.toFixed(digits)}%` : '—'
 }
 
+function breadthLabel(phase: string): string {
+  if (phase === 'Bullish') return 'Bullish breadth'
+  if (phase === 'Bearish') return 'Weak breadth'
+  return 'Mixed breadth'
+}
+
 function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: DataHealth | null }) {
   const phase = data.market_phase
   const phaseColor = phase === 'Bullish' ? 'var(--gain)'
@@ -55,7 +61,7 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: phaseColor, flexShrink: 0 }} />
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <span className="heading-card" style={{ color: phaseColor }}>{phase} market</span>
+            <span className="heading-card" style={{ color: phaseColor }}>{breadthLabel(phase)}</span>
             <span className="caption">{data.market_phase_desc}</span>
           </div>
         </div>
@@ -96,8 +102,8 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
 
   const cards = [
     {
-      label: 'Regime',
-      value: phase,
+      label: 'Market breadth',
+      value: breadthLabel(phase),
       detail: data.market_phase_desc,
       color: phaseColor,
     },
@@ -467,7 +473,7 @@ function WorkflowChecklistCard({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div className="caption">Next best action: {nextAction.label}</div>
+          <div className="caption">Continue with: {nextAction.label}</div>
         <Button variant="primary" size="sm" onClick={() => { window.location.href = nextAction.href }}>
           {nextAction.label}
         </Button>
@@ -485,21 +491,21 @@ function ReviewPulseCard({
     ? Math.round((workflow.reviewedTrades / workflow.closedTrades) * 100)
     : 0
 
-  const bestDay = workflow.patterns?.day_of_week?.reduce((best, current) => {
-    if (!best || current.win_rate > best.win_rate) return current
-    return best
+  const strongestDay = workflow.patterns?.day_of_week?.reduce((strongest, current) => {
+    if (!strongest || current.win_rate > strongest.win_rate) return current
+    return strongest
   }, workflow.patterns.day_of_week[0])
 
-  const bestDirection = workflow.patterns?.by_direction?.reduce((best, current) => {
-    if (!best || current.win_rate > best.win_rate) return current
-    return best
+  const strongestDirection = workflow.patterns?.by_direction?.reduce((strongest, current) => {
+    if (!strongest || current.win_rate > strongest.win_rate) return current
+    return strongest
   }, workflow.patterns.by_direction[0])
 
   const nextAction = workflow.closedTrades < 3
-    ? `Close ${3 - workflow.closedTrades} more trade${3 - workflow.closedTrades === 1 ? '' : 's'} to unlock journal-wide review.`
+    ? `${3 - workflow.closedTrades} more closed trade${3 - workflow.closedTrades === 1 ? '' : 's'} before journal-wide review has enough history.`
     : workflow.reviewedTrades < workflow.closedTrades
-      ? `Review ${workflow.closedTrades - workflow.reviewedTrades} more closed trade${workflow.closedTrades - workflow.reviewedTrades === 1 ? '' : 's'} to improve coaching coverage.`
-      : 'Your review coverage is healthy. Open the journal AI tab for the full summary.'
+      ? `${workflow.closedTrades - workflow.reviewedTrades} closed trade${workflow.closedTrades - workflow.reviewedTrades === 1 ? '' : 's'} still missing review notes.`
+      : 'Review coverage is complete for closed trades in the current journal sample.'
 
   return (
     <Card padding="md">
@@ -522,21 +528,21 @@ function ReviewPulseCard({
       </div>
 
       <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', marginBottom: 14 }}>
-        <div className="label" style={{ marginBottom: 4 }}>Next coaching milestone</div>
+        <div className="label" style={{ marginBottom: 4 }}>Journal coverage</div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{nextAction}</div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Best review signal</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Strongest review signal</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
-            {bestDirection ? `${bestDirection.direction} ${bestDirection.win_rate}%` : 'Build more history'}
+            {strongestDirection ? `${strongestDirection.direction} ${strongestDirection.win_rate}%` : 'Not enough closed trades'}
           </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Best day so far</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Highest win-rate day</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
-            {bestDay ? `${bestDay.day.slice(0, 3)} ${bestDay.win_rate}%` : 'Not enough closed trades'}
+            {strongestDay ? `${strongestDay.day.slice(0, 3)} ${strongestDay.win_rate}%` : 'Not enough closed trades'}
           </span>
         </div>
       </div>
@@ -550,7 +556,7 @@ function ReviewPromptsCard({ prompts }: { prompts: ReviewPrompts }) {
       ? `Review ${prompts.needsReviewCount} closed trade${prompts.needsReviewCount === 1 ? '' : 's'} still missing lessons.`
       : null,
     prompts.reviewSymbol
-      ? `${prompts.reviewSymbol} has ${prompts.reviewSymbolClosed} closed trade${prompts.reviewSymbolClosed === 1 ? '' : 's'} that deserve a tighter read.`
+      ? `${prompts.reviewSymbol} has ${prompts.reviewSymbolClosed} closed trade${prompts.reviewSymbolClosed === 1 ? '' : 's'} in the journal sample.`
       : null,
     prompts.weakSetup
       ? `${prompts.weakSetup} is underperforming${prompts.weakSetupWinRate != null ? ` at ${prompts.weakSetupWinRate.toFixed(0)}% win rate` : ''}.`
@@ -571,7 +577,7 @@ function ReviewPromptsCard({ prompts }: { prompts: ReviewPrompts }) {
           </div>
         )) : (
           <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-            Your review queue is in good shape. Keep feeding closed trades into the journal and check the AI tab for deeper summaries.
+            No pending review notes in the current sample. Journal analytics remain available for closed-trade summaries.
           </div>
         )}
       </div>
@@ -802,6 +808,40 @@ export default function DashboardPage() {
 
           {/* Phase card */}
           <PhaseCard data={data} dataHealth={dataHealth} />
+
+          <Card padding="lg" style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
+              <div>
+                <h2 className="heading-card" style={{ marginBottom: 4 }}>Continue your workflow</h2>
+                <div className="caption">Open a workspace, import trade history, or review journal analytics.</div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+              {[
+                { label: 'Open scanner', detail: 'Run user-defined filters on market data.', href: '/scanner' },
+                { label: 'Open watchlist', detail: 'Organize symbols, notes, charts, and order entry.', href: '/watchlist' },
+                { label: 'Open journal', detail: 'Review closed trades and performance history.', href: '/journal' },
+                { label: 'Upload trade report', detail: 'Import CSV, contract notes, or screenshots.', href: '/upload' },
+              ].map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  style={{
+                    display: 'block',
+                    minHeight: 96,
+                    padding: '14px 15px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--surface-2)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{item.label}</div>
+                  <div className="caption" style={{ lineHeight: 1.5 }}>{item.detail}</div>
+                </a>
+              ))}
+            </div>
+          </Card>
 
           {/* Stat cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>

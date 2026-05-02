@@ -128,17 +128,17 @@ def generate_trade_lesson(entry: dict) -> str:
         else:
             lines.append("- Compare the exit with the planned stop; tighten execution notes if the stop was not followed.")
     else:
-        lines.append("- Add a stop loss before entry so every closed trade has a measurable risk point.")
+        lines.append("- Stop loss was missing at entry, so the trade had no recorded pre-entry risk point.")
 
     if target and pnl > 0:
         lines.append("- Winner had a target recorded; review whether exit matched the planned reward.")
     elif pnl > 0:
-        lines.append("- Winner lacked a target; record the intended exit zone before the next entry.")
+        lines.append("- Winner lacked a target, so planned reward could not be compared with the exit.")
 
     if holding_days > 10 and pnl < 0:
-        lines.append("- Losing trade was held more than 10 days; define a time stop for stalled positions.")
+        lines.append("- Losing trade was held more than 10 days; duration exceeded the short swing-trade sample.")
     elif holding_days <= 3 and pnl > 0:
-        lines.append("- Quick winner; check whether this setup works best with faster profit-taking.")
+        lines.append("- Quick winner; this setup closed positive inside 3 days in the recorded sample.")
 
     return "\n".join(lines[:5])
 
@@ -215,31 +215,31 @@ def generate_journal_analysis(trades: list[dict]) -> str:
     if untagged:
         mistakes.append(f"- **Review quality:** {untagged} closed trades have no setup tag, which weakens pattern detection.")
     if not mistakes:
-        mistakes.append("- No repeated loss cluster is clear yet; keep logging setup, stop, target, and exit reason consistently.")
+        mistakes.append("- No repeated loss cluster is clear yet; setup, stop, target, and exit reason coverage determines future pattern quality.")
 
     working: list[str] = []
     strong_setups = [row for row in setup_stats if row[2] >= win_rate and row[3] > 0]
     if strong_setups:
         setup, count, rate, pnl = strong_setups[0]
-        working.append(f"- **Best setup:** {setup} has {count} trades, {rate}% win rate, {_format_money(pnl)} P&L.")
+        working.append(f"- **Highest P&L setup:** {setup} has {count} trades, {rate}% win rate, {_format_money(pnl)} P&L.")
     profitable_buckets = [row for row in bucket_rows if row[3] > 0]
     if profitable_buckets:
         bucket, count, rate, pnl = profitable_buckets[-1]
-        working.append(f"- **Best holding bucket:** {bucket} produced {_format_money(pnl)} across {count} trades.")
+        working.append(f"- **Highest P&L holding bucket:** {bucket} produced {_format_money(pnl)} across {count} trades.")
     if winners:
-        working.append(f"- **Winner count:** {len(winners)} trades closed positive; review those screenshots before adding new risk.")
+        working.append(f"- **Winner count:** {len(winners)} trades closed positive in the analysed sample.")
     if not working:
-        working.append("- Positive sample is still thin; focus on smaller risk and cleaner post-trade notes until a repeatable edge appears.")
+        working.append("- Positive sample is still thin; post-trade notes and risk fields are incomplete for pattern analysis.")
 
     rules: list[str] = []
     if weak_setups:
         setup = weak_setups[0][0]
-        rules.append(f"- Cap {setup} trades to half-size until the next 5 closed examples are net positive.")
+        rules.append(f"- {setup} trades are currently below the journal win-rate baseline in this sample.")
     if avg_loss_hold is not None and avg_win_hold is not None and avg_loss_hold > avg_win_hold:
-        rules.append("- Add a time stop: if a losing position lasts longer than your average winner, force a review before holding overnight.")
+        rules.append("- Losing trades were held longer than winning trades on average.")
     if worst:
-        rules.append(f"- Before entering a new {worst.get('symbol')} style trade, write the invalidation price and max loss in the journal.")
-    rules.append("- Every closed trade must have setup type, entry reason, exit reason, and one lesson before the next weekly review.")
+        rules.append(f"- {worst.get('symbol')} had the largest realised loss in the analysed sample.")
+    rules.append("- Closed trades with setup type, entry reason, exit reason, and lesson fields produce higher-quality review data.")
 
     return "\n\n".join([
         "## Key Patterns",
@@ -248,7 +248,7 @@ def generate_journal_analysis(trades: list[dict]) -> str:
         "\n".join(mistakes[:4]),
         "## What's Working",
         "\n".join(working[:3]),
-        "## Actionable Rules",
+        "## Observed Process Patterns",
         "\n".join(rules[:4]),
     ])
 
