@@ -1,10 +1,16 @@
 'use client'
 import { useState, useEffect, useCallback, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
-import { authHeaders, createFeedbackReport, getMarketSnapshot, getWatchlists as getCachedWatchlists, isMockMode, type DataHealth } from '@/lib/api'
+import {
+  addToWatchlist as addSymbolToWatchlist,
+  authHeaders,
+  createFeedbackReport,
+  createWatchlist,
+  getWatchlists as getCachedWatchlists,
+  isMockMode,
+} from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
-import DataFreshnessStrip from '@/components/DataFreshnessStrip'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -258,14 +264,12 @@ export default function ScannerPage() {
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
-  const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
   useEffect(() => {
     loadWatchlists()
     loadSavedScreens()
-    getMarketSnapshot().then(snapshot => setDataHealth(snapshot.health)).catch(() => setDataHealth(null))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg: string) {
@@ -456,12 +460,7 @@ export default function ScannerPage() {
       showToast(`${symbol} added to mock watchlist`)
       return
     }
-    const headers = await getAuthHeaders()
-    await fetch(`${API}/api/v1/watchlists/${wlId}/items`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ symbol }),
-    })
+    await addSymbolToWatchlist(wlId, symbol)
     showToast(`${symbol} added`)
   }
 
@@ -473,23 +472,18 @@ export default function ScannerPage() {
       router.push('/watchlist')
       return
     }
-    const headers = await getAuthHeaders()
-    const res = await fetch(`${API}/api/v1/watchlists`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ name: newWlName.trim() }),
-    })
-    const wl = await res.json() as { id: string }
-    const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
-    for (const s of toAdd.slice(0, 50)) {
-      await fetch(`${API}/api/v1/watchlists/${wl.id}/items`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ symbol: s.symbol }),
-      })
+    try {
+      const wl = await createWatchlist(newWlName.trim())
+      const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
+      for (const s of toAdd.slice(0, 50)) {
+        await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
+      }
+      setShowWlModal(false); setNewWlName('')
+      showToast(`"${wl.name}" created`)
+      router.push(`/watchlist?id=${wl.id}`)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Watchlist creation failed')
     }
-    setShowWlModal(false); setNewWlName('')
-    router.push(`/watchlist?id=${wl.id}`)
   }
 
   function setF(key: keyof Filters, val: unknown) {
@@ -573,57 +567,42 @@ export default function ScannerPage() {
     { length: pageSize === 0 ? 1 : Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => (pageSize === 0 ? 1 : pageWindowStart + idx),
   );
-  const presetStrip = (
-    <div className="workspace-card" style={{ padding: 10, marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', paddingBottom: 1 }}>
-        <span className="label" style={{ flexShrink: 0, paddingInline: 4 }}>Presets</span>
-        {PRESETS.map(p => {
-          const active = activePreset === p.id
-          return (
-            <button
-              key={p.id}
-              onClick={() => applyPreset(p)}
-              title={p.description}
-              className={`workspace-chip-button${active ? ' active' : ''}`}
-              style={{
-                flexShrink: 0,
-                minHeight: 34,
-                padding: '7px 12px',
-                borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
-                color: active ? 'var(--accent)' : 'var(--text-secondary)',
-              }}
-            >
-              {p.name}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-
   return (
     <div className="workspace-page">
-      <div className="workspace-card" style={{ padding: '14px 18px', marginBottom: 16 }}>
-        <div className="workspace-toolbar" style={{ minHeight: 'auto', padding: 0, border: 'none' }}>
-          <div>
-            <div className="workspace-card-title">Scanner</div>
-          </div>
-          <div className="workspace-pill-row">
-            <span className="workspace-pill">{activePresetMeta?.name ?? 'Custom view'}</span>
-            <span className="workspace-pill">{hasRun ? `${totalMatches || results.length} matches` : 'Ready to scan'}</span>
-            <DataProvenanceBadge kind="eod" asOf={tradeDate || null} compact />
-          </div>
-        </div>
-      </div>
-      <div style={{ marginBottom: 16 }}>
-        <DataFreshnessStrip health={dataHealth} tradeDate={tradeDate || null} compact />
-      </div>
-      {presetStrip}
-
       <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
 
       {/* ── LEFT PANEL ── */}
       <div className="workspace-card workspace-card-muted" style={{ display: 'flex', flexDirection: 'column' }}>
+
+        {/* Presets */}
+        <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <div className="label" style={{ marginBottom: 8 }}>Presets</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {PRESETS.map(p => {
+              const active = activePreset === p.id
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => applyPreset(p)}
+                  title={p.description}
+                  className={`workspace-chip-button${active ? ' active' : ''}`}
+                  style={{
+                    justifyContent: 'center',
+                    minHeight: 34,
+                    padding: '7px 10px',
+                    borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
+                    color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {p.name}
+                </button>
+              )
+            })}
+          </div>
+          <div className="caption" style={{ marginTop: 8 }}>
+            {activePresetMeta?.description ?? 'Choose a setup style, then tighten filters only when the list is too broad.'}
+          </div>
+        </div>
 
         {/* Saved screens */}
         {savedScreens.length > 0 && (

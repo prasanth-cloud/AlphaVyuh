@@ -823,15 +823,20 @@ function WatchlistContent() {
   }
 
   async function loadWatchlists() {
+    const requestedWatchlistId = searchParams.get("id");
     const liteLists = await getWatchlists({ lite: true });
     setWatchlists(liteLists);
-    if (liteLists.length > 0 && !activeId) setActiveId(liteLists[0].id);
+    if (liteLists.length > 0 && !activeId) {
+      setActiveId(liteLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : liteLists[0].id);
+    }
     setLoading(false);
 
     getWatchlists({ force: true })
       .then((enrichedLists) => {
         setWatchlists(enrichedLists);
-        if (enrichedLists.length > 0 && !activeId) setActiveId(enrichedLists[0].id);
+        if (enrichedLists.length > 0 && !activeId) {
+          setActiveId(enrichedLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : enrichedLists[0].id);
+        }
       })
       .catch(() => {});
   }
@@ -848,6 +853,16 @@ function WatchlistContent() {
   }, []);
 
   const symbolParam = searchParams.get("symbol");
+  const watchlistIdParam = searchParams.get("id");
+  useEffect(() => {
+    if (!watchlistIdParam || watchlists.length === 0) return;
+    const matched = watchlists.find((watchlist) => watchlist.id === watchlistIdParam);
+    if (!matched) return;
+    setActiveId(matched.id);
+    if (matched.items?.[0]?.symbol) setChartSymbol(matched.items[0].symbol);
+    router.replace("/watchlist", { scroll: false });
+  }, [watchlistIdParam, watchlists, router]);
+
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
     let found = false;
@@ -1363,32 +1378,6 @@ function WatchlistContent() {
                 {showDeskControls ? "Hide controls" : "Desk controls"}
               </button>
             </div>
-          </div>
-        )}
-        {activeWl && setupDesk.top.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
-            {setupDesk.top.map(({ item, setup }) => (
-              <button
-                key={item.symbol}
-                onClick={() => setChartSymbol(item.symbol)}
-                style={{
-                  textAlign: "left",
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  background: chartSymbol === item.symbol ? "rgba(77,214,255,0.12)" : "rgba(255,255,255,0.03)",
-                  border: chartSymbol === item.symbol ? "1px solid rgba(77,214,255,0.28)" : "1px solid rgba(255,255,255,0.07)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)" }}>{item.symbol}</span>
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: setupToneColor(setup.tone) }}>{setup.score}</span>
-                </div>
-                <div className="caption" style={{ marginTop: 3 }}>{setup.label}</div>
-                <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginTop: 7 }}>
-                  <div style={{ width: `${setup.score}%`, height: "100%", background: setupToneColor(setup.tone) }} />
-                </div>
-              </button>
-            ))}
           </div>
         )}
       </div>
