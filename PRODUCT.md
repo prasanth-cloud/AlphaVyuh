@@ -4,9 +4,18 @@
 
 ## What AlphaVyuh is
 
-AlphaVyuh is a founder-beta trading workflow desk for NSE/BSE swing and positional traders who want to scan, chart, plan, journal, and review decisions in one connected platform.
+AlphaVyuh is the one-stop trading workflow platform for NSE swing traders. Traders build their own scanners and watchlists, analyze stocks with charts and market data, trade directly through connected brokers, import or sync trades from broker statements, and review their own performance through analytics based on their actual history.
 
-**One-line pitch:** "One connected workspace to scan the market, build a focused watchlist, plan trades on charts, and review every decision in Indian equities."
+**One-line pitch:** "Scan markets, build watchlists, analyze charts, trade through your broker, and review your performance — all in one place."
+
+**The Cardinal Rule:** AlphaVyuh informs, organizes, executes, and analyzes — it does not advise.
+
+## What AlphaVyuh is not
+
+- An advisor
+- A signal service
+- A "tells you what to trade" platform
+- An analyst opinion provider
 
 ## Who it's for
 
@@ -38,8 +47,8 @@ The product's entire thesis is: **these 10 steps must feel like one continuous f
 
 Everything else is table stakes. These are what get us talked about:
 
-1. **Connected workflow context** — a symbol should carry scan reason, watchlist state, chart notes, broker context, and journal history.
-2. **Journal review with persistent memory** — review should identify repeated mistakes across weeks, not just summarize one trade.
+1. **Connected workflow context** — a symbol carries scan reason, watchlist state, chart notes, broker context, and journal history.
+2. **Journal review with persistent memory** — review identifies repeated mistakes across weeks, not just one-trade summaries.
 3. **Market breadth analytics** — sector rotation, % above EMAs, A/D ratios. The macro view most retail platforms skip.
 
 **Cut for launch:** Telegram alerts (can add post-launch), US markets, backtesting, options.
@@ -72,11 +81,37 @@ These rules apply to EVERY surface — landing, app, emails, onboarding.
 - **Numbers/data:** JetBrains Mono with tabular-nums. Always.
 
 ### Voice
+- **Informational, not advisory.** "Market breadth is weak — only 38% above EMA 200." Never "trade half size."
 - **Confident, not salesy.** "India's Trading OS." not "The best trading platform ever!"
 - **Technical, not dumbed-down.** Uses VCP, Stage 2, RS without explaining — audience knows.
-- **Short sentences.** "Scan for stocks, add to watchlist, chart them, log your trade." Not paragraphs.
-- **Specific but honest numbers over adjectives.** Use measured data only; avoid fake user counts, SLA claims, or scan-speed claims before production telemetry exists.
+- **Short sentences.** "Scan, organize, execute, review." Not paragraphs.
+- **Specific numbers over adjectives.** "120ms scan time" not "fast scanning."
 - **Lowercase product terms:** "scanner", "watchlist", "journal". Not "Scanner", not "SCANNER".
+- **Never use these phrases anywhere:**
+  - "Recommended action"
+  - "Best opportunity"
+  - "We suggest"
+  - "You should"
+  - "Trade size today"
+  - "Buy now" / "Sell now"
+  - Any verb in imperative mood telling the user to take a position
+
+## Page Roles
+
+| Page | Role | Forbidden behavior |
+|------|------|-------------------|
+| Dashboard | Market context + workflow launcher | No "do this" copy. No prescriptions. |
+| Scanner | User-controlled discovery engine | No preset called "Recommended". |
+| Watchlist | User-owned analysis + execution workspace | No "ratings" on stocks. |
+| Chart | Stock analysis + broker order entry initiated by user | No buy/sell signals overlay. |
+| Journal | Performance analysis based on user's own trades | OK to give feedback on past trades. |
+| Trade Report Upload | First-class import for users who trade elsewhere | No claims based on future positions. |
+
+## Cardinal Rule Test
+
+Every PR must answer: "Could a SEBI regulator interpret any new copy as advice?"
+
+If yes, rewrite before merge. AlphaVyuh informs, organizes, executes, and analyzes — it does not advise.
 
 ### Layout rhythm
 - Generous negative space. If it feels too sparse, it's probably right.
@@ -125,8 +160,8 @@ Annual = 30% off monthly.
 **Still beta-risky:**
 - Market data licensing for production realtime/delayed display is not finalized.
 - Broker order flow needs small-group verification before wider launch.
-- AI journal review memory should be hardened before paid public positioning.
-- Payment mode and pricing should stay founder-beta until Razorpay and data costs are final.
+- AI journal review memory needs hardening before paid public positioning.
+- Payment mode and pricing stay founder-beta until Razorpay and data costs are final.
 
 ## Launch target
 

@@ -5,6 +5,20 @@
 ## Autonomy level: 2
 Commit locally. User merges and pushes. User reviews before deploy.
 
+## The Cardinal Rule (READ FIRST)
+
+AlphaVyuh **informs, organizes, executes, analyzes — does not advise.**
+
+Before you commit anything, run this test on every line of copy you wrote or changed:
+> Could a SEBI regulator interpret this as investment advice?
+
+If yes — rewrite into informational voice.
+- "Trade half size" → "Breadth is weak — 38% above EMA 200"
+- "Best setups today" → "Strong setups: 14 stocks RSI 60-70 above EMA 50"
+- "Recommended" → never. Use "All", "Saved", "Custom", or specific descriptions.
+
+This rule overrides everything else. A page that ships with advisory copy is a P0 bug.
+
 ## You own (allowed to edit)
 - `frontend/app/(app)/dashboard/**`
 - `frontend/app/(app)/scanner/**`

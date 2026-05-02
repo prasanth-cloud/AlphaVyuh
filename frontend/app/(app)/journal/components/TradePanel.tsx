@@ -325,7 +325,7 @@ export function TradePanel({
             ) : selectedEntry.status === "closed" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.6 }}>
-                  This trade is closed but has not been reviewed yet. Generate a per-trade lesson now, and the full journal review will become more useful as closed trades accumulate.
+                  This trade is closed but has not been reviewed yet. A per-trade lesson adds context to journal-wide analytics as closed trades accumulate.
                 </div>
                 <button onClick={() => onGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
                   style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>

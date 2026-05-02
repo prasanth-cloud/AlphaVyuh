@@ -57,7 +57,7 @@ export function JournalAiInsights({
       <Card padding="lg">
         <h2 className="heading-card" style={{ marginBottom: 4 }}>Review loop</h2>
         <div className="body-secondary" style={{ marginBottom: 16 }}>
-          AlphaVyuh should remove the friction after execution: chart order to journal, closed-trade review, then pattern analysis.
+          AlphaVyuh connects execution records, closed-trade review, and pattern analysis from your own history.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}>
           {[
@@ -177,7 +177,7 @@ export function JournalAiInsights({
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
             <h2 className="heading-card" style={{ marginBottom: 4 }}>Trade review</h2>
-            <div className="body-secondary">Run a journal-wide review to surface repeat mistakes, strength areas, and process rules worth adding to your playbook.</div>
+            <div className="body-secondary">Run a journal-wide review to surface repeat mistakes, strength areas, and observed patterns from closed trades.</div>
             <div className="caption" style={{ marginTop: 6 }}>
               Generated inside AlphaVyuh from your closed trades and journal notes; use it as a review aid, not a trade signal.
             </div>
@@ -234,8 +234,8 @@ export function JournalAiInsights({
           <div style={{ textAlign: "center", padding: "32px 0" }}>
             <div className="body-secondary">
               {closedTrades >= 3
-                ? "Your journal is ready for review. AlphaVyuh will analyse only your recorded closed trades and notes."
-                : "Close a few more trades to unlock journal-wide review."}
+                ? "Journal-wide review is available. AlphaVyuh will analyse only recorded closed trades and notes."
+                : "Journal-wide review unlocks at 3 closed trades."}
             </div>
             <div className="caption" style={{ marginTop: 4 }}>Requires at least 3 closed trades.</div>
           </div>

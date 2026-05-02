@@ -246,6 +246,7 @@ function AccountMenuButton() {
         }}>
           {[
             { label: 'Settings', href: '/settings' },
+            { label: 'Upload trade report', href: '/upload' },
             { label: 'Billing',  href: '/settings/billing' },
             { label: 'Broker',   href: '/settings/broker' },
           ].map(item => (

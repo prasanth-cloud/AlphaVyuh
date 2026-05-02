@@ -53,39 +53,39 @@ interface Watchlist { id: string; name: string }
 const PRESETS = [
   {
     id: 'leaders',
-    name: 'Leaders',
-    description: 'Broad, market-ready shortlist of stronger names above key averages.',
+    name: 'EMA 20/50 + RSI 50-82',
+    description: 'Filter for stocks above EMA 20 and EMA 50 with RSI between 50 and 82.',
     filters: { rsi_min: 50, rsi_max: 82, volume_ratio_min: 1.05, price_vs_ema20: 'above', price_vs_ema50: 'above' },
   },
   {
     id: 'momentum',
-    name: 'Momentum',
-    description: 'Continuation names with improving participation.',
-    filters: { rsi_min: 55, rsi_max: 80, volume_ratio_min: 1.2, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
+    name: 'RSI 60-70 + Vol 2x',
+    description: 'Filter for RSI 60-70 with above-average volume and price above EMA 20/50.',
+    filters: { rsi_min: 60, rsi_max: 70, volume_ratio_min: 2.0, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
   },
   {
     id: 'breakout',
-    name: 'Breakout',
-    description: 'Higher-energy setups pushing toward fresh highs.',
+    name: '20-day high + Vol surge',
+    description: 'Filter for stocks near 52-week highs with volume ratio above 1.5.',
     filters: { volume_ratio_min: 1.5, pct_change_min: 1.0, week_52_high_pct_max: 12.0, price_vs_ema20: 'above' },
   },
   {
     id: 'new_highs',
     name: '52W Highs',
-    description: 'Names already proving absolute strength.',
+    description: 'Filter for stocks making a new 52-week high today.',
     filters: { new_52w_high: true },
   },
   {
     id: 'golden_cross',
     name: 'Golden Cross',
-    description: 'Trend transition ideas with medium-term structure support.',
+    description: 'Filter for EMA 20 above EMA 50 with price above EMA 200.',
     filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above', volume_ratio_min: 1.0 },
   },
   {
     id: 'oversold',
-    name: 'Oversold',
-    description: 'Recovery candidates still above the long-term trend.',
-    filters: { rsi_min: 20, rsi_max: 35, price_vs_ema200: 'above' },
+    name: 'RSI below 30',
+    description: 'Filter for RSI below 30 while price remains above EMA 200.',
+    filters: { rsi_min: 20, rsi_max: 30, price_vs_ema200: 'above' },
   },
 ] as const
 
@@ -309,8 +309,8 @@ export default function ScannerPage() {
   async function loadSavedScreens() {
     if (isMockMode) {
       setSavedScreens([
-        { id: 'mock-leaders', name: 'Leaders', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
-        { id: 'mock-breakout', name: 'Breakout Watch', filters: PRESETS[2].filters, created_at: '2026-04-24T09:20:00Z' },
+        { id: 'mock-leaders', name: 'EMA 20/50 + RSI', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
+        { id: 'mock-breakout', name: '20-day high + Vol surge', filters: PRESETS[2].filters, created_at: '2026-04-24T09:20:00Z' },
       ])
       return
     }
@@ -600,7 +600,7 @@ export default function ScannerPage() {
             })}
           </div>
           <div className="caption" style={{ marginTop: 8 }}>
-            {activePresetMeta?.description ?? 'Choose a setup style, then tighten filters only when the list is too broad.'}
+            {activePresetMeta?.description ?? 'Choose a saved filter, then adjust the fields for your scan.'}
           </div>
         </div>
 
@@ -651,14 +651,14 @@ export default function ScannerPage() {
         <div style={{ flex: filtersOpen ? 1 : 0, overflowY: 'auto', display: filtersOpen ? 'block' : 'none' }}>
           {filterTab === 'technical' ? (
             <>
-              <Section title="Price & Change" open>
+              <Section title="Price and change" open>
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
                 {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
               </Section>
-              <Section title="Volume">
+              <Section title="Liquidity">
                 {rangeRow('Vol ratio (× avg)', 'volume_ratio_min', 'volume_ratio_max')}
               </Section>
-              <Section title="Moving Averages">
+              <Section title="Trend quality">
                 {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
@@ -666,12 +666,12 @@ export default function ScannerPage() {
                 {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
                 {toggleRow('All EMAs bullish (20>50>200)', 'all_emas_bullish')}
               </Section>
-              <Section title="Momentum">
+              <Section title="Relative strength">
                 {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
                 {rangeRow('ADX 14', 'adx_min', 'adx_max')}
                 {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: 'Positive' }, { value: 'negative', label: 'Negative' }])}
               </Section>
-              <Section title="Bollinger Bands">
+              <Section title="Setup structure">
                 {segRow('Position', 'bb_position', [
                   { value: 'above_upper', label: 'Above upper' },
                   { value: 'below_lower', label: 'Below lower' },
@@ -681,23 +681,23 @@ export default function ScannerPage() {
                 ])}
                 {rangeRow('BB Width', 'bb_width_min', 'bb_width_max')}
               </Section>
-              <Section title="Volatility">
+              <Section title="Volatility and risk">
                 {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
               </Section>
-              <Section title="52-Week Range">
+              <Section title="52-week range">
                 {numRow('Max % below 52W high', 'week_52_high_pct_max', 'e.g. 25')}
                 {numRow('Min % above 52W low', 'w52l_pct_min', 'e.g. 30')}
                 {numRow('RS Score ≥', 'rs_score_min', 'e.g. 70')}
                 {toggleRow('New 52W high today', 'new_52w_high')}
                 {toggleRow('New 52W low today', 'new_52w_low')}
               </Section>
-              <Section title="Candle Patterns">
+              <Section title="Candle patterns">
                 {toggleRow('Inside bar', 'is_inside_bar')}
               </Section>
             </>
           ) : (
             <>
-              <Section title="Market Cap" open>
+              <Section title="Market cap" open>
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: -4, marginBottom: 6, lineHeight: 1.5 }}>
                   Large: 20000+  ·  Mid: 5000–20000  ·  Small: &lt;5000
@@ -708,7 +708,7 @@ export default function ScannerPage() {
                 {rangeRow('P/B ratio', 'pb_min', 'pb_max')}
                 {rangeRow('EPS (₹)', 'eps_min', 'eps_max')}
               </Section>
-              <Section title="Returns & Efficiency" open>
+              <Section title="Returns and efficiency" open>
                 {numRow('ROE ≥ %', 'roe_min', 'e.g. 15')}
                 {numRow('ROCE ≥ %', 'roce_min', 'e.g. 15')}
               </Section>
@@ -781,7 +781,7 @@ export default function ScannerPage() {
                   ))}
                 </select>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
-                  + Watchlist
+                  Add selected to watchlist
                 </Button>
               </div>
             </>
@@ -789,7 +789,7 @@ export default function ScannerPage() {
             <div>
               <div className="workspace-card-title">Scanner queue</div>
               <div className="workspace-card-copy">
-                {loading ? 'Scanning…' : 'Starting with a broad leaders scan so you land on a usable shortlist.'}
+                {loading ? 'Scanning…' : 'Run your first scan or start with a saved filter.'}
               </div>
             </div>
           )}
@@ -815,9 +815,9 @@ export default function ScannerPage() {
         {!loading && !hasRun && !error && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
-              title="Loading a practical starting list"
-              description="The scanner opens with a broader leaders preset first, then you can tighten filters only when you need a narrower setup list."
-              action={{ label: 'Run leaders preset', onClick: () => applyPreset(PRESETS[0]) }}
+              title="Run your first scan"
+              description="Choose a saved filter or set your own price, volume, trend, and RS conditions."
+              action={{ label: 'Run EMA 20/50 + RSI filter', onClick: () => applyPreset(PRESETS[0]) }}
             />
           </div>
         )}
