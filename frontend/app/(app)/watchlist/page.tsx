@@ -823,10 +823,17 @@ function WatchlistContent() {
   }
 
   async function loadWatchlists() {
-    const wls = await getWatchlists();
-    setWatchlists(wls);
-    if (wls.length > 0 && !activeId) setActiveId(wls[0].id);
+    const liteLists = await getWatchlists({ lite: true });
+    setWatchlists(liteLists);
+    if (liteLists.length > 0 && !activeId) setActiveId(liteLists[0].id);
     setLoading(false);
+
+    getWatchlists({ force: true })
+      .then((enrichedLists) => {
+        setWatchlists(enrichedLists);
+        if (enrichedLists.length > 0 && !activeId) setActiveId(enrichedLists[0].id);
+      })
+      .catch(() => {});
   }
 
   useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps

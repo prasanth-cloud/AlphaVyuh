@@ -338,12 +338,17 @@ export async function deleteScreen(id: string): Promise<void> {
   await fetch(`${API}/api/v1/scanner/screens/${id}`, { method: "DELETE", headers });
 }
 
-export async function getWatchlists(): Promise<Watchlist[]> {
+export async function getWatchlists(options?: { lite?: boolean; force?: boolean }): Promise<Watchlist[]> {
   if (shouldUseMockFallback()) return mockWatchlists();
-  return cachedClientRequest("watchlists", 30_000, async () => {
+  const cacheKey = options?.lite ? "watchlists:lite" : "watchlists";
+  if (options?.force) {
+    invalidateClientCache([cacheKey]);
+  }
+  return cachedClientRequest(cacheKey, options?.lite ? 10_000 : 30_000, async () => {
     try {
       const headers = await authHeaders();
-      const res = await fetch(`${API}/api/v1/watchlists`, { headers });
+      const qs = options?.lite ? "?lite=true" : "";
+      const res = await fetch(`${API}/api/v1/watchlists${qs}`, { headers });
       if (!res.ok) return shouldUseMockFallback() ? mockWatchlists() : [];
       const data = await res.json();
       return data.watchlists ?? [];

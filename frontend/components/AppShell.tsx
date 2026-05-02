@@ -17,12 +17,6 @@ const IDLE_PREFETCH_ROUTES = [
   '/dashboard',
   '/scanner',
   '/watchlist',
-  '/charts/RELIANCE',
-  '/journal',
-  '/alerts',
-  '/data',
-  '/settings',
-  '/settings/broker',
 ]
 
 type SymbolResult = { symbol: string; company_name: string; sector: string }
@@ -40,16 +34,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           router.prefetch(href)
         }
       }
-      warmCoreMarketData()
     }
+
+    const warmData = () => warmCoreMarketData()
 
     if ('requestIdleCallback' in window) {
-      const id = window.requestIdleCallback(prefetchCoreRoutes, { timeout: 1500 })
-      return () => window.cancelIdleCallback(id)
+      const routeId = window.requestIdleCallback(prefetchCoreRoutes, { timeout: 3000 })
+      const dataId = window.requestIdleCallback(warmData, { timeout: 6000 })
+      return () => {
+        window.cancelIdleCallback(routeId)
+        window.cancelIdleCallback(dataId)
+      }
     }
 
-    const id = globalThis.setTimeout(prefetchCoreRoutes, 600)
-    return () => globalThis.clearTimeout(id)
+    const routeId = globalThis.setTimeout(prefetchCoreRoutes, 1200)
+    const dataId = globalThis.setTimeout(warmData, 4500)
+    return () => {
+      globalThis.clearTimeout(routeId)
+      globalThis.clearTimeout(dataId)
+    }
   }, [pathname, router])
 
   if (pathname.startsWith('/onboarding')) return <>{children}</>
