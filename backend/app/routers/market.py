@@ -15,7 +15,7 @@ from starlette.responses import StreamingResponse
 
 from app.middleware.auth import get_current_user_id
 from app.services.kite_stream import KiteStreamError, kite_live_ticker
-from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
+from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, _kite_access_token, _kite_api_key, get_market_data_provider
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
@@ -24,6 +24,21 @@ router = APIRouter(prefix="/api/v1/market", tags=["market"])
 OVERVIEW_CACHE_TTL_SECONDS = 60
 _overview_cache: dict | None = None
 _overview_cache_expires_at = 0.0
+
+SECTOR_INDEXES = [
+    ("NIFTY IT", "IT"),
+    ("NIFTY BANK", "Banks"),
+    ("NIFTY PHARMA", "Pharma"),
+    ("NIFTY AUTO", "Auto"),
+    ("NIFTY FMCG", "FMCG"),
+    ("NIFTY METAL", "Metal"),
+    ("NIFTY REALTY", "Realty"),
+    ("NIFTY ENERGY", "Energy"),
+    ("NIFTY PSU BANK", "PSU banks"),
+    ("NIFTY PVT BANK", "Private banks"),
+    ("NIFTY FIN SERVICE", "Financial services"),
+    ("NIFTY OIL AND GAS", "Oil and gas"),
+]
 
 
 def _sse(event: str, payload: dict) -> str:
@@ -59,6 +74,8 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
         "market_phase": "Pending",
         "market_phase_desc": "Market breadth will appear after the latest complete trading day is available.",
         "sector_breadth": [],
+        "sector_breadth_basis": "latest_complete_session",
+        "sector_breadth_source": "daily_ohlcv",
         "top_sectors": [],
         "top_gainers": [],
         "top_losers": [],
@@ -104,6 +121,63 @@ def _index_quotes() -> tuple[list[dict], str, bool]:
                 "error": str(exc),
             })
     return quotes, provider.name, live
+
+
+def _sector_index_quotes() -> tuple[list[dict], str, bool]:
+    provider = get_market_data_provider()
+    quotes: list[dict] = []
+    live = True
+    for symbol, label in SECTOR_INDEXES:
+        try:
+            q = provider.live_quote(symbol, MarketIdentity(market="NSE", currency="INR"))
+            quotes.append({
+                "symbol": symbol,
+                "label": label,
+                "close": _finite_float(q.get("close")),
+                "pct_change": _finite_float(q.get("pct_change")),
+                "prev_close": _finite_float(q.get("prev_close")),
+                "source": q.get("source") or provider.name,
+            })
+        except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
+            live = False
+            quotes.append({
+                "symbol": symbol,
+                "label": label,
+                "close": None,
+                "pct_change": None,
+                "prev_close": None,
+                "source": provider.name,
+                "error": str(exc),
+            })
+    return quotes, provider.name, live
+
+
+def _kite_market_status() -> dict:
+    api_key = _kite_api_key()
+    access_token_configured = bool(os.getenv("KITE_ACCESS_TOKEN", "").strip())
+    token_valid = False
+    profile_error = None
+    if api_key and access_token_configured:
+        try:
+            from app.brokers.kite import api as kite_api
+            profile = kite_api.get_profile(_kite_access_token(), api_key=api_key)
+            token_valid = bool(profile.get("user_id"))
+        except Exception as exc:
+            profile_error = str(exc)
+
+    stream_status = kite_live_ticker.status()
+    return {
+        "provider": "kite",
+        "api_key_configured": bool(api_key),
+        "access_token_configured": access_token_configured,
+        "access_token_valid": token_valid,
+        "token_refresh": "daily_manual",
+        "stream_connected": bool(stream_status.get("connected")),
+        "stream_connecting": bool(stream_status.get("connecting")),
+        "subscriber_count": stream_status.get("subscriber_count", 0),
+        "subscribed_symbols": stream_status.get("subscribed_symbols", []),
+        "last_error": stream_status.get("last_error") or profile_error,
+    }
 
 
 @router.get("/overview")
@@ -295,6 +369,8 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "market_phase": phase,
         "market_phase_desc": phase_desc,
         "sector_breadth": sector_breadth[:12],
+        "sector_breadth_basis": "latest_complete_session",
+        "sector_breadth_source": "daily_ohlcv",
         "top_sectors": sector_breadth[:5],
         "top_gainers": [_mover(r) for r in top_gainers],
         "top_losers":  [_mover(r) for r in top_losers],
@@ -313,7 +389,19 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
 @router.get("/live/status")
 async def live_market_status(user_id: str = Depends(get_current_user_id)):
-    return kite_live_ticker.status()
+    return _kite_market_status()
+
+
+@router.get("/live/sectors")
+async def live_sector_indices(user_id: str = Depends(get_current_user_id)):
+    sectors, source, is_live = _sector_index_quotes()
+    return {
+        "basis": "live_sector_indices",
+        "source": source,
+        "is_live": is_live,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "sectors": sectors,
+    }
 
 
 @router.get("/live/stream")

@@ -1,7 +1,44 @@
 from fastapi import APIRouter
+from app.brokers.kite import api as kite_api
+from app.services.kite_stream import kite_live_ticker
+from app.services.market_data import _kite_access_token, _kite_api_key
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/data", tags=["data-health"])
+
+
+def _kite_market_status() -> dict:
+    api_key = _kite_api_key()
+    access_token_configured = False
+    token_valid = False
+    profile_error = None
+    try:
+        access_token = _kite_access_token()
+        access_token_configured = True
+    except Exception as exc:
+        access_token = ""
+        profile_error = str(exc)
+
+    if api_key and access_token:
+        try:
+            profile = kite_api.get_profile(access_token, api_key=api_key)
+            token_valid = bool(profile.get("user_id"))
+        except Exception as exc:
+            profile_error = str(exc)
+
+    stream_status = kite_live_ticker.status()
+    return {
+        "provider": "kite",
+        "api_key_configured": bool(api_key),
+        "access_token_configured": access_token_configured,
+        "access_token_valid": token_valid,
+        "token_refresh": "daily_manual",
+        "stream_connected": bool(stream_status.get("connected")),
+        "stream_connecting": bool(stream_status.get("connecting")),
+        "subscriber_count": stream_status.get("subscriber_count", 0),
+        "subscribed_symbols": stream_status.get("subscribed_symbols", []),
+        "last_error": stream_status.get("last_error") or profile_error,
+    }
 
 
 @router.get("/health")
@@ -56,6 +93,7 @@ async def data_health():
             "id": h.get("last_run_id"),
             "errors": last_run_errors,
         },
+        "live_market": _kite_market_status(),
     }
 
 

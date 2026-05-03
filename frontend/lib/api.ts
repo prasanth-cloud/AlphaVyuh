@@ -598,6 +598,53 @@ export function streamLiveQuotes(
   };
 }
 
+export type LiveMarketStatus = {
+  provider: string;
+  api_key_configured: boolean;
+  access_token_configured: boolean;
+  access_token_valid: boolean;
+  token_refresh: "daily_manual" | string;
+  stream_connected: boolean;
+  stream_connecting: boolean;
+  subscriber_count: number;
+  subscribed_symbols: string[];
+  last_error: string | null;
+};
+
+export type LiveSectorIndex = {
+  symbol: string;
+  label: string;
+  close: number | null;
+  pct_change: number | null;
+  prev_close: number | null;
+  source: string;
+  error?: string;
+};
+
+export async function getLiveMarketStatus(): Promise<LiveMarketStatus | null> {
+  if (shouldUseMockFallback()) return null;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/market/live/status`, { headers });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function getLiveSectorIndices(): Promise<{ basis: string; source: string; is_live: boolean; as_of: string; sectors: LiveSectorIndex[] } | null> {
+  if (shouldUseMockFallback()) return null;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/market/live/sectors`, { headers });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 // ── Charts ────────────────────────────────────────────────────────────────────
 
 export type CandleBar = {
@@ -1531,6 +1578,7 @@ export type DataHealth = {
     id: string | null;
     errors: number | null;
   };
+  live_market?: LiveMarketStatus | null;
 };
 
 let dataHealthCache: { value: DataHealth | null; expiresAt: number } | null = null;
@@ -1877,6 +1925,8 @@ export interface MarketOverview {
   top_sectors?: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
   market_data_source?: string;
   is_live?: boolean;
+  sector_breadth_basis?: "latest_complete_session" | string;
+  sector_breadth_source?: string;
   sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
   top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
@@ -1921,6 +1971,8 @@ function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined
     top_sectors: Array.isArray(data.top_sectors) ? data.top_sectors : [],
     market_data_source: data.market_data_source,
     is_live: Boolean(data.is_live),
+    sector_breadth_basis: data.sector_breadth_basis ?? "latest_complete_session",
+    sector_breadth_source: data.sector_breadth_source ?? "daily_ohlcv",
     sector_breadth: Array.isArray(data.sector_breadth) ? data.sector_breadth : [],
     top_gainers: Array.isArray(data.top_gainers) ? data.top_gainers : [],
     top_losers: Array.isArray(data.top_losers) ? data.top_losers : [],
