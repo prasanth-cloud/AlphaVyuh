@@ -37,6 +37,7 @@ import {
   deleteDrawing,
   placeOrder,
   getQuoteLive,
+  streamLiveQuotes,
   isMockMode,
   liveQuotePollingEnabled,
   type PlaceOrderRequest,
@@ -1357,8 +1358,38 @@ function WatchlistContent() {
     if (!liveQuotePollingEnabled) return;
     if (!activeId || !pageItems.length) return;
     let cancelled = false;
+    let streamConnected = false;
+    const visibleSymbols = pageItems.map((item) => item.symbol);
+
+    function applyLiveUpdates(updates: Array<{ symbol: string; close: number | null; pct_change: number | null }>) {
+      const liveMap = new Map(updates.filter((u) => u.close != null).map((u) => [u.symbol, u]));
+      if (!liveMap.size) return;
+      setWatchlists(prev => prev.map(w => (
+        w.id !== activeId
+          ? w
+          : {
+              ...w,
+              items: w.items.map(item => {
+                const live = liveMap.get(item.symbol);
+                return live ? { ...item, close: live.close ?? item.close, pct_change: live.pct_change } : item;
+              }),
+            }
+      )));
+    }
+
+    const stopStream = streamLiveQuotes(
+      visibleSymbols,
+      (ticks) => {
+        if (cancelled) return;
+        applyLiveUpdates(ticks);
+      },
+      (status) => {
+        streamConnected = status.connected;
+      }
+    );
 
     async function refreshLiveQuotes() {
+      if (streamConnected) return;
       const updates = await Promise.all(
         pageItems.map(async (item) => {
           const live = await getQuoteLive(item.symbol).catch(() => null);
@@ -1371,24 +1402,14 @@ function WatchlistContent() {
       );
 
       if (cancelled) return;
-      const liveMap = new Map(updates.filter(Boolean).map((u) => [u!.symbol, u!]));
-      setWatchlists(prev => prev.map(w => (
-        w.id !== activeId
-          ? w
-          : {
-              ...w,
-              items: w.items.map(item => {
-                const live = liveMap.get(item.symbol);
-                return live ? { ...item, close: live.close, pct_change: live.pct_change } : item;
-              }),
-            }
-      )));
+      applyLiveUpdates(updates.filter((update): update is { symbol: string; close: number | null; pct_change: number | null } => Boolean(update)));
     }
 
     refreshLiveQuotes();
     const id = window.setInterval(refreshLiveQuotes, 60_000);
     return () => {
       cancelled = true;
+      stopStream();
       window.clearInterval(id);
     };
   // We intentionally refresh only the visible five-symbol queue page.
