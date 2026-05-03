@@ -19,30 +19,21 @@ Indian retail swing traders, specifically:
 
 Not for: day traders, F&O-only traders, US market traders (until Elite tier launches).
 
-## The complete user journey (must work end-to-end)
+## Private beta focus
 
-1. **Lands on alphavyuh.com** — sees "India's Trading OS", one-page pitch
-2. **Signs up** — email + password, no email confirmation needed, goes straight to app
-3. **Onboarding** — first-time banner explains: Scan → Watchlist → Chart → Trade → Review
-4. **Scanner** — picks a preset (VCP, Breakout, Stage 2), runs scan, sees 100+ stocks
-5. **Adds to watchlist** — one click from scanner result
-6. **Charts** — hovers stock on watchlist, full chart appears with EMAs, RSI, volume
-7. **Places order** — if broker connected, one-click order from chart itself
-8. **Auto-journaled** — trade appears in journal automatically
-9. **AI review** — weekly, Claude analyzes trades, surfaces mistakes, remembers across weeks
-10. **Learns, improves** — next week, fewer mistakes of the same kind
+The private beta should feel simple: open the app, find useful market context, save symbols, inspect charts, and keep a journal. Avoid adding visible process layers unless they reduce clicks or confusion.
 
-The product's entire thesis is: **these 10 steps must feel like one continuous flow.** Currently many of them break at the seams.
+Everything else is secondary until the core pages feel obvious and stable.
 
-## Three launch-critical differentiators
+## Launch-critical differentiators
 
 Everything else is table stakes. These are what get us talked about:
 
-1. **Connected workflow context** — a symbol should carry scan reason, watchlist state, chart notes, broker context, and journal history.
-2. **Journal review with persistent memory** — review should identify repeated mistakes across weeks, not just summarize one trade.
+1. **Connected workflow context** — a symbol carries scan reason, watchlist state, chart notes, broker context, and journal history.
+2. **Journal review with persistent memory** — review identifies repeated patterns across weeks, not just one trade.
 3. **Market breadth analytics** — sector rotation, % above EMAs, A/D ratios. The macro view most retail platforms skip.
 
-**Cut for launch:** Telegram alerts (can add post-launch), US markets, backtesting, options.
+**Defer until the core workflow is stable:** Telegram alerts, broker order execution, trade report OCR, US markets, backtesting, options.
 
 ## Visual identity (established by landing page)
 
@@ -107,8 +98,8 @@ These rules apply to EVERY surface — landing, app, emails, onboarding.
 | Plan | Price/mo | Key limits |
 |------|----------|-----------|
 | Free | ₹0 | 50 scanner results, 5 saved screens, 1 watchlist × 20 stocks, 3mo journal history |
-| Pro | ₹1,999 | 500 results, unlimited screens, 10 watchlists × 200 stocks, unlimited journal, broker integration, weekly AI review |
-| Elite | ₹4,999 | Everything in Pro + US markets, AI deep analysis per trade, backtest scanners, priority support |
+| Pro | ₹1,999 | 500 results, unlimited screens, 10 watchlists × 200 stocks, unlimited journal, broker beta access, journal review |
+| Elite | ₹4,999 | Everything in Pro + US markets, deeper journal analytics, backtest scanners, priority support |
 
 Annual = 30% off monthly.
 
@@ -125,7 +116,7 @@ Annual = 30% off monthly.
 **Still beta-risky:**
 - Market data licensing for production realtime/delayed display is not finalized.
 - Broker order flow needs small-group verification before wider launch.
-- AI journal review memory should be hardened before paid public positioning.
+- Journal review memory needs hardening before paid public positioning.
 - Payment mode and pricing should stay founder-beta until Razorpay and data costs are final.
 
 ## Launch target

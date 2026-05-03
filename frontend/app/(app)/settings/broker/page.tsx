@@ -9,6 +9,7 @@ import {
   getZerodhaLoginUrl,
   importZerodhaTrades,
 } from "@/lib/api";
+import { isTradePlanValid, useWorkflowState } from "@/lib/workflow";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -55,6 +56,7 @@ function StatusDot({ tone }: { tone: "live" | "simulated" | "warning" }) {
 
 function BrokerSettingsContent() {
   const searchParams = useSearchParams();
+  const { state: workflowState } = useWorkflowState();
   const [state, setState] = useState<BrokerState | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"connect" | "import" | null>(null);
@@ -127,6 +129,7 @@ function BrokerSettingsContent() {
     { label: "Session", value: state?.connected ? "Live" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
     { label: "Expiry", value: state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
   ];
+  const validPlanCount = Object.values(workflowState.plans).filter(isTradePlanValid).length;
 
   if (loading) {
     return (
@@ -223,6 +226,15 @@ function BrokerSettingsContent() {
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
               <ShieldCheck size={17} style={{ color: "var(--accent)" }} />
               <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>Production broker rules</div>
+            </div>
+            <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 12, background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+              <div className="text-[11px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 5 }}>Execution readiness</div>
+              <div className="text-[13px] font-semibold" style={{ color: validPlanCount > 0 ? "var(--gain)" : "var(--warn)" }}>
+                {validPlanCount > 0 ? `${validPlanCount} valid plan${validPlanCount === 1 ? "" : "s"} can create order drafts` : "No valid trade plan yet"}
+              </div>
+              <div className="text-[12px] mt-1" style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                Broker routing stays downstream of planning: entry, stop, target, size, thesis, and invalidation are required before execution.
+              </div>
             </div>
             <div style={{ display: "grid", gap: 9 }}>
               {[

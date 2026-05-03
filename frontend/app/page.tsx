@@ -5,7 +5,6 @@ import Link from "next/link";
 export default function LandingPage() {
   const scanRowsRef = useRef<HTMLDivElement>(null);
   const tapeRef = useRef<HTMLDivElement>(null);
-  const twRef = useRef<HTMLSpanElement>(null);
   const chartLineRef = useRef<SVGPathElement>(null);
   const chartAreaRef = useRef<SVGPathElement>(null);
   const chartRsRef = useRef<SVGPathElement>(null);
@@ -39,27 +38,6 @@ export default function LandingPage() {
     const nav = document.getElementById("lp-nav");
     const onScroll = () => nav?.classList.toggle("lp-scrolled", window.scrollY > 40);
     window.addEventListener("scroll", onScroll, { passive: true });
-
-    // Typewriter
-    const words = ["Trade", "Scan", "Chart", "Analyze", "Journal", "Execute"];
-    let wi = 0, ci = 0, deleting = false;
-    const tw = twRef.current;
-    let twTimer: ReturnType<typeof setTimeout>;
-    function type() {
-      if (!tw) return;
-      const w = words[wi];
-      if (!deleting) {
-        ci++;
-        tw.textContent = w.slice(0, ci);
-        if (ci === w.length) { twTimer = setTimeout(() => { deleting = true; twTimer = setTimeout(type, 80); }, 2200); return; }
-      } else {
-        ci--;
-        tw.textContent = w.slice(0, ci);
-        if (ci === 0) { deleting = false; wi = (wi + 1) % words.length; }
-      }
-      twTimer = setTimeout(type, deleting ? 55 : 90);
-    }
-    twTimer = setTimeout(type, 600);
 
     // Scan rows
     const scanData = [
@@ -251,7 +229,6 @@ export default function LandingPage() {
       document.removeEventListener("mousemove", onMove);
       window.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(raf);
-      clearTimeout(twTimer);
       clearInterval(rowInterval);
       clearInterval(afInterval);
       io.disconnect();
@@ -301,12 +278,9 @@ export default function LandingPage() {
             </div>
             <h1 className="lp-h1">
               <span className="lp-h1-s1">India&apos;s Trading OS.</span>
-              <span className="lp-h1-s2">
-                <span className="lp-tw-wrap"><span ref={twRef}></span><span className="lp-caret"></span></span>
-                <span className="lp-h1-muted">with conviction.</span>
-              </span>
+              <span className="lp-h1-s2"><span className="lp-h1-muted">A simpler desk for Indian equities.</span></span>
             </h1>
-            <p className="lp-sub">Scan NSE/BSE setups, build watchlists, read charts, set alerts, place broker-ready trades, and review your journal in one connected platform.</p>
+            <p className="lp-sub">Market context, scanners, charts, watchlists, and journal notes in one clean workspace.</p>
             <div className="lp-ctas">
               <Link href="/signup" className="lp-btn-primary">Start free — no card needed →</Link>
               <a href="#features" className="lp-btn-secondary">
@@ -323,7 +297,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <div className="lp-proof-copy"><strong>Private beta workspace</strong> for serious Indian market workflows</div>
-                <div className="lp-stars">Scanner · Charts · Journal · Alerts</div>
+                <div className="lp-stars">Scanner · Watchlist · Charts · Journal</div>
               </div>
             </div>
           </div>
@@ -331,7 +305,7 @@ export default function LandingPage() {
           {/* Hero visual */}
           <div className="lp-hero-visual">
             <div className="lp-notif lp-notif1">
-              <div className="lp-ni lp-ni-green">📈</div>
+              <div className="lp-ni lp-ni-green">RS</div>
               <div className="lp-nt"><strong>VCP Breakout — DEEPAKNTR</strong><span>RS 94 · Vol surge 3.2× · <span style={{color:"var(--gain)"}}>+4.7%</span></span></div>
             </div>
             <div className="lp-hero-card lp-tilt">
@@ -352,8 +326,8 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="lp-notif lp-notif2">
-              <div className="lp-ni lp-ni-teal">🤖</div>
-              <div className="lp-nt"><strong>AI Review Complete</strong><span>3 patterns in your journal</span></div>
+              <div className="lp-ni lp-ni-teal">JR</div>
+              <div className="lp-nt"><strong>Journal review ready</strong><span>3 patterns in your closed trades</span></div>
             </div>
           </div>
         </div>
@@ -368,34 +342,10 @@ export default function LandingPage() {
       <section id="lp-stats">
         <div className="lp-wrap">
           <div className="lp-stats-grid">
-            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Connected workflows</div><div className="lp-stat-sub">scanner, charts, alerts, journal</div></div>
+            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Beta screens</div><div className="lp-stat-sub">scanner, watchlist, charts, journal</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">NSE &amp; BSE stocks</div><div className="lp-stat-sub">updated daily at 4PM IST</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="20" data-suffix="+">0</div><div className="lp-stat-label">Scanner filters</div><div className="lp-stat-sub">momentum, volume, RS, trend</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected desk</div><div className="lp-stat-sub">from signal to review</div></div>
-          </div>
-        </div>
-      </section>
-
-      {/* HOW */}
-      <section id="how" style={{padding:"100px 0",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)",borderBottom:"1px solid var(--lp-border)"}}>
-        <div className="lp-wrap" style={{textAlign:"center"}}>
-          <span className="lp-sec-label">Workflow</span>
-          <h2 className="lp-sec-title">Five steps. One platform.</h2>
-          <p className="lp-sec-sub" style={{margin:"0 auto"}}>Your complete trading workflow from signal to learning — connected end-to-end.</p>
-          <div className="lp-steps">
-            {[
-              {n:"01",h:"Scan",p:"Filter 5000+ stocks by pattern, RS score, volume surge, sector, and 20+ indicators in under 200ms."},
-              {n:"02",h:"Watchlist",p:"Add breakout candidates to your watchlist. Hover to preview a chart. Sort and rank by custom fields."},
-              {n:"03",h:"Chart",p:"Full TradingView-style charting with RS line, pivot zones, earnings markers, and drawing tools."},
-              {n:"04",h:"Order",p:"Place trades directly via Zerodha or Upstox from the chart. No tab-switching required."},
-              {n:"05",h:"Review",p:"Close the trade, capture mistakes and lessons, then turn journal history into a better process."},
-            ].map((s,i) => (
-              <div key={s.n} className="lp-step" style={{transitionDelay: (i*0.12)+"s"}}>
-                <div className="lp-step-num">{s.n}</div>
-                <h3>{s.h}</h3>
-                <p>{s.p}</p>
-              </div>
-            ))}
           </div>
         </div>
       </section>
@@ -404,10 +354,10 @@ export default function LandingPage() {
       <section id="features" style={{padding:"100px 0"}}>
         <div className="lp-wrap">
           <span className="lp-sec-label">Platform</span>
-          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>Everything a serious trader needs</h2>
-          <p className="lp-sec-sub" style={{marginBottom:"40px"}}>Every tool in the Indian trader&apos;s workflow — rebuilt as one fast, connected product.</p>
+          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>The private beta focus</h2>
+          <p className="lp-sec-sub" style={{marginBottom:"40px"}}>Four surfaces. One routine. No feature maze.</p>
           <div className="lp-tabs-wrap" id="lp-tabs-header">
-            {["scanner","charts","journal","alerts"].map((t,i) => (
+            {["scanner","watchlist","charts","journal"].map((t,i) => (
               <button key={t} className={"lp-tab-btn"+(i===0?" lp-tab-active":"")} data-tab={t}>
                 {t.charAt(0).toUpperCase()+t.slice(1)}
               </button>
@@ -418,10 +368,10 @@ export default function LandingPage() {
           <div className="lp-tab-panel lp-tab-active" id="lp-tab-scanner">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Scanner</span>
-              <h3 className="lp-tp-h">Chartink-killer scanner, built for momentum traders</h3>
-              <p className="lp-tp-p">Run complex multi-condition scans across all NSE/BSE equities. 20+ presets for VCP, Stage 2, breakout, RS leaders. Results in under 200ms.</p>
+              <h3 className="lp-tp-h">A scanner for cleaner shortlists</h3>
+              <p className="lp-tp-p">Run multi-condition scans across NSE/BSE equities. Use presets for VCP, Stage 2, breakout, and RS leaders.</p>
               <ul className="lp-feat-list">
-                {["20+ technical filter conditions — RSI, MACD, ATR, volume, EMA","Relative Strength score vs Nifty 50 for every stock","Pre-built scans: VCP, Cup & Handle, Breakout, Stage 2","Save unlimited custom scans (Pro)","Set scan alerts — Telegram notify when a new stock matches"].map(f => (
+                {["Technical filters for RSI, MACD, ATR, volume, and EMA","Relative Strength score vs Nifty 50 for every stock","Pre-built scans: VCP, Cup & Handle, Breakout, Stage 2","Saved custom scans for repeatable routines","Scanner results can move directly into a watchlist"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -440,14 +390,40 @@ export default function LandingPage() {
             </div>
           </div>
 
+          {/* Watchlist */}
+          <div className="lp-tab-panel" id="lp-tab-watchlist">
+            <div className="lp-tp-text">
+              <span className="lp-feat-label">Watchlist</span>
+              <h3 className="lp-tp-h">A focused desk for symbols under review</h3>
+              <p className="lp-tp-p">Keep scan reason, notes, status, and chart context together before a symbol moves into or out of your routine.</p>
+              <ul className="lp-feat-list">
+                {["User-owned status labels: watch, ready, tagged, needs review","Notes stay attached to the symbol","Chart preview keeps context visible","Sort by sector, price, volume, and RS","No platform ratings or trade calls"].map(f => (
+                  <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="lp-tv lp-tilt">
+              <div className="lp-tv-bar"><div className="lp-dot" style={{background:"#FF5F57"}}></div><div className="lp-dot" style={{background:"#FFBD2E",marginLeft:6}}></div><span className="lp-card-title">Watchlist · 24 symbols · 4 tagged</span></div>
+              <div className="lp-tv-body">
+                {[["DEEPAKNTR","Chemicals","Ready"],["DIXON","Electronics","Watch"],["PERSISTENT","IT Services","Tagged"],["CAMS","BFSI","Needs review"]].map(r => (
+                  <div key={r[0]} className="lp-jrow"><div><div className="lp-sym">{r[0]}</div><div className="lp-sym-sub">{r[1]}</div></div><div className="lp-ai-tag">{r[2]}</div></div>
+                ))}
+                <div className="lp-ai-insight">
+                  <div className="lp-ai-label">Watchlist note</div>
+                  <div className="lp-ai-body">Scan reason, levels, and journal history stay visible while the user reviews the symbol.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Charts */}
           <div className="lp-tab-panel" id="lp-tab-charts">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Charts</span>
               <h3 className="lp-tp-h">Professional charts with RS line and pivot zones</h3>
-              <p className="lp-tp-p">TradingView Lightweight Charts v4. Full drawing toolkit, precomputed indicators, earnings overlays, and one-click broker order entry — all on one screen.</p>
+              <p className="lp-tp-p">TradingView Lightweight Charts v4. Drawing tools, precomputed indicators, earnings overlays, and watchlist context on one screen.</p>
               <ul className="lp-feat-list">
-                {["Candlestick with 20+ overlay indicators precomputed server-side","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked automatically as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","One-click Buy/Sell → sends order to Zerodha / Upstox"].map(f => (
+                {["Candlestick with overlay indicators precomputed server-side","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker execution stays beta-gated until verified"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -480,11 +456,11 @@ export default function LandingPage() {
           {/* Journal */}
           <div className="lp-tab-panel" id="lp-tab-journal">
             <div className="lp-tp-text">
-              <span className="lp-feat-label">AI Journal</span>
-              <h3 className="lp-tp-h">Your trading diary — auto-filled, AI-reviewed</h3>
-              <p className="lp-tp-p">Every trade placed via AlphaVyuh is automatically logged. Claude AI analyzes your journal each week, spots patterns in your mistakes, and gives specific feedback.</p>
+              <span className="lp-feat-label">Journal</span>
+              <h3 className="lp-tp-h">A review layer for closed trades</h3>
+              <p className="lp-tp-p">Log closed trades, review P&L by context, and inspect patterns in your own history.</p>
               <ul className="lp-feat-list">
-                {["Auto-import trades from Zerodha & Upstox — no manual entry","P&L by stock, sector, time-of-day, holding period","AI identifies your top 3 mistakes each week","Lessons saved per trade — searchable, filterable","Equity curve + win rate + avg R:R metrics"].map(f=>(
+                {["Manual journal entry for beta routines","P&L by stock, sector, time-of-day, holding period","Review observations based only on closed trades","Lessons saved per trade — searchable, filterable","Equity curve + win rate + avg R:R metrics"].map(f=>(
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -493,36 +469,11 @@ export default function LandingPage() {
               <div className="lp-tv-bar"><div className="lp-dot" style={{background:"#FF5F57"}}></div><div className="lp-dot" style={{background:"#FFBD2E",marginLeft:6}}></div><span className="lp-card-title">Trade Journal · Apr 2025</span></div>
               <div className="lp-tv-body">
                 {[["DEEPAKNTR","Apr 14 · 3d","+₹14,280",true],["CAMS","Apr 10 · 5d","+₹8,640",true],["RVNL","Apr 7 · 1d","−₹3,120",false],["DIXON","Apr 4 · 7d","+₹22,500",true]].map(j=>(
-                  <div key={j[0] as string} className="lp-jrow"><div><div className="lp-sym">{j[0]}</div><div className="lp-sym-sub">{j[1]}</div></div><div className={j[3]?"lp-chg-pos":"lp-chg-neg"}>{j[2]}</div><div className="lp-ai-tag">AI reviewed</div></div>
+                  <div key={j[0] as string} className="lp-jrow"><div><div className="lp-sym">{j[0]}</div><div className="lp-sym-sub">{j[1]}</div></div><div className={j[3]?"lp-chg-pos":"lp-chg-neg"}>{j[2]}</div><div className="lp-ai-tag">Reviewed</div></div>
                 ))}
                 <div className="lp-ai-insight">
-                  <div className="lp-ai-label">🤖 AI Insight — This week</div>
-                  <div className="lp-ai-body">You cut RVNL too early — exits on day 1 have 2.1× lower R:R vs day 3+ holds in your data.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Alerts */}
-          <div className="lp-tab-panel" id="lp-tab-alerts">
-            <div className="lp-tp-text">
-              <span className="lp-feat-label">Alerts</span>
-              <h3 className="lp-tp-h">Get notified the moment a scan triggers</h3>
-              <p className="lp-tp-p">Set your scan conditions once. When any stock matches, AlphaVyuh pings you via Telegram instantly. Never miss a setup again.</p>
-              <ul className="lp-feat-list">
-                {["Any saved scan can become an alert — one toggle","Telegram delivery — instant, reliable, zero noise","Price alerts — above / below a level","Up to 20 alerts active simultaneously (Pro)","Alert history with match details and chart link"].map(f=>(
-                  <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="lp-tv lp-tilt">
-              <div className="lp-tv-bar"><div className="lp-dot" style={{background:"#FF5F57"}}></div><div className="lp-dot" style={{background:"#FFBD2E",marginLeft:6}}></div><span className="lp-card-title">Alerts · 8 active</span></div>
-              <div className="lp-tv-body">
-                {[["VCP Breakout","NSE EQ · RS > 85"],["Stage 2 Base","Large cap · Vol > 2×"],["RELIANCE > 2,900","Price alert"]].map(a=>(
-                  <div key={a[0]} className="lp-jrow"><div><div className="lp-sym">{a[0]}</div><div className="lp-sym-sub">{a[1]}</div></div><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,background:"var(--gain)",borderRadius:"50%"}}></div><span style={{fontSize:".72rem",color:"var(--gain)",fontWeight:700}}>Active</span></div></div>
-                ))}
-                <div className="lp-ai-insight" style={{background:"rgba(45,181,116,.06)",borderColor:"rgba(45,181,116,.15)"}}>
-                  <div className="lp-ai-body">📲 Last triggered: <strong>DEEPAKNTR</strong> matched VCP Breakout · 2h ago</div>
+                  <div className="lp-ai-label">Journal observation — This week</div>
+                  <div className="lp-ai-body">Day 1 exits show 2.1× lower R:R than day 3+ exits in this sample journal.</div>
                 </div>
               </div>
             </div>
@@ -537,10 +488,10 @@ export default function LandingPage() {
           <h2 className="lp-sec-title">A trading desk that feels alive</h2>
           <div className="lp-af">
             {[
-              {av:"SC",bg:"#2D3A2D",t:<><strong>Scanner</strong> found <span className="lp-hl">VCP Momentum matches</span> ready for chart review</>,time:"signal"},
+              {av:"SC",bg:"#2D3A2D",t:<><strong>Scanner</strong> found <span className="lp-hl">VCP Momentum matches</span> for chart review</>,time:"scan"},
               {av:"WL",bg:"#2A2D3E",t:<><strong>Watchlist</strong> moved <span className="lp-hl">DIXON</span> into the active setup queue</>,time:"focus"},
               {av:"JR",bg:"#3A2A2A",t:<><strong>Journal</strong> flagged a repeat review theme: <span className="lp-hl">&ldquo;Cutting winners early&rdquo;</span></>,time:"review"},
-              {av:"AL",bg:"#2A3A38",t:<><strong>Alert</strong> prepared a price-level notification with chart context attached</>,time:"ready"},
+              {av:"CH",bg:"#2A3A38",t:<><strong>Chart</strong> kept RS, levels, and notes attached to the symbol</>,time:"context"},
             ].map((a,i) => (
               <div key={i} className="lp-af-item">
                 <div className="lp-af-av" style={{background:a.bg}}>{a.av}</div>
@@ -560,7 +511,7 @@ export default function LandingPage() {
           <div className="lp-tgrid">
             {[
               {av:"SC",bg:"#2D3A2D",c:"var(--gain)",n:"Scanner to watchlist",r:"Discovery workflow",ret:"Less tab switching",q:"The product is designed so a scan result can become a focused watchlist candidate, then move straight into chart review without losing setup context."},
-              {av:"CH",bg:"#2A2D3E",c:"var(--info)",n:"Chart to execution",r:"Planning workflow",ret:"Context stays attached",q:"Chart markings, active levels, and broker-ready actions live in the same workspace, so trade planning does not split across disconnected tools."},
+              {av:"CH",bg:"#2A2D3E",c:"var(--info)",n:"Watchlist to chart",r:"Planning workflow",ret:"Context stays attached",q:"Chart markings, active levels, and notes live in the same workspace, so review does not split across disconnected tools."},
               {av:"JR",bg:"#2A3A38",c:"var(--accent)",n:"Journal to review",r:"Learning workflow",ret:"Mistakes become visible",q:"Every closed trade can carry the setup, exit reason, mistakes, lessons, and review notes needed to improve the next decision."},
             ].map((t,i) => (
               <div key={t.n} className="lp-tcard lp-tilt" style={{transitionDelay:(i*0.1)+"s"}}>
@@ -598,7 +549,7 @@ export default function LandingPage() {
               <p className="lp-pdesc">Enough to try everything. No credit card needed.</p>
               <Link href="/signup" className="lp-pcta lp-cta-free">Get started free</Link>
               <div className="lp-pfeats">
-                {[["50 scanner results per scan",true],["5 saved screens",true],["1 watchlist · 20 stocks",true],["Full charting (no broker)",true],["3 months journal history",true],["Scan alerts",false],["AI journal review",false],["Broker integration",false]].map(f=>(
+                {[["50 scanner results per scan",true],["5 saved screens",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal review",false],["Broker beta access",false]].map(f=>(
                   <div key={f[0] as string} className={"lp-pfi"+(f[1]?" lp-pfi-on":"")}>
                     <div className={"lp-pfcheck"+(f[1]?" lp-pfcheck-on":" lp-pfcheck-off")}>{f[1]?"✓":"–"}</div>
                     {f[0]}
@@ -610,10 +561,10 @@ export default function LandingPage() {
               <div className="lp-featured-badge">MOST POPULAR</div>
               <span className="lp-plan-tier">Pro</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-pro">1,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-pro-old" style={{display:"none"}}>₹1,999</span></div>
-              <p className="lp-pdesc">For active swing traders who scan daily and want broker integration.</p>
+              <p className="lp-pdesc">For active swing traders who scan daily and keep a structured review routine.</p>
               <Link href="/signup" className="lp-pcta lp-cta-pro">Start Pro — 7 days free</Link>
               <div className="lp-pfeats">
-                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting + broker orders",true],["Unlimited journal history",true],["20 scan alerts via Telegram",true],["AI journal review weekly",true],["Zerodha & Upstox integration",true]].map(f=>(
+                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting",true],["Unlimited journal history",true],["Broker beta access",true],["Journal review",true],["Priority beta support",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>
@@ -621,10 +572,10 @@ export default function LandingPage() {
             <div className="lp-pcard lp-fade" style={{transitionDelay:".2s"}}>
               <span className="lp-plan-tier">Elite</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-elite">4,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-elite-old" style={{display:"none"}}>₹4,999</span></div>
-              <p className="lp-pdesc">For full-time traders and HNIs who need the deepest AI analytics and US markets.</p>
+              <p className="lp-pdesc">For full-time traders who need deeper analytics, expanded markets, and priority support.</p>
               <Link href="/signup" className="lp-pcta lp-cta-elite">Go Elite →</Link>
               <div className="lp-pfeats">
-                {[["Everything in Pro",true],["US markets — NASDAQ & NYSE",true],["AI deep analysis per trade",true],["Backtest scanner conditions",true],["Priority support & onboarding",true],["Early access to new features",true]].map(f=>(
+                {[["Everything in Pro",true],["US markets — NASDAQ & NYSE",true],["Deeper journal analytics",true],["Backtest scanner conditions",true],["Priority support & onboarding",true],["Early access to new features",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>
@@ -642,8 +593,8 @@ export default function LandingPage() {
           <div className="lp-faq-list">
             {[
               ["Does AlphaVyuh provide real-time stock data?","AlphaVyuh uses end-of-day (EOD) OHLCV data updated daily at 4 PM IST via NSE bhavcopy. Scanner results are based on the previous trading day's close. Live intraday price feeds are on the roadmap."],
-              ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 are supported for placing orders directly from the chart. More brokers are on the roadmap. You can use AlphaVyuh for scanning and journaling without a broker connected."],
-              ["How does the AI journal review work?","Every trade you log is stored in your journal. On demand, Claude AI (claude-sonnet-4-6) analyzes your full history, identifies behavioral patterns in your losses, and gives you specific, trade-cited feedback."],
+              ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 are in beta. You can use AlphaVyuh for scanning, watchlists, chart review, and journaling without a broker connected."],
+              ["How does journal review work?","Every trade you log is stored in your journal. Review analytics summarize patterns from closed trades, including win rate, R:R, holding period, sector, and notes."],
               ["Is my trading data secure?","Yes. All data is stored in Supabase Postgres with Row Level Security — only you can access your trades, watchlists, and journal. Broker API keys are stored encrypted. We never store your trading password."],
               ["Can I cancel anytime?","Yes. Cancel from Settings → Billing at any time. Your plan stays active until the end of the billing period. No mid-cycle downgrades. Your data is never deleted on cancellation."],
               ["Is there a US stock market version?","Yes — Elite plan includes NASDAQ and NYSE stocks. The same scanner, charting, and journal tools work for US equities. Scan RS leaders in the S&P 500 alongside your NSE positions."],
@@ -728,8 +679,7 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter
 .lp-h1{font-size:clamp(2.4rem,4.2vw,3.8rem);font-weight:900;line-height:1.08;letter-spacing:-.03em;margin-bottom:10px}
 .lp-h1-s1{display:block;color:var(--lp-text)}
 .lp-h1-s2{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.lp-tw-wrap{display:inline-flex;align-items:center;height:1.2em;overflow:hidden}
-.lp-h1-s2 span:not(.lp-tw-wrap){color:var(--lp-text2)}
+.lp-h1-s2 span{color:var(--lp-text2)}
 .lp-caret{display:inline-block;width:3px;height:.8em;background:var(--lp-accent);margin-left:3px;animation:lp-blink .8s step-end infinite;border-radius:2px}
 @keyframes lp-blink{0%,100%{opacity:1}50%{opacity:0}}
 #lp-typewriter,#typewriter{color:var(--lp-accent)}

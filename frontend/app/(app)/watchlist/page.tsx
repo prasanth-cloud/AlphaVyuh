@@ -44,6 +44,14 @@ import {
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
 import { EmptyState } from "@/components/ui";
+import {
+  createDraftPlan,
+  isTradePlanValid,
+  SYMBOL_LIFECYCLE,
+  useWorkflowState,
+  type SymbolLifecycle,
+  type TradePlan,
+} from "@/lib/workflow";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -291,12 +299,18 @@ function ChartPanel({
   symbol,
   latestClose,
   watchlistName,
+  planValid,
+  planSummary,
+  onOpenPlan,
   onOpenChart,
   onStepSymbol,
 }: {
   symbol: string;
   latestClose?: number | null;
   watchlistName?: string | null;
+  planValid: boolean;
+  planSummary?: string;
+  onOpenPlan: () => void;
   onOpenChart: (symbol: string) => void;
   onStepSymbol: (direction: "prev" | "next") => void;
 }) {
@@ -304,6 +318,7 @@ function ChartPanel({
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [tf, setTf] = useState("3M");
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
   const [showChartDetails, setShowChartDetails] = useState(false);
@@ -390,6 +405,17 @@ function ChartPanel({
     };
     return timeframeMap[tf] ?? "D";
   }, [tf]);
+
+  useEffect(() => {
+    const readTheme = () => setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+    readTheme();
+    window.addEventListener("storage", readTheme);
+    window.addEventListener("alphavyuh:theme-changed", readTheme);
+    return () => {
+      window.removeEventListener("storage", readTheme);
+      window.removeEventListener("alphavyuh:theme-changed", readTheme);
+    };
+  }, []);
 
   const chartScale = useMemo(() => {
     if (!candles.length || overlaySize.width <= 0 || overlaySize.height <= 0) return null;
@@ -542,6 +568,10 @@ function ChartPanel({
   }
 
   async function handleOrder() {
+    if (!planValid) {
+      setOrderMsg({ ok: false, text: "Create a valid trade plan before drafting an order." });
+      return;
+    }
     const qtyN = parseInt(qty, 10);
     const priceN = parseFloat(price);
     if (!qtyN || qtyN < 1 || !priceN || priceN <= 0) {
@@ -614,8 +644,15 @@ function ChartPanel({
             Analysis
           </button>
           <button
-            onClick={() => setShowOrderTicket((current) => !current)}
+            onClick={onOpenPlan}
+            className={`workspace-chip-button${planValid ? " active" : ""}`}
+          >
+            Trade plan
+          </button>
+          <button
+            onClick={() => planValid ? setShowOrderTicket((current) => !current) : setOrderMsg({ ok: false, text: "Complete the trade plan to unlock execution." })}
             className={`workspace-chip-button${showOrderTicket ? " active" : ""}`}
+            title={planValid ? "Open order draft" : "Plan required before execution"}
           >
             Order
           </button>
@@ -717,7 +754,7 @@ function ChartPanel({
             onClick={handleChartToolClick}
             style={{ width: "100%", height: chartHeight, position: "relative", cursor: activeTool ? "crosshair" : "default" }}
           >
-            <MiniChart candles={candles} height={chartHeight} dark chartType={chartType} />
+            <MiniChart candles={candles} height={chartHeight} dark={theme !== "light"} chartType={chartType} />
             <svg
               width="100%"
               height="100%"
@@ -787,7 +824,7 @@ function ChartPanel({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">Keep execution attached to the active queue and auto-send the trade into journal review.</div>
+            <div className="caption">{planSummary ?? "Keep execution attached to the active queue and auto-send the trade into journal review."}</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -906,17 +943,104 @@ function ChartPanel({
           </div>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy}
+        <button onClick={handleOrder} disabled={orderBusy || !planValid}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: orderBusy ? "not-allowed" : "pointer",
-            opacity: orderBusy ? 0.5 : 1,
+            opacity: orderBusy || !planValid ? 0.5 : 1,
           }}>
-          {orderBusy ? "Placing…" : `Place ${side === "buy" ? "buy" : "sell"} order`}
+          {!planValid ? "Plan required before order" : orderBusy ? "Placing…" : `Place ${side === "buy" ? "buy" : "sell"} order`}
         </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function TradePlanCard({
+  plan,
+  selectedItem,
+  onChange,
+  onLifecycle,
+}: {
+  plan: TradePlan | null;
+  selectedItem: WatchlistItem | null;
+  onChange: (plan: TradePlan) => void;
+  onLifecycle: (lifecycle: SymbolLifecycle) => void;
+}) {
+  if (!selectedItem || !plan) {
+    return (
+      <div style={{ borderRadius: 16, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", padding: 12 }}>
+        <div className="label" style={{ marginBottom: 6 }}>Trade plan</div>
+        <div className="caption">Select a shortlisted symbol, then define entry, stop, target, risk size, thesis, and invalidation before execution.</div>
+      </div>
+    );
+  }
+
+  const valid = isTradePlanValid(plan);
+  const setField = (key: keyof TradePlan, value: string) => onChange({ ...plan, [key]: value });
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    fontSize: 12,
+    borderRadius: 10,
+    padding: "7px 9px",
+    background: "var(--surface-3)",
+    border: "1px solid var(--border-subtle)",
+    color: "var(--text-primary)",
+  };
+
+  return (
+    <div style={{ borderRadius: 16, border: `1px solid ${valid ? "rgba(45,181,116,0.32)" : "rgba(255,255,255,0.09)"}`, background: "rgba(255,255,255,0.025)", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 4 }}>Trade plan</div>
+          <div className="caption">{valid ? "Ready: execution actions are unlocked." : "Required before alerts or order drafts."}</div>
+        </div>
+        <select
+          value={plan.lifecycle}
+          onChange={(event) => onLifecycle(event.target.value as SymbolLifecycle)}
+          style={{ fontSize: 12, borderRadius: 999, padding: "7px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+        >
+          {SYMBOL_LIFECYCLE.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+        </select>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 4 }}>Setup</div>
+          <select value={plan.setupType} onChange={(event) => setField("setupType", event.target.value)} style={inputStyle}>
+            <option value="Momentum">Momentum</option>
+            <option value="Breakout">Breakout</option>
+            <option value="Pullback">Pullback</option>
+            <option value="VCP">VCP</option>
+            <option value="Reversal">Reversal</option>
+          </select>
+        </div>
+        <div>
+          <div className="label" style={{ marginBottom: 4 }}>Timeframe</div>
+          <input value={plan.timeframe} onChange={(event) => setField("timeframe", event.target.value)} style={inputStyle} />
+        </div>
+        {([
+          ["Entry", "entry"],
+          ["Stop", "stop"],
+          ["Target", "target"],
+          ["Position size", "positionSize"],
+        ] as const).map(([label, key]) => (
+          <div key={key}>
+            <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+            <input type="number" min="0" step="0.05" value={plan[key]} onChange={(event) => setField(key, event.target.value)} style={inputStyle} />
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <div className="label" style={{ marginBottom: 4 }}>Thesis</div>
+        <textarea value={plan.thesis} onChange={(event) => setField("thesis", event.target.value)} placeholder="Write your thesis for this symbol..." style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} />
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <div className="label" style={{ marginBottom: 4 }}>Invalidation rule</div>
+        <textarea value={plan.invalidationRule} onChange={(event) => setField("invalidationRule", event.target.value)} placeholder="What proves the idea wrong..." style={{ ...inputStyle, minHeight: 50, resize: "vertical" }} />
+      </div>
     </div>
   );
 }
@@ -926,6 +1050,12 @@ function ChartPanel({
 function WatchlistContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const {
+    state: workflowState,
+    savePlan,
+    markLifecycle,
+    rememberSymbol,
+  } = useWorkflowState();
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -952,6 +1082,7 @@ function WatchlistContent() {
   const [sortMode, setSortMode] = useState<"manual" | "setup" | "move" | "volume" | "rsi">("manual");
   const [showDeskControls, setShowDeskControls] = useState(false);
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
+  const [showTradePlan, setShowTradePlan] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [queuePage, setQueuePage] = useState(0);
 
@@ -1212,7 +1343,15 @@ function WatchlistContent() {
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
+  const selectedPlan = chartSymbol
+    ? workflowState.plans[chartSymbol] ?? createDraftPlan(chartSymbol, selectedItem?.close ?? null, selectedItem ? getSetupSignal(selectedItem).label : "Momentum")
+    : null;
+  const selectedPlanValid = isTradePlanValid(selectedPlan);
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
+
+  useEffect(() => {
+    if (chartSymbol) rememberSymbol(chartSymbol);
+  }, [chartSymbol, rememberSymbol]);
 
   useEffect(() => {
     if (!liveQuotePollingEnabled) return;
@@ -1537,79 +1676,7 @@ function WatchlistContent() {
 
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
-      <div className="workspace-card" style={{ padding: "10px 14px" }}>
-        <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
-          <div>
-            <div className="workspace-card-title">Watchlist</div>
-            {activeWl && (
-              <div className="caption" style={{ marginTop: 2 }}>
-                {activeWl.name} · {visibleItems.length}/{activeWl.items.length} visible
-              </div>
-            )}
-          </div>
-          <div className="workspace-pill-row" style={{ gap: 8 }}>
-            <span className="workspace-pill" title={isMockMode ? "Using mock or fallback market data" : "Using configured market data source"}>
-              Data: {isMockMode ? "Mock/fallback" : "Live configured"}
-            </span>
-            {chartSymbol && <span className="workspace-pill">Focus: {chartSymbol}</span>}
-          </div>
-        </div>
-        {activeWl && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-            <div className="workspace-pill-row" style={{ gap: 8 }}>
-              <span className="workspace-pill">All {queueCounts.total}</span>
-              {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned {queueCounts.pinned}</span>}
-              {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review {queueCounts.needsReview}</span>}
-              {queueCounts.total > 0 && <span className="workspace-pill">Setup avg {setupDesk.average}</span>}
-              {setupDesk.ready > 0 && <span className="workspace-pill" style={{ color: "var(--gain)" }}>Ready {setupDesk.ready}</span>}
-              {setupDesk.watch > 0 && <span className="workspace-pill" style={{ color: "var(--warn)" }}>Watch {setupDesk.watch}</span>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
-                <button className="workspace-chip-button" onClick={resetDeskView}>
-                  Reset
-                </button>
-              )}
-              {activeWl.items.length > 0 && (
-                <button className={`workspace-chip-button${sortMode === "setup" ? " active" : ""}`} onClick={() => setSortMode("setup")}>
-                  Best setups
-                </button>
-              )}
-              <button className={`workspace-chip-button${showDeskControls ? " active" : ""}`} onClick={() => setShowDeskControls((current) => !current)}>
-                {showDeskControls ? "Hide controls" : "Desk controls"}
-              </button>
-            </div>
-          </div>
-        )}
-        {activeWl && setupDesk.top.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
-            {setupDesk.top.map(({ item, setup }) => (
-              <button
-                key={item.symbol}
-                onClick={() => setChartSymbol(item.symbol)}
-                style={{
-                  textAlign: "left",
-                  padding: "8px 10px",
-                  borderRadius: 12,
-                  background: chartSymbol === item.symbol ? "rgba(77,214,255,0.12)" : "rgba(255,255,255,0.03)",
-                  border: chartSymbol === item.symbol ? "1px solid rgba(77,214,255,0.28)" : "1px solid rgba(255,255,255,0.07)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <span className="mono" style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)" }}>{item.symbol}</span>
-                  <span className="mono" style={{ fontSize: 11, fontWeight: 800, color: setupToneColor(setup.tone) }}>{setup.score}</span>
-                </div>
-                <div className="caption" style={{ marginTop: 3 }}>{setup.label}</div>
-                <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginTop: 7 }}>
-                  <div style={{ width: `${setup.score}%`, height: "100%", background: setupToneColor(setup.tone) }} />
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 178px)" }}>
+      <div className="workspace-grid" style={{ gridTemplateColumns: "380px minmax(0, 1fr)", minHeight: "calc(100vh - 178px)" }}>
       {/* Toast */}
       {toast && (
         <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
@@ -1617,104 +1684,37 @@ function WatchlistContent() {
         </div>
       )}
 
-      {/* ── Watchlist tabs sidebar ─── */}
-      {sidebarCollapsed ? (
-        <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14 }}>
-          <button onClick={() => setSidebarCollapsed(false)} style={{ color: "var(--text-tertiary)" }}>
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        </div>
-      ) : (
-        <aside className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          <div className="workspace-card-header" style={{ padding: "14px 14px" }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Watchlists</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button onClick={() => setShowNewWl(o => !o)} style={{ color: "var(--accent)", lineHeight: 0 }}>
-                <Plus size={15} />
-              </button>
-              <button onClick={() => setSidebarCollapsed(true)} style={{ color: "var(--text-tertiary)", lineHeight: 0 }}>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                  <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {showNewWl && (
-            <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border-subtle)", display: "flex", gap: 6 }}>
-              <input
-                autoFocus
-                value={newWlName}
-                onChange={e => setNewWlName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCreateWatchlist()}
-                placeholder="List name…"
-                style={{ flex: 1, fontSize: 11, borderRadius: "var(--radius-sm)", padding: "4px 8px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none" }}
-              />
-              <button onClick={handleCreateWatchlist} style={{ fontSize: 11, fontWeight: 500, color: "var(--accent)" }}>Add</button>
-              <button onClick={() => setShowNewWl(false)} style={{ color: "var(--text-tertiary)", lineHeight: 0 }}><X size={12} /></button>
-            </div>
-          )}
-
-          <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
-            {loading ? (
-              <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                {[1,2,3].map(i => <div key={i} style={{ height: 32, borderRadius: "var(--radius-sm)", background: "var(--surface-3)" }} />)}
-              </div>
-            ) : watchlists.length === 0 ? (
-              <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
-                No watchlists yet.
-                <div style={{ marginTop: 6 }}>Create one here or send names in from the scanner to start the workflow.</div>
-              </div>
-            ) : (
-              watchlists.map(wl => {
-                const active = activeId === wl.id;
-                return (
-                  <div key={wl.id} style={{ position: "relative", display: "flex", alignItems: "center" }} className="wl-item">
-                    <button onClick={() => setActiveId(wl.id)}
-                      style={{
-                        flex: 1, textAlign: "left", padding: "8px 14px", fontSize: 13, cursor: "pointer",
-                        background: active ? "var(--accent-subtle)" : "transparent",
-                        color: active ? "var(--accent)" : "var(--text-secondary)",
-                        fontWeight: active ? 500 : 400,
-                        transition: "all var(--motion-instant) var(--ease-out)",
-                      }}>
-                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 20 }}>{wl.name}</div>
-                      <div style={{ fontSize: 10, marginTop: 2, color: "var(--text-tertiary)" }}>{wl.items.length} stocks</div>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteWatchlist(wl.id)}
-                      style={{ position: "absolute", right: 8, color: "var(--text-tertiary)", lineHeight: 0, opacity: 0 }}
-                      className="wl-delete"
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--loss)"}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </aside>
-      )}
-
       {/* ── Stock list ─────────────────────────────────────── */}
       <div className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Header */}
         <div className="workspace-card-header" style={{ paddingBottom: 10, flexShrink: 0 }}>
           <div>
-            <div className="workspace-card-title">
-              {activeWl ? activeWl.name : "Watchlist"}
-            </div>
-            {activeWl && (
-              <div className="caption">{activeWl.items.length} stock{activeWl.items.length !== 1 ? "s" : ""}</div>
-            )}
+            <div className="workspace-card-title">Watchlist</div>
+            <div className="caption">{activeWl ? `${activeWl.items.length} stock${activeWl.items.length !== 1 ? "s" : ""}` : "Select or create a list"}</div>
           </div>
 
-          {activeWl && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <select
+                aria-label="Select watchlist"
+                value={activeId ?? ""}
+                onChange={(event) => setActiveId(event.target.value || null)}
+                style={{ maxWidth: 150, fontSize: 12, borderRadius: "var(--radius-sm)", padding: "5px 8px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none" }}
+              >
+                {watchlists.map((wl) => (
+                  <option key={wl.id} value={wl.id}>{wl.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setShowNewWl(o => !o)}
+                className="workspace-chip-button"
+                aria-label="Create watchlist"
+                title="Create watchlist"
+                style={{ width: 30, height: 30, padding: 0 }}
+              >
+                <Plus size={14} />
+              </button>
+            {activeWl && (
+              <>
               {addMsg && (
                 <span style={{ fontSize: 11, fontWeight: 500, color: addMsg === "Added" ? "var(--gain)" : "var(--loss)" }}>
                   {addMsg}
@@ -1754,157 +1754,24 @@ function WatchlistContent() {
                 style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
                 {adding ? "…" : "Add"}
               </button>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
-
-        <div style={{ padding: "0 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-          {selectedItem ? (
-            <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                    <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{selectedItem.symbol}</div>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      {selectedItem.close != null ? `₹${selectedItem.close.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-                    </span>
-                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: (selectedItem.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
-                      {selectedItem.pct_change != null ? `${selectedItem.pct_change >= 0 ? "+" : ""}${selectedItem.pct_change.toFixed(2)}%` : "-"}
-                    </span>
-                    {selectedSetup && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase",
-                          color: setupToneColor(selectedSetup.tone),
-                          padding: "2px 7px",
-                          borderRadius: 999,
-                          background: "rgba(255,255,255,0.04)",
-                          border: `1px solid ${setupToneColor(selectedSetup.tone)}`,
-                        }}
-                      >
-                        {selectedSetup.label} {selectedSetup.score}
-                      </span>
-                    )}
-                  </div>
-                  <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {selectedItem.company_name || selectedItem.sector || "Active watchlist focus"}
-                  </div>
-                </div>
-                <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-                  <button className="workspace-chip-button" onClick={() => router.push(chartHref(selectedItem.symbol))}>
-                    Open chart
-                  </button>
-                  <button className="workspace-chip-button" onClick={() => router.push(`/journal?symbol=${selectedItem.symbol}`)}>
-                    Review journal
-                  </button>
-                  <button className={`workspace-chip-button${showSelectedMeta ? " active" : ""}`} onClick={() => setShowSelectedMeta((current) => !current)}>
-                    {showSelectedMeta ? "Hide details" : "Details"}
-                  </button>
-                </div>
-              </div>
-              {showSelectedMeta && (
-                <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
-                    {selectedMetrics.map((metric) => (
-                      <div key={metric.label} style={{ padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                        <div className="label" style={{ marginBottom: 3 }}>{metric.label}</div>
-                        <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metric.tone }}>{metric.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedReviewState && (
-                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <div className="label" style={{ marginBottom: 6 }}>Review context</div>
-                      <div className="caption" style={{ lineHeight: 1.65 }}>
-                        {selectedReviewState.state === "reviewed"
-                          ? `Reviewed ${selectedReviewState.reviewed}/${selectedReviewState.closed} closed trades on ${selectedItem.symbol}.`
-                          : selectedReviewState.state === "needs-review"
-                            ? `${selectedReviewState.closed} closed trades on ${selectedItem.symbol} still need review coverage.`
-                            : `No closed review history yet on ${selectedItem.symbol}.`}
-                        {selectedReviewState.lastSetup ? ` Last setup: ${selectedReviewState.lastSetup}.` : ""}
-                      </div>
-                      {selectedReviewState.latestLesson && (
-                        <div className="caption" style={{ marginTop: 8, color: "var(--text-secondary)" }}>
-                          Latest lesson: {selectedReviewState.latestLesson.slice(0, 120)}{selectedReviewState.latestLesson.length > 120 ? "..." : ""}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 10, marginTop: 10 }}>
-                    <div style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <div className="label" style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                        <Tag size={11} /> Queue tags
-                      </div>
-                      <div className="workspace-pill-row" style={{ marginBottom: 8 }}>
-                        {(selectedItemMeta.tags ?? []).length > 0 ? (
-                          (selectedItemMeta.tags ?? []).map((tag) => (
-                            <button
-                              key={tag}
-                              className="workspace-pill"
-                              onClick={() => removeTagFromSelected(tag)}
-                              style={{ cursor: "pointer" }}
-                              title="Remove tag"
-                            >
-                              #{tag} ×
-                            </button>
-                          ))
-                        ) : (
-                          <span className="caption">No tags yet</span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && addTagToSelected()}
-                          placeholder="Add tag…"
-                          style={{ flex: 1, fontSize: 12, borderRadius: 999, padding: "7px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-                        />
-                        <button className="workspace-chip-button active" onClick={addTagToSelected}>Add</button>
-                      </div>
-                    </div>
-                    <div style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <div className="label" style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                        {selectedItemMeta.pinned ? <Pin size={11} /> : <PinOff size={11} />} Queue priority
-                      </div>
-                      <button
-                        className={`workspace-chip-button${selectedItemMeta.pinned ? " active" : ""}`}
-                        onClick={() => updateItemMeta(selectedItem.symbol, { pinned: !selectedItemMeta.pinned })}
-                        style={{ marginBottom: 8 }}
-                      >
-                        {selectedItemMeta.pinned ? "Pinned to top" : "Pin to top"}
-                      </button>
-                      <div className="caption" style={{ lineHeight: 1.6 }}>
-                        {selectedItemMeta.pinned
-                          ? "This symbol stays at the top of the active queue while filters are applied."
-                          : "Pin high-conviction names so they stay visible at the top of the queue."}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <div className="label" style={{ marginBottom: 6 }}>Watchlist note</div>
-                    <textarea
-                      value={noteDraft}
-                      onChange={(e) => setNoteDraft(e.target.value.slice(0, 280))}
-                      onBlur={() => void saveSelectedNote()}
-                      placeholder="Why is this still in the queue? What needs to happen before you act?"
-                      style={{ width: "100%", minHeight: 68, resize: "vertical", fontSize: 12, borderRadius: 10, padding: "8px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div style={{ borderRadius: 16, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", padding: 12 }}>
-              <div className="caption" style={{ lineHeight: 1.6 }}>
-                Select a symbol to load its working panel.
-              </div>
-            </div>
-          )}
-        </div>
+        {showNewWl && (
+          <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border-subtle)", display: "flex", gap: 6, flexShrink: 0 }}>
+            <input
+              autoFocus
+              value={newWlName}
+              onChange={e => setNewWlName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleCreateWatchlist()}
+              placeholder="New watchlist name..."
+              style={{ flex: 1, fontSize: 12, borderRadius: "var(--radius-sm)", padding: "6px 8px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none" }}
+            />
+            <button onClick={handleCreateWatchlist} className="workspace-chip-button active">Create</button>
+            <button onClick={() => setShowNewWl(false)} className="workspace-chip-button">Cancel</button>
+          </div>
+        )}
 
         <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "grid", gap: 10, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -2118,17 +1985,57 @@ function WatchlistContent() {
           <ChartPanel key={chartSymbol} symbol={chartSymbol}
             latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
             watchlistName={activeWl?.name ?? null}
+            planValid={selectedPlanValid}
+            planSummary={selectedPlanValid && selectedPlan ? `${selectedPlan.setupType} plan: entry ${selectedPlan.entry}, stop ${selectedPlan.stop}, target ${selectedPlan.target}.` : undefined}
             onOpenChart={(sym) => router.push(chartHref(sym))}
+            onOpenPlan={() => setShowTradePlan(true)}
             onStepSymbol={moveSelection} />
         ) : (
           <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <EmptyState
               title="Click any stock to load its chart"
-              description="Use the watchlist as your decision queue. Select the symbol you want to work on, then open the full chart when the setup deserves deeper analysis."
+              description="Use the watchlist to save symbols, add notes, and open charts when you want more context."
             />
           </div>
         )}
       </div>
+
+      {showTradePlan && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 80, background: "var(--overlay)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+          onClick={() => setShowTradePlan(false)}
+        >
+          <div
+            className="workspace-card"
+            style={{ width: "min(520px, 100%)", maxHeight: "85vh", overflow: "auto", padding: 16 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+              <div>
+                <div className="workspace-card-title">Trade plan</div>
+                <div className="caption">{selectedItem?.symbol ?? "Select a stock first"}</div>
+              </div>
+              <button className="workspace-chip-button" onClick={() => setShowTradePlan(false)}>Close</button>
+            </div>
+            <TradePlanCard
+              plan={selectedPlan}
+              selectedItem={selectedItem}
+              onChange={(nextPlan) => {
+                savePlan(nextPlan);
+                showToast(isTradePlanValid(nextPlan) ? "Plan created" : "Plan saved");
+              }}
+              onLifecycle={(lifecycle) => {
+                if (!selectedPlan) return;
+                savePlan({ ...selectedPlan, lifecycle });
+                markLifecycle(selectedPlan.symbol, lifecycle);
+                showToast(`Lifecycle moved to ${lifecycle}`);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       </div>
     </div>

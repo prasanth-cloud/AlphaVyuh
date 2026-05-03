@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect, useCallback, Fragment } from 'react'
-import { useRouter } from 'next/navigation'
-import { authHeaders, createFeedbackReport, getDataHealth, isMockMode, type DataHealth } from '@/lib/api'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { authHeaders, createFeedbackReport, isMockMode } from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
-import DataFreshnessStrip from '@/components/DataFreshnessStrip'
+import { useWorkflowState } from '@/lib/workflow'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -184,6 +184,14 @@ function MetricCell({ label, value, direction }: { label: string; value: string;
   )
 }
 
+function setupQualityScore(result: ScanResult): number {
+  const trend = [result.ema_20, result.ema_50, result.ema_200].filter((ema) => ema != null && result.close > ema).length * 18
+  const volume = Math.min(22, Math.max(0, (result.volume_ratio ?? 0) * 10))
+  const rs = Math.min(24, Math.max(0, (result.rs_score ?? 50) / 4))
+  const rsi = result.rsi_14 == null ? 8 : result.rsi_14 >= 50 && result.rsi_14 <= 72 ? 18 : 9
+  return Math.round(Math.min(100, trend + volume + rs + rsi))
+}
+
 // Inline detail expansion for a selected row
 function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
   r: ScanResult
@@ -193,7 +201,7 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
 }) {
   return (
     <tr>
-      <td colSpan={8} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
+      <td colSpan={10} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
           <MetricCell label="EMA 20" value={r.ema_20 ? `₹${r.ema_20.toFixed(0)}` : '—'} direction={r.ema_20 ? (r.close > r.ema_20 ? 'above' : 'below') : undefined} />
           <MetricCell label="EMA 50" value={r.ema_50 ? `₹${r.ema_50.toFixed(0)}` : '—'} direction={r.ema_50 ? (r.close > r.ema_50 ? 'above' : 'below') : undefined} />
@@ -232,6 +240,8 @@ const SORT_COLS = [
 
 export default function ScannerPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { addToShortlist } = useWorkflowState()
   const [filters, setFilters] = useState<Filters>(emptyFilters())
   const [activePreset, setActivePreset] = useState<string | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
@@ -258,14 +268,12 @@ export default function ScannerPage() {
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
-  const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
   useEffect(() => {
     loadWatchlists()
     loadSavedScreens()
-    getDataHealth().then(setDataHealth).catch(() => setDataHealth(null))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function showToast(msg: string) {
@@ -403,6 +411,13 @@ export default function ScannerPage() {
   }, [pageSize, runScan, sortBy, sortDesc])
 
   useEffect(() => {
+    const requestedPreset = searchParams.get('preset')
+    if (!requestedPreset || activePreset) return
+    const preset = PRESETS.find(item => item.id === requestedPreset)
+    if (preset) applyPreset(preset)
+  }, [activePreset, applyPreset, searchParams])
+
+  useEffect(() => {
     if (bootstrapped) return
     if (loading || hasRun || savedScreens.length > 0) return
     setBootstrapped(true)
@@ -464,6 +479,27 @@ export default function ScannerPage() {
       body: JSON.stringify({ symbol }),
     })
     showToast(`${symbol} added`)
+  }
+
+  function shortlistRows(rows: ScanResult[]) {
+    if (rows.length === 0) {
+      showToast('Select at least one stock to shortlist')
+      return
+    }
+    addToShortlist(rows.map((row) => ({
+      symbol: row.symbol,
+      companyName: row.company_name,
+      sector: row.sector,
+      setupQuality: setupQualityScore(row),
+      setupType: activePresetMeta?.name ?? 'Custom scan',
+      source: activePresetMeta?.name ?? 'Scanner',
+    })))
+    showToast(`Added ${rows.length} setup${rows.length === 1 ? '' : 's'} to shortlist`)
+  }
+
+  function shortlistSelectedRows() {
+    const rows = selectedResults.size > 0 ? results.filter(row => selectedResults.has(row.symbol)) : results.slice(0, 5)
+    shortlistRows(rows)
   }
 
   async function createWatchlistFromResults() {
@@ -574,6 +610,11 @@ export default function ScannerPage() {
     { length: pageSize === 0 ? 1 : Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => (pageSize === 0 ? 1 : pageWindowStart + idx),
   );
+  const setupQualityBySymbol = useMemo(() => {
+    const scores = new Map<string, number>()
+    for (const result of results) scores.set(result.symbol, setupQualityScore(result))
+    return scores
+  }, [results])
   const presetStrip = (
     <div className="workspace-card" style={{ padding: 10, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', paddingBottom: 1 }}>
@@ -604,21 +645,6 @@ export default function ScannerPage() {
 
   return (
     <div className="workspace-page">
-      <div className="workspace-card" style={{ padding: '14px 18px', marginBottom: 16 }}>
-        <div className="workspace-toolbar" style={{ minHeight: 'auto', padding: 0, border: 'none' }}>
-          <div>
-            <div className="workspace-card-title">Scanner</div>
-          </div>
-          <div className="workspace-pill-row">
-            <span className="workspace-pill">{activePresetMeta?.name ?? 'Custom view'}</span>
-            <span className="workspace-pill">{hasRun ? `${totalMatches || results.length} matches` : 'Ready to scan'}</span>
-            <DataProvenanceBadge kind="eod" asOf={tradeDate || null} compact />
-          </div>
-        </div>
-      </div>
-      <div style={{ marginBottom: 16 }}>
-        <DataFreshnessStrip health={dataHealth} tradeDate={tradeDate || null} compact />
-      </div>
       {presetStrip}
 
       <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
@@ -677,10 +703,10 @@ export default function ScannerPage() {
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
                 {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
               </Section>
-              <Section title="Volume">
+              <Section title="Liquidity">
                 {rangeRow('Vol ratio (× avg)', 'volume_ratio_min', 'volume_ratio_max')}
               </Section>
-              <Section title="Moving Averages">
+              <Section title="Trend quality">
                 {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
@@ -688,12 +714,12 @@ export default function ScannerPage() {
                 {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
                 {toggleRow('All EMAs bullish (20>50>200)', 'all_emas_bullish')}
               </Section>
-              <Section title="Momentum">
+              <Section title="Relative strength">
                 {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
                 {rangeRow('ADX 14', 'adx_min', 'adx_max')}
                 {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: 'Positive' }, { value: 'negative', label: 'Negative' }])}
               </Section>
-              <Section title="Bollinger Bands">
+              <Section title="Setup structure">
                 {segRow('Position', 'bb_position', [
                   { value: 'above_upper', label: 'Above upper' },
                   { value: 'below_lower', label: 'Below lower' },
@@ -703,7 +729,7 @@ export default function ScannerPage() {
                 ])}
                 {rangeRow('BB Width', 'bb_width_min', 'bb_width_max')}
               </Section>
-              <Section title="Volatility">
+              <Section title="Volatility and risk">
                 {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
               </Section>
               <Section title="52-Week Range">
@@ -719,7 +745,7 @@ export default function ScannerPage() {
             </>
           ) : (
             <>
-              <Section title="Market Cap" open>
+              <Section title="Fundamental quality" open>
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: -4, marginBottom: 6, lineHeight: 1.5 }}>
                   Large: 20000+  ·  Mid: 5000–20000  ·  Small: &lt;5000
@@ -802,8 +828,11 @@ export default function ScannerPage() {
                     <option key={option.label} value={option.value}>{option.value === 0 ? 'All results' : `${option.label} / page`}</option>
                   ))}
                 </select>
+                <Button size="sm" variant="primary" onClick={shortlistSelectedRows}>
+                  Add selected to watchlist
+                </Button>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
-                  + Watchlist
+                  Create watchlist
                 </Button>
               </div>
             </>
@@ -874,11 +903,13 @@ export default function ScannerPage() {
                 <Th align="right" width={60}>RSI</Th>
                 <Th align="right" width={50}>RS</Th>
                 <Th align="right" width={90}>52W H%</Th>
-                <Th width={60}>{''}</Th>
+                <Th align="right" width={70}>Quality</Th>
+                <Th width={92}>{''}</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {
                   const expanded = expandedSymbol === r.symbol
+                  const quality = setupQualityBySymbol.get(r.symbol) ?? setupQualityScore(r)
                   const rsiBadgeVariant = r.rsi_14 != null
                     ? (r.rsi_14 > 70 ? 'accent' : r.rsi_14 > 40 ? 'gain' : 'warn')
                     : 'neutral'
@@ -931,25 +962,24 @@ export default function ScannerPage() {
                         <Td align="right" mono>
                           {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
                         </Td>
+                        <Td align="right" mono>
+                          <span style={{ color: quality >= 80 ? 'var(--gain)' : quality >= 65 ? 'var(--warn)' : 'var(--text-secondary)' }}>
+                            {quality}
+                          </span>
+                        </Td>
                         <Td>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                             <button
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
+                              style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer', fontWeight: 700 }}
+                            >
+                              Analyze
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); shortlistRows([r]) }}
                               style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}
                             >
-                              Chart
-                            </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); router.push(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`) }}
-                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
-                            >
-                              Journal
-                            </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); reportScannerDataIssue(r.symbol) }}
-                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
-                            >
-                              Report
+                              Shortlist
                             </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}

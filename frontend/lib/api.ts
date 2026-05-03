@@ -73,6 +73,27 @@ function shouldUseMockFallback(): boolean {
   return isMockMode;
 }
 
+const MOCK_WATCHLIST_STORAGE_KEY = "alphavyuh.mock.watchlists";
+
+function readMockWatchlists(): Watchlist[] {
+  const base = mockWatchlists();
+  if (typeof window === "undefined") return base;
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(MOCK_WATCHLIST_STORAGE_KEY) || "[]") as Watchlist[];
+    const existingIds = new Set(base.map((watchlist) => watchlist.id));
+    return [...base, ...stored.filter((watchlist) => !existingIds.has(watchlist.id))];
+  } catch {
+    return base;
+  }
+}
+
+function writeMockWatchlists(watchlists: Watchlist[]) {
+  if (typeof window === "undefined") return;
+  const custom = watchlists.filter((watchlist) => !watchlist.id.startsWith("mock-"));
+  window.localStorage.setItem(MOCK_WATCHLIST_STORAGE_KEY, JSON.stringify(custom));
+}
+
 async function getToken(): Promise<string | null> {
   const now = Date.now();
   if (tokenCache && tokenCache.expiresAt > now) return tokenCache.token;
@@ -332,21 +353,36 @@ export async function deleteScreen(id: string): Promise<void> {
 }
 
 export async function getWatchlists(): Promise<Watchlist[]> {
-  if (shouldUseMockFallback()) return mockWatchlists();
+  if (shouldUseMockFallback()) return readMockWatchlists();
   return cachedClientRequest("watchlists", 30_000, async () => {
     try {
       const headers = await authHeaders();
       const res = await fetch(`${API}/api/v1/watchlists`, { headers });
-      if (!res.ok) return shouldUseMockFallback() ? mockWatchlists() : [];
+      if (!res.ok) return shouldUseMockFallback() ? readMockWatchlists() : [];
       const data = await res.json();
       return data.watchlists ?? [];
     } catch {
-      return shouldUseMockFallback() ? mockWatchlists() : [];
+      return shouldUseMockFallback() ? readMockWatchlists() : [];
     }
   });
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
+  if (shouldUseMockFallback()) {
+    const current = readMockWatchlists();
+    const now = new Date().toISOString();
+    const created: Watchlist = {
+      id: `local-${Date.now()}`,
+      name,
+      sort_order: current.length,
+      created_at: now,
+      items: [],
+    };
+    writeMockWatchlists([...current, created]);
+    invalidateClientCache(["watchlists"]);
+    return created;
+  }
+
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists`, {
     method: "POST",
@@ -364,6 +400,12 @@ export async function createWatchlist(name: string): Promise<Watchlist> {
 }
 
 export async function deleteWatchlist(watchlistId: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeMockWatchlists(readMockWatchlists().filter((watchlist) => watchlist.id !== watchlistId));
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
+
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
   invalidateClientCache(["watchlists"]);

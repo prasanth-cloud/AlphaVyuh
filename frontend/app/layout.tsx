@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
+import ThemeController from "@/components/ThemeController";
 
 const inter = localFont({
   src: "./fonts/GeistVF.woff",
@@ -68,6 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="font-sans antialiased">
+        <ThemeController />
         {children}
         <ServiceWorkerRegistrar />
       </body>

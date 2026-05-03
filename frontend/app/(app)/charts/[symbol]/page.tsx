@@ -19,6 +19,7 @@ import {
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import { DataProvenanceBadge } from "@/components/ui";
+import { isTradePlanValid, useWorkflowState } from "@/lib/workflow";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -250,10 +251,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const symbol = routeSymbol.toUpperCase();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { state: workflowState } = useWorkflowState();
   const sourcePage = searchParams.get("from");
   const sourceWatchlist = searchParams.get("watchlist");
   const sourceWatchlistId = searchParams.get("watchlistId");
   const fullChartMode = searchParams.get("full") === "1";
+  const workflowPlan = workflowState.plans[symbol];
+  const workflowPlanValid = isTradePlanValid(workflowPlan);
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [liveMode, setLiveMode] = useState(false);
@@ -2257,16 +2261,32 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               </div>
               <div className="px-4 py-3 flex gap-2" style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
-                  onClick={() => { setOrderSide("buy"); setShowOrder(true); }}
+                  onClick={() => {
+                    if (!workflowPlanValid) {
+                      setOrderToast({ message: "Create a valid trade plan in Watchlist before drafting an order.", journalId: null, broker: "simulated" });
+                      setTimeout(() => setOrderToast(null), 4000);
+                      return;
+                    }
+                    setOrderSide("buy"); setShowOrder(true);
+                  }}
                   className="flex-1 py-2 bg-[#26a65b] text-white text-[13px] font-bold rounded-[8px] hover:opacity-90 transition-opacity"
+                  style={{ opacity: workflowPlanValid ? 1 : 0.5 }}
                 >
-                  BUY
+                  {workflowPlanValid ? "BUY" : "PLAN REQUIRED"}
                 </button>
                 <button
-                  onClick={() => { setOrderSide("sell"); setShowOrder(true); }}
+                  onClick={() => {
+                    if (!workflowPlanValid) {
+                      setOrderToast({ message: "Create a valid trade plan in Watchlist before drafting an order.", journalId: null, broker: "simulated" });
+                      setTimeout(() => setOrderToast(null), 4000);
+                      return;
+                    }
+                    setOrderSide("sell"); setShowOrder(true);
+                  }}
                   className="flex-1 py-2 bg-[#e5383b] text-white text-[13px] font-bold rounded-[8px] hover:opacity-90 transition-opacity"
+                  style={{ opacity: workflowPlanValid ? 1 : 0.5 }}
                 >
-                  SELL
+                  {workflowPlanValid ? "SELL" : "PLAN REQUIRED"}
                 </button>
               </div>
               <div style={{ borderBottom: "1px solid var(--app-border)" }}>

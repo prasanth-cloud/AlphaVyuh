@@ -16,8 +16,7 @@ import {
   type JournalEntry,
   type MarketOverview,
 } from '@/lib/api'
-import { Card, StatCard, EmptyState, Button, DataProvenanceBadge } from '@/components/ui'
-import DataFreshnessStrip from '@/components/DataFreshnessStrip'
+import { Card, StatCard, EmptyState } from '@/components/ui'
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -56,7 +55,7 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: phaseColor, flexShrink: 0 }} />
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <span className="heading-card" style={{ color: phaseColor }}>{phase} market</span>
+            <span className="heading-card" style={{ color: phaseColor }}>{phase} breadth</span>
             <span className="caption">{data.market_phase_desc}</span>
           </div>
         </div>
@@ -66,11 +65,6 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
           {dataHealth?.status && (
             <Metric label="Data" value={dataHealth.status.toUpperCase()} />
           )}
-          <DataProvenanceBadge
-            kind={dataHealth?.status === 'degraded' ? 'fallback' : 'eod'}
-            asOf={data.trade_date}
-            compact
-          />
         </div>
       </div>
       {dataHealth && dataHealth.status !== 'healthy' && (
@@ -126,18 +120,13 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
     <Card padding="md" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
-          <div className="caption">One glance summary before scanning, charting, or placing alerts.</div>
+          <div className="label" style={{ marginBottom: 4 }}>Market snapshot</div>
+          <div className="caption">Index, breadth, trend, and sector context.</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {data.market_data_source && (
             <span className="caption">{data.is_live ? 'Index live' : 'Index fallback'} · {data.market_data_source}</span>
           )}
-          <DataProvenanceBadge
-            kind={dataHealth?.status === 'degraded' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
-            asOf={data.trade_date}
-            compact
-          />
         </div>
       </div>
       {!!data.indices?.length && (
@@ -319,134 +308,6 @@ type ReviewPrompts = {
   latestLesson: string | null
 }
 
-function WorkflowChecklistCard({
-  workflow,
-  dismissed,
-  onDismiss,
-}: {
-  workflow: WorkflowState
-  dismissed: boolean
-  onDismiss: () => void
-}) {
-  const steps = [
-    {
-      label: 'Create your first watchlist',
-      description: 'This becomes the bridge from scans to charts.',
-      completed: workflow.watchlists > 0,
-    },
-    {
-      label: 'Add at least one symbol',
-      description: 'Use the scanner or type a symbol directly into the watchlist desk.',
-      completed: workflow.trackedSymbols > 0,
-    },
-    {
-      label: 'Connect your broker',
-      description: workflow.brokerConnected
-        ? `${workflow.brokerName ?? 'Broker'} connected and ready for chart-side execution.`
-        : 'Optional, but this is what turns chart analysis into execution flow.',
-      completed: workflow.brokerConnected,
-    },
-    {
-      label: 'Log your first trade',
-      description: 'Once a trade exists, AlphaVyuh can start carrying context into the journal.',
-      completed: workflow.totalTrades > 0,
-    },
-    {
-      label: 'Close 3 trades for review',
-      description: 'That is enough history to unlock journal-wide coaching.',
-      completed: workflow.closedTrades >= 3,
-    },
-  ]
-
-  const completedCount = steps.filter(step => step.completed).length
-  const allComplete = completedCount === steps.length
-
-  const nextAction = workflow.watchlists === 0
-    ? { label: 'Create watchlist', href: '/watchlist' }
-    : workflow.trackedSymbols === 0
-      ? { label: 'Find symbols', href: '/scanner' }
-      : !workflow.brokerConnected
-        ? { label: 'Connect broker', href: '/settings/broker' }
-        : workflow.closedTrades === 0
-          ? { label: 'Log first trade', href: '/journal' }
-          : workflow.closedTrades < 3
-            ? { label: 'Build review base', href: '/journal' }
-            : { label: 'Open AI review', href: '/journal?tab=ai' }
-
-  if (dismissed || allComplete) return null
-
-  return (
-    <Card padding="lg">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
-        <div>
-          <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>Onboarding checklist</div>
-          <h2 className="heading-card" style={{ marginBottom: 4 }}>Make the product feel connected in the first session</h2>
-          <div className="body-secondary">
-            Traders stay when the next step is obvious. This checklist is driven by your actual account state, not generic setup copy.
-          </div>
-        </div>
-        <button onClick={onDismiss} style={{ color: 'var(--text-tertiary)', fontSize: 18, lineHeight: 1, background: 'transparent', border: 'none', cursor: 'pointer' }}>×</button>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ flex: 1, height: 8, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
-          <div style={{ width: `${(completedCount / steps.length) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent), #8ef3e2)' }} />
-        </div>
-        <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-          {completedCount}/{steps.length}
-        </span>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12, marginBottom: 18 }}>
-        {steps.map((step) => (
-          <div
-            key={step.label}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 12,
-              padding: '12px 14px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              background: step.completed ? 'var(--gain-subtle)' : 'var(--surface-2)',
-            }}
-          >
-            <div
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                fontSize: 11,
-                fontWeight: 700,
-                color: step.completed ? 'var(--gain)' : 'var(--text-tertiary)',
-                background: step.completed ? 'rgba(38,166,91,0.12)' : 'var(--surface-3)',
-                border: `1px solid ${step.completed ? 'rgba(38,166,91,0.18)' : 'var(--border-subtle)'}`,
-              }}
-            >
-              {step.completed ? '✓' : '•'}
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3 }}>{step.label}</div>
-              <div className="caption" style={{ lineHeight: 1.55 }}>{step.description}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div className="caption">Next best action: {nextAction.label}</div>
-        <Button variant="primary" size="sm" onClick={() => { window.location.href = nextAction.href }}>
-          {nextAction.label}
-        </Button>
-      </div>
-    </Card>
-  )
-}
-
 function ReviewPulseCard({
   workflow,
 }: {
@@ -521,7 +382,7 @@ function ReviewPromptsCard({ prompts }: { prompts: ReviewPrompts }) {
       ? `Review ${prompts.needsReviewCount} closed trade${prompts.needsReviewCount === 1 ? '' : 's'} still missing lessons.`
       : null,
     prompts.reviewSymbol
-      ? `${prompts.reviewSymbol} has ${prompts.reviewSymbolClosed} closed trade${prompts.reviewSymbolClosed === 1 ? '' : 's'} that deserve a tighter read.`
+      ? `${prompts.reviewSymbol} has ${prompts.reviewSymbolClosed} closed trade${prompts.reviewSymbolClosed === 1 ? '' : 's'} without notes.`
       : null,
     prompts.weakSetup
       ? `${prompts.weakSetup} is underperforming${prompts.weakSetupWinRate != null ? ` at ${prompts.weakSetupWinRate.toFixed(0)}% win rate` : ''}.`
@@ -599,7 +460,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [lastUpdated, setLastUpdated] = useState('')
-  const [checklistDismissed, setChecklistDismissed] = useState(false)
   const [workflow, setWorkflow] = useState<WorkflowState>({
     watchlists: 0,
     trackedSymbols: 0,
@@ -637,11 +497,6 @@ export default function DashboardPage() {
       setLoading(false)
     }
   }
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    setChecklistDismissed(window.localStorage.getItem('alphavyuh-onboarding-dismissed') === '1')
-  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -714,25 +569,11 @@ export default function DashboardPage() {
       <div style={{ height: 44, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Dashboard</span>
-          {data?.trade_date && (
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD {data.trade_date}</span>
-          )}
         </div>
         {lastUpdated && (
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated {lastUpdated}</span>
         )}
       </div>
-
-      <DataFreshnessStrip health={dataHealth} tradeDate={data?.trade_date ?? null} />
-
-      <WorkflowChecklistCard
-        workflow={workflow}
-        dismissed={checklistDismissed}
-        onDismiss={() => {
-          setChecklistDismissed(true)
-          if (typeof window !== 'undefined') window.localStorage.setItem('alphavyuh-onboarding-dismissed', '1')
-        }}
-      />
 
       {/* Error */}
       {error && (
