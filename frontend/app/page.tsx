@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 export default function LandingPage() {
@@ -8,6 +8,29 @@ export default function LandingPage() {
   const chartLineRef = useRef<SVGPathElement>(null);
   const chartAreaRef = useRef<SVGPathElement>(null);
   const chartRsRef = useRef<SVGPathElement>(null);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("alphavyuh-theme") === "light" ? "light" : "dark";
+    setTheme(stored);
+    document.documentElement.dataset.theme = stored;
+
+    const syncTheme = (event: Event) => {
+      const next = (event as CustomEvent<"dark" | "light">).detail ?? document.documentElement.dataset.theme;
+      setTheme(next === "light" ? "light" : "dark");
+    };
+
+    window.addEventListener("alphavyuh:theme-changed", syncTheme);
+    return () => window.removeEventListener("alphavyuh:theme-changed", syncTheme);
+  }, []);
+
+  function toggleTheme() {
+    const nextTheme = theme === "light" ? "dark" : "light";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    window.localStorage.setItem("alphavyuh-theme", nextTheme);
+    window.dispatchEvent(new CustomEvent("alphavyuh:theme-changed", { detail: nextTheme }));
+  }
 
   useEffect(() => {
     // Custom cursor
@@ -247,8 +270,8 @@ export default function LandingPage() {
           <Link href="/" className="lp-logo">
             <div className="lp-logo-mark">
               <svg viewBox="0 0 18 18" fill="none" width="18" height="18">
-                <path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="#050a08" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx="16" cy="6" r="1.5" fill="#050a08"/>
+                <path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="16" cy="6" r="1.5" fill="currentColor"/>
               </svg>
             </div>
             AlphaVyuh
@@ -260,6 +283,9 @@ export default function LandingPage() {
             <a href="#faq">FAQ</a>
           </div>
           <div className="lp-nav-right">
+            <button type="button" className="lp-theme-toggle" onClick={toggleTheme}>
+              {theme === "light" ? "Dark" : "Light"}
+            </button>
             <Link href="/login" className="lp-btn-ghost">Sign in</Link>
             <Link href="/signup" className="lp-btn-cta">Start free →</Link>
           </div>
@@ -626,7 +652,7 @@ export default function LandingPage() {
           <div className="lp-footer-grid">
             <div>
               <div className="lp-logo" style={{marginBottom:14}}>
-                <div className="lp-logo-mark"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="#050a08" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="16" cy="6" r="1.5" fill="#050a08"/></svg></div>
+                <div className="lp-logo-mark"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="16" cy="6" r="1.5" fill="currentColor"/></svg></div>
                 AlphaVyuh
               </div>
               <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s Trading OS. Scan, chart, trade, and journal — connected in one platform for Indian equity traders.</p>
@@ -657,14 +683,16 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter
 #lp-nav.lp-scrolled{background:rgba(13,15,20,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--lp-border);padding:12px 0}
 .lp-nav-wrap{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;align-items:center;justify-content:space-between;gap:40px}
 .lp-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem;letter-spacing:-.02em;color:var(--lp-text);text-decoration:none}
-.lp-logo-mark{width:34px;height:34px;background:linear-gradient(135deg,var(--lp-accent),var(--lp-accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lp-logo-mark{width:34px;height:34px;background:linear-gradient(135deg,var(--lp-accent),var(--lp-accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-on-accent)}
 .lp-nav-links{display:flex;align-items:center;gap:28px}
 .lp-nav-links a{font-size:.85rem;font-weight:500;color:var(--lp-text2);text-decoration:none;transition:color .2s}
 .lp-nav-links a:hover{color:var(--lp-text)}
 .lp-nav-right{display:flex;align-items:center;gap:12px}
+.lp-theme-toggle{height:34px;padding:0 12px;border:1px solid var(--lp-border);border-radius:8px;background:var(--lp-surface2);color:var(--lp-text);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .2s}
+.lp-theme-toggle:hover{border-color:var(--lp-accent);background:var(--lp-accent-dim)}
 .lp-btn-ghost{padding:8px 18px;border:1px solid var(--lp-border);border-radius:8px;font-size:.84rem;font-weight:600;color:var(--lp-text2);text-decoration:none;transition:all .2s}
 .lp-btn-ghost:hover{border-color:var(--lp-accent);color:var(--lp-accent)}
-.lp-btn-cta{padding:9px 20px;border-radius:8px;font-size:.84rem;font-weight:700;background:var(--lp-accent);color:#050a08;text-decoration:none;transition:all .2s;box-shadow:0 0 20px rgba(214,223,232,.25)}
+.lp-btn-cta{padding:9px 20px;border-radius:8px;font-size:.84rem;font-weight:700;background:var(--lp-accent);color:var(--text-on-accent);text-decoration:none;transition:all .2s;box-shadow:0 0 20px rgba(214,223,232,.25)}
 .lp-btn-cta:hover{box-shadow:0 0 32px rgba(214,223,232,.4);transform:translateY(-1px)}
 #lp-hero{min-height:100vh;display:flex;align-items:center;padding:120px 0 80px;position:relative;overflow:hidden}
 .lp-orb1{position:absolute;width:700px;height:700px;background:radial-gradient(circle,rgba(214,223,232,.07) 0%,transparent 70%);border-radius:50%;top:-200px;right:-100px;pointer-events:none;animation:lp-orb 8s ease-in-out infinite}
@@ -685,7 +713,7 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter
 #lp-typewriter,#typewriter{color:var(--lp-accent)}
 .lp-sub{font-size:1rem;color:var(--lp-text2);line-height:1.75;margin-bottom:36px;max-width:460px}
 .lp-ctas{display:flex;align-items:center;gap:14px;margin-bottom:44px;flex-wrap:wrap}
-.lp-btn-primary{display:inline-flex;align-items:center;gap:8px;padding:13px 28px;background:var(--lp-accent);color:#050a08;border-radius:9px;font-weight:700;font-size:.95rem;text-decoration:none;box-shadow:0 0 32px rgba(214,223,232,.3),0 4px 16px rgba(0,0,0,.3);transition:all .25s}
+.lp-btn-primary{display:inline-flex;align-items:center;gap:8px;padding:13px 28px;background:var(--lp-accent);color:var(--text-on-accent);border-radius:9px;font-weight:700;font-size:.95rem;text-decoration:none;box-shadow:0 0 32px rgba(214,223,232,.3),0 4px 16px rgba(0,0,0,.3);transition:all .25s}
 .lp-btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 48px rgba(214,223,232,.4),0 8px 24px rgba(0,0,0,.3)}
 .lp-btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:13px 24px;border:1.5px solid var(--lp-border);border-radius:9px;font-weight:600;font-size:.92rem;color:var(--lp-text2);text-decoration:none;transition:all .25s}
 .lp-btn-secondary:hover{border-color:var(--lp-accent);color:var(--lp-accent)}
@@ -817,7 +845,7 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter
 .lp-pcard:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,.3)}
 .lp-pcard-featured{background:linear-gradient(145deg,#16202E,var(--lp-surface2));border-color:var(--lp-accent);box-shadow:0 0 48px rgba(214,223,232,.08)}
 .lp-pcard-featured:hover{box-shadow:0 0 64px rgba(214,223,232,.12),0 16px 40px rgba(0,0,0,.3)}
-.lp-featured-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--lp-accent);color:#050a08;padding:4px 18px;border-radius:20px;font-size:.68rem;font-weight:800;letter-spacing:.08em;white-space:nowrap}
+.lp-featured-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--lp-accent);color:var(--text-on-accent);padding:4px 18px;border-radius:20px;font-size:.68rem;font-weight:800;letter-spacing:.08em;white-space:nowrap}
 .lp-plan-tier{font-size:.72rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--lp-text2);display:block;margin-bottom:10px}
 .lp-price-row{display:flex;align-items:baseline;gap:4px;margin-bottom:4px}
 .lp-pcurr{font-size:1.2rem;font-weight:600;line-height:2.2}
@@ -827,7 +855,7 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter
 .lp-pdesc{font-size:.83rem;color:var(--lp-text2);margin:12px 0 24px;min-height:36px;line-height:1.6}
 .lp-pcta{display:block;text-align:center;padding:12px;border-radius:9px;font-weight:700;font-size:.9rem;margin-bottom:28px;transition:all .25s;text-decoration:none}
 .lp-cta-free{border:1.5px solid var(--lp-border);color:var(--lp-text2)}.lp-cta-free:hover{border-color:rgba(214,223,232,.5);color:var(--lp-accent)}
-.lp-cta-pro{background:var(--lp-accent);color:#050a08;box-shadow:0 0 24px rgba(214,223,232,.25)}.lp-cta-pro:hover{box-shadow:0 0 36px rgba(214,223,232,.4)}
+.lp-cta-pro{background:var(--lp-accent);color:var(--text-on-accent);box-shadow:0 0 24px rgba(214,223,232,.25)}.lp-cta-pro:hover{box-shadow:0 0 36px rgba(214,223,232,.4)}
 .lp-cta-elite{border:1.5px solid rgba(167,182,200,.3);color:var(--lp-accent2)}.lp-cta-elite:hover{background:rgba(167,182,200,.1)}
 .lp-pfeats{display:flex;flex-direction:column;gap:10px}
 .lp-pfi{display:flex;align-items:center;gap:10px;font-size:.82rem;color:var(--lp-text2)}
@@ -844,7 +872,7 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter
 .lp-faq-a{max-height:0;overflow:hidden;transition:max-height .35s ease,padding .35s ease}
 .lp-faq-item.lp-faq-open .lp-faq-a{max-height:200px;padding-bottom:20px}
 .lp-faq-a p{font-size:.88rem;color:var(--lp-text2);line-height:1.75}
-.lp-btn-cta-big{display:inline-flex;align-items:center;gap:10px;padding:16px 40px;background:var(--lp-accent);color:#050a08;font-weight:800;font-size:1rem;border-radius:10px;text-decoration:none;box-shadow:0 0 48px rgba(214,223,232,.35),0 8px 32px rgba(0,0,0,.3);transition:all .25s}
+.lp-btn-cta-big{display:inline-flex;align-items:center;gap:10px;padding:16px 40px;background:var(--lp-accent);color:var(--text-on-accent);font-weight:800;font-size:1rem;border-radius:10px;text-decoration:none;box-shadow:0 0 48px rgba(214,223,232,.35),0 8px 32px rgba(0,0,0,.3);transition:all .25s}
 .lp-btn-cta-big:hover{transform:translateY(-3px);box-shadow:0 0 72px rgba(214,223,232,.45),0 12px 40px rgba(0,0,0,.3)}
 .lp-footer-grid{display:grid;grid-template-columns:2.5fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px}
 .lp-fcol h5{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--lp-muted);margin-bottom:18px}

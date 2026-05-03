@@ -65,12 +65,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
                   d="M2 14L6.5 8L10 11L14.5 4L16 6"
-                  stroke="#050a08"
+                  stroke="currentColor"
                   strokeWidth="2.2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx="16" cy="6" r="1.5" fill="#050a08" />
+                <circle cx="16" cy="6" r="1.5" fill="currentColor" />
               </svg>
             </span>
             <span className="app-brand-copy">

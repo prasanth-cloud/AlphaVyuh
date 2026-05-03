@@ -468,7 +468,7 @@ function SettingsContent() {
                   onClick={saveProfile}
                   disabled={saving}
                   className="px-5 py-2.5 text-white text-[13px] font-medium rounded-[8px] transition-opacity disabled:opacity-50"
-                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}
+                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}
                 >
                   {saving ? "Saving..." : "Save changes"}
                 </button>
@@ -565,7 +565,7 @@ function SettingsContent() {
                           onClick={handleZerodhaConnect}
                           disabled={connectingZerodha}
                           className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold transition-opacity disabled:opacity-50"
-                          style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}
+                          style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}
                         >
                           {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
                         </button>
@@ -583,7 +583,7 @@ function SettingsContent() {
                       onClick={saveBroker}
                       disabled={savingBroker}
                       className="px-4 py-2 rounded-[8px] text-[13px] font-medium transition-opacity disabled:opacity-50"
-                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}
+                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}
                     >
                       {savingBroker ? "Saving..." : "Save"}
                     </button>
@@ -662,7 +662,7 @@ function SettingsContent() {
                     onClick={handleApplyFounder}
                     disabled={applyingFounder}
                     className="inline-flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60"
-                    style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
+                    style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
                   >
                     <Gift size={14} />
                     {applyingFounder ? "Applying..." : "Apply"}
@@ -700,7 +700,7 @@ function SettingsContent() {
                       <button key={c} onClick={() => switchCurrency(c)}
                         className="px-3 py-1.5 text-[12px] font-semibold transition-colors"
                         style={billingCurrency === c
-                          ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }
+                          ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }
                           : { background: "transparent", color: "var(--app-text3)" }}>
                         {c === "INR" ? "₹ India" : "$ NRI / International"}
                       </button>
@@ -807,7 +807,7 @@ function SettingsContent() {
                         showToast("Referral code copied!", true);
                       }}
                       className="px-4 py-2.5 rounded-[8px] text-[13px] font-medium text-white transition-opacity"
-                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}>
+                      style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}>
                       Copy
                     </button>
                   </div>
