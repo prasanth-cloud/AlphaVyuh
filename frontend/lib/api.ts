@@ -21,7 +21,7 @@ import {
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
 export const liveQuotePollingEnabled =
-  forceLiveData || process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES === "true";
+  process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES !== "false";
 export const isMockMode =
   !forceLiveData &&
   (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
@@ -511,18 +511,19 @@ export async function getQuote(symbol: string): Promise<ScanResult | null> {
 
 export type LiveQuote = {
   symbol: string;
-  market: string;
-  currency: string;
-  close: number;
-  open: number;
-  high: number;
-  low: number;
-  volume: number;
-  prev_close: number;
+  market?: string;
+  currency?: string;
+  close: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  prev_close: number | null;
   pct_change: number | null;
-  week_52_high: number | null;
-  week_52_low: number | null;
+  week_52_high?: number | null;
+  week_52_low?: number | null;
   source: string;
+  as_of?: string;
 };
 
 export async function getQuoteLive(symbol: string): Promise<LiveQuote | null> {
@@ -535,6 +536,66 @@ export async function getQuoteLive(symbol: string): Promise<LiveQuote | null> {
   } catch {
     return shouldUseMockFallback() ? mockLiveQuote(symbol) : null;
   }
+}
+
+export function streamLiveQuotes(
+  symbols: string[],
+  onTicks: (ticks: LiveQuote[]) => void,
+  onStatus?: (status: { connected: boolean; error?: string }) => void
+): () => void {
+  const cleanSymbols = Array.from(new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))).slice(0, 200);
+  if (cleanSymbols.length === 0 || shouldUseMockFallback()) return () => {};
+
+  const controller = new AbortController();
+  let buffer = "";
+  let stopped = false;
+
+  async function start() {
+    try {
+      const headers = await authHeaders();
+      const params = new URLSearchParams({ symbols: cleanSymbols.join(","), mode: "quote" });
+      const res = await fetch(`${API}/api/v1/market/live/stream?${params.toString()}`, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`Live stream HTTP ${res.status}`);
+      onStatus?.({ connected: true });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      while (!stopped) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          const event = frame.split("\n").find((line) => line.startsWith("event:"))?.slice(6).trim();
+          const dataLine = frame.split("\n").find((line) => line.startsWith("data:"));
+          if (!dataLine) continue;
+          const payload = JSON.parse(dataLine.slice(5).trim());
+          if (event === "error") {
+            onStatus?.({ connected: false, error: payload.message || "Live stream unavailable" });
+            continue;
+          }
+          if ((event === "tick" || event === "snapshot") && Array.isArray(payload.ticks)) {
+            onTicks(payload.ticks as LiveQuote[]);
+          }
+        }
+      }
+    } catch (error) {
+      if (!stopped) {
+        onStatus?.({ connected: false, error: error instanceof Error ? error.message : "Live stream unavailable" });
+      }
+    }
+  }
+
+  void start();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
 }
 
 // ── Charts ────────────────────────────────────────────────────────────────────

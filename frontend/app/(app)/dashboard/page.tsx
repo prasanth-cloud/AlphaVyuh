@@ -10,10 +10,13 @@ import {
   getMarketOverview,
   getMe,
   getWatchlists,
+  liveQuotePollingEnabled,
+  streamLiveQuotes,
   updateMe,
   type AiPatterns,
   type DataHealth,
   type JournalEntry,
+  type LiveQuote,
   type MarketOverview,
 } from '@/lib/api'
 import { Card, StatCard, EmptyState } from '@/components/ui'
@@ -175,6 +178,26 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
       </div>
     </Card>
   )
+}
+
+function applyLiveIndexTicks(data: MarketOverview, ticks: LiveQuote[]): MarketOverview {
+  const liveBySymbol = new Map(ticks.map((tick) => [tick.symbol, tick]))
+  return {
+    ...data,
+    is_live: true,
+    market_data_source: 'kite_ws',
+    indices: (data.indices ?? []).map((index) => {
+      const tick = liveBySymbol.get(index.symbol)
+      if (!tick || tick.close == null) return index
+      return {
+        ...index,
+        close: tick.close,
+        pct_change: tick.pct_change,
+        prev_close: tick.prev_close ?? index.prev_close,
+        source: tick.source,
+      }
+    }),
+  }
 }
 
 function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; breadth_pct: number; avg_pct_change: number }) {
@@ -562,6 +585,15 @@ export default function DashboardPage() {
     const t = setInterval(load, 5 * 60 * 1000)
     return () => clearInterval(t)
   }, [])
+
+  useEffect(() => {
+    if (!liveQuotePollingEnabled || !data?.indices?.length) return;
+    const symbols = data.indices.map((index) => index.symbol);
+    return streamLiveQuotes(symbols, (ticks) => {
+      setData((current) => current ? applyLiveIndexTicks(current, ticks) : current);
+      setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+    });
+  }, [data?.indices?.map((index) => index.symbol).join('|')])
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>

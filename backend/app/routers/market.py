@@ -3,13 +3,18 @@ Market overview router — breadth, sector, movers for the dashboard.
 """
 from __future__ import annotations
 
+import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
+import json
+import os
 from time import monotonic
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from starlette.responses import StreamingResponse
 
 from app.middleware.auth import get_current_user_id
+from app.services.kite_stream import KiteStreamError, kite_live_ticker
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
@@ -19,6 +24,10 @@ router = APIRouter(prefix="/api/v1/market", tags=["market"])
 OVERVIEW_CACHE_TTL_SECONDS = 60
 _overview_cache: dict | None = None
 _overview_cache_expires_at = 0.0
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
 
 
 def _finite_float(value, default=None):
@@ -300,3 +309,47 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
     _overview_cache = deepcopy(overview)
     _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
     return overview
+
+
+@router.get("/live/status")
+async def live_market_status(user_id: str = Depends(get_current_user_id)):
+    return kite_live_ticker.status()
+
+
+@router.get("/live/stream")
+async def live_market_stream(
+    symbols: str = Query(..., min_length=1, description="Comma-separated NSE symbols"),
+    mode: str | None = Query(None, pattern="^(ltp|quote|full)$"),
+    user_id: str = Depends(get_current_user_id),
+):
+    requested = [symbol.strip().upper() for symbol in symbols.split(",") if symbol.strip()]
+    stream_mode = mode or os.getenv("KITE_STREAM_MODE", "quote").strip().lower() or "quote"
+    if stream_mode not in {"ltp", "quote", "full"}:
+        stream_mode = "quote"
+
+    async def events():
+        subscriber = None
+        try:
+            subscriber = await kite_live_ticker.subscribe(requested, mode=stream_mode)
+            yield _sse("ready", {"provider": "kite_ws", "symbols": requested, "mode": stream_mode})
+            while True:
+                try:
+                    payload = await asyncio.wait_for(subscriber.queue.get(), timeout=15)
+                    yield _sse(payload.get("type", "tick"), payload)
+                except asyncio.TimeoutError:
+                    yield _sse("heartbeat", {"provider": "kite_ws", "ts": datetime.now(timezone.utc).isoformat()})
+        except KiteStreamError as exc:
+            yield _sse("error", {"provider": "kite_ws", "message": str(exc)})
+        finally:
+            if subscriber is not None:
+                kite_live_ticker.unsubscribe(subscriber)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
