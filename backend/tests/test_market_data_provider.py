@@ -72,3 +72,20 @@ def test_kite_provider_maps_common_index_aliases(monkeypatch):
 
     assert instrument["instrument_token"] == 256265
     assert instrument["tradingsymbol"] == "NIFTY 50"
+
+
+def test_kite_provider_maps_sector_index_aliases(monkeypatch):
+    instruments = pd.DataFrame([
+        {
+            "instrument_token": 260105,
+            "exchange": "NSE",
+            "tradingsymbol": "NIFTY IT",
+            "name": "NIFTY IT",
+        }
+    ])
+    monkeypatch.setattr("app.services.market_data._kite_instruments", lambda exchange: instruments)
+
+    instrument = KiteMarketDataProvider()._instrument("NIFTY_IT", MarketIdentity())
+
+    assert instrument["instrument_token"] == 260105
+    assert instrument["tradingsymbol"] == "NIFTY IT"

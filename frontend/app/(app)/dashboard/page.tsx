@@ -7,6 +7,7 @@ import {
   getBrokerStatus,
   getJournalEntries,
   getJournalStats,
+  getLiveSectorIndices,
   getMarketOverview,
   getMe,
   getWatchlists,
@@ -16,10 +17,11 @@ import {
   type AiPatterns,
   type DataHealth,
   type JournalEntry,
+  type LiveSectorIndex,
   type LiveQuote,
   type MarketOverview,
 } from '@/lib/api'
-import { Card, StatCard, EmptyState } from '@/components/ui'
+import { Card, StatCard, EmptyState, DataProvenanceBadge } from '@/components/ui'
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -198,6 +200,67 @@ function applyLiveIndexTicks(data: MarketOverview, ticks: LiveQuote[]): MarketOv
       }
     }),
   }
+}
+
+function applyLiveSectorTicks(sectors: LiveSectorIndex[], ticks: LiveQuote[]): LiveSectorIndex[] {
+  const bySymbol = new Map(ticks.map((tick) => [tick.symbol, tick]))
+  return sectors.map((sector) => {
+    const tick = bySymbol.get(sector.symbol)
+    if (!tick || tick.close == null) return sector
+    return {
+      ...sector,
+      close: tick.close,
+      pct_change: tick.pct_change,
+      prev_close: tick.prev_close ?? sector.prev_close,
+      source: tick.source,
+      error: undefined,
+    }
+  })
+}
+
+function LiveSectorIndexCard({ sectors, asOf, isLive }: { sectors: LiveSectorIndex[]; asOf: string | null; isLive: boolean }) {
+  const clean = sectors
+    .filter((sector) => sector.close != null || sector.pct_change != null)
+    .sort((a, b) => safeNumber(b.pct_change, -999) - safeNumber(a.pct_change, -999))
+    .slice(0, 8)
+
+  return (
+    <Card padding="lg">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 16 }}>
+        <div>
+          <h2 className="heading-card">Live sector indices</h2>
+          <div className="caption">Kite sector-index quotes. Price movement only, not stock-level breadth.</div>
+        </div>
+        <DataProvenanceBadge kind={isLive ? 'live-beta' : 'fallback'} asOf={asOf} compact />
+      </div>
+      {clean.length === 0 ? (
+        <div className="caption" style={{ padding: '24px 0', textAlign: 'center' }}>
+          Live sector index quotes appear when the Kite token is valid.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+          {clean.map((sector) => {
+            const pct = safeNumber(sector.pct_change, NaN)
+            const close = safeNumber(sector.close, NaN)
+            const tone = Number.isFinite(pct) && pct >= 0 ? 'var(--gain)' : 'var(--loss)'
+            return (
+              <div key={sector.symbol} style={{ minWidth: 0, padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--surface-2)' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sector.label}</span>
+                  <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: Number.isFinite(pct) ? tone : 'var(--text-tertiary)' }}>
+                    {Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'}
+                  </span>
+                </div>
+                <div className="mono" style={{ marginTop: 4, fontSize: 11, color: 'var(--text-secondary)' }}>
+                  {Number.isFinite(close) ? close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : 'Pending'}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Card>
+  )
 }
 
 function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; breadth_pct: number; avg_pct_change: number }) {
@@ -383,13 +446,13 @@ function ReviewPulseCard({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Best review signal</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Highest review signal</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
             {bestDirection ? `${bestDirection.direction} ${bestDirection.win_rate}%` : 'Build more history'}
           </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Best day so far</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Highest day so far</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
             {bestDay ? `${bestDay.day.slice(0, 3)} ${bestDay.win_rate}%` : 'Not enough closed trades'}
           </span>
@@ -480,6 +543,9 @@ function deriveReviewPrompts(entries: JournalEntry[]): ReviewPrompts {
 export default function DashboardPage() {
   const [data, setData] = useState<MarketOverview | null>(null)
   const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
+  const [liveSectors, setLiveSectors] = useState<LiveSectorIndex[]>([])
+  const [liveSectorAsOf, setLiveSectorAsOf] = useState<string | null>(null)
+  const [liveSectorConnected, setLiveSectorConnected] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [lastUpdated, setLastUpdated] = useState('')
@@ -514,6 +580,14 @@ export default function DashboardPage() {
       setData(d)
       setDataHealth(health)
       setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
+      getLiveSectorIndices()
+        .then((snapshot) => {
+          if (!snapshot) return
+          setLiveSectors(snapshot.sectors ?? [])
+          setLiveSectorAsOf(snapshot.as_of ?? null)
+          setLiveSectorConnected(Boolean(snapshot.is_live))
+        })
+        .catch(() => {})
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data')
     } finally {
@@ -595,6 +669,18 @@ export default function DashboardPage() {
     });
   }, [data?.indices?.map((index) => index.symbol).join('|')])
 
+  useEffect(() => {
+    if (!liveQuotePollingEnabled || liveSectors.length === 0) return;
+    const symbols = liveSectors.map((sector) => sector.symbol);
+    return streamLiveQuotes(symbols, (ticks) => {
+      setLiveSectors((current) => applyLiveSectorTicks(current, ticks));
+      setLiveSectorAsOf(new Date().toISOString());
+      setLiveSectorConnected(true);
+    }, (status) => {
+      setLiveSectorConnected(status.connected);
+    });
+  }, [liveSectors.map((sector) => sector.symbol).join('|')])
+
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Status bar */}
@@ -655,8 +741,11 @@ export default function DashboardPage() {
             {/* Left: sector breadth */}
             <Card padding="lg">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-                <h2 className="heading-card">Sector breadth</h2>
-                <span className="caption">% above EMA 20 · avg chg%</span>
+                <div>
+                  <h2 className="heading-card">Sector breadth</h2>
+                  <div className="caption">Latest complete session from stock-level EOD data.</div>
+                </div>
+                <DataProvenanceBadge kind="eod" asOf={data.trade_date} compact />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (
@@ -673,6 +762,7 @@ export default function DashboardPage() {
 
             {/* Right: movers + EMA breadth */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <LiveSectorIndexCard sectors={liveSectors} asOf={liveSectorAsOf} isLive={liveSectorConnected} />
               <ReviewPulseCard workflow={workflow} />
               <ReviewPromptsCard prompts={reviewPrompts} />
               <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" />

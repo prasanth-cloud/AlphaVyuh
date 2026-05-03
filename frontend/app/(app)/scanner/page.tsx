@@ -53,38 +53,38 @@ interface Watchlist { id: string; name: string }
 const PRESETS = [
   {
     id: 'leaders',
-    name: 'EMA 20/50 + RSI 50-82',
-    description: 'Filter for stocks above EMA 20 and EMA 50 with RSI between 50 and 82.',
+    name: 'Above EMA 20/50 + RSI 50-82',
+    description: 'Price above EMA 20 and EMA 50 with RSI between 50 and 82.',
     filters: { rsi_min: 50, rsi_max: 82, volume_ratio_min: 1.05, price_vs_ema20: 'above', price_vs_ema50: 'above' },
   },
   {
     id: 'momentum',
     name: 'RSI 60-70 + Vol 2x',
-    description: 'Filter for RSI 60-70 with above-average volume and price above EMA 20/50.',
+    description: 'RSI 60-70, volume at least 2x average, and price above EMA 20/50.',
     filters: { rsi_min: 60, rsi_max: 70, volume_ratio_min: 2.0, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
   },
   {
     id: 'breakout',
-    name: '20-day high + Vol surge',
-    description: 'Filter for stocks near 52-week highs with volume ratio above 1.5.',
+    name: 'Within 12% of 52W high + Vol 1.5x',
+    description: 'Price within 12% of 52-week high with volume at least 1.5x average.',
     filters: { volume_ratio_min: 1.5, pct_change_min: 1.0, week_52_high_pct_max: 12.0, price_vs_ema20: 'above' },
   },
   {
     id: 'new_highs',
-    name: '52W Highs',
-    description: 'Filter for stocks making a new 52-week high today.',
+    name: 'New 52W highs',
+    description: 'Stocks marked as new 52-week highs on the latest complete market day.',
     filters: { new_52w_high: true },
   },
   {
     id: 'golden_cross',
-    name: 'Golden Cross',
-    description: 'Filter for EMA 20 above EMA 50 with price above EMA 200.',
+    name: 'EMA 20 above EMA 50',
+    description: 'EMA 20 above EMA 50, with price above EMA 200.',
     filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above', volume_ratio_min: 1.0 },
   },
   {
     id: 'oversold',
-    name: 'RSI below 30',
-    description: 'Filter for RSI below 30 while price remains above EMA 200.',
+    name: 'RSI 20-30 + above EMA 200',
+    description: 'RSI between 20 and 30 while price remains above EMA 200.',
     filters: { rsi_min: 20, rsi_max: 30, price_vs_ema200: 'above' },
   },
 ] as const
@@ -817,7 +817,7 @@ export default function ScannerPage() {
             <EmptyState
               title="Run your first scan"
               description="Choose a saved filter or set your own price, volume, trend, and RS conditions."
-              action={{ label: 'Run EMA 20/50 + RSI filter', onClick: () => applyPreset(PRESETS[0]) }}
+              action={{ label: 'Run EMA 20/50 + RSI 50-82', onClick: () => applyPreset(PRESETS[0]) }}
             />
           </div>
         )}
