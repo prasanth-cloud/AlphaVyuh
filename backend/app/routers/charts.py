@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -36,6 +36,12 @@ class LayoutSave(BaseModel):
     timeframe: str = "D"
     indicators: list[str] = []
     drawing_tools: list[Any] = []
+
+
+class WorkspaceSave(BaseModel):
+    timeframe: str = "D"
+    indicators: list[Any] = []
+    drawings: list[Any] = []
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,6 +98,118 @@ def _default_layout(symbol: str) -> dict[str, Any]:
         "indicators": [],
         "drawing_tools": [],
     }
+
+
+def _default_workspace(symbol: str, timeframe: str = "D") -> dict[str, Any]:
+    return {
+        "symbol": symbol.upper(),
+        "timeframe": timeframe,
+        "indicators": [],
+        "drawings": [],
+    }
+
+
+def _drawing_row_to_workspace(row: dict[str, Any]) -> dict[str, Any] | None:
+    points = row.get("points") or []
+    style = row.get("style") or {}
+    tool = str(row.get("tool_type") or "").lower()
+    color = style.get("color") or "#f4f7fb"
+    width = int(style.get("width") or 2)
+    if tool in {"horizontal", "horizontalray", "hray", "hline"}:
+        price = None
+        if points and isinstance(points[0], dict):
+            price = points[0].get("price")
+        if price is None:
+            return None
+        return {"id": row["id"], "kind": "hline", "price": price, "color": color, "width": width, "label": style.get("label")}
+    if len(points) < 2:
+        return None
+    return {"id": row["id"], "kind": "trendline", "p1": points[0], "p2": points[1], "color": color, "width": width}
+
+
+def _workspace_drawing_to_row(drawing: dict[str, Any], timeframe: str) -> dict[str, Any]:
+    if "tool_type" in drawing:
+        return {
+            "id": drawing.get("id"),
+            "user_id": "",
+            "symbol": "",
+            "timeframe": drawing.get("timeframe") or timeframe,
+            "tool_type": drawing.get("tool_type") or "trendline",
+            "points": drawing.get("points") or [],
+            "style": drawing.get("style") or {},
+            "created_at": drawing.get("created_at") or "",
+        }
+
+    drawing_id = drawing.get("id")
+    if drawing.get("kind") == "hline":
+        price = drawing.get("price")
+        point = {"time": drawing.get("time") or "", "price": price}
+        return {
+            "id": drawing_id,
+            "user_id": "",
+            "symbol": "",
+            "timeframe": timeframe,
+            "tool_type": "horizontal",
+            "points": [point, point],
+            "style": {"color": drawing.get("color") or "#f4f7fb", "width": drawing.get("width") or 2, "label": drawing.get("label")},
+            "created_at": "",
+        }
+    return {
+        "id": drawing_id,
+        "user_id": "",
+        "symbol": "",
+        "timeframe": timeframe,
+        "tool_type": "trendline",
+        "points": [drawing.get("p1"), drawing.get("p2")],
+        "style": {"color": drawing.get("color") or "#f4f7fb", "width": drawing.get("width") or 2},
+        "created_at": "",
+    }
+
+
+def _old_drawing_to_workspace(drawing_id: str, body: DrawingCreate | DrawingUpdate) -> dict[str, Any] | None:
+    points = body.points or []
+    style = body.style or {}
+    if len(points) == 0:
+        return None
+    return {
+        "id": drawing_id,
+        "timeframe": body.timeframe,
+        "tool_type": body.tool_type,
+        "points": points,
+        "style": style,
+    }
+
+
+def _get_workspace_row(symbol: str, timeframe: str, user_id: str) -> dict[str, Any]:
+    sb = get_admin_client()
+    try:
+        r = (
+            sb.table("chart_workspaces")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("symbol", symbol.upper())
+            .eq("timeframe", timeframe)
+            .maybe_single()
+            .execute()
+        )
+        return (r.data if r else None) or _default_workspace(symbol, timeframe)
+    except Exception:
+        return _default_workspace(symbol, timeframe)
+
+
+def _save_workspace_row(symbol: str, timeframe: str, indicators: list[Any], drawings: list[Any], user_id: str) -> dict[str, Any]:
+    sb = get_admin_client()
+    payload = {
+        "user_id": user_id,
+        "symbol": symbol.upper(),
+        "timeframe": timeframe,
+        "indicators": indicators,
+        "drawings": drawings,
+    }
+    r = sb.table("chart_workspaces").upsert(payload, on_conflict="user_id,symbol,timeframe").execute()
+    if not r.data:
+        raise HTTPException(status_code=500, detail="Failed to save workspace")
+    return r.data[0]
 
 
 def _aggregate_to_timeframe(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
@@ -437,23 +555,47 @@ async def search_symbols(
 
 # ── Drawings endpoints ────────────────────────────────────────────────────────
 
+@router.get("/{symbol}/workspace")
+async def get_workspace(
+    symbol: str,
+    timeframe: str = Query("D"),
+    user_id: str = Depends(get_current_user_id),
+):
+    row = _get_workspace_row(symbol, timeframe, user_id)
+    return {
+        "symbol": symbol.upper(),
+        "timeframe": timeframe,
+        "indicators": row.get("indicators") or [],
+        "drawings": row.get("drawings") or [],
+    }
+
+
+@router.post("/{symbol}/workspace")
+async def save_workspace(
+    symbol: str,
+    body: WorkspaceSave,
+    user_id: str = Depends(get_current_user_id),
+):
+    row = _save_workspace_row(symbol, body.timeframe, body.indicators, body.drawings, user_id)
+    return {
+        "symbol": symbol.upper(),
+        "timeframe": body.timeframe,
+        "indicators": row.get("indicators") or [],
+        "drawings": row.get("drawings") or [],
+    }
+
+
 @router.get("/{symbol}/drawings")
 async def get_drawings(
     symbol: str,
     timeframe: str = Query("D"),
     user_id: str = Depends(get_current_user_id),
 ):
-    sb = get_admin_client()
-    r = (
-        sb.table("drawings")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("symbol", symbol.upper())
-        .eq("timeframe", timeframe)
-        .order("created_at")
-        .execute()
-    )
-    return r.data or []
+    row = _get_workspace_row(symbol, timeframe, user_id)
+    return [
+        {**_workspace_drawing_to_row(item, timeframe), "user_id": user_id, "symbol": symbol.upper()}
+        for item in row.get("drawings") or []
+    ]
 
 
 @router.post("/{symbol}/drawings", status_code=status.HTTP_201_CREATED)
@@ -462,22 +604,14 @@ async def create_drawing(
     body: DrawingCreate,
     user_id: str = Depends(get_current_user_id),
 ):
-    sb = get_admin_client()
-    r = (
-        sb.table("drawings")
-        .insert({
-            "user_id": user_id,
-            "symbol": symbol.upper(),
-            "timeframe": body.timeframe,
-            "tool_type": body.tool_type,
-            "points": body.points,
-            "style": body.style,
-        })
-        .execute()
-    )
-    if not r.data:
-        raise HTTPException(status_code=500, detail="Failed to save drawing")
-    return r.data[0]
+    drawing_id = str(uuid4())
+    next_drawing = _old_drawing_to_workspace(drawing_id, body)
+    if next_drawing is None:
+        raise HTTPException(status_code=400, detail="Invalid drawing")
+    row = _get_workspace_row(symbol, body.timeframe, user_id)
+    drawings = [*(row.get("drawings") or []), next_drawing]
+    _save_workspace_row(symbol, body.timeframe, row.get("indicators") or [], drawings, user_id)
+    return {**_workspace_drawing_to_row(next_drawing, body.timeframe), "user_id": user_id, "symbol": symbol.upper()}
 
 
 @router.patch("/{symbol}/drawings/{drawing_id}")
@@ -487,34 +621,19 @@ async def update_drawing(
     body: DrawingUpdate,
     user_id: str = Depends(get_current_user_id),
 ):
-    sb = get_admin_client()
-    existing = (
-        sb.table("drawings")
-        .select("id,user_id")
-        .eq("id", drawing_id)
-        .eq("user_id", user_id)
-        .eq("symbol", symbol.upper())
-        .maybe_single()
-        .execute()
-    )
-    if not existing.data:
+    row = _get_workspace_row(symbol, body.timeframe, user_id)
+    drawings = row.get("drawings") or []
+    if not any(isinstance(item, dict) and str(item.get("id")) == drawing_id for item in drawings):
         raise HTTPException(status_code=404, detail="Drawing not found")
-
-    result = (
-        sb.table("drawings")
-        .update({
-            "tool_type": body.tool_type,
-            "points": body.points,
-            "style": body.style,
-            "timeframe": body.timeframe,
-        })
-        .eq("id", drawing_id)
-        .eq("user_id", user_id)
-        .execute()
-    )
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to update drawing")
-    return result.data[0]
+    next_drawing = _old_drawing_to_workspace(drawing_id, body)
+    if next_drawing is None:
+        raise HTTPException(status_code=400, detail="Invalid drawing")
+    next_drawings = [
+        next_drawing if isinstance(item, dict) and str(item.get("id")) == drawing_id else item
+        for item in drawings
+    ]
+    _save_workspace_row(symbol, body.timeframe, row.get("indicators") or [], next_drawings, user_id)
+    return {**_workspace_drawing_to_row(next_drawing, body.timeframe), "user_id": user_id, "symbol": symbol.upper()}
 
 
 @router.delete("/{symbol}/drawings/{drawing_id}")
@@ -524,18 +643,22 @@ async def delete_drawing(
     user_id: str = Depends(get_current_user_id),
 ):
     sb = get_admin_client()
-    # Verify ownership
-    existing = (
-        sb.table("drawings")
-        .select("id,user_id")
-        .eq("id", drawing_id)
+    rows = (
+        sb.table("chart_workspaces")
+        .select("*")
         .eq("user_id", user_id)
-        .maybe_single()
+        .eq("symbol", symbol.upper())
         .execute()
     )
-    if not existing.data:
+    changed = False
+    for row in rows.data or []:
+        drawings = row.get("drawings") or []
+        next_drawings = [item for item in drawings if not (isinstance(item, dict) and str(item.get("id")) == drawing_id)]
+        if len(next_drawings) != len(drawings):
+            changed = True
+            _save_workspace_row(symbol, row.get("timeframe") or "D", row.get("indicators") or [], next_drawings, user_id)
+    if not changed:
         raise HTTPException(status_code=404, detail="Drawing not found")
-    sb.table("drawings").delete().eq("id", drawing_id).execute()
     return {"message": "Deleted"}
 
 
@@ -546,19 +669,13 @@ async def get_layout(
     symbol: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    sb = get_admin_client()
-    try:
-        r = (
-            sb.table("chart_layouts")
-            .select("*")
-            .eq("user_id", user_id)
-            .eq("symbol", symbol.upper())
-            .maybe_single()
-            .execute()
-        )
-    except Exception:
-        return _default_layout(symbol)
-    return (r.data if r else None) or _default_layout(symbol)
+    row = _get_workspace_row(symbol, "D", user_id)
+    return {
+        "symbol": symbol.upper(),
+        "timeframe": row.get("timeframe") or "D",
+        "indicators": row.get("indicators") or [],
+        "drawing_tools": [],
+    }
 
 
 @router.post("/{symbol}/layout")
@@ -567,20 +684,11 @@ async def save_layout(
     body: LayoutSave,
     user_id: str = Depends(get_current_user_id),
 ):
-    sb = get_admin_client()
-    payload = {
-        "user_id": user_id,
+    row = _get_workspace_row(symbol, body.timeframe, user_id)
+    saved = _save_workspace_row(symbol, body.timeframe, body.indicators, row.get("drawings") or [], user_id)
+    return {
         "symbol": symbol.upper(),
         "timeframe": body.timeframe,
-        "indicators": body.indicators,
+        "indicators": saved.get("indicators") or [],
         "drawing_tools": body.drawing_tools,
-        "updated_at": "now()",
     }
-    r = (
-        sb.table("chart_layouts")
-        .upsert(payload, on_conflict="user_id,symbol")
-        .execute()
-    )
-    if not r.data:
-        raise HTTPException(status_code=500, detail="Failed to save layout")
-    return r.data[0]

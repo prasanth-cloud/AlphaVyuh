@@ -33,7 +33,7 @@ export function JournalStatusBar({
             {reviewedTrades}/{closedTrades} closed trades reviewed
           </span>
           <span style={{ fontSize: 12, color: reviewReady ? "var(--accent)" : "var(--text-tertiary)" }}>
-            {reviewReady ? "Journal coach ready" : `Coach unlocks at 3 closed trades`}
+            {reviewReady ? "Journal review ready" : `Review unlocks at 3 closed trades`}
           </span>
         </div>
       </div>

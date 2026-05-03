@@ -36,8 +36,8 @@ export default function TermsPage() {
           </p>
           <p>
             Nothing on this Platform constitutes investment advice, financial advice, trading advice, or any
-            other sort of advice. All content is for informational and educational purposes only. You should
-            consult a registered financial advisor before making any investment decisions.
+            other sort of advice. All content is for informational and educational purposes only. Investment
+            decisions remain the user&apos;s responsibility.
           </p>
         </section>
 

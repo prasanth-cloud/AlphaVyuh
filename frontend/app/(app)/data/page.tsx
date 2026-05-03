@@ -292,13 +292,13 @@ export default function DataFreshnessPage() {
         </Card>
 
         <Card padding="lg">
-          <h2 className="heading-card" style={{ marginBottom: 14 }}>Recommended actions</h2>
+          <h2 className="heading-card" style={{ marginBottom: 14 }}>Workflow status links</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {actions.length ? actions.map(action => (
               <ActionItem key={action.title} {...action} />
             )) : (
               <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", fontSize: 12, lineHeight: 1.6, color: "var(--text-secondary)" }}>
-                Data freshness, broker state, and journal review grounding are all in a usable state. Keep reviewing closed trades to preserve AI quality.
+                Data freshness, broker state, and journal review grounding are all in a usable state for the current snapshot.
               </div>
             )}
           </div>

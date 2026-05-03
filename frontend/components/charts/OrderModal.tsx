@@ -71,6 +71,11 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const reward = tgtNum > 0 ? Math.abs(tgtNum   - priceNum) * qtyNum : null;
   const rr     = risk && reward && risk > 0 ? (reward / risk).toFixed(2) : null;
   const invest = priceNum * qtyNum;
+  const executionPath = brokerLive && brokerName
+    ? `${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} live route`
+    : brokerTokenExpired
+      ? "Token expired · simulated route"
+      : "Simulated route";
 
   async function submit() {
     if (!quantity || !price || parseFloat(price) <= 0 || parseInt(quantity) <= 0) {
@@ -129,6 +134,23 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <p className="text-[11px] leading-5 text-[#7b5a2b]">
               Verify symbol, side, quantity, price, and risk before placing. Simulated orders still write to your journal for review.
             </p>
+          </div>
+
+          <div className="rounded-[8px] border border-[#e7e7e3] bg-[#fafaf8] px-3 py-2.5">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-[#777] mb-2">Order workflow</div>
+            <div className="grid grid-cols-4 gap-1 text-center text-[10px] font-semibold text-[#777]">
+              {[
+                executionPath,
+                "Broker order",
+                "Journal draft",
+                "AI review after close",
+              ].map((step, idx) => (
+                <div key={step} className="rounded-[6px] px-1.5 py-2 bg-white border border-[#eeeeea]">
+                  <div className="mx-auto mb-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#1c1c1a] text-[9px] text-white">{idx + 1}</div>
+                  {step}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* BUY / SELL toggle */}

@@ -3,6 +3,10 @@ Market overview router — breadth, sector, movers for the dashboard.
 """
 from __future__ import annotations
 
+from copy import deepcopy
+from datetime import datetime, timezone
+from time import monotonic
+
 from fastapi import APIRouter, Depends
 
 from app.middleware.auth import get_current_user_id
@@ -11,6 +15,10 @@ from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
+
+OVERVIEW_CACHE_TTL_SECONDS = 60
+_overview_cache: dict | None = None
+_overview_cache_expires_at = 0.0
 
 
 def _finite_float(value, default=None):
@@ -49,6 +57,9 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
         "indices": indices,
         "market_data_source": quote_source,
         "is_live": indices_live,
+        "as_of": latest_date,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cache_status": "miss",
     }
 
 
@@ -88,12 +99,23 @@ def _index_quotes() -> tuple[list[dict], str, bool]:
 
 @router.get("/overview")
 async def market_overview(user_id: str = Depends(get_current_user_id)):
+    global _overview_cache, _overview_cache_expires_at
+
+    now = monotonic()
+    if _overview_cache and _overview_cache_expires_at > now:
+        cached = deepcopy(_overview_cache)
+        cached["cache_status"] = "hit"
+        return cached
+
     sb = get_admin_client()
     indices, quote_source, indices_live = _index_quotes()
 
     latest_date = get_latest_complete_trade_date(sb)
     if not latest_date:
-        return _empty_overview(None, indices, quote_source, indices_live)
+        overview = _empty_overview(None, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
 
     # Fetch all NSE EQ rows for latest date
     rows = (
@@ -161,7 +183,10 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
     total = len(enriched)
     if total == 0:
-        return _empty_overview(latest_date, indices, quote_source, indices_live)
+        overview = _empty_overview(latest_date, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
 
     # Breadth counts
     advances = sum(1 for r in enriched if r["pct_change"] > 0.05)
@@ -243,7 +268,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
             "volume_ratio": r["volume_ratio"],
         }
 
-    return {
+    overview = {
         "trade_date": latest_date,
         "advances": advances,
         "declines": declines,
@@ -268,4 +293,10 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "indices": indices,
         "market_data_source": quote_source,
         "is_live": indices_live,
+        "as_of": latest_date,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cache_status": "miss",
     }
+    _overview_cache = deepcopy(overview)
+    _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+    return overview

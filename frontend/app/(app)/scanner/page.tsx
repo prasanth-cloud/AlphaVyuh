@@ -1,10 +1,16 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { authHeaders, createFeedbackReport, isMockMode } from '@/lib/api'
+import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  addToWatchlist as addSymbolToWatchlist,
+  authHeaders,
+  createFeedbackReport,
+  createWatchlist,
+  getWatchlists as getCachedWatchlists,
+  isMockMode,
+} from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
-import { useWorkflowState } from '@/lib/workflow'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -47,39 +53,39 @@ interface Watchlist { id: string; name: string }
 const PRESETS = [
   {
     id: 'leaders',
-    name: 'Leaders',
-    description: 'Broad, market-ready shortlist of stronger names above key averages.',
+    name: 'EMA 20/50 + RSI 50-82',
+    description: 'Filter for stocks above EMA 20 and EMA 50 with RSI between 50 and 82.',
     filters: { rsi_min: 50, rsi_max: 82, volume_ratio_min: 1.05, price_vs_ema20: 'above', price_vs_ema50: 'above' },
   },
   {
     id: 'momentum',
-    name: 'Momentum',
-    description: 'Continuation names with improving participation.',
-    filters: { rsi_min: 55, rsi_max: 80, volume_ratio_min: 1.2, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
+    name: 'RSI 60-70 + Vol 2x',
+    description: 'Filter for RSI 60-70 with above-average volume and price above EMA 20/50.',
+    filters: { rsi_min: 60, rsi_max: 70, volume_ratio_min: 2.0, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
   },
   {
     id: 'breakout',
-    name: 'Breakout',
-    description: 'Higher-energy setups pushing toward fresh highs.',
+    name: '20-day high + Vol surge',
+    description: 'Filter for stocks near 52-week highs with volume ratio above 1.5.',
     filters: { volume_ratio_min: 1.5, pct_change_min: 1.0, week_52_high_pct_max: 12.0, price_vs_ema20: 'above' },
   },
   {
     id: 'new_highs',
     name: '52W Highs',
-    description: 'Names already proving absolute strength.',
+    description: 'Filter for stocks making a new 52-week high today.',
     filters: { new_52w_high: true },
   },
   {
     id: 'golden_cross',
     name: 'Golden Cross',
-    description: 'Trend transition ideas with medium-term structure support.',
+    description: 'Filter for EMA 20 above EMA 50 with price above EMA 200.',
     filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above', volume_ratio_min: 1.0 },
   },
   {
     id: 'oversold',
-    name: 'Oversold',
-    description: 'Recovery candidates still above the long-term trend.',
-    filters: { rsi_min: 20, rsi_max: 35, price_vs_ema200: 'above' },
+    name: 'RSI below 30',
+    description: 'Filter for RSI below 30 while price remains above EMA 200.',
+    filters: { rsi_min: 20, rsi_max: 30, price_vs_ema200: 'above' },
   },
 ] as const
 
@@ -184,14 +190,6 @@ function MetricCell({ label, value, direction }: { label: string; value: string;
   )
 }
 
-function setupQualityScore(result: ScanResult): number {
-  const trend = [result.ema_20, result.ema_50, result.ema_200].filter((ema) => ema != null && result.close > ema).length * 18
-  const volume = Math.min(22, Math.max(0, (result.volume_ratio ?? 0) * 10))
-  const rs = Math.min(24, Math.max(0, (result.rs_score ?? 50) / 4))
-  const rsi = result.rsi_14 == null ? 8 : result.rsi_14 >= 50 && result.rsi_14 <= 72 ? 18 : 9
-  return Math.round(Math.min(100, trend + volume + rs + rsi))
-}
-
 // Inline detail expansion for a selected row
 function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
   r: ScanResult
@@ -201,7 +199,7 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
 }) {
   return (
     <tr>
-      <td colSpan={10} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
+      <td colSpan={8} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
           <MetricCell label="EMA 20" value={r.ema_20 ? `₹${r.ema_20.toFixed(0)}` : '—'} direction={r.ema_20 ? (r.close > r.ema_20 ? 'above' : 'below') : undefined} />
           <MetricCell label="EMA 50" value={r.ema_50 ? `₹${r.ema_50.toFixed(0)}` : '—'} direction={r.ema_50 ? (r.close > r.ema_50 ? 'above' : 'below') : undefined} />
@@ -240,8 +238,6 @@ const SORT_COLS = [
 
 export default function ScannerPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const { addToShortlist } = useWorkflowState()
   const [filters, setFilters] = useState<Filters>(emptyFilters())
   const [activePreset, setActivePreset] = useState<string | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
@@ -287,9 +283,8 @@ export default function ScannerPage() {
       return
     }
     try {
-      const headers = await getAuthHeaders()
-      const res = await fetch(`${API}/api/v1/watchlists`, { headers })
-      if (res.ok) { const d = await res.json(); setWatchlists(d.watchlists || []) }
+      const lists = await getCachedWatchlists()
+      setWatchlists(lists.map(({ id, name }) => ({ id, name })))
     } catch { /* ignore */ }
   }
 
@@ -314,8 +309,8 @@ export default function ScannerPage() {
   async function loadSavedScreens() {
     if (isMockMode) {
       setSavedScreens([
-        { id: 'mock-leaders', name: 'Leaders', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
-        { id: 'mock-breakout', name: 'Breakout Watch', filters: PRESETS[2].filters, created_at: '2026-04-24T09:20:00Z' },
+        { id: 'mock-leaders', name: 'EMA 20/50 + RSI', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
+        { id: 'mock-breakout', name: '20-day high + Vol surge', filters: PRESETS[2].filters, created_at: '2026-04-24T09:20:00Z' },
       ])
       return
     }
@@ -411,13 +406,6 @@ export default function ScannerPage() {
   }, [pageSize, runScan, sortBy, sortDesc])
 
   useEffect(() => {
-    const requestedPreset = searchParams.get('preset')
-    if (!requestedPreset || activePreset) return
-    const preset = PRESETS.find(item => item.id === requestedPreset)
-    if (preset) applyPreset(preset)
-  }, [activePreset, applyPreset, searchParams])
-
-  useEffect(() => {
     if (bootstrapped) return
     if (loading || hasRun || savedScreens.length > 0) return
     setBootstrapped(true)
@@ -472,34 +460,8 @@ export default function ScannerPage() {
       showToast(`${symbol} added to mock watchlist`)
       return
     }
-    const headers = await getAuthHeaders()
-    await fetch(`${API}/api/v1/watchlists/${wlId}/items`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ symbol }),
-    })
+    await addSymbolToWatchlist(wlId, symbol)
     showToast(`${symbol} added`)
-  }
-
-  function shortlistRows(rows: ScanResult[]) {
-    if (rows.length === 0) {
-      showToast('Select at least one stock to shortlist')
-      return
-    }
-    addToShortlist(rows.map((row) => ({
-      symbol: row.symbol,
-      companyName: row.company_name,
-      sector: row.sector,
-      setupQuality: setupQualityScore(row),
-      setupType: activePresetMeta?.name ?? 'Custom scan',
-      source: activePresetMeta?.name ?? 'Scanner',
-    })))
-    showToast(`Added ${rows.length} setup${rows.length === 1 ? '' : 's'} to shortlist`)
-  }
-
-  function shortlistSelectedRows() {
-    const rows = selectedResults.size > 0 ? results.filter(row => selectedResults.has(row.symbol)) : results.slice(0, 5)
-    shortlistRows(rows)
   }
 
   async function createWatchlistFromResults() {
@@ -510,23 +472,18 @@ export default function ScannerPage() {
       router.push('/watchlist')
       return
     }
-    const headers = await getAuthHeaders()
-    const res = await fetch(`${API}/api/v1/watchlists`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ name: newWlName.trim() }),
-    })
-    const wl = await res.json() as { id: string }
-    const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
-    for (const s of toAdd.slice(0, 50)) {
-      await fetch(`${API}/api/v1/watchlists/${wl.id}/items`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ symbol: s.symbol }),
-      })
+    try {
+      const wl = await createWatchlist(newWlName.trim())
+      const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
+      for (const s of toAdd.slice(0, 50)) {
+        await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
+      }
+      setShowWlModal(false); setNewWlName('')
+      showToast(`"${wl.name}" created`)
+      router.push(`/watchlist?id=${wl.id}`)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Watchlist creation failed')
     }
-    setShowWlModal(false); setNewWlName('')
-    router.push(`/watchlist?id=${wl.id}`)
   }
 
   function setF(key: keyof Filters, val: unknown) {
@@ -610,47 +567,42 @@ export default function ScannerPage() {
     { length: pageSize === 0 ? 1 : Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => (pageSize === 0 ? 1 : pageWindowStart + idx),
   );
-  const setupQualityBySymbol = useMemo(() => {
-    const scores = new Map<string, number>()
-    for (const result of results) scores.set(result.symbol, setupQualityScore(result))
-    return scores
-  }, [results])
-  const presetStrip = (
-    <div className="workspace-card" style={{ padding: 10, marginBottom: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', paddingBottom: 1 }}>
-        <span className="label" style={{ flexShrink: 0, paddingInline: 4 }}>Presets</span>
-        {PRESETS.map(p => {
-          const active = activePreset === p.id
-          return (
-            <button
-              key={p.id}
-              onClick={() => applyPreset(p)}
-              title={p.description}
-              className={`workspace-chip-button${active ? ' active' : ''}`}
-              style={{
-                flexShrink: 0,
-                minHeight: 34,
-                padding: '7px 12px',
-                borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
-                color: active ? 'var(--accent)' : 'var(--text-secondary)',
-              }}
-            >
-              {p.name}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-
   return (
     <div className="workspace-page">
-      {presetStrip}
-
       <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
 
       {/* ── LEFT PANEL ── */}
       <div className="workspace-card workspace-card-muted" style={{ display: 'flex', flexDirection: 'column' }}>
+
+        {/* Presets */}
+        <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <div className="label" style={{ marginBottom: 8 }}>Presets</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {PRESETS.map(p => {
+              const active = activePreset === p.id
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => applyPreset(p)}
+                  title={p.description}
+                  className={`workspace-chip-button${active ? ' active' : ''}`}
+                  style={{
+                    justifyContent: 'center',
+                    minHeight: 34,
+                    padding: '7px 10px',
+                    borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
+                    color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {p.name}
+                </button>
+              )
+            })}
+          </div>
+          <div className="caption" style={{ marginTop: 8 }}>
+            {activePresetMeta?.description ?? 'Choose a saved filter, then adjust the fields for your scan.'}
+          </div>
+        </div>
 
         {/* Saved screens */}
         {savedScreens.length > 0 && (
@@ -699,7 +651,7 @@ export default function ScannerPage() {
         <div style={{ flex: filtersOpen ? 1 : 0, overflowY: 'auto', display: filtersOpen ? 'block' : 'none' }}>
           {filterTab === 'technical' ? (
             <>
-              <Section title="Price & Change" open>
+              <Section title="Price and change" open>
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
                 {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
               </Section>
@@ -732,20 +684,20 @@ export default function ScannerPage() {
               <Section title="Volatility and risk">
                 {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
               </Section>
-              <Section title="52-Week Range">
+              <Section title="52-week range">
                 {numRow('Max % below 52W high', 'week_52_high_pct_max', 'e.g. 25')}
                 {numRow('Min % above 52W low', 'w52l_pct_min', 'e.g. 30')}
                 {numRow('RS Score ≥', 'rs_score_min', 'e.g. 70')}
                 {toggleRow('New 52W high today', 'new_52w_high')}
                 {toggleRow('New 52W low today', 'new_52w_low')}
               </Section>
-              <Section title="Candle Patterns">
+              <Section title="Candle patterns">
                 {toggleRow('Inside bar', 'is_inside_bar')}
               </Section>
             </>
           ) : (
             <>
-              <Section title="Fundamental quality" open>
+              <Section title="Market cap" open>
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: -4, marginBottom: 6, lineHeight: 1.5 }}>
                   Large: 20000+  ·  Mid: 5000–20000  ·  Small: &lt;5000
@@ -756,7 +708,7 @@ export default function ScannerPage() {
                 {rangeRow('P/B ratio', 'pb_min', 'pb_max')}
                 {rangeRow('EPS (₹)', 'eps_min', 'eps_max')}
               </Section>
-              <Section title="Returns & Efficiency" open>
+              <Section title="Returns and efficiency" open>
                 {numRow('ROE ≥ %', 'roe_min', 'e.g. 15')}
                 {numRow('ROCE ≥ %', 'roce_min', 'e.g. 15')}
               </Section>
@@ -828,11 +780,8 @@ export default function ScannerPage() {
                     <option key={option.label} value={option.value}>{option.value === 0 ? 'All results' : `${option.label} / page`}</option>
                   ))}
                 </select>
-                <Button size="sm" variant="primary" onClick={shortlistSelectedRows}>
-                  Add selected to watchlist
-                </Button>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
-                  Create watchlist
+                  Add selected to watchlist
                 </Button>
               </div>
             </>
@@ -840,7 +789,7 @@ export default function ScannerPage() {
             <div>
               <div className="workspace-card-title">Scanner queue</div>
               <div className="workspace-card-copy">
-                {loading ? 'Scanning…' : 'Starting with a broad leaders scan so you land on a usable shortlist.'}
+                {loading ? 'Scanning…' : 'Run your first scan or start with a saved filter.'}
               </div>
             </div>
           )}
@@ -866,9 +815,9 @@ export default function ScannerPage() {
         {!loading && !hasRun && !error && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
-              title="Loading a practical starting list"
-              description="The scanner opens with a broader leaders preset first, then you can tighten filters only when you need a narrower setup list."
-              action={{ label: 'Run leaders preset', onClick: () => applyPreset(PRESETS[0]) }}
+              title="Run your first scan"
+              description="Choose a saved filter or set your own price, volume, trend, and RS conditions."
+              action={{ label: 'Run EMA 20/50 + RSI filter', onClick: () => applyPreset(PRESETS[0]) }}
             />
           </div>
         )}
@@ -903,13 +852,11 @@ export default function ScannerPage() {
                 <Th align="right" width={60}>RSI</Th>
                 <Th align="right" width={50}>RS</Th>
                 <Th align="right" width={90}>52W H%</Th>
-                <Th align="right" width={70}>Quality</Th>
-                <Th width={92}>{''}</Th>
+                <Th width={60}>{''}</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {
                   const expanded = expandedSymbol === r.symbol
-                  const quality = setupQualityBySymbol.get(r.symbol) ?? setupQualityScore(r)
                   const rsiBadgeVariant = r.rsi_14 != null
                     ? (r.rsi_14 > 70 ? 'accent' : r.rsi_14 > 40 ? 'gain' : 'warn')
                     : 'neutral'
@@ -962,24 +909,25 @@ export default function ScannerPage() {
                         <Td align="right" mono>
                           {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
                         </Td>
-                        <Td align="right" mono>
-                          <span style={{ color: quality >= 80 ? 'var(--gain)' : quality >= 65 ? 'var(--warn)' : 'var(--text-secondary)' }}>
-                            {quality}
-                          </span>
-                        </Td>
                         <Td>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                             <button
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
-                              style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer', fontWeight: 700 }}
-                            >
-                              Analyze
-                            </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); shortlistRows([r]) }}
                               style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}
                             >
-                              Shortlist
+                              Chart
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); router.push(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`) }}
+                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                            >
+                              Journal
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); reportScannerDataIssue(r.symbol) }}
+                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
+                            >
+                              Report
                             </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}

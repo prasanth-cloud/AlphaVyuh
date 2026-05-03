@@ -19,7 +19,6 @@ import {
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import { DataProvenanceBadge } from "@/components/ui";
-import { isTradePlanValid, useWorkflowState } from "@/lib/workflow";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -72,6 +71,7 @@ const INDICATOR_CONFIG = [
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "LongPosition", "ShortPosition", "Text"] as const;
+const FULL_CHART_DRAWING_TOOLS = DRAWING_TOOLS;
 const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
 type DrawingTool = typeof DRAWING_TOOLS[number];
@@ -251,13 +251,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const symbol = routeSymbol.toUpperCase();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { state: workflowState } = useWorkflowState();
   const sourcePage = searchParams.get("from");
   const sourceWatchlist = searchParams.get("watchlist");
   const sourceWatchlistId = searchParams.get("watchlistId");
   const fullChartMode = searchParams.get("full") === "1";
-  const workflowPlan = workflowState.plans[symbol];
-  const workflowPlanValid = isTradePlanValid(workflowPlan);
+  const initialDrawMode = searchParams.get("draw");
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [liveMode, setLiveMode] = useState(false);
@@ -329,7 +327,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [showOrder, setShowOrder] = useState(false);
   const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
   const [tradePlan, setTradePlan] = useState<{ entry: string; stop: string; target: string }>({ entry: "", stop: "", target: "" });
-  const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string } | null>(null);
+  const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string; nextActions?: string[]; riskReward?: number | null } | null>(null);
   const [symbolPositions, setSymbolPositions] = useState<PortfolioPosition[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [closeBusyId, setCloseBusyId] = useState<string | null>(null);
@@ -404,6 +402,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   } | null>(null);
   const [snapToPrice, setSnapToPrice] = useState(true);
   const [textEditor, setTextEditor] = useState<{ drawingId: string | null; value: string; x: number; y: number; isNew: boolean } | null>(null);
+
+  useEffect(() => {
+    if (initialDrawMode === "trendline") {
+      setActiveDrawingTool("Trendline");
+    } else if (initialDrawMode === "hline" || initialDrawMode === "horizontal") {
+      setActiveDrawingTool("Horizontal");
+    }
+  }, [initialDrawMode]);
 
   const updateDrawingsWithHistory = useCallback((mutator: (current: ChartDrawing[]) => ChartDrawing[]) => {
     setDrawnLines((current) => {
@@ -813,6 +819,25 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setAlertSaving(false);
       setTimeout(() => setQuickAlertMsg(""), 3000);
     }
+  }
+
+  async function handleAlertFromSelectedDrawing() {
+    if (!selectedDrawing) {
+      setQuickAlertMsg("Select a drawing first");
+      setTimeout(() => setQuickAlertMsg(""), 2500);
+      return;
+    }
+    const target = isPositionDrawingTool(selectedDrawing.tool)
+      ? selectedDrawing.p3?.price ?? selectedDrawing.p1.price
+      : selectedDrawing.tool === "Horizontal" || selectedDrawing.tool === "HorizontalRay"
+        ? selectedDrawing.p1.price
+        : selectedDrawing.p2.price;
+    const condition = displayClose != null && target > displayClose ? "above" : "below";
+    await handleQuickAlert(
+      condition,
+      target,
+      `${DRAW_TOOL_META[selectedDrawing.tool].label} alert from saved drawing`,
+    );
   }
 
   async function handleDeleteAlert(id: string) {
@@ -1781,7 +1806,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   <span className="text-[10px] opacity-60">Esc</span>
                 </button>
                 <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
-                {DRAWING_TOOLS.map(tool => {
+                {FULL_CHART_DRAWING_TOOLS.map(tool => {
                   const meta = DRAW_TOOL_META[tool];
                   const Icon = meta.icon;
                   return (
@@ -1969,9 +1994,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             onClose={() => setShowOrder(false)}
             onFilled={(result: OrderResult) => {
               setShowOrder(false);
-              setOrderToast({ message: result.message, journalId: result.journal_id, broker: result.broker });
+              setOrderToast({
+                message: result.message,
+                journalId: result.journal_id,
+                broker: result.broker,
+                nextActions: result.next_actions,
+                riskReward: result.risk_reward,
+              });
               void loadSymbolPositions();
-              setTimeout(() => setOrderToast(null), 6000);
+              setTimeout(() => setOrderToast(null), 9000);
             }}
           />
         )}
@@ -1991,6 +2022,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)" }}>
                 {orderToast.broker === "simulated" ? "Simulated fill" : `Broker routed via ${orderToast.broker}`} · journal capture completed
+                {orderToast.riskReward != null ? ` · R:R ${orderToast.riskReward.toFixed(2)}` : ""}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <Link href="/journal" prefetch={false} style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
@@ -2001,6 +2033,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </Link>
               </div>
             </div>
+            {orderToast.nextActions?.length ? (
+              <div style={{ marginTop: 10, display: "grid", gap: 5 }}>
+                {orderToast.nextActions.slice(0, 3).map((action) => (
+                  <div key={action} style={{ fontSize: 11, color: "rgba(255,255,255,0.68)", lineHeight: 1.45 }}>
+                    {action}
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -2261,32 +2302,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               </div>
               <div className="px-4 py-3 flex gap-2" style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
-                  onClick={() => {
-                    if (!workflowPlanValid) {
-                      setOrderToast({ message: "Create a valid trade plan in Watchlist before drafting an order.", journalId: null, broker: "simulated" });
-                      setTimeout(() => setOrderToast(null), 4000);
-                      return;
-                    }
-                    setOrderSide("buy"); setShowOrder(true);
-                  }}
+                  onClick={() => { setOrderSide("buy"); setShowOrder(true); }}
                   className="flex-1 py-2 bg-[#26a65b] text-white text-[13px] font-bold rounded-[8px] hover:opacity-90 transition-opacity"
-                  style={{ opacity: workflowPlanValid ? 1 : 0.5 }}
                 >
-                  {workflowPlanValid ? "BUY" : "PLAN REQUIRED"}
+                  BUY
                 </button>
                 <button
-                  onClick={() => {
-                    if (!workflowPlanValid) {
-                      setOrderToast({ message: "Create a valid trade plan in Watchlist before drafting an order.", journalId: null, broker: "simulated" });
-                      setTimeout(() => setOrderToast(null), 4000);
-                      return;
-                    }
-                    setOrderSide("sell"); setShowOrder(true);
-                  }}
+                  onClick={() => { setOrderSide("sell"); setShowOrder(true); }}
                   className="flex-1 py-2 bg-[#e5383b] text-white text-[13px] font-bold rounded-[8px] hover:opacity-90 transition-opacity"
-                  style={{ opacity: workflowPlanValid ? 1 : 0.5 }}
                 >
-                  {workflowPlanValid ? "SELL" : "PLAN REQUIRED"}
+                  SELL
                 </button>
               </div>
               <div style={{ borderBottom: "1px solid var(--app-border)" }}>
@@ -2771,6 +2796,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               )}
               {selectedDrawing && (
                 <button
+                  onClick={() => void handleAlertFromSelectedDrawing()}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.22)" }}
+                >
+                  <Bell size={12} />
+                  Alert from drawing
+                </button>
+              )}
+              {selectedDrawing && (
+                <button
                   onClick={() => toggleDrawingLock(selectedDrawing.id)}
                   className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
                   style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
@@ -3038,6 +3073,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             {/* Drawing SVG overlay */}
             <div
               ref={overlayRef}
+              data-testid="chart-drawing-overlay"
               className="absolute inset-0 z-20"
               style={{ cursor: activeDrawingTool ? "crosshair" : dragState || positionDragState || planDragState ? "grabbing" : "default", pointerEvents: activeDrawingTool || selectedDrawing || dragState || positionDragState || planDragState || activeManagedPosition ? "all" : "none" }}
               onMouseDown={handleOverlayMouseDown}

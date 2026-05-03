@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button, Input, Label } from "@/components/ui";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 
 export default function LoginForm() {
+  const router = useRouter();
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
@@ -43,7 +45,8 @@ export default function LoginForm() {
         setError(data.error || "Login failed");
         return;
       }
-      window.location.replace(safeNext());
+      router.replace(safeNext());
+      router.refresh();
     } catch {
       setError("Network error — please try again.");
     } finally {
