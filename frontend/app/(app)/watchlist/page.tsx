@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   DndContext,
@@ -17,9 +17,9 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Eraser, Minus, PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag, Undo2 } from "lucide-react";
 import dynamic from "next/dynamic";
-import type { Watchlist, WatchlistItem, CandleBar, JournalEntry } from "@/lib/api";
+import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Drawing } from "@/lib/api";
 import {
   getWatchlists,
   getJournalEntries,
@@ -32,6 +32,9 @@ import {
   getQuote,
   searchSymbols,
   getCandles,
+  getDrawings,
+  saveDrawing,
+  deleteDrawing,
   placeOrder,
   getQuoteLive,
   isMockMode,
@@ -40,12 +43,27 @@ import {
   type WatchlistItemMetadataUpdate,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
-import { DataProvenanceBadge, EmptyState } from "@/components/ui";
-import IndicatorMenu from "@/components/charts/IndicatorMenu";
-import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
+import { EmptyState } from "@/components/ui";
+import {
+  createDraftPlan,
+  isTradePlanValid,
+  SYMBOL_LIFECYCLE,
+  useWorkflowState,
+  type SymbolLifecycle,
+  type TradePlan,
+} from "@/lib/workflow";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
+type WatchlistDrawingTool = "trendline" | "horizontal" | "long" | "short";
+type WatchlistDrawingPoint = { time: string; price: number };
+type WatchlistOverlayDrawing = {
+  id: string;
+  tool: WatchlistDrawingTool;
+  p1: WatchlistDrawingPoint;
+  p2?: WatchlistDrawingPoint;
+  color: string;
+};
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
 const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
@@ -56,10 +74,10 @@ function getSetupSignal(item: WatchlistItem): SetupSignal {
   const volume = item.volume_ratio ?? 0;
   const rsi = item.rsi_14 ?? 50;
 
-  if (move >= 2 && volume >= 1.5 && rsi >= 58) return { label: "2% up + vol", tone: "gain", score: 95 };
-  if (move >= 0.5 && volume >= 1.2 && rsi >= 55) return { label: "RSI 55+ + vol", tone: "accent", score: 82 };
-  if (move <= -2 && volume >= 1.3) return { label: "2% down + vol", tone: "loss", score: 28 };
-  if (move > -1 && move < 1 && rsi >= 42 && rsi <= 58) return { label: "Flat range", tone: "neutral", score: 64 };
+  if (move >= 2 && volume >= 1.5 && rsi >= 58) return { label: "Breakout", tone: "gain", score: 95 };
+  if (move >= 0.5 && volume >= 1.2 && rsi >= 55) return { label: "Momentum", tone: "accent", score: 82 };
+  if (move <= -2 && volume >= 1.3) return { label: "Weak", tone: "loss", score: 28 };
+  if (move > -1 && move < 1 && rsi >= 42 && rsi <= 58) return { label: "Pullback", tone: "neutral", score: 64 };
   return { label: "Watch", tone: "neutral", score: 50 };
 }
 
@@ -160,7 +178,7 @@ function SortableRow({
             </span>
           )}
           <span
-            title={`Metric match ${setup.score}`}
+            title={`Setup score ${setup.score}`}
             style={{
               fontSize: 9,
               fontWeight: 800,
@@ -253,30 +271,63 @@ function TimeframeTabs({ active, onChange }: { active: string; onChange: (v: str
   );
 }
 
+function normalizeWatchlistDrawing(drawing: Drawing): WatchlistOverlayDrawing | null {
+  const toolType = String(drawing.tool_type || "").toLowerCase();
+  const tool: WatchlistDrawingTool | null =
+    toolType === "trendline" ? "trendline" :
+    toolType === "horizontal" ? "horizontal" :
+    toolType === "long" ? "long" :
+    toolType === "short" ? "short" :
+    null;
+  if (!tool) return null;
+  const points = drawing.points as Array<{ time?: string; price?: number }>;
+  const first = points[0];
+  if (!first?.time || first.price == null) return null;
+  const second = points[1];
+  return {
+    id: drawing.id,
+    tool,
+    p1: { time: first.time, price: first.price },
+    p2: second?.time && second.price != null ? { time: second.time, price: second.price } : undefined,
+    color: (drawing.style as { color?: string })?.color ?? (tool === "short" ? "#e5383b" : tool === "long" ? "#1bbf72" : "#f4f7fb"),
+  };
+}
+
 // ─── Chart + order panel ──────────────────────────────────────────────────────
 
 function ChartPanel({
   symbol,
   latestClose,
   watchlistName,
+  planValid,
+  planSummary,
+  onOpenPlan,
   onOpenChart,
-  onOpenChartDraw,
   onStepSymbol,
 }: {
   symbol: string;
   latestClose?: number | null;
   watchlistName?: string | null;
+  planValid: boolean;
+  planSummary?: string;
+  onOpenPlan: () => void;
   onOpenChart: (symbol: string) => void;
-  onOpenChartDraw: (symbol: string) => void;
   onStepSymbol: (direction: "prev" | "next") => void;
 }) {
+  const chartWrapRef = useRef<HTMLDivElement | null>(null);
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [tf, setTf] = useState("3M");
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
   const [showChartDetails, setShowChartDetails] = useState(false);
   const [showOrderTicket, setShowOrderTicket] = useState(false);
+  const [activeTool, setActiveTool] = useState<WatchlistDrawingTool | null>(null);
+  const [drawings, setDrawings] = useState<WatchlistOverlayDrawing[]>([]);
+  const [pendingPoint, setPendingPoint] = useState<WatchlistDrawingPoint | null>(null);
+  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 });
+  const [toolMsg, setToolMsg] = useState("");
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -340,10 +391,10 @@ function ChartPanel({
     };
   }, [candles]);
   const chartHeight = showOrderTicket ? 300 : showChartDetails ? 380 : 440;
-  const workspaceTimeframe = useMemo(() => {
+  const drawingTimeframe = useMemo(() => {
     const timeframeMap: Record<string, "D" | "W" | "M"> = {
       "1D": "D",
-      "1W": "W",
+      "1W": "D",
       "1M": "D",
       "3M": "D",
       "6M": "W",
@@ -354,7 +405,57 @@ function ChartPanel({
     };
     return timeframeMap[tf] ?? "D";
   }, [tf]);
-  const chartWorkspace = useChartWorkspace(symbol, workspaceTimeframe);
+
+  useEffect(() => {
+    const readTheme = () => setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+    readTheme();
+    window.addEventListener("storage", readTheme);
+    window.addEventListener("alphavyuh:theme-changed", readTheme);
+    return () => {
+      window.removeEventListener("storage", readTheme);
+      window.removeEventListener("alphavyuh:theme-changed", readTheme);
+    };
+  }, []);
+
+  const chartScale = useMemo(() => {
+    if (!candles.length || overlaySize.width <= 0 || overlaySize.height <= 0) return null;
+    const highs = candles.map((c) => c.high).filter(Number.isFinite);
+    const lows = candles.map((c) => c.low).filter(Number.isFinite);
+    if (!highs.length || !lows.length) return null;
+    const rawHigh = Math.max(...highs);
+    const rawLow = Math.min(...lows);
+    const pad = Math.max((rawHigh - rawLow) * 0.08, rawHigh * 0.002, 1);
+    const high = rawHigh + pad;
+    const low = rawLow - pad;
+    const range = high - low || 1;
+    const indexByTime = new Map(candles.map((c, index) => [c.time, index]));
+    return { high, low, range, indexByTime };
+  }, [candles, overlaySize.height, overlaySize.width]);
+
+  const pointToCoord = useCallback((point: WatchlistDrawingPoint) => {
+    if (!chartScale || candles.length === 0) return null;
+    const index = chartScale.indexByTime.get(point.time);
+    if (index == null) return null;
+    const x = candles.length === 1 ? overlaySize.width / 2 : (index / (candles.length - 1)) * overlaySize.width;
+    const y = ((chartScale.high - point.price) / chartScale.range) * overlaySize.height;
+    return { x, y };
+  }, [candles.length, chartScale, overlaySize.height, overlaySize.width]);
+
+  const coordToPoint = useCallback((clientX: number, clientY: number): WatchlistDrawingPoint | null => {
+    const rect = chartWrapRef.current?.getBoundingClientRect();
+    if (!rect || !chartScale || candles.length === 0) return null;
+    const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+    const y = Math.min(Math.max(clientY - rect.top, 0), rect.height);
+    const index = candles.length === 1 ? 0 : Math.round((x / Math.max(rect.width, 1)) * (candles.length - 1));
+    const candle = candles[Math.min(Math.max(index, 0), candles.length - 1)];
+    const price = chartScale.high - (y / Math.max(rect.height, 1)) * chartScale.range;
+    return { time: candle.time, price: Math.max(0, price) };
+  }, [candles, chartScale]);
+
+  const flashToolMsg = useCallback((message: string) => {
+    setToolMsg(message);
+    window.setTimeout(() => setToolMsg(""), 2500);
+  }, []);
 
   useEffect(() => {
     setChartLoading(true);
@@ -396,7 +497,81 @@ function ChartPanel({
     if (latestClose) setPrice(String(latestClose));
   }, [latestClose]);
 
+  useEffect(() => {
+    setDrawings([]);
+    setPendingPoint(null);
+    getDrawings(symbol, drawingTimeframe)
+      .then((list) => setDrawings(list.map(normalizeWatchlistDrawing).filter((drawing): drawing is WatchlistOverlayDrawing => Boolean(drawing))))
+      .catch(() => setDrawings([]));
+  }, [drawingTimeframe, symbol]);
+
+  useEffect(() => {
+    const node = chartWrapRef.current;
+    if (!node) return;
+    const syncSize = () => setOverlaySize({ width: node.clientWidth, height: node.clientHeight });
+    syncSize();
+    const observer = new ResizeObserver(syncSize);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [chartHeight, candles.length]);
+
+  async function handleChartToolClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (!activeTool || chartLoading || chartError || candles.length === 0) return;
+    const point = coordToPoint(event.clientX, event.clientY);
+    if (!point) return;
+
+    if (activeTool === "trendline" && !pendingPoint) {
+      setPendingPoint(point);
+      flashToolMsg("Select second point");
+      return;
+    }
+
+    const p1 = pendingPoint ?? point;
+    const p2 = activeTool === "trendline" ? point : point;
+    const color = activeTool === "short" ? "#e5383b" : activeTool === "long" ? "#1bbf72" : "#f4f7fb";
+    const local: WatchlistOverlayDrawing = {
+      id: `local-${Date.now()}`,
+      tool: activeTool,
+      p1,
+      p2,
+      color,
+    };
+    setDrawings((current) => [...current, local]);
+    setPendingPoint(null);
+    setActiveTool(null);
+
+    try {
+      const saved = await saveDrawing(symbol, {
+        tool_type: activeTool,
+        points: activeTool === "trendline"
+          ? [{ time: p1.time, price: p1.price }, { time: p2.time, price: p2.price }]
+          : [{ time: p1.time, price: p1.price }, { time: p1.time, price: p1.price }],
+        style: { color, source: "watchlist" },
+        timeframe: drawingTimeframe,
+      });
+      const normalized = normalizeWatchlistDrawing(saved);
+      if (normalized) {
+        setDrawings((current) => current.map((drawing) => drawing.id === local.id ? normalized : drawing));
+      }
+      flashToolMsg(activeTool === "long" ? "Long marker saved" : activeTool === "short" ? "Short marker saved" : "Drawing saved");
+    } catch {
+      flashToolMsg("Saved locally for this session");
+    }
+  }
+
+  async function clearWatchlistDrawings() {
+    const current = drawings;
+    setDrawings([]);
+    setPendingPoint(null);
+    await Promise.all(current.filter((drawing) => !drawing.id.startsWith("local-")).map((drawing) => deleteDrawing(symbol, drawing.id).catch(() => {})));
+    flashToolMsg("Chart marks cleared");
+  }
+
   async function handleOrder() {
+    if (!planValid) {
+      setOrderMsg({ ok: false, text: "Create a valid trade plan before drafting an order." });
+      return;
+    }
     const qtyN = parseInt(qty, 10);
     const priceN = parseFloat(price);
     if (!qtyN || qtyN < 1 || !priceN || priceN <= 0) {
@@ -447,7 +622,6 @@ function ChartPanel({
                 {previewChange >= 0 ? "+" : ""}{previewChange.toFixed(2)}%
               </span>
             )}
-            <DataProvenanceBadge kind="eod" asOf={latestBar?.time ? String(latestBar.time) : null} compact />
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -464,26 +638,64 @@ function ChartPanel({
             Full chart
           </button>
           <button
-            onClick={() => onOpenChartDraw(symbol)}
-            className="workspace-chip-button"
-            title="Open full chart drawing mode"
-            style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <PencilLine size={13} />
-          </button>
-          <button
             onClick={() => setShowChartDetails((current) => !current)}
             className={`workspace-chip-button${showChartDetails ? " active" : ""}`}
           >
             Analysis
           </button>
           <button
-            onClick={() => setShowOrderTicket((current) => !current)}
+            onClick={onOpenPlan}
+            className={`workspace-chip-button${planValid ? " active" : ""}`}
+          >
+            Trade plan
+          </button>
+          <button
+            onClick={() => planValid ? setShowOrderTicket((current) => !current) : setOrderMsg({ ok: false, text: "Complete the trade plan to unlock execution." })}
             className={`workspace-chip-button${showOrderTicket ? " active" : ""}`}
+            title={planValid ? "Open order draft" : "Plan required before execution"}
           >
             Order
           </button>
-          <IndicatorMenu selected={chartWorkspace.indicators} onChange={chartWorkspace.setIndicators} />
+          {([
+            ["trendline", PencilLine, "Trendline"],
+            ["horizontal", Minus, "Support / resistance"],
+            ["long", ArrowUpRight, "Long marker"],
+            ["short", ArrowDownRight, "Short marker"],
+          ] as const).map(([tool, Icon, label]) => (
+            <button
+              key={tool}
+              onClick={() => {
+                setActiveTool((current) => current === tool ? null : tool);
+                setPendingPoint(null);
+                if (activeTool !== tool) flashToolMsg(tool === "trendline" ? "Select first point" : "Click chart to place");
+              }}
+              className={`workspace-chip-button${activeTool === tool ? " active" : ""}`}
+              title={label}
+              style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <Icon size={13} />
+            </button>
+          ))}
+          {pendingPoint && (
+            <button
+              onClick={() => setPendingPoint(null)}
+              className="workspace-chip-button"
+              title="Undo pending point"
+              style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <Undo2 size={13} />
+            </button>
+          )}
+          {drawings.length > 0 && (
+            <button
+              onClick={clearWatchlistDrawings}
+              className="workspace-chip-button"
+              title="Clear visible chart marks"
+              style={{ width: 30, height: 30, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+            >
+              <Eraser size={13} />
+            </button>
+          )}
           <label className="caption" style={{ display: "flex", alignItems: "center", gap: 6 }}>
             Chart
             <select
@@ -524,6 +736,11 @@ function ChartPanel({
           ))}
         </div>
       )}
+      {toolMsg && (
+        <div className="caption" style={{ padding: "5px 14px 0", color: activeTool ? "var(--accent)" : "var(--text-tertiary)", flexShrink: 0 }}>
+          {toolMsg}
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: "8px 14px 0" }}>
         {chartLoading ? (
           <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--surface-3)", borderTopColor: "var(--accent)", animation: "spin 1s linear infinite" }}>
@@ -532,7 +749,51 @@ function ChartPanel({
         ) : chartError || candles.length === 0 ? (
           <span className="caption">No chart data</span>
         ) : (
-          <MiniChart candles={candles} height={chartHeight} dark chartType={chartType} indicators={chartWorkspace.indicators} />
+          <div
+            ref={chartWrapRef}
+            onClick={handleChartToolClick}
+            style={{ width: "100%", height: chartHeight, position: "relative", cursor: activeTool ? "crosshair" : "default" }}
+          >
+            <MiniChart candles={candles} height={chartHeight} dark={theme !== "light"} chartType={chartType} />
+            <svg
+              width="100%"
+              height="100%"
+              viewBox={`0 0 ${Math.max(1, overlaySize.width)} ${Math.max(1, overlaySize.height)}`}
+              preserveAspectRatio="none"
+              style={{ position: "absolute", inset: 0, pointerEvents: activeTool ? "auto" : "none" }}
+            >
+              {drawings.map((drawing) => {
+                const p1 = pointToCoord(drawing.p1);
+                const p2 = drawing.p2 ? pointToCoord(drawing.p2) : p1;
+                if (!p1 || !p2) return null;
+                if (drawing.tool === "horizontal") {
+                  return <line key={drawing.id} x1={0} y1={p1.y} x2={overlaySize.width} y2={p1.y} stroke={drawing.color} strokeWidth={1.25} strokeDasharray="5 5" opacity={0.9} />;
+                }
+                if (drawing.tool === "trendline") {
+                  return <line key={drawing.id} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={drawing.color} strokeWidth={1.5} opacity={0.95} />;
+                }
+                const isLong = drawing.tool === "long";
+                const label = isLong ? "LONG" : "SHORT";
+                const y = p1.y + (isLong ? -10 : 18);
+                return (
+                  <g key={drawing.id}>
+                    <path
+                      d={isLong
+                        ? `M ${p1.x} ${p1.y - 15} L ${p1.x - 6} ${p1.y - 3} L ${p1.x + 6} ${p1.y - 3} Z`
+                        : `M ${p1.x} ${p1.y + 15} L ${p1.x - 6} ${p1.y + 3} L ${p1.x + 6} ${p1.y + 3} Z`}
+                      fill={drawing.color}
+                      opacity={0.95}
+                    />
+                    <text x={p1.x + 8} y={y} fill={drawing.color} fontSize={10} fontWeight={700}>{label}</text>
+                  </g>
+                );
+              })}
+              {pendingPoint && (() => {
+                const p = pointToCoord(pendingPoint);
+                return p ? <circle cx={p.x} cy={p.y} r={4} fill="var(--accent)" /> : null;
+              })()}
+            </svg>
+          </div>
         )}
       </div>
       {showChartDetails && (
@@ -563,7 +824,7 @@ function ChartPanel({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">Keep execution attached to the active queue and auto-send the trade into journal review.</div>
+            <div className="caption">{planSummary ?? "Keep execution attached to the active queue and auto-send the trade into journal review."}</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -682,17 +943,104 @@ function ChartPanel({
           </div>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy}
+        <button onClick={handleOrder} disabled={orderBusy || !planValid}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: orderBusy ? "not-allowed" : "pointer",
-            opacity: orderBusy ? 0.5 : 1,
+            opacity: orderBusy || !planValid ? 0.5 : 1,
           }}>
-          {orderBusy ? "Placing…" : `Place ${side === "buy" ? "buy" : "sell"} order`}
+          {!planValid ? "Plan required before order" : orderBusy ? "Placing…" : `Place ${side === "buy" ? "buy" : "sell"} order`}
         </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function TradePlanCard({
+  plan,
+  selectedItem,
+  onChange,
+  onLifecycle,
+}: {
+  plan: TradePlan | null;
+  selectedItem: WatchlistItem | null;
+  onChange: (plan: TradePlan) => void;
+  onLifecycle: (lifecycle: SymbolLifecycle) => void;
+}) {
+  if (!selectedItem || !plan) {
+    return (
+      <div style={{ borderRadius: 16, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", padding: 12 }}>
+        <div className="label" style={{ marginBottom: 6 }}>Trade plan</div>
+        <div className="caption">Select a shortlisted symbol, then define entry, stop, target, risk size, thesis, and invalidation before execution.</div>
+      </div>
+    );
+  }
+
+  const valid = isTradePlanValid(plan);
+  const setField = (key: keyof TradePlan, value: string) => onChange({ ...plan, [key]: value });
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    fontSize: 12,
+    borderRadius: 10,
+    padding: "7px 9px",
+    background: "var(--surface-3)",
+    border: "1px solid var(--border-subtle)",
+    color: "var(--text-primary)",
+  };
+
+  return (
+    <div style={{ borderRadius: 16, border: `1px solid ${valid ? "rgba(45,181,116,0.32)" : "rgba(255,255,255,0.09)"}`, background: "rgba(255,255,255,0.025)", padding: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 4 }}>Trade plan</div>
+          <div className="caption">{valid ? "Ready: execution actions are unlocked." : "Required before alerts or order drafts."}</div>
+        </div>
+        <select
+          value={plan.lifecycle}
+          onChange={(event) => onLifecycle(event.target.value as SymbolLifecycle)}
+          style={{ fontSize: 12, borderRadius: 999, padding: "7px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+        >
+          {SYMBOL_LIFECYCLE.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+        </select>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 4 }}>Setup</div>
+          <select value={plan.setupType} onChange={(event) => setField("setupType", event.target.value)} style={inputStyle}>
+            <option value="Momentum">Momentum</option>
+            <option value="Breakout">Breakout</option>
+            <option value="Pullback">Pullback</option>
+            <option value="VCP">VCP</option>
+            <option value="Reversal">Reversal</option>
+          </select>
+        </div>
+        <div>
+          <div className="label" style={{ marginBottom: 4 }}>Timeframe</div>
+          <input value={plan.timeframe} onChange={(event) => setField("timeframe", event.target.value)} style={inputStyle} />
+        </div>
+        {([
+          ["Entry", "entry"],
+          ["Stop", "stop"],
+          ["Target", "target"],
+          ["Position size", "positionSize"],
+        ] as const).map(([label, key]) => (
+          <div key={key}>
+            <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+            <input type="number" min="0" step="0.05" value={plan[key]} onChange={(event) => setField(key, event.target.value)} style={inputStyle} />
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <div className="label" style={{ marginBottom: 4 }}>Thesis</div>
+        <textarea value={plan.thesis} onChange={(event) => setField("thesis", event.target.value)} placeholder="Write your thesis for this symbol..." style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} />
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <div className="label" style={{ marginBottom: 4 }}>Invalidation rule</div>
+        <textarea value={plan.invalidationRule} onChange={(event) => setField("invalidationRule", event.target.value)} placeholder="What proves the idea wrong..." style={{ ...inputStyle, minHeight: 50, resize: "vertical" }} />
+      </div>
     </div>
   );
 }
@@ -702,6 +1050,12 @@ function ChartPanel({
 function WatchlistContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const {
+    state: workflowState,
+    savePlan,
+    markLifecycle,
+    rememberSymbol,
+  } = useWorkflowState();
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -728,6 +1082,7 @@ function WatchlistContent() {
   const [sortMode, setSortMode] = useState<"manual" | "setup" | "move" | "volume" | "rsi">("manual");
   const [showDeskControls, setShowDeskControls] = useState(false);
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
+  const [showTradePlan, setShowTradePlan] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [queuePage, setQueuePage] = useState(0);
 
@@ -823,22 +1178,10 @@ function WatchlistContent() {
   }
 
   async function loadWatchlists() {
-    const requestedWatchlistId = searchParams.get("id");
-    const liteLists = await getWatchlists({ lite: true });
-    setWatchlists(liteLists);
-    if (liteLists.length > 0 && !activeId) {
-      setActiveId(liteLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : liteLists[0].id);
-    }
+    const wls = await getWatchlists();
+    setWatchlists(wls);
+    if (wls.length > 0 && !activeId) setActiveId(wls[0].id);
     setLoading(false);
-
-    getWatchlists({ force: true })
-      .then((enrichedLists) => {
-        setWatchlists(enrichedLists);
-        if (enrichedLists.length > 0 && !activeId) {
-          setActiveId(enrichedLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : enrichedLists[0].id);
-        }
-      })
-      .catch(() => {});
   }
 
   useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -853,16 +1196,6 @@ function WatchlistContent() {
   }, []);
 
   const symbolParam = searchParams.get("symbol");
-  const watchlistIdParam = searchParams.get("id");
-  useEffect(() => {
-    if (!watchlistIdParam || watchlists.length === 0) return;
-    const matched = watchlists.find((watchlist) => watchlist.id === watchlistIdParam);
-    if (!matched) return;
-    setActiveId(matched.id);
-    if (matched.items?.[0]?.symbol) setChartSymbol(matched.items[0].symbol);
-    router.replace("/watchlist", { scroll: false });
-  }, [watchlistIdParam, watchlists, router]);
-
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
     let found = false;
@@ -890,9 +1223,8 @@ function WatchlistContent() {
   }, [symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
-  const chartHref = useCallback((symbol: string, draw?: "trendline") => {
+  const chartHref = useCallback((symbol: string) => {
     const params = new URLSearchParams({ from: "watchlist", full: "1" });
-    if (draw) params.set("draw", draw);
     if (activeWl?.id) params.set("watchlistId", activeWl.id);
     if (activeWl?.name) params.set("watchlist", activeWl.name);
     return `/charts/${symbol}?${params.toString()}`;
@@ -1011,7 +1343,15 @@ function WatchlistContent() {
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
+  const selectedPlan = chartSymbol
+    ? workflowState.plans[chartSymbol] ?? createDraftPlan(chartSymbol, selectedItem?.close ?? null, selectedItem ? getSetupSignal(selectedItem).label : "Momentum")
+    : null;
+  const selectedPlanValid = isTradePlanValid(selectedPlan);
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
+
+  useEffect(() => {
+    if (chartSymbol) rememberSymbol(chartSymbol);
+  }, [chartSymbol, rememberSymbol]);
 
   useEffect(() => {
     if (!liveQuotePollingEnabled) return;
@@ -1336,52 +1676,7 @@ function WatchlistContent() {
 
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
-      <div className="workspace-card" style={{ padding: "10px 14px" }}>
-        <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
-          <div>
-            <div className="workspace-card-title">Watchlist</div>
-            {activeWl && (
-              <div className="caption" style={{ marginTop: 2 }}>
-                {activeWl.name} · {visibleItems.length}/{activeWl.items.length} visible
-              </div>
-            )}
-          </div>
-          <div className="workspace-pill-row" style={{ gap: 8 }}>
-            <span className="workspace-pill" title={isMockMode ? "Using mock or fallback market data" : "Using configured market data source"}>
-              Data: {isMockMode ? "Mock/fallback" : "Live configured"}
-            </span>
-            {chartSymbol && <span className="workspace-pill">Focus: {chartSymbol}</span>}
-          </div>
-        </div>
-        {activeWl && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-            <div className="workspace-pill-row" style={{ gap: 8 }}>
-              <span className="workspace-pill">All {queueCounts.total}</span>
-              {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned {queueCounts.pinned}</span>}
-              {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review {queueCounts.needsReview}</span>}
-              {queueCounts.total > 0 && <span className="workspace-pill">Setup avg {setupDesk.average}</span>}
-              {setupDesk.watch > 0 && <span className="workspace-pill" style={{ color: "var(--warn)" }}>Watch {setupDesk.watch}</span>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
-                <button className="workspace-chip-button" onClick={resetDeskView}>
-                  Reset
-                </button>
-              )}
-              {activeWl.items.length > 0 && (
-                <button className={`workspace-chip-button${sortMode === "setup" ? " active" : ""}`} onClick={() => setSortMode("setup")}>
-                  Sort by metrics
-                </button>
-              )}
-              <button className={`workspace-chip-button${showDeskControls ? " active" : ""}`} onClick={() => setShowDeskControls((current) => !current)}>
-                {showDeskControls ? "Hide controls" : "Desk controls"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 178px)" }}>
+      <div className="workspace-grid" style={{ gridTemplateColumns: "380px minmax(0, 1fr)", minHeight: "calc(100vh - 178px)" }}>
       {/* Toast */}
       {toast && (
         <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
@@ -1389,104 +1684,37 @@ function WatchlistContent() {
         </div>
       )}
 
-      {/* ── Watchlist tabs sidebar ─── */}
-      {sidebarCollapsed ? (
-        <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14 }}>
-          <button onClick={() => setSidebarCollapsed(false)} style={{ color: "var(--text-tertiary)" }}>
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-        </div>
-      ) : (
-        <aside className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          <div className="workspace-card-header" style={{ padding: "14px 14px" }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Watchlists</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button onClick={() => setShowNewWl(o => !o)} style={{ color: "var(--accent)", lineHeight: 0 }}>
-                <Plus size={15} />
-              </button>
-              <button onClick={() => setSidebarCollapsed(true)} style={{ color: "var(--text-tertiary)", lineHeight: 0 }}>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                  <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          {showNewWl && (
-            <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border-subtle)", display: "flex", gap: 6 }}>
-              <input
-                autoFocus
-                value={newWlName}
-                onChange={e => setNewWlName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCreateWatchlist()}
-                placeholder="List name…"
-                style={{ flex: 1, fontSize: 11, borderRadius: "var(--radius-sm)", padding: "4px 8px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none" }}
-              />
-              <button onClick={handleCreateWatchlist} style={{ fontSize: 11, fontWeight: 500, color: "var(--accent)" }}>Add</button>
-              <button onClick={() => setShowNewWl(false)} style={{ color: "var(--text-tertiary)", lineHeight: 0 }}><X size={12} /></button>
-            </div>
-          )}
-
-          <div style={{ flex: 1, overflowY: "auto", padding: "4px 0" }}>
-            {loading ? (
-              <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                {[1,2,3].map(i => <div key={i} style={{ height: 32, borderRadius: "var(--radius-sm)", background: "var(--surface-3)" }} />)}
-              </div>
-            ) : watchlists.length === 0 ? (
-              <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
-                No watchlists yet.
-                <div style={{ marginTop: 6 }}>Create one here or send names in from the scanner to start the workflow.</div>
-              </div>
-            ) : (
-              watchlists.map(wl => {
-                const active = activeId === wl.id;
-                return (
-                  <div key={wl.id} style={{ position: "relative", display: "flex", alignItems: "center" }} className="wl-item">
-                    <button onClick={() => setActiveId(wl.id)}
-                      style={{
-                        flex: 1, textAlign: "left", padding: "8px 14px", fontSize: 13, cursor: "pointer",
-                        background: active ? "var(--accent-subtle)" : "transparent",
-                        color: active ? "var(--accent)" : "var(--text-secondary)",
-                        fontWeight: active ? 500 : 400,
-                        transition: "all var(--motion-instant) var(--ease-out)",
-                      }}>
-                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 20 }}>{wl.name}</div>
-                      <div style={{ fontSize: 10, marginTop: 2, color: "var(--text-tertiary)" }}>{wl.items.length} stocks</div>
-                    </button>
-                    <button
-                      onClick={() => handleDeleteWatchlist(wl.id)}
-                      style={{ position: "absolute", right: 8, color: "var(--text-tertiary)", lineHeight: 0, opacity: 0 }}
-                      className="wl-delete"
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--loss)"}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </aside>
-      )}
-
       {/* ── Stock list ─────────────────────────────────────── */}
       <div className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Header */}
         <div className="workspace-card-header" style={{ paddingBottom: 10, flexShrink: 0 }}>
           <div>
-            <div className="workspace-card-title">
-              {activeWl ? activeWl.name : "Watchlist"}
-            </div>
-            {activeWl && (
-              <div className="caption">{activeWl.items.length} stock{activeWl.items.length !== 1 ? "s" : ""}</div>
-            )}
+            <div className="workspace-card-title">Watchlist</div>
+            <div className="caption">{activeWl ? `${activeWl.items.length} stock${activeWl.items.length !== 1 ? "s" : ""}` : "Select or create a list"}</div>
           </div>
 
-          {activeWl && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <select
+                aria-label="Select watchlist"
+                value={activeId ?? ""}
+                onChange={(event) => setActiveId(event.target.value || null)}
+                style={{ maxWidth: 150, fontSize: 12, borderRadius: "var(--radius-sm)", padding: "5px 8px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none" }}
+              >
+                {watchlists.map((wl) => (
+                  <option key={wl.id} value={wl.id}>{wl.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setShowNewWl(o => !o)}
+                className="workspace-chip-button"
+                aria-label="Create watchlist"
+                title="Create watchlist"
+                style={{ width: 30, height: 30, padding: 0 }}
+              >
+                <Plus size={14} />
+              </button>
+            {activeWl && (
+              <>
               {addMsg && (
                 <span style={{ fontSize: 11, fontWeight: 500, color: addMsg === "Added" ? "var(--gain)" : "var(--loss)" }}>
                   {addMsg}
@@ -1523,160 +1751,27 @@ function WatchlistContent() {
                 )}
               </div>
               <button onClick={handleAddSymbol} disabled={adding || !symbolInput.trim()}
-                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
+                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid var(--border-focus)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
                 {adding ? "…" : "Add"}
               </button>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </div>
-
-        <div style={{ padding: "0 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-          {selectedItem ? (
-            <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)", padding: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                    <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{selectedItem.symbol}</div>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      {selectedItem.close != null ? `₹${selectedItem.close.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-                    </span>
-                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: (selectedItem.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
-                      {selectedItem.pct_change != null ? `${selectedItem.pct_change >= 0 ? "+" : ""}${selectedItem.pct_change.toFixed(2)}%` : "-"}
-                    </span>
-                    {selectedSetup && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase",
-                          color: setupToneColor(selectedSetup.tone),
-                          padding: "2px 7px",
-                          borderRadius: 999,
-                          background: "rgba(255,255,255,0.04)",
-                          border: `1px solid ${setupToneColor(selectedSetup.tone)}`,
-                        }}
-                      >
-                        {selectedSetup.label}
-                      </span>
-                    )}
-                  </div>
-                  <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {selectedItem.company_name || selectedItem.sector || "Active watchlist symbol"}
-                  </div>
-                </div>
-                <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-                  <button className="workspace-chip-button" onClick={() => router.push(chartHref(selectedItem.symbol))}>
-                    Open chart
-                  </button>
-                  <button className="workspace-chip-button" onClick={() => router.push(`/journal?symbol=${selectedItem.symbol}`)}>
-                    Review journal
-                  </button>
-                  <button className={`workspace-chip-button${showSelectedMeta ? " active" : ""}`} onClick={() => setShowSelectedMeta((current) => !current)}>
-                    {showSelectedMeta ? "Hide details" : "Details"}
-                  </button>
-                </div>
-              </div>
-              {showSelectedMeta && (
-                <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
-                    {selectedMetrics.map((metric) => (
-                      <div key={metric.label} style={{ padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                        <div className="label" style={{ marginBottom: 3 }}>{metric.label}</div>
-                        <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metric.tone }}>{metric.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedReviewState && (
-                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <div className="label" style={{ marginBottom: 6 }}>Review context</div>
-                      <div className="caption" style={{ lineHeight: 1.65 }}>
-                        {selectedReviewState.state === "reviewed"
-                          ? `Reviewed ${selectedReviewState.reviewed}/${selectedReviewState.closed} closed trades on ${selectedItem.symbol}.`
-                          : selectedReviewState.state === "needs-review"
-                            ? `${selectedReviewState.closed} closed trades on ${selectedItem.symbol} still need review coverage.`
-                            : `No closed review history yet on ${selectedItem.symbol}.`}
-                        {selectedReviewState.lastSetup ? ` Last setup: ${selectedReviewState.lastSetup}.` : ""}
-                      </div>
-                      {selectedReviewState.latestLesson && (
-                        <div className="caption" style={{ marginTop: 8, color: "var(--text-secondary)" }}>
-                          Latest lesson: {selectedReviewState.latestLesson.slice(0, 120)}{selectedReviewState.latestLesson.length > 120 ? "..." : ""}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 10, marginTop: 10 }}>
-                    <div style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <div className="label" style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                        <Tag size={11} /> Queue tags
-                      </div>
-                      <div className="workspace-pill-row" style={{ marginBottom: 8 }}>
-                        {(selectedItemMeta.tags ?? []).length > 0 ? (
-                          (selectedItemMeta.tags ?? []).map((tag) => (
-                            <button
-                              key={tag}
-                              className="workspace-pill"
-                              onClick={() => removeTagFromSelected(tag)}
-                              style={{ cursor: "pointer" }}
-                              title="Remove tag"
-                            >
-                              #{tag} ×
-                            </button>
-                          ))
-                        ) : (
-                          <span className="caption">No tags yet</span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && addTagToSelected()}
-                          placeholder="Add tag…"
-                          style={{ flex: 1, fontSize: 12, borderRadius: 999, padding: "7px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-                        />
-                        <button className="workspace-chip-button active" onClick={addTagToSelected}>Add</button>
-                      </div>
-                    </div>
-                    <div style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                      <div className="label" style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                        {selectedItemMeta.pinned ? <Pin size={11} /> : <PinOff size={11} />} Queue priority
-                      </div>
-                      <button
-                        className={`workspace-chip-button${selectedItemMeta.pinned ? " active" : ""}`}
-                        onClick={() => updateItemMeta(selectedItem.symbol, { pinned: !selectedItemMeta.pinned })}
-                        style={{ marginBottom: 8 }}
-                      >
-                        {selectedItemMeta.pinned ? "Pinned to top" : "Pin to top"}
-                      </button>
-                      <div className="caption" style={{ lineHeight: 1.6 }}>
-                        {selectedItemMeta.pinned
-                          ? "This symbol stays at the top of the active queue while filters are applied."
-                          : "Pin high-conviction names so they stay visible at the top of the queue."}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <div className="label" style={{ marginBottom: 6 }}>Watchlist note</div>
-                    <textarea
-                      value={noteDraft}
-                      onChange={(e) => setNoteDraft(e.target.value.slice(0, 280))}
-                      onBlur={() => void saveSelectedNote()}
-                      placeholder="Why is this still in the queue? What needs to happen before you act?"
-                      style={{ width: "100%", minHeight: 68, resize: "vertical", fontSize: 12, borderRadius: 10, padding: "8px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div style={{ borderRadius: 16, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", padding: 12 }}>
-              <div className="caption" style={{ lineHeight: 1.6 }}>
-                Select a symbol to load its working panel.
-              </div>
-            </div>
-          )}
-        </div>
+        {showNewWl && (
+          <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border-subtle)", display: "flex", gap: 6, flexShrink: 0 }}>
+            <input
+              autoFocus
+              value={newWlName}
+              onChange={e => setNewWlName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleCreateWatchlist()}
+              placeholder="New watchlist name..."
+              style={{ flex: 1, fontSize: 12, borderRadius: "var(--radius-sm)", padding: "6px 8px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none" }}
+            />
+            <button onClick={handleCreateWatchlist} className="workspace-chip-button active">Create</button>
+            <button onClick={() => setShowNewWl(false)} className="workspace-chip-button">Cancel</button>
+          </div>
+        )}
 
         <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "grid", gap: 10, flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -1890,18 +1985,57 @@ function WatchlistContent() {
           <ChartPanel key={chartSymbol} symbol={chartSymbol}
             latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
             watchlistName={activeWl?.name ?? null}
+            planValid={selectedPlanValid}
+            planSummary={selectedPlanValid && selectedPlan ? `${selectedPlan.setupType} plan: entry ${selectedPlan.entry}, stop ${selectedPlan.stop}, target ${selectedPlan.target}.` : undefined}
             onOpenChart={(sym) => router.push(chartHref(sym))}
-            onOpenChartDraw={(sym) => router.push(chartHref(sym, "trendline"))}
+            onOpenPlan={() => setShowTradePlan(true)}
             onStepSymbol={moveSelection} />
         ) : (
           <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <EmptyState
               title="Click any stock to load its chart"
-              description="Use the watchlist as your analysis workspace. Select a symbol, then open the full chart for price, volume, and indicator context."
+              description="Use the watchlist to save symbols, add notes, and open charts when you want more context."
             />
           </div>
         )}
       </div>
+
+      {showTradePlan && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 80, background: "var(--overlay)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+          onClick={() => setShowTradePlan(false)}
+        >
+          <div
+            className="workspace-card"
+            style={{ width: "min(520px, 100%)", maxHeight: "85vh", overflow: "auto", padding: 16 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+              <div>
+                <div className="workspace-card-title">Trade plan</div>
+                <div className="caption">{selectedItem?.symbol ?? "Select a stock first"}</div>
+              </div>
+              <button className="workspace-chip-button" onClick={() => setShowTradePlan(false)}>Close</button>
+            </div>
+            <TradePlanCard
+              plan={selectedPlan}
+              selectedItem={selectedItem}
+              onChange={(nextPlan) => {
+                savePlan(nextPlan);
+                showToast(isTradePlanValid(nextPlan) ? "Plan created" : "Plan saved");
+              }}
+              onLifecycle={(lifecycle) => {
+                if (!selectedPlan) return;
+                savePlan({ ...selectedPlan, lifecycle });
+                markLifecycle(selectedPlan.symbol, lifecycle);
+                showToast(`Lifecycle moved to ${lifecycle}`);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       </div>
     </div>

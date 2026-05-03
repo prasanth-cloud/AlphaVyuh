@@ -39,7 +39,7 @@ export default function AlertsPage() {
               padding: "10px 16px",
               borderRadius: 999,
               background: "linear-gradient(180deg, var(--accent-strong), var(--accent))",
-              color: "#061110",
+              color: "var(--text-on-accent)",
               fontSize: 13,
               fontWeight: 600,
             }}>

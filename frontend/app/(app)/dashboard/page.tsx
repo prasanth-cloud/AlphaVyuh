@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
+  getDataHealth,
   getAiPatterns,
   getBrokerStatus,
   getJournalEntries,
   getJournalStats,
-  getMarketSnapshot,
+  getMarketOverview,
   getMe,
   getWatchlists,
   updateMe,
@@ -15,8 +16,7 @@ import {
   type JournalEntry,
   type MarketOverview,
 } from '@/lib/api'
-import { Card, StatCard, EmptyState, Button, DataProvenanceBadge } from '@/components/ui'
-import DataFreshnessStrip from '@/components/DataFreshnessStrip'
+import { Card, StatCard, EmptyState } from '@/components/ui'
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -39,12 +39,6 @@ function formatPercent(value: unknown, digits = 0): string {
   return Number.isFinite(numeric) ? `${numeric.toFixed(digits)}%` : '—'
 }
 
-function breadthLabel(phase: string): string {
-  if (phase === 'Bullish') return 'Bullish breadth'
-  if (phase === 'Bearish') return 'Weak breadth'
-  return 'Mixed breadth'
-}
-
 function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: DataHealth | null }) {
   const phase = data.market_phase
   const phaseColor = phase === 'Bullish' ? 'var(--gain)'
@@ -61,7 +55,7 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: phaseColor, flexShrink: 0 }} />
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <span className="heading-card" style={{ color: phaseColor }}>{breadthLabel(phase)}</span>
+            <span className="heading-card" style={{ color: phaseColor }}>{phase} breadth</span>
             <span className="caption">{data.market_phase_desc}</span>
           </div>
         </div>
@@ -71,11 +65,6 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
           {dataHealth?.status && (
             <Metric label="Data" value={dataHealth.status.toUpperCase()} />
           )}
-          <DataProvenanceBadge
-            kind={dataHealth?.status === 'degraded' ? 'fallback' : 'eod'}
-            asOf={data.trade_date}
-            compact
-          />
         </div>
       </div>
       {dataHealth && dataHealth.status !== 'healthy' && (
@@ -102,8 +91,8 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
 
   const cards = [
     {
-      label: 'Market breadth',
-      value: breadthLabel(phase),
+      label: 'Regime',
+      value: phase,
       detail: data.market_phase_desc,
       color: phaseColor,
     },
@@ -131,18 +120,13 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
     <Card padding="md" style={{ marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
-          <div className="caption">One glance summary before scanning, charting, or placing alerts.</div>
+          <div className="label" style={{ marginBottom: 4 }}>Market snapshot</div>
+          <div className="caption">Index, breadth, trend, and sector context.</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {data.market_data_source && (
             <span className="caption">{data.is_live ? 'Index live' : 'Index fallback'} · {data.market_data_source}</span>
           )}
-          <DataProvenanceBadge
-            kind={dataHealth?.status === 'degraded' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
-            asOf={data.trade_date}
-            compact
-          />
         </div>
       </div>
       {!!data.indices?.length && (
@@ -324,164 +308,6 @@ type ReviewPrompts = {
   latestLesson: string | null
 }
 
-const DASHBOARD_SNAPSHOT_CACHE_KEY = 'alphavyuh-dashboard-snapshot-v1'
-
-type DashboardSnapshotCache = {
-  data: MarketOverview
-  dataHealth: DataHealth | null
-  savedAt: number
-}
-
-function readDashboardSnapshotCache(): DashboardSnapshotCache | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(DASHBOARD_SNAPSHOT_CACHE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as DashboardSnapshotCache
-    if (!parsed?.data || Date.now() - parsed.savedAt > 10 * 60 * 1000) return null
-    return parsed
-  } catch {
-    return null
-  }
-}
-
-function writeDashboardSnapshotCache(data: MarketOverview, dataHealth: DataHealth | null) {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(DASHBOARD_SNAPSHOT_CACHE_KEY, JSON.stringify({ data, dataHealth, savedAt: Date.now() }))
-  } catch {
-    // Cache is a performance hint only.
-  }
-}
-
-function WorkflowChecklistCard({
-  workflow,
-  dismissed,
-  onDismiss,
-}: {
-  workflow: WorkflowState
-  dismissed: boolean
-  onDismiss: () => void
-}) {
-  const steps = [
-    {
-      label: 'Create your first watchlist',
-      description: 'This becomes the bridge from scans to charts.',
-      completed: workflow.watchlists > 0,
-    },
-    {
-      label: 'Add at least one symbol',
-      description: 'Use the scanner or type a symbol directly into the watchlist desk.',
-      completed: workflow.trackedSymbols > 0,
-    },
-    {
-      label: 'Connect your broker',
-      description: workflow.brokerConnected
-        ? `${workflow.brokerName ?? 'Broker'} connected and ready for chart-side execution.`
-        : 'Optional, but this is what turns chart analysis into execution flow.',
-      completed: workflow.brokerConnected,
-    },
-    {
-      label: 'Log your first trade',
-      description: 'Once a trade exists, AlphaVyuh can start carrying context into the journal.',
-      completed: workflow.totalTrades > 0,
-    },
-    {
-      label: 'Close 3 trades for review',
-      description: 'That is enough history to unlock journal-wide coaching.',
-      completed: workflow.closedTrades >= 3,
-    },
-  ]
-
-  const completedCount = steps.filter(step => step.completed).length
-  const allComplete = completedCount === steps.length
-
-  const nextAction = workflow.watchlists === 0
-    ? { label: 'Create watchlist', href: '/watchlist' }
-    : workflow.trackedSymbols === 0
-      ? { label: 'Find symbols', href: '/scanner' }
-      : !workflow.brokerConnected
-        ? { label: 'Connect broker', href: '/settings/broker' }
-        : workflow.closedTrades === 0
-          ? { label: 'Log first trade', href: '/journal' }
-          : workflow.closedTrades < 3
-            ? { label: 'Build review base', href: '/journal' }
-            : { label: 'Open AI review', href: '/journal?tab=ai' }
-
-  if (dismissed || allComplete) return null
-
-  return (
-    <Card padding="lg">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
-        <div>
-          <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>Onboarding checklist</div>
-          <h2 className="heading-card" style={{ marginBottom: 4 }}>Make the product feel connected in the first session</h2>
-          <div className="body-secondary">
-            Traders stay when the next step is obvious. This checklist is driven by your actual account state, not generic setup copy.
-          </div>
-        </div>
-        <button onClick={onDismiss} style={{ color: 'var(--text-tertiary)', fontSize: 18, lineHeight: 1, background: 'transparent', border: 'none', cursor: 'pointer' }}>×</button>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ flex: 1, height: 8, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
-          <div style={{ width: `${(completedCount / steps.length) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent), #8ef3e2)' }} />
-        </div>
-        <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-          {completedCount}/{steps.length}
-        </span>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 18 }}>
-        {steps.map((step) => (
-          <div
-            key={step.label}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 10,
-              padding: '10px 11px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              background: step.completed ? 'var(--gain-subtle)' : 'var(--surface-2)',
-            }}
-          >
-            <div
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                fontSize: 11,
-                fontWeight: 700,
-                color: step.completed ? 'var(--gain)' : 'var(--text-tertiary)',
-                background: step.completed ? 'rgba(38,166,91,0.12)' : 'var(--surface-3)',
-                border: `1px solid ${step.completed ? 'rgba(38,166,91,0.18)' : 'var(--border-subtle)'}`,
-              }}
-            >
-              {step.completed ? '✓' : '•'}
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3, lineHeight: 1.25 }}>{step.label}</div>
-              <div className="caption" style={{ lineHeight: 1.55 }}>{step.description}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div className="caption">Continue with: {nextAction.label}</div>
-        <Button variant="primary" size="sm" onClick={() => { window.location.href = nextAction.href }}>
-          {nextAction.label}
-        </Button>
-      </div>
-    </Card>
-  )
-}
-
 function ReviewPulseCard({
   workflow,
 }: {
@@ -491,21 +317,21 @@ function ReviewPulseCard({
     ? Math.round((workflow.reviewedTrades / workflow.closedTrades) * 100)
     : 0
 
-  const strongestDay = workflow.patterns?.day_of_week?.reduce((strongest, current) => {
-    if (!strongest || current.win_rate > strongest.win_rate) return current
-    return strongest
+  const bestDay = workflow.patterns?.day_of_week?.reduce((best, current) => {
+    if (!best || current.win_rate > best.win_rate) return current
+    return best
   }, workflow.patterns.day_of_week[0])
 
-  const strongestDirection = workflow.patterns?.by_direction?.reduce((strongest, current) => {
-    if (!strongest || current.win_rate > strongest.win_rate) return current
-    return strongest
+  const bestDirection = workflow.patterns?.by_direction?.reduce((best, current) => {
+    if (!best || current.win_rate > best.win_rate) return current
+    return best
   }, workflow.patterns.by_direction[0])
 
   const nextAction = workflow.closedTrades < 3
-    ? `${3 - workflow.closedTrades} more closed trade${3 - workflow.closedTrades === 1 ? '' : 's'} before journal-wide review has enough history.`
+    ? `Close ${3 - workflow.closedTrades} more trade${3 - workflow.closedTrades === 1 ? '' : 's'} to unlock journal-wide review.`
     : workflow.reviewedTrades < workflow.closedTrades
-      ? `${workflow.closedTrades - workflow.reviewedTrades} closed trade${workflow.closedTrades - workflow.reviewedTrades === 1 ? '' : 's'} still missing review notes.`
-      : 'Review coverage is complete for closed trades in the current journal sample.'
+      ? `Review ${workflow.closedTrades - workflow.reviewedTrades} more closed trade${workflow.closedTrades - workflow.reviewedTrades === 1 ? '' : 's'} to improve coaching coverage.`
+      : 'Your review coverage is healthy. Open the journal AI tab for the full summary.'
 
   return (
     <Card padding="md">
@@ -528,21 +354,21 @@ function ReviewPulseCard({
       </div>
 
       <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', marginBottom: 14 }}>
-        <div className="label" style={{ marginBottom: 4 }}>Journal coverage</div>
+        <div className="label" style={{ marginBottom: 4 }}>Next coaching milestone</div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{nextAction}</div>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Strongest review signal</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Best review signal</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
-            {strongestDirection ? `${strongestDirection.direction} ${strongestDirection.win_rate}%` : 'Not enough closed trades'}
+            {bestDirection ? `${bestDirection.direction} ${bestDirection.win_rate}%` : 'Build more history'}
           </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Highest win-rate day</span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Best day so far</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
-            {strongestDay ? `${strongestDay.day.slice(0, 3)} ${strongestDay.win_rate}%` : 'Not enough closed trades'}
+            {bestDay ? `${bestDay.day.slice(0, 3)} ${bestDay.win_rate}%` : 'Not enough closed trades'}
           </span>
         </div>
       </div>
@@ -556,7 +382,7 @@ function ReviewPromptsCard({ prompts }: { prompts: ReviewPrompts }) {
       ? `Review ${prompts.needsReviewCount} closed trade${prompts.needsReviewCount === 1 ? '' : 's'} still missing lessons.`
       : null,
     prompts.reviewSymbol
-      ? `${prompts.reviewSymbol} has ${prompts.reviewSymbolClosed} closed trade${prompts.reviewSymbolClosed === 1 ? '' : 's'} in the journal sample.`
+      ? `${prompts.reviewSymbol} has ${prompts.reviewSymbolClosed} closed trade${prompts.reviewSymbolClosed === 1 ? '' : 's'} without notes.`
       : null,
     prompts.weakSetup
       ? `${prompts.weakSetup} is underperforming${prompts.weakSetupWinRate != null ? ` at ${prompts.weakSetupWinRate.toFixed(0)}% win rate` : ''}.`
@@ -577,7 +403,7 @@ function ReviewPromptsCard({ prompts }: { prompts: ReviewPrompts }) {
           </div>
         )) : (
           <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-            No pending review notes in the current sample. Journal analytics remain available for closed-trade summaries.
+            Your review queue is in good shape. Keep feeding closed trades into the journal and check the AI tab for deeper summaries.
           </div>
         )}
       </div>
@@ -634,7 +460,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [lastUpdated, setLastUpdated] = useState('')
-  const [checklistDismissed, setChecklistDismissed] = useState(false)
   const [workflow, setWorkflow] = useState<WorkflowState>({
     watchlists: 0,
     trackedSymbols: 0,
@@ -656,55 +481,27 @@ export default function DashboardPage() {
     latestLesson: null,
   })
 
-  const load = useCallback(async () => {
+  async function load() {
     setError('')
-    const pendingSnapshot = getMarketSnapshot()
     try {
-      const snapshot = await Promise.race([
-        pendingSnapshot,
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), data ? 1800 : 900)),
+      const [d, health] = await Promise.all([
+        getMarketOverview(),
+        getDataHealth().catch(() => null),
       ])
-      if (!snapshot) {
-        if (!data) {
-          setLoading(false)
-        }
-        pendingSnapshot
-          .then((lateSnapshot) => {
-            setData(lateSnapshot.overview)
-            setDataHealth(lateSnapshot.health)
-            writeDashboardSnapshotCache(lateSnapshot.overview, lateSnapshot.health)
-            setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
-          })
-          .catch(() => {})
-        return
-      }
-      setData(snapshot.overview)
-      setDataHealth(snapshot.health)
-      writeDashboardSnapshotCache(snapshot.overview, snapshot.health)
+      setData(d)
+      setDataHealth(health)
       setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data')
     } finally {
       setLoading(false)
     }
-  }, [data])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    setChecklistDismissed(window.localStorage.getItem('alphavyuh-onboarding-dismissed') === '1')
-    const cached = readDashboardSnapshotCache()
-    if (cached) {
-      setData(cached.data)
-      setDataHealth(cached.dataHealth)
-      setLastUpdated('cached')
-      setLoading(false)
-    }
-  }, [])
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       Promise.all([
-        getWatchlists({ lite: true }).catch(() => []),
+        getWatchlists().catch(() => []),
         getJournalEntries({ limit: 75 }).catch(() => ({ entries: [], total: 0 })),
         getJournalStats().catch(() => null),
         getBrokerStatus().catch(() => ({
@@ -764,7 +561,7 @@ export default function DashboardPage() {
     load()
     const t = setInterval(load, 5 * 60 * 1000)
     return () => clearInterval(t)
-  }, [load])
+  }, [])
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -772,25 +569,11 @@ export default function DashboardPage() {
       <div style={{ height: 44, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Dashboard</span>
-          {data?.trade_date && (
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD {data.trade_date}</span>
-          )}
         </div>
         {lastUpdated && (
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated {lastUpdated}</span>
         )}
       </div>
-
-      <DataFreshnessStrip health={dataHealth} tradeDate={data?.trade_date ?? null} />
-
-      <WorkflowChecklistCard
-        workflow={workflow}
-        dismissed={checklistDismissed}
-        onDismiss={() => {
-          setChecklistDismissed(true)
-          if (typeof window !== 'undefined') window.localStorage.setItem('alphavyuh-onboarding-dismissed', '1')
-        }}
-      />
 
       {/* Error */}
       {error && (
@@ -808,40 +591,6 @@ export default function DashboardPage() {
 
           {/* Phase card */}
           <PhaseCard data={data} dataHealth={dataHealth} />
-
-          <Card padding="lg" style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
-              <div>
-                <h2 className="heading-card" style={{ marginBottom: 4 }}>Continue your workflow</h2>
-                <div className="caption">Open a workspace, import trade history, or review journal analytics.</div>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-              {[
-                { label: 'Open scanner', detail: 'Run user-defined filters on market data.', href: '/scanner' },
-                { label: 'Open watchlist', detail: 'Organize symbols, notes, charts, and order entry.', href: '/watchlist' },
-                { label: 'Open journal', detail: 'Review closed trades and performance history.', href: '/journal' },
-                { label: 'Upload trade report', detail: 'Import CSV, contract notes, or screenshots.', href: '/upload' },
-              ].map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  style={{
-                    display: 'block',
-                    minHeight: 96,
-                    padding: '14px 15px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'var(--surface-2)',
-                    textDecoration: 'none',
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{item.label}</div>
-                  <div className="caption" style={{ lineHeight: 1.5 }}>{item.detail}</div>
-                </a>
-              ))}
-            </div>
-          </Card>
 
           {/* Stat cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>

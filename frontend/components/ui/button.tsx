@@ -22,19 +22,19 @@ const sizeStyles: Record<Size, React.CSSProperties> = {
 const variantStyles: Record<Variant, React.CSSProperties> = {
   primary: {
     background: 'linear-gradient(180deg, var(--accent-strong), var(--accent))',
-    color: '#04120d',
+    color: 'var(--text-on-accent)',
     fontWeight: 700,
-    border: '1px solid rgba(86, 215, 193, 0.28)',
-    boxShadow: '0 10px 24px rgba(86, 215, 193, 0.18)',
+    border: '1px solid var(--border-focus)',
+    boxShadow: '0 10px 24px var(--accent-glow)',
   },
   secondary: {
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025)), var(--surface-2)',
+    background: 'var(--surface-2)',
     color: 'var(--text-primary)',
     fontWeight: 500,
-    border: '1px solid rgba(255,255,255,0.09)',
+    border: '1px solid var(--border-subtle)',
   },
   ghost: {
-    background: 'rgba(255,255,255,0.01)',
+    background: 'transparent',
     color: 'var(--text-secondary)',
     fontWeight: 500,
     border: '1px solid transparent',
@@ -48,7 +48,7 @@ const variantStyles: Record<Variant, React.CSSProperties> = {
 }
 
 const variantHover: Record<Variant, string> = {
-  primary: 'linear-gradient(180deg, #9af6e8, var(--accent-hover))',
+  primary: 'linear-gradient(180deg, var(--accent-hover), var(--accent))',
   secondary: 'var(--surface-3)',
   ghost: 'var(--surface-2)',
   danger: 'var(--loss-subtle)',

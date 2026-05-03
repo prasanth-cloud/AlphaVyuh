@@ -132,7 +132,7 @@ export default function OnboardingPage() {
             <div key={i} className="flex items-center gap-2 flex-1">
               <div className="w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0"
                 style={i <= step
-                  ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }
+                  ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }
                   : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-tertiary)" }}>
                 {i < step ? "✓" : i + 1}
               </div>
@@ -172,7 +172,7 @@ export default function OnboardingPage() {
               </div>
               <button
                 className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-50"
-                style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
+                style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
                 disabled={!form.experience || !form.trades}
                 onClick={() => setStep(1)}>
                 Continue →
@@ -198,7 +198,7 @@ export default function OnboardingPage() {
                     : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold"
                     style={form.broker === b.value
-                      ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }
+                      ? { background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }
                       : { background: "rgba(255,255,255,0.03)", color: "var(--text-tertiary)" }}>
                     {b.logo}
                   </div>
@@ -251,7 +251,7 @@ export default function OnboardingPage() {
               </button>
               <button
                 className="flex-1 py-2.5 rounded-[8px] text-[14px] font-bold text-white"
-                style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
+                style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
                 onClick={() => setStep(2)}>
                 Continue →
               </button>
@@ -304,7 +304,7 @@ export default function OnboardingPage() {
 
             <button
               className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
-              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
+              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
               disabled={loading}
               onClick={() => finish("/dashboard")}>
               {loading ? "Setting up…" : "Go to Dashboard →"}

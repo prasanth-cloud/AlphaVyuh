@@ -25,7 +25,8 @@ export const liveQuotePollingEnabled =
 export const isMockMode =
   !forceLiveData &&
   (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
-    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true");
+    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
+    process.env.NODE_ENV === "development");
 
 let tokenCache: { token: string | null; expiresAt: number } | null = null;
 let tokenPromise: Promise<string | null> | null = null;
@@ -77,6 +78,27 @@ function invalidateClientCache(prefixes: string[]) {
 
 function shouldUseMockFallback(): boolean {
   return isMockMode;
+}
+
+const MOCK_WATCHLIST_STORAGE_KEY = "alphavyuh.mock.watchlists";
+
+function readMockWatchlists(): Watchlist[] {
+  const base = mockWatchlists();
+  if (typeof window === "undefined") return base;
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(MOCK_WATCHLIST_STORAGE_KEY) || "[]") as Watchlist[];
+    const existingIds = new Set(base.map((watchlist) => watchlist.id));
+    return [...base, ...stored.filter((watchlist) => !existingIds.has(watchlist.id))];
+  } catch {
+    return base;
+  }
+}
+
+function writeMockWatchlists(watchlists: Watchlist[]) {
+  if (typeof window === "undefined") return;
+  const custom = watchlists.filter((watchlist) => !watchlist.id.startsWith("mock-"));
+  window.localStorage.setItem(MOCK_WATCHLIST_STORAGE_KEY, JSON.stringify(custom));
 }
 
 async function getToken(): Promise<string | null> {
@@ -338,7 +360,7 @@ export async function deleteScreen(id: string): Promise<void> {
 }
 
 export async function getWatchlists(options?: { lite?: boolean; force?: boolean }): Promise<Watchlist[]> {
-  if (shouldUseMockFallback()) return mockWatchlists();
+  if (shouldUseMockFallback()) return readMockWatchlists();
   const cacheKey = options?.lite ? "watchlists:lite" : "watchlists";
   if (options?.force) {
     invalidateClientCache([cacheKey]);
@@ -348,16 +370,31 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
       const headers = await authHeaders();
       const qs = options?.lite ? "?lite=true" : "";
       const res = await fetch(`${API}/api/v1/watchlists${qs}`, { headers });
-      if (!res.ok) return shouldUseMockFallback() ? mockWatchlists() : [];
+      if (!res.ok) return shouldUseMockFallback() ? readMockWatchlists() : [];
       const data = await res.json();
       return data.watchlists ?? [];
     } catch {
-      return shouldUseMockFallback() ? mockWatchlists() : [];
+      return shouldUseMockFallback() ? readMockWatchlists() : [];
     }
   });
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
+  if (shouldUseMockFallback()) {
+    const current = readMockWatchlists();
+    const now = new Date().toISOString();
+    const created: Watchlist = {
+      id: `local-${Date.now()}`,
+      name,
+      sort_order: current.length,
+      created_at: now,
+      items: [],
+    };
+    writeMockWatchlists([...current, created]);
+    invalidateClientCache(["watchlists"]);
+    return created;
+  }
+
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists`, {
     method: "POST",
@@ -375,6 +412,12 @@ export async function createWatchlist(name: string): Promise<Watchlist> {
 }
 
 export async function deleteWatchlist(watchlistId: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeMockWatchlists(readMockWatchlists().filter((watchlist) => watchlist.id !== watchlistId));
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
+
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
   invalidateClientCache(["watchlists"]);

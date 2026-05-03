@@ -124,7 +124,7 @@ export default function PortfolioPage() {
                 <div className="text-[13px] mb-4" style={{ color: "var(--text-secondary)" }}>Add trades via the journal or the chart page.</div>
                 <button onClick={() => router.push("/journal")}
                   className="px-4 py-2 text-[13px] font-semibold rounded-[999px] hover:opacity-90 transition-opacity"
-                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}>
+                  style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}>
                   Go to Journal →
                 </button>
               </div>

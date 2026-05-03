@@ -46,7 +46,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 function DsButton({ variant = "primary", disabled = false, children }: { variant?: "primary" | "secondary" | "ghost" | "danger"; disabled?: boolean; children: React.ReactNode }) {
   const styles: Record<string, React.CSSProperties> = {
-    primary:   { background: "var(--accent)", color: "#04120d", border: "none" },
+    primary:   { background: "var(--accent)", color: "var(--text-on-accent)", border: "none" },
     secondary: { background: "var(--surface-2)", color: "var(--text-secondary)", border: "1px solid var(--border-default)" },
     ghost:     { background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border-subtle)" },
     danger:    { background: "var(--loss-subtle)", color: "var(--loss)", border: "1px solid rgba(225,85,96,0.25)" },
