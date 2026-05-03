@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
   authHeaders,
-  createFeedbackReport,
   createWatchlist,
   getWatchlists as getCachedWatchlists,
   isMockMode,
@@ -52,40 +51,40 @@ interface Watchlist { id: string; name: string }
 // ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
   {
-    id: 'leaders',
-    name: 'Above EMA 20/50 + RSI 50-82',
-    description: 'Price above EMA 20 and EMA 50 with RSI between 50 and 82.',
-    filters: { rsi_min: 50, rsi_max: 82, volume_ratio_min: 1.05, price_vs_ema20: 'above', price_vs_ema50: 'above' },
+    id: 'stage2_trend',
+    name: 'Stage 2 trend',
+    description: 'EMA 20 above EMA 50 above EMA 200, RSI at least 50, and RS score at least 70.',
+    filters: { all_emas_bullish: true, rsi_min: 50, rs_score_min: 70 },
   },
   {
-    id: 'momentum',
-    name: 'RSI 60-70 + Vol 2x',
-    description: 'RSI 60-70, volume at least 2x average, and price above EMA 20/50.',
-    filters: { rsi_min: 60, rsi_max: 70, volume_ratio_min: 2.0, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
+    id: 'rs_leaders',
+    name: 'RS leaders near highs',
+    description: 'RS score at least 80, price above EMA 50, and within 12% of the 52-week high.',
+    filters: { rs_score_min: 80, week_52_high_pct_max: 12.0, price_vs_ema50: 'above' },
   },
   {
-    id: 'breakout',
-    name: 'Within 12% of 52W high + Vol 1.5x',
-    description: 'Price within 12% of 52-week high with volume at least 1.5x average.',
-    filters: { volume_ratio_min: 1.5, pct_change_min: 1.0, week_52_high_pct_max: 12.0, price_vs_ema20: 'above' },
+    id: 'volume_breakout',
+    name: 'Volume breakout',
+    description: 'Price up at least 1%, volume at least 2x average, above EMA 20, and near the 52-week high.',
+    filters: { volume_ratio_min: 2.0, pct_change_min: 1.0, week_52_high_pct_max: 10.0, price_vs_ema20: 'above' },
   },
   {
-    id: 'new_highs',
-    name: 'New 52W highs',
+    id: 'ema_pullback',
+    name: 'EMA pullback',
+    description: 'Price above EMA 50, RSI 45-60, and no large same-day move.',
+    filters: { price_vs_ema50: 'above', rsi_min: 45, rsi_max: 60, pct_change_min: -2.0, pct_change_max: 2.0 },
+  },
+  {
+    id: 'fresh_52w_high',
+    name: 'Fresh 52W high',
     description: 'Stocks marked as new 52-week highs on the latest complete market day.',
     filters: { new_52w_high: true },
   },
   {
-    id: 'golden_cross',
-    name: 'EMA 20 above EMA 50',
-    description: 'EMA 20 above EMA 50, with price above EMA 200.',
-    filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above', volume_ratio_min: 1.0 },
-  },
-  {
-    id: 'oversold',
-    name: 'RSI 20-30 + above EMA 200',
-    description: 'RSI between 20 and 30 while price remains above EMA 200.',
-    filters: { rsi_min: 20, rsi_max: 30, price_vs_ema200: 'above' },
+    id: 'high_volume',
+    name: 'High volume',
+    description: 'Volume at least 3x average for liquidity and activity review.',
+    filters: { volume_ratio_min: 3.0 },
   },
 ] as const
 
@@ -288,29 +287,11 @@ export default function ScannerPage() {
     } catch { /* ignore */ }
   }
 
-  async function reportScannerDataIssue(symbol?: string) {
-    try {
-      await createFeedbackReport({
-        category: 'data_issue',
-        page: '/scanner',
-        symbol,
-        severity: 'high',
-        message: symbol
-          ? `Scanner data issue reported for ${symbol}.`
-          : `Scanner returned no matches for filters that may need data review.`,
-        context: { filters: buildPayload(filters, sortBy, sortDesc).filters, trade_date: tradeDate, total_matches: totalMatches },
-      });
-      showToast('Data issue reported')
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not report issue')
-    }
-  }
-
   async function loadSavedScreens() {
     if (isMockMode) {
       setSavedScreens([
-        { id: 'mock-leaders', name: 'EMA 20/50 + RSI', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
-        { id: 'mock-breakout', name: '20-day high + Vol surge', filters: PRESETS[2].filters, created_at: '2026-04-24T09:20:00Z' },
+        { id: 'mock-stage2', name: 'Stage 2 trend', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
+        { id: 'mock-rs-leaders', name: 'RS leaders near highs', filters: PRESETS[1].filters, created_at: '2026-04-24T09:20:00Z' },
       ])
       return
     }
@@ -817,7 +798,7 @@ export default function ScannerPage() {
             <EmptyState
               title="Run your first scan"
               description="Choose a saved filter or set your own price, volume, trend, and RS conditions."
-              action={{ label: 'Run EMA 20/50 + RSI 50-82', onClick: () => applyPreset(PRESETS[0]) }}
+              action={{ label: 'Run Stage 2 trend', onClick: () => applyPreset(PRESETS[0]) }}
             />
           </div>
         )}
@@ -827,12 +808,9 @@ export default function ScannerPage() {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
               title="No stocks matched"
-              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Widen RSI/volume filters, start from a preset, or report it if this looks like a data issue.` : 'No matches yet. Try a broader preset, or report it if this looks like a data issue.'}
+              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Use broader RSI, volume, trend, or RS conditions.` : 'No matches yet. Use a broader preset or adjust the filters.'}
               action={{ label: 'Reset filters', onClick: resetFilters }}
             />
-            <button className="workspace-chip-button" style={{ marginTop: 12 }} onClick={() => reportScannerDataIssue()}>
-              Report data issue
-            </button>
           </div>
         )}
 
@@ -922,12 +900,6 @@ export default function ScannerPage() {
                               style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
                             >
                               Journal
-                            </button>
-                            <button
-                              onClick={e => { e.stopPropagation(); reportScannerDataIssue(r.symbol) }}
-                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
-                            >
-                              Report
                             </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}

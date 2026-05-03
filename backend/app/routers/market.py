@@ -90,37 +90,24 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
 
 
 def _index_quotes() -> tuple[list[dict], str, bool]:
-    provider = get_market_data_provider()
     indexes = [
-        ("NIFTY", "NIFTY 50", MarketIdentity(market="NSE", currency="INR")),
-        ("BANKNIFTY", "BANK NIFTY", MarketIdentity(market="NSE", currency="INR")),
-        ("VIX", "India VIX", MarketIdentity(market="NSE", currency="INR")),
+        ("NIFTY", "NIFTY 50"),
+        ("BANKNIFTY", "BANK NIFTY"),
+        ("VIX", "India VIX"),
     ]
-    quotes: list[dict] = []
-    live = True
-    for symbol, label, identity in indexes:
-        try:
-            q = provider.live_quote(symbol, identity)
-            quotes.append({
-                "symbol": symbol,
-                "label": label,
-                "close": _finite_float(q.get("close")),
-                "pct_change": _finite_float(q.get("pct_change")),
-                "prev_close": _finite_float(q.get("prev_close")),
-                "source": q.get("source") or provider.name,
-            })
-        except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
-            live = False
-            quotes.append({
-                "symbol": symbol,
-                "label": label,
-                "close": None,
-                "pct_change": None,
-                "prev_close": None,
-                "source": provider.name,
-                "error": str(exc),
-            })
-    return quotes, provider.name, live
+    live_ticks = {tick["symbol"]: tick for tick in kite_live_ticker.snapshot([symbol for symbol, _ in indexes])}
+    quotes = []
+    for symbol, label in indexes:
+        tick = live_ticks.get(symbol)
+        quotes.append({
+            "symbol": symbol,
+            "label": label,
+            "close": _finite_float((tick or {}).get("close")),
+            "pct_change": _finite_float((tick or {}).get("pct_change")),
+            "prev_close": _finite_float((tick or {}).get("prev_close")),
+            "source": (tick or {}).get("source") or "latest_complete_session",
+        })
+    return quotes, "kite_ws" if live_ticks else "latest_complete_session", bool(live_ticks)
 
 
 def _sector_index_quotes() -> tuple[list[dict], str, bool]:
