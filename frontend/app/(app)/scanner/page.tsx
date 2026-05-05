@@ -439,10 +439,6 @@ export default function ScannerPage() {
   }
 
   async function addToWatchlist(symbol: string, wlId: string) {
-    if (isMockMode) {
-      showToast(`${symbol} added to mock watchlist`)
-      return
-    }
     await addSymbolToWatchlist(wlId, symbol)
     showToast(`${symbol} added`)
   }

@@ -1690,6 +1690,32 @@ export async function triggerTradeLesson(entryId: string): Promise<JournalEntry>
 }
 
 export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
+  if (shouldUseMockFallback()) {
+    const result: OrderResult = {
+      status: "filled",
+      message: `${order.side.toUpperCase()} ${order.quantity} × ${order.symbol.toUpperCase()} @ ₹${order.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })} — simulated and journal-ready`,
+      journal_id: `mock-journal-${Date.now()}`,
+      symbol: order.symbol.toUpperCase(),
+      side: order.side,
+      quantity: order.quantity,
+      price: order.price,
+      broker: "simulated",
+      broker_order_id: `MOCK-${Date.now()}`,
+      execution_mode: "simulated",
+      journal_status: "open",
+      risk_reward: order.stop_loss && order.target_price && order.stop_loss !== order.price
+        ? Number((Math.abs(order.target_price - order.price) / Math.abs(order.price - order.stop_loss)).toFixed(2))
+        : null,
+      next_actions: [
+        "Mock execution used for local workflow testing.",
+        "Journal draft is represented locally; live journal writes happen through the backend after real auth.",
+        "Complete the trade review after exit to generate coaching tips.",
+      ],
+    };
+    invalidateClientCache(["journal:", "portfolio"]);
+    return result;
+  }
+
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/orders`, {
     method: "POST",

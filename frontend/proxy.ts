@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { isDevMockWorkspaceEnabled } from "@/lib/dev-workspace";
 import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
 
 const PUBLIC_PREFIXES = [
@@ -47,6 +48,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set("x-pathname", pathname);
 
   if (isPublic(pathname)) return response;
+  if (isDevMockWorkspaceEnabled()) return response;
 
   const supabase = createMiddlewareClient(request, response);
 

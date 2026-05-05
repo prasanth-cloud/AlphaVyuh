@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { isDevMockWorkspaceEnabled } from "@/lib/dev-workspace";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
 
@@ -9,6 +10,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const pathname = (await headers()).get("x-pathname") ?? "/";
+
+  if (isDevMockWorkspaceEnabled()) {
+    return <AppShell>{children}</AppShell>;
+  }
 
   const supabase = await createServerSupabaseClient();
 

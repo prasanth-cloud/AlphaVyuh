@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { isDevMockWorkspaceEnabled, safeInternalNext } from "@/lib/dev-workspace";
 import { createClient } from "@/lib/supabase/client";
 
 function DevLoginInner() {
@@ -9,6 +10,11 @@ function DevLoginInner() {
   const [status, setStatus] = useState("Signing you in…");
 
   useEffect(() => {
+    if (isDevMockWorkspaceEnabled()) {
+      window.location.replace(safeInternalNext(params.get("next")));
+      return;
+    }
+
     const email = params.get("email");
     const token = params.get("token");
     if (!email || !token) {

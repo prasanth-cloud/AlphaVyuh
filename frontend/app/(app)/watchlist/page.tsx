@@ -301,6 +301,7 @@ function ChartPanel({
   latestClose,
   watchlistName,
   planValid,
+  plan,
   planSummary,
   onOpenPlan,
   onOpenChart,
@@ -310,6 +311,7 @@ function ChartPanel({
   latestClose?: number | null;
   watchlistName?: string | null;
   planValid: boolean;
+  plan: TradePlan | null;
   planSummary?: string;
   onOpenPlan: () => void;
   onOpenChart: (symbol: string) => void;
@@ -350,6 +352,14 @@ function ChartPanel({
     if (!qtyN || !priceN) return null;
     return qtyN * priceN;
   })();
+
+  useEffect(() => {
+    if (!plan) return;
+    if (plan.entry && !price) setPrice(plan.entry);
+    if (plan.positionSize && qty === "1") setQty(plan.positionSize);
+    if (plan.setupType) setSetupType(plan.setupType.toLowerCase());
+    if (plan.thesis && !tradeNote) setTradeNote(plan.thesis);
+  }, [plan, price, qty, tradeNote]);
   const chartStats = useMemo(() => {
     if (candles.length < 2) return null;
     const closes = candles.map((c) => c.close).filter((value) => Number.isFinite(value));
@@ -591,6 +601,8 @@ function ChartPanel({
         source_page: "watchlist",
         source_context: watchlistName ? `${watchlistName} queue` : "Watchlist queue",
         ...(setupType ? { setup_type: setupType } : {}),
+        ...(plan?.stop ? { stop_loss: Number(plan.stop) } : {}),
+        ...(plan?.target ? { target_price: Number(plan.target) } : {}),
         ...(tradeNote.trim() ? { notes: tradeNote.trim() } : {}),
       };
       await placeOrder(req);
@@ -719,6 +731,33 @@ function ChartPanel({
           </label>
           <TimeframeTabs active={tf} onChange={setTf} />
         </div>
+      </div>
+
+      <div
+        style={{
+          margin: "8px 14px 0",
+          padding: "8px 10px",
+          borderRadius: 12,
+          border: `1px solid ${planValid ? "rgba(45,181,116,0.28)" : "rgba(245,158,11,0.24)"}`,
+          background: planValid ? "rgba(45,181,116,0.08)" : "rgba(245,158,11,0.08)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          flexShrink: 0,
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <div className="label" style={{ color: planValid ? "var(--gain)" : "var(--warn)" }}>
+            {planValid ? "Plan ready" : "Plan required"}
+          </div>
+          <div className="caption" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {planValid && planSummary ? planSummary : "Set entry, stop, target, size, thesis, and invalidation before order drafting."}
+          </div>
+        </div>
+        <button className="workspace-chip-button active" onClick={onOpenPlan}>
+          {planValid ? "Edit plan" : "Create plan"}
+        </button>
       </div>
 
       {/* Chart */}
@@ -2077,6 +2116,7 @@ function WatchlistContent() {
             latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
             watchlistName={activeWl?.name ?? null}
             planValid={selectedPlanValid}
+            plan={selectedPlan}
             planSummary={selectedPlanValid && selectedPlan ? `${selectedPlan.setupType} plan: entry ${selectedPlan.entry}, stop ${selectedPlan.stop}, target ${selectedPlan.target}.` : undefined}
             onOpenChart={(sym) => router.push(chartHref(sym))}
             onOpenPlan={() => setShowTradePlan(true)}

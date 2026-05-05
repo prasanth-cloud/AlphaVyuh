@@ -44,10 +44,14 @@ def _kite_market_status() -> dict:
 @router.get("/health")
 async def data_health():
     """Returns overall data freshness — public, no auth required."""
-    sb = get_admin_client()
-
-    health_res = sb.from_("data_health").select("*").limit(1).execute()
-    h = health_res.data[0] if health_res.data else {}
+    h = {}
+    health_error = None
+    try:
+        sb = get_admin_client()
+        health_res = sb.from_("data_health").select("*").limit(1).execute()
+        h = health_res.data[0] if health_res.data else {}
+    except Exception as exc:
+        health_error = str(exc)
 
     hours_stale = h.get("hours_since_last_run") or 999
     null_rsi = h.get("null_rsi_latest") or 0
@@ -69,7 +73,11 @@ async def data_health():
     elif status == "stale":
         mode = "unknown"
 
-    if status == "healthy":
+    if health_error:
+        status = "degraded"
+        mode = "fallback"
+        message = "Data health table is unavailable; product views use cached/mock-safe fallbacks until the backend is repaired."
+    elif status == "healthy":
         message = "Latest complete market day is available."
     elif status == "degraded":
         message = "Newest ingest has gaps; product views use the latest complete market day."
@@ -94,6 +102,7 @@ async def data_health():
             "errors": last_run_errors,
         },
         "live_market": _kite_market_status(),
+        "error": health_error,
     }
 
 
