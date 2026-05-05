@@ -86,6 +86,32 @@ def _order(live_confirmed: bool = False):
     )
 
 
+def test_order_from_valid_plan_carries_context_into_journal(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: {})
+
+    order = _order()
+    order.stop_loss = 2440
+    order.target_price = 2680
+    order.setup_type = "breakout"
+    order.notes = "Scanner shortlist to watchlist queue"
+    order.thesis = "Breakout holding above prior resistance with rising volume."
+    order.invalidation_rule = "Exit if price closes below the breakout base."
+
+    result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
+
+    assert result["broker"] == "simulated"
+    assert result["journal_status"] == "open"
+    assert client.journal_inserts
+    entry = client.journal_inserts[0]
+    assert entry["stop_loss"] == 2440
+    assert entry["target_price"] == 2680
+    assert entry["setup_type"] == "breakout"
+    assert "Thesis: Breakout holding" in entry["entry_reason"]
+    assert "Invalidation: Exit if price closes below" in entry["entry_reason"]
+
+
 def test_live_order_requires_explicit_confirmation(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)

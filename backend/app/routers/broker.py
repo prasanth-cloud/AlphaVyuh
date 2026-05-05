@@ -43,6 +43,8 @@ class PlaceOrderRequest(BaseModel):
     target_price:   Optional[float] = None
     setup_type:     Optional[str]   = None
     notes:          Optional[str]   = None
+    thesis:         Optional[str]   = None
+    invalidation_rule: Optional[str] = None
     source_page:    Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
     source_context: Optional[str]   = None
     live_confirmed: bool = False
@@ -268,7 +270,14 @@ async def place_order(
         "manual": "Manual",
     }.get(body.source_page or "chart", "Chart")
 
-    base_reason = body.notes.strip() if body.notes else f"{body.side.upper()} via {source_label.lower()} — {body.order_type} order"
+    reason_parts = []
+    if body.notes and body.notes.strip():
+        reason_parts.append(body.notes.strip())
+    if body.thesis and body.thesis.strip():
+        reason_parts.append(f"Thesis: {body.thesis.strip()}")
+    if body.invalidation_rule and body.invalidation_rule.strip():
+        reason_parts.append(f"Invalidation: {body.invalidation_rule.strip()}")
+    base_reason = " | ".join(reason_parts) if reason_parts else f"{body.side.upper()} via {source_label.lower()} — {body.order_type} order"
     context_bits = [broker_context, source_label]
     if source_context:
         context_bits.append(source_context[:80])
@@ -309,6 +318,8 @@ async def place_order(
         "position_size": body.quantity,
         "setup_type": body.setup_type,
         "notes": body.notes,
+        "thesis": body.thesis,
+        "invalidation_rule": body.invalidation_rule,
         "broker_order_id": broker_order_id,
         "journal_id": journal_entry["id"],
     })

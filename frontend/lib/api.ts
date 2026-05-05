@@ -1658,6 +1658,8 @@ export type PlaceOrderRequest = {
   target_price?: number;
   setup_type?:  string;
   notes?:       string;
+  thesis?:      string;
+  invalidation_rule?: string;
   source_page?: "chart" | "watchlist" | "scanner" | "manual";
   source_context?: string;
   live_confirmed?: boolean;

@@ -369,6 +369,7 @@ function ChartPanel({
   onOpenChart,
   onOpenChartDraw,
   onStepSymbol,
+  plan,
   planValid,
   planNextAction,
 }: {
@@ -378,6 +379,7 @@ function ChartPanel({
   onOpenChart: (symbol: string) => void;
   onOpenChartDraw: (symbol: string) => void;
   onStepSymbol: (direction: "prev" | "next") => void;
+  plan: WorkflowState | null;
   planValid: boolean;
   planNextAction: string;
 }) {
@@ -507,6 +509,23 @@ function ChartPanel({
     if (latestClose) setPrice(String(latestClose));
   }, [latestClose]);
 
+  useEffect(() => {
+    if (!plan) return;
+    if (plan.entry && plan.entry > 0) setPrice(String(plan.entry));
+    if (plan.position_size && plan.position_size > 0) setQty(String(Math.trunc(plan.position_size)));
+    if (plan.setup_type) setSetupType(plan.setup_type);
+
+    if (plan.notes?.trim()) setTradeNote(plan.notes.trim());
+  }, [
+    plan,
+    plan?.entry,
+    plan?.position_size,
+    plan?.setup_type,
+    plan?.notes,
+    plan?.thesis,
+    plan?.invalidation_rule,
+  ]);
+
   async function handleOrder() {
     const qtyN = parseInt(qty, 10);
     const priceN = parseFloat(price);
@@ -529,8 +548,12 @@ function ChartPanel({
         order_type: orderType,
         source_page: "watchlist",
         source_context: watchlistName ? `${watchlistName} queue` : "Watchlist queue",
-        ...(setupType ? { setup_type: setupType } : {}),
+        ...(plan?.stop ? { stop_loss: plan.stop } : {}),
+        ...(plan?.target ? { target_price: plan.target } : {}),
+        ...(plan?.setup_type || setupType ? { setup_type: plan?.setup_type || setupType } : {}),
         ...(tradeNote.trim() ? { notes: tradeNote.trim() } : {}),
+        ...(plan?.thesis?.trim() ? { thesis: plan.thesis.trim() } : {}),
+        ...(plan?.invalidation_rule?.trim() ? { invalidation_rule: plan.invalidation_rule.trim() } : {}),
       };
       const broker = await getBrokerStatus();
       if (broker.connected && broker.broker && !broker.token_expired) {
@@ -2037,6 +2060,7 @@ function WatchlistContent() {
                 onOpenChart={(sym) => router.push(chartHref(sym))}
                 onOpenChartDraw={(sym) => router.push(chartHref(sym, "trendline"))}
                 onStepSymbol={moveSelection}
+                plan={selectedWorkflow}
                 planValid={selectedPlanStatus.valid}
                 planNextAction={selectedPlanStatus.next} />
             </div>
