@@ -738,7 +738,8 @@ export default function DashboardPage() {
         getMe().catch(() => null),
       ]).then(async ([watchlists, journal, stats, broker, me]) => {
         const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
-        const closedTrades = journal.entries.filter(entry => entry.status === 'closed').length || (stats?.total_trades ?? 0)
+        const closedTradesInSample = journal.entries.filter(entry => entry.status === 'closed').length
+        const closedTrades = Math.max(closedTradesInSample, stats?.total_trades ?? 0)
         const reviewedTrades = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
         const nextWorkflow: WorkflowState = {
           watchlists: watchlists.length,
