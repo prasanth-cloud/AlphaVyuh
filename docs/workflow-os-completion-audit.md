@@ -84,6 +84,10 @@ python scripts/test_kite_connection.py
 python scripts/test_upstox_connection.py
 ```
 
+Latest local attempt on 2026-05-05 stopped before any broker API call because
+`KITE_ACCESS_TOKEN` and `UPSTOX_ACCESS_TOKEN` were not present in
+`backend/.env`. No order placement was attempted.
+
 The manual order-submission protocol is documented in
 `docs/customer-launch-runbook.md#11-broker-execution-gate`.
 
