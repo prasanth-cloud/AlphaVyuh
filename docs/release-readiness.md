@@ -31,6 +31,9 @@ npm run launch:check
 # SKIP_BROWSER_SMOKE=1 npm run launch:check
 # To include read-only Kite/Upstox account smoke when tokens are available:
 # RUN_BROKER_SMOKE=1 npm run launch:check
+# To validate one broker at a time:
+# RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=kite npm run launch:check
+# RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=upstox npm run launch:check
 
 cd frontend
 npm run lint
