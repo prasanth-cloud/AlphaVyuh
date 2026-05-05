@@ -169,7 +169,11 @@ function BrokerSettingsContent() {
                 <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Current mode</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                   <StatusDot tone={mode === "live" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
-                  <div className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  <div
+                    data-testid={mode === "live" ? "broker-status-connected" : "broker-status-simulated"}
+                    className="text-[16px] font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
                     {mode === "live"
                       ? "Live via Zerodha"
                       : mode === "token-expired"
@@ -208,6 +212,7 @@ function BrokerSettingsContent() {
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               <button
+                data-testid="connect-btn"
                 onClick={handleConnect}
                 disabled={busy === "connect" || !state?.has_api_key}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
@@ -239,6 +244,8 @@ function BrokerSettingsContent() {
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
                 "Expired sessions fall back to simulated mode instead of blocking chart/journal workflows.",
+                "Live order submission requires an explicit final confirmation of symbol, side, quantity, price, and risk.",
+                "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
                 "Every live order should still create a journal entry with broker context.",
               ].map((line) => (
                 <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
