@@ -11,6 +11,7 @@ import {
   isMockMode,
 } from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
+import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -467,25 +468,19 @@ export default function ScannerPage() {
     showToast(`${symbol} added`)
   }
 
-  async function markWorkflow(symbols: string[], lifecycle: 'idea' | 'ignored' | 'review_later', label: 'shortlist' | 'ignored' | 'review_later') {
+  async function markWorkflow(symbols: string[], label: 'shortlist' | 'ignored' | 'review_later') {
     if (symbols.length === 0) return
     setWorkflowMarks(prev => {
       const next = { ...prev }
       for (const symbol of symbols) next[symbol] = label
       return next
     })
-    await bulkUpsertWorkflowStates(symbols.map(symbol => ({
-      symbol,
-      lifecycle,
-      source: 'scanner',
-      ...(label === 'ignored' ? { ignored: true } : {}),
-      ...(label === 'review_later' ? { review_later: true } : {}),
-    })))
+    await bulkUpsertWorkflowStates(symbols.map(symbol => scannerWorkflowPatch(symbol, label)))
     showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
   }
 
   function selectedSymbols() {
-    return results.filter(result => selectedResults.has(result.symbol)).map(result => result.symbol)
+    return selectedScannerSymbols(results, selectedResults)
   }
 
   async function createWatchlistFromResults() {
@@ -502,12 +497,7 @@ export default function ScannerPage() {
       for (const s of toAdd.slice(0, 50)) {
         await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
       }
-      await bulkUpsertWorkflowStates(toAdd.slice(0, 50).map((s) => ({
-        symbol: s.symbol,
-        watchlist_id: wl.id,
-        lifecycle: 'watch',
-        source: 'scanner',
-      })))
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches(toAdd.slice(0, 50).map((s) => s.symbol), wl.id))
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       router.push(`/watchlist?id=${wl.id}`)
@@ -785,6 +775,11 @@ export default function ScannerPage() {
                     Free plan · 200 cap
                   </span>
                 )}
+                {selectedResults.size > 0 && (
+                  <span className="workspace-pill" aria-live="polite">
+                    {selectedResults.size} selected
+                  </span>
+                )}
                 {SORT_COLS.map(([col, lbl]) => {
                   const active = sortBy === col
                   return (
@@ -813,11 +808,14 @@ export default function ScannerPage() {
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
                   Create watchlist
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'idea', 'shortlist')} disabled={selectedResults.size === 0}>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')} disabled={selectedResults.size === 0}>
                   Shortlist selected
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'ignored', 'ignored')} disabled={selectedResults.size === 0}>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'ignored')} disabled={selectedResults.size === 0}>
                   Ignore selected
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')} disabled={selectedResults.size === 0}>
+                  Review later selected
                 </Button>
               </div>
             </>
@@ -953,19 +951,19 @@ export default function ScannerPage() {
                         <Td>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                             <button
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'idea', 'shortlist') }}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'shortlist') }}
                               style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer' }}
                             >
                               Shortlist
                             </button>
                             <button
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later', 'review_later') }}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later') }}
                               style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
                             >
                               Later
                             </button>
                             <button
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored', 'ignored') }}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored') }}
                               style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
                             >
                               Ignore
@@ -992,7 +990,7 @@ export default function ScannerPage() {
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
                                 onClick={e => e.stopPropagation()}
                                 style={{ fontSize: 10, padding: '2px 4px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                                <option value="">+WL</option>
+                                <option value="">Add to watchlist</option>
                                 {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                               </select>
                             )}
