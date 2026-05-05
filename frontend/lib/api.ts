@@ -1391,6 +1391,24 @@ export type UserProfile = {
 };
 
 export async function getMe(): Promise<UserProfile> {
+  if (shouldUseMockFallback()) {
+    return {
+      id: "mock-user",
+      email: "mock@alphavyuh.local",
+      full_name: "AlphaVyuh Demo",
+      avatar_url: null,
+      plan: "pro",
+      plan_expires_at: null,
+      onboarding_completed: false,
+      telegram_chat_id: null,
+      broker_type: null,
+      broker_api_key: null,
+      broker_connected_at: null,
+      billing_region: "IN",
+      billing_currency: "INR",
+      created_at: new Date().toISOString(),
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/me`, { headers });
   if (!res.ok) throw new Error("Failed to fetch profile");
@@ -1407,6 +1425,9 @@ export async function updateMe(updates: {
   billing_region?: string;
   billing_currency?: string;
 }): Promise<UserProfile> {
+  if (shouldUseMockFallback()) {
+    return { ...(await getMe()), ...updates };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/me`, {
     method: "PATCH",
@@ -1585,6 +1606,26 @@ let dataHealthCache: { value: DataHealth | null; expiresAt: number } | null = nu
 let dataHealthPromise: Promise<DataHealth | null> | null = null;
 
 export async function getDataHealth(): Promise<DataHealth | null> {
+  if (shouldUseMockFallback()) {
+    return {
+      status: "healthy",
+      latest_trade_date: "2026-04-24",
+      hours_since_refresh: 1,
+      symbols_on_latest_date: 500,
+      universe_active: 500,
+      coverage_pct: 99.2,
+      mode: "fallback",
+      message: "Demo data is loaded from local mock fixtures.",
+      indicators_missing: {
+        rsi_14: 0,
+        ema_200: 0,
+      },
+      last_run: {
+        id: "mock-refresh",
+        errors: 0,
+      },
+    };
+  }
   const now = Date.now();
   if (dataHealthCache && dataHealthCache.expiresAt > now) return dataHealthCache.value;
   if (dataHealthPromise) return dataHealthPromise;
