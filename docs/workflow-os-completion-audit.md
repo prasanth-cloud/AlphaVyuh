@@ -38,7 +38,7 @@ CI:
 | Do not swap `lightweight-charts` | Dependency remains in `frontend/package.json`; chart work is in `frontend/app/(app)/charts/[symbol]/page.tsx`. | Covered |
 | Latency/data reliability and fail-soft backend routes | Fail-soft routes and cache paths covered by `frontend/tests/e2e/backend-live-smoke.spec.ts`, `backend/tests/test_market_overview_failsoft.py`, `backend/tests/test_market_data_provider.py`, `backend/tests/test_fundamentals_failsoft.py`, `frontend/tests/unit/candles-cache.test.ts`, and timing marks in `frontend/lib/performance.ts`. | Covered locally |
 | Data freshness badges on dashboard/scanner/watchlist/chart | Data freshness/provenance components and page usage in `frontend/components/DataFreshnessStrip.tsx`, `frontend/components/ui/DataProvenanceBadge.tsx`, dashboard/scanner/watchlist/chart files. | Covered by code inspection and browser smoke |
-| Scanner workflow upgrade: rail, row/bulk lifecycle actions, shortlist/watchlist flow | `frontend/app/(app)/scanner/page.tsx`; workflow E2E covers scan -> review later -> create watchlist in `frontend/tests/e2e/workflow-mock.spec.ts`. | Covered |
+| Scanner workflow upgrade: rail, row/bulk lifecycle actions, shortlist/watchlist flow | `frontend/app/(app)/scanner/page.tsx`; workflow E2E covers scan -> Shortlist/Ignore/Review later, row-level Add to watchlist persistence, and create watchlist from scanner results in `frontend/tests/e2e/workflow-mock.spec.ts`. | Covered |
 | Watchlist Decision Desk with lifecycle/plan fields and gating | `frontend/app/(app)/watchlist/page.tsx`, `frontend/lib/workflow.ts`; E2E covers Ready/order gating, Prev/Next buttons, ArrowUp/ArrowDown queue navigation, and local persistence in `workflow-mock.spec.ts`. | Covered |
 | Persist workflow state to Supabase with RLS and local fallback | Migration `supabase/migrations/20260505014955_workflow_state.sql`, backend router `backend/app/routers/workflow.py`, service `backend/app/services/workflow_state.py`, frontend fallback in `frontend/lib/api.ts`. Remote staging/prod application is not verified. | Covered locally; remote gate open |
 | Full chart drawing tools, persistence, Delete/Esc, plan/alert/zone connections | `frontend/app/(app)/charts/[symbol]/page.tsx`; drawing E2E covers Trendline, Ray, Horizontal, H-Ray, Zone, Fib, Long/Short Position, Text, reload persistence, Delete, Esc, risk/reward plan fill, zone note creation. `frontend/tests/unit/mock-chart-persistence.test.ts` covers local-first workspace fallback when the API save fails. | Covered locally |
@@ -63,9 +63,9 @@ Latest focused gate result recorded on 2026-05-05 after head `2cdc8b9`:
 - `npm run typecheck`: passed
 - `npm run lint`: passed
 - `npm --prefix frontend run test -- --run`: 33 passed
-- `npm run test:e2e:mock`: 5 passed, including scanner lifecycle, watchlist
-  Prev/Next and ArrowUp/ArrowDown queue navigation, order gating, and drawing
-  persistence
+- `npm run test:e2e:mock`: 5 passed, including scanner lifecycle, scanner
+  row-level Add to watchlist persistence, watchlist Prev/Next and
+  ArrowUp/ArrowDown queue navigation, order gating, and drawing persistence
 
 Latest full launch gate result recorded on 2026-05-05 before later focused
 additions:
