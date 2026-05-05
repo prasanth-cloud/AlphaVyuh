@@ -10,7 +10,7 @@ import {
   getWatchlists as getCachedWatchlists,
   isMockMode,
 } from '@/lib/api'
-import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
+import { mockRunScan } from '@/lib/mock-data'
 import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 
@@ -281,10 +281,6 @@ export default function ScannerPage() {
   }
 
   async function loadWatchlists() {
-    if (isMockMode) {
-      setWatchlists(mockWatchlists().map(({ id, name }) => ({ id, name })))
-      return
-    }
     try {
       const lists = await getCachedWatchlists()
       setWatchlists(lists.map(({ id, name }) => ({ id, name })))
@@ -460,10 +456,6 @@ export default function ScannerPage() {
   }
 
   async function addToWatchlist(symbol: string, wlId: string) {
-    if (isMockMode) {
-      showToast(`${symbol} added to mock watchlist`)
-      return
-    }
     await addSymbolToWatchlist(wlId, symbol)
     showToast(`${symbol} added`)
   }
@@ -485,12 +477,6 @@ export default function ScannerPage() {
 
   async function createWatchlistFromResults() {
     if (!newWlName.trim()) return
-    if (isMockMode) {
-      setShowWlModal(false); setNewWlName('')
-      showToast('Mock watchlist created')
-      router.push('/watchlist')
-      return
-    }
     try {
       const wl = await createWatchlist(newWlName.trim())
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results

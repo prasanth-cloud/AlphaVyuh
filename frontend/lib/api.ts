@@ -283,6 +283,51 @@ export type Watchlist = {
   items: WatchlistItem[];
 };
 
+const mockWatchlistsKey = "alphavyuh-mock-watchlists-v1";
+
+function readMockWatchlists(): Watchlist[] {
+  const defaults = mockWatchlists();
+  if (typeof window === "undefined") return defaults;
+  try {
+    const raw = window.localStorage.getItem(mockWatchlistsKey);
+    return raw ? JSON.parse(raw) : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function writeMockWatchlists(watchlists: Watchlist[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockWatchlistsKey, JSON.stringify(watchlists));
+}
+
+function mockWatchlistItem(symbol: string, sortOrder: number): WatchlistItem {
+  const quote = mockQuote(symbol);
+  return quote
+    ? {
+        symbol: quote.symbol,
+        sort_order: sortOrder,
+        added_at: new Date().toISOString(),
+        company_name: quote.company_name,
+        sector: quote.sector,
+        close: quote.close,
+        pct_change: quote.pct_change,
+        volume_ratio: quote.volume_ratio,
+        rsi_14: quote.rsi_14,
+        pinned: false,
+        tags: [],
+        note: "",
+      }
+    : {
+        symbol: symbol.toUpperCase(),
+        sort_order: sortOrder,
+        added_at: new Date().toISOString(),
+        pinned: false,
+        tags: [],
+        note: "",
+      };
+}
+
 export type SavedScreen = {
   id: string;
   name: string;
@@ -338,7 +383,7 @@ export async function deleteScreen(id: string): Promise<void> {
 }
 
 export async function getWatchlists(options?: { lite?: boolean; force?: boolean }): Promise<Watchlist[]> {
-  if (shouldUseMockFallback()) return mockWatchlists();
+  if (shouldUseMockFallback()) return readMockWatchlists();
   const cacheKey = options?.lite ? "watchlists:lite" : "watchlists";
   if (options?.force) {
     invalidateClientCache([cacheKey]);
@@ -358,6 +403,19 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
 }
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
+  if (shouldUseMockFallback()) {
+    const lists = readMockWatchlists();
+    const created: Watchlist = {
+      id: `mock-${Date.now()}`,
+      name,
+      sort_order: lists.length,
+      created_at: new Date().toISOString(),
+      items: [],
+    };
+    writeMockWatchlists([...lists, created]);
+    invalidateClientCache(["watchlists"]);
+    return created;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists`, {
     method: "POST",
@@ -375,12 +433,32 @@ export async function createWatchlist(name: string): Promise<Watchlist> {
 }
 
 export async function deleteWatchlist(watchlistId: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeMockWatchlists(readMockWatchlists().filter((watchlist) => watchlist.id !== watchlistId));
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
   invalidateClientCache(["watchlists"]);
 }
 
 export async function addToWatchlist(watchlistId: string, symbol: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const lists = readMockWatchlists();
+    const next = lists.map((watchlist) => {
+      if (watchlist.id !== watchlistId) return watchlist;
+      if (watchlist.items.some((item) => item.symbol === normalized)) throw new Error("Already in watchlist");
+      return {
+        ...watchlist,
+        items: [...watchlist.items, mockWatchlistItem(normalized, watchlist.items.length)],
+      };
+    });
+    writeMockWatchlists(next);
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}/items`, {
     method: "POST",
@@ -393,6 +471,16 @@ export async function addToWatchlist(watchlistId: string, symbol: string): Promi
 }
 
 export async function removeFromWatchlist(watchlistId: string, symbol: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    writeMockWatchlists(readMockWatchlists().map((watchlist) => (
+      watchlist.id !== watchlistId
+        ? watchlist
+        : { ...watchlist, items: watchlist.items.filter((item) => item.symbol !== normalized) }
+    )));
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/${symbol}`, {
     method: "DELETE",
