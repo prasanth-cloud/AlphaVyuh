@@ -480,10 +480,9 @@ export default function ScannerPage() {
     try {
       const wl = await createWatchlist(newWlName.trim())
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
-      for (const s of toAdd.slice(0, 50)) {
-        await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
-      }
-      await bulkUpsertWorkflowStates(scannerWatchlistPatches(toAdd.slice(0, 50).map((s) => s.symbol), wl.id))
+      const symbols = toAdd.slice(0, 50).map((s) => s.symbol)
+      await Promise.all(symbols.map((symbol) => addSymbolToWatchlist(wl.id, symbol).catch(() => {})))
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches(symbols, wl.id))
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       router.push(`/watchlist?id=${wl.id}`)
