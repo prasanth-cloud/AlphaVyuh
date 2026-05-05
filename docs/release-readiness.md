@@ -27,11 +27,8 @@ Run these before release:
 
 ```bash
 npm run launch:check
-npm run typecheck
-npm run lint
-npm run test
-npm run test:e2e:mock
-npm run test:e2e:backend
+# To skip local browser server smoke in constrained shells only:
+# SKIP_BROWSER_SMOKE=1 npm run launch:check
 
 cd frontend
 npm run lint
@@ -40,7 +37,7 @@ npm run build
 NEXT_PUBLIC_DATA_MODE=mock npm run build
 npx playwright test tests/e2e/release-readiness.spec.ts
 npx playwright test --config=playwright.backend.config.ts
-npm audit --audit-level=high
+npm audit --audit-level=moderate
 
 cd ../backend
 .venv/bin/pytest

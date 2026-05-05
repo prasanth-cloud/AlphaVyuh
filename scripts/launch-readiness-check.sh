@@ -28,8 +28,18 @@ run_step() {
 run_step "Git tracked changes" git status --short
 
 run_step "Frontend lint" npm --prefix frontend run lint
+run_step "Frontend typecheck" npm --prefix frontend run typecheck
 run_step "Frontend unit tests" npm --prefix frontend run test
 run_step "Frontend production build" npm --prefix frontend run build
+run_step "Frontend dependency audit" npm audit --audit-level=moderate
+
+if [[ "${SKIP_BROWSER_SMOKE:-}" == "1" ]]; then
+  echo "Skipping browser smoke checks because SKIP_BROWSER_SMOKE=1."
+  echo
+else
+  run_step "Mock workflow browser smoke" npm run test:e2e:mock
+  run_step "Live backend HTTP smoke" npm run test:e2e:backend
+fi
 
 if [[ -d backend ]]; then
   if [[ -n "$PYTHON_BIN" ]]; then
