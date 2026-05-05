@@ -29,37 +29,32 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeEnabled();
     await expect(page.getByRole("button", { name: /^Place buy order$/i })).toBeEnabled();
 
-    let orderPayload: Record<string, unknown> | null = null;
-    await page.route("**/api/v1/orders", async (route) => {
-      orderPayload = route.request().postDataJSON();
-      await route.fulfill({
-        status: 201,
-        contentType: "application/json",
-        body: JSON.stringify({
-          status: "filled",
-          message: "Mock order placed",
-          journal_id: "journal-1",
-          symbol: orderPayload?.symbol,
-          side: orderPayload?.side,
-          quantity: orderPayload?.quantity,
-          price: orderPayload?.price,
-          broker: "simulated",
-          broker_order_id: null,
-          journal_status: "open",
-        }),
-      });
-    });
     await page.getByRole("button", { name: /^Place buy order$/i }).click();
     await expect(page.getByText(/journal capture is ready/i)).toBeVisible({ timeout: 10_000 });
-    expect(orderPayload).toMatchObject({
-      source_page: "watchlist",
+
+    const localOrder = await page.evaluate(() => {
+      const journal = JSON.parse(localStorage.getItem("alphavyuh-mock-journal-v1") || "[]");
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return { journal: journal[0], workflow: workflow[journal[0]?.symbol] };
+    });
+    expect(localOrder.journal).toMatchObject({
+      entry_price: 1500,
+      quantity: 10,
       stop_loss: 1440,
       target_price: 1650,
       setup_type: "breakout",
+      status: "open",
+    });
+    expect(localOrder.journal.entry_reason).toContain("Thesis: Breakout holding");
+    expect(typeof localOrder.journal.symbol).toBe("string");
+    expect(localOrder.workflow).toMatchObject({
+      lifecycle: "open",
+      entry: 1500,
+      stop: 1440,
+      target: 1650,
+      position_size: 10,
       thesis: "Breakout holding above prior resistance with clean volume.",
       invalidation_rule: "Exit if price closes below the breakout base.",
-      quantity: 10,
-      price: 1500,
     });
 
     expect(errors).toEqual([]);
