@@ -152,4 +152,42 @@ test.describe("Mock workflow smoke", () => {
 
     expect(errors).toEqual([]);
   });
+
+  test("rectangle drawing can create a persisted zone note", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/charts/AUBANK?full=1");
+    const overlay = page.getByTestId("chart-drawing-overlay");
+    await expect(overlay).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole("button", { name: /Zone/i }).first().click();
+    await expect(page.getByText(/Zone armed/i)).toBeVisible({ timeout: 10_000 });
+
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.move(box.x + box.width * 0.30, box.y + box.height * 0.42);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.57);
+    await page.mouse.up();
+
+    await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 10_000 });
+    await page.getByText(/1\. Zone/).click();
+    await expect(page.getByText(/Selected: Zone/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: /Zone note/i }).click();
+    await expect(page.getByText(/2 visible .* 2 total/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/2\. Text/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Zone \d+\.\d+-\d+\.\d+/).first()).toBeVisible({ timeout: 10_000 });
+
+    await page.reload();
+    await expect(page.getByText(/2 visible .* 2 total/)).toBeVisible({ timeout: 15_000 });
+
+    expect(errors).toEqual([]);
+  });
 });
