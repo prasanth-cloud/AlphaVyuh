@@ -114,6 +114,14 @@ test.describe("Mock workflow smoke", () => {
     expect(workflowMarks[ignoredSymbol]).toMatchObject({ lifecycle: "ignored", ignored: true, source: "scanner" });
     expect(workflowMarks[reviewSymbol]).toMatchObject({ lifecycle: "review_later", review_later: true, source: "scanner" });
 
+    await resultRows.nth(0).locator("select").selectOption({ label: "Leaders" });
+    await expect(page.getByText(`${shortlistSymbol} added`)).toBeVisible({ timeout: 10_000 });
+    const leadersWatchlist = await page.evaluate(() => {
+      const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
+      return lists.find((list: { name: string }) => list.name === "Leaders");
+    });
+    expect(leadersWatchlist.items.some((item: { symbol: string }) => item.symbol === shortlistSymbol)).toBe(true);
+
     await page.getByRole("button", { name: /Create watchlist/i }).first().click();
     await page.getByPlaceholder(/Watchlist name/).fill("Workflow QA");
     await page.getByRole("button", { name: /^Create$/ }).click();
