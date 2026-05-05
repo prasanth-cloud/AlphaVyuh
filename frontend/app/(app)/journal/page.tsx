@@ -17,9 +17,11 @@ import { TradePanel } from "./components/TradePanel";
 import { JournalAnalytics as JournalAnalyticsTab } from "./components/JournalAnalytics";
 import { JournalAiInsights } from "./components/JournalAiInsights";
 import type { PanelMode, Tab } from "./components/types";
+import { useWorkflowState } from "@/lib/workflow";
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
+  const { completeReview } = useWorkflowState();
   const [tab, setTab] = useState<Tab>("trades");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [journalPlan, setJournalPlan] = useState<string | null>(null);
@@ -147,7 +149,6 @@ export default function JournalPage() {
       return true;
     })
   ), [entries, reviewFocus, symbolFocus]);
-
   const handleAddTrade = async () => {
     if (!selectedSymbol || !addForm.entry_price || !addForm.quantity || !addForm.entry_date || !addForm.trade_type) {
       showToast("Fill in symbol, date, price and quantity"); return;
@@ -181,6 +182,7 @@ export default function JournalPage() {
       const updated = await triggerTradeLesson(entry.id);
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       if (selectedEntry?.id === updated.id) setSelectedEntry(updated);
+      completeReview(updated.symbol);
       showToast("Trade lesson generated");
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Trade lesson failed"); }
     finally { setLessonLoading(null); }

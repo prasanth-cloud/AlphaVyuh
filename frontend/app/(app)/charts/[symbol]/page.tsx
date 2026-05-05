@@ -15,6 +15,7 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
+  streamLiveQuotes,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -588,8 +589,25 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     setLiveQuoteUpdatedAt(null);
     if (!liveMode && !liveQuotePollingEnabled) return;
     let cancelled = false;
+    let streamConnected = false;
+
+    const stopStream = streamLiveQuotes(
+      [symbol],
+      (ticks) => {
+        if (cancelled) return;
+        const quote = ticks.find((tick) => tick.symbol === symbol.toUpperCase());
+        if (!quote || quote.close == null) return;
+        setLiveQuote(quote);
+        if (quote.currency) setSymbolCurrency(quote.currency);
+        setLiveQuoteUpdatedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
+      },
+      (status) => {
+        streamConnected = status.connected;
+      }
+    );
 
     async function refreshLiveQuote() {
+      if (streamConnected) return;
       const quote = await getQuoteLive(symbol);
       if (cancelled || !quote) return;
       setLiveQuote(quote);
@@ -601,6 +619,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     const id = window.setInterval(refreshLiveQuote, 30_000);
     return () => {
       cancelled = true;
+      stopStream();
       window.clearInterval(id);
     };
   }, [liveMode, symbol]);

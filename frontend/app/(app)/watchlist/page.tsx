@@ -1189,8 +1189,8 @@ function WatchlistContent() {
           const live = await getQuoteLive(item.symbol).catch(() => null);
           return live ? {
             symbol: item.symbol,
-            close: live.close,
-            pct_change: live.pct_change,
+            close: live.close ?? undefined,
+            pct_change: live.pct_change ?? undefined,
           } : null;
         })
       );

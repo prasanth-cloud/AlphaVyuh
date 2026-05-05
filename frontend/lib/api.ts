@@ -21,11 +21,12 @@ import {
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
 export const liveQuotePollingEnabled =
-  forceLiveData || process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES === "true";
+  process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES !== "false";
 export const isMockMode =
   !forceLiveData &&
   (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
-    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true");
+    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
+    process.env.NODE_ENV === "development");
 
 let tokenCache: { token: string | null; expiresAt: number } | null = null;
 let tokenPromise: Promise<string | null> | null = null;
@@ -393,11 +394,11 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
       const headers = await authHeaders();
       const qs = options?.lite ? "?lite=true" : "";
       const res = await fetch(`${API}/api/v1/watchlists${qs}`, { headers });
-      if (!res.ok) return shouldUseMockFallback() ? mockWatchlists() : [];
+      if (!res.ok) return shouldUseMockFallback() ? readMockWatchlists() : [];
       const data = await res.json();
       return data.watchlists ?? [];
     } catch {
-      return shouldUseMockFallback() ? mockWatchlists() : [];
+      return shouldUseMockFallback() ? readMockWatchlists() : [];
     }
   });
 }
@@ -707,18 +708,19 @@ export async function getQuote(symbol: string): Promise<ScanResult | null> {
 
 export type LiveQuote = {
   symbol: string;
-  market: string;
-  currency: string;
-  close: number;
-  open: number;
-  high: number;
-  low: number;
-  volume: number;
-  prev_close: number;
+  market?: string;
+  currency?: string;
+  close: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  prev_close: number | null;
   pct_change: number | null;
-  week_52_high: number | null;
-  week_52_low: number | null;
+  week_52_high?: number | null;
+  week_52_low?: number | null;
   source: string;
+  as_of?: string;
 };
 
 export async function getQuoteLive(symbol: string): Promise<LiveQuote | null> {
@@ -730,6 +732,113 @@ export async function getQuoteLive(symbol: string): Promise<LiveQuote | null> {
     return res.json();
   } catch {
     return shouldUseMockFallback() ? mockLiveQuote(symbol) : null;
+  }
+}
+
+export function streamLiveQuotes(
+  symbols: string[],
+  onTicks: (ticks: LiveQuote[]) => void,
+  onStatus?: (status: { connected: boolean; error?: string }) => void
+): () => void {
+  const cleanSymbols = Array.from(new Set(symbols.map((symbol) => symbol.trim().toUpperCase()).filter(Boolean))).slice(0, 200);
+  if (cleanSymbols.length === 0 || shouldUseMockFallback()) return () => {};
+
+  const controller = new AbortController();
+  let buffer = "";
+  let stopped = false;
+
+  async function start() {
+    try {
+      const headers = await authHeaders();
+      const params = new URLSearchParams({ symbols: cleanSymbols.join(","), mode: "quote" });
+      const res = await fetch(`${API}/api/v1/market/live/stream?${params.toString()}`, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`Live stream HTTP ${res.status}`);
+      onStatus?.({ connected: true });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      while (!stopped) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() ?? "";
+        for (const frame of frames) {
+          const event = frame.split("\n").find((line) => line.startsWith("event:"))?.slice(6).trim();
+          const dataLine = frame.split("\n").find((line) => line.startsWith("data:"));
+          if (!dataLine) continue;
+          const payload = JSON.parse(dataLine.slice(5).trim());
+          if (event === "error") {
+            onStatus?.({ connected: false, error: payload.message || "Live stream unavailable" });
+            continue;
+          }
+          if ((event === "tick" || event === "snapshot") && Array.isArray(payload.ticks)) {
+            onTicks(payload.ticks as LiveQuote[]);
+          }
+        }
+      }
+    } catch (error) {
+      if (!stopped) {
+        onStatus?.({ connected: false, error: error instanceof Error ? error.message : "Live stream unavailable" });
+      }
+    }
+  }
+
+  void start();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
+}
+
+export type LiveMarketStatus = {
+  provider: string;
+  api_key_configured: boolean;
+  access_token_configured: boolean;
+  access_token_valid: boolean;
+  token_refresh: "daily_manual" | string;
+  stream_connected: boolean;
+  stream_connecting: boolean;
+  subscriber_count: number;
+  subscribed_symbols: string[];
+  last_error: string | null;
+};
+
+export type LiveSectorIndex = {
+  symbol: string;
+  label: string;
+  close: number | null;
+  pct_change: number | null;
+  prev_close: number | null;
+  source: string;
+  error?: string;
+};
+
+export async function getLiveMarketStatus(): Promise<LiveMarketStatus | null> {
+  if (shouldUseMockFallback()) return null;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/market/live/status`, { headers });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function getLiveSectorIndices(): Promise<{ basis: string; source: string; is_live: boolean; as_of: string; sectors: LiveSectorIndex[] } | null> {
+  if (shouldUseMockFallback()) return null;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/market/live/sectors`, { headers });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
   }
 }
 
@@ -1856,6 +1965,7 @@ export type DataHealth = {
     id: string | null;
     errors: number | null;
   };
+  live_market?: LiveMarketStatus | null;
 };
 
 let dataHealthCache: { value: DataHealth | null; expiresAt: number } | null = null;
@@ -2292,6 +2402,8 @@ export interface MarketOverview {
   top_sectors?: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
   market_data_source?: string;
   is_live?: boolean;
+  sector_breadth_basis?: "latest_complete_session" | string;
+  sector_breadth_source?: string;
   sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
   top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
@@ -2336,6 +2448,8 @@ function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined
     top_sectors: Array.isArray(data.top_sectors) ? data.top_sectors : [],
     market_data_source: data.market_data_source,
     is_live: Boolean(data.is_live),
+    sector_breadth_basis: data.sector_breadth_basis ?? "latest_complete_session",
+    sector_breadth_source: data.sector_breadth_source ?? "daily_ohlcv",
     sector_breadth: Array.isArray(data.sector_breadth) ? data.sector_breadth : [],
     top_gainers: Array.isArray(data.top_gainers) ? data.top_gainers : [],
     top_losers: Array.isArray(data.top_losers) ? data.top_losers : [],

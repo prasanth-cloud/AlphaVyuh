@@ -1,29 +1,26 @@
 # Priority queue
 
-## P0 — Blocking launch
+This file exists to prevent feature overload. Until the core beta workflow is stable, agents should not add new product surfaces unless a P0 bug requires it.
 
-1. **DEPLOY** — Fix Vercel build (production has been ERROR for 7+ commits)
-2. **FEATURE** — Fix auth "Not authenticated" on scanner/watchlist/journal (BUG-001)
-3. **FEATURE** — Fix dashboard primary button invisible text (BUG-002)
-4. **DATA** — Add /api/v1/market/breadth/sectors endpoint (BUG-003, REQ-001)
-5. **DATA** — Fix EMA 50 breadth showing 0% (BUG-004)
+## Now — private beta
 
-## P1 — Launch readiness
+1. **Stabilize build and deployment** — production must build reliably before more product work.
+2. **Stabilize auth in app pages** — scanner, watchlist, charts, and journal must load without false "Not authenticated" states.
+3. **Simplify the app UI** — remove visible process layers, extra step trackers, and copy that explains the product too much.
+4. **Keep copy informational** — no advisory language, no buy/sell prompts, no "best opportunity" framing.
+5. **Verify with one real beta routine** — sign in, open dashboard, run scanner, save a symbol, open a chart, log or review a trade.
 
-6. **FEATURE** — Build trade report upload (CSV from Zerodha/Upstox/Groww)
-7. **FEATURE** — AI journal review with memory (analyzes past trades only — no future advice)
-8. **FEATURE** — One-click order from scanner to broker (user-initiated, not suggested)
-9. **FEATURE** — Enhanced breadth analytics dashboard
-10. **DESIGN** — Apply landing page voice consistently to app pages
+## Next — after the core path feels calm
 
-## P2 — Post-launch polish
+6. **Market breadth analytics** — sector rotation and EMA breadth as context, not advice.
+7. **Journal review memory** — observations from closed trades only.
+8. **Broker beta hardening** — user-initiated order entry after account-level verification.
+9. **Trade report upload** — CSV import first, screenshots/OCR later.
 
-11. **FEATURE** — User-controlled watchlist status labels (Watch/Ready/Tagged/Needs Review)
-12. **FEATURE** — Onboarding flow for new users
-13. **DEPLOY** — alphavyuh.com DNS + SSL verification
-14. **QA** — Full Playwright test suite
-15. **DEPLOY** — Sentry error monitoring
+## Later — do not build during focus pass
 
-## Completed
-
-(empty — this is session 1)
+10. Telegram alerts
+11. Backtesting
+12. US markets
+13. Options/F&O workflows
+14. Public social proof and heavy growth loops

@@ -135,7 +135,7 @@ export default function BetaAdminPage() {
             onClick={handleCreateInvite}
             disabled={creating}
             className="w-full rounded-[8px] px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60"
-            style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#061110" }}
+            style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
           >
             {creating ? "Creating..." : "Create founder invite"}
           </button>

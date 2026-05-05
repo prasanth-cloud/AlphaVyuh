@@ -58,7 +58,7 @@ function BrokerCallbackContent() {
             <button
               onClick={() => router.replace("/settings/broker")}
               className="px-4 py-2 rounded-[8px] text-[13px] font-semibold"
-              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)" }}>
+              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}>
               Back to Settings
             </button>
           </>

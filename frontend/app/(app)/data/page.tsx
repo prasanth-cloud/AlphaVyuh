@@ -193,6 +193,7 @@ export default function DataFreshnessPage() {
     ? Math.round((health.symbols_on_latest_date / health.universe_active) * 100)
     : null;
   const missingIndicators = (health?.indicators_missing.rsi_14 ?? 0) + (health?.indicators_missing.ema_200 ?? 0);
+  const liveMarket = health?.live_market ?? null;
 
   if (loading) {
     return (
@@ -254,10 +255,10 @@ export default function DataFreshnessPage() {
           status={broker.connected && !broker.token_expired ? "good" : broker.token_expired ? "bad" : "warn"}
         />
         <HealthTile
-          label="Review grounding"
-          value={state.closedTrades ? `${reviewCoverage}%` : "NO HISTORY"}
-          detail={`${state.reviewedTrades} of ${state.closedTrades} closed trades include lessons for AI review.`}
-          status={state.closedTrades >= 3 && reviewCoverage >= 70 ? "good" : state.closedTrades >= 3 ? "warn" : "bad"}
+          label="Kite live feed"
+          value={liveMarket?.access_token_valid ? "TOKEN VALID" : liveMarket?.access_token_configured ? "CHECK TOKEN" : "NO TOKEN"}
+          detail={liveMarket?.stream_connected ? `${liveMarket.subscriber_count} active stream subscriber${liveMarket.subscriber_count === 1 ? "" : "s"}.` : liveMarket?.last_error || "Live quotes need the daily Kite access token."}
+          status={liveMarket?.access_token_valid && liveMarket.stream_connected ? "good" : liveMarket?.access_token_configured ? "warn" : "bad"}
         />
       </div>
 
@@ -272,6 +273,8 @@ export default function DataFreshnessPage() {
               ["EMA 200 missing", fmtNumber(health?.indicators_missing.ema_200)],
               ["Last ingest run", health?.last_run.id ?? "Not available"],
               ["Last ingest errors", fmtNumber(health?.last_run.errors)],
+              ["Kite API key", liveMarket?.api_key_configured ? "Configured" : "Missing"],
+              ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
               ["Open trades", fmtNumber(state.journalStats?.open_trades)],
               ["AI pattern readiness", state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
             ].map(([label, value]) => (
@@ -310,9 +313,9 @@ export default function DataFreshnessPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
           {[
             ["Scanner", "Uses the latest complete market day and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
-            ["Charts", "Shows EOD or live beta provenance directly in the chart toolbar before order planning.", "/charts/RELIANCE"],
+            ["Charts", "Shows EOD or Kite live-beta provenance directly in the chart toolbar before order planning.", "/charts/RELIANCE"],
+            ["Dashboard", "Separates live sector-index movement from latest complete session breadth.", "/dashboard"],
             ["Broker", "Broker beta remains explicit at order time; simulated mode still records review context.", "/settings/broker"],
-            ["Journal AI", "AI review quality depends on closed trades with lessons, not only trade count.", "/journal?tab=ai"],
           ].map(([title, detail, href]) => (
             <Link key={title} href={href} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", textDecoration: "none" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{title}</div>

@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import TraderReminderStrip from '@/components/TraderReminderStrip'
 import FeedbackWidget from '@/components/FeedbackWidget'
 import { clearAuthHeaderCache, warmCoreMarketData } from '@/lib/api'
+import { useWorkflowState } from '@/lib/workflow'
 
 const NAV_LINKS = [
   { href: '/dashboard', label: 'Dashboard' },
@@ -67,12 +68,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
                   d="M2 14L6.5 8L10 11L14.5 4L16 6"
-                  stroke="#050a08"
+                  stroke="currentColor"
                   strokeWidth="2.2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx="16" cy="6" r="1.5" fill="#050a08" />
+                <circle cx="16" cy="6" r="1.5" fill="currentColor" />
               </svg>
             </span>
             <span className="app-brand-copy">
@@ -196,8 +197,16 @@ function MarketStatus() {
 /* ── ACCOUNT MENU ────────────────────────────────────────────────────────── */
 function AccountMenuButton() {
   const [open, setOpen] = useState(false)
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const ref = useRef<HTMLDivElement>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem('alphavyuh-theme')
+    const nextTheme = stored === 'light' ? 'light' : 'dark'
+    setTheme(nextTheme)
+    document.documentElement.dataset.theme = nextTheme
+  }, [])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -212,6 +221,14 @@ function AccountMenuButton() {
     clearAuthHeaderCache()
     await createClient().auth.signOut()
     router.push('/login')
+  }
+
+  function toggleTheme() {
+    const nextTheme = theme === 'light' ? 'dark' : 'light'
+    setTheme(nextTheme)
+    document.documentElement.dataset.theme = nextTheme
+    window.localStorage.setItem('alphavyuh-theme', nextTheme)
+    window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: nextTheme }))
   }
 
   return (
@@ -237,8 +254,8 @@ function AccountMenuButton() {
         <div style={{
           position: 'absolute', top: 'calc(100% + 8px)', right: 0,
           width: 180,
-          background: 'linear-gradient(180deg, rgba(17,20,25,0.98), rgba(8,10,13,0.98))',
-          border: '1px solid rgba(255,255,255,0.11)',
+          background: 'var(--surface-float)',
+          border: '1px solid var(--border-default)',
           borderRadius: 'var(--radius-md)',
           boxShadow: 'var(--shadow-panel)',
           padding: 4,
@@ -267,6 +284,21 @@ function AccountMenuButton() {
               {item.label}
             </Link>
           ))}
+          <button
+            onClick={toggleTheme}
+            style={{
+              width: '100%', textAlign: 'left',
+              padding: '7px 10px',
+              fontSize: 12, color: 'var(--text-secondary)',
+              cursor: 'pointer', background: 'none', border: 'none',
+              borderRadius: 4,
+              transition: 'background var(--motion-instant)',
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+          >
+            {theme === 'light' ? 'Use dark theme' : 'Use light theme'}
+          </button>
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
           <button
             onClick={signOut}
@@ -298,6 +330,7 @@ function SymbolSearch() {
   const router = useRouter()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const { state, rememberSymbol } = useWorkflowState()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -339,9 +372,22 @@ function SymbolSearch() {
     setQuery('')
     setResults([])
     setOpen(false)
+    rememberSymbol(symbol)
     router.push(`/watchlist?symbol=${symbol}`)
     inputRef.current?.blur()
   }
+
+  const quickResults = query.length > 0
+    ? [
+        ...state.recentSymbols
+          .filter(symbol => symbol.includes(query))
+          .map(symbol => ({ symbol, company_name: 'Recent workflow symbol', sector: 'Recent' })),
+        ...state.shortlist
+          .filter(item => item.symbol.includes(query))
+          .map(item => ({ symbol: item.symbol, company_name: item.companyName ?? 'Saved symbol', sector: item.lifecycle })),
+      ].filter((item, index, arr) => arr.findIndex(other => other.symbol === item.symbol) === index).slice(0, 5)
+    : []
+  const displayResults = results.length > 0 ? results : quickResults
 
   return (
     <div style={{ position: 'relative', width: '100%', maxWidth: 400 }}>
@@ -358,9 +404,9 @@ function SymbolSearch() {
           onBlur={() => setTimeout(() => setOpen(false), 180)}
           onKeyDown={e => {
             if (e.key === 'Escape') { setOpen(false); setQuery(''); inputRef.current?.blur() }
-            if (e.key === 'Enter' && results[0]) select(results[0].symbol)
+            if (e.key === 'Enter' && displayResults[0]) select(displayResults[0].symbol)
           }}
-          placeholder="Search symbols..."
+          placeholder="Search symbols, shortlist, recent..."
           style={{
             flex: 1, height: '100%',
             fontSize: 12,
@@ -394,12 +440,12 @@ function SymbolSearch() {
               Searching...
             </div>
           )}
-          {!loading && results.length === 0 && (
+          {!loading && displayResults.length === 0 && (
             <div style={{ padding: 14, fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
               No matches
             </div>
           )}
-          {results.map((r, i) => (
+          {displayResults.map((r, i) => (
             <div
               key={r.symbol}
               onMouseDown={() => select(r.symbol)}
@@ -407,7 +453,7 @@ function SymbolSearch() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '9px 12px',
                 cursor: 'pointer',
-                borderBottom: i < results.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                borderBottom: i < displayResults.length - 1 ? '1px solid var(--border-subtle)' : 'none',
                 transition: 'background var(--motion-instant) var(--ease-out)',
               }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'}
