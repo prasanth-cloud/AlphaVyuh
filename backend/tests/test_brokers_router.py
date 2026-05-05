@@ -5,6 +5,9 @@ import os
 import secrets
 from datetime import datetime, timezone
 
+import pytest
+from fastapi import HTTPException
+
 os.environ.setdefault("BROKER_CREDS_KEY", secrets.token_bytes(32).hex())
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
@@ -56,3 +59,17 @@ def test_broker_router_accepts_upstox_oauth_code(monkeypatch):
     assert saved[("upstox", "refresh_token")] == "extended-token"
     assert response.status_code == 302
     assert response.headers["location"].endswith("/settings/broker?connected=upstox")
+
+
+def test_broker_connect_start_reports_missing_configuration(monkeypatch):
+    class _MisconfiguredAdapter:
+        def get_auth_url(self, _state):
+            raise KeyError("UPSTOX_API_KEY")
+
+    monkeypatch.setattr(brokers_router, "get_adapter", lambda broker_id: _MisconfiguredAdapter())
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(brokers_router.connect_start("upstox", user_id="user-1"))
+
+    assert exc_info.value.status_code == 503
+    assert "missing UPSTOX_API_KEY" in str(exc_info.value.detail)

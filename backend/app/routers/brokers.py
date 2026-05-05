@@ -82,7 +82,14 @@ async def connect_start(
     broker_id = _validate_broker(broker)
     adapter = get_adapter(broker_id)
     state = secrets.token_urlsafe(16)
-    auth_url = adapter.get_auth_url(state)
+    try:
+        auth_url = adapter.get_auth_url(state)
+    except KeyError as exc:
+        missing = str(exc).strip("'")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{broker_id} connect is not configured: missing {missing}",
+        ) from exc
     return {"auth_url": auth_url, "state": state}
 
 

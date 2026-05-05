@@ -2601,7 +2601,10 @@ export type BrokerHolding = {
 export async function startBrokerConnect(broker: string): Promise<{ auth_url: string; state: string }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/brokers/${broker}/connect/start`, { method: "POST", headers });
-  if (!res.ok) throw new Error("Failed to start broker connect");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to start broker connect");
+  }
   return res.json();
 }
 
