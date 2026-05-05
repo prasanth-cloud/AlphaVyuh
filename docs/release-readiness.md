@@ -60,6 +60,8 @@ Read-only broker account smoke, when real credentials are available:
 npm run broker:smoke
 BROKER_SMOKE_TARGET=kite npm run broker:smoke
 BROKER_SMOKE_TARGET=upstox npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --login-url
 ```
 
 These broker scripts verify account/data reads only. Do not run live order placement

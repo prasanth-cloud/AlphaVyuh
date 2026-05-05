@@ -29,14 +29,14 @@ run_step() {
 BROKER_SMOKE_TARGET="${BROKER_SMOKE_TARGET:-all}"
 case "$BROKER_SMOKE_TARGET" in
   all)
-    run_step "Kite read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_kite_connection.py
-    run_step "Upstox read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_upstox_connection.py
+    run_step "Kite read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_kite_connection.py "$@"
+    run_step "Upstox read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_upstox_connection.py "$@"
     ;;
   kite)
-    run_step "Kite read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_kite_connection.py
+    run_step "Kite read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_kite_connection.py "$@"
     ;;
   upstox)
-    run_step "Upstox read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_upstox_connection.py
+    run_step "Upstox read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_upstox_connection.py "$@"
     ;;
   *)
     echo "Invalid BROKER_SMOKE_TARGET=$BROKER_SMOKE_TARGET. Use all, kite, or upstox."

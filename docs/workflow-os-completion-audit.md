@@ -82,6 +82,8 @@ Read-only account smoke is available:
 npm run broker:smoke
 BROKER_SMOKE_TARGET=kite npm run broker:smoke
 BROKER_SMOKE_TARGET=upstox npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --login-url
 RUN_BROKER_SMOKE=1 npm run launch:check
 RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=kite npm run launch:check
 RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=upstox npm run launch:check
