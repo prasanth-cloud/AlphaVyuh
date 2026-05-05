@@ -34,10 +34,14 @@ import {
   getCandles,
   placeOrder,
   getQuoteLive,
+  getWorkflowStates,
   isMockMode,
   liveQuotePollingEnabled,
   type PlaceOrderRequest,
   type WatchlistItemMetadataUpdate,
+  type WorkflowLifecycle,
+  type WorkflowState,
+  upsertWorkflowState,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
 import { DataProvenanceBadge, EmptyState } from "@/components/ui";
@@ -253,6 +257,120 @@ function TimeframeTabs({ active, onChange }: { active: string; onChange: (v: str
   );
 }
 
+const LIFECYCLES: WorkflowLifecycle[] = ["idea", "watch", "ready", "triggered", "open", "closed", "reviewed", "invalidated"];
+
+function lifecycleLabel(value: WorkflowLifecycle) {
+  return value.replace("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function workflowPlanStatus(plan: WorkflowState | null) {
+  if (!plan) return { valid: false, next: "Create a plan before drafting an order." };
+  if (!plan.entry || plan.entry <= 0) return { valid: false, next: "Complete entry." };
+  if (!plan.stop || plan.stop <= 0) return { valid: false, next: "Complete stop." };
+  if (!plan.target || plan.target <= 0) return { valid: false, next: "Complete target." };
+  if (plan.entry <= plan.stop) return { valid: false, next: "Entry must be above stop for a long swing plan." };
+  if (plan.target <= plan.entry) return { valid: false, next: "Target must be above entry." };
+  if (!plan.position_size || plan.position_size <= 0) return { valid: false, next: "Complete position size." };
+  if (!plan.thesis?.trim()) return { valid: false, next: "Complete thesis." };
+  if (!plan.invalidation_rule?.trim()) return { valid: false, next: "Complete invalidation rule." };
+  return { valid: true, next: "Ready for order draft." };
+}
+
+function DecisionDesk({
+  symbol,
+  watchlistId,
+  plan,
+  onPlanChange,
+  onToast,
+}: {
+  symbol: string;
+  watchlistId: string | null;
+  plan: WorkflowState | null;
+  onPlanChange: (plan: WorkflowState) => void;
+  onToast: (msg: string) => void;
+}) {
+  const status = workflowPlanStatus(plan);
+  const draft = plan ?? { symbol, watchlist_id: watchlistId, lifecycle: "watch", timeframe: "D", tags: [] };
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    fontSize: 12,
+    borderRadius: "var(--radius-sm)",
+    padding: "6px 8px",
+    background: "var(--surface-3)",
+    border: "1px solid var(--border-subtle)",
+    color: "var(--text-primary)",
+    outline: "none",
+  };
+
+  async function patch(updates: Partial<WorkflowState>) {
+    const next = await upsertWorkflowState({
+      ...draft,
+      ...updates,
+      symbol,
+      watchlist_id: watchlistId,
+      source: draft.source ?? "watchlist",
+    });
+    onPlanChange(next);
+  }
+
+  async function markReady() {
+    if (!status.valid) return;
+    await patch({ lifecycle: "ready" });
+    onToast(`${symbol} marked ready`);
+  }
+
+  return (
+    <section style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px", background: "rgba(255,255,255,0.02)", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 3 }}>Decision desk</div>
+          <div className="caption">{status.next}</div>
+        </div>
+        <div className="workspace-pill-row" style={{ marginTop: 0 }}>
+          <button className={`workspace-chip-button${status.valid ? " active" : ""}`} disabled={!status.valid} onClick={markReady} style={{ opacity: status.valid ? 1 : 0.45 }}>
+            Ready
+          </button>
+          <button className="workspace-chip-button" disabled={!status.valid} onClick={() => onToast(status.valid ? "Order draft is unlocked in the chart order panel." : status.next)} style={{ opacity: status.valid ? 1 : 0.45 }}>
+            Draft order
+          </button>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
+        <select value={draft.lifecycle} onChange={(e) => patch({ lifecycle: e.target.value as WorkflowLifecycle })} style={inputStyle}>
+          {LIFECYCLES.map((item) => <option key={item} value={item}>{lifecycleLabel(item)}</option>)}
+        </select>
+        <select value={draft.setup_type ?? ""} onChange={(e) => patch({ setup_type: e.target.value || null })} style={inputStyle}>
+          <option value="">Setup</option>
+          <option value="breakout">Breakout</option>
+          <option value="pullback">Pullback</option>
+          <option value="momentum">Momentum</option>
+          <option value="vcp">VCP</option>
+          <option value="reversal">Reversal</option>
+        </select>
+        <input type="number" placeholder="Entry" value={draft.entry ?? ""} onChange={(e) => patch({ entry: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
+        <input type="number" placeholder="Stop" value={draft.stop ?? ""} onChange={(e) => patch({ stop: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
+        <input type="number" placeholder="Target" value={draft.target ?? ""} onChange={(e) => patch({ target: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
+        <input type="number" placeholder="Qty" value={draft.position_size ?? ""} onChange={(e) => patch({ position_size: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 110px", gap: 8, marginTop: 8 }}>
+        <input placeholder="TF" value={draft.timeframe ?? "D"} onChange={(e) => patch({ timeframe: e.target.value.toUpperCase() || "D" })} style={inputStyle} />
+        <input placeholder="Thesis" value={draft.thesis ?? ""} onChange={(e) => patch({ thesis: e.target.value || null })} style={inputStyle} />
+        <input placeholder="Invalidation rule" value={draft.invalidation_rule ?? ""} onChange={(e) => patch({ invalidation_rule: e.target.value || null })} style={inputStyle} />
+        <select value={draft.confidence ?? ""} onChange={(e) => patch({ confidence: e.target.value ? Number(e.target.value) : null })} style={inputStyle}>
+          <option value="">Quality</option>
+          {[1, 2, 3, 4, 5].map((score) => <option key={score} value={score}>{score}/5</option>)}
+        </select>
+      </div>
+      <textarea
+        placeholder="Notes, tags, review later context..."
+        value={draft.notes ?? ""}
+        onChange={(e) => patch({ notes: e.target.value || null })}
+        style={{ ...inputStyle, marginTop: 8, minHeight: 48, resize: "vertical" }}
+      />
+    </section>
+  );
+}
+
 // ─── Chart + order panel ──────────────────────────────────────────────────────
 
 function ChartPanel({
@@ -262,6 +380,8 @@ function ChartPanel({
   onOpenChart,
   onOpenChartDraw,
   onStepSymbol,
+  planValid,
+  planNextAction,
 }: {
   symbol: string;
   latestClose?: number | null;
@@ -269,6 +389,8 @@ function ChartPanel({
   onOpenChart: (symbol: string) => void;
   onOpenChartDraw: (symbol: string) => void;
   onStepSymbol: (direction: "prev" | "next") => void;
+  planValid: boolean;
+  planNextAction: string;
 }) {
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
@@ -399,6 +521,10 @@ function ChartPanel({
   async function handleOrder() {
     const qtyN = parseInt(qty, 10);
     const priceN = parseFloat(price);
+    if (!planValid) {
+      setOrderMsg({ ok: false, text: planNextAction || "Complete the decision desk before drafting an order" });
+      return;
+    }
     if (!qtyN || qtyN < 1 || !priceN || priceN <= 0) {
       setOrderMsg({ ok: false, text: "Enter valid qty and price" });
       return;
@@ -682,14 +808,14 @@ function ChartPanel({
           </div>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy}
+        <button onClick={handleOrder} disabled={orderBusy || !planValid}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
-            fontSize: 12, fontWeight: 700, cursor: orderBusy ? "not-allowed" : "pointer",
-            opacity: orderBusy ? 0.5 : 1,
+            fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid ? "not-allowed" : "pointer",
+            opacity: orderBusy || !planValid ? 0.5 : 1,
           }}>
-          {orderBusy ? "Placing…" : `Place ${side === "buy" ? "buy" : "sell"} order`}
+          {orderBusy ? "Placing…" : planValid ? `Place ${side === "buy" ? "buy" : "sell"} order` : planNextAction}
         </button>
         </div>
       )}
@@ -730,6 +856,7 @@ function WatchlistContent() {
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [queuePage, setQueuePage] = useState(0);
+  const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -851,6 +978,18 @@ function WatchlistContent() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const symbols = Array.from(new Set(watchlists.flatMap((watchlist) => watchlist.items.map((item) => item.symbol))));
+    if (!symbols.length) return;
+    getWorkflowStates({ symbols }).then((states) => {
+      setWorkflowBySymbol((prev) => {
+        const next = { ...prev };
+        for (const state of states) next[state.symbol] = state;
+        return next;
+      });
+    });
+  }, [watchlists]);
 
   const symbolParam = searchParams.get("symbol");
   const watchlistIdParam = searchParams.get("id");
@@ -1011,6 +1150,8 @@ function WatchlistContent() {
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
+  const selectedWorkflow = chartSymbol ? workflowBySymbol[chartSymbol] ?? null : null;
+  const selectedPlanStatus = workflowPlanStatus(selectedWorkflow);
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
 
   useEffect(() => {
@@ -1885,14 +2026,27 @@ function WatchlistContent() {
       </div>
 
       {/* ── Chart + order panel ─────────────────────────────── */}
-      <div className="workspace-card" style={{ minWidth: 0, overflow: "hidden" }}>
+      <div className="workspace-card" style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {chartSymbol ? (
-          <ChartPanel key={chartSymbol} symbol={chartSymbol}
-            latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
-            watchlistName={activeWl?.name ?? null}
-            onOpenChart={(sym) => router.push(chartHref(sym))}
-            onOpenChartDraw={(sym) => router.push(chartHref(sym, "trendline"))}
-            onStepSymbol={moveSelection} />
+          <>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <ChartPanel key={chartSymbol} symbol={chartSymbol}
+                latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
+                watchlistName={activeWl?.name ?? null}
+                onOpenChart={(sym) => router.push(chartHref(sym))}
+                onOpenChartDraw={(sym) => router.push(chartHref(sym, "trendline"))}
+                onStepSymbol={moveSelection}
+                planValid={selectedPlanStatus.valid}
+                planNextAction={selectedPlanStatus.next} />
+            </div>
+            <DecisionDesk
+              symbol={chartSymbol}
+              watchlistId={activeWl?.id ?? null}
+              plan={selectedWorkflow}
+              onPlanChange={(next) => setWorkflowBySymbol((prev) => ({ ...prev, [next.symbol]: next }))}
+              onToast={showToast}
+            />
+          </>
         ) : (
           <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <EmptyState

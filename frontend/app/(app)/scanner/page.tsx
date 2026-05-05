@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
   authHeaders,
+  bulkUpsertWorkflowStates,
   createFeedbackReport,
   createWatchlist,
   getWatchlists as getCachedWatchlists,
@@ -264,6 +265,7 @@ export default function ScannerPage() {
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
+  const [workflowMarks, setWorkflowMarks] = useState<Record<string, 'shortlist' | 'ignored' | 'review_later'>>({})
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -386,6 +388,7 @@ export default function ScannerPage() {
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
       const data = await res.json()
       setResults(data.results || [])
+      setSelectedResults(new Set())
       setTotalMatches(data.total_matches || 0)
       setTotalPages(data.total_pages || 1)
       setCurrentPage(data.page || page)
@@ -464,6 +467,27 @@ export default function ScannerPage() {
     showToast(`${symbol} added`)
   }
 
+  async function markWorkflow(symbols: string[], lifecycle: 'idea' | 'ignored' | 'review_later', label: 'shortlist' | 'ignored' | 'review_later') {
+    if (symbols.length === 0) return
+    setWorkflowMarks(prev => {
+      const next = { ...prev }
+      for (const symbol of symbols) next[symbol] = label
+      return next
+    })
+    await bulkUpsertWorkflowStates(symbols.map(symbol => ({
+      symbol,
+      lifecycle,
+      source: 'scanner',
+      ...(label === 'ignored' ? { ignored: true } : {}),
+      ...(label === 'review_later' ? { review_later: true } : {}),
+    })))
+    showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
+  }
+
+  function selectedSymbols() {
+    return results.filter(result => selectedResults.has(result.symbol)).map(result => result.symbol)
+  }
+
   async function createWatchlistFromResults() {
     if (!newWlName.trim()) return
     if (isMockMode) {
@@ -478,6 +502,12 @@ export default function ScannerPage() {
       for (const s of toAdd.slice(0, 50)) {
         await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
       }
+      await bulkUpsertWorkflowStates(toAdd.slice(0, 50).map((s) => ({
+        symbol: s.symbol,
+        watchlist_id: wl.id,
+        lifecycle: 'watch',
+        source: 'scanner',
+      })))
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       router.push(`/watchlist?id=${wl.id}`)
@@ -781,7 +811,13 @@ export default function ScannerPage() {
                   ))}
                 </select>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
-                  Add selected to watchlist
+                  Create watchlist
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'idea', 'shortlist')} disabled={selectedResults.size === 0}>
+                  Shortlist selected
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'ignored', 'ignored')} disabled={selectedResults.size === 0}>
+                  Ignore selected
                 </Button>
               </div>
             </>
@@ -886,6 +922,11 @@ export default function ScannerPage() {
                         <Td>
                           <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
                           <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                          {workflowMarks[r.symbol] && (
+                            <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
+                              {workflowMarks[r.symbol] === 'shortlist' ? 'Shortlisted' : workflowMarks[r.symbol] === 'review_later' ? 'Review later' : 'Ignored'}
+                            </div>
+                          )}
                         </Td>
                         <Td align="right" mono emphasized>₹{r.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Td>
                         <Td align="right">
@@ -911,6 +952,24 @@ export default function ScannerPage() {
                         </Td>
                         <Td>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'idea', 'shortlist') }}
+                              style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer' }}
+                            >
+                              Shortlist
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later', 'review_later') }}
+                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
+                            >
+                              Later
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored', 'ignored') }}
+                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                            >
+                              Ignore
+                            </button>
                             <button
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
                               style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}

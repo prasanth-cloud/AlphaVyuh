@@ -420,6 +420,89 @@ export type WatchlistItemMetadataUpdate = {
   note?: string | null;
 };
 
+export type WorkflowLifecycle =
+  | "idea"
+  | "watch"
+  | "ready"
+  | "triggered"
+  | "open"
+  | "closed"
+  | "reviewed"
+  | "invalidated"
+  | "ignored"
+  | "review_later";
+
+export type WorkflowState = {
+  id?: string;
+  user_id?: string;
+  symbol: string;
+  watchlist_id?: string | null;
+  source?: string;
+  lifecycle: WorkflowLifecycle;
+  setup_type?: string | null;
+  entry?: number | null;
+  stop?: number | null;
+  target?: number | null;
+  position_size?: number | null;
+  timeframe?: string;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
+  confidence?: number | null;
+  setup_quality?: number | null;
+  notes?: string | null;
+  tags?: string[];
+  pinned?: boolean;
+  review_later?: boolean;
+  ignored?: boolean;
+  broker_order_id?: string | null;
+  journal_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type WorkflowStatePatch = Partial<Omit<WorkflowState, "id" | "user_id" | "created_at" | "updated_at">> & {
+  symbol: string;
+};
+
+const workflowLocalKey = "alphavyuh-workflow-state-v1";
+
+function readLocalWorkflowStates(): Record<string, WorkflowState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(workflowLocalKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalWorkflowStates(states: Record<string, WorkflowState>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(workflowLocalKey, JSON.stringify(states));
+}
+
+function saveLocalWorkflowState(patch: WorkflowStatePatch): WorkflowState {
+  const states = readLocalWorkflowStates();
+  const symbol = patch.symbol.toUpperCase();
+  const previous = states[symbol] ?? { symbol, lifecycle: "idea" as WorkflowLifecycle, timeframe: "D", tags: [] };
+  const next: WorkflowState = {
+    ...previous,
+    ...patch,
+    symbol,
+    lifecycle: patch.lifecycle ?? previous.lifecycle ?? "idea",
+    timeframe: patch.timeframe ?? previous.timeframe ?? "D",
+    tags: patch.tags ?? previous.tags ?? [],
+    updated_at: new Date().toISOString(),
+  };
+  states[symbol] = next;
+  writeLocalWorkflowStates(states);
+  return next;
+}
+
+function saveLocalWorkflowStates(patches: WorkflowStatePatch[]): WorkflowState[] {
+  return patches.map(saveLocalWorkflowState);
+}
+
 export async function updateWatchlistItemMetadata(
   watchlistId: string,
   symbol: string,
@@ -438,6 +521,74 @@ export async function updateWatchlistItemMetadata(
   const updated = await res.json();
   invalidateClientCache(["watchlists"]);
   return updated;
+}
+
+export async function getWorkflowStates(options?: { symbols?: string[]; watchlistId?: string }): Promise<WorkflowState[]> {
+  const local = readLocalWorkflowStates();
+  const localValues = Object.values(local);
+  if (shouldUseMockFallback()) {
+    return options?.symbols?.length
+      ? localValues.filter((state) => options.symbols!.includes(state.symbol))
+      : localValues;
+  }
+  try {
+    const headers = await authHeaders();
+    const qs = new URLSearchParams();
+    if (options?.symbols?.length) qs.set("symbols", options.symbols.map((s) => s.toUpperCase()).join(","));
+    if (options?.watchlistId) qs.set("watchlist_id", options.watchlistId);
+    const res = await fetch(`${API}/api/v1/workflow/states?${qs}`, { headers });
+    if (!res.ok) return localValues;
+    const data = await res.json();
+    const remote: WorkflowState[] = data.states ?? [];
+    if (remote.length) {
+      const merged = { ...local };
+      for (const state of remote) merged[state.symbol] = state;
+      writeLocalWorkflowStates(merged);
+    }
+    return remote.length ? remote : localValues;
+  } catch {
+    return localValues;
+  }
+}
+
+export async function upsertWorkflowState(patch: WorkflowStatePatch): Promise<WorkflowState> {
+  const local = saveLocalWorkflowState(patch);
+  if (shouldUseMockFallback()) return local;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/workflow/states/${patch.symbol.toUpperCase()}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ ...patch, symbol: patch.symbol.toUpperCase() }),
+    });
+    if (!res.ok) return local;
+    const remote = await res.json();
+    saveLocalWorkflowState(remote);
+    return remote;
+  } catch {
+    return local;
+  }
+}
+
+export async function bulkUpsertWorkflowStates(patches: WorkflowStatePatch[]): Promise<WorkflowState[]> {
+  const normalized = patches.map((patch) => ({ ...patch, symbol: patch.symbol.toUpperCase() }));
+  const local = saveLocalWorkflowStates(normalized);
+  if (shouldUseMockFallback() || normalized.length === 0) return local;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/workflow/states/bulk`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(normalized),
+    });
+    if (!res.ok) return local;
+    const data = await res.json();
+    const remote: WorkflowState[] = data.states ?? [];
+    if (remote.length) saveLocalWorkflowStates(remote);
+    return remote.length ? remote : local;
+  } catch {
+    return local;
+  }
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
@@ -530,7 +681,7 @@ export type CandlesResponse = {
     high: number;
     low: number;
     prev_close: number | null;
-  };
+  } | null;
 };
 
 export type IndicatorsResponse = {

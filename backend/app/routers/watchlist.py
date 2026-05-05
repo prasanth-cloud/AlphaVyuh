@@ -81,11 +81,14 @@ async def get_watchlists(
     client = get_admin_client()
 
     # 1 – all watchlists
-    wl_res = client.table("watchlists") \
-        .select("id, name, sort_order, created_at") \
-        .eq("user_id", user_id) \
-        .order("sort_order") \
-        .execute()
+    try:
+        wl_res = client.table("watchlists") \
+            .select("id, name, sort_order, created_at") \
+            .eq("user_id", user_id) \
+            .order("sort_order") \
+            .execute()
+    except Exception:
+        return {"watchlists": [], "mode": "unavailable", "message": "Watchlist shell is temporarily unavailable."}
     watchlists = wl_res.data or []
     if not watchlists:
         return {"watchlists": []}
@@ -128,28 +131,31 @@ async def get_watchlists(
         latest_date = get_latest_complete_trade_date(client)
         if latest_date:
             # 4 – quotes for ALL symbols in ONE query
-            quotes_res = client.table("daily_ohlcv") \
-                .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14,"
-                        "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector)") \
-                .eq("trade_date", latest_date) \
-                .in_("symbol", all_symbols) \
-                .execute()
-            for q in (quotes_res.data or []):
-                su = q.get("stock_universe") or {}
-                if isinstance(su, list):
-                    su = su[0] if su else {}
-                close = float(q["close"] or 0)
-                prev  = float(q["prev_close"] or 0)
-                vol   = int(q["volume"] or 0)
-                avg   = int(q["avg_volume_20d"] or 0)
-                quote_map[q["symbol"]] = {
-                    "company_name": su.get("company_name"),
-                    "sector":       su.get("sector"),
-                    "close":        close,
-                    "pct_change":   round((close - prev) / prev * 100, 2) if prev else None,
-                    "volume_ratio": round(vol / avg, 2) if avg else None,
-                    "rsi_14":       float(q["rsi_14"]) if q["rsi_14"] is not None else None,
-                }
+            try:
+                quotes_res = client.table("daily_ohlcv") \
+                    .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14,"
+                            "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector)") \
+                    .eq("trade_date", latest_date) \
+                    .in_("symbol", all_symbols) \
+                    .execute()
+                for q in (quotes_res.data or []):
+                    su = q.get("stock_universe") or {}
+                    if isinstance(su, list):
+                        su = su[0] if su else {}
+                    close = float(q["close"] or 0)
+                    prev  = float(q["prev_close"] or 0)
+                    vol   = int(q["volume"] or 0)
+                    avg   = int(q["avg_volume_20d"] or 0)
+                    quote_map[q["symbol"]] = {
+                        "company_name": su.get("company_name"),
+                        "sector":       su.get("sector"),
+                        "close":        close,
+                        "pct_change":   round((close - prev) / prev * 100, 2) if prev else None,
+                        "volume_ratio": round(vol / avg, 2) if avg else None,
+                        "rsi_14":       float(q["rsi_14"]) if q["rsi_14"] is not None else None,
+                    }
+            except Exception:
+                quote_map = {}
 
     # group items by watchlist_id and merge quotes
     items_by_wl: dict = {}
