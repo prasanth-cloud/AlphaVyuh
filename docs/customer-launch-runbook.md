@@ -30,6 +30,56 @@ Manual browser pass:
 
 No customer release if any P0/P1 issue remains in auth, payment, data visibility, or trade/journal integrity.
 
+## 1.1 Broker Execution Gate
+
+Do not run live or sandbox order submission as part of routine automated QA.
+Broker execution validation requires real credentials and explicit account-owner
+confirmation for the exact test order.
+
+Read-only broker smoke first:
+
+```bash
+cd backend
+python scripts/test_kite_connection.py
+python scripts/test_upstox_connection.py
+```
+
+Required confirmation record before any live/sandbox order:
+
+```text
+Broker:
+Mode: sandbox | live
+Account owner:
+Symbol:
+Side: BUY | SELL
+Quantity:
+Order type: MARKET | LIMIT
+Limit price, if applicable:
+Expected risk plan: entry / stop / target
+Expected journal source: chart | watchlist
+Confirmed by:
+Timestamp:
+```
+
+Execution checklist:
+
+1. Connect the broker from `/settings/broker` and confirm token expiry copy is visible.
+2. Create a valid plan in Watchlist Decision Desk or Full Chart.
+3. Confirm `Ready` unlocks only after entry, stop, target, quantity, thesis, and invalidation are complete.
+4. Confirm the order draft is disabled until the plan is valid.
+5. Submit only after the explicit live/sandbox confirmation above.
+6. Verify the broker returns an order id and AlphaVyuh records the broker name/order id where available.
+7. Verify a journal draft is created or updated with setup, entry, stop, target, thesis, invalidation, source, and broker/order id.
+8. Close the trade in Journal with a known exit price and verify P&L, lifecycle `Closed`, and review prompt.
+9. Save the run evidence in the PR or launch issue; mask tokens and account identifiers.
+
+Failure rules:
+
+- If broker profile/holdings/order-book reads fail, do not attempt order submission.
+- If AlphaVyuh asks for live confirmation incorrectly, stop and file a P0.
+- If broker response is ambiguous or times out, check broker order book before retrying; do not resubmit blindly.
+- If journal/workflow sync fails after a broker order, stop launch until data integrity is fixed.
+
 ## 2. Production Data Readiness
 
 Recommended path:

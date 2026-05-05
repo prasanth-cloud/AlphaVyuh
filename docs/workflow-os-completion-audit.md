@@ -82,6 +82,9 @@ python scripts/test_kite_connection.py
 python scripts/test_upstox_connection.py
 ```
 
+The manual order-submission protocol is documented in
+`docs/customer-launch-runbook.md#11-broker-execution-gate`.
+
 Live or sandbox order submission must not be automated by default. It requires
 explicit account-owner confirmation of:
 
