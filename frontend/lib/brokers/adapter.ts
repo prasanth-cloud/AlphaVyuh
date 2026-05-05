@@ -131,6 +131,7 @@ export type OrderExtensions = {
     readonly icebergQuantity?: number;
   };
   readonly upstox?: {
+    readonly instrumentToken?: string;
     readonly slOrderType?: "SL" | "SL-M";
     readonly amoSession?: "PRE_OPEN" | "OPEN" | "OPEN_30" | "OPEN_60";
   };

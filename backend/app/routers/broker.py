@@ -20,7 +20,14 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
-from app.brokers.adapter import BrokerCredentials, BrokerError, IdempotencyKey, OrderRequest as BrokerOrderRequest
+from app.brokers.adapter import (
+    BrokerCredentials,
+    BrokerError,
+    IdempotencyKey,
+    OrderExtensions,
+    OrderRequest as BrokerOrderRequest,
+    UpstoxExtensions,
+)
 from app.brokers.credentials import CredentialNotFoundError, get_broker_credential, upsert_broker_credential
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
@@ -203,12 +210,13 @@ async def place_order(
     sym = body.symbol.strip().upper()
 
     # Validate symbol
-    sym_check = sb.table("stock_universe").select("symbol, company_name") \
+    sym_check = sb.table("stock_universe").select("symbol, company_name, isin") \
         .eq("symbol", sym).maybe_single().execute()
     if not sym_check.data:
         raise HTTPException(status_code=404, detail=f"Symbol {sym} not found")
 
     company_name = sym_check.data.get("company_name", sym)
+    isin = sym_check.data.get("isin")
 
     # Try real broker if connected
     broker_order_id: str | None = None
@@ -252,10 +260,13 @@ async def place_order(
                         quantity=body.quantity,
                         order_type="MARKET" if body.order_type == "market" else "LIMIT",
                         limit_price=body.price if body.order_type == "limit" else None,
-                        product="CNC",
-                        validity="DAY",
+                    product="CNC",
+                    validity="DAY",
+                    extensions=OrderExtensions(
+                        upstox=UpstoxExtensions(instrument_token=f"NSE_EQ|{isin}") if isin else None
                     ),
-                )
+                ),
+            )
             except BrokerError as exc:
                 logger.error("Upstox adapter order failed for user %s: %s", user_id, exc)
                 if exc.kind == "INVALID_REQUEST":

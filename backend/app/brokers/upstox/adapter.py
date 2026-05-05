@@ -233,14 +233,20 @@ def _store_order_result(
 def _to_upstox_order_payload(order: OrderRequest) -> dict[str, Any]:
     product = {"CNC": "D", "MIS": "I", "NRML": "D"}[order.product]
     order_type = "SL-M" if order.order_type == "SL_MARKET" else order.order_type
-    is_amo = bool(order.extensions and order.extensions.upstox and order.extensions.upstox.amo_session)
+    upstox_ext = order.extensions.upstox if order.extensions else None
+    is_amo = bool(upstox_ext and upstox_ext.amo_session)
+    instrument_token = (
+        upstox_ext.instrument_token
+        if upstox_ext and upstox_ext.instrument_token
+        else f"{order.exchange}_EQ|{order.symbol.upper()}"
+    )
     payload = {
         "quantity": order.quantity,
         "product": product,
         "validity": order.validity,
         "price": order.limit_price if order.order_type in {"LIMIT", "SL"} else 0,
         "tag": "alphavyuh",
-        "instrument_token": f"{order.exchange}_EQ|{order.symbol.upper()}",
+        "instrument_token": instrument_token,
         "order_type": order_type,
         "transaction_type": order.side,
         "disclosed_quantity": 0,

@@ -15,7 +15,7 @@ os.environ.setdefault("BROKER_CREDS_KEY", secrets.token_bytes(32).hex())
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
-from app.brokers.adapter import BrokerCredentials, BrokerError, IdempotencyKey, OrderRequest
+from app.brokers.adapter import BrokerCredentials, BrokerError, IdempotencyKey, OrderExtensions, OrderRequest, UpstoxExtensions
 from app.brokers.upstox.adapter import UpstoxAdapter, _next_upstox_expiry
 from app.brokers.upstox.api import UpstoxApiError
 
@@ -187,7 +187,20 @@ def test_place_order_reserves_key_calls_broker_and_stores_result(monkeypatch):
     assert result.order.status == "PENDING"
     assert client.inserts[0]["idempotency_key"] == "11111111-1111-4111-8111-111111111111"
     assert client.updates[0]["broker_order_id"] == "upstox-order-1"
+    assert place.call_args.args[1]["instrument_token"] == "NSE_EQ|RELIANCE"
     place.assert_called_once()
+
+
+def test_place_order_uses_upstox_instrument_token_extension(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr("app.brokers.upstox.adapter.get_admin_client", lambda: client)
+    order = _order().model_copy(
+        update={"extensions": OrderExtensions(upstox=UpstoxExtensions(instrument_token="NSE_EQ|INE002A01018"))}
+    )
+    with patch("app.brokers.upstox.api.place_order", return_value={"order_id": "upstox-order-1"}) as place:
+        _run(UpstoxAdapter().place_order("user-1", _creds(), order))
+
+    assert place.call_args.args[1]["instrument_token"] == "NSE_EQ|INE002A01018"
 
 
 def test_place_order_returns_cached_result_without_broker_call(monkeypatch):

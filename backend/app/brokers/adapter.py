@@ -105,6 +105,7 @@ class ZerodhaExtensions(BaseModel):
 
 
 class UpstoxExtensions(BaseModel):
+    instrument_token: Optional[str] = None
     sl_order_type: Optional[Literal["SL", "SL-M"]] = None
     amo_session: Optional[Literal["PRE_OPEN", "OPEN", "OPEN_30", "OPEN_60"]] = None
 

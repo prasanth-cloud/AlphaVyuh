@@ -44,7 +44,7 @@ class _Query:
 
     def execute(self):
         if self.table_name == "stock_universe":
-            return type("Result", (), {"data": {"symbol": "RELIANCE", "company_name": "Reliance Industries"}})()
+            return type("Result", (), {"data": {"symbol": "RELIANCE", "company_name": "Reliance Industries", "isin": "INE002A01018"}})()
         if self.table_name == "trade_journal" and self.insert_payload is not None:
             self.client.journal_inserts.append(self.insert_payload)
             return type("Result", (), {"data": [{"id": "journal-1", **self.insert_payload}]})()
@@ -196,4 +196,5 @@ def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
     assert captured["user_id"] == "user-1"
     assert captured["creds"].broker_id == "upstox"
     assert captured["order"].idempotency_key
+    assert captured["order"].extensions.upstox.instrument_token == "NSE_EQ|INE002A01018"
     assert client.journal_inserts
