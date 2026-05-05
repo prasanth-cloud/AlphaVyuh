@@ -121,6 +121,17 @@ test.describe("Mock workflow smoke", () => {
       return lists.find((list: { name: string }) => list.name === "Leaders");
     });
     expect(leadersWatchlist.items.some((item: { symbol: string }) => item.symbol === shortlistSymbol)).toBe(true);
+    const scannerAddWorkflow = await page.evaluate((symbol) => {
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return workflow[symbol];
+    }, shortlistSymbol);
+    expect(scannerAddWorkflow).toMatchObject({
+      lifecycle: "watch",
+      source: "scanner",
+      watchlist_id: leadersWatchlist.id,
+      ignored: false,
+      review_later: false,
+    });
 
     await page.getByRole("button", { name: /Create watchlist/i }).first().click();
     await page.getByPlaceholder(/Watchlist name/).fill("Workflow QA");

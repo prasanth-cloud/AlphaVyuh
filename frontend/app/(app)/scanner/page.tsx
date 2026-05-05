@@ -456,8 +456,14 @@ export default function ScannerPage() {
   }
 
   async function addToWatchlist(symbol: string, wlId: string) {
-    await addSymbolToWatchlist(wlId, symbol)
-    showToast(`${symbol} added`)
+    try {
+      await addSymbolToWatchlist(wlId, symbol)
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches([symbol], wlId))
+      setWorkflowMarks(prev => ({ ...prev, [symbol]: 'shortlist' }))
+      showToast(`${symbol} added`)
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Add to watchlist failed')
+    }
   }
 
   async function markWorkflow(symbols: string[], label: 'shortlist' | 'ignored' | 'review_later') {
