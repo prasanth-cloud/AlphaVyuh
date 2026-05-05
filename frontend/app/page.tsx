@@ -387,7 +387,7 @@ export default function LandingPage() {
               {n:"01",h:"Scan",p:"Filter 5000+ stocks by pattern, RS score, volume surge, sector, and 20+ indicators in under 200ms."},
               {n:"02",h:"Watchlist",p:"Add breakout candidates to your watchlist. Hover to preview a chart. Sort and rank by custom fields."},
               {n:"03",h:"Chart",p:"Full TradingView-style charting with RS line, pivot zones, earnings markers, and drawing tools."},
-              {n:"04",h:"Order",p:"Place trades directly via Zerodha or Upstox from the chart. No tab-switching required."},
+              {n:"04",h:"Order",p:"Draft orders from the chart, simulate safely by default, and route through Zerodha when connected."},
               {n:"05",h:"Review",p:"Close the trade, capture mistakes and lessons, then turn journal history into a better process."},
             ].map((s,i) => (
               <div key={s.n} className="lp-step" style={{transitionDelay: (i*0.12)+"s"}}>
@@ -445,9 +445,9 @@ export default function LandingPage() {
             <div className="lp-tp-text">
               <span className="lp-feat-label">Charts</span>
               <h3 className="lp-tp-h">Professional charts with RS line and pivot zones</h3>
-              <p className="lp-tp-p">TradingView Lightweight Charts v4. Full drawing toolkit, precomputed indicators, earnings overlays, and one-click broker order entry — all on one screen.</p>
+              <p className="lp-tp-p">TradingView Lightweight Charts v4. Full drawing toolkit, precomputed indicators, earnings overlays, and broker-aware order drafting — all on one screen.</p>
               <ul className="lp-feat-list">
-                {["Candlestick with 20+ overlay indicators precomputed server-side","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked automatically as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","One-click Buy/Sell → sends order to Zerodha / Upstox"].map(f => (
+                {["Candlestick with 20+ overlay indicators precomputed server-side","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked automatically as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Order drafts can simulate or route through connected Zerodha"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -484,7 +484,7 @@ export default function LandingPage() {
               <h3 className="lp-tp-h">Your trading diary — auto-filled, AI-reviewed</h3>
               <p className="lp-tp-p">Every trade placed via AlphaVyuh is automatically logged. Claude AI analyzes your journal each week, spots patterns in your mistakes, and gives specific feedback.</p>
               <ul className="lp-feat-list">
-                {["Auto-import trades from Zerodha & Upstox — no manual entry","P&L by stock, sector, time-of-day, holding period","AI identifies your top 3 mistakes each week","Lessons saved per trade — searchable, filterable","Equity curve + win rate + avg R:R metrics"].map(f=>(
+                {["Auto-import filled trades from Zerodha when connected","P&L by stock, sector, time-of-day, holding period","AI identifies your top 3 mistakes each week","Lessons saved per trade — searchable, filterable","Equity curve + win rate + avg R:R metrics"].map(f=>(
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -613,7 +613,7 @@ export default function LandingPage() {
               <p className="lp-pdesc">For active swing traders who scan daily and want broker integration.</p>
               <Link href="/signup" className="lp-pcta lp-cta-pro">Start Pro — 7 days free</Link>
               <div className="lp-pfeats">
-                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting + broker orders",true],["Unlimited journal history",true],["20 scan alerts via Telegram",true],["AI journal review weekly",true],["Zerodha & Upstox integration",true]].map(f=>(
+                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting + Zerodha broker beta",true],["Unlimited journal history",true],["20 scan alerts via Telegram",true],["AI journal review weekly",true],["Upstox adapter staged next",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>
@@ -642,7 +642,7 @@ export default function LandingPage() {
           <div className="lp-faq-list">
             {[
               ["Does AlphaVyuh provide real-time stock data?","AlphaVyuh uses end-of-day (EOD) OHLCV data updated daily at 4 PM IST via NSE bhavcopy. Scanner results are based on the previous trading day's close. Live intraday price feeds are on the roadmap."],
-              ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 are supported for placing orders directly from the chart. More brokers are on the roadmap. You can use AlphaVyuh for scanning and journaling without a broker connected."],
+              ["Which brokers are supported?","Zerodha Kite Connect v3 is the active broker beta for chart and watchlist order routing. Upstox is staged next on the same adapter path. You can use AlphaVyuh for scanning, planning, simulated orders, and journaling without a broker connected."],
               ["How does the AI journal review work?","Every trade you log is stored in your journal. On demand, Claude AI (claude-sonnet-4-6) analyzes your full history, identifies behavioral patterns in your losses, and gives you specific, trade-cited feedback."],
               ["Is my trading data secure?","Yes. All data is stored in Supabase Postgres with Row Level Security — only you can access your trades, watchlists, and journal. Broker API keys are stored encrypted. We never store your trading password."],
               ["Can I cancel anytime?","Yes. Cancel from Settings → Billing at any time. Your plan stays active until the end of the billing period. No mid-cycle downgrades. Your data is never deleted on cancellation."],
