@@ -24,6 +24,7 @@ from app.brokers.credentials import CredentialNotFoundError, get_broker_credenti
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.services.supabase import get_admin_client
+from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
 
@@ -182,19 +183,6 @@ def _token_is_expired(expires_at: str | None) -> bool:
         return True
 
 
-def _sync_workflow_state(sb, user_id: str, symbol: str, payload: dict) -> None:
-    row = {
-        "user_id": user_id,
-        "symbol": symbol,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        **{k: v for k, v in payload.items() if v is not None},
-    }
-    try:
-        sb.table("workflow_states").upsert(row, on_conflict="user_id,symbol").execute()
-    except Exception:
-        logger.exception("Failed to sync workflow state for %s", symbol)
-
-
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/orders", status_code=status.HTTP_201_CREATED)
@@ -312,7 +300,7 @@ async def place_order(
         raise HTTPException(status_code=500, detail="Failed to create journal entry")
 
     journal_entry = result.data[0]
-    _sync_workflow_state(sb, user_id, sym, {
+    sync_workflow_state(sb, user_id, sym, {
         "source": body.source_page or "chart",
         "lifecycle": "open",
         "entry": body.price,
@@ -394,7 +382,7 @@ async def close_position(
         "status":       "closed",
     }
     sb.table("trade_journal").update(update).eq("id", body.journal_id).execute()
-    _sync_workflow_state(sb, user_id, str(entry["symbol"]).upper(), {
+    sync_workflow_state(sb, user_id, str(entry["symbol"]).upper(), {
         "source": "journal",
         "lifecycle": "closed",
         "journal_id": body.journal_id,
