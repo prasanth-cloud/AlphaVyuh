@@ -931,6 +931,7 @@ export type ChartWorkspace = {
 
 const mockDrawingsKey = "alphavyuh-mock-chart-drawings-v1";
 const mockWorkspaceKey = "alphavyuh-mock-chart-workspaces-v1";
+const chartWorkspaceCacheKey = "alphavyuh-chart-workspaces-cache-v1";
 
 function chartStoreKey(symbol: string, timeframe = "D") {
   return `${symbol.toUpperCase()}:${timeframe.toUpperCase()}`;
@@ -964,6 +965,40 @@ function readMockWorkspaceMap(): Record<string, ChartWorkspace> {
 function writeMockWorkspaceMap(value: Record<string, ChartWorkspace>) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(mockWorkspaceKey, JSON.stringify(value));
+}
+
+function readChartWorkspaceCache(): Record<string, ChartWorkspace> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(chartWorkspaceCacheKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeChartWorkspaceCache(value: Record<string, ChartWorkspace>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(chartWorkspaceCacheKey, JSON.stringify(value));
+  } catch {
+    // Workspace cache is a local-first reliability layer only.
+  }
+}
+
+function cacheChartWorkspace(symbol: string, workspace: Omit<ChartWorkspace, "symbol">): ChartWorkspace {
+  const normalized = symbol.toUpperCase();
+  const saved: ChartWorkspace = {
+    ...workspace,
+    symbol: normalized,
+    timeframe: workspace.timeframe.toUpperCase(),
+    indicators: Array.isArray(workspace.indicators) ? workspace.indicators : [],
+    drawings: Array.isArray(workspace.drawings) ? workspace.drawings : [],
+  };
+  const map = readChartWorkspaceCache();
+  map[chartStoreKey(normalized, saved.timeframe)] = saved;
+  writeChartWorkspaceCache(map);
+  return saved;
 }
 
 export async function getCandles(
@@ -1088,36 +1123,53 @@ export async function getDrawings(symbol: string, timeframe = "D"): Promise<Draw
 }
 
 export async function getChartWorkspace(symbol: string, timeframe = "D"): Promise<ChartWorkspace> {
+  const normalized = symbol.toUpperCase();
+  const normalizedTimeframe = timeframe.toUpperCase();
   if (shouldUseMockFallback()) {
-    return readMockWorkspaceMap()[chartStoreKey(symbol, timeframe)] ?? { symbol, timeframe, indicators: [], drawings: [] };
+    return readMockWorkspaceMap()[chartStoreKey(normalized, normalizedTimeframe)] ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
   }
+  const local = readChartWorkspaceCache()[chartStoreKey(normalized, normalizedTimeframe)] ?? null;
   try {
     const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace?timeframe=${timeframe}`, { headers });
-    if (!res.ok) return { symbol, timeframe, indicators: [], drawings: [] };
-    return res.json();
+    const res = await fetch(`${API}/api/v1/charts/${normalized}/workspace?timeframe=${normalizedTimeframe}`, { headers });
+    if (!res.ok) return local ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
+    const remote: ChartWorkspace = await res.json();
+    return cacheChartWorkspace(normalized, {
+      timeframe: remote.timeframe || normalizedTimeframe,
+      indicators: remote.indicators ?? [],
+      drawings: remote.drawings ?? [],
+    });
   } catch {
-    return { symbol, timeframe, indicators: [], drawings: [] };
+    return local ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
   }
 }
 
 export async function saveChartWorkspace(symbol: string, workspace: Omit<ChartWorkspace, "symbol">): Promise<ChartWorkspace> {
+  const normalized = symbol.toUpperCase();
+  const local = cacheChartWorkspace(normalized, workspace);
   if (shouldUseMockFallback()) {
-    const normalized = symbol.toUpperCase();
-    const saved: ChartWorkspace = { ...workspace, symbol: normalized };
     const map = readMockWorkspaceMap();
-    map[chartStoreKey(normalized, workspace.timeframe)] = saved;
+    map[chartStoreKey(normalized, workspace.timeframe)] = local;
     writeMockWorkspaceMap(map);
-    return saved;
+    return local;
   }
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(workspace),
-  });
-  if (!res.ok) throw new Error("Save chart workspace failed");
-  return res.json();
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/charts/${normalized}/workspace`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...workspace, timeframe: local.timeframe }),
+    });
+    if (!res.ok) return local;
+    const remote: ChartWorkspace = await res.json();
+    return cacheChartWorkspace(normalized, {
+      timeframe: remote.timeframe || local.timeframe,
+      indicators: remote.indicators ?? local.indicators,
+      drawings: remote.drawings ?? local.drawings,
+    });
+  } catch {
+    return local;
+  }
 }
 
 export async function saveDrawing(
@@ -2092,10 +2144,16 @@ export async function getAiPatterns(): Promise<AiPatterns> {
       ],
     };
   }
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/ai/patterns`, { headers });
-  if (!res.ok) return { ready: false };
-  return res.json();
+  return cachedClientRequest("ai:patterns", 60_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await withTimeout(fetch(`${API}/api/v1/ai/patterns`, { headers }), 3000);
+      if (!res.ok) return { ready: false };
+      return res.json();
+    } catch {
+      return { ready: false };
+    }
+  });
 }
 
 export async function triggerTradeLesson(entryId: string): Promise<JournalEntry> {

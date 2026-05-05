@@ -71,4 +71,39 @@ describe("mock chart persistence", () => {
       indicators: [{ type: "ema", params: { period: 20 } }, { type: "rsi" }],
     });
   });
+
+  it("keeps live chart workspace changes available when the API save fails", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+
+    const { getChartWorkspace, saveChartWorkspace } = await import("@/lib/api");
+
+    const saved = await saveChartWorkspace("reliance", {
+      timeframe: "D",
+      indicators: [{ type: "ema", params: { period: 20 } }],
+      drawings: [
+        {
+          id: "rr-1",
+          kind: "hline",
+          price: 2840,
+          color: "#2dd4bf",
+          width: 2,
+          label: "Entry",
+        },
+      ],
+    });
+
+    expect(saved.drawings).toHaveLength(1);
+    await expect(getChartWorkspace("RELIANCE", "D")).resolves.toMatchObject({
+      symbol: "RELIANCE",
+      timeframe: "D",
+      drawings: [{ id: "rr-1", kind: "hline", price: 2840 }],
+    });
+  });
 });

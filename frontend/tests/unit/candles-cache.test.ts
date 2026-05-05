@@ -52,4 +52,16 @@ describe("candles client cache", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("coalesces AI pattern requests and fails soft", async () => {
+    const fetchMock = vi.fn(async () => new Response("temporary outage", { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getAiPatterns } = await import("@/lib/api");
+    const [first, second] = await Promise.all([getAiPatterns(), getAiPatterns()]);
+
+    expect(first).toEqual({ ready: false });
+    expect(second).toEqual({ ready: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
