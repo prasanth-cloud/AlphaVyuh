@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { getWorkflowStateRemote, saveWorkflowStateRemote } from './api'
 
 export const SYMBOL_LIFECYCLE = [
   'Idea',
@@ -69,6 +70,7 @@ export type WorkflowState = {
 }
 
 const STORAGE_KEY = 'alphavyuh.workflow.v1'
+let remoteSaveTimer: ReturnType<typeof setTimeout> | null = null
 
 const starterGoals: Goal[] = [
   {
@@ -131,10 +133,34 @@ function readWorkflowState(): WorkflowState {
   }
 }
 
+function coerceWorkflowState(value: unknown): WorkflowState | null {
+  if (!value || typeof value !== 'object') return null
+  const parsed = value as Partial<WorkflowState>
+  return {
+    ...emptyState,
+    ...parsed,
+    shortlist: Array.isArray(parsed.shortlist) ? parsed.shortlist : [],
+    plans: parsed.plans && typeof parsed.plans === 'object' ? parsed.plans : {},
+    goals: Array.isArray(parsed.goals) && parsed.goals.length > 0 ? parsed.goals : starterGoals,
+    recentSymbols: Array.isArray(parsed.recentSymbols) ? parsed.recentSymbols : [],
+    reviewCompletions: typeof parsed.reviewCompletions === 'number' ? parsed.reviewCompletions : 0,
+  }
+}
+
+function scheduleRemoteSave(next: WorkflowState) {
+  if (remoteSaveTimer) clearTimeout(remoteSaveTimer)
+  remoteSaveTimer = setTimeout(() => {
+    saveWorkflowStateRemote(next).catch(() => {
+      // Local state is still authoritative for this session; retry on next change.
+    })
+  }, 900)
+}
+
 function writeWorkflowState(next: WorkflowState) {
   if (!canUseStorage()) return
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   window.dispatchEvent(new CustomEvent('alphavyuh:workflow-updated', { detail: next }))
+  scheduleRemoteSave(next)
 }
 
 function normalizeSymbol(symbol: string) {
@@ -179,6 +205,24 @@ export function isTradePlanValid(plan?: TradePlan | null): boolean {
   )
 }
 
+export function getTradePlanMissingFields(plan?: TradePlan | null): string[] {
+  if (!plan) return ['symbol', 'setup', 'entry', 'stop', 'target', 'size', 'thesis', 'invalidation']
+  const missing: string[] = []
+  const entry = Number(plan.entry)
+  const stop = Number(plan.stop)
+  const target = Number(plan.target)
+  const size = Number(plan.positionSize)
+  if (!plan.setupType.trim()) missing.push('setup')
+  if (!Number.isFinite(entry) || entry <= 0) missing.push('entry')
+  if (!Number.isFinite(stop) || stop <= 0) missing.push('stop')
+  if (!Number.isFinite(target) || target <= 0) missing.push('target')
+  if (!Number.isFinite(size) || size <= 0) missing.push('size')
+  if (!plan.thesis.trim() || plan.thesis.trim().length < 12) missing.push('thesis')
+  if (!plan.invalidationRule.trim() || plan.invalidationRule.trim().length < 8) missing.push('invalidation')
+  if (!plan.timeframe.trim()) missing.push('timeframe')
+  return missing
+}
+
 export function createDraftPlan(symbol: string, referencePrice?: number | null, setupType = 'Momentum'): TradePlan {
   const price = referencePrice && Number.isFinite(referencePrice) ? referencePrice : 0
   return {
@@ -200,7 +244,19 @@ export function useWorkflowState() {
   const [state, setState] = useState<WorkflowState>(emptyState)
 
   useEffect(() => {
-    setState(mergeGoalProgress(readWorkflowState()))
+    const local = mergeGoalProgress(readWorkflowState())
+    setState(local)
+    getWorkflowStateRemote()
+      .then((remote) => {
+        const coerced = coerceWorkflowState(remote)
+        if (!coerced) return
+        const next = mergeGoalProgress(coerced)
+        if (JSON.stringify(next) === JSON.stringify(readWorkflowState())) return
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+        window.dispatchEvent(new CustomEvent('alphavyuh:workflow-updated', { detail: next }))
+        setState(next)
+      })
+      .catch(() => {})
     const onStorage = () => setState(mergeGoalProgress(readWorkflowState()))
     window.addEventListener('storage', onStorage)
     window.addEventListener('alphavyuh:workflow-updated', onStorage)

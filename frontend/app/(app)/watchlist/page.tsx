@@ -47,6 +47,7 @@ import type { SymbolSearchResult } from "@/lib/api";
 import { EmptyState } from "@/components/ui";
 import {
   createDraftPlan,
+  getTradePlanMissingFields,
   isTradePlanValid,
   SYMBOL_LIFECYCLE,
   useWorkflowState,
@@ -1402,6 +1403,7 @@ function WatchlistContent() {
     ? workflowState.plans[chartSymbol] ?? createDraftPlan(chartSymbol, selectedItem?.close ?? null, selectedItem ? getSetupSignal(selectedItem).label : "Momentum")
     : null;
   const selectedPlanValid = isTradePlanValid(selectedPlan);
+  const selectedPlanMissing = getTradePlanMissingFields(selectedPlan);
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
 
   useEffect(() => {
@@ -2167,6 +2169,17 @@ function WatchlistContent() {
 
           {selectedItem && (
             <>
+              <div style={{ padding: "9px 10px", borderRadius: 12, background: selectedPlanValid ? "rgba(45,181,116,0.1)" : "rgba(245,158,11,0.09)", border: `1px solid ${selectedPlanValid ? "rgba(45,181,116,0.28)" : "rgba(245,158,11,0.22)"}` }}>
+                <div className="label" style={{ marginBottom: 4, color: selectedPlanValid ? "var(--gain)" : "var(--warn)" }}>
+                  {selectedPlanValid ? "Next action: ready for order draft" : `Next action: complete ${selectedPlanMissing[0] ?? "plan"}`}
+                </div>
+                <div className="caption">
+                  {selectedPlanValid
+                    ? "The setup has the required entry, stop, target, size, thesis, and invalidation."
+                    : `Missing ${selectedPlanMissing.slice(0, 4).join(", ")}${selectedPlanMissing.length > 4 ? "..." : ""}.`}
+                </div>
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {selectedMetrics.map((metric) => (
                   <div key={metric.label} style={{ padding: "8px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>

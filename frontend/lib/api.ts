@@ -17,6 +17,7 @@ import {
   mockSectorBreadth,
   mockWatchlists,
 } from './mock-data'
+import type { WorkflowState } from './workflow'
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
@@ -1729,6 +1730,36 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
   const result = await res.json();
   invalidateClientCache(["journal:", "portfolio"]);
   return result;
+}
+
+export async function getWorkflowStateRemote(): Promise<WorkflowState | null> {
+  if (shouldUseMockFallback()) return null;
+  return cachedClientRequest("workflow:state", 10_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/workflow/state`, { headers });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return (data.state ?? null) as WorkflowState | null;
+    } catch {
+      return null;
+    }
+  });
+}
+
+export async function saveWorkflowStateRemote(state: WorkflowState): Promise<void> {
+  if (shouldUseMockFallback()) return;
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/workflow/state`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ state }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? "Workflow save failed");
+  }
+  invalidateClientCache(["workflow:state"]);
 }
 
 // ── Live candles (Yahoo Finance, no DB) ──────────────────────────────────────
