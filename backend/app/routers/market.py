@@ -63,6 +63,13 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
     }
 
 
+def _unavailable_overview(latest_date, indices: list[dict], quote_source: str, indices_live: bool) -> dict:
+    overview = _empty_overview(latest_date, indices, quote_source, indices_live)
+    overview["mode"] = "unavailable"
+    overview["message"] = "Market summary is temporarily unavailable; dashboard will use the latest known shell data."
+    return overview
+
+
 def _index_quotes() -> tuple[list[dict], str, bool]:
     provider = get_market_data_provider()
     indexes = [
@@ -107,10 +114,23 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         cached["cache_status"] = "hit"
         return cached
 
-    sb = get_admin_client()
     indices, quote_source, indices_live = _index_quotes()
 
-    latest_date = get_latest_complete_trade_date(sb)
+    try:
+        sb = get_admin_client()
+    except Exception:
+        overview = _unavailable_overview(None, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
+
+    try:
+        latest_date = get_latest_complete_trade_date(sb)
+    except Exception:
+        overview = _unavailable_overview(None, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
     if not latest_date:
         overview = _empty_overview(None, indices, quote_source, indices_live)
         _overview_cache = deepcopy(overview)
@@ -118,18 +138,24 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         return overview
 
     # Fetch all NSE EQ rows for latest date
-    rows = (
-        sb.table("daily_ohlcv")
-        .select(
-            "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
-            "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,"
-            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
+    try:
+        rows = (
+            sb.table("daily_ohlcv")
+            .select(
+                "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
+                "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,"
+                "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
+            )
+            .eq("trade_date", latest_date)
+            .limit(3000)
+            .execute()
+            .data or []
         )
-        .eq("trade_date", latest_date)
-        .limit(3000)
-        .execute()
-        .data or []
-    )
+    except Exception:
+        overview = _unavailable_overview(latest_date, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
 
     # Filter NSE EQ active only (avoid double-counting BSE cross-listings)
     rows = [
