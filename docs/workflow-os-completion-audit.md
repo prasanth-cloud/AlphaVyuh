@@ -61,6 +61,7 @@ Latest full gate result recorded on 2026-05-05:
 - Frontend dependency audit: 0 vulnerabilities
 - Mock workflow browser smoke: 5 passed
 - Mock workflow performance smoke: passed
+- Mock workflow layout smoke: passed
 - Live-backend HTTP smoke: 3 passed
 - Backend focused tests: 39 passed
 - Backend dependency audit: no known vulnerabilities

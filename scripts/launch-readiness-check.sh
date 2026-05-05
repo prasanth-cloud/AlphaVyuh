@@ -39,6 +39,7 @@ if [[ "${SKIP_BROWSER_SMOKE:-}" == "1" ]]; then
 else
   run_step "Mock workflow browser smoke" npm run test:e2e:mock
   run_step "Mock workflow performance smoke" npm run test:e2e:perf
+  run_step "Mock workflow layout smoke" npm run test:e2e:layout
   run_step "Live backend HTTP smoke" npm run test:e2e:backend
 fi
 
