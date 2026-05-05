@@ -1,6 +1,37 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Mock workflow smoke", () => {
+  test("watchlist plan gates ready state and order draft", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/watchlist");
+    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole("button", { name: /^Order$/ }).click();
+    const lockedOrder = page.getByRole("button", { name: /Create a plan before drafting an order|Complete entry/i });
+    await expect(lockedOrder).toBeVisible();
+    await expect(lockedOrder).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
+
+    await page.getByPlaceholder("Entry").fill("1500");
+    await page.getByPlaceholder("Stop").fill("1440");
+    await page.getByPlaceholder("Target").fill("1650");
+    await page.getByPlaceholder("Qty").fill("10");
+    await page.getByPlaceholder("Thesis").fill("Breakout holding above prior resistance with clean volume.");
+    await page.getByPlaceholder("Invalidation rule").fill("Exit if price closes below the breakout base.");
+
+    await expect(page.getByText("Ready for order draft.")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /^Ready$/ })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /^Place buy order$/i })).toBeEnabled();
+
+    expect(errors).toEqual([]);
+  });
+
   test("scanner shortlist creates a selected watchlist and chart drawing survives reload", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
