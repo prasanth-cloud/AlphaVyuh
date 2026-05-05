@@ -27,6 +27,11 @@ Run these before release:
 
 ```bash
 npm run launch:check
+npm run typecheck
+npm run lint
+npm run test
+npm run test:e2e:mock
+npm run test:e2e:backend
 
 cd frontend
 npm run lint
@@ -34,6 +39,7 @@ npm run test
 npm run build
 NEXT_PUBLIC_DATA_MODE=mock npm run build
 npx playwright test tests/e2e/release-readiness.spec.ts
+npx playwright test --config=playwright.backend.config.ts
 npm audit --audit-level=high
 
 cd ../backend
@@ -43,6 +49,18 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 ```
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
+
+Read-only broker account smoke, when real credentials are available:
+
+```bash
+cd backend
+python scripts/test_kite_connection.py
+python scripts/test_upstox_connection.py
+```
+
+These broker scripts verify account/data reads only. Do not run live order placement
+as a release gate unless the account owner explicitly confirms the exact broker,
+symbol, side, quantity, order type, and sandbox/live mode.
 
 ## Security Checklist
 

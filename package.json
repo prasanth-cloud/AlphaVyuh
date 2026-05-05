@@ -4,6 +4,9 @@
   "scripts": {
     "typecheck": "npm --prefix frontend run typecheck",
     "lint": "npm --prefix frontend run lint",
+    "test": "npm --prefix frontend run test -- --run",
+    "test:e2e:mock": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/workflow-mock.spec.ts",
+    "test:e2e:backend": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.backend.config.ts",
     "launch:check": "bash scripts/launch-readiness-check.sh",
     "db:start": "npx supabase start",
     "db:stop": "npx supabase stop",
