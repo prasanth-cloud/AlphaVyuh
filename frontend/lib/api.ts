@@ -1215,10 +1215,73 @@ export type UpdateJournalEntry = {
   status?: string;
 };
 
+const mockJournalKey = "alphavyuh-mock-journal-v1";
+
+function readLocalJournalEntries(): JournalEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(mockJournalKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed as JournalEntry[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalJournalEntries(entries: JournalEntry[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockJournalKey, JSON.stringify(entries));
+}
+
+function createLocalJournalEntry(entry: CreateJournalEntry): JournalEntry {
+  const now = new Date().toISOString();
+  const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `mock-journal-${Date.now()}`;
+  return {
+    id,
+    user_id: "mock-user",
+    symbol: entry.symbol.toUpperCase(),
+    company_name: null,
+    trade_type: entry.trade_type,
+    setup_type: entry.setup_type ?? null,
+    entry_date: entry.entry_date,
+    entry_price: entry.entry_price,
+    quantity: entry.quantity,
+    exit_date: null,
+    exit_price: null,
+    pnl: null,
+    pnl_pct: null,
+    holding_days: null,
+    stop_loss: entry.stop_loss ?? null,
+    target_price: entry.target_price ?? null,
+    risk_reward: entry.stop_loss && entry.target_price && entry.stop_loss !== entry.entry_price
+      ? Number((Math.abs(entry.target_price - entry.entry_price) / Math.abs(entry.entry_price - entry.stop_loss)).toFixed(2))
+      : null,
+    entry_reason: entry.entry_reason ?? null,
+    exit_reason: null,
+    mistakes: null,
+    lessons: null,
+    status: "open",
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 export async function getJournalEntries(
   params?: { limit?: number; offset?: number; status?: string; symbol?: string }
 ): Promise<{ entries: JournalEntry[]; total: number; plan?: string; history_months?: number | null }> {
-  if (shouldUseMockFallback()) return mockJournalEntries();
+  if (shouldUseMockFallback()) {
+    const base = mockJournalEntries();
+    const local = readLocalJournalEntries();
+    let entries = [...local, ...base.entries];
+    if (params?.status) entries = entries.filter((entry) => entry.status === params.status);
+    if (params?.symbol) entries = entries.filter((entry) => entry.symbol === params.symbol?.toUpperCase());
+    const total = entries.length;
+    const offset = params?.offset ?? 0;
+    const limit = params?.limit ?? entries.length;
+    return { entries: entries.slice(offset, offset + limit), total, plan: "mock", history_months: null };
+  }
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
@@ -1247,6 +1310,12 @@ export async function getJournalStats(): Promise<JournalStats> {
 }
 
 export async function createJournalEntry(entry: CreateJournalEntry): Promise<JournalEntry> {
+  if (shouldUseMockFallback()) {
+    const created = createLocalJournalEntry(entry);
+    writeLocalJournalEntries([created, ...readLocalJournalEntries()]);
+    invalidateClientCache(["journal:", "portfolio"]);
+    return created;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/journal`, {
     method: "POST",
@@ -1887,6 +1956,66 @@ export async function triggerTradeLesson(entryId: string): Promise<JournalEntry>
 }
 
 export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
+  if (shouldUseMockFallback()) {
+    const side = order.side === "buy" ? "long" : "short";
+    const reasonParts = [
+      order.notes?.trim() || null,
+      order.thesis?.trim() ? `Thesis: ${order.thesis.trim()}` : null,
+      order.invalidation_rule?.trim() ? `Invalidation: ${order.invalidation_rule.trim()}` : null,
+    ].filter(Boolean);
+    const created = createLocalJournalEntry({
+      symbol: order.symbol,
+      trade_type: side,
+      entry_date: new Date().toISOString().slice(0, 10),
+      entry_price: order.price,
+      quantity: order.quantity,
+      setup_type: order.setup_type,
+      stop_loss: order.stop_loss,
+      target_price: order.target_price,
+      entry_reason: `${reasonParts.length ? reasonParts.join(" | ") : `${order.side.toUpperCase()} mock order`} [Simulated · ${order.source_page ?? "chart"}${order.source_context ? ` · ${order.source_context}` : ""}]`,
+    });
+    writeLocalJournalEntries([created, ...readLocalJournalEntries()]);
+    const localWorkflow = readLocalWorkflowStates();
+    const symbol = order.symbol.toUpperCase();
+    writeLocalWorkflowStates({
+      ...localWorkflow,
+      [symbol]: {
+        ...(localWorkflow[symbol] ?? { symbol, lifecycle: "open" as WorkflowLifecycle }),
+        symbol,
+        lifecycle: "open",
+        source: order.source_page ?? "chart",
+        entry: order.price,
+        stop: order.stop_loss ?? localWorkflow[symbol]?.stop ?? null,
+        target: order.target_price ?? localWorkflow[symbol]?.target ?? null,
+        position_size: order.quantity,
+        setup_type: order.setup_type ?? localWorkflow[symbol]?.setup_type ?? null,
+        notes: order.notes ?? localWorkflow[symbol]?.notes ?? null,
+        thesis: order.thesis ?? localWorkflow[symbol]?.thesis ?? null,
+        invalidation_rule: order.invalidation_rule ?? localWorkflow[symbol]?.invalidation_rule ?? null,
+        journal_id: created.id,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    invalidateClientCache(["journal:", "portfolio"]);
+    return {
+      status: "filled",
+      message: `${order.side.toUpperCase()} ${order.quantity} x ${symbol} @ ₹${order.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })} - recorded in Journal`,
+      journal_id: created.id,
+      symbol,
+      side: order.side,
+      quantity: order.quantity,
+      price: order.price,
+      broker: "simulated",
+      broker_order_id: null,
+      execution_mode: "simulated",
+      journal_status: "open",
+      risk_reward: created.risk_reward,
+      next_actions: [
+        "Simulated execution used in mock mode.",
+        "Journal draft created with setup, stop, target, and source context.",
+      ],
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/orders`, {
     method: "POST",
