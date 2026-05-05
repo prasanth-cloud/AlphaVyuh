@@ -72,6 +72,15 @@ def _live_creds():
     }
 
 
+def _upstox_creds():
+    return {
+        "broker_type": "upstox",
+        "api_key": "upstox-key",
+        "access_token": "upstox-token",
+        "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+    }
+
+
 def _order(live_confirmed: bool = False):
     return broker_router.PlaceOrderRequest(
         symbol="RELIANCE",
@@ -137,3 +146,21 @@ def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypa
     assert exc.value.status_code == 502
     assert "No simulated order was created" in str(exc.value.detail)
     assert client.journal_inserts == []
+
+
+def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(
+        broker_router,
+        "_get_user_broker_credentials",
+        lambda _user_id, broker="zerodha": {"broker_type": "upstox"} if broker == "zerodha" else _upstox_creds(),
+    )
+    monkeypatch.setattr(broker_router, "_place_upstox_order", lambda *_args, **_kwargs: "upstox-order-1")
+
+    result = asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert result["broker"] == "upstox"
+    assert result["broker_order_id"] == "upstox-order-1"
+    assert result["journal_status"] == "open"
+    assert client.journal_inserts
