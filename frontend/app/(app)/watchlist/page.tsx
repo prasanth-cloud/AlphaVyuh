@@ -1181,7 +1181,11 @@ function WatchlistContent() {
   async function loadWatchlists() {
     const wls = await getWatchlists();
     setWatchlists(wls);
-    if (wls.length > 0 && !activeId) setActiveId(wls[0].id);
+    const requestedId = searchParams.get("id");
+    if (wls.length > 0 && !activeId) {
+      const requested = requestedId ? wls.find((watchlist) => watchlist.id === requestedId) : null;
+      setActiveId(requested?.id ?? wls[0].id);
+    }
     setLoading(false);
   }
 
@@ -1197,6 +1201,17 @@ function WatchlistContent() {
   }, []);
 
   const symbolParam = searchParams.get("symbol");
+  const watchlistIdParam = searchParams.get("id");
+  useEffect(() => {
+    if (!watchlistIdParam || watchlists.length === 0) return;
+    const matched = watchlists.find((watchlist) => watchlist.id === watchlistIdParam);
+    if (matched) {
+      setActiveId(matched.id);
+      if (matched.items?.[0]?.symbol) setChartSymbol(matched.items[0].symbol);
+      router.replace("/watchlist", { scroll: false });
+    }
+  }, [router, watchlistIdParam, watchlists]);
+
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
     let found = false;
@@ -1549,6 +1564,33 @@ function WatchlistContent() {
     }
   }
 
+  async function addShortlistedToActive(symbol: string) {
+    if (!activeId) return;
+    const normalized = symbol.trim().toUpperCase();
+    const alreadyExists = activeWl?.items.some((item) => item.symbol === normalized);
+    if (alreadyExists) {
+      setChartSymbol(normalized);
+      showToast(`${normalized} is already in this watchlist`);
+      return;
+    }
+    setAdding(true);
+    setAddMsg("");
+    try {
+      await addToWatchlist(activeId, normalized);
+      const quote = await getQuote(normalized).catch(() => null);
+      const newItem: WatchlistItem = quote
+        ? { symbol: quote.symbol, sort_order: activeWl?.items.length ?? 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
+        : { symbol: normalized, sort_order: activeWl?.items.length ?? 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+      setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
+      setChartSymbol(normalized);
+      showToast(`${normalized} moved from shortlist`);
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Could not add shortlisted symbol");
+    } finally {
+      setAdding(false);
+    }
+  }
+
   async function addStarterSymbols() {
     if (!activeId) return;
     setAdding(true);
@@ -1791,6 +1833,34 @@ function WatchlistContent() {
             />
             <button onClick={handleCreateWatchlist} className="workspace-chip-button active">Create</button>
             <button onClick={() => setShowNewWl(false)} className="workspace-chip-button">Cancel</button>
+          </div>
+        )}
+
+        {workflowState.shortlist.length > 0 && (
+          <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "grid", gap: 8, flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+              <div>
+                <div className="label">Scanner shortlist</div>
+                <div className="caption">{workflowState.shortlist.length} ideas waiting for plan review</div>
+              </div>
+              <button className="workspace-chip-button" onClick={() => router.push("/scanner")}>Scanner</button>
+            </div>
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+              {workflowState.shortlist.slice(-8).reverse().map((item) => {
+                const inActiveList = Boolean(activeWl?.items.some((entry) => entry.symbol === item.symbol));
+                return (
+                  <button
+                    key={item.symbol}
+                    className={`workspace-chip-button${inActiveList ? " active" : ""}`}
+                    onClick={() => inActiveList ? setChartSymbol(item.symbol) : void addShortlistedToActive(item.symbol)}
+                    title={inActiveList ? "Open in active watchlist" : "Move into active watchlist"}
+                    style={{ flex: "0 0 auto" }}
+                  >
+                    {item.symbol} · {item.lifecycle}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

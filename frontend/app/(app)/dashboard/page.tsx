@@ -598,7 +598,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       Promise.all([
-        getWatchlists().catch(() => []),
+        getWatchlists({ lite: true }).catch(() => []),
         getJournalEntries({ limit: 75 }).catch(() => ({ entries: [], total: 0 })),
         getJournalStats().catch(() => null),
         getBrokerStatus().catch(() => ({

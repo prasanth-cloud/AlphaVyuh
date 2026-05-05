@@ -424,11 +424,39 @@ export async function deleteWatchlist(watchlistId: string): Promise<void> {
 }
 
 export async function addToWatchlist(watchlistId: string, symbol: string): Promise<void> {
+  const normalized = symbol.trim().toUpperCase();
+  if (shouldUseMockFallback()) {
+    const current = readMockWatchlists();
+    const next = current.map((watchlist) => {
+      if (watchlist.id !== watchlistId) return watchlist;
+      if (watchlist.items.some((item) => item.symbol === normalized)) {
+        throw new Error("Already in watchlist");
+      }
+      return {
+        ...watchlist,
+        items: [
+          ...watchlist.items,
+          {
+            symbol: normalized,
+            sort_order: watchlist.items.length,
+            added_at: new Date().toISOString(),
+            pinned: false,
+            tags: [],
+            note: "",
+          },
+        ],
+      };
+    });
+    writeMockWatchlists(next);
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
+
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}/items`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ symbol }),
+    body: JSON.stringify({ symbol: normalized }),
   });
   if (res.status === 409) throw new Error("Already in watchlist");
   if (!res.ok) throw new Error("Add failed");
@@ -436,6 +464,17 @@ export async function addToWatchlist(watchlistId: string, symbol: string): Promi
 }
 
 export async function removeFromWatchlist(watchlistId: string, symbol: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.trim().toUpperCase();
+    writeMockWatchlists(readMockWatchlists().map((watchlist) => (
+      watchlist.id === watchlistId
+        ? { ...watchlist, items: watchlist.items.filter((item) => item.symbol !== normalized) }
+        : watchlist
+    )));
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
+
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/${symbol}`, {
     method: "DELETE",
@@ -2094,7 +2133,7 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
 
 export function warmCoreMarketData() {
   void getMarketSnapshot().catch(() => null);
-  void getWatchlists().catch(() => null);
+  void getWatchlists({ lite: true }).catch(() => null);
   void getJournalEntries({ limit: 75 }).catch(() => null);
   void getJournalStats().catch(() => null);
   void getBrokerStatus().catch(() => null);

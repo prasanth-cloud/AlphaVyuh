@@ -9,6 +9,7 @@ import {
   isMockMode,
 } from '@/lib/api'
 import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
+import { useWorkflowState } from '@/lib/workflow'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -237,6 +238,7 @@ const SORT_COLS = [
 
 export default function ScannerPage() {
   const router = useRouter()
+  const { state: workflowState, addToShortlist, rememberSymbol } = useWorkflowState()
   const [filters, setFilters] = useState<Filters>(emptyFilters())
   const [activePreset, setActivePreset] = useState<string | null>(null)
   const [bootstrapped, setBootstrapped] = useState(false)
@@ -445,20 +447,33 @@ export default function ScannerPage() {
     showToast(`${symbol} added`)
   }
 
+  function shortlistFromResults(items: ScanResult[]) {
+    if (items.length === 0) return
+    addToShortlist(items.map((item) => ({
+      symbol: item.symbol,
+      companyName: item.company_name,
+      sector: item.sector,
+      setupQuality: item.rs_score ?? Math.round(Math.min(100, Math.max(0, ((item.rsi_14 ?? 50) + ((item.volume_ratio ?? 1) * 10))))),
+      setupType: activePresetMeta?.name ?? 'Scanner idea',
+      source: activePresetMeta ? `Scanner · ${activePresetMeta.name}` : 'Scanner',
+      lifecycle: 'Watch',
+    })))
+    rememberSymbol(items[0].symbol)
+    showToast(`${items.length} ${items.length === 1 ? 'symbol' : 'symbols'} shortlisted`)
+  }
+
+  function shortlistSelectedResults() {
+    const items = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results.slice(0, 25)
+    shortlistFromResults(items)
+  }
+
   async function createWatchlistFromResults() {
     if (!newWlName.trim()) return
-    if (isMockMode) {
-      setShowWlModal(false); setNewWlName('')
-      showToast('Mock watchlist created')
-      router.push('/watchlist')
-      return
-    }
     try {
       const wl = await createWatchlist(newWlName.trim())
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
-      for (const s of toAdd.slice(0, 50)) {
-        await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
-      }
+      await Promise.all(toAdd.slice(0, 50).map((s) => addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})))
+      shortlistFromResults(toAdd.slice(0, 50))
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       router.push(`/watchlist?id=${wl.id}`)
@@ -764,6 +779,9 @@ export default function ScannerPage() {
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
                   Add selected to watchlist
                 </Button>
+                <Button size="sm" variant="primary" onClick={shortlistSelectedResults}>
+                  Shortlist {selectedResults.size > 0 ? selectedResults.size : Math.min(results.length, 25)}
+                </Button>
               </div>
             </>
           ) : (
@@ -889,6 +907,12 @@ export default function ScannerPage() {
                         </Td>
                         <Td>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); shortlistFromResults([r]) }}
+                              style={{ fontSize: 10, color: workflowState.shortlist.some(item => item.symbol === r.symbol) ? 'var(--gain)' : 'var(--accent)', cursor: 'pointer', fontWeight: 700 }}
+                            >
+                              {workflowState.shortlist.some(item => item.symbol === r.symbol) ? 'Shortlisted' : 'Shortlist'}
+                            </button>
                             <button
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
                               style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}
