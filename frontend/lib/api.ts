@@ -970,23 +970,28 @@ export async function getCandles(
   symbol: string,
   params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
 ): Promise<CandlesResponse> {
-  if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
+  const sym = symbol.trim().toUpperCase();
+  if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
   const qs = new URLSearchParams();
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.timeframe) qs.set("timeframe", params.timeframe);
-  try {
-    const res = await fetch(`${API}/api/v1/charts/${symbol}/candles?${qs}`, { headers: publicHeaders });
-    if (!res.ok) {
-      if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
-      throw new Error(`No data for ${symbol}`);
+  const query = qs.toString();
+  const cacheKey = `candles:${sym}:${query}`;
+  return cachedClientRequest(cacheKey, 60_000, async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers: publicHeaders });
+      if (!res.ok) {
+        if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
+        throw new Error(`No data for ${sym}`);
+      }
+      return res.json();
+    } catch (error) {
+      if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
+      throw error;
     }
-    return res.json();
-  } catch (error) {
-    if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
-    throw error;
-  }
+  });
 }
 
 export async function getIndicators(
