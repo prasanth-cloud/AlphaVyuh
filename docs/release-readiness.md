@@ -57,9 +57,9 @@ The release owner should also complete `docs/customer-launch-runbook.md` before 
 Read-only broker account smoke, when real credentials are available:
 
 ```bash
-cd backend
-python scripts/test_kite_connection.py
-python scripts/test_upstox_connection.py
+npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke
 ```
 
 These broker scripts verify account/data reads only. Do not run live order placement

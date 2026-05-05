@@ -79,12 +79,15 @@ Real broker validation is not complete.
 Read-only account smoke is available:
 
 ```bash
+npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke
 RUN_BROKER_SMOKE=1 npm run launch:check
 RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=kite npm run launch:check
 RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=upstox npm run launch:check
 ```
 
-The launch gate runs `backend/scripts/test_kite_connection.py` and
+The broker smoke script and launch gate run `backend/scripts/test_kite_connection.py` and
 `backend/scripts/test_upstox_connection.py`. Those scripts verify account/data
 reads only and do not submit, modify, or cancel orders.
 

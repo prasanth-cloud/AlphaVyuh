@@ -10,6 +10,7 @@
     "test:e2e:perf": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/performance-smoke.spec.ts",
     "test:e2e:layout": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/layout-smoke.spec.ts",
     "launch:check": "bash scripts/launch-readiness-check.sh",
+    "broker:smoke": "bash scripts/broker-readonly-smoke.sh",
     "db:start": "npx supabase start",
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",
