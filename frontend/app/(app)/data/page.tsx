@@ -188,7 +188,6 @@ export default function DataFreshnessPage() {
 
   const health = state.dataHealth;
   const broker = state.broker ?? fallbackBroker;
-  const reviewCoverage = state.closedTrades ? Math.round((state.reviewedTrades / state.closedTrades) * 100) : 0;
   const coveragePct = health?.symbols_on_latest_date != null && health.universe_active
     ? Math.round((health.symbols_on_latest_date / health.universe_active) * 100)
     : null;
