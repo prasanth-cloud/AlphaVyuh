@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timedelta, timezone
+from typing import Any
 
 from app.brokers.adapter import (
     BrokerAdapter,
@@ -11,6 +12,7 @@ from app.brokers.adapter import (
     BrokerProfile,
     FillCallback,
     Holding,
+    IdempotencyKey,
     ModifyResult,
     Order,
     OrderPatch,
@@ -21,6 +23,7 @@ from app.brokers.adapter import (
 )
 from app.brokers.upstox import api as upstox_api
 from app.brokers.upstox.api import UpstoxApiError
+from app.services.supabase import get_admin_client
 
 
 class UpstoxAdapter(BrokerAdapter):
@@ -105,8 +108,63 @@ class UpstoxAdapter(BrokerAdapter):
             )
         return [h for h in holdings if h.symbol]
 
-    async def place_order(self, creds: BrokerCredentials, order: OrderRequest) -> OrderResult:
-        raise NotImplementedError("Upstox order placement remains on the legacy broker order route until adapter idempotency is migrated.")
+    async def place_order(self, user_id: str, creds: BrokerCredentials, order: OrderRequest) -> OrderResult:
+        cached = _cached_order_result(user_id, order.idempotency_key)
+        if cached is not None:
+            return cached
+
+        payload = _to_upstox_order_payload(order)
+        try:
+            _reserve_order_key(user_id, order)
+        except Exception as exc:
+            cached = _cached_order_result(user_id, order.idempotency_key)
+            if cached is not None:
+                return cached
+            raise BrokerError(
+                kind="UNKNOWN",
+                broker_id="upstox",
+                message="Order idempotency key is already reserved and the broker result is not reconciled yet.",
+                retryable=False,
+                possibly_executed=True,
+                cause=exc,
+            ) from exc
+        try:
+            data = upstox_api.place_order(creds.access_token, payload)
+        except UpstoxApiError as exc:
+            raise _wrap(exc) from exc
+
+        broker_order_id = str(data.get("order_id") or "")
+        if not broker_order_id:
+            raise BrokerError(
+                kind="BROKER_REJECTED",
+                broker_id="upstox",
+                message="Upstox order response did not include an order id.",
+                retryable=False,
+            )
+
+        now = datetime.now(timezone.utc)
+        placed = Order(
+            id=order.idempotency_key,
+            broker_order_id=BrokerOrderId(broker_order_id),
+            symbol=order.symbol.upper(),
+            exchange=order.exchange,
+            side=order.side,
+            order_type=order.order_type,
+            product=order.product,
+            status="PENDING",
+            quantity=order.quantity,
+            filled_quantity=0,
+            average_price=0,
+            fills=[],
+            child_broker_order_ids=[],
+            limit_price=order.limit_price,
+            trigger_price=order.trigger_price,
+            placed_at=now,
+            updated_at=now,
+        )
+        result = OrderResult(order=placed, from_cache=False)
+        _store_order_result(user_id, order.idempotency_key, broker_order_id, result)
+        return result
 
     async def modify_order(self, creds: BrokerCredentials, broker_order_id: BrokerOrderId, patch: OrderPatch) -> ModifyResult:
         raise NotImplementedError("Upstox order modification is not implemented in the adapter yet.")
@@ -131,6 +189,80 @@ def _next_upstox_expiry(now: datetime | None = None) -> datetime:
     if now >= cutoff:
         cutoff += timedelta(days=1)
     return cutoff
+
+
+def _cached_order_result(user_id: str, idempotency_key: IdempotencyKey) -> OrderResult | None:
+    row = (
+        get_admin_client()
+        .table("order_idempotency")
+        .select("result")
+        .eq("user_id", user_id)
+        .eq("idempotency_key", str(idempotency_key))
+        .maybe_single()
+        .execute()
+    ).data
+    if not row or not row.get("result"):
+        return None
+    cached = OrderResult.model_validate(row["result"])
+    return cached.model_copy(update={"from_cache": True})
+
+
+def _reserve_order_key(user_id: str, order: OrderRequest) -> None:
+    get_admin_client().table("order_idempotency").insert(
+        {
+            "user_id": user_id,
+            "idempotency_key": str(order.idempotency_key),
+            "broker_id": "upstox",
+            "result": None,
+        }
+    ).execute()
+
+
+def _store_order_result(
+    user_id: str,
+    idempotency_key: IdempotencyKey,
+    broker_order_id: str,
+    result: OrderResult,
+) -> None:
+    payload = result.model_dump(mode="json")
+    get_admin_client().table("order_idempotency").update(
+        {"broker_order_id": broker_order_id, "result": payload}
+    ).eq("user_id", user_id).eq("idempotency_key", str(idempotency_key)).execute()
+
+
+def _to_upstox_order_payload(order: OrderRequest) -> dict[str, Any]:
+    product = {"CNC": "D", "MIS": "I", "NRML": "D"}[order.product]
+    order_type = "SL-M" if order.order_type == "SL_MARKET" else order.order_type
+    is_amo = bool(order.extensions and order.extensions.upstox and order.extensions.upstox.amo_session)
+    payload = {
+        "quantity": order.quantity,
+        "product": product,
+        "validity": order.validity,
+        "price": order.limit_price if order.order_type in {"LIMIT", "SL"} else 0,
+        "tag": "alphavyuh",
+        "instrument_token": f"{order.exchange}_EQ|{order.symbol.upper()}",
+        "order_type": order_type,
+        "transaction_type": order.side,
+        "disclosed_quantity": 0,
+        "trigger_price": order.trigger_price or 0,
+        "is_amo": is_amo,
+        "market_protection": 0,
+    }
+    if order.order_type in {"LIMIT", "SL"} and not order.limit_price:
+        raise BrokerError(
+            kind="INVALID_REQUEST",
+            broker_id="upstox",
+            message="Limit price is required for Upstox LIMIT and SL orders.",
+            retryable=False,
+        )
+    if order.order_type in {"SL", "SL_MARKET"} and not order.trigger_price:
+        raise BrokerError(
+            kind="INVALID_REQUEST",
+            broker_id="upstox",
+            message="Trigger price is required for Upstox stop-loss orders.",
+            retryable=False,
+        )
+    return payload
 
 
 def _wrap(exc: UpstoxApiError) -> BrokerError:

@@ -478,6 +478,8 @@ export interface BrokerAdapter<B extends BrokerId = BrokerId> {
   // Orders
   /**
    * Place an order.
+   * userId is required because idempotency is scoped to (user_id, idempotency_key)
+   * in Supabase before any broker request is sent.
    *
    * Idempotency (mandatory):
    * Before calling the broker, the adapter checks the `order_idempotency` DB
@@ -498,6 +500,7 @@ export interface BrokerAdapter<B extends BrokerId = BrokerId> {
    * Throws BrokerError on all failure modes. Never throws a raw SDK error.
    */
   placeOrder(
+    userId: string,
     creds: BrokerCredentials,
     order: OrderRequest<B>
   ): Promise<OrderResult>;

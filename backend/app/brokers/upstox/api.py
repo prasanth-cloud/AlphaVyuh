@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 import httpx
 
 BASE_URL = "https://api.upstox.com/v2"
+ORDER_BASE_URL = "https://api-hft.upstox.com/v2"
 AUTH_URL = f"{BASE_URL}/login/authorization/dialog"
 TOKEN_URL = f"{BASE_URL}/login/authorization/token"
 
@@ -67,6 +68,10 @@ def get_holdings(access_token: str) -> list[dict[str, Any]]:
     return _request("GET", "/portfolio/long-term-holdings", access_token=access_token)["data"]
 
 
+def place_order(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return _request("POST", "/order/place", access_token=access_token, data=payload, base_url=ORDER_BASE_URL)["data"]
+
+
 def _headers(access_token: str | None, form: bool = False) -> dict[str, str]:
     headers = {"Accept": "application/json"}
     if form:
@@ -84,8 +89,9 @@ def _request(
     access_token: str | None,
     data: dict[str, Any] | None = None,
     form: bool = False,
+    base_url: str = BASE_URL,
 ) -> dict[str, Any]:
-    url = f"{BASE_URL}{path}"
+    url = f"{base_url}{path}"
     headers = _headers(access_token, form=form)
 
     for attempt in range(3):

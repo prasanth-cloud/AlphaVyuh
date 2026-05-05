@@ -334,10 +334,12 @@ class BrokerAdapter(abc.ABC):
 
     @abc.abstractmethod
     async def place_order(
-        self, creds: BrokerCredentials, order: OrderRequest
+        self, user_id: str, creds: BrokerCredentials, order: OrderRequest
     ) -> OrderResult:
         """
         Place an order. MUST check order_idempotency table before calling broker.
+        user_id is required because idempotency is scoped to
+        (user_id, idempotency_key) in Supabase.
         If order.idempotency_key matches an existing row, return cached result
         with from_cache=True — do NOT call the broker again.
         """
