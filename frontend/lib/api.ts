@@ -2553,10 +2553,8 @@ export type MarketSnapshot = {
 
 export async function getMarketSnapshot(): Promise<MarketSnapshot> {
   return cachedClientRequest("market-snapshot", 30_000, async () => {
-    const [overview, health] = await Promise.all([
-      getMarketOverview(),
-      getDataHealth().catch(() => null),
-    ]);
+    const overview = await getMarketOverview();
+    const health = await withTimeout(getDataHealth(), 600).catch(() => null);
     return {
       overview,
       health,
@@ -2571,7 +2569,10 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
 
 export function warmCoreMarketData() {
   void getMarketSnapshot().catch(() => null);
-  void getWatchlists().catch(() => null);
+  void getWatchlists({ lite: true }).catch(() => null);
+}
+
+export function warmSecondaryWorkflowData() {
   void getJournalEntries({ limit: 75 }).catch(() => null);
   void getJournalStats().catch(() => null);
   void getBrokerStatus().catch(() => null);

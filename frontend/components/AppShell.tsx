@@ -4,7 +4,8 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import TraderReminderStrip from '@/components/TraderReminderStrip'
 import FeedbackWidget from '@/components/FeedbackWidget'
-import { clearAuthHeaderCache, warmCoreMarketData } from '@/lib/api'
+import { clearAuthHeaderCache, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
+import { markAppTiming } from '@/lib/performance'
 import { useWorkflowState } from '@/lib/workflow'
 
 const NAV_LINKS = [
@@ -29,6 +30,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
 
   useEffect(() => {
+    window.requestAnimationFrame(() => markAppTiming('first-app-shell-paint'))
+  }, [])
+
+  useEffect(() => {
     const prefetchCoreRoutes = () => {
       for (const href of IDLE_PREFETCH_ROUTES) {
         if (href !== pathname) {
@@ -38,21 +43,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     const warmData = () => warmCoreMarketData()
+    const warmSecondaryData = () => warmSecondaryWorkflowData()
 
     if ('requestIdleCallback' in window) {
       const routeId = window.requestIdleCallback(prefetchCoreRoutes, { timeout: 3000 })
       const dataId = window.requestIdleCallback(warmData, { timeout: 6000 })
+      const secondaryDataId = window.requestIdleCallback(warmSecondaryData, { timeout: 10_000 })
       return () => {
         window.cancelIdleCallback(routeId)
         window.cancelIdleCallback(dataId)
+        window.cancelIdleCallback(secondaryDataId)
       }
     }
 
     const routeId = globalThis.setTimeout(prefetchCoreRoutes, 1200)
     const dataId = globalThis.setTimeout(warmData, 4500)
+    const secondaryDataId = globalThis.setTimeout(warmSecondaryData, 9000)
     return () => {
       globalThis.clearTimeout(routeId)
       globalThis.clearTimeout(dataId)
+      globalThis.clearTimeout(secondaryDataId)
     }
   }, [pathname, router])
 

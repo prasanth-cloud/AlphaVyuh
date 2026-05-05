@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   getAiPatterns,
   getBrokerStatus,
@@ -17,6 +17,7 @@ import {
 } from '@/lib/api'
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge } from '@/components/ui'
 import DataFreshnessStrip from '@/components/DataFreshnessStrip'
+import { markAppTiming } from '@/lib/performance'
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
@@ -648,6 +649,7 @@ function deriveReviewPrompts(entries: JournalEntry[]): ReviewPrompts {
 
 export default function DashboardPage() {
   const [data, setData] = useState<MarketOverview | null>(null)
+  const dataRef = useRef<MarketOverview | null>(null)
   const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -680,14 +682,15 @@ export default function DashboardPage() {
     try {
       const snapshot = await Promise.race([
         pendingSnapshot,
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), data ? 1800 : 900)),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), dataRef.current ? 1800 : 900)),
       ])
       if (!snapshot) {
-        if (!data) {
+        if (!dataRef.current) {
           setLoading(false)
         }
         pendingSnapshot
           .then((lateSnapshot) => {
+            dataRef.current = lateSnapshot.overview
             setData(lateSnapshot.overview)
             setDataHealth(lateSnapshot.health)
             writeDashboardSnapshotCache(lateSnapshot.overview, lateSnapshot.health)
@@ -696,8 +699,10 @@ export default function DashboardPage() {
           .catch(() => {})
         return
       }
+      dataRef.current = snapshot.overview
       setData(snapshot.overview)
       setDataHealth(snapshot.health)
+      markAppTiming('market-overview-loaded')
       writeDashboardSnapshotCache(snapshot.overview, snapshot.health)
       setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
@@ -705,13 +710,14 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [data])
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     setChecklistDismissed(window.localStorage.getItem('alphavyuh-onboarding-dismissed') === '1')
     const cached = readDashboardSnapshotCache()
     if (cached) {
+      dataRef.current = cached.data
       setData(cached.data)
       setDataHealth(cached.dataHealth)
       setLastUpdated('cached')
@@ -757,7 +763,10 @@ export default function DashboardPage() {
 
         if (closedTrades >= 3) {
           getAiPatterns()
-            .then((patterns) => setWorkflow(current => ({ ...current, patterns: patterns as AiPatterns | null })))
+            .then((patterns) => {
+              setWorkflow(current => ({ ...current, patterns: patterns as AiPatterns | null }))
+              markAppTiming('dashboard-ai-coaching-loaded')
+            })
             .catch(() => {})
         }
 
@@ -774,12 +783,14 @@ export default function DashboardPage() {
             // Ignore profile sync failures; local product state still reflects progress.
           }
         }
+        markAppTiming('dashboard-background-hydration-complete')
       })
     }, 250)
     return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
+    window.requestAnimationFrame(() => markAppTiming('dashboard-shell-paint'))
     load()
     const t = setInterval(load, 5 * 60 * 1000)
     return () => clearInterval(t)

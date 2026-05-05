@@ -6,6 +6,7 @@ export async function POST(request: Request) {
 
   // Create the response first — the supabase client writes sb-* cookies onto it
   const response = NextResponse.json({ success: true });
+  response.headers.set("Server-Timing", 'alphavyuh_auth_session;desc="session_set"');
   const supabase = await createRouteHandlerClient(response);
 
   const { data, error } = await supabase.auth.signInWithPassword({
