@@ -300,7 +300,7 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
     sb = get_admin_client()
     result = (
         sb.table("trade_journal")
-        .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,holding_days")
+        .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,holding_days,risk_reward,mistakes")
         .eq("user_id", user_id)
         .eq("status", "closed")
         .execute()
@@ -325,10 +325,22 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
 
     win_hold: list[int] = []
     loss_hold: list[int] = []
+    rr_values: list[float] = []
+    mistake_notes: list[str] = []
+    setup_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"trades": 0, "wins": 0, "total_pnl": 0.0})
 
     for t in trades:
         pnl = _num(t.get("pnl"))
         win = pnl > 0
+        setup = t.get("setup_type") or "Untagged"
+        setup_stats[setup]["trades"] += 1
+        setup_stats[setup]["total_pnl"] += pnl
+        if win:
+            setup_stats[setup]["wins"] += 1
+        if t.get("risk_reward") is not None:
+            rr_values.append(_num(t.get("risk_reward")))
+        if str(t.get("mistakes") or "").strip():
+            mistake_notes.append(str(t.get("mistakes")).strip())
 
         entry_day = _date(t.get("entry_date"))
         if entry_day:
@@ -354,6 +366,9 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
             win_hold.append(hd)
         else:
             loss_hold.append(hd)
+
+    avg_win_hold = round(sum(win_hold) / len(win_hold), 1) if win_hold else None
+    avg_loss_hold = round(sum(loss_hold) / len(loss_hold), 1) if loss_hold else None
 
     day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     day_of_week = [
@@ -390,12 +405,105 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
         if v["trades"] > 0
     ]
 
+    best_setup = None
+    if setup_stats:
+        setup_rows = [
+            (
+                setup,
+                int(values["trades"]),
+                round(values["wins"] / values["trades"] * 100, 1) if values["trades"] else 0,
+                round(values["total_pnl"], 2),
+            )
+            for setup, values in setup_stats.items()
+        ]
+        best_setup = sorted(setup_rows, key=lambda row: (row[3], row[2], row[1]), reverse=True)[0]
+
+    worst_day = min(day_of_week, key=lambda row: row["total_pnl"], default=None)
+    worst_bucket = min(
+        (
+            {
+                **bucket,
+                "total_pnl": round(sum(_num(t.get("pnl")) for t in trades if _holding_bucket(int(_num(t.get("holding_days")))) == bucket["bucket"]), 2),
+            }
+            for bucket in by_holding
+        ),
+        key=lambda row: row["total_pnl"],
+        default=None,
+    )
+    avg_rr = round(sum(rr_values) / len(rr_values), 2) if rr_values else None
+    weak_rr = sum(1 for value in rr_values if value < 2)
+    untagged = int(setup_stats.get("Untagged", {}).get("trades", 0))
+
+    next_tip = "Keep closing trades with setup, risk, exit reason, and lesson notes to sharpen review quality."
+    if untagged:
+        next_tip = f"Tag {untagged} untagged closed trade{'s' if untagged != 1 else ''} so setup quality becomes measurable."
+    elif avg_rr is not None and weak_rr:
+        next_tip = f"Tighten pre-trade filtering: {weak_rr} closed trade{'s' if weak_rr != 1 else ''} had planned R:R below 2."
+    elif avg_loss_hold is not None and avg_win_hold is not None and avg_loss_hold > avg_win_hold:
+        next_tip = "Review exit rules: losing trades are being held longer than winners."
+
+    coaching_cards = [
+        {
+            "label": "Repeated mistakes",
+            "value": f"{len(mistake_notes)} noted",
+            "detail": mistake_notes[-1][:140] if mistake_notes else "No repeated mistake notes yet; add close-review notes to expose behavior patterns.",
+            "tone": "warn" if mistake_notes else "neutral",
+        },
+        {
+            "label": "Best setup type",
+            "value": best_setup[0] if best_setup else "Not enough data",
+            "detail": f"{best_setup[1]} trades, {best_setup[2]}% win rate, {_format_money(best_setup[3])} P&L." if best_setup else "Tag closed trades with setup type to identify your edge.",
+            "tone": "gain" if best_setup and best_setup[3] >= 0 else "neutral",
+        },
+        {
+            "label": "Worst behavior",
+            "value": worst_day["day"] if worst_day and worst_day["total_pnl"] < 0 else (worst_bucket["bucket"] if worst_bucket and worst_bucket["total_pnl"] < 0 else "No clear leak"),
+            "detail": (
+                f"{worst_day['day']} entries are at {_format_money(worst_day['total_pnl'])}."
+                if worst_day and worst_day["total_pnl"] < 0
+                else f"{worst_bucket['bucket']} trades are at {_format_money(worst_bucket['total_pnl'])}."
+                if worst_bucket and worst_bucket["total_pnl"] < 0
+                else "No negative cluster is strong enough yet."
+            ),
+            "tone": "loss" if (worst_day and worst_day["total_pnl"] < 0) or (worst_bucket and worst_bucket["total_pnl"] < 0) else "neutral",
+        },
+        {
+            "label": "Risk/reward discipline",
+            "value": f"Avg {avg_rr}:1" if avg_rr is not None else "Missing",
+            "detail": f"{weak_rr} closed trade{'s' if weak_rr != 1 else ''} below 2:1 planned R:R." if avg_rr is not None else "Add stop and target before entry so R:R can be audited.",
+            "tone": "gain" if avg_rr is not None and avg_rr >= 2 and weak_rr == 0 else "warn",
+        },
+        {
+            "label": "Holding time insight",
+            "value": (
+                f"W {avg_win_hold}d / L {avg_loss_hold}d"
+                if avg_win_hold is not None and avg_loss_hold is not None
+                else "Incomplete"
+            ),
+            "detail": (
+                "Losers are held longer than winners; review exit discipline."
+                if avg_loss_hold is not None and avg_win_hold is not None and avg_loss_hold > avg_win_hold
+                else "Winner and loser holding periods are not showing a major leak yet."
+                if avg_win_hold is not None and avg_loss_hold is not None
+                else "Close more trades with dates to compare winner and loser hold times."
+            ),
+            "tone": "loss" if avg_loss_hold is not None and avg_win_hold is not None and avg_loss_hold > avg_win_hold else "neutral",
+        },
+        {
+            "label": "Next improvement tip",
+            "value": "Process",
+            "detail": next_tip,
+            "tone": "accent",
+        },
+    ]
+
     return {
         "ready": True,
         "total_trades": len(trades),
-        "avg_hold_winners": round(sum(win_hold) / len(win_hold), 1) if win_hold else None,
-        "avg_hold_losers":  round(sum(loss_hold) / len(loss_hold), 1) if loss_hold else None,
+        "avg_hold_winners": avg_win_hold,
+        "avg_hold_losers":  avg_loss_hold,
         "day_of_week":      day_of_week,
         "by_direction":     by_direction,
         "by_holding_period": by_holding,
+        "coaching_cards": coaching_cards,
     }

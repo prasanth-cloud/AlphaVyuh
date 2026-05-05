@@ -1614,6 +1614,7 @@ export type AiPatterns = {
   trades_available?: number;
   avg_hold_winners?: number | null;
   avg_hold_losers?: number | null;
+  coaching_cards?: { label: string; value: string; detail: string; tone: "gain" | "loss" | "warn" | "accent" | "neutral" }[];
   day_of_week?: { day: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
   by_direction?: { direction: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
   by_holding_period?: { bucket: string; trades: number; wins: number; win_rate: number }[];
@@ -1628,6 +1629,14 @@ export async function getAiPatterns(): Promise<AiPatterns> {
       min_trades_required: 10,
       avg_hold_winners: 8,
       avg_hold_losers: 4,
+      coaching_cards: [
+        { label: "Repeated mistakes", value: "3 noted", detail: "Late entries after range extension are hurting average R:R.", tone: "warn" },
+        { label: "Best setup type", value: "Breakout", detail: "12 trades, 67% win rate, +₹58,400 P&L.", tone: "gain" },
+        { label: "Worst behavior", value: "Monday", detail: "Monday entries have the weakest realised P&L in the sample.", tone: "loss" },
+        { label: "Risk/reward discipline", value: "Avg 2.1:1", detail: "2 closed trades were below 2:1 planned R:R.", tone: "warn" },
+        { label: "Holding time insight", value: "W 8d / L 4d", detail: "Winner and loser holding periods are not showing a major leak yet.", tone: "neutral" },
+        { label: "Next improvement tip", value: "Process", detail: "Write the invalidation rule before moving an idea to Ready.", tone: "accent" },
+      ],
       by_direction: [
         { direction: "long", trades: 18, wins: 12, win_rate: 66.7, total_pnl: 58400 },
         { direction: "short", trades: 6, wins: 3, win_rate: 50, total_pnl: 10020 },

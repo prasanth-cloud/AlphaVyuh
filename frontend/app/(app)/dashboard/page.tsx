@@ -507,6 +507,15 @@ function ReviewPulseCard({
       ? `${workflow.closedTrades - workflow.reviewedTrades} closed trade${workflow.closedTrades - workflow.reviewedTrades === 1 ? '' : 's'} still missing review notes.`
       : 'Review coverage is complete for closed trades in the current journal sample.'
 
+  const coachingCards = workflow.patterns?.coaching_cards?.slice(0, 3) ?? []
+  const toneColor = (tone: string) => {
+    if (tone === 'gain') return 'var(--gain)'
+    if (tone === 'loss') return 'var(--loss)'
+    if (tone === 'warn') return 'var(--warn)'
+    if (tone === 'accent') return 'var(--accent)'
+    return 'var(--text-primary)'
+  }
+
   return (
     <Card padding="md">
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
@@ -533,6 +542,15 @@ function ReviewPulseCard({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {coachingCards.map((card) => (
+          <div key={card.label} style={{ padding: '9px 11px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--surface-2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+              <span className="label">{card.label}</span>
+              <span className="mono" style={{ fontSize: 11, fontWeight: 700, color: toneColor(card.tone), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{card.value}</span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{card.detail}</div>
+          </div>
+        ))}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
           <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Strongest review signal</span>
           <span className="mono" style={{ fontSize: 12, color: 'var(--text-primary)' }}>
