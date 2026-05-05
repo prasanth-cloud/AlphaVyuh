@@ -27,6 +27,12 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
+function allowPlaywrightMockAuth(): boolean {
+  return process.env.NODE_ENV !== "production"
+    && process.env.PLAYWRIGHT_MOCK_AUTH === "true"
+    && process.env.NEXT_PUBLIC_DATA_MODE === "mock";
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -47,6 +53,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set("x-pathname", pathname);
 
   if (isPublic(pathname)) return response;
+  if (allowPlaywrightMockAuth()) return response;
 
   const supabase = createMiddlewareClient(request, response);
 
