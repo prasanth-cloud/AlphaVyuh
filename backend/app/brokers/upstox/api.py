@@ -72,6 +72,32 @@ def place_order(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _request("POST", "/order/place", access_token=access_token, data=payload, base_url=ORDER_BASE_URL)["data"]
 
 
+def modify_order(access_token: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return _request("PUT", "/order/modify", access_token=access_token, data=payload, base_url=ORDER_BASE_URL)["data"]
+
+
+def cancel_order(access_token: str, order_id: str) -> dict[str, Any]:
+    return _request(
+        "DELETE",
+        "/order/cancel",
+        access_token=access_token,
+        params={"order_id": order_id},
+        base_url=ORDER_BASE_URL,
+    )["data"]
+
+
+def get_order_details(access_token: str, order_id: str) -> dict[str, Any]:
+    return _request("GET", "/order/details", access_token=access_token, params={"order_id": order_id})["data"]
+
+
+def list_orders(access_token: str) -> list[dict[str, Any]]:
+    return _request("GET", "/order/retrieve-all", access_token=access_token)["data"]
+
+
+def get_order_trades(access_token: str, order_id: str) -> list[dict[str, Any]]:
+    return _request("GET", "/order/trades", access_token=access_token, params={"order_id": order_id})["data"]
+
+
 def _headers(access_token: str | None, form: bool = False) -> dict[str, str]:
     headers = {"Accept": "application/json"}
     if form:
@@ -88,6 +114,7 @@ def _request(
     path: str,
     access_token: str | None,
     data: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
     form: bool = False,
     base_url: str = BASE_URL,
 ) -> dict[str, Any]:
@@ -97,7 +124,14 @@ def _request(
     for attempt in range(3):
         try:
             with httpx.Client(timeout=_TIMEOUT) as client:
-                resp = client.request(method, url, headers=headers, data=data if form else None, json=None if form else data)
+                resp = client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    data=data if form else None,
+                    json=None if form else data,
+                )
         except httpx.RequestError as exc:
             if attempt < 2:
                 continue

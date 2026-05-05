@@ -10,6 +10,7 @@ from app.brokers.adapter import (
     BrokerError,
     BrokerOrderId,
     BrokerProfile,
+    Fill,
     FillCallback,
     Holding,
     IdempotencyKey,
@@ -167,16 +168,35 @@ class UpstoxAdapter(BrokerAdapter):
         return result
 
     async def modify_order(self, creds: BrokerCredentials, broker_order_id: BrokerOrderId, patch: OrderPatch) -> ModifyResult:
-        raise NotImplementedError("Upstox order modification is not implemented in the adapter yet.")
+        current = await self.get_order(creds, broker_order_id)
+        payload = _to_upstox_modify_payload(broker_order_id, current, patch)
+        try:
+            upstox_api.modify_order(creds.access_token, payload)
+        except UpstoxApiError as exc:
+            raise _wrap(exc) from exc
+        return ModifyResult(order=await self.get_order(creds, broker_order_id))
 
     async def cancel_order(self, creds: BrokerCredentials, broker_order_id: BrokerOrderId) -> ModifyResult:
-        raise NotImplementedError("Upstox order cancellation is not implemented in the adapter yet.")
+        try:
+            upstox_api.cancel_order(creds.access_token, str(broker_order_id))
+        except UpstoxApiError as exc:
+            raise _wrap(exc) from exc
+        return ModifyResult(order=await self.get_order(creds, broker_order_id))
 
     async def get_order(self, creds: BrokerCredentials, broker_order_id: BrokerOrderId) -> Order:
-        raise NotImplementedError("Upstox order lookup is not implemented in the adapter yet.")
+        try:
+            raw = upstox_api.get_order_details(creds.access_token, str(broker_order_id))
+            trades = upstox_api.get_order_trades(creds.access_token, str(broker_order_id))
+        except UpstoxApiError as exc:
+            raise _wrap(exc) from exc
+        return _to_order(raw, trades=trades)
 
     async def list_orders(self, creds: BrokerCredentials) -> list[Order]:
-        raise NotImplementedError("Upstox order listing is not implemented in the adapter yet.")
+        try:
+            rows = upstox_api.list_orders(creds.access_token)
+        except UpstoxApiError as exc:
+            raise _wrap(exc) from exc
+        return [_to_order(row, trades=[]) for row in rows]
 
     def subscribe_fills(self, creds: BrokerCredentials, on_fill: FillCallback) -> Unsubscribe:
         return lambda: None
@@ -269,6 +289,140 @@ def _to_upstox_order_payload(order: OrderRequest) -> dict[str, Any]:
             retryable=False,
         )
     return payload
+
+
+def _to_upstox_modify_payload(broker_order_id: BrokerOrderId, current: Order, patch: OrderPatch) -> dict[str, Any]:
+    order_type = "SL-M" if current.order_type == "SL_MARKET" else current.order_type
+    quantity = patch.quantity if patch.quantity is not None else current.quantity
+    price = patch.limit_price if patch.limit_price is not None else current.limit_price
+    trigger_price = patch.trigger_price if patch.trigger_price is not None else current.trigger_price
+    payload = {
+        "order_id": str(broker_order_id),
+        "quantity": quantity,
+        "validity": patch.validity or "DAY",
+        "price": price if current.order_type in {"LIMIT", "SL"} else 0,
+        "order_type": order_type,
+        "disclosed_quantity": 0,
+        "trigger_price": trigger_price if current.order_type in {"SL", "SL_MARKET"} else 0,
+        "market_protection": 0,
+    }
+    if current.order_type in {"LIMIT", "SL"} and not payload["price"]:
+        raise BrokerError(
+            kind="INVALID_REQUEST",
+            broker_id="upstox",
+            message="Upstox LIMIT/SL modification requires a limit price.",
+            retryable=False,
+        )
+    if current.order_type in {"SL", "SL_MARKET"} and not payload["trigger_price"]:
+        raise BrokerError(
+            kind="INVALID_REQUEST",
+            broker_id="upstox",
+            message="Upstox SL/SL_MARKET modification requires a trigger price.",
+            retryable=False,
+        )
+    return payload
+
+
+def _to_order(raw: dict[str, Any], trades: list[dict[str, Any]]) -> Order:
+    broker_order_id = BrokerOrderId(str(raw.get("order_id") or ""))
+    placed_at = _parse_upstox_time(raw.get("order_timestamp"))
+    updated_at = _parse_upstox_time(raw.get("exchange_timestamp")) or placed_at
+    fills = [_to_fill(trade, broker_order_id) for trade in trades]
+    return Order(
+        id=IdempotencyKey(str(raw.get("tag") or raw.get("order_ref_id") or raw.get("guid") or broker_order_id)),
+        broker_order_id=broker_order_id,
+        symbol=_symbol_from_upstox(raw),
+        exchange=_exchange_from_upstox(raw.get("exchange")),
+        side="SELL" if str(raw.get("transaction_type")).upper() == "SELL" else "BUY",
+        order_type=_order_type_from_upstox(raw.get("order_type")),
+        product=_product_from_upstox(raw.get("product")),
+        status=_status_from_upstox(raw.get("status")),
+        quantity=int(float(raw.get("quantity") or 0)),
+        filled_quantity=int(float(raw.get("filled_quantity") or 0)),
+        average_price=float(raw.get("average_price") or 0),
+        fills=fills,
+        child_broker_order_ids=[],
+        limit_price=_optional_price(raw.get("price")),
+        trigger_price=_optional_price(raw.get("trigger_price")),
+        placed_at=placed_at,
+        updated_at=updated_at,
+        rejection_reason=raw.get("status_message") or raw.get("status_message_raw"),
+    )
+
+
+def _to_fill(raw: dict[str, Any], fallback_order_id: BrokerOrderId) -> Fill:
+    broker_order_id = BrokerOrderId(str(raw.get("order_id") or fallback_order_id))
+    return Fill(
+        trade_id=str(raw.get("trade_id") or raw.get("exchange_order_id") or broker_order_id),
+        broker_order_id=broker_order_id,
+        symbol=_symbol_from_upstox(raw),
+        side="SELL" if str(raw.get("transaction_type")).upper() == "SELL" else "BUY",
+        fill_quantity=int(float(raw.get("quantity") or 0)),
+        fill_price=float(raw.get("average_price") or 0),
+        filled_at=_parse_upstox_time(raw.get("exchange_timestamp")),
+    )
+
+
+def _parse_upstox_time(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if not value:
+        return datetime.now(timezone.utc)
+    text = str(value)
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z"):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    try:
+        parsed = datetime.fromisoformat(text)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return datetime.now(timezone.utc)
+
+
+def _symbol_from_upstox(raw: dict[str, Any]) -> str:
+    symbol = str(raw.get("trading_symbol") or raw.get("tradingsymbol") or raw.get("instrument_token") or "")
+    if "|" in symbol:
+        symbol = symbol.split("|", 1)[1]
+    return symbol.removesuffix("-EQ").upper()
+
+
+def _exchange_from_upstox(value: Any) -> str:
+    exchange = str(value or "NSE").upper()
+    if exchange.startswith("BSE"):
+        return "BSE"
+    return "NSE"
+
+
+def _product_from_upstox(value: Any) -> str:
+    return {"D": "CNC", "I": "MIS", "CO": "MIS", "MTF": "CNC"}.get(str(value or "").upper(), "CNC")
+
+
+def _order_type_from_upstox(value: Any) -> str:
+    order_type = str(value or "MARKET").upper()
+    return "SL_MARKET" if order_type == "SL-M" else order_type
+
+
+def _status_from_upstox(value: Any) -> str:
+    status = str(value or "").lower()
+    if "complete" in status or status == "filled":
+        return "COMPLETE"
+    if "partial" in status:
+        return "PARTIAL"
+    if "cancel" in status:
+        return "CANCELLED"
+    if "reject" in status:
+        return "REJECTED"
+    if "open" in status:
+        return "OPEN"
+    return "PENDING"
+
+
+def _optional_price(value: Any) -> float | None:
+    price = float(value or 0)
+    return price or None
 
 
 def _wrap(exc: UpstoxApiError) -> BrokerError:

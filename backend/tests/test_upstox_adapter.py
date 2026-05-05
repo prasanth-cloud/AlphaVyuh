@@ -15,7 +15,16 @@ os.environ.setdefault("BROKER_CREDS_KEY", secrets.token_bytes(32).hex())
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
-from app.brokers.adapter import BrokerCredentials, BrokerError, IdempotencyKey, OrderExtensions, OrderRequest, UpstoxExtensions
+from app.brokers.adapter import (
+    BrokerCredentials,
+    BrokerError,
+    BrokerOrderId,
+    IdempotencyKey,
+    OrderExtensions,
+    OrderPatch,
+    OrderRequest,
+    UpstoxExtensions,
+)
 from app.brokers.upstox.adapter import UpstoxAdapter, _next_upstox_expiry
 from app.brokers.upstox.api import UpstoxApiError
 
@@ -43,6 +52,59 @@ def _order(key: str = "11111111-1111-4111-8111-111111111111") -> OrderRequest:
         product="CNC",
         validity="DAY",
     )
+
+
+def _upstox_order_row(**overrides):
+    row = {
+        "exchange": "NSE",
+        "product": "D",
+        "price": 571.0,
+        "quantity": 2,
+        "status": "open",
+        "tag": "alphavyuh-test",
+        "instrument_token": "NSE_EQ|INE062A01020",
+        "trading_symbol": "SBIN-EQ",
+        "tradingsymbol": "SBIN-EQ",
+        "order_type": "LIMIT",
+        "validity": "DAY",
+        "trigger_price": 0.0,
+        "transaction_type": "BUY",
+        "average_price": 0.0,
+        "filled_quantity": 0,
+        "pending_quantity": 2,
+        "status_message": None,
+        "status_message_raw": None,
+        "exchange_order_id": "1300000025660919",
+        "parent_order_id": None,
+        "order_id": "upstox-order-1",
+        "variety": "SIMPLE",
+        "order_timestamp": "2026-05-05 09:25:13",
+        "exchange_timestamp": "2026-05-05 09:25:13",
+        "is_amo": False,
+        "order_request_id": "1",
+        "order_ref_id": "ref-1",
+    }
+    row.update(overrides)
+    return row
+
+
+def _upstox_trade_row(**overrides):
+    row = {
+        "exchange": "NSE",
+        "product": "D",
+        "trading_symbol": "SBIN-EQ",
+        "instrument_token": "NSE_EQ|INE062A01020",
+        "order_type": "LIMIT",
+        "transaction_type": "BUY",
+        "quantity": 2,
+        "exchange_order_id": "1300000025660919",
+        "order_id": "upstox-order-1",
+        "exchange_timestamp": "2026-05-05 09:26:13",
+        "average_price": 570.95,
+        "trade_id": "trade-1",
+    }
+    row.update(overrides)
+    return row
 
 
 class _OrderIdempotencyQuery:
@@ -263,6 +325,72 @@ def test_place_order_validates_limit_price_before_broker_call(monkeypatch):
     place.assert_not_called()
 
 
-def test_unimplemented_order_followups_still_raise():
+def test_get_order_maps_details_and_trades():
+    with patch("app.brokers.upstox.api.get_order_details", return_value=_upstox_order_row(status="complete", filled_quantity=2, average_price=570.95)):
+        with patch("app.brokers.upstox.api.get_order_trades", return_value=[_upstox_trade_row()]):
+            order = _run(UpstoxAdapter().get_order(_creds(), BrokerOrderId("upstox-order-1")))
+
+    assert order.broker_order_id == "upstox-order-1"
+    assert order.symbol == "SBIN"
+    assert order.exchange == "NSE"
+    assert order.product == "CNC"
+    assert order.order_type == "LIMIT"
+    assert order.status == "COMPLETE"
+    assert order.filled_quantity == 2
+    assert order.fills[0].trade_id == "trade-1"
+    assert order.fills[0].fill_price == 570.95
+
+
+def test_list_orders_maps_day_order_book_without_trade_lookup():
+    with patch("app.brokers.upstox.api.list_orders", return_value=[_upstox_order_row(status="cancelled")]):
+        orders = _run(UpstoxAdapter().list_orders(_creds()))
+
+    assert len(orders) == 1
+    assert orders[0].broker_order_id == "upstox-order-1"
+    assert orders[0].status == "CANCELLED"
+    assert orders[0].fills == []
+
+
+def test_modify_order_merges_patch_with_current_order_and_returns_snapshot():
+    current = _upstox_order_row(price=571.0, quantity=2, status="open")
+    updated = _upstox_order_row(price=575.5, quantity=3, status="open")
+    with patch("app.brokers.upstox.api.get_order_details", side_effect=[current, updated]) as details:
+        with patch("app.brokers.upstox.api.get_order_trades", return_value=[]):
+            with patch("app.brokers.upstox.api.modify_order", return_value={"order_id": "upstox-order-1"}) as modify:
+                result = _run(
+                    UpstoxAdapter().modify_order(
+                        _creds(),
+                        BrokerOrderId("upstox-order-1"),
+                        OrderPatch(quantity=3, limit_price=575.5),
+                    )
+                )
+
+    assert result.order.quantity == 3
+    assert result.order.limit_price == 575.5
+    assert modify.call_args.args[1] == {
+        "order_id": "upstox-order-1",
+        "quantity": 3,
+        "validity": "DAY",
+        "price": 575.5,
+        "order_type": "LIMIT",
+        "disclosed_quantity": 0,
+        "trigger_price": 0,
+        "market_protection": 0,
+    }
+    assert details.call_count == 2
+
+
+def test_cancel_order_calls_broker_and_returns_cancelled_snapshot():
+    cancelled = _upstox_order_row(status="cancelled")
+    with patch("app.brokers.upstox.api.get_order_details", return_value=cancelled):
+        with patch("app.brokers.upstox.api.get_order_trades", return_value=[]):
+            with patch("app.brokers.upstox.api.cancel_order", return_value={"order_id": "upstox-order-1"}) as cancel:
+                result = _run(UpstoxAdapter().cancel_order(_creds(), BrokerOrderId("upstox-order-1")))
+
+    assert result.order.status == "CANCELLED"
+    cancel.assert_called_once_with("upstox-token", "upstox-order-1")
+
+
+def test_subscribe_fills_returns_noop_unsubscribe():
     unsubscribe = UpstoxAdapter().subscribe_fills(_creds(), lambda fill: None)
     assert callable(unsubscribe)
