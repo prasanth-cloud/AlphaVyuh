@@ -1363,15 +1363,13 @@ function WatchlistContent() {
     try {
       const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
       const symbols = STARTER_SYMBOLS.filter((symbol) => !existing.has(symbol));
-      const newItems: WatchlistItem[] = [];
-      for (const symbol of symbols) {
+      const newItems = await Promise.all(symbols.map(async (symbol, index): Promise<WatchlistItem> => {
         await addToWatchlist(activeId, symbol).catch(() => {});
         const quote = await getQuote(symbol).catch(() => null);
-        newItems.push(quote
-          ? { symbol: quote.symbol, sort_order: newItems.length, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-          : { symbol, sort_order: newItems.length, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" }
-        );
-      }
+        return quote
+          ? { symbol: quote.symbol, sort_order: index, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
+          : { symbol, sort_order: index, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" }
+      }));
       if (newItems.length) {
         setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
         setChartSymbol(newItems[0].symbol);
