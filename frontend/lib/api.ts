@@ -820,6 +820,43 @@ export type ChartWorkspace = {
   drawings: ChartWorkspaceDrawing[];
 };
 
+const mockDrawingsKey = "alphavyuh-mock-chart-drawings-v1";
+const mockWorkspaceKey = "alphavyuh-mock-chart-workspaces-v1";
+
+function chartStoreKey(symbol: string, timeframe = "D") {
+  return `${symbol.toUpperCase()}:${timeframe.toUpperCase()}`;
+}
+
+function readMockDrawingMap(): Record<string, Drawing[]> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(mockDrawingsKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeMockDrawingMap(value: Record<string, Drawing[]>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockDrawingsKey, JSON.stringify(value));
+}
+
+function readMockWorkspaceMap(): Record<string, ChartWorkspace> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(mockWorkspaceKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeMockWorkspaceMap(value: Record<string, ChartWorkspace>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockWorkspaceKey, JSON.stringify(value));
+}
+
 export async function getCandles(
   symbol: string,
   params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
@@ -925,7 +962,7 @@ export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
 }
 
 export async function getDrawings(symbol: string, timeframe = "D"): Promise<Drawing[]> {
-  if (shouldUseMockFallback()) return [];
+  if (shouldUseMockFallback()) return readMockDrawingMap()[chartStoreKey(symbol, timeframe)] ?? [];
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings?timeframe=${timeframe}`, { headers });
@@ -937,7 +974,9 @@ export async function getDrawings(symbol: string, timeframe = "D"): Promise<Draw
 }
 
 export async function getChartWorkspace(symbol: string, timeframe = "D"): Promise<ChartWorkspace> {
-  if (shouldUseMockFallback()) return { symbol, timeframe, indicators: [], drawings: [] };
+  if (shouldUseMockFallback()) {
+    return readMockWorkspaceMap()[chartStoreKey(symbol, timeframe)] ?? { symbol, timeframe, indicators: [], drawings: [] };
+  }
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace?timeframe=${timeframe}`, { headers });
@@ -949,6 +988,14 @@ export async function getChartWorkspace(symbol: string, timeframe = "D"): Promis
 }
 
 export async function saveChartWorkspace(symbol: string, workspace: Omit<ChartWorkspace, "symbol">): Promise<ChartWorkspace> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const saved: ChartWorkspace = { ...workspace, symbol: normalized };
+    const map = readMockWorkspaceMap();
+    map[chartStoreKey(normalized, workspace.timeframe)] = saved;
+    writeMockWorkspaceMap(map);
+    return saved;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace`, {
     method: "POST",
@@ -963,6 +1010,24 @@ export async function saveDrawing(
   symbol: string,
   drawing: { tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe: string }
 ): Promise<Drawing> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const saved: Drawing = {
+      id: `mock-drawing-${Date.now()}`,
+      user_id: "mock-user",
+      symbol: normalized,
+      timeframe: drawing.timeframe,
+      tool_type: drawing.tool_type,
+      points: drawing.points,
+      style: drawing.style,
+      created_at: new Date().toISOString(),
+    };
+    const map = readMockDrawingMap();
+    const key = chartStoreKey(normalized, drawing.timeframe);
+    map[key] = [...(map[key] ?? []), saved];
+    writeMockDrawingMap(map);
+    return saved;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings`, {
     method: "POST",
@@ -978,6 +1043,26 @@ export async function updateDrawing(
   drawingId: string,
   drawing: { tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe: string }
 ): Promise<Drawing> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const map = readMockDrawingMap();
+    const key = chartStoreKey(normalized, drawing.timeframe);
+    const existing = map[key]?.find((item) => item.id === drawingId);
+    const updated: Drawing = {
+      id: drawingId,
+      user_id: existing?.user_id ?? "mock-user",
+      symbol: normalized,
+      timeframe: drawing.timeframe,
+      tool_type: drawing.tool_type,
+      points: drawing.points,
+      style: drawing.style,
+      created_at: existing?.created_at ?? new Date().toISOString(),
+    };
+    map[key] = (map[key] ?? []).map((item) => item.id === drawingId ? updated : item);
+    if (!map[key].some((item) => item.id === drawingId)) map[key].push(updated);
+    writeMockDrawingMap(map);
+    return updated;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
     method: "PATCH",
@@ -989,6 +1074,17 @@ export async function updateDrawing(
 }
 
 export async function deleteDrawing(symbol: string, drawingId: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const map = readMockDrawingMap();
+    for (const key of Object.keys(map)) {
+      if (key.startsWith(`${normalized}:`)) {
+        map[key] = map[key].filter((item) => item.id !== drawingId);
+      }
+    }
+    writeMockDrawingMap(map);
+    return;
+  }
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
