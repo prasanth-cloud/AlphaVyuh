@@ -34,6 +34,7 @@ import {
   getCandles,
   placeOrder,
   getQuoteLive,
+  getBrokerStatus,
   getWorkflowStates,
   isMockMode,
   liveQuotePollingEnabled,
@@ -531,6 +532,18 @@ function ChartPanel({
         ...(setupType ? { setup_type: setupType } : {}),
         ...(tradeNote.trim() ? { notes: tradeNote.trim() } : {}),
       };
+      const broker = await getBrokerStatus();
+      if (broker.connected && broker.broker && !broker.token_expired) {
+        const brokerName = broker.broker.charAt(0).toUpperCase() + broker.broker.slice(1);
+        const confirmed = window.confirm(
+          `Submit live ${brokerName} ${side.toUpperCase()} order for ${qtyN} ${symbol} at ₹${priceN.toFixed(2)}?\n\nConfirm only after checking symbol, side, quantity, price, stop, target, and risk.`
+        );
+        if (!confirmed) {
+          setOrderMsg({ ok: false, text: "Live order cancelled before broker submission.", journalReady: false });
+          return;
+        }
+        req.live_confirmed = true;
+      }
       await placeOrder(req);
       setOrderMsg({ ok: true, text: `${side === "buy" ? "Buy" : "Sell"} order placed and journal capture is ready.`, journalReady: true });
       setTradeNote("");

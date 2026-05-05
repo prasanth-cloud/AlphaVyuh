@@ -1455,6 +1455,7 @@ export type PlaceOrderRequest = {
   notes?:       string;
   source_page?: "chart" | "watchlist" | "scanner" | "manual";
   source_context?: string;
+  live_confirmed?: boolean;
 };
 
 export type OrderResult = {

@@ -44,6 +44,7 @@ class PlaceOrderRequest(BaseModel):
     notes:          Optional[str]   = None
     source_page:    Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
     source_context: Optional[str]   = None
+    live_confirmed: bool = False
 
 
 class ClosePositionRequest(BaseModel):
@@ -169,6 +170,19 @@ def _get_user_broker_credentials(user_id: str, broker: str) -> dict[str, str | N
     }
 
 
+def _token_is_expired(expires_at: str | None) -> bool:
+    if not expires_at:
+        return False
+    try:
+        from datetime import datetime, timezone
+        expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return expiry <= datetime.now(timezone.utc)
+    except Exception:
+        return True
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/orders", status_code=status.HTTP_201_CREATED)
@@ -197,15 +211,24 @@ async def place_order(
 
     creds = _get_user_broker_credentials(user_id, "zerodha")
     bt = creds.get("broker_type")
+    if bt and bt != "zerodha":
+        creds = _get_user_broker_credentials(user_id, str(bt))
+        bt = creds.get("broker_type")
 
     if bt:
-        if bt == "zerodha" and creds.get("api_key") and creds.get("access_token"):
+        live_ready = bool(creds.get("api_key") and creds.get("access_token") and not _token_is_expired(creds.get("expires_at")))
+        if live_ready and not body.live_confirmed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Live {bt} order requires explicit confirmation. Re-submit after confirming symbol, side, quantity, price, and risk.",
+            )
+        if bt == "zerodha" and live_ready:
             broker_order_id = _place_zerodha_order(
                 str(creds["api_key"]), str(creds["access_token"]), sym, body.side, body.quantity, body.price, body.order_type
             )
             if broker_order_id:
                 broker_used = "zerodha"
-        elif bt == "upstox" and creds.get("api_key") and creds.get("access_token"):
+        elif bt == "upstox" and live_ready:
             broker_order_id = _place_upstox_order(
                 str(creds["api_key"]),
                 str(creds["access_token"]),
