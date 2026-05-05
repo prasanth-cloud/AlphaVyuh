@@ -41,6 +41,41 @@ const budgets: PageBudget[] = [
 ];
 
 test.describe("Mock workflow performance", () => {
+  test("mock login reaches a usable dashboard and records startup timing marks", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    const started = Date.now();
+    await page.goto("/login");
+    await page.getByLabel("Email").fill("mock.trader@alphavyuh.test");
+    await page.getByLabel("Password").fill("MockPass123!");
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+    await expect(page.getByText("Market pulse")).toBeVisible({ timeout: 8_000 });
+
+    const elapsed = Date.now() - started;
+    expect(elapsed, `mock login to dashboard usable in ${elapsed}ms`).toBeLessThanOrEqual(8_000);
+
+    const timings = await page.evaluate(() => {
+      const win = window as Window & { __alphavyuhTimings?: { name: string; at: number }[] };
+      return win.__alphavyuhTimings ?? [];
+    });
+    const names = timings.map((item) => item.name);
+    expect(names).toEqual(expect.arrayContaining([
+      "login-submit",
+      "auth-session-set",
+      "first-app-shell-paint",
+      "dashboard-shell-paint",
+      "market-overview-loaded",
+    ]));
+    expect(errors).toEqual([]);
+  });
+
   test("core signed-in workflow pages stay within local smoke budgets", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
