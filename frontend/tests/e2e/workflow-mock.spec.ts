@@ -16,6 +16,23 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByText("Mkt cap")).toBeVisible();
     await expect(page.getByText("P/E")).toBeVisible();
 
+    const focusPill = page.locator(".workspace-pill").filter({ hasText: /^Focus:/ }).first();
+    const focusSymbol = async () => ((await focusPill.textContent()) ?? "").replace("Focus:", "").trim();
+    const initialSymbol = await focusSymbol();
+    expect(initialSymbol).toMatch(/^[A-Z0-9]+$/);
+
+    await page.getByRole("button", { name: /^Next/ }).click();
+    await expect.poll(focusSymbol).not.toBe(initialSymbol);
+    const nextSymbol = await focusSymbol();
+
+    await page.getByRole("button", { name: /Prev$/ }).click();
+    await expect.poll(focusSymbol).toBe(initialSymbol);
+
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(focusSymbol).toBe(nextSymbol);
+    await page.keyboard.press("ArrowUp");
+    await expect.poll(focusSymbol).toBe(initialSymbol);
+
     await page.getByRole("button", { name: /^Order$/ }).click();
     const lockedOrder = page.getByRole("button", { name: /Create a plan before drafting an order|Complete entry/i });
     await expect(lockedOrder).toBeVisible();
