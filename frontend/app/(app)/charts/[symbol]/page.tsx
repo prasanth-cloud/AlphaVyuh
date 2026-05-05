@@ -2987,7 +2987,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
             {showObjectList && (
               <div
-                className="absolute top-3 right-3 z-10 w-[220px] rounded-[16px] p-3"
+                className="absolute top-3 right-3 z-30 w-[220px] rounded-[16px] p-3"
                 style={{ background: "rgba(13,15,20,0.88)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(14px)" }}
               >
                 <div className="flex items-center justify-between mb-2">

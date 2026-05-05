@@ -93,6 +93,11 @@ test.describe("Mock workflow smoke", () => {
     await page.goto("/charts/AUBANK?full=1&draw=trendline");
     const overlay = page.getByTestId("chart-drawing-overlay");
     await expect(overlay).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/Trendline armed/i)).toBeVisible({ timeout: 10_000 });
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(/Trendline armed/i)).toBeHidden();
+    await page.keyboard.press("T");
+    await expect(page.getByText(/Trendline armed/i)).toBeVisible({ timeout: 10_000 });
     const box = await overlay.boundingBox();
     expect(box).not.toBeNull();
     if (!box) return;
@@ -105,6 +110,13 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 10_000 });
     await page.reload();
     await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 15_000 });
+
+    await page.getByText(/1\. Trendline/).click();
+    await expect(page.getByText(/Selected: Trendline/i)).toBeVisible({ timeout: 10_000 });
+    await page.keyboard.press("Delete");
+    await expect(page.getByText(/0 visible .* 0 total/)).toBeVisible({ timeout: 10_000 });
+    await page.reload();
+    await expect(page.getByText(/0 visible .* 0 total/)).toBeVisible({ timeout: 15_000 });
 
     expect(errors).toEqual([]);
   });
