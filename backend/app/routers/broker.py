@@ -20,9 +20,11 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
+from app.brokers.adapter import BrokerCredentials, BrokerError, IdempotencyKey, OrderRequest as BrokerOrderRequest
 from app.brokers.credentials import CredentialNotFoundError, get_broker_credential, upsert_broker_credential
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
+from app.brokers.upstox.adapter import UpstoxAdapter
 from app.services.supabase import get_admin_client
 from app.services.workflow_state import sync_workflow_state
 
@@ -48,6 +50,7 @@ class PlaceOrderRequest(BaseModel):
     source_page:    Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
     source_context: Optional[str]   = None
     live_confirmed: bool = False
+    idempotency_key: Optional[str] = None
 
 
 class ClosePositionRequest(BaseModel):
@@ -231,15 +234,37 @@ async def place_order(
             if broker_order_id:
                 broker_used = "zerodha"
         elif bt == "upstox" and live_ready:
-            broker_order_id = _place_upstox_order(
-                str(creds["api_key"]),
-                str(creds["access_token"]),
-                sym,
-                body.side,
-                body.quantity,
-                body.price,
-                body.order_type,
-            )
+            import uuid
+
+            try:
+                adapter_result = await UpstoxAdapter().place_order(
+                    user_id,
+                    BrokerCredentials(
+                        broker_id="upstox",
+                        access_token=str(creds["access_token"]),
+                        expires_at=datetime.fromisoformat(str(creds["expires_at"]).replace("Z", "+00:00")),
+                    ),
+                    BrokerOrderRequest(
+                        idempotency_key=IdempotencyKey(body.idempotency_key or str(uuid.uuid4())),
+                        symbol=sym,
+                        exchange="NSE",
+                        side="BUY" if body.side == "buy" else "SELL",
+                        quantity=body.quantity,
+                        order_type="MARKET" if body.order_type == "market" else "LIMIT",
+                        limit_price=body.price if body.order_type == "limit" else None,
+                        product="CNC",
+                        validity="DAY",
+                    ),
+                )
+            except BrokerError as exc:
+                logger.error("Upstox adapter order failed for user %s: %s", user_id, exc)
+                if exc.kind == "INVALID_REQUEST":
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
+                ) from exc
+            broker_order_id = str(adapter_result.order.broker_order_id)
             if broker_order_id:
                 broker_used = "upstox"
         if live_ready and body.live_confirmed and bt in {"zerodha", "upstox"} and not broker_order_id:

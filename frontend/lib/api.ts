@@ -1732,6 +1732,7 @@ export type PlaceOrderRequest = {
   source_page?: "chart" | "watchlist" | "scanner" | "manual";
   source_context?: string;
   live_confirmed?: boolean;
+  idempotency_key?: string;
 };
 
 export type OrderResult = {
@@ -2017,10 +2018,11 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     };
   }
   const headers = await authHeaders();
+  const idempotencyKey = order.idempotency_key ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const res = await fetch(`${API}/api/v1/orders`, {
     method: "POST",
     headers,
-    body: JSON.stringify(order),
+    body: JSON.stringify({ ...order, idempotency_key: idempotencyKey }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));

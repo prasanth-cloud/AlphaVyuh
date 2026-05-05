@@ -11,6 +11,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import broker as broker_router  # noqa: E402
+from app.brokers.adapter import BrokerOrderId, Order, OrderResult  # noqa: E402
 
 
 class _Query:
@@ -150,17 +151,49 @@ def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypa
 
 def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
     client = _FakeSupabase()
+    captured = {}
+
+    class _FakeUpstoxAdapter:
+        async def place_order(self, user_id, creds, order):
+            captured["user_id"] = user_id
+            captured["creds"] = creds
+            captured["order"] = order
+            now = datetime.now(timezone.utc)
+            return OrderResult(
+                order=Order(
+                    id=order.idempotency_key,
+                    broker_order_id=BrokerOrderId("upstox-order-1"),
+                    symbol=order.symbol,
+                    exchange=order.exchange,
+                    side=order.side,
+                    order_type=order.order_type,
+                    product=order.product,
+                    status="PENDING",
+                    quantity=order.quantity,
+                    filled_quantity=0,
+                    average_price=0,
+                    fills=[],
+                    child_broker_order_ids=[],
+                    placed_at=now,
+                    updated_at=now,
+                ),
+                from_cache=False,
+            )
+
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
     monkeypatch.setattr(
         broker_router,
         "_get_user_broker_credentials",
         lambda _user_id, broker="zerodha": {"broker_type": "upstox"} if broker == "zerodha" else _upstox_creds(),
     )
-    monkeypatch.setattr(broker_router, "_place_upstox_order", lambda *_args, **_kwargs: "upstox-order-1")
+    monkeypatch.setattr(broker_router, "UpstoxAdapter", _FakeUpstoxAdapter)
 
     result = asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
 
     assert result["broker"] == "upstox"
     assert result["broker_order_id"] == "upstox-order-1"
     assert result["journal_status"] == "open"
+    assert captured["user_id"] == "user-1"
+    assert captured["creds"].broker_id == "upstox"
+    assert captured["order"].idempotency_key
     assert client.journal_inserts
