@@ -76,10 +76,26 @@ test.describe("Mock workflow smoke", () => {
     await page.getByRole("button", { name: /^Run scan$/i }).click();
     await expect(page.getByRole("button", { name: /Review later selected/i })).toBeVisible({ timeout: 20_000 });
 
-    await page.locator("tbody input[type=checkbox]").first().check({ force: true });
+    const resultRows = page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) });
+    await expect(resultRows.nth(2)).toBeVisible({ timeout: 10_000 });
+    const shortlistSymbol = ((await resultRows.nth(0).locator(".mono").first().textContent()) ?? "").trim();
+    const ignoredSymbol = ((await resultRows.nth(1).locator(".mono").first().textContent()) ?? "").trim();
+    const reviewSymbol = ((await resultRows.nth(2).locator(".mono").first().textContent()) ?? "").trim();
+
+    await resultRows.nth(0).getByRole("button", { name: /^Shortlist$/ }).click();
+    await expect(resultRows.nth(0).getByText("Shortlisted")).toBeVisible();
+    await resultRows.nth(1).getByRole("button", { name: /^Ignore$/ }).click();
+    await expect(resultRows.nth(1).getByText("Ignored")).toBeVisible();
+
+    await resultRows.nth(2).locator("input[type=checkbox]").check({ force: true });
     await expect(page.getByText("1 selected")).toBeVisible();
     await page.getByRole("button", { name: /Review later selected/i }).click();
-    await expect(page.getByText("Review later").first()).toBeVisible();
+    await expect(resultRows.nth(2).getByText("Review later")).toBeVisible();
+
+    const workflowMarks = await page.evaluate(() => JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}"));
+    expect(workflowMarks[shortlistSymbol]).toMatchObject({ lifecycle: "idea", source: "scanner" });
+    expect(workflowMarks[ignoredSymbol]).toMatchObject({ lifecycle: "ignored", ignored: true, source: "scanner" });
+    expect(workflowMarks[reviewSymbol]).toMatchObject({ lifecycle: "review_later", review_later: true, source: "scanner" });
 
     await page.getByRole("button", { name: /Create watchlist/i }).first().click();
     await page.getByPlaceholder(/Watchlist name/).fill("Workflow QA");
