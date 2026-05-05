@@ -8,6 +8,7 @@ import {
   getBrokerStatus,
   getZerodhaLoginUrl,
   importZerodhaTrades,
+  startBrokerConnect,
 } from "@/lib/api";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
@@ -57,7 +58,7 @@ function BrokerSettingsContent() {
   const searchParams = useSearchParams();
   const [state, setState] = useState<BrokerState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"connect" | "import" | null>(null);
+  const [busy, setBusy] = useState<"connect" | "connect-upstox" | "import" | null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
 
@@ -98,6 +99,18 @@ function BrokerSettingsContent() {
       window.location.href = url;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Could not start Zerodha login");
+      setBusy(null);
+    }
+  }
+
+  async function handleAdapterConnect(broker: "upstox") {
+    setBusy(`connect-${broker}`);
+    setError("");
+    try {
+      const { auth_url } = await startBrokerConnect(broker);
+      window.location.href = auth_url;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : `Could not start ${broker} login`);
       setBusy(null);
     }
   }
@@ -148,14 +161,14 @@ function BrokerSettingsContent() {
         <div style={{ marginBottom: 18 }}>
           <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>Broker Connect Hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is the beta adapter first; Upstox and Dhan are staged as the next adapters after small-group verification.
+            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is the live-order beta first; Upstox OAuth is staged next for account validation and adapter-readiness.
           </div>
         </div>
 
         <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(244,247,251,0.16)" }}>
           <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Broker adapter path</div>
           <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>
-            Zerodha OAuth is active first. Simulated fallback remains available. Upstox uses the same adapter contract later.
+            Zerodha OAuth is active for live-order beta. Simulated fallback remains available. Upstox now uses the same OAuth adapter contract for connect, profile, and holdings before order routing is promoted.
           </div>
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
             This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every order can still auto-create a journal draft before AI review after close.
@@ -259,6 +272,7 @@ function BrokerSettingsContent() {
         <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
           {BROKERS.map((broker) => {
             const active = broker.id === "zerodha";
+            const upstoxConnectable = broker.id === "upstox";
             return (
               <div key={broker.id} style={{ ...cardStyle, padding: 18, opacity: active ? 1 : 0.78 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
@@ -275,6 +289,10 @@ function BrokerSettingsContent() {
                 {active ? (
                   <button onClick={handleConnect} disabled={busy === "connect" || !state?.has_api_key} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
                     {state?.connected ? "Reconnect" : "Connect"}
+                  </button>
+                ) : upstoxConnectable ? (
+                  <button onClick={() => handleAdapterConnect("upstox")} disabled={busy === "connect-upstox"} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
+                    {busy === "connect-upstox" ? "Opening Upstox..." : "Connect OAuth beta"}
                   </button>
                 ) : (
                   <button disabled className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
