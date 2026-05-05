@@ -36,6 +36,9 @@ Do not run live or sandbox order submission as part of routine automated QA.
 Broker execution validation requires real credentials and explicit account-owner
 confirmation for the exact test order.
 
+Record evidence with `docs/broker-validation-record.md`; mask tokens, account
+identifiers, and private account data.
+
 Read-only broker smoke first:
 
 ```bash
@@ -81,7 +84,7 @@ Execution checklist:
 6. Verify the broker returns an order id and AlphaVyuh records the broker name/order id where available.
 7. Verify a journal draft is created or updated with setup, entry, stop, target, thesis, invalidation, source, and broker/order id.
 8. Close the trade in Journal with a known exit price and verify P&L, lifecycle `Closed`, and review prompt.
-9. Save the run evidence in the PR or launch issue; mask tokens and account identifiers.
+9. Save the run evidence in the PR or launch issue using `docs/broker-validation-record.md`; mask tokens and account identifiers.
 
 Failure rules:
 

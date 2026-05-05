@@ -95,6 +95,9 @@ The broker smoke script and launch gate run `backend/scripts/test_kite_connectio
 `backend/scripts/test_upstox_connection.py`. Those scripts verify account/data
 reads only and do not submit, modify, or cancel orders.
 
+Evidence should be recorded with `docs/broker-validation-record.md`; tokens,
+API secrets, and private account identifiers must be masked.
+
 Latest local attempt on 2026-05-05 stopped before any broker API call because
 `KITE_ACCESS_TOKEN` and `UPSTOX_ACCESS_TOKEN` were not present in
 `backend/.env`. No order placement was attempted.
