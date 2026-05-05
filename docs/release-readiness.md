@@ -29,6 +29,8 @@ Run these before release:
 npm run launch:check
 # To skip local browser server smoke in constrained shells only:
 # SKIP_BROWSER_SMOKE=1 npm run launch:check
+# To include read-only Kite/Upstox account smoke when tokens are available:
+# RUN_BROKER_SMOKE=1 npm run launch:check
 
 cd frontend
 npm run lint

@@ -66,6 +66,19 @@ else
   echo
 fi
 
+if [[ "${RUN_BROKER_SMOKE:-}" == "1" ]]; then
+  if [[ -n "$PYTHON_BIN" ]]; then
+    run_step "Kite read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_kite_connection.py
+    run_step "Upstox read-only broker smoke" "$PYTHON_BIN" backend/scripts/test_upstox_connection.py
+  else
+    echo "Skipping broker smoke checks: no Python interpreter is available."
+    echo
+  fi
+else
+  echo "Skipping read-only broker smoke. Set RUN_BROKER_SMOKE=1 when broker tokens are available."
+  echo
+fi
+
 if [[ "${LIVE_URL:-}" != "" ]]; then
   run_step "Live landing workflow check" bash -c \
     "curl -sSL '${LIVE_URL}' | rg 'Five steps|Scan|Watchlist|Chart|Order|Review'"
