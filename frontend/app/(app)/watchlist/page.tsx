@@ -1776,6 +1776,28 @@ function WatchlistContent() {
     setListQuery("");
   }
 
+  function saveSelectedPlan(nextPlan: TradePlan) {
+    savePlan(nextPlan);
+  }
+
+  function moveSelectedLifecycle(lifecycle: SymbolLifecycle) {
+    if (!selectedPlan) return;
+    savePlan({ ...selectedPlan, lifecycle });
+    markLifecycle(selectedPlan.symbol, lifecycle);
+    showToast(`Lifecycle moved to ${lifecycle}`);
+  }
+
+  async function markSelectedReviewLater() {
+    if (!selectedItem) return;
+    const tags = Array.from(new Set([...(selectedItemMeta.tags ?? []), "review-later"])).slice(0, 6);
+    const note = selectedItemMeta.note?.trim()
+      ? selectedItemMeta.note
+      : "Review later: setup needs another confirmation before planning.";
+    await updateItemMeta(selectedItem.symbol, { tags, note });
+    markLifecycle(selectedItem.symbol, "Watch");
+    showToast(`${selectedItem.symbol} marked for review later`);
+  }
+
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
       <div className="workspace-grid" style={{ gridTemplateColumns: "380px minmax(0, 1fr)", minHeight: "calc(100vh - 178px)" }}>
@@ -2109,26 +2131,82 @@ function WatchlistContent() {
         </div>
       </div>
 
-      {/* ── Chart + order panel ─────────────────────────────── */}
-      <div className="workspace-card" style={{ minWidth: 0, overflow: "hidden" }}>
-        {chartSymbol ? (
-          <ChartPanel key={chartSymbol} symbol={chartSymbol}
-            latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
-            watchlistName={activeWl?.name ?? null}
-            planValid={selectedPlanValid}
-            plan={selectedPlan}
-            planSummary={selectedPlanValid && selectedPlan ? `${selectedPlan.setupType} plan: entry ${selectedPlan.entry}, stop ${selectedPlan.stop}, target ${selectedPlan.target}.` : undefined}
-            onOpenChart={(sym) => router.push(chartHref(sym))}
-            onOpenPlan={() => setShowTradePlan(true)}
-            onStepSymbol={moveSelection} />
-        ) : (
-          <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            <EmptyState
-              title="Click any stock to load its chart"
-              description="Use the watchlist to save symbols, add notes, and open charts when you want more context."
-            />
+      {/* ── Chart + decision desk ───────────────────────────── */}
+      <div style={{ minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 10 }}>
+        <div className="workspace-card" style={{ minWidth: 0, overflow: "hidden" }}>
+          {chartSymbol ? (
+            <ChartPanel key={chartSymbol} symbol={chartSymbol}
+              latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
+              watchlistName={activeWl?.name ?? null}
+              planValid={selectedPlanValid}
+              plan={selectedPlan}
+              planSummary={selectedPlanValid && selectedPlan ? `${selectedPlan.setupType} plan: entry ${selectedPlan.entry}, stop ${selectedPlan.stop}, target ${selectedPlan.target}.` : undefined}
+              onOpenChart={(sym) => router.push(chartHref(sym))}
+              onOpenPlan={() => setShowTradePlan(true)}
+              onStepSymbol={moveSelection} />
+          ) : (
+            <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <EmptyState
+                title="Click any stock to load its chart"
+                description="Use the watchlist to save symbols, add notes, and open charts when you want more context."
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="workspace-card workspace-card-muted" style={{ minWidth: 0, overflow: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+            <div>
+              <div className="workspace-card-title">Decision desk</div>
+              <div className="caption">{selectedItem?.symbol ?? "Select a symbol"} · {selectedSetup?.label ?? "No setup"}</div>
+            </div>
+            <button className="workspace-chip-button" onClick={() => setShowTradePlan(true)} disabled={!selectedItem} style={{ opacity: selectedItem ? 1 : 0.5 }}>
+              Expand
+            </button>
           </div>
-        )}
+
+          {selectedItem && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {selectedMetrics.map((metric) => (
+                  <div key={metric.label} style={{ padding: "8px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div className="label" style={{ marginBottom: 3 }}>{metric.label}</div>
+                    <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: metric.tone }}>{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <button className={`workspace-chip-button${selectedPlanValid ? " active" : ""}`} onClick={() => moveSelectedLifecycle("Ready")} disabled={!selectedPlanValid} style={{ justifyContent: "center", opacity: selectedPlanValid ? 1 : 0.5 }}>
+                  Ready
+                </button>
+                <button className="workspace-chip-button" onClick={() => void markSelectedReviewLater()} style={{ justifyContent: "center" }}>
+                  Review later
+                </button>
+                <button className="workspace-chip-button" onClick={() => moveSelectedLifecycle("Invalidated")} style={{ justifyContent: "center", color: "var(--loss)" }}>
+                  Invalidated
+                </button>
+                <button className="workspace-chip-button" onClick={() => selectedItem && updateItemMeta(selectedItem.symbol, { pinned: !selectedItemMeta.pinned })} style={{ justifyContent: "center" }}>
+                  {selectedItemMeta.pinned ? "Unpin" : "Pin"}
+                </button>
+              </div>
+
+              <TradePlanCard
+                plan={selectedPlan}
+                selectedItem={selectedItem}
+                onChange={saveSelectedPlan}
+                onLifecycle={moveSelectedLifecycle}
+              />
+            </>
+          )}
+
+          {!selectedItem && (
+            <EmptyState
+              title="No symbol selected"
+              description="Pick a row from the queue to plan the trade before you open an order ticket."
+            />
+          )}
+        </div>
       </div>
 
       {showTradePlan && (
@@ -2154,15 +2232,10 @@ function WatchlistContent() {
               plan={selectedPlan}
               selectedItem={selectedItem}
               onChange={(nextPlan) => {
-                savePlan(nextPlan);
+                saveSelectedPlan(nextPlan);
                 showToast(isTradePlanValid(nextPlan) ? "Plan created" : "Plan saved");
               }}
-              onLifecycle={(lifecycle) => {
-                if (!selectedPlan) return;
-                savePlan({ ...selectedPlan, lifecycle });
-                markLifecycle(selectedPlan.symbol, lifecycle);
-                showToast(`Lifecycle moved to ${lifecycle}`);
-              }}
+              onLifecycle={moveSelectedLifecycle}
             />
           </div>
         </div>
