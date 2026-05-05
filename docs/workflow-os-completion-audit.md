@@ -58,7 +58,7 @@ Primary gate:
 npm run launch:check
 ```
 
-Latest focused gate result recorded on 2026-05-05 after head `2cdc8b9`:
+Latest focused gate result recorded on 2026-05-05 after head `3800860`:
 
 - `npm run typecheck`: passed
 - `npm run lint`: passed
@@ -80,14 +80,15 @@ additions:
 - Mock workflow performance smoke: passed
 - Mock workflow layout smoke: passed
 - Live-backend HTTP smoke: 3 passed
-- Backend focused tests: 39 passed at that time
+- Backend focused tests: 40 passed at that time
 - Backend dependency audit: no known vulnerabilities
 
 Additional previously run gates:
 
 - `backend/.venv/bin/python -m pytest backend/tests`: 158 passed
 - `npx playwright test --config=playwright.mock.config.ts tests/e2e/full-ui-qa.spec.ts`: 2 passed
-- Vercel PR deployment: passed
+- Vercel PR deployment: `dpl_3xXEVAhZpHY5hdMDYRoQ3vHwwVj5` is Ready on
+  head `3800860`
 
 ## Remaining Owner-Controlled Gates
 
