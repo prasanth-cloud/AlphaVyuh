@@ -1496,6 +1496,8 @@ export async function getJournalAnalytics(): Promise<JournalAnalytics> {
 
 export type Fundamentals = {
   symbol: string;
+  market?: string;
+  currency?: string;
   trailing_pe: number | null;
   forward_pe: number | null;
   price_to_book: number | null;
@@ -1508,12 +1510,47 @@ export type Fundamentals = {
   debt_to_equity: number | null;
   market_cap: number | null;
   market_cap_str: string | null;
+  shares_outstanding?: number | null;
 };
 
+function mockFundamentals(symbol: string): Fundamentals {
+  const quote = mockQuote(symbol);
+  const normalized = quote?.symbol ?? symbol.trim().toUpperCase();
+  const close = quote?.close ?? 1000;
+  const seed = normalized.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return {
+    symbol: normalized,
+    market: quote?.market ?? "NSE",
+    currency: quote?.currency ?? "INR",
+    trailing_pe: Number((18 + (seed % 22) * 0.7).toFixed(1)),
+    forward_pe: Number((16 + (seed % 18) * 0.6).toFixed(1)),
+    price_to_book: Number((2 + (seed % 12) * 0.35).toFixed(2)),
+    dividend_yield: Number(((seed % 5) * 0.25).toFixed(2)),
+    trailing_eps: Number((close / Math.max(12, 18 + (seed % 22))).toFixed(2)),
+    forward_eps: Number((close / Math.max(11, 16 + (seed % 18))).toFixed(2)),
+    earnings_growth: Number((4 + (seed % 18) * 0.8).toFixed(1)),
+    revenue_growth: Number((3 + (seed % 15) * 0.7).toFixed(1)),
+    return_on_equity: Number((9 + (seed % 18) * 0.9).toFixed(1)),
+    debt_to_equity: Number((0.2 + (seed % 12) * 0.08).toFixed(2)),
+    market_cap: null,
+    market_cap_str: seed % 2 === 0 ? `₹${(25_000 + (seed % 90) * 1200).toLocaleString("en-IN")} Cr` : null,
+    shares_outstanding: null,
+  };
+}
+
 export async function getFundamentals(symbol: string): Promise<Fundamentals | null> {
-  const res = await fetch(`${API}/api/v1/stocks/${symbol}/fundamentals`);
-  if (!res.ok) return null;
-  return res.json();
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return null;
+  if (shouldUseMockFallback()) return mockFundamentals(sym);
+  return cachedClientRequest(`fundamentals:${sym}`, 6 * 60 * 60 * 1000, async () => {
+    try {
+      const res = await withTimeout(fetch(`${API}/api/v1/stocks/${sym}/fundamentals`), 2_500);
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
+  });
 }
 
 // ── Payments ──────────────────────────────────────────────────────────────────

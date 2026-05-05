@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag } from "lucide-react";
 import dynamic from "next/dynamic";
-import type { Watchlist, WatchlistItem, CandleBar, JournalEntry } from "@/lib/api";
+import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals } from "@/lib/api";
 import {
   getWatchlists,
   getJournalEntries,
@@ -34,6 +34,7 @@ import {
   getCandles,
   placeOrder,
   getQuoteLive,
+  getFundamentals,
   getBrokerStatus,
   getWorkflowStates,
   isMockMode,
@@ -881,6 +882,7 @@ function WatchlistContent() {
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [queuePage, setQueuePage] = useState(0);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
+  const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -1176,6 +1178,7 @@ function WatchlistContent() {
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
   const selectedWorkflow = chartSymbol ? workflowBySymbol[chartSymbol] ?? null : null;
   const selectedPlanStatus = workflowPlanStatus(selectedWorkflow);
+  const selectedFundamentals = chartSymbol ? fundamentalsBySymbol[chartSymbol] ?? null : null;
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
 
   useEffect(() => {
@@ -1466,6 +1469,28 @@ function WatchlistContent() {
     setNoteDraft(selectedItemMeta.note ?? "");
   }, [chartSymbol, activeId, selectedItemMeta.note]);
 
+  useEffect(() => {
+    if (!showSelectedMeta || !selectedItem) return;
+    const symbol = selectedItem.symbol;
+    const existing = fundamentalsBySymbol[symbol];
+    if (existing?.loading || existing?.data || existing?.error) return;
+
+    let cancelled = false;
+    setFundamentalsBySymbol((prev) => ({ ...prev, [symbol]: { loading: true, data: null, error: false } }));
+    getFundamentals(symbol)
+      .then((data) => {
+        if (cancelled) return;
+        setFundamentalsBySymbol((prev) => ({ ...prev, [symbol]: { loading: false, data, error: !data } }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFundamentalsBySymbol((prev) => ({ ...prev, [symbol]: { loading: false, data: null, error: true } }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fundamentalsBySymbol, selectedItem, showSelectedMeta]);
+
   async function addTagToSelected() {
     if (!selectedItem || !activeId) return;
     const nextTag = tagInput.trim().toLowerCase();
@@ -1751,6 +1776,45 @@ function WatchlistContent() {
                         <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metric.tone }}>{metric.value}</div>
                       </div>
                     ))}
+                  </div>
+                  <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                      <div className="label">Fundamentals</div>
+                      <div className="caption">
+                        {selectedFundamentals?.loading
+                          ? "Loading"
+                          : selectedFundamentals?.data
+                            ? "Cached"
+                            : selectedFundamentals?.error
+                              ? "Unavailable"
+                              : "Queued"}
+                      </div>
+                    </div>
+                    {selectedFundamentals?.loading || !selectedFundamentals ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+                        {[1, 2, 3, 4].map((item) => (
+                          <div key={item} style={{ height: 38, borderRadius: 10, background: "linear-gradient(90deg, rgba(255,255,255,0.035), rgba(255,255,255,0.06), rgba(255,255,255,0.035))" }} />
+                        ))}
+                      </div>
+                    ) : selectedFundamentals.data ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+                        {[
+                          ["Mkt cap", selectedFundamentals.data.market_cap_str ?? "-"],
+                          ["P/E", selectedFundamentals.data.trailing_pe != null ? selectedFundamentals.data.trailing_pe.toFixed(1) : "-"],
+                          ["ROE", selectedFundamentals.data.return_on_equity != null ? `${selectedFundamentals.data.return_on_equity.toFixed(1)}%` : "-"],
+                          ["Sales", selectedFundamentals.data.revenue_growth != null ? `${selectedFundamentals.data.revenue_growth >= 0 ? "+" : ""}${selectedFundamentals.data.revenue_growth.toFixed(1)}%` : "-"],
+                        ].map(([label, value]) => (
+                          <div key={label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                            <div className="label" style={{ marginBottom: 3 }}>{label}</div>
+                            <div className="mono" style={{ fontSize: 12, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="caption" style={{ lineHeight: 1.6 }}>
+                        Fundamentals are not available right now. The desk keeps chart, queue, and plan workflow usable while this data source recovers.
+                      </div>
+                    )}
                   </div>
                   {selectedReviewState && (
                     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>

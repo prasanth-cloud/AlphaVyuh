@@ -11,6 +11,10 @@ test.describe("Mock workflow smoke", () => {
 
     await page.goto("/watchlist");
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: /^Details$/ }).click();
+    await expect(page.getByText("Fundamentals")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Mkt cap")).toBeVisible();
+    await expect(page.getByText("P/E")).toBeVisible();
 
     await page.getByRole("button", { name: /^Order$/ }).click();
     const lockedOrder = page.getByRole("button", { name: /Create a plan before drafting an order|Complete entry/i });

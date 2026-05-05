@@ -450,8 +450,31 @@ async def get_fundamentals(symbol: str):
         }
         _fund_cache[sym] = (time.time(), result)
         return result
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not fetch fundamentals: {e}")
+    except Exception:
+        if sym in _fund_cache:
+            _, cached_data = _fund_cache[sym]
+            return {**cached_data, "data_status": "stale"}
+        market, currency = _lookup_market(sym)
+        return {
+            "symbol": sym,
+            "market": market,
+            "currency": currency,
+            "trailing_pe": None,
+            "forward_pe": None,
+            "price_to_book": None,
+            "dividend_yield": None,
+            "trailing_eps": None,
+            "forward_eps": None,
+            "earnings_growth": None,
+            "revenue_growth": None,
+            "return_on_equity": None,
+            "debt_to_equity": None,
+            "market_cap": None,
+            "market_cap_str": None,
+            "shares_outstanding": None,
+            "data_status": "unavailable",
+            "message": "Fundamentals are temporarily unavailable; trading workflow can continue with chart and plan data.",
+        }
 
 
 @router.get("/stocks/{symbol}/quote-live")
