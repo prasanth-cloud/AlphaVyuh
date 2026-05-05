@@ -12,7 +12,7 @@ Workflow:
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -174,13 +174,25 @@ def _token_is_expired(expires_at: str | None) -> bool:
     if not expires_at:
         return False
     try:
-        from datetime import datetime, timezone
         expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
         if expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
         return expiry <= datetime.now(timezone.utc)
     except Exception:
         return True
+
+
+def _sync_workflow_state(sb, user_id: str, symbol: str, payload: dict) -> None:
+    row = {
+        "user_id": user_id,
+        "symbol": symbol,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        **{k: v for k, v in payload.items() if v is not None},
+    }
+    try:
+        sb.table("workflow_states").upsert(row, on_conflict="user_id,symbol").execute()
+    except Exception:
+        logger.exception("Failed to sync workflow state for %s", symbol)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -240,6 +252,11 @@ async def place_order(
             )
             if broker_order_id:
                 broker_used = "upstox"
+        if live_ready and body.live_confirmed and bt in {"zerodha", "upstox"} and not broker_order_id:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
+            )
 
     trade_type = "long" if body.side == "buy" else "short"
 
@@ -295,6 +312,18 @@ async def place_order(
         raise HTTPException(status_code=500, detail="Failed to create journal entry")
 
     journal_entry = result.data[0]
+    _sync_workflow_state(sb, user_id, sym, {
+        "source": body.source_page or "chart",
+        "lifecycle": "open",
+        "entry": body.price,
+        "stop": body.stop_loss,
+        "target": body.target_price,
+        "position_size": body.quantity,
+        "setup_type": body.setup_type,
+        "notes": body.notes,
+        "broker_order_id": broker_order_id,
+        "journal_id": journal_entry["id"],
+    })
     next_actions = [
         "Journal draft created with setup, stop, target, and source context.",
         "When the trade is closed, AlphaVyuh will compute P&L and generate a trade lesson.",
@@ -365,6 +394,11 @@ async def close_position(
         "status":       "closed",
     }
     sb.table("trade_journal").update(update).eq("id", body.journal_id).execute()
+    _sync_workflow_state(sb, user_id, str(entry["symbol"]).upper(), {
+        "source": "journal",
+        "lifecycle": "closed",
+        "journal_id": body.journal_id,
+    })
 
     lesson_generated = False
     try:
