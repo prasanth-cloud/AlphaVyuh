@@ -116,6 +116,7 @@ test.describe("Mock workflow smoke", () => {
 
     await resultRows.nth(0).locator("select").selectOption({ label: "Leaders" });
     await expect(page.getByText(`${shortlistSymbol} added`)).toBeVisible({ timeout: 10_000 });
+    await expect(resultRows.nth(0).getByText("Watching")).toBeVisible({ timeout: 10_000 });
     const leadersWatchlist = await page.evaluate(() => {
       const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
       return lists.find((list: { name: string }) => list.name === "Leaders");

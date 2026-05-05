@@ -92,6 +92,7 @@ const PRESETS = [
 ] as const
 
 type Preset = (typeof PRESETS)[number]
+type WorkflowMark = 'shortlist' | 'ignored' | 'review_later' | 'watch'
 
 type Filters = {
   price_min: string; price_max: string
@@ -266,7 +267,7 @@ export default function ScannerPage() {
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
-  const [workflowMarks, setWorkflowMarks] = useState<Record<string, 'shortlist' | 'ignored' | 'review_later'>>({})
+  const [workflowMarks, setWorkflowMarks] = useState<Record<string, WorkflowMark>>({})
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -459,7 +460,7 @@ export default function ScannerPage() {
     try {
       await addSymbolToWatchlist(wlId, symbol)
       await bulkUpsertWorkflowStates(scannerWatchlistPatches([symbol], wlId))
-      setWorkflowMarks(prev => ({ ...prev, [symbol]: 'shortlist' }))
+      setWorkflowMarks(prev => ({ ...prev, [symbol]: 'watch' }))
       showToast(`${symbol} added`)
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Add to watchlist failed')
@@ -913,7 +914,13 @@ export default function ScannerPage() {
                           <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
                           {workflowMarks[r.symbol] && (
                             <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
-                              {workflowMarks[r.symbol] === 'shortlist' ? 'Shortlisted' : workflowMarks[r.symbol] === 'review_later' ? 'Review later' : 'Ignored'}
+                              {workflowMarks[r.symbol] === 'shortlist'
+                                ? 'Shortlisted'
+                                : workflowMarks[r.symbol] === 'review_later'
+                                  ? 'Review later'
+                                  : workflowMarks[r.symbol] === 'watch'
+                                    ? 'Watching'
+                                    : 'Ignored'}
                             </div>
                           )}
                         </Td>
