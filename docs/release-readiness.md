@@ -62,6 +62,8 @@ BROKER_SMOKE_TARGET=kite npm run broker:smoke
 BROKER_SMOKE_TARGET=upstox npm run broker:smoke
 BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --login-url
 BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --request-token <request_token>
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --code <authorization_code>
 ```
 
 These broker scripts verify account/data reads only. Do not run live order placement

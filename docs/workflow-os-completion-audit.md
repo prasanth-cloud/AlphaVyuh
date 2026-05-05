@@ -84,6 +84,8 @@ BROKER_SMOKE_TARGET=kite npm run broker:smoke
 BROKER_SMOKE_TARGET=upstox npm run broker:smoke
 BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --login-url
 BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --request-token <request_token>
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --code <authorization_code>
 RUN_BROKER_SMOKE=1 npm run launch:check
 RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=kite npm run launch:check
 RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=upstox npm run launch:check

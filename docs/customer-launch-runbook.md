@@ -39,9 +39,19 @@ confirmation for the exact test order.
 Read-only broker smoke first:
 
 ```bash
-cd backend
-python scripts/test_kite_connection.py
-python scripts/test_upstox_connection.py
+npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke
+```
+
+If a daily token is missing or expired, generate the login URL and exchange the
+returned token/code before rerunning the read-only smoke:
+
+```bash
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --request-token <request_token>
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --code <authorization_code>
 ```
 
 Required confirmation record before any live/sandbox order:
