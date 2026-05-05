@@ -87,8 +87,8 @@ Additional previously run gates:
 
 - `backend/.venv/bin/python -m pytest backend/tests`: 158 passed
 - `npx playwright test --config=playwright.mock.config.ts tests/e2e/full-ui-qa.spec.ts`: 2 passed
-- Vercel PR deployment: `dpl_3xXEVAhZpHY5hdMDYRoQ3vHwwVj5` is Ready on
-  head `3800860`
+- Vercel PR deployment: `dpl_HEJ3YKsLJa9tRYeScG22cSBEbjSP` is Ready on
+  head `fa16b35`
 
 ## Remaining Owner-Controlled Gates
 
