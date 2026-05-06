@@ -55,6 +55,16 @@ test.describe("Public pages — no redirect", () => {
     await page.goto("/reset-password");
     await expect(page).toHaveURL(/\/reset-password/);
   });
+
+  test("/privacy and /terms are accessible before login", async ({ page }) => {
+    await page.goto("/privacy");
+    await expect(page).toHaveURL(/\/privacy/);
+    await expect(page.getByRole("heading", { name: "Privacy Policy" })).toBeVisible();
+
+    await page.goto("/terms");
+    await expect(page).toHaveURL(/\/terms/);
+    await expect(page.getByRole("heading", { name: "Terms of Service" })).toBeVisible();
+  });
 });
 
 // ── Open-redirect protection ──────────────────────────────────────────────────

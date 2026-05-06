@@ -75,8 +75,12 @@ Branch: `launch/auth-workflow-data-hardening`
 - Added e2e coverage for signup -> onboarding -> starter watchlist.
 - Added e2e coverage for scanner -> shortlist -> create watchlist -> watchlist focus -> Decision Desk -> mock order -> journal draft.
 - Existing drawing persistence, risk/reward plan fill, zone note, and Decision Desk gating coverage remains in the mock workflow suite.
+- Privacy and terms are now public, pre-login routes with the dark launch visual system instead of the old light authenticated-page treatment.
+- Settings billing now has an explicit launch posture: checkout is blocked unless production Razorpay config is present, while founder invite access remains available.
+- Journal now surfaces a review queue with Needs Review, Reviewed, Broker import, Chart/simulated, and Manual counts so the learning loop is visible before opening a row.
 
 ### Security
 
 - Open redirect checks now cover encoded attack vectors in unit and browser tests.
 - Broker execution remains gated; no live/sandbox order path was run.
+- Legal and billing copy now states that live/sandbox broker order placement and production billing are owner-gated.

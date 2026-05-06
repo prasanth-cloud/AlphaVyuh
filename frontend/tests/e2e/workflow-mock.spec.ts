@@ -64,6 +64,15 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("journal explains review queue and trade source labels", async ({ page }) => {
+    await page.goto("/journal", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("journal-review-queue")).toContainText(/Needs review|No closed trades waiting/i);
+    await expect(page.getByTestId("journal-review-queue")).toContainText(/Broker import/);
+    await expect(page.getByTestId("journal-review-queue")).toContainText(/Chart\/sim/);
+    await expect(page.locator("body")).toContainText(/Trade review|Import from Zerodha|Broker/i, { timeout: 15_000 });
+  });
+
   test("watchlist plan gates ready state and order draft", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
