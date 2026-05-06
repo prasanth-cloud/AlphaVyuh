@@ -80,27 +80,6 @@ function shouldUseMockFallback(): boolean {
   return isMockMode;
 }
 
-const MOCK_WATCHLIST_STORAGE_KEY = "alphavyuh.mock.watchlists";
-
-function readMockWatchlists(): Watchlist[] {
-  const base = mockWatchlists();
-  if (typeof window === "undefined") return base;
-
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(MOCK_WATCHLIST_STORAGE_KEY) || "[]") as Watchlist[];
-    const existingIds = new Set(base.map((watchlist) => watchlist.id));
-    return [...base, ...stored.filter((watchlist) => !existingIds.has(watchlist.id))];
-  } catch {
-    return base;
-  }
-}
-
-function writeMockWatchlists(watchlists: Watchlist[]) {
-  if (typeof window === "undefined") return;
-  const custom = watchlists.filter((watchlist) => !watchlist.id.startsWith("mock-"));
-  window.localStorage.setItem(MOCK_WATCHLIST_STORAGE_KEY, JSON.stringify(custom));
-}
-
 async function getToken(): Promise<string | null> {
   const now = Date.now();
   if (tokenCache && tokenCache.expiresAt > now) return tokenCache.token;
@@ -305,6 +284,51 @@ export type Watchlist = {
   items: WatchlistItem[];
 };
 
+const mockWatchlistsKey = "alphavyuh-mock-watchlists-v1";
+
+function readMockWatchlists(): Watchlist[] {
+  const defaults = mockWatchlists();
+  if (typeof window === "undefined") return defaults;
+  try {
+    const raw = window.localStorage.getItem(mockWatchlistsKey);
+    return raw ? JSON.parse(raw) : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function writeMockWatchlists(watchlists: Watchlist[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockWatchlistsKey, JSON.stringify(watchlists));
+}
+
+function mockWatchlistItem(symbol: string, sortOrder: number): WatchlistItem {
+  const quote = mockQuote(symbol);
+  return quote
+    ? {
+        symbol: quote.symbol,
+        sort_order: sortOrder,
+        added_at: new Date().toISOString(),
+        company_name: quote.company_name,
+        sector: quote.sector,
+        close: quote.close,
+        pct_change: quote.pct_change,
+        volume_ratio: quote.volume_ratio,
+        rsi_14: quote.rsi_14,
+        pinned: false,
+        tags: [],
+        note: "",
+      }
+    : {
+        symbol: symbol.toUpperCase(),
+        sort_order: sortOrder,
+        added_at: new Date().toISOString(),
+        pinned: false,
+        tags: [],
+        note: "",
+      };
+}
+
 export type SavedScreen = {
   id: string;
   name: string;
@@ -381,20 +405,18 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
 
 export async function createWatchlist(name: string): Promise<Watchlist> {
   if (shouldUseMockFallback()) {
-    const current = readMockWatchlists();
-    const now = new Date().toISOString();
+    const lists = readMockWatchlists();
     const created: Watchlist = {
-      id: `local-${Date.now()}`,
+      id: `mock-${Date.now()}`,
       name,
-      sort_order: current.length,
-      created_at: now,
+      sort_order: lists.length,
+      created_at: new Date().toISOString(),
       items: [],
     };
-    writeMockWatchlists([...current, created]);
+    writeMockWatchlists([...lists, created]);
     invalidateClientCache(["watchlists"]);
     return created;
   }
-
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists`, {
     method: "POST",
@@ -417,13 +439,27 @@ export async function deleteWatchlist(watchlistId: string): Promise<void> {
     invalidateClientCache(["watchlists"]);
     return;
   }
-
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
   invalidateClientCache(["watchlists"]);
 }
 
 export async function addToWatchlist(watchlistId: string, symbol: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const lists = readMockWatchlists();
+    const next = lists.map((watchlist) => {
+      if (watchlist.id !== watchlistId) return watchlist;
+      if (watchlist.items.some((item) => item.symbol === normalized)) throw new Error("Already in watchlist");
+      return {
+        ...watchlist,
+        items: [...watchlist.items, mockWatchlistItem(normalized, watchlist.items.length)],
+      };
+    });
+    writeMockWatchlists(next);
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}/items`, {
     method: "POST",
@@ -436,6 +472,16 @@ export async function addToWatchlist(watchlistId: string, symbol: string): Promi
 }
 
 export async function removeFromWatchlist(watchlistId: string, symbol: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    writeMockWatchlists(readMockWatchlists().map((watchlist) => (
+      watchlist.id !== watchlistId
+        ? watchlist
+        : { ...watchlist, items: watchlist.items.filter((item) => item.symbol !== normalized) }
+    )));
+    invalidateClientCache(["watchlists"]);
+    return;
+  }
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/${symbol}`, {
     method: "DELETE",
@@ -463,6 +509,89 @@ export type WatchlistItemMetadataUpdate = {
   note?: string | null;
 };
 
+export type WorkflowLifecycle =
+  | "idea"
+  | "watch"
+  | "ready"
+  | "triggered"
+  | "open"
+  | "closed"
+  | "reviewed"
+  | "invalidated"
+  | "ignored"
+  | "review_later";
+
+export type WorkflowState = {
+  id?: string;
+  user_id?: string;
+  symbol: string;
+  watchlist_id?: string | null;
+  source?: string;
+  lifecycle: WorkflowLifecycle;
+  setup_type?: string | null;
+  entry?: number | null;
+  stop?: number | null;
+  target?: number | null;
+  position_size?: number | null;
+  timeframe?: string;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
+  confidence?: number | null;
+  setup_quality?: number | null;
+  notes?: string | null;
+  tags?: string[];
+  pinned?: boolean;
+  review_later?: boolean;
+  ignored?: boolean;
+  broker_order_id?: string | null;
+  journal_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type WorkflowStatePatch = Partial<Omit<WorkflowState, "id" | "user_id" | "created_at" | "updated_at">> & {
+  symbol: string;
+};
+
+const workflowLocalKey = "alphavyuh-workflow-state-v1";
+
+function readLocalWorkflowStates(): Record<string, WorkflowState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(workflowLocalKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalWorkflowStates(states: Record<string, WorkflowState>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(workflowLocalKey, JSON.stringify(states));
+}
+
+function saveLocalWorkflowState(patch: WorkflowStatePatch): WorkflowState {
+  const states = readLocalWorkflowStates();
+  const symbol = patch.symbol.toUpperCase();
+  const previous = states[symbol] ?? { symbol, lifecycle: "idea" as WorkflowLifecycle, timeframe: "D", tags: [] };
+  const next: WorkflowState = {
+    ...previous,
+    ...patch,
+    symbol,
+    lifecycle: patch.lifecycle ?? previous.lifecycle ?? "idea",
+    timeframe: patch.timeframe ?? previous.timeframe ?? "D",
+    tags: patch.tags ?? previous.tags ?? [],
+    updated_at: new Date().toISOString(),
+  };
+  states[symbol] = next;
+  writeLocalWorkflowStates(states);
+  return next;
+}
+
+function saveLocalWorkflowStates(patches: WorkflowStatePatch[]): WorkflowState[] {
+  return patches.map(saveLocalWorkflowState);
+}
+
 export async function updateWatchlistItemMetadata(
   watchlistId: string,
   symbol: string,
@@ -481,6 +610,74 @@ export async function updateWatchlistItemMetadata(
   const updated = await res.json();
   invalidateClientCache(["watchlists"]);
   return updated;
+}
+
+export async function getWorkflowStates(options?: { symbols?: string[]; watchlistId?: string }): Promise<WorkflowState[]> {
+  const local = readLocalWorkflowStates();
+  const localValues = Object.values(local);
+  if (shouldUseMockFallback()) {
+    return options?.symbols?.length
+      ? localValues.filter((state) => options.symbols!.includes(state.symbol))
+      : localValues;
+  }
+  try {
+    const headers = await authHeaders();
+    const qs = new URLSearchParams();
+    if (options?.symbols?.length) qs.set("symbols", options.symbols.map((s) => s.toUpperCase()).join(","));
+    if (options?.watchlistId) qs.set("watchlist_id", options.watchlistId);
+    const res = await fetch(`${API}/api/v1/workflow/states?${qs}`, { headers });
+    if (!res.ok) return localValues;
+    const data = await res.json();
+    const remote: WorkflowState[] = data.states ?? [];
+    if (remote.length) {
+      const merged = { ...local };
+      for (const state of remote) merged[state.symbol] = state;
+      writeLocalWorkflowStates(merged);
+    }
+    return remote.length ? remote : localValues;
+  } catch {
+    return localValues;
+  }
+}
+
+export async function upsertWorkflowState(patch: WorkflowStatePatch): Promise<WorkflowState> {
+  const local = saveLocalWorkflowState(patch);
+  if (shouldUseMockFallback()) return local;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/workflow/states/${patch.symbol.toUpperCase()}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ ...patch, symbol: patch.symbol.toUpperCase() }),
+    });
+    if (!res.ok) return local;
+    const remote = await res.json();
+    saveLocalWorkflowState(remote);
+    return remote;
+  } catch {
+    return local;
+  }
+}
+
+export async function bulkUpsertWorkflowStates(patches: WorkflowStatePatch[]): Promise<WorkflowState[]> {
+  const normalized = patches.map((patch) => ({ ...patch, symbol: patch.symbol.toUpperCase() }));
+  const local = saveLocalWorkflowStates(normalized);
+  if (shouldUseMockFallback() || normalized.length === 0) return local;
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/workflow/states/bulk`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(normalized),
+    });
+    if (!res.ok) return local;
+    const data = await res.json();
+    const remote: WorkflowState[] = data.states ?? [];
+    if (remote.length) saveLocalWorkflowStates(remote);
+    return remote.length ? remote : local;
+  } catch {
+    return local;
+  }
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
@@ -681,7 +878,7 @@ export type CandlesResponse = {
     high: number;
     low: number;
     prev_close: number | null;
-  };
+  } | null;
 };
 
 export type IndicatorsResponse = {
@@ -732,27 +929,104 @@ export type ChartWorkspace = {
   drawings: ChartWorkspaceDrawing[];
 };
 
+const mockDrawingsKey = "alphavyuh-mock-chart-drawings-v1";
+const mockWorkspaceKey = "alphavyuh-mock-chart-workspaces-v1";
+const chartWorkspaceCacheKey = "alphavyuh-chart-workspaces-cache-v1";
+
+function chartStoreKey(symbol: string, timeframe = "D") {
+  return `${symbol.toUpperCase()}:${timeframe.toUpperCase()}`;
+}
+
+function readMockDrawingMap(): Record<string, Drawing[]> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(mockDrawingsKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeMockDrawingMap(value: Record<string, Drawing[]>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockDrawingsKey, JSON.stringify(value));
+}
+
+function readMockWorkspaceMap(): Record<string, ChartWorkspace> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(mockWorkspaceKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeMockWorkspaceMap(value: Record<string, ChartWorkspace>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockWorkspaceKey, JSON.stringify(value));
+}
+
+function readChartWorkspaceCache(): Record<string, ChartWorkspace> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(chartWorkspaceCacheKey);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeChartWorkspaceCache(value: Record<string, ChartWorkspace>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(chartWorkspaceCacheKey, JSON.stringify(value));
+  } catch {
+    // Workspace cache is a local-first reliability layer only.
+  }
+}
+
+function cacheChartWorkspace(symbol: string, workspace: Omit<ChartWorkspace, "symbol">): ChartWorkspace {
+  const normalized = symbol.toUpperCase();
+  const saved: ChartWorkspace = {
+    ...workspace,
+    symbol: normalized,
+    timeframe: workspace.timeframe.toUpperCase(),
+    indicators: Array.isArray(workspace.indicators) ? workspace.indicators : [],
+    drawings: Array.isArray(workspace.drawings) ? workspace.drawings : [],
+  };
+  const map = readChartWorkspaceCache();
+  map[chartStoreKey(normalized, saved.timeframe)] = saved;
+  writeChartWorkspaceCache(map);
+  return saved;
+}
+
 export async function getCandles(
   symbol: string,
   params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
 ): Promise<CandlesResponse> {
-  if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
+  const sym = symbol.trim().toUpperCase();
+  if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
   const qs = new URLSearchParams();
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.timeframe) qs.set("timeframe", params.timeframe);
-  try {
-    const res = await fetch(`${API}/api/v1/charts/${symbol}/candles?${qs}`, { headers: publicHeaders });
-    if (!res.ok) {
-      if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
-      throw new Error(`No data for ${symbol}`);
+  const query = qs.toString();
+  const cacheKey = `candles:${sym}:${query}`;
+  return cachedClientRequest(cacheKey, 60_000, async () => {
+    try {
+      const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers: publicHeaders });
+      if (!res.ok) {
+        if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
+        throw new Error(`No data for ${sym}`);
+      }
+      return res.json();
+    } catch (error) {
+      if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
+      throw error;
     }
-    return res.json();
-  } catch (error) {
-    if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
-    throw error;
-  }
+  });
 }
 
 export async function getIndicators(
@@ -837,7 +1111,7 @@ export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
 }
 
 export async function getDrawings(symbol: string, timeframe = "D"): Promise<Drawing[]> {
-  if (shouldUseMockFallback()) return [];
+  if (shouldUseMockFallback()) return readMockDrawingMap()[chartStoreKey(symbol, timeframe)] ?? [];
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings?timeframe=${timeframe}`, { headers });
@@ -849,32 +1123,77 @@ export async function getDrawings(symbol: string, timeframe = "D"): Promise<Draw
 }
 
 export async function getChartWorkspace(symbol: string, timeframe = "D"): Promise<ChartWorkspace> {
-  if (shouldUseMockFallback()) return { symbol, timeframe, indicators: [], drawings: [] };
+  const normalized = symbol.toUpperCase();
+  const normalizedTimeframe = timeframe.toUpperCase();
+  if (shouldUseMockFallback()) {
+    return readMockWorkspaceMap()[chartStoreKey(normalized, normalizedTimeframe)] ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
+  }
+  const local = readChartWorkspaceCache()[chartStoreKey(normalized, normalizedTimeframe)] ?? null;
   try {
     const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace?timeframe=${timeframe}`, { headers });
-    if (!res.ok) return { symbol, timeframe, indicators: [], drawings: [] };
-    return res.json();
+    const res = await fetch(`${API}/api/v1/charts/${normalized}/workspace?timeframe=${normalizedTimeframe}`, { headers });
+    if (!res.ok) return local ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
+    const remote: ChartWorkspace = await res.json();
+    return cacheChartWorkspace(normalized, {
+      timeframe: remote.timeframe || normalizedTimeframe,
+      indicators: remote.indicators ?? [],
+      drawings: remote.drawings ?? [],
+    });
   } catch {
-    return { symbol, timeframe, indicators: [], drawings: [] };
+    return local ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
   }
 }
 
 export async function saveChartWorkspace(symbol: string, workspace: Omit<ChartWorkspace, "symbol">): Promise<ChartWorkspace> {
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/charts/${symbol}/workspace`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(workspace),
-  });
-  if (!res.ok) throw new Error("Save chart workspace failed");
-  return res.json();
+  const normalized = symbol.toUpperCase();
+  const local = cacheChartWorkspace(normalized, workspace);
+  if (shouldUseMockFallback()) {
+    const map = readMockWorkspaceMap();
+    map[chartStoreKey(normalized, workspace.timeframe)] = local;
+    writeMockWorkspaceMap(map);
+    return local;
+  }
+  try {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/charts/${normalized}/workspace`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...workspace, timeframe: local.timeframe }),
+    });
+    if (!res.ok) return local;
+    const remote: ChartWorkspace = await res.json();
+    return cacheChartWorkspace(normalized, {
+      timeframe: remote.timeframe || local.timeframe,
+      indicators: remote.indicators ?? local.indicators,
+      drawings: remote.drawings ?? local.drawings,
+    });
+  } catch {
+    return local;
+  }
 }
 
 export async function saveDrawing(
   symbol: string,
   drawing: { tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe: string }
 ): Promise<Drawing> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const saved: Drawing = {
+      id: `mock-drawing-${Date.now()}`,
+      user_id: "mock-user",
+      symbol: normalized,
+      timeframe: drawing.timeframe,
+      tool_type: drawing.tool_type,
+      points: drawing.points,
+      style: drawing.style,
+      created_at: new Date().toISOString(),
+    };
+    const map = readMockDrawingMap();
+    const key = chartStoreKey(normalized, drawing.timeframe);
+    map[key] = [...(map[key] ?? []), saved];
+    writeMockDrawingMap(map);
+    return saved;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings`, {
     method: "POST",
@@ -890,6 +1209,26 @@ export async function updateDrawing(
   drawingId: string,
   drawing: { tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe: string }
 ): Promise<Drawing> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const map = readMockDrawingMap();
+    const key = chartStoreKey(normalized, drawing.timeframe);
+    const existing = map[key]?.find((item) => item.id === drawingId);
+    const updated: Drawing = {
+      id: drawingId,
+      user_id: existing?.user_id ?? "mock-user",
+      symbol: normalized,
+      timeframe: drawing.timeframe,
+      tool_type: drawing.tool_type,
+      points: drawing.points,
+      style: drawing.style,
+      created_at: existing?.created_at ?? new Date().toISOString(),
+    };
+    map[key] = (map[key] ?? []).map((item) => item.id === drawingId ? updated : item);
+    if (!map[key].some((item) => item.id === drawingId)) map[key].push(updated);
+    writeMockDrawingMap(map);
+    return updated;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
     method: "PATCH",
@@ -901,6 +1240,17 @@ export async function updateDrawing(
 }
 
 export async function deleteDrawing(symbol: string, drawingId: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    const normalized = symbol.toUpperCase();
+    const map = readMockDrawingMap();
+    for (const key of Object.keys(map)) {
+      if (key.startsWith(`${normalized}:`)) {
+        map[key] = map[key].filter((item) => item.id !== drawingId);
+      }
+    }
+    writeMockDrawingMap(map);
+    return;
+  }
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
@@ -1031,10 +1381,73 @@ export type UpdateJournalEntry = {
   status?: string;
 };
 
+const mockJournalKey = "alphavyuh-mock-journal-v1";
+
+function readLocalJournalEntries(): JournalEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(mockJournalKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed as JournalEntry[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalJournalEntries(entries: JournalEntry[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockJournalKey, JSON.stringify(entries));
+}
+
+function createLocalJournalEntry(entry: CreateJournalEntry): JournalEntry {
+  const now = new Date().toISOString();
+  const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `mock-journal-${Date.now()}`;
+  return {
+    id,
+    user_id: "mock-user",
+    symbol: entry.symbol.toUpperCase(),
+    company_name: null,
+    trade_type: entry.trade_type,
+    setup_type: entry.setup_type ?? null,
+    entry_date: entry.entry_date,
+    entry_price: entry.entry_price,
+    quantity: entry.quantity,
+    exit_date: null,
+    exit_price: null,
+    pnl: null,
+    pnl_pct: null,
+    holding_days: null,
+    stop_loss: entry.stop_loss ?? null,
+    target_price: entry.target_price ?? null,
+    risk_reward: entry.stop_loss && entry.target_price && entry.stop_loss !== entry.entry_price
+      ? Number((Math.abs(entry.target_price - entry.entry_price) / Math.abs(entry.entry_price - entry.stop_loss)).toFixed(2))
+      : null,
+    entry_reason: entry.entry_reason ?? null,
+    exit_reason: null,
+    mistakes: null,
+    lessons: null,
+    status: "open",
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 export async function getJournalEntries(
   params?: { limit?: number; offset?: number; status?: string; symbol?: string }
 ): Promise<{ entries: JournalEntry[]; total: number; plan?: string; history_months?: number | null }> {
-  if (shouldUseMockFallback()) return mockJournalEntries();
+  if (shouldUseMockFallback()) {
+    const base = mockJournalEntries();
+    const local = readLocalJournalEntries();
+    let entries = [...local, ...base.entries];
+    if (params?.status) entries = entries.filter((entry) => entry.status === params.status);
+    if (params?.symbol) entries = entries.filter((entry) => entry.symbol === params.symbol?.toUpperCase());
+    const total = entries.length;
+    const offset = params?.offset ?? 0;
+    const limit = params?.limit ?? entries.length;
+    return { entries: entries.slice(offset, offset + limit), total, plan: "mock", history_months: null };
+  }
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
@@ -1063,6 +1476,12 @@ export async function getJournalStats(): Promise<JournalStats> {
 }
 
 export async function createJournalEntry(entry: CreateJournalEntry): Promise<JournalEntry> {
+  if (shouldUseMockFallback()) {
+    const created = createLocalJournalEntry(entry);
+    writeLocalJournalEntries([created, ...readLocalJournalEntries()]);
+    invalidateClientCache(["journal:", "portfolio"]);
+    return created;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/journal`, {
     method: "POST",
@@ -1134,6 +1553,8 @@ export async function getJournalAnalytics(): Promise<JournalAnalytics> {
 
 export type Fundamentals = {
   symbol: string;
+  market?: string;
+  currency?: string;
   trailing_pe: number | null;
   forward_pe: number | null;
   price_to_book: number | null;
@@ -1146,12 +1567,47 @@ export type Fundamentals = {
   debt_to_equity: number | null;
   market_cap: number | null;
   market_cap_str: string | null;
+  shares_outstanding?: number | null;
 };
 
+function mockFundamentals(symbol: string): Fundamentals {
+  const quote = mockQuote(symbol);
+  const normalized = quote?.symbol ?? symbol.trim().toUpperCase();
+  const close = quote?.close ?? 1000;
+  const seed = normalized.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return {
+    symbol: normalized,
+    market: quote?.market ?? "NSE",
+    currency: quote?.currency ?? "INR",
+    trailing_pe: Number((18 + (seed % 22) * 0.7).toFixed(1)),
+    forward_pe: Number((16 + (seed % 18) * 0.6).toFixed(1)),
+    price_to_book: Number((2 + (seed % 12) * 0.35).toFixed(2)),
+    dividend_yield: Number(((seed % 5) * 0.25).toFixed(2)),
+    trailing_eps: Number((close / Math.max(12, 18 + (seed % 22))).toFixed(2)),
+    forward_eps: Number((close / Math.max(11, 16 + (seed % 18))).toFixed(2)),
+    earnings_growth: Number((4 + (seed % 18) * 0.8).toFixed(1)),
+    revenue_growth: Number((3 + (seed % 15) * 0.7).toFixed(1)),
+    return_on_equity: Number((9 + (seed % 18) * 0.9).toFixed(1)),
+    debt_to_equity: Number((0.2 + (seed % 12) * 0.08).toFixed(2)),
+    market_cap: null,
+    market_cap_str: seed % 2 === 0 ? `₹${(25_000 + (seed % 90) * 1200).toLocaleString("en-IN")} Cr` : null,
+    shares_outstanding: null,
+  };
+}
+
 export async function getFundamentals(symbol: string): Promise<Fundamentals | null> {
-  const res = await fetch(`${API}/api/v1/stocks/${symbol}/fundamentals`);
-  if (!res.ok) return null;
-  return res.json();
+  const sym = symbol.trim().toUpperCase();
+  if (!sym) return null;
+  if (shouldUseMockFallback()) return mockFundamentals(sym);
+  return cachedClientRequest(`fundamentals:${sym}`, 6 * 60 * 60 * 1000, async () => {
+    try {
+      const res = await withTimeout(fetch(`${API}/api/v1/stocks/${sym}/fundamentals`), 2_500);
+      if (!res.ok) return null;
+      return res.json();
+    } catch {
+      return null;
+    }
+  });
 }
 
 // ── Payments ──────────────────────────────────────────────────────────────────
@@ -1391,6 +1847,24 @@ export type UserProfile = {
 };
 
 export async function getMe(): Promise<UserProfile> {
+  if (shouldUseMockFallback()) {
+    return {
+      id: "mock-user",
+      email: "mock@alphavyuh.local",
+      full_name: "AlphaVyuh Demo",
+      avatar_url: null,
+      plan: "pro",
+      plan_expires_at: null,
+      onboarding_completed: false,
+      telegram_chat_id: null,
+      broker_type: null,
+      broker_api_key: null,
+      broker_connected_at: null,
+      billing_region: "IN",
+      billing_currency: "INR",
+      created_at: new Date().toISOString(),
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/me`, { headers });
   if (!res.ok) throw new Error("Failed to fetch profile");
@@ -1407,6 +1881,9 @@ export async function updateMe(updates: {
   billing_region?: string;
   billing_currency?: string;
 }): Promise<UserProfile> {
+  if (shouldUseMockFallback()) {
+    return { ...(await getMe()), ...updates };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/me`, {
     method: "PATCH",
@@ -1453,8 +1930,12 @@ export type PlaceOrderRequest = {
   target_price?: number;
   setup_type?:  string;
   notes?:       string;
+  thesis?:      string;
+  invalidation_rule?: string;
   source_page?: "chart" | "watchlist" | "scanner" | "manual";
   source_context?: string;
+  live_confirmed?: boolean;
+  idempotency_key?: string;
 };
 
 export type OrderResult = {
@@ -1585,6 +2066,26 @@ let dataHealthCache: { value: DataHealth | null; expiresAt: number } | null = nu
 let dataHealthPromise: Promise<DataHealth | null> | null = null;
 
 export async function getDataHealth(): Promise<DataHealth | null> {
+  if (shouldUseMockFallback()) {
+    return {
+      status: "healthy",
+      latest_trade_date: "2026-04-24",
+      hours_since_refresh: 1,
+      symbols_on_latest_date: 500,
+      universe_active: 500,
+      coverage_pct: 99.2,
+      mode: "fallback",
+      message: "Demo data is loaded from local mock fixtures.",
+      indicators_missing: {
+        rsi_14: 0,
+        ema_200: 0,
+      },
+      last_run: {
+        id: "mock-refresh",
+        errors: 0,
+      },
+    };
+  }
   const now = Date.now();
   if (dataHealthCache && dataHealthCache.expiresAt > now) return dataHealthCache.value;
   if (dataHealthPromise) return dataHealthPromise;
@@ -1614,6 +2115,7 @@ export type AiPatterns = {
   trades_available?: number;
   avg_hold_winners?: number | null;
   avg_hold_losers?: number | null;
+  coaching_cards?: { label: string; value: string; detail: string; tone: "gain" | "loss" | "warn" | "accent" | "neutral" }[];
   day_of_week?: { day: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
   by_direction?: { direction: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
   by_holding_period?: { bucket: string; trades: number; wins: number; win_rate: number }[];
@@ -1628,16 +2130,30 @@ export async function getAiPatterns(): Promise<AiPatterns> {
       min_trades_required: 10,
       avg_hold_winners: 8,
       avg_hold_losers: 4,
+      coaching_cards: [
+        { label: "Repeated mistakes", value: "3 noted", detail: "Late entries after range extension are hurting average R:R.", tone: "warn" },
+        { label: "Best setup type", value: "Breakout", detail: "12 trades, 67% win rate, +₹58,400 P&L.", tone: "gain" },
+        { label: "Worst behavior", value: "Monday", detail: "Monday entries have the weakest realised P&L in the sample.", tone: "loss" },
+        { label: "Risk/reward discipline", value: "Avg 2.1:1", detail: "2 closed trades were below 2:1 planned R:R.", tone: "warn" },
+        { label: "Holding time insight", value: "W 8d / L 4d", detail: "Winner and loser holding periods are not showing a major leak yet.", tone: "neutral" },
+        { label: "Next improvement tip", value: "Process", detail: "Write the invalidation rule before moving an idea to Ready.", tone: "accent" },
+      ],
       by_direction: [
         { direction: "long", trades: 18, wins: 12, win_rate: 66.7, total_pnl: 58400 },
         { direction: "short", trades: 6, wins: 3, win_rate: 50, total_pnl: 10020 },
       ],
     };
   }
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/ai/patterns`, { headers });
-  if (!res.ok) return { ready: false };
-  return res.json();
+  return cachedClientRequest("ai:patterns", 60_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await withTimeout(fetch(`${API}/api/v1/ai/patterns`, { headers }), 3000);
+      if (!res.ok) return { ready: false };
+      return res.json();
+    } catch {
+      return { ready: false };
+    }
+  });
 }
 
 export async function triggerTradeLesson(entryId: string): Promise<JournalEntry> {
@@ -1651,11 +2167,72 @@ export async function triggerTradeLesson(entryId: string): Promise<JournalEntry>
 }
 
 export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
+  if (shouldUseMockFallback()) {
+    const side = order.side === "buy" ? "long" : "short";
+    const reasonParts = [
+      order.notes?.trim() || null,
+      order.thesis?.trim() ? `Thesis: ${order.thesis.trim()}` : null,
+      order.invalidation_rule?.trim() ? `Invalidation: ${order.invalidation_rule.trim()}` : null,
+    ].filter(Boolean);
+    const created = createLocalJournalEntry({
+      symbol: order.symbol,
+      trade_type: side,
+      entry_date: new Date().toISOString().slice(0, 10),
+      entry_price: order.price,
+      quantity: order.quantity,
+      setup_type: order.setup_type,
+      stop_loss: order.stop_loss,
+      target_price: order.target_price,
+      entry_reason: `${reasonParts.length ? reasonParts.join(" | ") : `${order.side.toUpperCase()} mock order`} [Simulated · ${order.source_page ?? "chart"}${order.source_context ? ` · ${order.source_context}` : ""}]`,
+    });
+    writeLocalJournalEntries([created, ...readLocalJournalEntries()]);
+    const localWorkflow = readLocalWorkflowStates();
+    const symbol = order.symbol.toUpperCase();
+    writeLocalWorkflowStates({
+      ...localWorkflow,
+      [symbol]: {
+        ...(localWorkflow[symbol] ?? { symbol, lifecycle: "open" as WorkflowLifecycle }),
+        symbol,
+        lifecycle: "open",
+        source: order.source_page ?? "chart",
+        entry: order.price,
+        stop: order.stop_loss ?? localWorkflow[symbol]?.stop ?? null,
+        target: order.target_price ?? localWorkflow[symbol]?.target ?? null,
+        position_size: order.quantity,
+        setup_type: order.setup_type ?? localWorkflow[symbol]?.setup_type ?? null,
+        notes: order.notes ?? localWorkflow[symbol]?.notes ?? null,
+        thesis: order.thesis ?? localWorkflow[symbol]?.thesis ?? null,
+        invalidation_rule: order.invalidation_rule ?? localWorkflow[symbol]?.invalidation_rule ?? null,
+        journal_id: created.id,
+        updated_at: new Date().toISOString(),
+      },
+    });
+    invalidateClientCache(["journal:", "portfolio"]);
+    return {
+      status: "filled",
+      message: `${order.side.toUpperCase()} ${order.quantity} x ${symbol} @ ₹${order.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })} - recorded in Journal`,
+      journal_id: created.id,
+      symbol,
+      side: order.side,
+      quantity: order.quantity,
+      price: order.price,
+      broker: "simulated",
+      broker_order_id: null,
+      execution_mode: "simulated",
+      journal_status: "open",
+      risk_reward: created.risk_reward,
+      next_actions: [
+        "Simulated execution used in mock mode.",
+        "Journal draft created with setup, stop, target, and source context.",
+      ],
+    };
+  }
   const headers = await authHeaders();
+  const idempotencyKey = order.idempotency_key ?? globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const res = await fetch(`${API}/api/v1/orders`, {
     method: "POST",
     headers,
-    body: JSON.stringify(order),
+    body: JSON.stringify({ ...order, idempotency_key: idempotencyKey }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
@@ -2076,10 +2653,8 @@ export type MarketSnapshot = {
 
 export async function getMarketSnapshot(): Promise<MarketSnapshot> {
   return cachedClientRequest("market-snapshot", 30_000, async () => {
-    const [overview, health] = await Promise.all([
-      getMarketOverview(),
-      getDataHealth().catch(() => null),
-    ]);
+    const overview = await getMarketOverview();
+    const health = await withTimeout(getDataHealth(), 600).catch(() => null);
     return {
       overview,
       health,
@@ -2094,7 +2669,10 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
 
 export function warmCoreMarketData() {
   void getMarketSnapshot().catch(() => null);
-  void getWatchlists().catch(() => null);
+  void getWatchlists({ lite: true }).catch(() => null);
+}
+
+export function warmSecondaryWorkflowData() {
   void getJournalEntries({ limit: 75 }).catch(() => null);
   void getJournalStats().catch(() => null);
   void getBrokerStatus().catch(() => null);
@@ -2240,7 +2818,10 @@ export type BrokerHolding = {
 export async function startBrokerConnect(broker: string): Promise<{ auth_url: string; state: string }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/brokers/${broker}/connect/start`, { method: "POST", headers });
-  if (!res.ok) throw new Error("Failed to start broker connect");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail ?? "Failed to start broker connect");
+  }
   return res.json();
 }
 

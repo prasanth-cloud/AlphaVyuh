@@ -51,6 +51,13 @@ export function JournalAiInsights({
   onAnalyse,
 }: JournalAiInsightsProps) {
   const reviewCoverage = closedTrades > 0 ? Math.round((reviewedTrades / closedTrades) * 100) : 0;
+  const toneColor = (tone: string) => {
+    if (tone === "gain") return "var(--gain)";
+    if (tone === "loss") return "var(--loss)";
+    if (tone === "warn") return "var(--warn)";
+    if (tone === "accent") return "var(--accent)";
+    return "var(--text-primary)";
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -72,6 +79,22 @@ export function JournalAiInsights({
           ))}
         </div>
       </Card>
+
+      {patterns?.ready && (patterns.coaching_cards?.length ?? 0) > 0 && (
+        <Card padding="lg">
+          <h2 className="heading-card" style={{ marginBottom: 4 }}>Coaching cards</h2>
+          <div className="body-secondary" style={{ marginBottom: 16 }}>Workflow signals from closed trades, risk fields, and review notes.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+            {patterns.coaching_cards!.map((card) => (
+              <div key={card.label} style={{ minWidth: 0, borderRadius: "var(--radius-md)", padding: "12px 14px", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                <div className="label" style={{ marginBottom: 6 }}>{card.label}</div>
+                <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: toneColor(card.tone), marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.value}</div>
+                <div style={{ fontSize: 11, lineHeight: 1.55, color: "var(--text-secondary)" }}>{card.detail}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Pattern stats */}
       <Card padding="lg">

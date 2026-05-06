@@ -140,6 +140,20 @@ use the mock — real broker APIs are never called in CI.
 Backend unit tests in `backend/tests/test_<broker>_adapter.py` mock httpx at the
 transport layer. No real network calls.
 
+For a real account smoke that does not place orders:
+
+```bash
+cd backend
+python scripts/test_kite_connection.py --login-url
+python scripts/test_kite_connection.py --request-token <request_token>
+
+python scripts/test_upstox_connection.py --login-url
+python scripts/test_upstox_connection.py --code <authorization_code>
+```
+
+These scripts verify OAuth/profile/account reads and market/order-book reads where
+supported. They mask tokens by default and never submit, modify, or cancel orders.
+
 ---
 
 ## Idempotency

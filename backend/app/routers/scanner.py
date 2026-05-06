@@ -634,11 +634,30 @@ async def run_scanner(
             headers={"Retry-After": str(retry_after)},
         )
 
-    client  = get_admin_client()
-    plan = _get_user_plan(user_id)
+    try:
+        client = get_admin_client()
+        plan = _get_user_plan(user_id)
+    except Exception:
+        return {
+            "trade_date": None,
+            "total_matches": 0,
+            "plan_limit": FREE_RESULT_LIMIT,
+            "plan": "free",
+            "is_limited": False,
+            "page": max(body.page, 1),
+            "page_size": body.page_size,
+            "total_pages": 1,
+            "visible_count": 0,
+            "results": [],
+            "mode": "unavailable",
+            "message": "Scanner data is temporarily unavailable.",
+        }
     hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
 
-    latest_date = get_latest_complete_trade_date(client)
+    try:
+        latest_date = get_latest_complete_trade_date(client)
+    except Exception:
+        latest_date = None
     if not latest_date:
         return {"trade_date": None, "total_matches": 0, "plan_limit": hard_limit, "results": []}
 
@@ -705,7 +724,23 @@ async def run_scanner(
     # Python fallback in _apply_filters handles rs_score/volume_ratio/w52h_pct/w52l_pct
     # until the ingest job populates these columns.
 
-    rows = q.limit(SCAN_ROW_CAP).execute().data or []
+    try:
+        rows = q.limit(SCAN_ROW_CAP).execute().data or []
+    except Exception:
+        return {
+            "trade_date": latest_date,
+            "total_matches": 0,
+            "plan_limit": hard_limit,
+            "plan": plan,
+            "is_limited": False,
+            "page": max(body.page, 1),
+            "page_size": body.page_size,
+            "total_pages": 1,
+            "visible_count": 0,
+            "results": [],
+            "mode": "unavailable",
+            "message": "Scanner query could not complete; try a narrower preset.",
+        }
 
     # Python-side filter for computed columns
     results = _apply_filters(rows, f)

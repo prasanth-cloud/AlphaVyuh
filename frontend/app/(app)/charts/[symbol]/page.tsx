@@ -389,7 +389,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [dragState, setDragState] = useState<{
     drawingId: string;
     mode: "point" | "whole";
-    point?: "p1" | "p2";
+    point?: "p1" | "p2" | "p3";
     startX: number;
     startY: number;
     original: ChartDrawing;
@@ -929,6 +929,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           const snappedPrice = e.altKey ? price : getSnappedPrice(time, price);
           setDrawnLines((prev) => prev.map((item) => {
             if (item.id !== dragState.drawingId) return item;
+            if (dragState.point === "p3" && isPositionDrawingTool(item.tool)) {
+              return { ...item, p3: { time, price: snappedPrice } };
+            }
             const next = {
               ...item,
               [dragState.point!]: { time, price: snappedPrice },
@@ -942,7 +945,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             if (item.tool === "Text") {
               next.p2 = { ...next.p1 };
             }
-            if (isPositionDrawingTool(item.tool)) {
+            if (isPositionDrawingTool(item.tool) && dragState.point !== "p3") {
               const built = buildPositionDrawingPoints(item.tool, next.p1, next.p2);
               next.p2 = built.p2;
               next.p3 = built.p3;
@@ -1253,7 +1256,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     });
   }, [updateDrawingsWithHistory]);
 
-  const beginPointDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing, point: "p1" | "p2") => {
+  const beginPointDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing, point: "p1" | "p2" | "p3") => {
     if (drawing.locked || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
     updateDrawingsWithHistory((prev) => cloneDrawings(prev));
@@ -1276,6 +1279,51 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     const editorY = Math.max(12, y - 12);
     setTextEditor({ drawingId: drawing.id, value: drawing.text ?? "Note", x: editorX, y: editorY, isNew: false });
   }, []);
+
+  const applyPositionDrawingToPlan = useCallback((drawing: ChartDrawing) => {
+    if (!isPositionDrawingTool(drawing.tool) || !drawing.p3) return;
+    setTradePlan({
+      entry: drawing.p1.price.toFixed(2),
+      stop: drawing.p2.price.toFixed(2),
+      target: drawing.p3.price.toFixed(2),
+    });
+    setOrderToast({
+      message: "Trade plan filled from risk/reward drawing.",
+      journalId: null,
+      broker: "simulated",
+      riskReward: Math.abs(drawing.p3.price - drawing.p1.price) / Math.max(Math.abs(drawing.p1.price - drawing.p2.price), 0.01),
+    });
+    setTimeout(() => setOrderToast(null), 3500);
+  }, []);
+
+  const createZoneNoteFromDrawing = useCallback(async (drawing: ChartDrawing) => {
+    if (drawing.tool !== "Rectangle") return;
+    const high = Math.max(drawing.p1.price, drawing.p2.price);
+    const low = Math.min(drawing.p1.price, drawing.p2.price);
+    const note: ChartDrawing = {
+      id: crypto.randomUUID(),
+      tool: "Text",
+      p1: { time: drawing.p1.time, price: high },
+      p2: { time: drawing.p1.time, price: high },
+      color: DRAWING_DEFAULT_COLOR,
+      text: `Zone ${low.toFixed(2)}-${high.toFixed(2)}`,
+    };
+    updateDrawingsWithHistory((prev) => [...prev, note]);
+    setSelectedDrawingId(note.id);
+    try {
+      const saved = await saveDrawing(symbol, {
+        tool_type: "text",
+        points: getPersistedDrawingPoints(note),
+        style: { color: note.color, text: note.text },
+        timeframe,
+      });
+      setDrawings(prev => [...prev, saved]);
+      setDrawnLines(prev => prev.map(item => item.id === note.id ? { ...item, id: saved.id } : item));
+      setSelectedDrawingId(saved.id);
+    } catch {
+      // local note remains available even if persistence is temporarily offline
+    }
+  }, [symbol, timeframe, updateDrawingsWithHistory]);
 
   const commitTextEditor = useCallback(async () => {
     if (!textEditor?.drawingId) return;
@@ -2823,6 +2871,26 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   Alert from drawing
                 </button>
               )}
+              {selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && (
+                <button
+                  onClick={() => applyPositionDrawingToPlan(selectedDrawing)}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.22)" }}
+                >
+                  <TrendingUp size={12} />
+                  Use as plan
+                </button>
+              )}
+              {selectedDrawing?.tool === "Rectangle" && (
+                <button
+                  onClick={() => void createZoneNoteFromDrawing(selectedDrawing)}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(139,150,166,0.14)", color: "#cbd5e1", border: "1px solid rgba(139,150,166,0.24)" }}
+                >
+                  <Type size={12} />
+                  Zone note
+                </button>
+              )}
               {selectedDrawing && (
                 <button
                   onClick={() => toggleDrawingLock(selectedDrawing.id)}
@@ -2938,7 +3006,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
             {showObjectList && (
               <div
-                className="absolute top-3 right-3 z-10 w-[220px] rounded-[16px] p-3"
+                className="absolute top-3 right-3 z-30 w-[220px] rounded-[16px] p-3"
                 style={{ background: "rgba(13,15,20,0.88)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(14px)" }}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -3557,6 +3625,16 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "ns-resize" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                            />
+                            <circle
+                              cx={x2}
+                              cy={targetY}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#bbf7d0"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "ns-resize" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p3"); }}
                             />
                           </>
                         )}

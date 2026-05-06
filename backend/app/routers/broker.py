@@ -12,7 +12,7 @@ Workflow:
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,10 +20,20 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
+from app.brokers.adapter import (
+    BrokerCredentials,
+    BrokerError,
+    IdempotencyKey,
+    OrderExtensions,
+    OrderRequest as BrokerOrderRequest,
+    UpstoxExtensions,
+)
 from app.brokers.credentials import CredentialNotFoundError, get_broker_credential, upsert_broker_credential
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
+from app.brokers.upstox.adapter import UpstoxAdapter
 from app.services.supabase import get_admin_client
+from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +52,12 @@ class PlaceOrderRequest(BaseModel):
     target_price:   Optional[float] = None
     setup_type:     Optional[str]   = None
     notes:          Optional[str]   = None
+    thesis:         Optional[str]   = None
+    invalidation_rule: Optional[str] = None
     source_page:    Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
     source_context: Optional[str]   = None
+    live_confirmed: bool = False
+    idempotency_key: Optional[str] = None
 
 
 class ClosePositionRequest(BaseModel):
@@ -169,6 +183,18 @@ def _get_user_broker_credentials(user_id: str, broker: str) -> dict[str, str | N
     }
 
 
+def _token_is_expired(expires_at: str | None) -> bool:
+    if not expires_at:
+        return False
+    try:
+        expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return expiry <= datetime.now(timezone.utc)
+    except Exception:
+        return True
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/orders", status_code=status.HTTP_201_CREATED)
@@ -184,12 +210,13 @@ async def place_order(
     sym = body.symbol.strip().upper()
 
     # Validate symbol
-    sym_check = sb.table("stock_universe").select("symbol, company_name") \
+    sym_check = sb.table("stock_universe").select("symbol, company_name, isin") \
         .eq("symbol", sym).maybe_single().execute()
     if not sym_check.data:
         raise HTTPException(status_code=404, detail=f"Symbol {sym} not found")
 
     company_name = sym_check.data.get("company_name", sym)
+    isin = sym_check.data.get("isin")
 
     # Try real broker if connected
     broker_order_id: str | None = None
@@ -197,26 +224,65 @@ async def place_order(
 
     creds = _get_user_broker_credentials(user_id, "zerodha")
     bt = creds.get("broker_type")
+    if bt and bt != "zerodha":
+        creds = _get_user_broker_credentials(user_id, str(bt))
+        bt = creds.get("broker_type")
 
     if bt:
-        if bt == "zerodha" and creds.get("api_key") and creds.get("access_token"):
+        live_ready = bool(creds.get("api_key") and creds.get("access_token") and not _token_is_expired(creds.get("expires_at")))
+        if live_ready and not body.live_confirmed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Live {bt} order requires explicit confirmation. Re-submit after confirming symbol, side, quantity, price, and risk.",
+            )
+        if bt == "zerodha" and live_ready:
             broker_order_id = _place_zerodha_order(
                 str(creds["api_key"]), str(creds["access_token"]), sym, body.side, body.quantity, body.price, body.order_type
             )
             if broker_order_id:
                 broker_used = "zerodha"
-        elif bt == "upstox" and creds.get("api_key") and creds.get("access_token"):
-            broker_order_id = _place_upstox_order(
-                str(creds["api_key"]),
-                str(creds["access_token"]),
-                sym,
-                body.side,
-                body.quantity,
-                body.price,
-                body.order_type,
+        elif bt == "upstox" and live_ready:
+            import uuid
+
+            try:
+                adapter_result = await UpstoxAdapter().place_order(
+                    user_id,
+                    BrokerCredentials(
+                        broker_id="upstox",
+                        access_token=str(creds["access_token"]),
+                        expires_at=datetime.fromisoformat(str(creds["expires_at"]).replace("Z", "+00:00")),
+                    ),
+                    BrokerOrderRequest(
+                        idempotency_key=IdempotencyKey(body.idempotency_key or str(uuid.uuid4())),
+                        symbol=sym,
+                        exchange="NSE",
+                        side="BUY" if body.side == "buy" else "SELL",
+                        quantity=body.quantity,
+                        order_type="MARKET" if body.order_type == "market" else "LIMIT",
+                        limit_price=body.price if body.order_type == "limit" else None,
+                    product="CNC",
+                    validity="DAY",
+                    extensions=OrderExtensions(
+                        upstox=UpstoxExtensions(instrument_token=f"NSE_EQ|{isin}") if isin else None
+                    ),
+                ),
             )
+            except BrokerError as exc:
+                logger.error("Upstox adapter order failed for user %s: %s", user_id, exc)
+                if exc.kind == "INVALID_REQUEST":
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
+                ) from exc
+            broker_order_id = str(adapter_result.order.broker_order_id)
             if broker_order_id:
                 broker_used = "upstox"
+        if live_ready and body.live_confirmed and bt in {"zerodha", "upstox"} and not broker_order_id:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
+            )
 
     trade_type = "long" if body.side == "buy" else "short"
 
@@ -240,7 +306,14 @@ async def place_order(
         "manual": "Manual",
     }.get(body.source_page or "chart", "Chart")
 
-    base_reason = body.notes.strip() if body.notes else f"{body.side.upper()} via {source_label.lower()} — {body.order_type} order"
+    reason_parts = []
+    if body.notes and body.notes.strip():
+        reason_parts.append(body.notes.strip())
+    if body.thesis and body.thesis.strip():
+        reason_parts.append(f"Thesis: {body.thesis.strip()}")
+    if body.invalidation_rule and body.invalidation_rule.strip():
+        reason_parts.append(f"Invalidation: {body.invalidation_rule.strip()}")
+    base_reason = " | ".join(reason_parts) if reason_parts else f"{body.side.upper()} via {source_label.lower()} — {body.order_type} order"
     context_bits = [broker_context, source_label]
     if source_context:
         context_bits.append(source_context[:80])
@@ -272,6 +345,20 @@ async def place_order(
         raise HTTPException(status_code=500, detail="Failed to create journal entry")
 
     journal_entry = result.data[0]
+    sync_workflow_state(sb, user_id, sym, {
+        "source": body.source_page or "chart",
+        "lifecycle": "open",
+        "entry": body.price,
+        "stop": body.stop_loss,
+        "target": body.target_price,
+        "position_size": body.quantity,
+        "setup_type": body.setup_type,
+        "notes": body.notes,
+        "thesis": body.thesis,
+        "invalidation_rule": body.invalidation_rule,
+        "broker_order_id": broker_order_id,
+        "journal_id": journal_entry["id"],
+    })
     next_actions = [
         "Journal draft created with setup, stop, target, and source context.",
         "When the trade is closed, AlphaVyuh will compute P&L and generate a trade lesson.",
@@ -342,6 +429,11 @@ async def close_position(
         "status":       "closed",
     }
     sb.table("trade_journal").update(update).eq("id", body.journal_id).execute()
+    sync_workflow_state(sb, user_id, str(entry["symbol"]).upper(), {
+        "source": "journal",
+        "lifecycle": "closed",
+        "journal_id": body.journal_id,
+    })
 
     lesson_generated = False
     try:

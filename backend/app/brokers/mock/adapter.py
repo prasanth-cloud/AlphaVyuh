@@ -115,7 +115,7 @@ class MockAdapter(BrokerAdapter):
     # ─── Orders ───────────────────────────────────────────────────────────────
 
     async def place_order(
-        self, creds: BrokerCredentials, order: OrderRequest
+        self, user_id: str, creds: BrokerCredentials, order: OrderRequest
     ) -> OrderResult:
         from datetime import timedelta
 

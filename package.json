@@ -2,15 +2,21 @@
   "name": "alphavyuh",
   "private": true,
   "scripts": {
-    "typecheck": "cd frontend && bun run typecheck",
-    "lint": "cd frontend && bun run lint",
+    "typecheck": "npm --prefix frontend run typecheck",
+    "lint": "npm --prefix frontend run lint",
+    "test": "npm --prefix frontend run test -- --run",
+    "test:e2e:mock": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/workflow-mock.spec.ts",
+    "test:e2e:backend": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.backend.config.ts",
+    "test:e2e:perf": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/performance-smoke.spec.ts",
+    "test:e2e:layout": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/layout-smoke.spec.ts",
     "launch:check": "bash scripts/launch-readiness-check.sh",
+    "broker:smoke": "bash scripts/broker-readonly-smoke.sh",
     "db:start": "npx supabase start",
     "db:stop": "npx supabase stop",
     "db:reset": "npx supabase db reset",
     "db:types": "npx supabase gen types typescript --local > frontend/lib/supabase/types.ts",
     "db:push:staging": "scripts/db-push-staging.sh",
-    "dev:frontend": "cd frontend && bun run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000"
   }
 }

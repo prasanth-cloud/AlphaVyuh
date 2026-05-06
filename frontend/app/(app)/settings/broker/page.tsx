@@ -8,8 +8,8 @@ import {
   getBrokerStatus,
   getZerodhaLoginUrl,
   importZerodhaTrades,
+  startBrokerConnect,
 } from "@/lib/api";
-import { isTradePlanValid, useWorkflowState } from "@/lib/workflow";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -56,10 +56,9 @@ function StatusDot({ tone }: { tone: "live" | "simulated" | "warning" }) {
 
 function BrokerSettingsContent() {
   const searchParams = useSearchParams();
-  const { state: workflowState } = useWorkflowState();
   const [state, setState] = useState<BrokerState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"connect" | "import" | null>(null);
+  const [busy, setBusy] = useState<"connect" | "connect-upstox" | "import" | null>(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
 
@@ -104,6 +103,18 @@ function BrokerSettingsContent() {
     }
   }
 
+  async function handleAdapterConnect(broker: "upstox") {
+    setBusy(`connect-${broker}`);
+    setError("");
+    try {
+      const { auth_url } = await startBrokerConnect(broker);
+      window.location.href = auth_url;
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : `Could not start ${broker} login`);
+      setBusy(null);
+    }
+  }
+
   async function handleImport() {
     setBusy("import");
     setError("");
@@ -129,7 +140,6 @@ function BrokerSettingsContent() {
     { label: "Session", value: state?.connected ? "Live" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
     { label: "Expiry", value: state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
   ];
-  const validPlanCount = Object.values(workflowState.plans).filter(isTradePlanValid).length;
 
   if (loading) {
     return (
@@ -151,14 +161,14 @@ function BrokerSettingsContent() {
         <div style={{ marginBottom: 18 }}>
           <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>Broker Connect Hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is the beta adapter first; Upstox and Dhan are staged as the next adapters after small-group verification.
+            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is the live-order beta first; Upstox OAuth is staged next for account validation and adapter-readiness.
           </div>
         </div>
 
         <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(244,247,251,0.16)" }}>
           <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Broker adapter path</div>
           <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>
-            Zerodha OAuth is active first. Simulated fallback remains available. Upstox uses the same adapter contract later.
+            Zerodha OAuth is active for live-order beta. Simulated fallback remains available. Upstox now uses the same OAuth adapter contract for connect, profile, and holdings before order routing is promoted.
           </div>
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
             This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every order can still auto-create a journal draft before AI review after close.
@@ -172,7 +182,11 @@ function BrokerSettingsContent() {
                 <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Current mode</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                   <StatusDot tone={mode === "live" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
-                  <div className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  <div
+                    data-testid={mode === "live" ? "broker-status-connected" : "broker-status-simulated"}
+                    className="text-[16px] font-semibold"
+                    style={{ color: "var(--text-primary)" }}
+                  >
                     {mode === "live"
                       ? "Live via Zerodha"
                       : mode === "token-expired"
@@ -211,6 +225,7 @@ function BrokerSettingsContent() {
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               <button
+                data-testid="connect-btn"
                 onClick={handleConnect}
                 disabled={busy === "connect" || !state?.has_api_key}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
@@ -237,20 +252,13 @@ function BrokerSettingsContent() {
               <ShieldCheck size={17} style={{ color: "var(--accent)" }} />
               <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>Production broker rules</div>
             </div>
-            <div style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 12, background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
-              <div className="text-[11px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 5 }}>Execution readiness</div>
-              <div className="text-[13px] font-semibold" style={{ color: validPlanCount > 0 ? "var(--gain)" : "var(--warn)" }}>
-                {validPlanCount > 0 ? `${validPlanCount} valid plan${validPlanCount === 1 ? "" : "s"} can create order drafts` : "No valid trade plan yet"}
-              </div>
-              <div className="text-[12px] mt-1" style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                Broker routing stays downstream of planning: entry, stop, target, size, thesis, and invalidation are required before execution.
-              </div>
-            </div>
             <div style={{ display: "grid", gap: 9 }}>
               {[
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
                 "Expired sessions fall back to simulated mode instead of blocking chart/journal workflows.",
+                "Live order submission requires an explicit final confirmation of symbol, side, quantity, price, and risk.",
+                "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
                 "Every live order should still create a journal entry with broker context.",
               ].map((line) => (
                 <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
@@ -264,6 +272,7 @@ function BrokerSettingsContent() {
         <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
           {BROKERS.map((broker) => {
             const active = broker.id === "zerodha";
+            const upstoxConnectable = broker.id === "upstox";
             return (
               <div key={broker.id} style={{ ...cardStyle, padding: 18, opacity: active ? 1 : 0.78 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
@@ -280,6 +289,10 @@ function BrokerSettingsContent() {
                 {active ? (
                   <button onClick={handleConnect} disabled={busy === "connect" || !state?.has_api_key} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
                     {state?.connected ? "Reconnect" : "Connect"}
+                  </button>
+                ) : upstoxConnectable ? (
+                  <button onClick={() => handleAdapterConnect("upstox")} disabled={busy === "connect-upstox"} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
+                    {busy === "connect-upstox" ? "Opening Upstox..." : "Connect OAuth beta"}
                   </button>
                 ) : (
                   <button disabled className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>

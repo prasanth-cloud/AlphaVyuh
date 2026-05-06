@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input, Label } from "@/components/ui";
 import { isSafeRedirect } from "@/lib/safe-redirect";
+import { markAppTiming } from "@/lib/performance";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -31,6 +32,7 @@ export default function LoginForm() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    markAppTiming("login-submit");
     setError("");
     setNotice("");
     setLoading(true);
@@ -45,6 +47,7 @@ export default function LoginForm() {
         setError(data.error || "Login failed");
         return;
       }
+      markAppTiming("auth-session-set");
       router.replace(safeNext());
       router.refresh();
     } catch {

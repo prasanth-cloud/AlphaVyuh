@@ -27,6 +27,13 @@ Run these before release:
 
 ```bash
 npm run launch:check
+# To skip local browser server smoke in constrained shells only:
+# SKIP_BROWSER_SMOKE=1 npm run launch:check
+# To include read-only Kite/Upstox account smoke when tokens are available:
+# RUN_BROKER_SMOKE=1 npm run launch:check
+# To validate one broker at a time:
+# RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=kite npm run launch:check
+# RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=upstox npm run launch:check
 
 cd frontend
 npm run lint
@@ -34,7 +41,10 @@ npm run test
 npm run build
 NEXT_PUBLIC_DATA_MODE=mock npm run build
 npx playwright test tests/e2e/release-readiness.spec.ts
-npm audit --audit-level=high
+npx playwright test --config=playwright.mock.config.ts tests/e2e/performance-smoke.spec.ts
+npx playwright test --config=playwright.mock.config.ts tests/e2e/layout-smoke.spec.ts
+npx playwright test --config=playwright.backend.config.ts
+npm audit --audit-level=moderate
 
 cd ../backend
 .venv/bin/pytest
@@ -43,6 +53,22 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 ```
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
+
+Read-only broker account smoke, when real credentials are available:
+
+```bash
+npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --request-token <request_token>
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --code <authorization_code>
+```
+
+These broker scripts verify account/data reads only. Do not run live order placement
+as a release gate unless the account owner explicitly confirms the exact broker,
+symbol, side, quantity, order type, and sandbox/live mode.
 
 ## Security Checklist
 

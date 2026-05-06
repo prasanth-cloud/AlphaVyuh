@@ -360,11 +360,21 @@ async def get_candles(
     limit: int = Query(365, ge=1, le=3000),
 ):
     sym = symbol.upper()
-    sb = get_admin_client()
-
-    # Fetch metadata
-    uni = sb.table("stock_universe").select("company_name,sector,series").eq("symbol", sym).maybe_single().execute()
-    meta = uni.data or {}
+    try:
+        sb = get_admin_client()
+        # Fetch metadata
+        uni = sb.table("stock_universe").select("company_name,sector,series").eq("symbol", sym).maybe_single().execute()
+        meta = uni.data or {}
+    except Exception:
+        return {
+            "symbol": sym,
+            "company_name": None,
+            "sector": None,
+            "timeframe": timeframe.upper(),
+            "candles": [],
+            "latest": None,
+            "mode": "unavailable",
+        }
 
     # For W/M we need more raw daily bars to aggregate into enough candles
     tf = timeframe.upper()
@@ -375,16 +385,27 @@ async def get_candles(
     fd = date.fromisoformat(from_date) if from_date else (td - timedelta(days=365 * 12))
     td2 = date.fromisoformat(to_date) if to_date else td
 
-    q = (
-        sb.table("daily_ohlcv")
-        .select("trade_date,open,high,low,close,volume,prev_close,avg_volume_20d,rsi_14,ema_20,ema_50,ema_200,atr_14,week_52_high,week_52_low")
-        .eq("symbol", sym)
-        .gte("trade_date", str(fd))
-        .lte("trade_date", str(td2))
-        .order("trade_date", desc=False)
-        .limit(raw_limit)
-        .execute()
-    )
+    try:
+        q = (
+            sb.table("daily_ohlcv")
+            .select("trade_date,open,high,low,close,volume,prev_close,avg_volume_20d,rsi_14,ema_20,ema_50,ema_200,atr_14,week_52_high,week_52_low")
+            .eq("symbol", sym)
+            .gte("trade_date", str(fd))
+            .lte("trade_date", str(td2))
+            .order("trade_date", desc=False)
+            .limit(raw_limit)
+            .execute()
+        )
+    except Exception:
+        return {
+            "symbol": sym,
+            "company_name": meta.get("company_name"),
+            "sector": meta.get("sector"),
+            "timeframe": tf,
+            "candles": [],
+            "latest": None,
+            "mode": "unavailable",
+        }
 
     if not q.data:
         raise HTTPException(status_code=404, detail=f"No candle data found for {sym}")

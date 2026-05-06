@@ -41,6 +41,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [brokerLive, setBrokerLive] = useState(false);
   const [brokerTokenExpired, setBrokerTokenExpired] = useState(false);
+  const [liveConfirmed, setLiveConfirmed] = useState(false);
 
   useEffect(() => {
     getBrokerStatus()
@@ -55,6 +56,10 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   useEffect(() => {
     setSide(defaultSide);
   }, [defaultSide]);
+
+  useEffect(() => {
+    if (!brokerLive) setLiveConfirmed(false);
+  }, [brokerLive]);
 
   useEffect(() => {
     setPrice((initialPlan?.entry ?? currentPrice).toFixed(2));
@@ -82,6 +87,10 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
       setError("Enter a valid price and quantity");
       return;
     }
+    if (brokerLive && brokerName && !liveConfirmed) {
+      setError(`Confirm the live ${brokerName} order before submitting`);
+      return;
+    }
     setPlacing(true);
     setError("");
     try {
@@ -93,6 +102,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         order_type: "market",
         source_page: "chart",
         source_context: symbol,
+        live_confirmed: Boolean(brokerLive && brokerName && liveConfirmed),
         ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
         ...(tgtNum > 0 ? { target_price: tgtNum } : {}),
         ...(setupType   ? { setup_type:  setupType } : {}),
@@ -251,6 +261,20 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             </div>
           )}
 
+          {brokerLive && brokerName && (
+            <label className="flex cursor-pointer items-start gap-2 rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={liveConfirmed}
+                onChange={(event) => setLiveConfirmed(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[#9a5f07]"
+              />
+              <span className="text-[11px] leading-5 text-[#7b5a2b]">
+                I have verified this is a live {brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} order for {symbol}, {side.toUpperCase()} {qtyNum} at ₹{priceNum.toFixed(2)} and I am ready to submit it to the broker.
+              </span>
+            </label>
+          )}
+
           {/* Setup */}
           <div>
             <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
@@ -284,11 +308,15 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
           {/* Submit */}
           <button
             onClick={submit}
-            disabled={placing}
+            disabled={placing || (brokerLive && brokerName ? !liveConfirmed : false)}
             className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
             style={{ background: accent }}
           >
-            {placing ? "Placing order…" : `Place ${side.toUpperCase()} Order`}
+            {placing
+              ? "Placing order…"
+              : brokerLive && brokerName
+                ? `Confirm live ${side.toUpperCase()} order`
+                : `Place simulated ${side.toUpperCase()} order`}
           </button>
 
           <p className="text-[10px] text-[#ccc] text-center">

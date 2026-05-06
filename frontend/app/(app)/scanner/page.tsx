@@ -4,11 +4,14 @@ import { useRouter } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
   authHeaders,
+  bulkUpsertWorkflowStates,
+  createFeedbackReport,
   createWatchlist,
   getWatchlists as getCachedWatchlists,
   isMockMode,
 } from '@/lib/api'
-import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
+import { mockRunScan } from '@/lib/mock-data'
+import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -51,44 +54,45 @@ interface Watchlist { id: string; name: string }
 // ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
   {
-    id: 'stage2_trend',
-    name: 'Stage 2 trend',
-    description: 'EMA 20 above EMA 50 above EMA 200, RSI at least 50, and RS score at least 70.',
-    filters: { all_emas_bullish: true, rsi_min: 50, rs_score_min: 70 },
+    id: 'leaders',
+    name: 'EMA 20/50 + RSI 50-82',
+    description: 'Filter for stocks above EMA 20 and EMA 50 with RSI between 50 and 82.',
+    filters: { rsi_min: 50, rsi_max: 82, volume_ratio_min: 1.05, price_vs_ema20: 'above', price_vs_ema50: 'above' },
   },
   {
-    id: 'rs_leaders',
-    name: 'RS leaders near highs',
-    description: 'RS score at least 80, price above EMA 50, and within 12% of the 52-week high.',
-    filters: { rs_score_min: 80, week_52_high_pct_max: 12.0, price_vs_ema50: 'above' },
+    id: 'momentum',
+    name: 'RSI 60-70 + Vol 2x',
+    description: 'Filter for RSI 60-70 with above-average volume and price above EMA 20/50.',
+    filters: { rsi_min: 60, rsi_max: 70, volume_ratio_min: 2.0, price_vs_ema20: 'above', price_vs_ema50: 'above', pct_change_min: 0.5 },
   },
   {
-    id: 'volume_breakout',
-    name: 'Volume breakout',
-    description: 'Price up at least 1%, volume at least 2x average, above EMA 20, and near the 52-week high.',
-    filters: { volume_ratio_min: 2.0, pct_change_min: 1.0, week_52_high_pct_max: 10.0, price_vs_ema20: 'above' },
+    id: 'breakout',
+    name: '20-day high + Vol surge',
+    description: 'Filter for stocks near 52-week highs with volume ratio above 1.5.',
+    filters: { volume_ratio_min: 1.5, pct_change_min: 1.0, week_52_high_pct_max: 12.0, price_vs_ema20: 'above' },
   },
   {
-    id: 'ema_pullback',
-    name: 'EMA pullback',
-    description: 'Price above EMA 50, RSI 45-60, and no large same-day move.',
-    filters: { price_vs_ema50: 'above', rsi_min: 45, rsi_max: 60, pct_change_min: -2.0, pct_change_max: 2.0 },
-  },
-  {
-    id: 'fresh_52w_high',
-    name: 'Fresh 52W high',
-    description: 'Stocks marked as new 52-week highs on the latest complete market day.',
+    id: 'new_highs',
+    name: '52W Highs',
+    description: 'Filter for stocks making a new 52-week high today.',
     filters: { new_52w_high: true },
   },
   {
-    id: 'high_volume',
-    name: 'High volume',
-    description: 'Volume at least 3x average for liquidity and activity review.',
-    filters: { volume_ratio_min: 3.0 },
+    id: 'golden_cross',
+    name: 'Golden Cross',
+    description: 'Filter for EMA 20 above EMA 50 with price above EMA 200.',
+    filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above', volume_ratio_min: 1.0 },
+  },
+  {
+    id: 'oversold',
+    name: 'RSI below 30',
+    description: 'Filter for RSI below 30 while price remains above EMA 200.',
+    filters: { rsi_min: 20, rsi_max: 30, price_vs_ema200: 'above' },
   },
 ] as const
 
 type Preset = (typeof PRESETS)[number]
+type WorkflowMark = 'shortlist' | 'ignored' | 'review_later' | 'watch'
 
 type Filters = {
   price_min: string; price_max: string
@@ -263,6 +267,7 @@ export default function ScannerPage() {
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
+  const [workflowMarks, setWorkflowMarks] = useState<Record<string, WorkflowMark>>({})
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -277,21 +282,35 @@ export default function ScannerPage() {
   }
 
   async function loadWatchlists() {
-    if (isMockMode) {
-      setWatchlists(mockWatchlists().map(({ id, name }) => ({ id, name })))
-      return
-    }
     try {
       const lists = await getCachedWatchlists()
       setWatchlists(lists.map(({ id, name }) => ({ id, name })))
     } catch { /* ignore */ }
   }
 
+  async function reportScannerDataIssue(symbol?: string) {
+    try {
+      await createFeedbackReport({
+        category: 'data_issue',
+        page: '/scanner',
+        symbol,
+        severity: 'high',
+        message: symbol
+          ? `Scanner data issue reported for ${symbol}.`
+          : `Scanner returned no matches for filters that may need data review.`,
+        context: { filters: buildPayload(filters, sortBy, sortDesc).filters, trade_date: tradeDate, total_matches: totalMatches },
+      });
+      showToast('Data issue reported')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not report issue')
+    }
+  }
+
   async function loadSavedScreens() {
     if (isMockMode) {
       setSavedScreens([
-        { id: 'mock-stage2', name: 'Stage 2 trend', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
-        { id: 'mock-rs-leaders', name: 'RS leaders near highs', filters: PRESETS[1].filters, created_at: '2026-04-24T09:20:00Z' },
+        { id: 'mock-leaders', name: 'EMA 20/50 + RSI', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
+        { id: 'mock-breakout', name: '20-day high + Vol surge', filters: PRESETS[2].filters, created_at: '2026-04-24T09:20:00Z' },
       ])
       return
     }
@@ -367,6 +386,7 @@ export default function ScannerPage() {
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
       const data = await res.json()
       setResults(data.results || [])
+      setSelectedResults(new Set())
       setTotalMatches(data.total_matches || 0)
       setTotalPages(data.total_pages || 1)
       setCurrentPage(data.page || page)
@@ -437,28 +457,39 @@ export default function ScannerPage() {
   }
 
   async function addToWatchlist(symbol: string, wlId: string) {
-    if (isMockMode) {
-      showToast(`${symbol} added to mock watchlist`)
-      return
+    try {
+      await addSymbolToWatchlist(wlId, symbol)
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches([symbol], wlId))
+      setWorkflowMarks(prev => ({ ...prev, [symbol]: 'watch' }))
+      showToast(`${symbol} added`)
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Add to watchlist failed')
     }
-    await addSymbolToWatchlist(wlId, symbol)
-    showToast(`${symbol} added`)
+  }
+
+  async function markWorkflow(symbols: string[], label: 'shortlist' | 'ignored' | 'review_later') {
+    if (symbols.length === 0) return
+    setWorkflowMarks(prev => {
+      const next = { ...prev }
+      for (const symbol of symbols) next[symbol] = label
+      return next
+    })
+    await bulkUpsertWorkflowStates(symbols.map(symbol => scannerWorkflowPatch(symbol, label)))
+    showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
+  }
+
+  function selectedSymbols() {
+    return selectedScannerSymbols(results, selectedResults)
   }
 
   async function createWatchlistFromResults() {
     if (!newWlName.trim()) return
-    if (isMockMode) {
-      setShowWlModal(false); setNewWlName('')
-      showToast('Mock watchlist created')
-      router.push('/watchlist')
-      return
-    }
     try {
       const wl = await createWatchlist(newWlName.trim())
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
-      for (const s of toAdd.slice(0, 50)) {
-        await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
-      }
+      const symbols = toAdd.slice(0, 50).map((s) => s.symbol)
+      await Promise.all(symbols.map((symbol) => addSymbolToWatchlist(wl.id, symbol).catch(() => {})))
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches(symbols, wl.id))
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       router.push(`/watchlist?id=${wl.id}`)
@@ -736,6 +767,11 @@ export default function ScannerPage() {
                     Free plan · 200 cap
                   </span>
                 )}
+                {selectedResults.size > 0 && (
+                  <span className="workspace-pill" aria-live="polite">
+                    {selectedResults.size} selected
+                  </span>
+                )}
                 {SORT_COLS.map(([col, lbl]) => {
                   const active = sortBy === col
                   return (
@@ -762,7 +798,16 @@ export default function ScannerPage() {
                   ))}
                 </select>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
-                  Add selected to watchlist
+                  Create watchlist
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')} disabled={selectedResults.size === 0}>
+                  Shortlist selected
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'ignored')} disabled={selectedResults.size === 0}>
+                  Ignore selected
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')} disabled={selectedResults.size === 0}>
+                  Review later selected
                 </Button>
               </div>
             </>
@@ -798,7 +843,7 @@ export default function ScannerPage() {
             <EmptyState
               title="Run your first scan"
               description="Choose a saved filter or set your own price, volume, trend, and RS conditions."
-              action={{ label: 'Run Stage 2 trend', onClick: () => applyPreset(PRESETS[0]) }}
+              action={{ label: 'Run EMA 20/50 + RSI filter', onClick: () => applyPreset(PRESETS[0]) }}
             />
           </div>
         )}
@@ -808,9 +853,12 @@ export default function ScannerPage() {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
               title="No stocks matched"
-              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Use broader RSI, volume, trend, or RS conditions.` : 'No matches yet. Use a broader preset or adjust the filters.'}
+              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Widen RSI/volume filters, start from a preset, or report it if this looks like a data issue.` : 'No matches yet. Try a broader preset, or report it if this looks like a data issue.'}
               action={{ label: 'Reset filters', onClick: resetFilters }}
             />
+            <button className="workspace-chip-button" style={{ marginTop: 12 }} onClick={() => reportScannerDataIssue()}>
+              Report data issue
+            </button>
           </div>
         )}
 
@@ -864,6 +912,17 @@ export default function ScannerPage() {
                         <Td>
                           <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
                           <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                          {workflowMarks[r.symbol] && (
+                            <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
+                              {workflowMarks[r.symbol] === 'shortlist'
+                                ? 'Shortlisted'
+                                : workflowMarks[r.symbol] === 'review_later'
+                                  ? 'Review later'
+                                  : workflowMarks[r.symbol] === 'watch'
+                                    ? 'Watching'
+                                    : 'Ignored'}
+                            </div>
+                          )}
                         </Td>
                         <Td align="right" mono emphasized>₹{r.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Td>
                         <Td align="right">
@@ -890,6 +949,24 @@ export default function ScannerPage() {
                         <Td>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
                             <button
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'shortlist') }}
+                              style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer' }}
+                            >
+                              Shortlist
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later') }}
+                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
+                            >
+                              Later
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored') }}
+                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                            >
+                              Ignore
+                            </button>
+                            <button
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
                               style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}
                             >
@@ -901,11 +978,17 @@ export default function ScannerPage() {
                             >
                               Journal
                             </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); reportScannerDataIssue(r.symbol) }}
+                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
+                            >
+                              Report
+                            </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
                                 onClick={e => e.stopPropagation()}
                                 style={{ fontSize: 10, padding: '2px 4px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                                <option value="">+WL</option>
+                                <option value="">Add to watchlist</option>
                                 {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                               </select>
                             )}

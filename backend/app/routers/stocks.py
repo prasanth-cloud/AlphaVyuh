@@ -40,20 +40,50 @@ def _yf_ticker_symbol(sym: str, market: str) -> str:
 
 @router.get("/stocks/{symbol}/quote")
 async def get_quote(symbol: str):
-    client = get_admin_client()
     sym = symbol.upper()
-
-    result = client.table("daily_ohlcv") \
-        .select(
-            "symbol, trade_date, open, high, low, close, prev_close, volume, "
-            "avg_volume_20d, week_52_high, week_52_low, rsi_14, "
-            "ema_20, ema_50, ema_200, atr_14, turnover, "
-            "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series, market, currency)"
-        ) \
-        .eq("symbol", sym) \
-        .order("trade_date", desc=True) \
-        .limit(1) \
-        .execute()
+    try:
+        client = get_admin_client()
+        result = client.table("daily_ohlcv") \
+            .select(
+                "symbol, trade_date, open, high, low, close, prev_close, volume, "
+                "avg_volume_20d, week_52_high, week_52_low, rsi_14, "
+                "ema_20, ema_50, ema_200, atr_14, turnover, "
+                "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series, market, currency)"
+            ) \
+            .eq("symbol", sym) \
+            .order("trade_date", desc=True) \
+            .limit(1) \
+            .execute()
+    except Exception:
+        return {
+            "symbol": sym,
+            "company_name": sym,
+            "sector": None,
+            "series": None,
+            "market": "NSE",
+            "currency": "INR",
+            "trade_date": None,
+            "open": 0,
+            "high": 0,
+            "low": 0,
+            "close": 0,
+            "prev_close": 0,
+            "pct_change": None,
+            "volume": 0,
+            "avg_volume_20d": 0,
+            "volume_ratio": None,
+            "week_52_high": None,
+            "week_52_low": None,
+            "week_52_high_pct": None,
+            "week_52_low_pct": None,
+            "rsi_14": None,
+            "ema_20": None,
+            "ema_50": None,
+            "ema_200": None,
+            "atr_14": None,
+            "turnover": None,
+            "mode": "unavailable",
+        }
 
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Symbol not found")
@@ -102,28 +132,33 @@ async def get_quote(symbol: str):
 
 @router.get("/market/summary")
 async def get_market_summary():
-    client = get_admin_client()
+    try:
+        client = get_admin_client()
+        latest_date = get_latest_complete_trade_date(client)
+        if not latest_date:
+            return {"trade_date": None, "advances": 0, "declines": 0, "unchanged": 0,
+                    "new_52w_highs": 0, "new_52w_lows": 0, "total_stocks": 0}
 
-    latest_date = get_latest_complete_trade_date(client)
-    if not latest_date:
+        # Fetch all rows for latest date (paginate in 1000-row chunks)
+        all_rows = []
+        offset = 0
+        while True:
+            chunk = client.table("daily_ohlcv") \
+                .select("close, prev_close, week_52_high, week_52_low, ema_20, ema_50, ema_200") \
+                .eq("trade_date", latest_date) \
+                .range(offset, offset + 999) \
+                .execute()
+            if not chunk.data:
+                break
+            all_rows.extend(chunk.data)
+            if len(chunk.data) < 1000:
+                break
+            offset += 1000
+    except Exception:
         return {"trade_date": None, "advances": 0, "declines": 0, "unchanged": 0,
-                "new_52w_highs": 0, "new_52w_lows": 0, "total_stocks": 0}
-
-    # Fetch all rows for latest date (paginate in 1000-row chunks)
-    all_rows = []
-    offset = 0
-    while True:
-        chunk = client.table("daily_ohlcv") \
-            .select("close, prev_close, week_52_high, week_52_low, ema_20, ema_50, ema_200") \
-            .eq("trade_date", latest_date) \
-            .range(offset, offset + 999) \
-            .execute()
-        if not chunk.data:
-            break
-        all_rows.extend(chunk.data)
-        if len(chunk.data) < 1000:
-            break
-        offset += 1000
+                "advance_decline_ratio": None, "new_52w_highs": 0, "new_52w_lows": 0,
+                "above_ema20_pct": None, "above_ema50_pct": None, "above_ema200_pct": None,
+                "total_stocks": 0, "mode": "unavailable"}
 
     advances = declines = unchanged = 0
     new_highs = new_lows = 0
@@ -415,8 +450,31 @@ async def get_fundamentals(symbol: str):
         }
         _fund_cache[sym] = (time.time(), result)
         return result
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not fetch fundamentals: {e}")
+    except Exception:
+        if sym in _fund_cache:
+            _, cached_data = _fund_cache[sym]
+            return {**cached_data, "data_status": "stale"}
+        market, currency = _lookup_market(sym)
+        return {
+            "symbol": sym,
+            "market": market,
+            "currency": currency,
+            "trailing_pe": None,
+            "forward_pe": None,
+            "price_to_book": None,
+            "dividend_yield": None,
+            "trailing_eps": None,
+            "forward_eps": None,
+            "earnings_growth": None,
+            "revenue_growth": None,
+            "return_on_equity": None,
+            "debt_to_equity": None,
+            "market_cap": None,
+            "market_cap_str": None,
+            "shares_outstanding": None,
+            "data_status": "unavailable",
+            "message": "Fundamentals are temporarily unavailable; trading workflow can continue with chart and plan data.",
+        }
 
 
 @router.get("/stocks/{symbol}/quote-live")
