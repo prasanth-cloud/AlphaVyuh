@@ -1669,6 +1669,9 @@ export type PaymentConfig = {
 };
 
 export async function getPaymentConfig(): Promise<PaymentConfig> {
+  if (shouldUseMockFallback()) {
+    return { gateway: "razorpay", configured: false, mode: "disabled", key_prefix: "", founder_plan_available: false };
+  }
   try {
     const res = await fetch(`${API}/api/v1/payments/config`, { headers: publicHeaders });
     if (!res.ok) throw new Error("Payment config unavailable");
@@ -2555,6 +2558,12 @@ export async function runBacktest(
 // ── Referral ──────────────────────────────────────────────────────────────────
 
 export async function getReferralCode(): Promise<{ referral_code: string; referral_url: string }> {
+  if (shouldUseMockFallback()) {
+    return {
+      referral_code: "DEMOALPHA",
+      referral_url: "https://alphavyuh.com/signup?ref=DEMOALPHA",
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/referral-code`, { headers });
   if (!res.ok) throw new Error("Failed to get referral code");
@@ -2589,7 +2598,33 @@ export type SharedScreen = {
   created_at: string;
 };
 
+const mockSharedScreens: SharedScreen[] = [
+  {
+    id: "mock-screen-volume-leaders",
+    user_id: "demo-trader-01",
+    screen_id: "mock-vcp-leaders",
+    title: "Volume leaders holding above EMA 20",
+    description: "A demo community screen for finding liquid swing candidates with constructive breadth.",
+    tags: ["Demo", "Swing", "Volume"],
+    upvotes: 42,
+    is_featured: true,
+    created_at: "2026-04-24T09:30:00.000Z",
+  },
+  {
+    id: "mock-screen-pullback",
+    user_id: "demo-trader-02",
+    screen_id: "mock-pullback-quality",
+    title: "Quality pullbacks near prior breakout zones",
+    description: "Uses mock EOD fixtures. Treat as workflow guidance, not live market advice.",
+    tags: ["Demo", "Pullback"],
+    upvotes: 28,
+    is_featured: false,
+    created_at: "2026-04-22T09:30:00.000Z",
+  },
+];
+
 export async function getSharedScreens(limit = 20): Promise<SharedScreen[]> {
+  if (shouldUseMockFallback()) return mockSharedScreens.slice(0, limit);
   const res = await fetch(`${API}/api/v1/community/screens?limit=${limit}`, { headers: publicHeaders });
   if (!res.ok) return [];
   const data = await res.json();
@@ -2608,6 +2643,10 @@ export async function shareScreen(screenId: string, title: string, description?:
 }
 
 export async function upvoteScreen(sharedScreenId: string): Promise<{ upvotes: number }> {
+  if (shouldUseMockFallback()) {
+    const screen = mockSharedScreens.find((item) => item.id === sharedScreenId);
+    return { upvotes: (screen?.upvotes ?? 0) + 1 };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/community/screens/${sharedScreenId}/upvote`, {
     method: "POST",
