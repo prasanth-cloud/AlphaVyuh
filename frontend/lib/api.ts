@@ -382,10 +382,12 @@ export async function deleteScreen(id: string): Promise<void> {
 }
 
 export async function getWatchlists(options?: { lite?: boolean; force?: boolean }): Promise<Watchlist[]> {
-  if (shouldUseMockFallback()) return readMockWatchlists();
   const cacheKey = options?.lite ? "watchlists:lite" : "watchlists";
   if (options?.force) {
     invalidateClientCache([cacheKey]);
+  }
+  if (shouldUseMockFallback()) {
+    return cachedClientRequest(cacheKey, options?.lite ? 10_000 : 30_000, async () => readMockWatchlists());
   }
   return cachedClientRequest(cacheKey, options?.lite ? 10_000 : 30_000, async () => {
     try {
@@ -690,8 +692,8 @@ export async function getMarketSummary(): Promise<MarketSummary | null> {
 }
 
 export async function getQuote(symbol: string): Promise<ScanResult | null> {
-  if (shouldUseMockFallback()) return mockQuote(symbol);
   const sym = symbol.toUpperCase();
+  if (shouldUseMockFallback()) return cachedClientRequest(`quote:${sym}`, 20_000, async () => mockQuote(sym));
   return cachedClientRequest(`quote:${sym}`, 20_000, async () => {
     try {
       const headers = await authHeaders();
@@ -1004,7 +1006,6 @@ export async function getCandles(
   params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
 ): Promise<CandlesResponse> {
   const sym = symbol.trim().toUpperCase();
-  if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
   const qs = new URLSearchParams();
   if (params?.from_date) qs.set("from_date", params.from_date);
   if (params?.to_date) qs.set("to_date", params.to_date);
@@ -1012,6 +1013,7 @@ export async function getCandles(
   if (params?.timeframe) qs.set("timeframe", params.timeframe);
   const query = qs.toString();
   const cacheKey = `candles:${sym}:${query}`;
+  if (shouldUseMockFallback()) return cachedClientRequest(cacheKey, 60_000, async () => mockCandles(sym, params?.timeframe, params?.limit));
   return cachedClientRequest(cacheKey, 60_000, async () => {
     try {
       const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers: publicHeaders });
@@ -2090,24 +2092,26 @@ export async function getBrokerStatus(): Promise<{
   live_order_requires_confirmation?: boolean;
 }> {
   if (shouldUseMockFallback()) {
-    const sync = readLocalBrokerSync();
-    return {
-      connected: false,
-      broker: "zerodha",
-      mode: "simulated",
-      status: "not_connected",
-      status_label: "Mock broker import ready",
-      has_api_key: true,
-      has_token: false,
-      token_expired: false,
-      connected_at: null,
-      token_expires_at: null,
-      read_only: false,
-      can_import: true,
-      sync_status: "idle",
-      last_synced_at: sync.last_synced_at,
-      live_order_requires_confirmation: true,
-    };
+    return cachedClientRequest("broker:status", 5_000, async () => {
+      const sync = readLocalBrokerSync();
+      return {
+        connected: false,
+        broker: "zerodha",
+        mode: "simulated",
+        status: "not_connected",
+        status_label: "Mock broker import ready",
+        has_api_key: true,
+        has_token: false,
+        token_expired: false,
+        connected_at: null,
+        token_expires_at: null,
+        read_only: false,
+        can_import: true,
+        sync_status: "idle",
+        last_synced_at: sync.last_synced_at,
+        live_order_requires_confirmation: true,
+      };
+    });
   }
   return cachedClientRequest("broker:status", 20_000, async () => {
     try {

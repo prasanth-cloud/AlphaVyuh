@@ -710,14 +710,14 @@ input, textarea, select {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 5px;
+  gap: 6px;
   flex-wrap: wrap;
-  min-width: 254px;
+  min-width: 300px;
 }
 
 .scanner-row-action {
   min-height: 24px;
-  padding: 3px 7px;
+  padding: 3px 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
@@ -727,9 +727,8 @@ input, textarea, select {
   white-space: nowrap;
 }
 
-.scanner-watchlist-select {
+.scanner-row-select {
   min-height: 24px;
-  max-width: 138px;
   padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
@@ -738,6 +737,50 @@ input, textarea, select {
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.scanner-lifecycle-select,
+.scanner-more-select {
+  max-width: 78px;
+}
+
+.scanner-watchlist-select {
+  max-width: 132px;
+}
+
+.decision-desk-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.decision-desk-chip {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.025);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.decision-desk-chip.complete {
+  color: var(--gain);
+  border-color: rgba(45, 181, 116, 0.32);
+  background: rgba(45, 181, 116, 0.08);
+}
+
+.decision-desk-chip.invalid {
+  color: var(--loss);
+  border-color: rgba(229, 56, 59, 0.32);
+  background: rgba(229, 56, 59, 0.08);
 }
 
 .watchlist-chart-header {
@@ -961,6 +1004,18 @@ input, textarea, select {
     min-width: 180px;
   }
 
+  .decision-desk-primary-grid,
+  .decision-desk-secondary-grid,
+  .broker-settings-grid,
+  .broker-health-grid,
+  .broker-adapter-grid,
+  .data-health-grid,
+  .data-detail-grid,
+  .data-metric-grid,
+  .data-surface-grid {
+    grid-template-columns: 1fr !important;
+  }
+
   .watchlist-chart-stats,
   .watchlist-chart-details {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -989,6 +1044,21 @@ input, textarea, select {
   .dashboard-action-grid,
   .dashboard-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .decision-desk-primary-grid,
+  .broker-health-grid,
+  .broker-adapter-grid,
+  .data-health-grid,
+  .data-surface-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .decision-desk-secondary-grid,
+  .broker-settings-grid,
+  .data-detail-grid,
+  .data-metric-grid {
+    grid-template-columns: 1fr !important;
   }
 }
 
