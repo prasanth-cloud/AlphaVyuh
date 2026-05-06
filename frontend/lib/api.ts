@@ -17,16 +17,14 @@ import {
   mockSectorBreadth,
   mockWatchlists,
 } from './mock-data'
+import { allowClientMockFallback } from './runtime-mode'
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
 export const liveQuotePollingEnabled =
   process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES !== "false";
 export const isMockMode =
-  !forceLiveData &&
-  (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
-    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
-    process.env.NODE_ENV === "development");
+  !forceLiveData && allowClientMockFallback();
 
 let tokenCache: { token: string | null; expiresAt: number } | null = null;
 let tokenPromise: Promise<string | null> | null = null;

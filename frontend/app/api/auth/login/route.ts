@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
+import { allowMockAppAuth } from "@/lib/runtime-mode";
 
 export async function POST(request: Request) {
   const { email, password } = await request.json();
@@ -8,11 +9,7 @@ export async function POST(request: Request) {
   const response = NextResponse.json({ success: true });
   response.headers.set("Server-Timing", 'alphavyuh_auth_session;desc="session_set"');
 
-  if (
-    process.env.NODE_ENV !== "production"
-    && process.env.PLAYWRIGHT_MOCK_AUTH === "true"
-    && process.env.NEXT_PUBLIC_DATA_MODE === "mock"
-  ) {
+  if (allowMockAppAuth()) {
     return response;
   }
 
