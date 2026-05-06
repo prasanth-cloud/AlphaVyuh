@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 export default function ThemeController() {
+  const pathname = usePathname();
+
   useEffect(() => {
+    const currentPath = pathname ?? window.location.pathname;
     const appRoute = [
       "/dashboard",
       "/scanner",
@@ -15,7 +19,9 @@ export default function ThemeController() {
       "/alerts",
       "/admin",
       "/upload",
-    ].some((prefix) => window.location.pathname.startsWith(prefix));
+      "/broker",
+      "/onboarding",
+    ].some((prefix) => currentPath.startsWith(prefix));
     if (appRoute) {
       document.documentElement.dataset.theme = "dark";
       window.localStorage.setItem("alphavyuh-theme", "dark");
@@ -25,7 +31,7 @@ export default function ThemeController() {
     const stored = window.localStorage.getItem("alphavyuh-theme");
     const theme = stored === "light" ? "light" : "dark";
     document.documentElement.dataset.theme = theme;
-  }, []);
+  }, [pathname]);
 
   return null;
 }

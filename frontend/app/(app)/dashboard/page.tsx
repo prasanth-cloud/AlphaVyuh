@@ -435,7 +435,7 @@ function WorkflowChecklistCard({
         </span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 18 }}>
+      <div className="dashboard-checklist-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 18 }}>
         {steps.map((step) => (
           <div
             key={step.label}
@@ -861,7 +861,7 @@ export default function DashboardPage() {
                 <div className="caption">Open a workspace, import trade history, or review journal analytics.</div>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+            <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
               {[
                 { label: 'Open scanner', detail: 'Run user-defined filters on market data.', href: '/scanner' },
                 { label: 'Open watchlist', detail: 'Organize symbols, notes, charts, and order entry.', href: '/watchlist' },
@@ -889,7 +889,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Stat cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+          <div className="dashboard-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
             <StatCard
               label="Advances"
               value={safeNumber(data.advances).toLocaleString()}
@@ -915,7 +915,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Two-column grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+          <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
             {/* Left: sector breadth */}
             <Card padding="lg">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>

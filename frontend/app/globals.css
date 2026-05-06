@@ -967,6 +967,31 @@ input, textarea, select {
   }
 }
 
+@media (max-width: 920px) {
+  .dashboard-checklist-grid,
+  .dashboard-action-grid,
+  .dashboard-stat-grid,
+  .dashboard-main-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-action-grid {
+    gap: 8px !important;
+  }
+
+  .dashboard-action-grid a {
+    min-height: auto !important;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1180px) {
+  .dashboard-checklist-grid,
+  .dashboard-action-grid,
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
 /* Legacy hardcoded-screen bridge.
    Several older pages used light arbitrary Tailwind colors directly. These
    scoped overrides keep them inside the same black/white terminal skin while
