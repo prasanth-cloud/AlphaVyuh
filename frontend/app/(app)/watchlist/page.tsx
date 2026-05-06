@@ -1024,30 +1024,38 @@ function WatchlistContent() {
     const matched = watchlists.find((watchlist) => watchlist.id === watchlistIdParam);
     if (!matched) return;
     setActiveId(matched.id);
-    if (matched.items?.[0]?.symbol) setChartSymbol(matched.items[0].symbol);
+    const requestedSymbol = symbolParam?.toUpperCase() ?? null;
+    const matchedRequestedSymbol = requestedSymbol && matched.items?.some((item) => item.symbol === requestedSymbol);
+    if (matchedRequestedSymbol) {
+      setChartSymbol(requestedSymbol);
+    } else if (matched.items?.[0]?.symbol) {
+      setChartSymbol(matched.items[0].symbol);
+    }
     router.replace("/watchlist", { scroll: false });
-  }, [watchlistIdParam, watchlists, router]);
+  }, [symbolParam, watchlistIdParam, watchlists, router]);
 
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
+    if (watchlistIdParam) return;
     let found = false;
+    const requestedSymbol = symbolParam.toUpperCase();
     for (const wl of watchlists) {
-      if (wl.items?.some((i: WatchlistItem) => i.symbol === symbolParam)) {
+      if (wl.items?.some((i: WatchlistItem) => i.symbol === requestedSymbol)) {
         setActiveId(wl.id);
-        setChartSymbol(symbolParam);
+        setChartSymbol(requestedSymbol);
         found = true;
         break;
       }
     }
     if (!found && activeId) {
-      addToWatchlist(activeId, symbolParam)
-        .then(() => getQuote(symbolParam))
+      addToWatchlist(activeId, requestedSymbol)
+        .then(() => getQuote(requestedSymbol))
         .then(quote => {
           const newItem: WatchlistItem = quote
             ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-            : { symbol: symbolParam, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+            : { symbol: requestedSymbol, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
           setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...(w.items || []), newItem] } : w));
-          setChartSymbol(symbolParam);
+          setChartSymbol(requestedSymbol);
         })
         .catch(() => {});
     }

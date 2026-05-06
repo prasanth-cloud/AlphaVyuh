@@ -134,6 +134,13 @@ test.describe("Mock workflow smoke", () => {
       review_later: false,
     });
 
+    await page.goto(`/watchlist?id=${leadersWatchlist.id}&symbol=${shortlistSymbol}`);
+    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${shortlistSymbol}` }).first()).toBeVisible({ timeout: 10_000 });
+    await page.goto("/scanner");
+    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await expect(page.getByRole("button", { name: /Review later selected/i })).toBeVisible({ timeout: 20_000 });
+
     await page.getByRole("button", { name: /Create watchlist/i }).first().click();
     await page.getByPlaceholder(/Watchlist name/).fill("Workflow QA");
     await page.getByRole("button", { name: /^Create$/ }).click();
