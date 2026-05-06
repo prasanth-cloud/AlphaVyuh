@@ -15,7 +15,7 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes,
+  streamLiveQuotes, isMockMode,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -1989,7 +1989,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           >
             <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : ""}`}
               style={!liveMode ? { background: "var(--app-text3)" } : {}} />
-            <DataProvenanceBadge kind={liveMode ? "live-beta" : "eod"} compact />
+            <DataProvenanceBadge kind={liveMode ? "live-beta" : isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
           </button>
 
           {/* Price alert bell */}
@@ -2945,7 +2945,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
               >
                 <Activity size={12} />
-                <DataProvenanceBadge kind={liveMode ? "live-beta" : "eod"} compact />
+                <DataProvenanceBadge kind={liveMode ? "live-beta" : isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
               </button>
             </div>
           </div>

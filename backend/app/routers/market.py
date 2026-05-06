@@ -16,6 +16,7 @@ from starlette.responses import StreamingResponse
 from app.middleware.auth import get_current_user_id
 from app.services.kite_stream import KiteStreamError, kite_live_ticker
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, _kite_access_token, _kite_api_key, get_market_data_provider
+from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
@@ -56,6 +57,12 @@ def _finite_float(value, default=None):
 
 
 def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices_live: bool) -> dict:
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="unknown" if latest_date is None else "healthy",
+        symbols_count=0,
+        cache_status="miss",
+    )
     return {
         "trade_date": latest_date,
         "advances": 0,
@@ -86,6 +93,8 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
         "as_of": latest_date,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cache_status": "miss",
+        "provider": metadata,
+        "source_metadata": metadata,
     }
 
 
@@ -93,6 +102,9 @@ def _unavailable_overview(latest_date, indices: list[dict], quote_source: str, i
     overview = _empty_overview(latest_date, indices, quote_source, indices_live)
     overview["mode"] = "unavailable"
     overview["message"] = "Market summary is temporarily unavailable; dashboard will use the latest known shell data."
+    metadata = fallback_source_metadata(overview["message"], as_of=latest_date)
+    overview["provider"] = metadata
+    overview["source_metadata"] = metadata
     return overview
 
 
@@ -364,6 +376,14 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
             "volume_ratio": r["volume_ratio"],
         }
 
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="healthy",
+        coverage_pct=round((total / total) * 100, 1) if total else None,
+        symbols_count=total,
+        universe_active=total,
+        cache_status="miss",
+    )
     overview = {
         "trade_date": latest_date,
         "advances": advances,
@@ -394,6 +414,8 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "as_of": latest_date,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cache_status": "miss",
+        "provider": metadata,
+        "source_metadata": metadata,
     }
     _overview_cache = deepcopy(overview)
     _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS

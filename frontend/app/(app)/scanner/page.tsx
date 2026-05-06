@@ -48,6 +48,15 @@ interface ScanResult {
   roce: number | null
 }
 
+type ScanTrust = {
+  mode: 'demo' | 'eod' | 'fallback' | 'live' | 'unknown'
+  source: string
+  asOf: string | null
+  coveragePct: number | null
+  universeSize: number | null
+  message?: string
+}
+
 interface SavedScreen { id: string; name: string; filters: Record<string, unknown>; created_at: string }
 interface Watchlist { id: string; name: string }
 
@@ -268,6 +277,7 @@ export default function ScannerPage() {
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
   const [workflowMarks, setWorkflowMarks] = useState<Record<string, WorkflowMark>>({})
+  const [scanTrust, setScanTrust] = useState<ScanTrust | null>(null)
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -373,6 +383,14 @@ export default function ScannerPage() {
         setCurrentPage(data.page || page)
         setTradeDate(data.trade_date || '')
         setIsLimited(data.is_limited || false)
+        setScanTrust({
+          mode: data.source_metadata?.mode ?? 'demo',
+          source: data.source_metadata?.source_name ?? 'AlphaVyuh mock fixtures',
+          asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
+          coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
+          universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
+          message: data.source_metadata?.license_notes,
+        })
         setHasRun(true)
         return
       }
@@ -392,6 +410,14 @@ export default function ScannerPage() {
       setCurrentPage(data.page || page)
       setTradeDate(data.trade_date || '')
       setIsLimited(data.is_limited || false)
+      setScanTrust({
+        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
+        source: data.source_metadata?.source_name ?? data.source ?? 'NSE bhavcopy EOD',
+        asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
+        coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
+        universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
+        message: data.message ?? data.source_metadata?.license_notes,
+      })
       setHasRun(true)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Scan failed')
@@ -759,9 +785,21 @@ export default function ScannerPage() {
             <>
               <div>
                 <span className="heading-card">{totalMatches > 0 ? `${totalMatches} stocks` : 'Scanner'}</span>
-                {tradeDate && <DataProvenanceBadge kind="eod" asOf={tradeDate} compact className="ml-2" />}
+                {(tradeDate || scanTrust?.asOf) && (
+                  <DataProvenanceBadge
+                    kind={scanTrust?.mode === 'demo' ? 'demo' : scanTrust?.mode === 'fallback' || scanTrust?.mode === 'unknown' ? 'fallback' : 'eod'}
+                    asOf={scanTrust?.asOf ?? tradeDate}
+                    compact
+                    className="ml-2"
+                  />
+                )}
               </div>
               <div className="workspace-toolbar-group">
+                {scanTrust && (
+                  <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
+                    {scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
+                  </span>
+                )}
                 {isLimited && (
                   <span className="workspace-pill" style={{ background: 'var(--warn-subtle)', color: 'var(--warn)' }}>
                     Free plan · 200 cap

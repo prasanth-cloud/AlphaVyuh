@@ -632,7 +632,7 @@ function ChartPanel({
                 {previewChange >= 0 ? "+" : ""}{previewChange.toFixed(2)}%
               </span>
             )}
-            <DataProvenanceBadge kind="eod" asOf={latestBar?.time ? String(latestBar.time) : null} compact />
+            <DataProvenanceBadge kind={isMockMode ? "demo" : "eod"} asOf={latestBar?.time ? String(latestBar.time) : null} compact />
           </div>
         </div>
         <div className="watchlist-chart-controls">
@@ -1586,8 +1586,8 @@ function WatchlistContent() {
             )}
           </div>
           <div className="workspace-pill-row" style={{ gap: 8 }}>
-            <span className="workspace-pill" title={isMockMode ? "Using mock or fallback market data" : "Using configured market data source"}>
-              Data: {isMockMode ? "Mock/fallback" : "Live configured"}
+            <span className="workspace-pill" title={isMockMode ? "Deterministic mock data for workflow QA, not market data" : "Using latest EOD market data unless a live quote is explicitly enabled"}>
+              Data: {isMockMode ? "Demo fixtures" : "EOD market"}
             </span>
             {chartSymbol && <span className="workspace-pill">Focus: {chartSymbol}</span>}
           </div>

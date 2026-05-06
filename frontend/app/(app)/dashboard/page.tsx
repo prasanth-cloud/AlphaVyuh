@@ -73,7 +73,7 @@ function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: Dat
             <Metric label="Data" value={dataHealth.status.toUpperCase()} />
           )}
           <DataProvenanceBadge
-            kind={dataHealth?.status === 'degraded' ? 'fallback' : 'eod'}
+            kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : 'eod'}
             asOf={data.trade_date}
             compact
           />
@@ -140,7 +140,7 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
             <span className="caption">{data.is_live ? 'Index live' : 'Index fallback'} · {data.market_data_source}</span>
           )}
           <DataProvenanceBadge
-            kind={dataHealth?.status === 'degraded' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
+            kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
             asOf={data.trade_date}
             compact
           />
