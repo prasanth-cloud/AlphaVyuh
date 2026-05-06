@@ -354,6 +354,7 @@ function SettingsContent() {
   }
 
   const currentPlan = planStatus?.plan ?? "free";
+  const checkoutEnabled = Boolean(paymentConfig?.configured && RAZORPAY_KEY);
   const expiresAt = planStatus?.expires_at
     ? new Date(planStatus.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : null;
@@ -680,6 +681,30 @@ function SettingsContent() {
                 </div>
               </div>
 
+              <div
+                className="mb-5 rounded-[12px] px-4 py-3 text-[12px] flex items-start justify-between gap-3 flex-wrap"
+                data-testid="billing-launch-posture"
+                style={{
+                  background: checkoutEnabled ? "rgba(38,166,91,0.08)" : "rgba(217,119,6,0.10)",
+                  border: "1px solid var(--app-border)",
+                  color: "var(--app-text2)",
+                }}
+              >
+                <div className="max-w-[640px]">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.12em] mb-1" style={{ color: checkoutEnabled ? "var(--gain)" : "var(--warn)" }}>
+                    {checkoutEnabled ? "Billing ready" : "Billing disabled for launch"}
+                  </div>
+                  <div className="leading-relaxed">
+                    {checkoutEnabled
+                      ? "Razorpay checkout is configured. Plan upgrades can open from this page."
+                      : "Public checkout is disabled until the owner confirms production billing. Founder beta access can still be applied with an approved invite code."}
+                  </div>
+                </div>
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)" }}>
+                  {checkoutEnabled ? "Checkout enabled" : "Checkout blocked"}
+                </div>
+              </div>
+
               {paymentConfig && (
                 <div className="mb-5 rounded-[12px] px-4 py-3 text-[12px] flex items-center justify-between gap-3 flex-wrap"
                   style={{ background: paymentConfig.configured ? "rgba(38,166,91,0.08)" : "rgba(229,56,59,0.08)", border: "1px solid var(--app-border)", color: "var(--app-text2)" }}>
@@ -773,10 +798,12 @@ function SettingsContent() {
                       ) : isHigher ? (
                         <button
                           onClick={() => handleUpgrade(plan.id as "pro" | "elite")}
-                          disabled={!!paying}
+                          disabled={!!paying || !checkoutEnabled}
                           className="w-full py-2 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-60"
-                          style={{ background: plan.color }}>
-                          {paying === plan.id ? "Processing…" : `Upgrade to ${plan.label}`}
+                          aria-disabled={!checkoutEnabled}
+                          title={!checkoutEnabled ? "Billing is disabled until production checkout is configured." : undefined}
+                          style={{ background: checkoutEnabled ? plan.color : "rgba(244,247,251,0.10)", color: checkoutEnabled ? "#fff" : "var(--app-text3)" }}>
+                          {paying === plan.id ? "Processing…" : checkoutEnabled ? `Upgrade to ${plan.label}` : "Checkout disabled"}
                         </button>
                       ) : (
                         <div className="w-full text-center py-2 rounded-[8px] text-[13px]"

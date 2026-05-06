@@ -32,8 +32,11 @@ const launchRoutes = [
   "/charts/AUBANK?full=1",
   "/journal",
   "/settings",
+  "/settings?tab=billing",
   "/settings/broker",
   "/data",
+  "/privacy",
+  "/terms",
   "/alerts",
   "/portfolio",
   "/options",
@@ -181,5 +184,18 @@ test.describe("Workflow layout smoke", () => {
     }
 
     expect(errors.filter((entry) => !entry.includes("favicon")), "console/page errors").toEqual([]);
+  });
+
+  test("billing launch posture blocks checkout until production payments are configured", async ({ page }) => {
+    await page.goto("/settings?tab=billing", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("billing-launch-posture")).toContainText(/Billing disabled for launch|Billing ready/i, { timeout: 15_000 });
+
+    const posture = await page.getByTestId("billing-launch-posture").textContent();
+    if (posture?.includes("Billing disabled for launch")) {
+      await expect(page.getByRole("button", { name: "Checkout disabled" }).first()).toBeDisabled();
+      await expect(page.locator("body")).toContainText(/Founder beta access/i);
+    }
+
+    expect(await layoutProblems(page)).toEqual([]);
   });
 });

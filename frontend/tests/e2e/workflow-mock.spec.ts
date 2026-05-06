@@ -1,6 +1,78 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Mock workflow smoke", () => {
+  test("signup first-run flow reaches a focused starter watchlist", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/signup");
+    await page.getByLabel("Full name").fill("Launch QA Trader");
+    await page.getByLabel("Email").fill(`launch-${Date.now()}@alphavyuh.test`);
+    await page.getByLabel("Password", { exact: true }).fill("LaunchPass123!");
+    await page.getByLabel("Confirm password").fill("LaunchPass123!");
+    await page.getByRole("button", { name: /^Create account$/ }).click();
+
+    await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
+    await expect(page.getByText("Set up your desk before the first real workflow.")).toBeVisible();
+
+    await page.getByLabel(/Intermediate/).check();
+    await page.getByLabel(/Equity/).check();
+    await page.getByRole("button", { name: /Continue/i }).click();
+    await page.getByRole("button", { name: /None yet/i }).click();
+    await page.getByRole("button", { name: /Continue/i }).click();
+    await page.getByRole("button", { name: /Starter queue/i }).click();
+
+    await expect(page).toHaveURL(/\/watchlist\?id=.*symbol=RELIANCE/, { timeout: 15_000 });
+    await expect(page.locator(".workspace-pill").filter({ hasText: "Focus: RELIANCE" }).first()).toBeVisible({ timeout: 10_000 });
+
+    const starter = await page.evaluate(() => {
+      const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
+      return lists.find((list: { name: string }) => list.name === "Starter setup queue");
+    });
+    expect(starter.items.map((item: { symbol: string }) => item.symbol)).toEqual(
+      expect.arrayContaining(["RELIANCE", "TCS", "INFY"]),
+    );
+    expect(errors).toEqual([]);
+  });
+
+  test("market data provenance is visible across core workflow surfaces", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    for (const route of ["/dashboard", "/scanner", "/watchlist", "/charts/AUBANK?full=1", "/data"]) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      await expect(page.locator("body")).toContainText(/Demo|EOD|BACKEND DATA|DEMO DATA/i, { timeout: 15_000 });
+      await expect(page.locator("body")).toContainText(/As of|Updated|Data is|Source|Provider|coverage|Data: Demo fixtures/i, { timeout: 15_000 });
+    }
+
+    await page.goto("/scanner");
+    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await expect(page.locator("body")).toContainText(/Trade date|coverage|Demo|AlphaVyuh mock fixtures/i, { timeout: 15_000 });
+
+    await page.goto("/charts/AUBANK?full=1");
+    await expect(page.locator("body")).toContainText("AU Small Finance Bank", { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Data is .* old|EOD|Demo|As of/i, { timeout: 15_000 });
+
+    expect(errors).toEqual([]);
+  });
+
+  test("journal explains review queue and trade source labels", async ({ page }) => {
+    await page.goto("/journal", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("journal-review-queue")).toContainText(/Needs review|No closed trades waiting/i);
+    await expect(page.getByTestId("journal-review-queue")).toContainText(/Broker import/);
+    await expect(page.getByTestId("journal-review-queue")).toContainText(/Chart\/sim/);
+    await expect(page.locator("body")).toContainText(/Trade review|Import from Zerodha|Broker/i, { timeout: 15_000 });
+  });
+
   test("watchlist plan gates ready state and order draft", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
@@ -78,6 +150,67 @@ test.describe("Mock workflow smoke", () => {
       invalidation_rule: "Exit if price closes below the breakout base.",
     });
 
+    expect(errors).toEqual([]);
+  });
+
+  test("scanner idea can become a watchlist plan, mock order, and journal draft", async ({ page }) => {
+    test.setTimeout(90_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/scanner");
+    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await expect(page.getByRole("button", { name: /Create watchlist/i }).first()).toBeVisible({ timeout: 20_000 });
+
+    const resultRows = page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) });
+    await expect(resultRows.first()).toBeVisible({ timeout: 10_000 });
+    const symbol = ((await resultRows.first().locator(".mono").first().textContent()) ?? "RELIANCE").trim();
+
+    await resultRows.first().locator("input[type=checkbox]").check({ force: true });
+    await expect(page.getByText("1 selected")).toBeVisible();
+    await page.getByRole("button", { name: /Shortlist selected/i }).click();
+    await expect(resultRows.first().getByText("Shortlisted")).toBeVisible();
+
+    await page.getByRole("button", { name: /Create watchlist/i }).first().click();
+    await page.getByPlaceholder(/Watchlist name/).fill("Launch Flow QA");
+    await page.getByRole("button", { name: /^Create$/ }).click();
+
+    await expect(page).toHaveURL(/\/watchlist/, { timeout: 15_000 });
+    await expect(page.getByText("Launch Flow QA").first()).toBeVisible();
+    await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole("button", { name: /^Order$/ }).click();
+    await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
+    await page.getByPlaceholder("Entry").fill("1500");
+    await page.getByPlaceholder("Stop").fill("1440");
+    await page.getByPlaceholder("Target").fill("1650");
+    await page.getByPlaceholder("Qty").fill("3");
+    await page.getByPlaceholder("Thesis").fill("Launch QA setup from scanner shortlist with clear confirmation.");
+    await page.getByPlaceholder("Invalidation rule").fill("Exit if the breakout base fails on closing basis.");
+
+    await expect(page.getByText("Ready for order draft.")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /^Place buy order$/i })).toBeEnabled();
+    await page.getByRole("button", { name: /^Place buy order$/i }).click();
+    await expect(page.getByText(/journal capture is ready/i)).toBeVisible({ timeout: 10_000 });
+
+    await page.goto("/journal");
+    await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Review|Needs review|Open/i, { timeout: 15_000 });
+
+    const state = await page.evaluate((activeSymbol) => {
+      const journal = JSON.parse(localStorage.getItem("alphavyuh-mock-journal-v1") || "[]");
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return {
+        journal: journal.find((entry: { symbol: string }) => entry.symbol === activeSymbol),
+        workflow: workflow[activeSymbol],
+      };
+    }, symbol);
+    expect(state.journal).toMatchObject({ symbol, quantity: 3, status: "open" });
+    expect(state.workflow).toMatchObject({ lifecycle: "open" });
+    expect(["scanner", "watchlist"]).toContain(state.workflow.source);
     expect(errors).toEqual([]);
   });
 

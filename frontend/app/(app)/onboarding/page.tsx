@@ -97,6 +97,7 @@ export default function OnboardingPage() {
         const starter = await createWatchlist("Starter setup queue").catch(() => null);
         if (starter?.id) {
           await Promise.all(STARTER_SYMBOLS.map((symbol) => addToWatchlist(starter.id, symbol).catch(() => null)));
+          destination = `/watchlist?id=${encodeURIComponent(starter.id)}&symbol=${encodeURIComponent(STARTER_SYMBOLS[0])}`;
         }
       }
       window.location.replace(destination);

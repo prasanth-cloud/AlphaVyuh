@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
+import { allowMockAppAuth } from "@/lib/runtime-mode";
 
 export async function POST(request: Request) {
   const { email, password, full_name, next } = await request.json();
   const requestUrl = new URL(request.url);
-  const safeNext = isSafeRedirect(next) ? next : "/dashboard";
+  const safeNext = isSafeRedirect(next) ? next : "/onboarding";
   const emailRedirectTo = `${requestUrl.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 
   const response = NextResponse.json({ success: true });
+  response.headers.set("Server-Timing", 'alphavyuh_auth_signup;desc="session_set"');
+
+  if (allowMockAppAuth()) {
+    return response;
+  }
+
   const supabase = await createRouteHandlerClient(response);
 
   const { data, error } = await supabase.auth.signUp({
