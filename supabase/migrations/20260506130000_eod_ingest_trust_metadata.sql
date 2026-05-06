@@ -3,6 +3,8 @@
 -- created manually with a timestamped filename.
 
 alter table public.bhavcopy_ingestion_log
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now(),
   add column if not exists source_name text default 'NSE bhavcopy EOD',
   add column if not exists source_url text,
   add column if not exists expected_rows int,

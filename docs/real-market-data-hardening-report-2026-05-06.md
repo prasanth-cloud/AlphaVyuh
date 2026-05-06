@@ -85,7 +85,8 @@ Observed:
 
 ## Remaining Gated Work
 
-- Apply the Supabase migration to staging/production only with owner approval.
+- Production Supabase migration was applied on 2026-05-06 after owner approval.
+- Staging Supabase project `alphavyuh-staging` is currently inactive/timeouting through the Supabase API, so staging apply could not be completed from this session.
 - Real Kite/Upstox read-only smoke requires owner-provided tokens.
 - Live/sandbox order placement remains gated and was not run.
 - Paid realtime data provider selection requires license/commercial owner input.
