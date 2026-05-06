@@ -20,6 +20,27 @@ const viewports = [
   { width: 390, height: 844, label: "mobile" },
 ];
 
+const launchRoutes = [
+  "/",
+  "/signup",
+  "/login",
+  "/reset-password",
+  "/onboarding",
+  "/dashboard",
+  "/scanner",
+  "/watchlist",
+  "/charts/AUBANK?full=1",
+  "/journal",
+  "/settings",
+  "/settings/broker",
+  "/data",
+  "/alerts",
+  "/portfolio",
+  "/options",
+  "/community",
+  "/offline",
+];
+
 async function layoutProblems(page: Page) {
   return page.evaluate(() => {
     const problems: string[] = [];
@@ -142,5 +163,23 @@ test.describe("Workflow layout smoke", () => {
     expect(boxes.widget).toBeTruthy();
     if (boxes.widget && boxes.topbar) expect(intersects(boxes.widget, boxes.topbar)).toBe(false);
     if (boxes.widget && boxes.chartHeader) expect(intersects(boxes.widget, boxes.chartHeader)).toBe(false);
+  });
+
+  test("launch routes render without console errors or horizontal overflow", async ({ page }) => {
+    test.setTimeout(90_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    for (const route of launchRoutes) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      await expect(page.locator("body")).toBeVisible({ timeout: 15_000 });
+      await page.waitForLoadState("networkidle", { timeout: 2_000 }).catch(() => {});
+      expect(await layoutProblems(page), route).toEqual([]);
+    }
+
+    expect(errors.filter((entry) => !entry.includes("favicon")), "console/page errors").toEqual([]);
   });
 });
