@@ -39,6 +39,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["orders"])
 
+BROKER_IMPORT_MARKER = "alphavyuh-broker-import"
+
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
@@ -193,6 +195,71 @@ def _token_is_expired(expires_at: str | None) -> bool:
         return expiry <= datetime.now(timezone.utc)
     except Exception:
         return True
+
+
+def _broker_import_marker(broker: str, order_id: str) -> str:
+    return f"{BROKER_IMPORT_MARKER}:{broker}:order:{order_id}"
+
+
+def _latest_broker_import_at(sb, user_id: str, broker: str) -> str | None:
+    try:
+        result = (
+            sb.table("trade_journal")
+            .select("created_at")
+            .eq("user_id", user_id)
+            .ilike("entry_reason", f"%{BROKER_IMPORT_MARKER}:{broker}:%")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        row = (result.data or [None])[0]
+        return row.get("created_at") if row else None
+    except Exception:
+        logger.debug("Unable to read latest %s import timestamp", broker, exc_info=True)
+        return None
+
+
+def _status_payload(
+    *,
+    broker: str | None,
+    key: str | None,
+    token: str | None,
+    token_expired: bool,
+    connected_at: str | None,
+    expires_at: str | None,
+    last_synced_at: str | None,
+) -> dict:
+    connected = bool(broker and key and token and not token_expired)
+    if connected:
+        status_code = "connected_read_only"
+        status_label = f"{broker.capitalize()} connected read-only"
+    elif token_expired:
+        status_code = "token_expired"
+        status_label = "Broker token expired"
+    elif key:
+        status_code = "not_connected"
+        status_label = "Broker login required"
+    else:
+        status_code = "credentials_missing"
+        status_label = "Broker credentials missing"
+
+    return {
+        "connected": connected,
+        "broker": broker if broker else None,
+        "mode": broker if connected else "simulated",
+        "status": status_code,
+        "status_label": status_label,
+        "has_api_key": bool(key),
+        "has_token": bool(token),
+        "token_expired": token_expired,
+        "connected_at": connected_at,
+        "token_expires_at": expires_at,
+        "read_only": connected,
+        "can_import": connected and broker == "zerodha",
+        "sync_status": "idle",
+        "last_synced_at": last_synced_at,
+        "live_order_requires_confirmation": True,
+    }
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -473,7 +540,15 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
     ).eq("id", user_id).maybe_single().execute()
 
     if not u.data:
-        return {"connected": False, "broker": None, "mode": "simulated", "token_expired": False}
+        return _status_payload(
+            broker=None,
+            key=None,
+            token=None,
+            token_expired=False,
+            connected_at=None,
+            expires_at=None,
+            last_synced_at=None,
+        )
 
     bt  = u.data.get("broker_type") or "zerodha"
     key = _get_stored_credential(user_id, bt, "api_key") or u.data.get("broker_api_key")
@@ -492,18 +567,15 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
         except Exception:
             token_expired = False
 
-    connected = bool(bt and key and tok and not token_expired)
-
-    return {
-        "connected":    connected,
-        "broker":       bt,
-        "mode":         bt if connected else "simulated",
-        "has_api_key":  bool(key),
-        "has_token":    bool(tok),
-        "token_expired": token_expired,
-        "connected_at": u.data.get("broker_connected_at"),
-        "token_expires_at": expires_at,
-    }
+    return _status_payload(
+        broker=bt,
+        key=key,
+        token=tok,
+        token_expired=token_expired,
+        connected_at=u.data.get("broker_connected_at"),
+        expires_at=expires_at,
+        last_synced_at=_latest_broker_import_at(sb, user_id, bt),
+    )
 
 
 @router.get("/broker/zerodha/login")
@@ -523,17 +595,92 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     return {"login_url": login_url}
 
 
+@router.get("/broker/zerodha/read-only-smoke")
+async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
+    """
+    Run read-only Kite checks and return sanitized status/counts only.
+    This endpoint never places, modifies, or cancels broker orders.
+    """
+    creds = _get_user_broker_credentials(user_id, "zerodha")
+    api_key = creds.get("api_key")
+    access_token = creds.get("access_token")
+    token_expired = _token_is_expired(creds.get("expires_at"))
+    checks: dict[str, dict] = {
+        "login_url": {"ok": bool(api_key)},
+        "profile": {"ok": False},
+        "positions": {"ok": False, "count": 0},
+        "holdings": {"ok": False, "count": 0},
+        "orderbook": {"ok": False, "count": 0},
+        "tradebook": {"ok": False, "count": 0},
+    }
+
+    if not api_key:
+        checks["login_url"]["error"] = "Broker API key is not configured."
+    if not api_key or not access_token or token_expired:
+        return {
+            "broker": "zerodha",
+            "connected_read_only": False,
+            "token_expired": token_expired,
+            "checks": checks,
+        }
+
+    try:
+        profile = kite_api.get_profile(str(access_token), api_key=str(api_key))
+        checks["profile"] = {"ok": True, "user_id_present": bool(profile.get("user_id"))}
+    except KiteApiError as exc:
+        checks["profile"] = {"ok": False, "error": exc.error_type}
+
+    try:
+        positions = kite_api.get_positions(str(access_token), api_key=str(api_key))
+        net_positions = positions.get("net", []) if isinstance(positions, dict) else []
+        checks["positions"] = {"ok": True, "count": len(net_positions)}
+    except KiteApiError as exc:
+        checks["positions"] = {"ok": False, "count": 0, "error": exc.error_type}
+
+    try:
+        holdings = kite_api.get_holdings(str(access_token), api_key=str(api_key))
+        checks["holdings"] = {"ok": True, "count": len(holdings)}
+    except KiteApiError as exc:
+        checks["holdings"] = {"ok": False, "count": 0, "error": exc.error_type}
+
+    orders: list[dict] = []
+    try:
+        orders = kite_api.list_orders(str(access_token), api_key=str(api_key))
+        checks["orderbook"] = {"ok": True, "count": len(orders)}
+    except KiteApiError as exc:
+        checks["orderbook"] = {"ok": False, "count": 0, "error": exc.error_type}
+
+    completed_order_id = next((str(o.get("order_id")) for o in orders if o.get("status") == "COMPLETE" and o.get("order_id")), None)
+    if completed_order_id:
+        try:
+            trades = kite_api.get_order_trades(str(access_token), completed_order_id, api_key=str(api_key))
+            checks["tradebook"] = {"ok": True, "count": len(trades)}
+        except KiteApiError as exc:
+            checks["tradebook"] = {"ok": False, "count": 0, "error": exc.error_type}
+    else:
+        checks["tradebook"] = {"ok": True, "count": 0, "note": "No completed order available for tradebook probe."}
+
+    return {
+        "broker": "zerodha",
+        "connected_read_only": True,
+        "token_expired": False,
+        "checks": checks,
+    }
+
+
 @router.post("/broker/zerodha/import")
 async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
     """
     Import today's filled orders from Zerodha into the trade journal.
-    Skips orders already recorded (matched by order ID in entry_reason).
+    Skips orders already recorded using a deterministic broker import marker.
     Requires a valid daily access token set via /broker/zerodha/callback.
     """
     sb = get_admin_client()
     creds = _get_user_broker_credentials(user_id, "zerodha")
     if not creds.get("api_key") or not creds.get("access_token"):
         raise HTTPException(status_code=400, detail="Zerodha not connected. Complete the OAuth login first.")
+    if _token_is_expired(creds.get("expires_at")):
+        raise HTTPException(status_code=401, detail="Zerodha token expired. Reconnect Kite before importing trades.")
 
     try:
         orders = kite_api.list_orders(
@@ -556,16 +703,16 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         avg_px   = float(order.get("average_price") or 0)
         txn      = (order.get("transaction_type") or "BUY").upper()
         order_id = str(order.get("order_id") or "")
+        marker = _broker_import_marker("zerodha", order_id)
 
         if not sym or not qty or not avg_px or not order_id:
             continue
 
-        # Skip if already imported
         existing = (
             sb.table("trade_journal")
             .select("id")
             .eq("user_id", user_id)
-            .ilike("entry_reason", f"%{order_id}%")
+            .ilike("entry_reason", f"%{marker}%")
             .execute()
         )
         if existing.data:
@@ -578,24 +725,38 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         company_name = stock.data["company_name"] if stock.data else sym
 
         trade_type = "long" if txn == "BUY" else "short"
+        executed_at = str(order.get("exchange_timestamp") or order.get("order_timestamp") or date.today())
+        entry_date = executed_at[:10] if len(executed_at) >= 10 else str(date.today())
         entry = {
             "user_id":      user_id,
             "symbol":       sym,
             "company_name": company_name,
             "trade_type":   trade_type,
-            "entry_date":   str(date.today()),
+            "entry_date":   entry_date,
             "entry_price":  avg_px,
             "quantity":     qty,
-            "entry_reason": f"Zerodha import — order #{order_id} [Zerodha]",
+            "entry_reason": f"Zerodha import — order #{order_id} [{marker}] [Zerodha · auto]",
             "status":       "open",
         }
-        sb.table("trade_journal").insert(entry).execute()
+        inserted = sb.table("trade_journal").insert(entry).execute()
+        journal_entry = (inserted.data or [{}])[0]
+        if journal_entry.get("id"):
+            sync_workflow_state(sb, user_id, sym, {
+                "source": "broker-import",
+                "lifecycle": "open",
+                "entry": avg_px,
+                "position_size": qty,
+                "broker_order_id": order_id,
+                "journal_id": journal_entry["id"],
+                "notes": "Auto-created from Zerodha filled-order import.",
+            })
         imported += 1
 
     return {
         "imported": imported,
         "skipped":  skipped,
         "total_filled_orders": len(filled),
+        "last_synced_at": datetime.now(timezone.utc).isoformat(),
         "message": f"Imported {imported} new trade(s) from Zerodha.",
     }
 

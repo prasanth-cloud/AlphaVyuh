@@ -77,12 +77,12 @@ def cancel_order(access_token: str, variety: str, order_id: str) -> dict[str, An
     return _delete(f"/orders/{variety}/{order_id}", access_token=access_token)["data"]
 
 
-def get_order(access_token: str, order_id: str) -> dict[str, Any]:
-    return _get(f"/orders/{order_id}", access_token)["data"]
+def get_order(access_token: str, order_id: str, api_key: str | None = None) -> dict[str, Any]:
+    return _get(f"/orders/{order_id}", access_token, api_key=api_key)["data"]
 
 
-def get_order_trades(access_token: str, order_id: str) -> list[dict[str, Any]]:
-    return _get(f"/orders/{order_id}/trades", access_token)["data"]
+def get_order_trades(access_token: str, order_id: str, api_key: str | None = None) -> list[dict[str, Any]]:
+    return _get(f"/orders/{order_id}/trades", access_token, api_key=api_key)["data"]
 
 
 def list_orders(access_token: str, api_key: str | None = None) -> list[dict[str, Any]]:

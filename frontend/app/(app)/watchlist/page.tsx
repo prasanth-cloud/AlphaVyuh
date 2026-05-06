@@ -400,6 +400,7 @@ function ChartPanel({
   const [tradeNote, setTradeNote] = useState("");
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderMsg, setOrderMsg] = useState<{ ok: boolean; text: string; journalReady?: boolean } | null>(null);
+  const [brokerStatus, setBrokerStatus] = useState<Awaited<ReturnType<typeof getBrokerStatus>> | null>(null);
   const latestBar = candles[candles.length - 1] ?? null;
   const previousBar = candles[candles.length - 2] ?? null;
   const referenceClose = latestClose ?? latestBar?.close ?? null;
@@ -454,6 +455,10 @@ function ChartPanel({
     };
   }, [candles]);
   const chartHeight = showOrderTicket ? 300 : showChartDetails ? 380 : 440;
+  useEffect(() => {
+    if (!showOrderTicket) return;
+    getBrokerStatus().then(setBrokerStatus).catch(() => setBrokerStatus(null));
+  }, [showOrderTicket]);
   const workspaceTimeframe = useMemo(() => {
     const timeframeMap: Record<string, "D" | "W" | "M"> = {
       "1D": "D",
@@ -722,6 +727,15 @@ function ChartPanel({
               <div className="mono" style={{ fontSize: 12, fontWeight: 700 }}>₹{estimatedValue.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
             </div>
           )}
+        </div>
+
+        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: brokerStatus?.connected ? "var(--gain)" : "var(--text-secondary)" }}>
+            {brokerStatus?.status_label ?? "Checking broker route..."}
+          </span>
+          <span className="caption">
+            {brokerStatus?.connected ? "Live submit needs final confirmation" : "Order will record as simulated"}
+          </span>
         </div>
 
         {/* Buy / Sell */}

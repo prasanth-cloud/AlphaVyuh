@@ -34,6 +34,9 @@ export default function JournalPage() {
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [brokerConnected, setBrokerConnected] = useState(false);
   const [brokerName, setBrokerName] = useState<string | null>(null);
+  const [brokerStatusLabel, setBrokerStatusLabel] = useState<string | null>(null);
+  const [brokerCanImport, setBrokerCanImport] = useState(false);
+  const [brokerLastSyncedAt, setBrokerLastSyncedAt] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [lessonLoading, setLessonLoading] = useState<string | null>(null);
   const [stats, setStats] = useState<JournalStats | null>(null);
@@ -91,9 +94,17 @@ export default function JournalPage() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    getBrokerStatus().then(s => { setBrokerConnected(s.connected); setBrokerName(s.broker); }).catch(() => {});
+  const refreshBrokerStatus = useCallback(() => {
+    getBrokerStatus().then(s => {
+      setBrokerConnected(s.connected);
+      setBrokerName(s.broker);
+      setBrokerStatusLabel(s.status_label ?? null);
+      setBrokerCanImport(Boolean(s.can_import));
+      setBrokerLastSyncedAt(s.last_synced_at ?? null);
+    }).catch(() => {});
   }, []);
+
+  useEffect(() => { refreshBrokerStatus(); }, [refreshBrokerStatus]);
 
   useEffect(() => {
     if (tab !== "ai" || patterns !== null) return;
@@ -193,6 +204,8 @@ export default function JournalPage() {
     try {
       const r = await importZerodhaTrades();
       showToast(r.message);
+      setBrokerLastSyncedAt(r.last_synced_at ?? new Date().toISOString());
+      refreshBrokerStatus();
       if (r.imported > 0) load();
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Import failed"); }
     finally { setImporting(false); }
@@ -240,6 +253,9 @@ export default function JournalPage() {
       <JournalStatusBar
         brokerConnected={brokerConnected}
         brokerName={brokerName}
+        brokerStatusLabel={brokerStatusLabel}
+        canImport={brokerCanImport}
+        lastSyncedAt={brokerLastSyncedAt}
         importing={importing}
         closedTrades={closedTrades}
         reviewedTrades={reviewedTrades}

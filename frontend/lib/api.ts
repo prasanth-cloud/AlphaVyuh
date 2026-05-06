@@ -1380,6 +1380,8 @@ export type UpdateJournalEntry = {
 };
 
 const mockJournalKey = "alphavyuh-mock-journal-v1";
+const mockBrokerSyncKey = "alphavyuh-mock-broker-sync-v1";
+const brokerImportMarker = "alphavyuh-broker-import";
 
 function readLocalJournalEntries(): JournalEntry[] {
   if (typeof window === "undefined") return [];
@@ -1395,6 +1397,21 @@ function readLocalJournalEntries(): JournalEntry[] {
 function writeLocalJournalEntries(entries: JournalEntry[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(mockJournalKey, JSON.stringify(entries));
+}
+
+function readLocalBrokerSync(): { last_synced_at: string | null } {
+  if (typeof window === "undefined") return { last_synced_at: null };
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(mockBrokerSyncKey) || "{}");
+    return { last_synced_at: typeof parsed.last_synced_at === "string" ? parsed.last_synced_at : null };
+  } catch {
+    return { last_synced_at: null };
+  }
+}
+
+function writeLocalBrokerSync(lastSyncedAt: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockBrokerSyncKey, JSON.stringify({ last_synced_at: lastSyncedAt }));
 }
 
 function createLocalJournalEntry(entry: CreateJournalEntry): JournalEntry {
@@ -1918,6 +1935,13 @@ export async function connectZerodha(requestToken: string): Promise<{ status: st
 
 // ── Orders / Broker ───────────────────────────────────────────────────────────
 
+export type ZerodhaReadOnlySmoke = {
+  broker: "zerodha";
+  connected_read_only: boolean;
+  token_expired: boolean;
+  checks: Record<string, { ok: boolean; count?: number; error?: string; note?: string; user_id_present?: boolean }>;
+};
+
 export type PlaceOrderRequest = {
   symbol:       string;
   side:         "buy" | "sell";
@@ -1973,8 +1997,45 @@ export async function closePosition(
 }
 
 export async function importZerodhaTrades(): Promise<{
-  imported: number; skipped: number; total_filled_orders: number; message: string
+  imported: number; skipped: number; total_filled_orders: number; message: string; last_synced_at?: string | null
 }> {
+  if (shouldUseMockFallback()) {
+    const now = new Date().toISOString();
+    const local = readLocalJournalEntries();
+    const mockOrders = [
+      { orderId: "MOCK-ZERODHA-1001", symbol: "RELIANCE", side: "BUY", quantity: 10, price: 1500 },
+      { orderId: "MOCK-ZERODHA-1002", symbol: "INFY", side: "BUY", quantity: 5, price: 1420 },
+    ];
+    let imported = 0;
+    let skipped = 0;
+    const next = [...local];
+    for (const order of mockOrders) {
+      const marker = `${brokerImportMarker}:zerodha:order:${order.orderId}`;
+      if (next.some((entry) => entry.entry_reason?.includes(marker))) {
+        skipped += 1;
+        continue;
+      }
+      next.unshift(createLocalJournalEntry({
+        symbol: order.symbol,
+        trade_type: order.side === "BUY" ? "long" : "short",
+        entry_date: now.slice(0, 10),
+        entry_price: order.price,
+        quantity: order.quantity,
+        entry_reason: `Zerodha import - order #${order.orderId} [${marker}] [Zerodha - auto]`,
+      }));
+      imported += 1;
+    }
+    writeLocalJournalEntries(next);
+    writeLocalBrokerSync(now);
+    invalidateClientCache(["journal:", "portfolio", "broker:status"]);
+    return {
+      imported,
+      skipped,
+      total_filled_orders: mockOrders.length,
+      last_synced_at: now,
+      message: `Imported ${imported} new mock trade(s) from Zerodha.`,
+    };
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/broker/zerodha/import`, { method: "POST", headers });
   if (!res.ok) {
@@ -1982,30 +2043,70 @@ export async function importZerodhaTrades(): Promise<{
     throw new Error(body.detail ?? "Import failed");
   }
   const imported = await res.json();
-  invalidateClientCache(["journal:", "portfolio"]);
+  invalidateClientCache(["journal:", "portfolio", "broker:status"]);
   return imported;
+}
+
+export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
+  if (shouldUseMockFallback()) {
+    return {
+      broker: "zerodha",
+      connected_read_only: false,
+      token_expired: false,
+      checks: {
+        login_url: { ok: true },
+        profile: { ok: true, user_id_present: true },
+        positions: { ok: true, count: 1 },
+        holdings: { ok: true, count: 2 },
+        orderbook: { ok: true, count: 2 },
+        tradebook: { ok: true, count: 2 },
+      },
+    };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/zerodha/read-only-smoke`, { headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(body.detail ?? "Read-only broker smoke failed");
+  }
+  return res.json();
 }
 
 export async function getBrokerStatus(): Promise<{
   connected: boolean;
   broker: string | null;
   mode: string;
+  status?: "credentials_missing" | "not_connected" | "token_expired" | "connected_read_only";
+  status_label?: string;
   has_api_key: boolean;
   has_token: boolean;
   token_expired: boolean;
   connected_at: string | null;
   token_expires_at: string | null;
+  read_only?: boolean;
+  can_import?: boolean;
+  sync_status?: "idle" | "running" | "failed";
+  last_synced_at?: string | null;
+  live_order_requires_confirmation?: boolean;
 }> {
   if (shouldUseMockFallback()) {
+    const sync = readLocalBrokerSync();
     return {
       connected: false,
-      broker: null,
+      broker: "zerodha",
       mode: "simulated",
-      has_api_key: false,
+      status: "not_connected",
+      status_label: "Mock broker import ready",
+      has_api_key: true,
       has_token: false,
       token_expired: false,
       connected_at: null,
       token_expires_at: null,
+      read_only: false,
+      can_import: true,
+      sync_status: "idle",
+      last_synced_at: sync.last_synced_at,
+      live_order_requires_confirmation: true,
     };
   }
   return cachedClientRequest("broker:status", 20_000, async () => {

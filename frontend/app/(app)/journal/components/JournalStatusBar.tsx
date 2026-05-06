@@ -3,6 +3,9 @@
 interface JournalStatusBarProps {
   brokerConnected: boolean;
   brokerName: string | null;
+  brokerStatusLabel?: string | null;
+  canImport?: boolean;
+  lastSyncedAt?: string | null;
   importing: boolean;
   closedTrades: number;
   reviewedTrades: number;
@@ -14,6 +17,9 @@ interface JournalStatusBarProps {
 export function JournalStatusBar({
   brokerConnected,
   brokerName,
+  brokerStatusLabel,
+  canImport,
+  lastSyncedAt,
   importing,
   closedTrades,
   reviewedTrades,
@@ -27,7 +33,10 @@ export function JournalStatusBar({
         <span style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>Trading Journal</span>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, color: brokerConnected ? "var(--gain)" : "var(--text-tertiary)" }}>
-            {brokerConnected ? `Broker live${brokerName ? ` · ${brokerName}` : ""}` : "Manual logging active"}
+            {brokerStatusLabel ?? (brokerConnected ? `Broker read-only${brokerName ? ` · ${brokerName}` : ""}` : "Manual logging active")}
+          </span>
+          <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+            Sync {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : "not run"}
           </span>
           <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
             {reviewedTrades}/{closedTrades} closed trades reviewed
@@ -38,7 +47,7 @@ export function JournalStatusBar({
         </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        {brokerConnected && brokerName === "zerodha" && (
+        {(canImport || (brokerConnected && brokerName === "zerodha")) && (
           <button
             onClick={onImport}
             disabled={importing}

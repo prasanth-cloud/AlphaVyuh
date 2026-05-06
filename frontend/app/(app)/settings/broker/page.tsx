@@ -8,6 +8,7 @@ import {
   getBrokerStatus,
   getZerodhaLoginUrl,
   importZerodhaTrades,
+  runZerodhaReadOnlySmoke,
   startBrokerConnect,
 } from "@/lib/api";
 
@@ -59,6 +60,8 @@ function BrokerSettingsContent() {
   const [state, setState] = useState<BrokerState | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"connect" | "connect-upstox" | "import" | null>(null);
+  const [smokeBusy, setSmokeBusy] = useState(false);
+  const [smokeSummary, setSmokeSummary] = useState("");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
 
@@ -86,8 +89,8 @@ function BrokerSettingsContent() {
 
   const mode = useMemo(() => {
     if (!state?.has_api_key) return "credentials-missing" as const;
-    if (state.connected) return "live" as const;
     if (state.token_expired) return "token-expired" as const;
+    if (state.connected || state.status === "connected_read_only") return "read-only" as const;
     return "simulated" as const;
   }, [state]);
 
@@ -129,6 +132,23 @@ function BrokerSettingsContent() {
     }
   }
 
+  async function handleSmoke() {
+    setSmokeBusy(true);
+    setError("");
+    setSmokeSummary("");
+    try {
+      const result = await runZerodhaReadOnlySmoke();
+      const checks = Object.entries(result.checks);
+      const passed = checks.filter(([, check]) => check.ok).length;
+      const failed = checks.length - passed;
+      setSmokeSummary(`${passed}/${checks.length} read-only checks passed${failed ? `; ${failed} need attention` : ""}. No order route was called.`);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Read-only broker smoke failed");
+    } finally {
+      setSmokeBusy(false);
+    }
+  }
+
   const cardStyle: React.CSSProperties = {
     background: "var(--surface-1)",
     border: "1px solid var(--border-subtle)",
@@ -137,9 +157,10 @@ function BrokerSettingsContent() {
 
   const healthCards = [
     { label: "Credentials", value: state?.has_api_key ? "Saved" : "Missing", icon: KeyRound },
-    { label: "Session", value: state?.connected ? "Live" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
+    { label: "Session", value: state?.connected ? "Read-only" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
     { label: "Expiry", value: state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
   ];
+  const lastSyncedLabel = state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
 
   if (loading) {
     return (
@@ -181,14 +202,14 @@ function BrokerSettingsContent() {
               <div>
                 <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Current mode</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                  <StatusDot tone={mode === "live" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
+                  <StatusDot tone={mode === "read-only" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
                   <div
-                    data-testid={mode === "live" ? "broker-status-connected" : "broker-status-simulated"}
+                    data-testid={mode === "read-only" ? "broker-status-connected" : "broker-status-simulated"}
                     className="text-[16px] font-semibold"
                     style={{ color: "var(--text-primary)" }}
                   >
-                    {mode === "live"
-                      ? "Live via Zerodha"
+                    {mode === "read-only"
+                      ? "Zerodha connected read-only"
                       : mode === "token-expired"
                         ? "Token expired"
                         : mode === "credentials-missing"
@@ -197,8 +218,8 @@ function BrokerSettingsContent() {
                   </div>
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
-                  {mode === "live"
-                    ? "Orders from charts and watchlists route to Zerodha, then AlphaVyuh records them in the journal."
+                  {mode === "read-only"
+                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Live orders still require explicit final confirmation."
                     : mode === "token-expired"
                       ? "Your API key is saved, but Kite needs a fresh daily access token."
                       : mode === "credentials-missing"
@@ -207,7 +228,7 @@ function BrokerSettingsContent() {
                 </div>
               </div>
               <div className="mono" style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
-                {state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : "No live session"}
+                {state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : lastSyncedLabel}
               </div>
             </div>
 
@@ -223,6 +244,16 @@ function BrokerSettingsContent() {
               ))}
             </div>
 
+            <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>Broker sync</div>
+                <div className="text-[13px]" style={{ color: "var(--text-primary)" }}>{state?.status_label ?? "Simulated fallback active"}</div>
+              </div>
+              <div className="mono" style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                Last sync: {lastSyncedLabel}
+              </div>
+            </div>
+
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               <button
                 data-testid="connect-btn"
@@ -231,15 +262,23 @@ function BrokerSettingsContent() {
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
               >
-                {busy === "connect" ? "Opening Kite..." : mode === "live" ? "Reconnect Zerodha" : "Connect Zerodha"}
+                {busy === "connect" ? "Opening Kite..." : mode === "read-only" ? "Reconnect Zerodha" : "Connect Zerodha"}
               </button>
               <button
                 onClick={handleImport}
-                disabled={busy === "import" || !state?.connected}
+                disabled={busy === "import" || !state?.can_import}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
               >
                 {busy === "import" ? "Importing..." : "Import today's filled trades"}
+              </button>
+              <button
+                onClick={handleSmoke}
+                disabled={smokeBusy || !state?.has_api_key}
+                className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
+                style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
+              >
+                {smokeBusy ? "Checking..." : "Run read-only smoke"}
               </button>
               <Link href="/settings?tab=broker" className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
                 Edit Zerodha keys
@@ -327,6 +366,11 @@ function BrokerSettingsContent() {
         {(toast || error) && (
           <div style={{ ...cardStyle, padding: 14, marginTop: 14, color: error ? "var(--loss)" : "var(--text-primary)", background: error ? "rgba(255, 90, 101, 0.08)" : "var(--surface-1)" }}>
             <div className="text-[12px]">{error || toast}</div>
+          </div>
+        )}
+        {smokeSummary && (
+          <div style={{ ...cardStyle, padding: 14, marginTop: 14, color: "var(--text-primary)" }}>
+            <div className="text-[12px]">{smokeSummary}</div>
           </div>
         )}
       </div>

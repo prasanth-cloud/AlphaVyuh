@@ -309,6 +309,8 @@ type WorkflowState = {
   totalTrades: number
   brokerConnected: boolean
   brokerName: string | null
+  brokerStatusLabel: string | null
+  brokerLastSyncedAt: string | null
   closedTrades: number
   reviewedTrades: number
   onboardingCompleted: boolean
@@ -659,8 +661,10 @@ export default function DashboardPage() {
     watchlists: 0,
     trackedSymbols: 0,
     totalTrades: 0,
-    brokerConnected: false,
-    brokerName: null,
+      brokerConnected: false,
+      brokerName: null,
+      brokerStatusLabel: null,
+      brokerLastSyncedAt: null,
     closedTrades: 0,
     reviewedTrades: 0,
     onboardingCompleted: false,
@@ -735,11 +739,17 @@ export default function DashboardPage() {
           connected: false,
           broker: null,
           mode: 'simulated',
+          status: 'not_connected' as const,
+          status_label: 'Broker simulated',
           has_api_key: false,
           has_token: false,
           token_expired: false,
           connected_at: null,
           token_expires_at: null,
+          read_only: false,
+          can_import: false,
+          sync_status: 'idle' as const,
+          last_synced_at: null,
         })),
         getMe().catch(() => null),
       ]).then(async ([watchlists, journal, stats, broker, me]) => {
@@ -753,6 +763,8 @@ export default function DashboardPage() {
           totalTrades: stats?.total_trades ?? journal.entries.length,
           brokerConnected: Boolean(broker.connected),
           brokerName: broker.broker,
+          brokerStatusLabel: broker.status_label ?? null,
+          brokerLastSyncedAt: broker.last_synced_at ?? null,
           closedTrades,
           reviewedTrades,
           onboardingCompleted: Boolean(me?.onboarding_completed),
@@ -805,6 +817,9 @@ export default function DashboardPage() {
           {data?.trade_date && (
             <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD {data.trade_date}</span>
           )}
+          <span style={{ fontSize: 12, color: workflow.brokerConnected ? 'var(--gain)' : 'var(--text-tertiary)' }}>
+            {workflow.brokerStatusLabel ?? 'Broker simulated'}
+          </span>
         </div>
         {lastUpdated && (
           <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated {lastUpdated}</span>

@@ -74,4 +74,32 @@ describe("mock order flow", () => {
       journal_id: result.journal_id,
     });
   });
+
+  it("deduplicates mock broker imports and exposes sync state", async () => {
+    const { getBrokerStatus, getJournalEntries, importZerodhaTrades, runZerodhaReadOnlySmoke } = await import("@/lib/api");
+
+    const before = await getBrokerStatus();
+    expect(before.can_import).toBe(true);
+    expect(before.connected).toBe(false);
+
+    const first = await importZerodhaTrades();
+    const second = await importZerodhaTrades();
+
+    expect(first).toMatchObject({ imported: 2, skipped: 0, total_filled_orders: 2 });
+    expect(second).toMatchObject({ imported: 0, skipped: 2, total_filled_orders: 2 });
+
+    const journal = await getJournalEntries({ status: "open" });
+    const imported = journal.entries.filter((entry) =>
+      entry.entry_reason?.includes("alphavyuh-broker-import:zerodha:order:")
+    );
+    expect(imported).toHaveLength(2);
+
+    const after = await getBrokerStatus();
+    expect(after.last_synced_at).toBeTruthy();
+    expect(after.status_label).toBe("Mock broker import ready");
+
+    const smoke = await runZerodhaReadOnlySmoke();
+    expect(smoke.checks.profile.ok).toBe(true);
+    expect(smoke.checks.orderbook.count).toBe(2);
+  });
 });
