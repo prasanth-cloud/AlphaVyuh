@@ -20,11 +20,22 @@ class _Query:
         self.table_name = table_name
         self.insert_payload = None
         self.upsert_payload = None
+        self.ilike_value = None
 
     def select(self, *_args, **_kwargs):
         return self
 
     def eq(self, *_args, **_kwargs):
+        return self
+
+    def ilike(self, _column, value):
+        self.ilike_value = value.replace("%", "")
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
         return self
 
     def maybe_single(self):
@@ -48,6 +59,13 @@ class _Query:
         if self.table_name == "trade_journal" and self.insert_payload is not None:
             self.client.journal_inserts.append(self.insert_payload)
             return type("Result", (), {"data": [{"id": "journal-1", **self.insert_payload}]})()
+        if self.table_name == "trade_journal" and self.ilike_value:
+            matches = [
+                {"id": f"journal-{idx + 1}", "created_at": "2026-05-05T12:00:00+00:00"}
+                for idx, row in enumerate(self.client.journal_inserts)
+                if self.ilike_value in str(row.get("entry_reason", ""))
+            ]
+            return type("Result", (), {"data": matches})()
         if self.table_name == "workflow_states" and self.upsert_payload is not None:
             self.client.workflow_upserts.append(self.upsert_payload)
             return type("Result", (), {"data": [self.upsert_payload]})()
@@ -198,3 +216,49 @@ def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
     assert captured["order"].idempotency_key
     assert captured["order"].extensions.upstox.instrument_token == "NSE_EQ|INE002A01018"
     assert client.journal_inserts
+
+
+def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
+    client = _FakeSupabase()
+    orders = [
+        {
+            "status": "COMPLETE",
+            "tradingsymbol": "RELIANCE",
+            "filled_quantity": 10,
+            "average_price": 2500,
+            "transaction_type": "BUY",
+            "order_id": "kite-order-1",
+            "exchange_timestamp": "2026-05-05 10:20:00",
+        }
+    ]
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda **_kwargs: orders)
+
+    first = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+    second = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+
+    assert first["imported"] == 1
+    assert first["skipped"] == 0
+    assert second["imported"] == 0
+    assert second["skipped"] == 1
+    assert len(client.journal_inserts) == 1
+    assert "alphavyuh-broker-import:zerodha:order:kite-order-1" in client.journal_inserts[0]["entry_reason"]
+
+
+def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "get_profile", lambda *_args, **_kwargs: {"user_id": "kite-user"})
+    monkeypatch.setattr(broker_router.kite_api, "get_positions", lambda *_args, **_kwargs: {"net": [{"tradingsymbol": "RELIANCE"}]})
+    monkeypatch.setattr(broker_router.kite_api, "get_holdings", lambda *_args, **_kwargs: [{"tradingsymbol": "INFY"}])
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda *_args, **_kwargs: [{"status": "COMPLETE", "order_id": "kite-order-1"}])
+    monkeypatch.setattr(broker_router.kite_api, "get_order_trades", lambda *_args, **_kwargs: [{"trade_id": "trade-1"}])
+
+    result = asyncio.run(broker_router.zerodha_read_only_smoke(user_id="user-1"))
+
+    assert result["connected_read_only"] is True
+    assert result["checks"]["profile"]["ok"] is True
+    assert result["checks"]["positions"]["count"] == 1
+    assert result["checks"]["holdings"]["count"] == 1
+    assert result["checks"]["orderbook"]["count"] == 1
+    assert result["checks"]["tradebook"]["count"] == 1
