@@ -43,6 +43,39 @@ async function layoutProblems(page: Page) {
   });
 }
 
+async function darkThemeProblems(page: Page) {
+  return page.evaluate(() => {
+    const problems: string[] = [];
+    if (document.documentElement.dataset.theme !== "dark") {
+      problems.push(`theme is ${document.documentElement.dataset.theme || "unset"}`);
+    }
+
+    const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [];
+    if (rgb.length >= 3) {
+      const luminance = (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2]);
+      if (luminance > 55) problems.push(`body background is too light (${Math.round(luminance)})`);
+    }
+
+    const lightPanels = Array.from(document.querySelectorAll(".app-shell .workspace-card, .app-shell .workspace-hero, .app-shell table, .app-shell aside"))
+      .filter((el) => {
+        const color = window.getComputedStyle(el as HTMLElement).backgroundColor;
+        const parts = color.match(/[\d.]+/g)?.map(Number) ?? [];
+        if (parts.length < 3) return false;
+        const alpha = parts[3] ?? 1;
+        if (alpha < 0.65) return false;
+        const luminance = (0.2126 * parts[0]) + (0.7152 * parts[1]) + (0.0722 * parts[2]);
+        return luminance > 80;
+      });
+    if (lightPanels.length) problems.push(`${lightPanels.length} workflow panels rendered light`);
+
+    return problems;
+  });
+}
+
+function intersects(a: DOMRect | { x: number; y: number; width: number; height: number }, b: DOMRect | { x: number; y: number; width: number; height: number }) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
 test.describe("Workflow layout smoke", () => {
   for (const viewport of viewports) {
     test(`core workflow pages avoid horizontal overflow at ${viewport.label}`, async ({ page }) => {
@@ -58,4 +91,55 @@ test.describe("Workflow layout smoke", () => {
       }
     });
   }
+
+  test("authenticated workflow stays in the dark trading desk theme", async ({ page }) => {
+    for (const workflowPage of pages) {
+      await page.goto(workflowPage.path, { waitUntil: "domcontentloaded" });
+      await expect(workflowPage.marker(page)).toBeVisible({ timeout: 15_000 });
+      const problems = await darkThemeProblems(page);
+      expect(problems, workflowPage.name).toEqual([]);
+    }
+  });
+
+  test("scanner actions and watchlist chart header remain usable", async ({ page }) => {
+    await page.goto("/scanner", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Shortlist" })).toBeVisible();
+    await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Chart" })).toBeVisible();
+
+    await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".watchlist-chart-header")).toBeVisible();
+
+    const overlap = await page.locator(".watchlist-chart-header").evaluate((header) => {
+      const children = Array.from(header.children).map((child) => child.getBoundingClientRect());
+      return children.length >= 2 && children[0].x < children[1].x + children[1].width
+        && children[0].x + children[0].width > children[1].x
+        && children[0].y < children[1].y + children[1].height
+        && children[0].y + children[0].height > children[1].y;
+    });
+    expect(overlap).toBe(false);
+  });
+
+  test("feedback widget does not cover top workflow controls", async ({ page }) => {
+    await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    const boxes = await page.evaluate(() => {
+      const serialize = (rect: DOMRect | undefined) => rect ? {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      } : null;
+      const widget = serialize(document.querySelector(".feedback-widget")?.getBoundingClientRect());
+      const topbar = serialize(document.querySelector(".app-topbar")?.getBoundingClientRect());
+      const chartHeader = serialize(document.querySelector(".watchlist-chart-header")?.getBoundingClientRect());
+      return { widget, topbar, chartHeader };
+    });
+
+    expect(boxes.widget).toBeTruthy();
+    if (boxes.widget && boxes.topbar) expect(intersects(boxes.widget, boxes.topbar)).toBe(false);
+    if (boxes.widget && boxes.chartHeader) expect(intersects(boxes.widget, boxes.chartHeader)).toBe(false);
+  });
 });

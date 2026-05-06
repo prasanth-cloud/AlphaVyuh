@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
+import { allowMockAppAuth } from "@/lib/runtime-mode";
 
 export default async function AppLayout({
   children,
@@ -10,11 +11,7 @@ export default async function AppLayout({
 }) {
   const pathname = (await headers()).get("x-pathname") ?? "/";
 
-  if (
-    process.env.NODE_ENV !== "production"
-    && process.env.PLAYWRIGHT_MOCK_AUTH === "true"
-    && process.env.NEXT_PUBLIC_DATA_MODE === "mock"
-  ) {
+  if (allowMockAppAuth()) {
     return <AppShell>{children}</AppShell>;
   }
 

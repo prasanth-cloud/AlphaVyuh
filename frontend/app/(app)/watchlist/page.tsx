@@ -588,8 +588,8 @@ function ChartPanel({
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Topbar */}
-      <div className="workspace-card-header" style={{ background: "rgba(255,255,255,0.02)", paddingBottom: 8, flexShrink: 0 }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
+      <div className="workspace-card-header watchlist-chart-header" style={{ background: "rgba(255,255,255,0.02)", paddingBottom: 8, flexShrink: 0 }}>
+        <div className="watchlist-chart-title">
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <span className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{symbol}</span>
             <span className="caption">{referenceClose != null ? `Spot ${referenceClose.toFixed(2)}` : "Spot pending"}</span>
@@ -601,7 +601,7 @@ function ChartPanel({
             <DataProvenanceBadge kind="eod" asOf={latestBar?.time ? String(latestBar.time) : null} compact />
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div className="watchlist-chart-controls">
           <button onClick={() => onStepSymbol("prev")} className="workspace-chip-button">
             ← Prev
           </button>
@@ -661,7 +661,7 @@ function ChartPanel({
 
       {/* Chart */}
       {chartStats && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8, padding: "10px 14px 2px", flexShrink: 0 }}>
+        <div className="watchlist-chart-stats" style={{ padding: "10px 14px 2px", flexShrink: 0 }}>
           {[
             { label: "Structure", value: chartStats.trend, tone: chartStats.trend === "Uptrend" ? "var(--gain)" : chartStats.trend === "Downtrend" ? "var(--loss)" : "var(--text-secondary)" },
             { label: `${tf} move`, value: chartStats.change != null ? `${chartStats.change >= 0 ? "+" : ""}${chartStats.change.toFixed(2)}%` : "-", tone: (chartStats.change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" },
@@ -688,7 +688,7 @@ function ChartPanel({
       </div>
       {showChartDetails && (
         <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 8 }}>
+          <div className="watchlist-chart-details">
             {[
               { label: "Open", value: latestBar ? latestBar.open.toFixed(2) : "-" },
               { label: "High", value: latestBar ? latestBar.high.toFixed(2) : "-" },
@@ -711,7 +711,7 @@ function ChartPanel({
       {/* Order panel */}
       {showOrderTicket && (
         <div style={{ flexShrink: 0, padding: "14px 16px 16px", borderTop: "1px solid var(--border-subtle)", background: "rgba(255,255,255,0.025)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+        <div className="order-ticket-header">
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
             <div className="caption">Keep execution attached to the active queue and auto-send the trade into journal review.</div>

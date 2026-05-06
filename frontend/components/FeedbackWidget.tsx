@@ -49,7 +49,7 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
   }
 
   return (
-    <div style={{ position: "fixed", right: 18, bottom: 18, zIndex: 60 }}>
+    <div className="feedback-widget" style={{ position: "fixed", right: 14, bottom: 14, zIndex: 60 }}>
       {open && (
         <div
           style={{

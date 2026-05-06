@@ -248,6 +248,10 @@ input, textarea, select {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.reminder-strip-shell {
+  position: relative;
+}
+
 .reminder-strip-app {
   background: linear-gradient(180deg, rgba(244, 247, 251, 0.045), rgba(255, 255, 255, 0.01));
 }
@@ -269,11 +273,11 @@ input, textarea, select {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 7px 14px;
 }
 
 .reminder-chip {
-  padding: 7px 11px;
+  padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   background: rgba(255, 255, 255, 0.035);
@@ -282,6 +286,29 @@ input, textarea, select {
   letter-spacing: 0.02em;
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+.reminder-strip-dismiss {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(3, 4, 5, 0.82);
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.reminder-strip-dismiss:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 @keyframes reminder-scroll {
@@ -514,7 +541,7 @@ input, textarea, select {
 .app-topbar-inner {
   max-width: 1520px;
   margin: 0 auto;
-  min-height: 64px;
+  min-height: 58px;
   padding: 0 24px;
   display: flex;
   align-items: center;
@@ -530,8 +557,8 @@ input, textarea, select {
 }
 
 .app-brand-mark {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
   display: grid;
   place-items: center;
@@ -571,7 +598,7 @@ input, textarea, select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 10px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -609,8 +636,8 @@ input, textarea, select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 0 12px;
+  min-height: 32px;
+  padding: 0 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
@@ -629,7 +656,7 @@ input, textarea, select {
   gap: 8px;
   width: 100%;
   max-width: 420px;
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -640,6 +667,25 @@ input, textarea, select {
 .app-search-shell:focus-within {
   border-color: rgba(214, 223, 232, 0.18);
   box-shadow: 0 0 0 4px rgba(214, 223, 232, 0.05);
+}
+
+.app-search-input {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: 0;
+}
+
+.chart-symbol-search-input {
+  border: 1px solid rgba(255,255,255,0.08);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)),
+    rgba(10,14,18,0.78);
+  color: var(--app-text1);
 }
 
 .app-float-panel {
@@ -658,6 +704,103 @@ input, textarea, select {
   max-width: 1520px;
   margin: 0 auto;
   padding: 24px;
+}
+
+.scanner-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex-wrap: wrap;
+  min-width: 254px;
+}
+
+.scanner-row-action {
+  min-height: 24px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.scanner-watchlist-select {
+  min-height: 24px;
+  max-width: 138px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.watchlist-chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.watchlist-chart-title {
+  min-width: min(260px, 100%);
+  flex: 1 1 260px;
+}
+
+.watchlist-chart-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 1 1 520px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.watchlist-chart-controls label {
+  min-width: 0;
+}
+
+.watchlist-chart-stats,
+.watchlist-chart-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.order-ticket-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.journal-table-shell {
+  background: var(--surface-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: auto;
+}
+
+.journal-table {
+  width: 100%;
+  min-width: 860px;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+
+.journal-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .app-content-full-chart {
@@ -764,6 +907,17 @@ input, textarea, select {
   }
 }
 
+@media (max-width: 1180px) {
+  .watchlist-chart-title,
+  .watchlist-chart-controls {
+    flex-basis: 100%;
+  }
+
+  .watchlist-chart-controls {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 900px) {
   .app-auth-grid {
     grid-template-columns: 1fr;
@@ -800,6 +954,16 @@ input, textarea, select {
   .app-toolbar {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .scanner-row-actions {
+    justify-content: flex-start;
+    min-width: 180px;
+  }
+
+  .watchlist-chart-stats,
+  .watchlist-chart-details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
