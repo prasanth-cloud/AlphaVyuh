@@ -61,8 +61,8 @@ if not SUPABASE_KEY:
     print("Fix: Add SUPABASE_SERVICE_KEY=eyJ... to backend/.env")
     sys.exit(1)
 
-print(f"Supabase URL: {SUPABASE_URL[:40]}...")
-print(f"Key (first 20 chars): {SUPABASE_KEY[:20]}...")
+print(f"Supabase URL host: {SUPABASE_URL.split('//')[-1].split('/')[0] if '//' in SUPABASE_URL else '[configured]'}")
+print("Supabase key: [configured, redacted]")
 
 # ── Install dependencies if missing ──────────────────────────────────────────
 def ensure(pkg, import_name=None):

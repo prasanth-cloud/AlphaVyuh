@@ -281,6 +281,22 @@ function DecisionDesk({
 }) {
   const status = workflowPlanStatus(plan);
   const draft = plan ?? { symbol, watchlist_id: watchlistId, lifecycle: "watch", timeframe: "D", tags: [] };
+  const requiredFields = [
+    { key: "entry", label: "Entry", complete: Boolean(draft.entry && draft.entry > 0) },
+    { key: "stop", label: "Stop", complete: Boolean(draft.stop && draft.stop > 0) },
+    { key: "target", label: "Target", complete: Boolean(draft.target && draft.target > 0) },
+    { key: "position_size", label: "Size", complete: Boolean(draft.position_size && draft.position_size > 0) },
+    { key: "thesis", label: "Thesis", complete: Boolean(draft.thesis?.trim()) },
+    { key: "invalidation_rule", label: "Invalidation", complete: Boolean(draft.invalidation_rule?.trim()) },
+  ];
+  const invalidRisk =
+    draft.entry != null && draft.stop != null && draft.entry > 0 && draft.stop > 0 && draft.entry <= draft.stop;
+  const invalidReward =
+    draft.entry != null && draft.target != null && draft.entry > 0 && draft.target > 0 && draft.target <= draft.entry;
+  const riskReward =
+    draft.entry && draft.stop && draft.target && draft.entry > draft.stop && draft.target > draft.entry
+      ? (Math.abs(draft.target - draft.entry) / Math.abs(draft.entry - draft.stop)).toFixed(2)
+      : null;
   const inputStyle: React.CSSProperties = {
     width: "100%",
     fontSize: 12,
@@ -325,7 +341,20 @@ function DecisionDesk({
           </button>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
+      <div className="decision-desk-progress" style={{ marginBottom: 10 }}>
+        {requiredFields.map((field) => (
+          <span key={field.key} className={`decision-desk-chip${field.complete ? " complete" : ""}`}>
+            {field.complete ? "✓" : "•"} {field.label}
+          </span>
+        ))}
+        {riskReward && <span className="decision-desk-chip complete">R:R {riskReward}</span>}
+        {(invalidRisk || invalidReward) && (
+          <span className="decision-desk-chip invalid">
+            {invalidRisk ? "Stop must be below entry" : "Target must be above entry"}
+          </span>
+        )}
+      </div>
+      <div className="decision-desk-primary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
         <select value={draft.lifecycle} onChange={(e) => patch({ lifecycle: e.target.value as WorkflowLifecycle })} style={inputStyle}>
           {LIFECYCLES.map((item) => <option key={item} value={item}>{lifecycleLabel(item)}</option>)}
         </select>
@@ -342,7 +371,7 @@ function DecisionDesk({
         <input type="number" placeholder="Target" value={draft.target ?? ""} onChange={(e) => patch({ target: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
         <input type="number" placeholder="Qty" value={draft.position_size ?? ""} onChange={(e) => patch({ position_size: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 110px", gap: 8, marginTop: 8 }}>
+      <div className="decision-desk-secondary-grid" style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 110px", gap: 8, marginTop: 8 }}>
         <input placeholder="TF" value={draft.timeframe ?? "D"} onChange={(e) => patch({ timeframe: e.target.value.toUpperCase() || "D" })} style={inputStyle} />
         <input placeholder="Thesis" value={draft.thesis ?? ""} onChange={(e) => patch({ thesis: e.target.value || null })} style={inputStyle} />
         <input placeholder="Invalidation rule" value={draft.invalidation_rule ?? ""} onChange={(e) => patch({ invalidation_rule: e.target.value || null })} style={inputStyle} />

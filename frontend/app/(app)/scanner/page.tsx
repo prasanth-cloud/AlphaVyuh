@@ -769,7 +769,7 @@ export default function ScannerPage() {
                 )}
                 {selectedResults.size > 0 && (
                   <span className="workspace-pill" aria-live="polite">
-                    {selectedResults.size} selected
+                    {selectedResults.size} selected · bulk actions enabled
                   </span>
                 )}
                 {SORT_COLS.map(([col, lbl]) => {
@@ -950,6 +950,7 @@ export default function ScannerPage() {
                           <div className="scanner-row-actions">
                             <button
                               className="scanner-row-action"
+                              title={`Shortlist ${r.symbol}`}
                               onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'shortlist') }}
                               style={{ color: 'var(--accent)', cursor: 'pointer' }}
                             >
@@ -957,20 +958,7 @@ export default function ScannerPage() {
                             </button>
                             <button
                               className="scanner-row-action"
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later') }}
-                              style={{ color: 'var(--warn)', cursor: 'pointer' }}
-                            >
-                              Later
-                            </button>
-                            <button
-                              className="scanner-row-action"
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored') }}
-                              style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
-                            >
-                              Ignore
-                            </button>
-                            <button
-                              className="scanner-row-action"
+                              title={`Open ${r.symbol} chart`}
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
                               style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
                             >
@@ -978,22 +966,25 @@ export default function ScannerPage() {
                             </button>
                             <button
                               className="scanner-row-action"
-                              onClick={e => { e.stopPropagation(); router.push(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`) }}
-                              style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                              title={`Review ${r.symbol} later`}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later') }}
+                              style={{ color: 'var(--warn)', cursor: 'pointer' }}
                             >
-                              Journal
+                              Later
                             </button>
                             <button
                               className="scanner-row-action"
-                              onClick={e => { e.stopPropagation(); reportScannerDataIssue(r.symbol) }}
-                              style={{ color: 'var(--warn)', cursor: 'pointer' }}
+                              title={`Ignore ${r.symbol}`}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored') }}
+                              style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
                             >
-                              Report
+                              Ignore
                             </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
                                 onClick={e => e.stopPropagation()}
-                                className="scanner-watchlist-select">
+                                aria-label={`Add ${r.symbol} to watchlist`}
+                                className="scanner-row-select scanner-watchlist-select">
                                 <option value="">Add to watchlist</option>
                                 {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                               </select>

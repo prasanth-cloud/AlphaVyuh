@@ -234,7 +234,7 @@ export default function DataFreshnessPage() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
           value={health?.status ? health.status.toUpperCase() : "UNKNOWN"}
@@ -261,10 +261,10 @@ export default function DataFreshnessPage() {
         />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 16 }}>
+      <div className="data-detail-grid" style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 16 }}>
         <Card padding="lg">
           <h2 className="heading-card" style={{ marginBottom: 14 }}>Freshness details</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+          <div className="data-metric-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             {[
               ["Latest trade date", fmtDate(health?.latest_trade_date)],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
@@ -309,7 +309,7 @@ export default function DataFreshnessPage() {
 
       <Card padding="lg">
         <h2 className="heading-card" style={{ marginBottom: 14 }}>Product surface map</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+        <div className="data-surface-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
           {[
             ["Scanner", "Uses the latest complete market day and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
             ["Charts", "Shows EOD or Kite live-beta provenance directly in the chart toolbar before order planning.", "/charts/RELIANCE"],

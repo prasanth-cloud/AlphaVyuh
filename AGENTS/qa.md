@@ -44,17 +44,10 @@ cd backend && uvicorn app.main:app --reload --port 8000 &
 cd frontend && npm run dev &
 sleep 8
 
-# 2. Programmatically log in to get a session token for API tests
-cd backend
-TOKEN=$(python3 -c "
-import os
-from dotenv import load_dotenv
-load_dotenv('.env')
-from supabase import create_client
-sb = create_client(os.getenv('SUPABASE_URL'), os.getenv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '') or os.getenv('SUPABASE_ANON_KEY', ''))
-r = sb.auth.sign_in_with_password({'email': 'prasaanthbugga6840@gmail.com', 'password': 'AlphaVyuh2026!'})
-print(r.session.access_token)
-")
+# 2. Set a private QA session token for API tests.
+#    Generate it through your local auth tooling and keep it out of committed
+#    docs, shell history, screenshots, and shared logs.
+export TOKEN="<redacted-local-qa-session-token>"
 ```
 
 For each step 1-10 in PRODUCT.md, do:

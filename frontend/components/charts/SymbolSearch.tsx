@@ -108,6 +108,7 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="chart-symbol-search-input w-[220px] text-[13px] font-semibold rounded-[12px] pl-9 pr-3 py-2 outline-none transition-colors"
+          suppressHydrationWarning
         />
       </div>
 
