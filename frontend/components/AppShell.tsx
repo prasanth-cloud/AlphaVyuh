@@ -424,12 +424,7 @@ function SymbolSearch() {
             if (e.key === 'Enter' && displayResults[0]) select(displayResults[0].symbol)
           }}
           placeholder="Search symbols, shortlist, recent..."
-          style={{
-            flex: 1, height: '100%',
-            fontSize: 12,
-            color: 'var(--text-primary)',
-            background: 'transparent', border: 'none', outline: 'none',
-          }}
+          className="app-search-input"
         />
         <kbd style={{
           fontSize: 10,

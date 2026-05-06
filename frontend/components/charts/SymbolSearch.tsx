@@ -107,12 +107,7 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="w-[220px] text-[13px] font-semibold rounded-[12px] pl-9 pr-3 py-2 outline-none transition-colors"
-          style={{
-            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), rgba(10,14,18,0.78)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "var(--app-text1)",
-          }}
+          className="chart-symbol-search-input w-[220px] text-[13px] font-semibold rounded-[12px] pl-9 pr-3 py-2 outline-none transition-colors"
         />
       </div>
 
