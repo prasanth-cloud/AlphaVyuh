@@ -16,19 +16,17 @@ export default function LoginForm() {
   const [error, setError]       = useState("");
   const [notice, setNotice]     = useState("");
   const [showResend, setShowResend] = useState(false);
+  const [nextPath, setNextPath] = useState("/dashboard");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const requestedNext = params.get("next");
+    setNextPath(isSafeRedirect(requestedNext) ? requestedNext : "/dashboard");
     if (params.get("error") === "auth_callback_failed") {
       setError("Confirmation link expired or could not be verified. Please sign in, or request a fresh link.");
       setShowResend(true);
     }
   }, []);
-
-  function safeNext() {
-    const next = new URLSearchParams(window.location.search).get("next");
-    return isSafeRedirect(next) ? next : "/dashboard";
-  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -48,7 +46,7 @@ export default function LoginForm() {
         return;
       }
       markAppTiming("auth-session-set");
-      router.replace(safeNext());
+      router.replace(nextPath);
       router.refresh();
     } catch {
       setError("Network error — please try again.");
@@ -65,7 +63,7 @@ export default function LoginForm() {
       const res = await fetch("/api/auth/resend-confirmation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), next: safeNext() }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), next: nextPath }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -98,6 +96,21 @@ export default function LoginForm() {
         <div style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.6 }}>
           Continue into your trading workspace and pick up exactly where your workflow left off.
         </div>
+        {nextPath !== "/dashboard" && (
+          <div
+            style={{
+              marginTop: 12,
+              border: "1px solid rgba(244,247,251,0.12)",
+              borderRadius: 10,
+              background: "rgba(244,247,251,0.06)",
+              color: "var(--text-secondary)",
+              fontSize: 12,
+              padding: "8px 10px",
+            }}
+          >
+            After sign-in, you will continue to <span style={{ color: "var(--text-primary)" }}>{nextPath}</span>.
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleLogin} style={{ display: "grid", gap: 16 }}>
@@ -151,7 +164,7 @@ export default function LoginForm() {
 
       <p style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
         Don&apos;t have an account?{" "}
-        <Link href="/signup" style={{ color: "var(--accent)" }}>Create one</Link>
+        <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Create one</Link>
       </p>
     </div>
   );

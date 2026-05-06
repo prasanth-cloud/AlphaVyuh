@@ -67,6 +67,9 @@ test.describe("Open-redirect protection", () => {
   const attackVectors = [
     { label: "protocol-relative //evil.com", next: "//evil.com" },
     { label: "backslash /\\\\evil.com", next: "/\\evil.com" },
+    { label: "encoded protocol-relative /%2F%2Fevil.com", next: "/%2F%2Fevil.com" },
+    { label: "encoded backslash /%5Cevil.com", next: "/%5Cevil.com" },
+    { label: "encoded newline", next: "/dashboard%0ASet-Cookie:%20bad=1" },
     { label: "absolute https://evil.com", next: "https://evil.com" },
     { label: "javascript: scheme", next: "javascript:alert(1)" },
   ];

@@ -26,16 +26,17 @@ export default function ResetPasswordPage() {
 
   if (done) {
     return (
-      <Card className="bg-gray-900 border-gray-800">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-white">Check your inbox</CardTitle>
-          <CardDescription className="text-gray-400">
+          <div className="auth-kicker">Recovery</div>
+          <CardTitle>Check your inbox</CardTitle>
+          <CardDescription>
             If that email exists, you&apos;ll receive a reset link shortly.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Link href="/login" className="text-sm text-indigo-400 hover:text-indigo-300">
-            ← Back to login
+          <Link href="/login" style={{ color: "var(--accent)", fontSize: 13 }}>
+            Back to login
           </Link>
         </CardContent>
       </Card>
@@ -43,29 +44,29 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <Card className="bg-gray-900 border-gray-800">
+    <Card>
       <CardHeader>
-        <div className="mb-2 text-2xl font-bold text-white tracking-tight">AlphaVyuh</div>
-        <CardTitle className="text-white">Reset your password</CardTitle>
-        <CardDescription className="text-gray-400">
-          Enter your email and we&apos;ll send a reset link
+        <div className="auth-kicker">Recovery</div>
+        <CardTitle>Reset your password</CardTitle>
+        <CardDescription>
+          Enter your email and we&apos;ll send a reset link back to AlphaVyuh.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
-            <Label htmlFor="email" className="text-gray-300">Email</Label>
+            <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="arjun@example.com" required
-              className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500" />
+            />
           </div>
-          <Button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white">
+          <Button type="submit" disabled={loading} variant="primary" size="lg" fullWidth>
             {loading ? "Sending…" : "Send reset link"}
           </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-gray-400">
-          <Link href="/login" className="text-indigo-400 hover:text-indigo-300">← Back to login</Link>
+        <p style={{ marginTop: 16, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
+          <Link href="/login" style={{ color: "var(--accent)" }}>Back to login</Link>
         </p>
       </CardContent>
     </Card>
