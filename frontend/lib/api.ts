@@ -2043,7 +2043,7 @@ export async function importZerodhaTrades(): Promise<{
     throw new Error(body.detail ?? "Import failed");
   }
   const imported = await res.json();
-  invalidateClientCache(["journal:", "portfolio"]);
+  invalidateClientCache(["journal:", "portfolio", "broker:status"]);
   return imported;
 }
 
