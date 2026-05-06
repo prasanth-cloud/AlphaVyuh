@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
+from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
@@ -91,7 +92,7 @@ async def get_watchlists(
         return {"watchlists": [], "mode": "unavailable", "message": "Watchlist shell is temporarily unavailable."}
     watchlists = wl_res.data or []
     if not watchlists:
-        return {"watchlists": []}
+        return {"watchlists": [], "source_metadata": eod_source_metadata(as_of=None, status="unknown"), "mode": "eod"}
 
     wl_ids = [wl["id"] for wl in watchlists]
 
@@ -122,11 +123,16 @@ async def get_watchlists(
             })
         for wl in watchlists:
             wl["items"] = items_by_wl.get(wl["id"], [])
-        return {"watchlists": watchlists, "mode": "lite"}
+        return {
+            "watchlists": watchlists,
+            "mode": "lite",
+            "source_metadata": eod_source_metadata(as_of=None, status="unknown", symbols_count=len(all_items)),
+        }
 
     # 3 – latest complete trade date (once)
     quote_map: dict = {}
     all_symbols = list({item["symbol"] for item in all_items})
+    latest_date = None
     if all_symbols:
         latest_date = get_latest_complete_trade_date(client)
         if latest_date:
@@ -172,7 +178,19 @@ async def get_watchlists(
     for wl in watchlists:
         wl["items"] = items_by_wl.get(wl["id"], [])
 
-    return {"watchlists": watchlists}
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="healthy" if quote_map or not all_symbols else "degraded",
+        coverage_pct=round((len(quote_map) / len(all_symbols)) * 100, 1) if all_symbols else 100,
+        symbols_count=len(quote_map),
+        universe_active=len(all_symbols),
+    )
+    return {
+        "watchlists": watchlists,
+        "source_metadata": metadata,
+        "mode": metadata["mode"],
+        "trade_date": latest_date,
+    }
 
 
 class CreateWatchlistRequest(BaseModel):

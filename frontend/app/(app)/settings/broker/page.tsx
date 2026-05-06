@@ -18,7 +18,7 @@ type BrokerCard = {
   name: string;
   status: "active" | "next" | "planned";
   auth: string;
-  token: string;
+  sessionPolicy: string;
   scope: string;
 };
 
@@ -28,7 +28,7 @@ const BROKERS: BrokerCard[] = [
     name: "Zerodha Kite",
     status: "active",
     auth: "Kite Connect request-token flow",
-    token: "Daily token, expires around 06:00 IST",
+    sessionPolicy: "Daily broker session expires around 06:00 IST",
     scope: "Profile, holdings, orders, filled-trade import, chart-backed execution",
   },
   {
@@ -36,7 +36,7 @@ const BROKERS: BrokerCard[] = [
     name: "Upstox",
     status: "next",
     auth: "OAuth 2.0 authorization-code flow",
-    token: "Standard token expires at 03:30 AM next day; extended read token available by approval",
+    sessionPolicy: "Standard session expires at 03:30 AM next day; extended read mode needs approval",
     scope: "Holdings, positions, order book, execution after adapter is added",
   },
   {
@@ -44,7 +44,7 @@ const BROKERS: BrokerCard[] = [
     name: "Dhan",
     status: "planned",
     auth: "Access-token flow, partner path for multi-user platforms",
-    token: "User-controlled validity from 8 hours to 30 days",
+    sessionPolicy: "User-controlled validity from 8 hours to 30 days",
     scope: "Good candidate after Upstox because token validity is more flexible",
   },
 ];
@@ -322,7 +322,7 @@ function BrokerSettingsContent() {
                 </div>
                 <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
                   <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Auth:</b> {broker.auth}</div>
-                  <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Token:</b> {broker.token}</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Session:</b> {broker.sessionPolicy}</div>
                   <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Scope:</b> {broker.scope}</div>
                 </div>
                 {active ? (

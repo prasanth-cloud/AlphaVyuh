@@ -1,6 +1,6 @@
 import io
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -21,6 +21,7 @@ NSE_HEADERS = {
 }
 
 VALID_SERIES = {"EQ", "BE", "BZ", "SM", "ST"}
+SOURCE_NAME = "NSE bhavcopy EOD"
 
 COL_MAP = {
     # Symbol
@@ -63,6 +64,38 @@ def _safe_int(val):
         f = float(val)
         return None if np.isnan(f) else int(f)
     except (TypeError, ValueError):
+        return None
+
+
+def _upsert_ingest_log(client, payload: dict) -> None:
+    payload = {**payload, "updated_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        client.table("bhavcopy_ingestion_log").upsert(payload).execute()
+    except Exception:
+        legacy_keys = {
+            "trade_date",
+            "status",
+            "rows_ingested",
+            "error_message",
+            "created_at",
+            "updated_at",
+        }
+        client.table("bhavcopy_ingestion_log").upsert(
+            {key: value for key, value in payload.items() if key in legacy_keys}
+        ).execute()
+
+
+def _expected_active_rows(client, series: set[str] = VALID_SERIES) -> int | None:
+    try:
+        result = (
+            client.table("stock_universe")
+            .select("symbol", count="exact")
+            .eq("is_active", True)
+            .in_("series", sorted(series))
+            .execute()
+        )
+        return result.count
+    except Exception:
         return None
 
 
@@ -174,32 +207,60 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
 async def download_and_ingest(trade_date: date) -> dict:
     client = get_admin_client()
     date_str = trade_date.strftime("%d%m%Y")
+    source_url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{date_str}.csv"
+
+    if trade_date.weekday() >= 5:
+        _upsert_ingest_log(client, {
+            "trade_date": str(trade_date),
+            "status": "skipped",
+            "source_name": SOURCE_NAME,
+            "source_url": source_url,
+            "warning_message": "Weekend/non-trading day skipped before download.",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {"status": "skipped", "trade_date": str(trade_date), "reason": "weekend"}
 
     # 1. Check if already ingested
     existing = client.table("bhavcopy_ingestion_log") \
-        .select("status") \
+        .select("status,rows_ingested") \
         .eq("trade_date", str(trade_date)) \
         .execute()
-    if existing.data and existing.data[0]["status"] == "success":
-        return {"status": "already_done", "trade_date": str(trade_date)}
+    if existing.data and existing.data[0]["status"] == "success" and (existing.data[0].get("rows_ingested") or 0) > 0:
+        return {"status": "already_done", "trade_date": str(trade_date), "rows_ingested": existing.data[0].get("rows_ingested")}
 
     # 2. Mark as pending
-    client.table("bhavcopy_ingestion_log").upsert({
+    attempt_count = 1
+    try:
+        if existing.data:
+            attempt_count = int(existing.data[0].get("attempt_count") or 0) + 1
+    except Exception:
+        attempt_count = 1
+    _upsert_ingest_log(client, {
         "trade_date": str(trade_date),
         "status": "pending",
-    }).execute()
+        "source_name": SOURCE_NAME,
+        "source_url": source_url,
+        "attempt_count": attempt_count,
+    })
 
     try:
         # 3. Download bhavcopy CSV
-        url = f"https://nsearchives.nseindia.com/products/content/sec_bhavdata_full_{date_str}.csv"
         session = requests.Session()
         # Prime cookies by hitting NSE homepage first
         session.get("https://www.nseindia.com/", headers=NSE_HEADERS, timeout=15)
-        response = session.get(url, headers=NSE_HEADERS, timeout=30)
+        response = session.get(source_url, headers=NSE_HEADERS, timeout=30)
         response.raise_for_status()
 
         if len(response.content) < 500:
-            raise ValueError(f"Response too small ({len(response.content)} bytes) — likely not a trading day")
+            _upsert_ingest_log(client, {
+                "trade_date": str(trade_date),
+                "status": "skipped",
+                "source_name": SOURCE_NAME,
+                "source_url": source_url,
+                "warning_message": f"Response too small ({len(response.content)} bytes) — likely holiday/non-trading day.",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            })
+            return {"status": "skipped", "trade_date": str(trade_date), "reason": "holiday_or_unpublished"}
 
         # 4. Parse CSV
         df = pd.read_csv(io.BytesIO(response.content))
@@ -284,6 +345,13 @@ async def download_and_ingest(trade_date: date) -> dict:
 
         rows_ingested = len(ohlcv_rows)
         logger.info(f"Ingested {rows_ingested} rows for {trade_date}")
+        expected_rows = _expected_active_rows(client)
+        coverage_pct = round((rows_ingested / expected_rows) * 100, 2) if expected_rows else None
+        partial_ingest = bool(expected_rows and rows_ingested < max(100, int(expected_rows * 0.9)))
+        warning_message = (
+            f"Partial ingest: {rows_ingested}/{expected_rows} active symbols ({coverage_pct}%)."
+            if partial_ingest else None
+        )
 
         # 8 & 9. Compute indicators via bulk fetch (one query, not N queries)
         update_batch = _compute_indicators_bulk(client, df["symbol"].unique().tolist(), trade_date)
@@ -307,19 +375,36 @@ async def download_and_ingest(trade_date: date) -> dict:
             logger.warning(f"rs_score RPC failed for {trade_date}: {rs_err}")
 
         # 11. Log success
-        client.table("bhavcopy_ingestion_log").upsert({
+        _upsert_ingest_log(client, {
             "trade_date": str(trade_date),
-            "status": "success",
+            "status": "partial" if partial_ingest else "success",
             "rows_ingested": rows_ingested,
-        }).execute()
+            "source_name": SOURCE_NAME,
+            "source_url": source_url,
+            "expected_rows": expected_rows,
+            "coverage_pct": coverage_pct,
+            "partial_ingest": partial_ingest,
+            "warning_message": warning_message,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
 
-        return {"status": "success", "trade_date": str(trade_date), "rows_ingested": rows_ingested}
+        return {
+            "status": "partial" if partial_ingest else "success",
+            "trade_date": str(trade_date),
+            "rows_ingested": rows_ingested,
+            "expected_rows": expected_rows,
+            "coverage_pct": coverage_pct,
+            "partial_ingest": partial_ingest,
+        }
 
     except Exception as e:
         logger.error(f"Ingest failed for {trade_date}: {e}")
-        client.table("bhavcopy_ingestion_log").upsert({
+        _upsert_ingest_log(client, {
             "trade_date": str(trade_date),
             "status": "failed",
             "error_message": str(e)[:500],
-        }).execute()
+            "source_name": SOURCE_NAME,
+            "source_url": source_url,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
         raise

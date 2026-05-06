@@ -101,6 +101,20 @@ export function mockRunScan(): ScanResponse & {
     plan_limit: 200,
     plan: "mock",
     is_limited: false,
+    mode: "demo",
+    source: "AlphaVyuh mock fixtures",
+    source_metadata: {
+      source_name: "AlphaVyuh mock fixtures",
+      mode: "demo",
+      as_of: TRADE_DATE,
+      confidence: "demo",
+      coverage_pct: 100,
+      symbols_count: MOCK_STOCKS.length,
+      universe_active: MOCK_STOCKS.length,
+      license_notes: "Deterministic mock data for workflow QA, not market data.",
+    },
+    coverage_pct: 100,
+    universe_size: MOCK_STOCKS.length,
     results: MOCK_STOCKS,
   };
 }
@@ -148,6 +162,16 @@ export function mockMarketOverview(): MarketOverview {
     top_gainers: MOCK_STOCKS.filter((s) => (s.pct_change ?? 0) > 0).slice(0, 5).map(toMover),
     top_losers: MOCK_STOCKS.filter((s) => (s.pct_change ?? 0) < 0).slice(0, 5).map(toMover),
     most_active: [...MOCK_STOCKS].sort((a, b) => b.volume - a.volume).slice(0, 5).map(toMover),
+    source_metadata: {
+      source_name: "AlphaVyuh mock fixtures",
+      mode: "demo",
+      as_of: TRADE_DATE,
+      confidence: "demo",
+      coverage_pct: 100,
+      symbols_count: MOCK_STOCKS.length,
+      universe_active: MOCK_STOCKS.length,
+      license_notes: "Deterministic mock data for workflow QA, not market data.",
+    },
   };
 }
 
@@ -235,6 +259,18 @@ export function mockCandles(symbol: string, timeframe = "D", limit = 180): Candl
     company_name: q.company_name,
     sector: q.sector,
     timeframe,
+    mode: "demo",
+    source: "AlphaVyuh mock fixtures",
+    source_metadata: {
+      source_name: "AlphaVyuh mock fixtures",
+      mode: "demo",
+      as_of: last.time,
+      confidence: "demo",
+      coverage_pct: 100,
+      symbols_count: 1,
+      universe_active: 1,
+      license_notes: "Deterministic mock candles for workflow QA, not market data.",
+    },
     candles,
     latest: {
       close: last.close,

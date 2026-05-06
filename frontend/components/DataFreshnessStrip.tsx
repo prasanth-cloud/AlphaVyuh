@@ -20,7 +20,13 @@ function healthTone(status?: DataHealth["status"]) {
 export default function DataFreshnessStrip({ health, tradeDate, compact = false }: DataFreshnessStripProps) {
   const status = health?.status;
   const asOf = tradeDate || health?.latest_trade_date || null;
-  const badgeKind = status === "degraded" ? "fallback" : "eod";
+  const badgeKind = health?.mode === "demo"
+    ? "demo"
+    : health?.mode === "live"
+      ? "live-beta"
+      : status === "degraded" || status === "stale" || health?.fallback_active
+        ? "fallback"
+        : "eod";
   const tone = healthTone(status);
   const detail = health?.message
     ?? (asOf ? `Using latest complete market day ${asOf}.` : "Data freshness check is unavailable.");
@@ -59,6 +65,7 @@ export default function DataFreshnessStrip({ health, tradeDate, compact = false 
             <span className="label" style={{ color: tone }}>{status ? status.toUpperCase() : "UNKNOWN"}</span>
             {coverage && <span className="caption">{coverage}</span>}
             {symbols && <span className="caption">{symbols}</span>}
+            {health?.provider?.source_name && <span className="caption">{health.provider.source_name}</span>}
           </div>
           {!compact && (
             <div className="caption" style={{ marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

@@ -220,7 +220,7 @@ export default function DataFreshnessPage() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
             <DataProvenanceBadge
-              kind={health?.status === "degraded" ? "fallback" : "eod"}
+              kind={health?.mode === "demo" ? "demo" : health?.status === "degraded" || health?.status === "stale" || health?.fallback_active ? "fallback" : "eod"}
               asOf={health?.latest_trade_date ?? null}
             />
             {loadedAt && <span className="caption">Checked {loadedAt}</span>}
@@ -267,7 +267,11 @@ export default function DataFreshnessPage() {
           <div className="data-metric-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             {[
               ["Latest trade date", fmtDate(health?.latest_trade_date)],
+              ["Last successful EOD", fmtDate(health?.last_successful_eod_date ?? health?.latest_trade_date)],
+              ["Source", health?.provider?.source_name ?? "Unknown"],
+              ["Fallback active", health?.fallback_active ? "Yes" : "No"],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
+              ["Last bhavcopy", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],
               ["EMA 200 missing", fmtNumber(health?.indicators_missing.ema_200)],
               ["Last ingest run", health?.last_run.id ?? "Not available"],

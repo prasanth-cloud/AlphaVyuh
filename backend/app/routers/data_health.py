@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from app.brokers.kite import api as kite_api
 from app.services.kite_stream import kite_live_ticker
 from app.services.market_data import _kite_access_token, _kite_api_key
+from app.services.market_context import fallback_source_metadata, normalize_health_row
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/data", tags=["data-health"])
@@ -19,6 +20,11 @@ def _unavailable_health():
         "message": "Data freshness check is temporarily unavailable; product views will use cached or latest known data where possible.",
         "indicators_missing": {"rsi_14": None, "ema_200": None},
         "last_run": {"id": None, "errors": None},
+        "last_successful_eod_date": None,
+        "last_bhavcopy": {"trade_date": None, "status": None, "rows_ingested": None, "source_url": None, "error_message": None},
+        "provider": fallback_source_metadata("Data freshness endpoint unavailable."),
+        "fallback_active": True,
+        "next_refresh_hint": "After the next successful EOD ingest.",
         "live_market": _kite_market_status(),
     }
 
@@ -68,52 +74,7 @@ async def data_health():
         return _unavailable_health()
 
     try:
-        hours_stale = h.get("hours_since_last_run") or 999
-        null_rsi = h.get("null_rsi_latest") or 0
-        total_syms = max(h.get("symbols_latest") or 1, 1)
-        active_universe = h.get("universe_active") or total_syms
-        last_run_errors = h.get("last_run_errors") or 0
-        coverage_pct = round((total_syms / max(active_universe, 1)) * 100, 1)
-
-        if hours_stale > 28:
-            status = "stale"
-        elif (null_rsi / total_syms) > 0.05 or last_run_errors > 20:
-            status = "degraded"
-        else:
-            status = "healthy"
-
-        mode = "eod"
-        if status == "degraded":
-            mode = "fallback"
-        elif status == "stale":
-            mode = "unknown"
-
-        if status == "healthy":
-            message = "Latest complete market day is available."
-        elif status == "degraded":
-            message = "Newest ingest has gaps; product views use the latest complete market day."
-        else:
-            message = "Market data refresh is overdue; verify before acting."
-
-        return {
-            "status": status,
-            "latest_trade_date": h.get("latest_trade_date"),
-            "hours_since_refresh": round(float(hours_stale), 1) if hours_stale != 999 else None,
-            "symbols_on_latest_date": h.get("symbols_latest"),
-            "universe_active": h.get("universe_active"),
-            "coverage_pct": coverage_pct,
-            "mode": mode,
-            "message": message,
-            "indicators_missing": {
-                "rsi_14": h.get("null_rsi_latest"),
-                "ema_200": h.get("null_ema200_latest"),
-            },
-            "last_run": {
-                "id": h.get("last_run_id"),
-                "errors": last_run_errors,
-            },
-            "live_market": _kite_market_status(),
-        }
+        return {**normalize_health_row(h), "live_market": _kite_market_status()}
     except Exception:
         return _unavailable_health()
 

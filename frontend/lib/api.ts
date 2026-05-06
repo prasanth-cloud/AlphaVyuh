@@ -238,11 +238,33 @@ export async function getMarkets(): Promise<Market[]> {
 }
 
 export type ScanResponse = {
-  trade_date: string;
+  trade_date: string | null;
   total_matches: number;
   plan_limit: number;
   plan?: string;
+  mode?: DataMode;
+  source?: string;
+  source_metadata?: SourceMetadata;
+  coverage_pct?: number | null;
+  universe_size?: number | null;
+  message?: string;
   results: ScanResult[];
+};
+
+export type DataMode = "live" | "eod" | "fallback" | "unknown" | "demo";
+
+export type SourceMetadata = {
+  source_name: string;
+  mode: DataMode;
+  as_of: string | null;
+  generated_at?: string;
+  confidence?: string;
+  coverage_pct?: number | null;
+  symbols_count?: number | null;
+  universe_active?: number | null;
+  cache_status?: string | null;
+  license_notes?: string;
+  message?: string;
 };
 
 export type MarketSummary = {
@@ -861,6 +883,9 @@ export type CandlesResponse = {
   company_name: string | null;
   sector: string | null;
   timeframe: string;
+  mode?: DataMode;
+  source?: string;
+  source_metadata?: SourceMetadata;
   candles: CandleBar[];
   latest: {
     close: number;
@@ -2146,13 +2171,14 @@ export async function getBrokerStatus(): Promise<{
 }
 
 export type DataHealth = {
-  status: "healthy" | "degraded" | "stale";
+  status: "healthy" | "degraded" | "stale" | "unknown";
   latest_trade_date: string | null;
+  last_successful_eod_date?: string | null;
   hours_since_refresh: number | null;
   symbols_on_latest_date: number | null;
   universe_active: number | null;
   coverage_pct?: number | null;
-  mode?: "live" | "eod" | "fallback" | "unknown";
+  mode?: DataMode;
   message?: string;
   indicators_missing: {
     rsi_14: number | null;
@@ -2162,6 +2188,16 @@ export type DataHealth = {
     id: string | null;
     errors: number | null;
   };
+  last_bhavcopy?: {
+    trade_date: string | null;
+    status: string | null;
+    rows_ingested: number | null;
+    source_url?: string | null;
+    error_message?: string | null;
+  };
+  provider?: SourceMetadata;
+  fallback_active?: boolean;
+  next_refresh_hint?: string;
   live_market?: LiveMarketStatus | null;
 };
 
@@ -2177,7 +2213,7 @@ export async function getDataHealth(): Promise<DataHealth | null> {
       symbols_on_latest_date: 500,
       universe_active: 500,
       coverage_pct: 99.2,
-      mode: "fallback",
+      mode: "demo",
       message: "Demo data is loaded from local mock fixtures.",
       indicators_missing: {
         rsi_14: 0,
@@ -2187,6 +2223,19 @@ export async function getDataHealth(): Promise<DataHealth | null> {
         id: "mock-refresh",
         errors: 0,
       },
+      last_successful_eod_date: "2026-04-24",
+      provider: {
+        source_name: "AlphaVyuh mock fixtures",
+        mode: "demo",
+        as_of: "2026-04-24",
+        confidence: "demo",
+        coverage_pct: 99.2,
+        symbols_count: 500,
+        universe_active: 500,
+        license_notes: "Deterministic mock data for workflow QA, not market data.",
+      },
+      fallback_active: false,
+      next_refresh_hint: "Mock data does not refresh automatically.",
     };
   }
   const now = Date.now();
@@ -2614,6 +2663,8 @@ export interface MarketOverview {
   as_of?: string | null;
   generated_at?: string | null;
   cache_status?: "hit" | "miss" | string;
+  source_metadata?: SourceMetadata;
+  provider?: SourceMetadata;
 }
 
 function numberOr(value: unknown, fallback = 0): number {
@@ -2660,6 +2711,8 @@ function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined
     as_of: data.as_of ?? data.trade_date ?? null,
     generated_at: data.generated_at ?? null,
     cache_status: data.cache_status,
+    source_metadata: data.source_metadata ?? data.provider,
+    provider: data.provider,
   };
 }
 
@@ -2748,7 +2801,7 @@ export type MarketSnapshot = {
   overview: MarketOverview;
   health: DataHealth | null;
   asOf: string | null;
-  mode: DataHealth["mode"] | "live" | "eod" | "fallback" | "unknown";
+  mode: DataMode;
   source: string;
   generatedAt: string;
   cacheStatus: string;
@@ -2761,9 +2814,9 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
     return {
       overview,
       health,
-      asOf: overview.as_of ?? overview.trade_date ?? health?.latest_trade_date ?? null,
-      mode: overview.is_live ? "live" : health?.mode ?? "eod",
-      source: overview.market_data_source ?? "AlphaVyuh market snapshot",
+      asOf: overview.source_metadata?.as_of ?? overview.as_of ?? overview.trade_date ?? health?.latest_trade_date ?? null,
+      mode: overview.source_metadata?.mode ?? (overview.is_live ? "live" : health?.mode ?? "eod"),
+      source: overview.source_metadata?.source_name ?? overview.market_data_source ?? "AlphaVyuh market snapshot",
       generatedAt: overview.generated_at ?? new Date().toISOString(),
       cacheStatus: overview.cache_status ?? "client",
     };
@@ -2880,7 +2933,7 @@ export async function getScannerPresets(): Promise<ScanPreset[]> {
   return res.json();
 }
 
-export async function runScanner(filters: Record<string, unknown>, sort_by = "volume_ratio", sort_order = "desc"): Promise<{ trade_date: string; total_matches: number; plan: string; results: ScanResult[] }> {
+export async function runScanner(filters: Record<string, unknown>, sort_by = "volume_ratio", sort_order = "desc"): Promise<{ trade_date: string | null; total_matches: number; plan: string; results: ScanResult[] }> {
   if (shouldUseMockFallback()) {
     const data = mockRunScan();
     return {

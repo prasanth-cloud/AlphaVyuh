@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services.rate_limit import plan_cache, scanner_limiter
+from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
@@ -659,7 +660,24 @@ async def run_scanner(
     except Exception:
         latest_date = None
     if not latest_date:
-        return {"trade_date": None, "total_matches": 0, "plan_limit": hard_limit, "results": []}
+        metadata = fallback_source_metadata("No complete EOD trade date is available for scanner.")
+        return {
+            "trade_date": None,
+            "total_matches": 0,
+            "plan_limit": hard_limit,
+            "plan": plan,
+            "is_limited": False,
+            "page": max(body.page, 1),
+            "page_size": body.page_size,
+            "total_pages": 1,
+            "visible_count": 0,
+            "results": [],
+            "mode": "unavailable",
+            "message": "No complete EOD trade date is available for scanner.",
+            "source_metadata": metadata,
+            "coverage_pct": None,
+            "universe_size": None,
+        }
 
     # Build base query with series filter pushed to DB
     f = body.filters
@@ -727,6 +745,7 @@ async def run_scanner(
     try:
         rows = q.limit(SCAN_ROW_CAP).execute().data or []
     except Exception:
+        metadata = fallback_source_metadata("Scanner query could not complete; try a narrower preset.", as_of=latest_date)
         return {
             "trade_date": latest_date,
             "total_matches": 0,
@@ -740,6 +759,9 @@ async def run_scanner(
             "results": [],
             "mode": "unavailable",
             "message": "Scanner query could not complete; try a narrower preset.",
+            "source_metadata": metadata,
+            "coverage_pct": None,
+            "universe_size": None,
         }
 
     # Python-side filter for computed columns
@@ -758,6 +780,25 @@ async def run_scanner(
 
     total = len(results)
     capped = results[:hard_limit]
+    try:
+        universe_size = (
+            client.table("stock_universe")
+            .select("symbol", count="exact")
+            .eq("is_active", True)
+            .in_("series", series_list)
+            .execute()
+            .count
+        )
+    except Exception:
+        universe_size = None
+    coverage_pct = round((len(rows) / universe_size) * 100, 1) if universe_size else None
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="degraded" if coverage_pct is not None and coverage_pct < 90 else "healthy",
+        coverage_pct=coverage_pct,
+        symbols_count=len(rows),
+        universe_active=universe_size,
+    )
     safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
     safe_page = max(body.page, 1)
 
@@ -781,6 +822,11 @@ async def run_scanner(
         "total_pages":   total_pages,
         "visible_count": len(paged),
         "results":       paged,
+        "source_metadata": metadata,
+        "mode": metadata["mode"],
+        "source": metadata["source_name"],
+        "coverage_pct": coverage_pct,
+        "universe_size": universe_size,
     }
 
 
