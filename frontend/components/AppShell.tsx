@@ -28,9 +28,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
   const fullChart = pathname.startsWith('/charts/') && searchParams.get('full') === '1'
   const router = useRouter()
+  const [reminderDismissed, setReminderDismissed] = useState(false)
 
   useEffect(() => {
     window.requestAnimationFrame(() => markAppTiming('first-app-shell-paint'))
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = 'dark'
+    window.localStorage.setItem('alphavyuh-theme', 'dark')
+    window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: 'dark' }))
+    setReminderDismissed(window.localStorage.getItem('alphavyuh-reminder-strip') === 'dismissed')
   }, [])
 
   useEffect(() => {
@@ -117,7 +125,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <AccountMenuButton />
           </div>
         </div>
-        <TraderReminderStrip tone="app" />
+        {!reminderDismissed && (
+          <div className="reminder-strip-shell">
+            <TraderReminderStrip tone="app" />
+            <button
+              type="button"
+              className="reminder-strip-dismiss"
+              aria-label="Dismiss trading reminder strip"
+              onClick={() => {
+                window.localStorage.setItem('alphavyuh-reminder-strip', 'dismissed')
+                setReminderDismissed(true)
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
       </nav>
       )}
 
@@ -207,15 +230,12 @@ function MarketStatus() {
 /* ── ACCOUNT MENU ────────────────────────────────────────────────────────── */
 function AccountMenuButton() {
   const [open, setOpen] = useState(false)
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const ref = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('alphavyuh-theme')
-    const nextTheme = stored === 'light' ? 'light' : 'dark'
-    setTheme(nextTheme)
-    document.documentElement.dataset.theme = nextTheme
+    document.documentElement.dataset.theme = 'dark'
+    window.localStorage.setItem('alphavyuh-theme', 'dark')
   }, [])
 
   useEffect(() => {
@@ -231,14 +251,6 @@ function AccountMenuButton() {
     clearAuthHeaderCache()
     await createClient().auth.signOut()
     router.push('/login')
-  }
-
-  function toggleTheme() {
-    const nextTheme = theme === 'light' ? 'dark' : 'light'
-    setTheme(nextTheme)
-    document.documentElement.dataset.theme = nextTheme
-    window.localStorage.setItem('alphavyuh-theme', nextTheme)
-    window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: nextTheme }))
   }
 
   return (
@@ -294,21 +306,16 @@ function AccountMenuButton() {
               {item.label}
             </Link>
           ))}
-          <button
-            onClick={toggleTheme}
+          <div
             style={{
-              width: '100%', textAlign: 'left',
               padding: '7px 10px',
-              fontSize: 12, color: 'var(--text-secondary)',
-              cursor: 'pointer', background: 'none', border: 'none',
-              borderRadius: 4,
-              transition: 'background var(--motion-instant)',
+              fontSize: 11,
+              color: 'var(--text-tertiary)',
+              lineHeight: 1.45,
             }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
           >
-            {theme === 'light' ? 'Use dark theme' : 'Use light theme'}
-          </button>
+            Authenticated workspace locked to dark trading desk mode.
+          </div>
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
           <button
             onClick={signOut}

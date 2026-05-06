@@ -947,47 +947,53 @@ export default function ScannerPage() {
                           {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
                         </Td>
                         <Td>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                          <div className="scanner-row-actions">
                             <button
+                              className="scanner-row-action"
                               onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'shortlist') }}
-                              style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer' }}
+                              style={{ color: 'var(--accent)', cursor: 'pointer' }}
                             >
                               Shortlist
                             </button>
                             <button
+                              className="scanner-row-action"
                               onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later') }}
-                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
+                              style={{ color: 'var(--warn)', cursor: 'pointer' }}
                             >
                               Later
                             </button>
                             <button
+                              className="scanner-row-action"
                               onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored') }}
-                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                              style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
                             >
                               Ignore
                             </button>
                             <button
+                              className="scanner-row-action"
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
-                              style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}
+                              style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
                             >
                               Chart
                             </button>
                             <button
+                              className="scanner-row-action"
                               onClick={e => { e.stopPropagation(); router.push(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`) }}
-                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                              style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
                             >
                               Journal
                             </button>
                             <button
+                              className="scanner-row-action"
                               onClick={e => { e.stopPropagation(); reportScannerDataIssue(r.symbol) }}
-                              style={{ fontSize: 10, color: 'var(--warn)', cursor: 'pointer' }}
+                              style={{ color: 'var(--warn)', cursor: 'pointer' }}
                             >
                               Report
                             </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
                                 onClick={e => e.stopPropagation()}
-                                style={{ fontSize: 10, padding: '2px 4px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                className="scanner-watchlist-select">
                                 <option value="">Add to watchlist</option>
                                 {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                               </select>
