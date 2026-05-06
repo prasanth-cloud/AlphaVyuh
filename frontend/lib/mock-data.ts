@@ -29,6 +29,7 @@ const MOCK_STOCKS: ScanResult[] = [
   stock("TCS", "Tata Consultancy Services", "IT Services", 3824, 0.55, 2066130, 0.9, 53, 3792, 3716, 3560, 77),
   stock("HDFCBANK", "HDFC Bank", "Banks", 1714, 0.91, 9218080, 1.2, 55, 1688, 1656, 1604, 79),
   stock("SBIN", "State Bank of India", "Banks", 786, -0.22, 18218802, 0.8, 49, 792, 806, 742, 64),
+  stock("AUBANK", "AU Small Finance Bank", "Banks", 694.35, 1.42, 2110840, 1.4, 61, 682, 665, 628, 76),
 ];
 
 function stock(
@@ -196,7 +197,13 @@ export function mockWatchlists(): Watchlist[] {
 }
 
 export function mockQuote(symbol: string): ScanResult | null {
-  return MOCK_STOCKS.find((s) => s.symbol === symbol.toUpperCase()) ?? MOCK_STOCKS[0] ?? null;
+  const normalized = symbol.trim().toUpperCase();
+  const match = MOCK_STOCKS.find((s) => s.symbol === normalized);
+  if (match) return match;
+  const seed = Array.from(normalized).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const close = 450 + (seed % 1200);
+  const pct = ((seed % 41) - 20) / 10;
+  return stock(normalized || "UNKNOWN", `${normalized || "Unknown"} demo symbol`, "Demo", close, pct, 500000 + seed * 1000, 1.1, 52 + (seed % 22), close * 0.98, close * 0.95, close * 0.9, 50 + (seed % 35));
 }
 
 export function mockLiveQuote(symbol: string): LiveQuote | null {

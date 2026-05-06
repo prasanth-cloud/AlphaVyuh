@@ -17,6 +17,7 @@ const pages: WorkflowPage[] = [
 const viewports = [
   { width: 1366, height: 768, label: "desktop" },
   { width: 1024, height: 768, label: "tablet" },
+  { width: 390, height: 844, label: "mobile" },
 ];
 
 async function layoutProblems(page: Page) {
