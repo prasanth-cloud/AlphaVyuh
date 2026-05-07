@@ -39,7 +39,7 @@ This file maps the full public-launch prompt to concrete artifacts on branch
 | Data provenance visible and not confused with live data. | Existing E2E coverage checks provenance across dashboard/scanner/watchlist/full chart/data page. | Done |
 | Broker execution cannot accidentally place live orders. | Backend order safety tests passed; live/sandbox execution remains disabled unless explicit backend flag and user confirmation are present. | Done |
 | Billing/Razorpay safely enabled or disabled. | Billing UI remains disabled/waitlist-gated; Razorpay checkout is not production-enabled. | Done for disabled posture |
-| Supabase migrations reviewed and production-safe. | Repo migration docs reviewed; no production Supabase mutation or advisor run was approved. | Owner-gated |
+| Supabase migrations reviewed and production-safe. | Repo migration docs reviewed; read-only staging advisors were run; `supabase/migrations/20260507111500_launch_advisor_security_hardening.sql` added for function grants/search paths. Production application evidence remains owner-gated. | Partially done; production apply gated |
 | Security-sensitive flows reviewed. | Auth, redirects, service keys, broker credentials, payment webhooks, rate limits, public API exposure, and dependency posture are covered by scan docs and tests. | Done for repo-local evidence |
 
 ## Remaining Owner-Controlled No-Go Items
@@ -51,9 +51,9 @@ These are outside autonomous repo work and prevent marking the app as a paid ful
 3. Razorpay production checkout approval with webhook, refund/cancel, failed-payment, and owner sign-off evidence.
 4. Owner-provided Kite/Upstox tokens for read-only smoke, if broker validation is desired.
 5. Explicit production Supabase inspection/migration approval, including RLS/advisor evidence.
-6. A real `codex-security:security-scan` run, if that skill becomes available in the environment.
+6. Apply and verify `supabase/migrations/20260507111500_launch_advisor_security_hardening.sql` in staging/prod.
+7. A real `codex-security:security-scan` run, if that skill becomes available in the environment.
 
 ## Conclusion
 
 The repo work and evidence PR are complete. The full public launch objective is not complete because the remaining no-go items require owner input or unavailable tooling. The safe release recommendation is to continue founder/private beta until those gates are resolved.
-

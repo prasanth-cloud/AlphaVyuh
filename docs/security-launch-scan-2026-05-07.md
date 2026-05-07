@@ -48,7 +48,7 @@ Dependency checks are recorded in `docs/public-launch-readiness-2026-05-07.md` a
 
 ### SEC-2026-05-07-01 — Dev Login Public Route
 
-Severity: Medium  
+Severity: Medium
 Status: Fixed
 
 `/dev-login` was included in `PUBLIC_PREFIXES`. The page still required a real Supabase OTP token and did not bypass auth by itself, but public production-like exposure of a development-named auth route is a trust and attack-surface issue.
@@ -61,7 +61,7 @@ Fix:
 
 ### SEC-2026-05-07-02 — Auth Provider Error Detail Leakage
 
-Severity: Medium  
+Severity: Medium
 Status: Fixed
 
 Backend auth middleware returned `Authentication failed: {provider_exception}` on unexpected Supabase Auth fallback errors. This could expose internal provider or network details.
@@ -73,7 +73,7 @@ Fix:
 
 ### SEC-2026-05-07-03 — Broker Smoke Full Token Print Switch
 
-Severity: Medium  
+Severity: Medium
 Status: Fixed
 
 Read-only Kite and Upstox smoke scripts masked tokens by default, but `--print-access-token` could print a full session token during local validation.
@@ -83,6 +83,25 @@ Fix:
 - Full token printing now also requires `ALLOW_PRINT_ACCESS_TOKEN=true`.
 - Help text marks the option unsafe debug only.
 - Default smoke output remains masked and does not place, modify, or cancel orders.
+
+### SEC-2026-05-07-04 — Supabase SECURITY DEFINER Grants And Search Path
+
+Severity: Medium
+Status: Migration added
+
+Read-only Supabase security advisors for the documented staging project reported
+WARN-level findings for direct `anon`/`authenticated` execution of several
+`SECURITY DEFINER` functions and mutable function search paths.
+
+Fix:
+
+- Added `supabase/migrations/20260507111500_launch_advisor_security_hardening.sql`.
+- The migration sets explicit `search_path = public` on known security-sensitive
+  functions.
+- It revokes direct `PUBLIC`, `anon`, and `authenticated` execution for
+  backend/service-role RPCs such as broker credential access, scanner VCP lookback,
+  and RS score recomputation.
+- It grants those backend RPCs to `service_role` only.
 
 ## Validated Safe Posture
 
@@ -94,10 +113,12 @@ Fix:
 - Frontend `npm audit --audit-level=moderate` reported 0 vulnerabilities.
 - Backend `pip-audit` reported no known vulnerabilities for `backend/requirements.txt`.
 - Full backend tests passed, including broker order safety, encrypted credential, payment signature, rate-limit, and auth middleware coverage.
+- Read-only Supabase advisors were run against staging project `fyxltykqdvacbdgmeucf`. WARN-level function grant/search-path findings are addressed by the new migration; production application remains owner-gated.
 
 ## Residual Owner-Gated Risks
 
-- Production Supabase RLS/advisor evidence was not generated because production Supabase mutation/inspection was not approved.
+- Production Supabase mutation remains unapproved; the new hardening migration still needs normal staging/prod application evidence before public launch.
+- Supabase Auth leaked-password protection was disabled in the staging advisor output and must be enabled by the project owner in Supabase Auth settings before public launch.
 - Real Kite/Upstox read-only smoke was not run because owner-provided tokens were not supplied.
 - Razorpay production checkout is not enabled; payment launch needs owner approval and end-to-end test/live-mode evidence.
 - Paid/live market-data redistribution requires vendor terms and launch-owner approval.

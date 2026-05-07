@@ -1,7 +1,7 @@
 # AlphaVyuh Public Launch Readiness Audit — 2026-05-07
 
-Branch: `launch/public-release-readiness-2026-05-07`  
-Repository: `prasanth-cloud/AlphaVyuh`  
+Branch: `launch/public-release-readiness-2026-05-07`
+Repository: `prasanth-cloud/AlphaVyuh`
 Scope: latest GitHub `main` after the private-beta release work, reviewed as a candidate for broader public launch.
 
 ## Recommendation
@@ -27,7 +27,7 @@ These block broad paid public launch and require owner-controlled evidence befor
 | Billing | Production Razorpay checkout is intentionally disabled. | Settings billing has `checkoutEnabled = false`; launch requires Razorpay keys, webhook signature evidence, refund/cancel path, failed-payment path, and owner approval. |
 | Broker execution | Live/sandbox order placement is disabled and must stay gated. | Backend rejects live-confirmed orders unless `BROKER_LIVE_ORDERS_ENABLED=true`; no owner-provided broker tokens or explicit live/sandbox order confirmation were provided. |
 | Legal/compliance | Public-launch legal copy, support policy, and market-data disclaimers need owner sign-off. | Current copy is beta-safe and educational, but not a final paid public-launch legal package. |
-| Production Supabase | No production mutation or RLS advisor run was approved for this pass. | Migrations remain reviewed through repo history only; production DB changes require explicit approval. |
+| Production Supabase | Production mutation remains unapproved. | Read-only staging advisors were run; repo now includes a reviewed hardening migration. Production application still requires owner approval. |
 
 ## P1 Launch Hardening Fixed In This Pass
 
@@ -36,6 +36,7 @@ These block broad paid public launch and require owner-controlled evidence befor
 | Auth surface | `/dev-login` was listed as a public route. It still required a Supabase token, but the route name and public exposure were inappropriate for production-like traffic. | `/dev-login` is now available only when mock app auth is enabled; otherwise it redirects to `/login`. |
 | Auth error leakage | Backend auth fallback returned provider exception text in the 401 response. | Auth fallback now returns the generic message `Authentication failed`; a regression test covers this. |
 | Broker smoke scripts | Kite/Upstox read-only smoke scripts had an explicit `--print-access-token` switch. | Full token printing now requires `ALLOW_PRINT_ACCESS_TOKEN=true`; default and documented behavior remains masked. |
+| Supabase advisor security | Read-only staging advisors found public/signed-in EXECUTE grants on `SECURITY DEFINER` functions and mutable function search paths. | Added `supabase/migrations/20260507111500_launch_advisor_security_hardening.sql` to revoke direct browser/API execution for backend-only RPCs and set stable function search paths. |
 
 ## P2 Post-Launch Improvements
 
@@ -72,3 +73,11 @@ None were merged as part of this pass.
 | `npm run launch:check` | Passed on elevated rerun. First sandbox run reached browser smoke then failed to bind local port 3002 with `EPERM`; rerun with local-server permission completed successfully. |
 
 Read-only broker smoke was skipped because no owner-provided Kite/Upstox tokens were supplied. Live URL check was skipped because `LIVE_URL` was not set for this local branch validation.
+
+Read-only Supabase advisor checks were run against the documented staging project
+`fyxltykqdvacbdgmeucf`. Security advisors returned WARN-level findings for
+mutable search paths and direct execution grants on security-definer functions;
+the branch adds a reviewed migration for those repo-fixable items. Performance
+advisors also returned unindexed foreign keys, auth RLS init-plan warnings,
+duplicate indexes, and multiple permissive policy warnings; those are tracked as
+post-launch database hardening unless they block load testing.
