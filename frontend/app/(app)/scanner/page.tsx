@@ -51,40 +51,88 @@ interface Watchlist { id: string; name: string }
 // ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
   {
-    id: 'stage2_trend',
-    name: 'Stage 2 trend',
-    description: 'EMA 20 above EMA 50 above EMA 200, RSI at least 50, and RS score at least 70.',
-    filters: { all_emas_bullish: true, rsi_min: 50, rs_score_min: 70 },
+    id: 'trend_template',
+    name: 'Trend Template',
+    description: 'Minervini-style daily trend screen using the available SMA stack, EMA 200, RSI, and 52-week range.',
+    filters: {
+      all_smas_bullish: true,
+      price_vs_sma50: 'above',
+      price_vs_sma150: 'above',
+      price_vs_sma200: 'above',
+      price_vs_ema200: 'above',
+      rsi_min: 50,
+      week_52_high_pct_max: 25,
+      w52l_pct_min: 30,
+      series: ['EQ'],
+    },
   },
   {
-    id: 'rs_leaders',
-    name: 'RS leaders near highs',
-    description: 'RS score at least 80, price above EMA 50, and within 12% of the 52-week high.',
-    filters: { rs_score_min: 80, week_52_high_pct_max: 12.0, price_vs_ema50: 'above' },
+    id: 'vcp_breakout',
+    name: 'VCP Breakout',
+    description: 'Volatility contraction candidates near highs with a constructive trend stack and controlled ATR risk.',
+    filters: {
+      vcp_contraction: true,
+      vcp_min_pivots: 2,
+      vcp_max_depth_pct: 15,
+      vcp_pivot_proximity_pct: 10,
+      all_smas_bullish: true,
+      price_vs_sma50: 'above',
+      week_52_high_pct_max: 12,
+      atr_pct_max: 8,
+      volume_ratio_min: 0.8,
+      series: ['EQ'],
+    },
   },
   {
-    id: 'volume_breakout',
-    name: 'Volume breakout',
-    description: 'Price up at least 1%, volume at least 2x average, above EMA 20, and near the 52-week high.',
-    filters: { volume_ratio_min: 2.0, pct_change_min: 1.0, week_52_high_pct_max: 10.0, price_vs_ema20: 'above' },
+    id: 'stage2_breakout',
+    name: 'Stage 2 Breakout',
+    description: 'Daily Stage 2 approximation: price above the SMA trend stack, near highs, with expanding volume.',
+    filters: {
+      all_smas_bullish: true,
+      price_vs_sma50: 'above',
+      price_vs_sma200: 'above',
+      week_52_high_pct_max: 15,
+      volume_ratio_min: 1.2,
+      rsi_min: 50,
+      series: ['EQ'],
+    },
   },
   {
-    id: 'ema_pullback',
-    name: 'EMA pullback',
-    description: 'Price above EMA 50, RSI 45-60, and no large same-day move.',
-    filters: { price_vs_ema50: 'above', rsi_min: 45, rsi_max: 60, pct_change_min: -2.0, pct_change_max: 2.0 },
+    id: 'high_52w_breakout',
+    name: '52W High Breakout',
+    description: 'Stocks closing within 2% of the 52-week high with positive price action and above-average volume.',
+    filters: {
+      week_52_high_pct_max: 2,
+      pct_change_min: 0,
+      volume_ratio_min: 1.2,
+      price_vs_sma50: 'above',
+      series: ['EQ'],
+    },
   },
   {
-    id: 'fresh_52w_high',
-    name: 'Fresh 52W high',
-    description: 'Stocks marked as new 52-week highs on the latest complete market day.',
-    filters: { new_52w_high: true },
+    id: 'episodic_pivot',
+    name: 'Episodic Pivot',
+    description: 'Large positive move with volume expansion, above the intermediate trend, for event-driven pivot review.',
+    filters: {
+      pct_change_min: 3,
+      volume_ratio_min: 2,
+      price_vs_sma50: 'above',
+      rsi_min: 55,
+      week_52_high_pct_max: 30,
+      series: ['EQ'],
+    },
   },
   {
-    id: 'high_volume',
-    name: 'High volume',
-    description: 'Volume at least 3x average for liquidity and activity review.',
-    filters: { volume_ratio_min: 3.0 },
+    id: 'darvas_box_breakout',
+    name: 'Darvas Box',
+    description: 'Tight high-base breakout approximation near 52-week highs with volume confirmation and manageable ATR.',
+    filters: {
+      week_52_high_pct_max: 8,
+      price_vs_sma50: 'above',
+      volume_ratio_min: 1.2,
+      atr_pct_max: 6,
+      series: ['EQ'],
+    },
   },
 ] as const
 
@@ -97,7 +145,7 @@ type Filters = {
   rsi_min: string; rsi_max: string
   adx_min: string; adx_max: string
   price_vs_ema20: string; price_vs_ema50: string; price_vs_ema200: string
-  price_vs_sma20: string; price_vs_sma50: string
+  price_vs_sma20: string; price_vs_sma50: string; price_vs_sma150: string; price_vs_sma200: string
   ema20_vs_ema50: string; ema50_vs_ema200: string
   macd_hist_positive: string
   bb_position: string
@@ -107,6 +155,11 @@ type Filters = {
   rs_score_min: string
   w52l_pct_min: string
   all_emas_bullish: boolean
+  all_smas_bullish: boolean
+  vcp_contraction: boolean
+  vcp_min_pivots: string
+  vcp_max_depth_pct: string
+  vcp_pivot_proximity_pct: string
   new_52w_high: boolean; new_52w_low: boolean
   is_inside_bar: boolean
   series: string[]
@@ -127,7 +180,7 @@ const emptyFilters = (): Filters => ({
   rsi_min: '', rsi_max: '',
   adx_min: '', adx_max: '',
   price_vs_ema20: '', price_vs_ema50: '', price_vs_ema200: '',
-  price_vs_sma20: '', price_vs_sma50: '',
+  price_vs_sma20: '', price_vs_sma50: '', price_vs_sma150: '', price_vs_sma200: '',
   ema20_vs_ema50: '', ema50_vs_ema200: '',
   macd_hist_positive: '',
   bb_position: '',
@@ -137,6 +190,11 @@ const emptyFilters = (): Filters => ({
   rs_score_min: '',
   w52l_pct_min: '',
   all_emas_bullish: false,
+  all_smas_bullish: false,
+  vcp_contraction: false,
+  vcp_min_pivots: '',
+  vcp_max_depth_pct: '',
+  vcp_pivot_proximity_pct: '',
   new_52w_high: false, new_52w_low: false,
   is_inside_bar: false,
   series: ['EQ'],
@@ -290,8 +348,8 @@ export default function ScannerPage() {
   async function loadSavedScreens() {
     if (isMockMode) {
       setSavedScreens([
-        { id: 'mock-stage2', name: 'Stage 2 trend', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
-        { id: 'mock-rs-leaders', name: 'RS leaders near highs', filters: PRESETS[1].filters, created_at: '2026-04-24T09:20:00Z' },
+        { id: 'mock-trend-template', name: 'Trend Template', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
+        { id: 'mock-vcp-breakout', name: 'VCP Breakout', filters: PRESETS[1].filters, created_at: '2026-04-24T09:20:00Z' },
       ])
       return
     }
@@ -316,6 +374,11 @@ export default function ScannerPage() {
     set('rs_score_min', num(f.rs_score_min))
     set('w52l_pct_min', num(f.w52l_pct_min))
     if (f.all_emas_bullish) fil.all_emas_bullish = true
+    if (f.all_smas_bullish) fil.all_smas_bullish = true
+    if (f.vcp_contraction) fil.vcp_contraction = true
+    set('vcp_min_pivots', num(f.vcp_min_pivots))
+    set('vcp_max_depth_pct', num(f.vcp_max_depth_pct))
+    set('vcp_pivot_proximity_pct', num(f.vcp_pivot_proximity_pct))
     set('bb_width_min', num(f.bb_width_min)); set('bb_width_max', num(f.bb_width_max))
     set('atr_pct_min', num(f.atr_pct_min)); set('atr_pct_max', num(f.atr_pct_max))
     if (f.price_vs_ema20) set('price_vs_ema20', f.price_vs_ema20)
@@ -323,6 +386,8 @@ export default function ScannerPage() {
     if (f.price_vs_ema200) set('price_vs_ema200', f.price_vs_ema200)
     if (f.price_vs_sma20) set('price_vs_sma20', f.price_vs_sma20)
     if (f.price_vs_sma50) set('price_vs_sma50', f.price_vs_sma50)
+    if (f.price_vs_sma150) set('price_vs_sma150', f.price_vs_sma150)
+    if (f.price_vs_sma200) set('price_vs_sma200', f.price_vs_sma200)
     if (f.ema20_vs_ema50) set('ema20_vs_ema50', f.ema20_vs_ema50)
     if (f.ema50_vs_ema200) set('ema50_vs_ema200', f.ema50_vs_ema200)
     if (f.bb_position) set('bb_position', f.bb_position)
@@ -488,6 +553,21 @@ export default function ScannerPage() {
     )
   }
 
+  function numberRow(label: string, key: keyof Filters, placeholder = 'value') {
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <div className="label" style={{ marginBottom: 4 }}>{label}</div>
+        <input
+          type="number"
+          placeholder={placeholder}
+          value={(filters[key] as string) || ''}
+          onChange={e => setF(key, e.target.value)}
+          style={{ ...inputStyle, width: '100%' }}
+        />
+      </div>
+    )
+  }
+
   function numRow(label: string, k: keyof Filters, placeholder = '') {
     return (
       <div style={{ marginBottom: 8 }}>
@@ -520,7 +600,7 @@ export default function ScannerPage() {
     )
   }
 
-  function toggleRow(label: string, key: 'new_52w_high' | 'new_52w_low' | 'is_inside_bar' | 'all_emas_bullish') {
+  function toggleRow(label: string, key: 'new_52w_high' | 'new_52w_low' | 'is_inside_bar' | 'all_emas_bullish' | 'all_smas_bullish' | 'vcp_contraction') {
     return (
       <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6, cursor: 'pointer' }}>
         <input type="checkbox" checked={!!filters[key]} onChange={e => setF(key, e.target.checked)}
@@ -643,9 +723,13 @@ export default function ScannerPage() {
                 {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
+                {segRow('vs SMA 50', 'price_vs_sma50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
+                {segRow('vs SMA 150', 'price_vs_sma150', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
+                {segRow('vs SMA 200', 'price_vs_sma200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('EMA 20 vs 50', 'ema20_vs_ema50', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
                 {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
                 {toggleRow('All EMAs bullish (20>50>200)', 'all_emas_bullish')}
+                {toggleRow('All SMAs bullish (close>50>150>200)', 'all_smas_bullish')}
               </Section>
               <Section title="Relative strength">
                 {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
@@ -653,6 +737,10 @@ export default function ScannerPage() {
                 {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: 'Positive' }, { value: 'negative', label: 'Negative' }])}
               </Section>
               <Section title="Setup structure">
+                {toggleRow('VCP contraction pass', 'vcp_contraction')}
+                {numberRow('VCP minimum pivots', 'vcp_min_pivots', '2')}
+                {numberRow('VCP max depth %', 'vcp_max_depth_pct', '15')}
+                {numberRow('Pivot proximity %', 'vcp_pivot_proximity_pct', '10')}
                 {segRow('Position', 'bb_position', [
                   { value: 'above_upper', label: 'Above upper' },
                   { value: 'below_lower', label: 'Below lower' },
@@ -798,7 +886,7 @@ export default function ScannerPage() {
             <EmptyState
               title="Run your first scan"
               description="Choose a saved filter or set your own price, volume, trend, and RS conditions."
-              action={{ label: 'Run Stage 2 trend', onClick: () => applyPreset(PRESETS[0]) }}
+              action={{ label: 'Run Trend Template', onClick: () => applyPreset(PRESETS[0]) }}
             />
           </div>
         )}
