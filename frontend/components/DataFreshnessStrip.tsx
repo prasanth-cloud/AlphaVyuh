@@ -14,7 +14,7 @@ function healthTone(status?: DataHealth["status"]) {
   if (status === "healthy") return "var(--gain)";
   if (status === "degraded") return "var(--warn)";
   if (status === "stale") return "var(--loss)";
-  return "var(--text-tertiary)";
+  return "var(--accent)";
 }
 
 export default function DataFreshnessStrip({ health, tradeDate, compact = false }: DataFreshnessStripProps) {
@@ -29,7 +29,7 @@ export default function DataFreshnessStrip({ health, tradeDate, compact = false 
         : "eod";
   const tone = healthTone(status);
   const detail = health?.message
-    ?? (asOf ? `Using latest complete market day ${asOf}.` : "Data freshness check is unavailable.");
+    ?? (asOf ? `Using latest complete market day ${asOf}.` : "Using latest complete market day.");
   const coverage = health?.coverage_pct == null ? null : `${health.coverage_pct.toFixed(1)}% coverage`;
   const symbols = health?.symbols_on_latest_date == null ? null : `${health.symbols_on_latest_date.toLocaleString("en-IN")} symbols`;
 
@@ -62,7 +62,7 @@ export default function DataFreshnessStrip({ health, tradeDate, compact = false 
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <DataProvenanceBadge kind={badgeKind} asOf={asOf} compact />
-            <span className="label" style={{ color: tone }}>{status ? status.toUpperCase() : "UNKNOWN"}</span>
+            {status && <span className="label" style={{ color: tone }}>{status.toUpperCase()}</span>}
             {coverage && <span className="caption">{coverage}</span>}
             {symbols && <span className="caption">{symbols}</span>}
             {health?.provider?.source_name && <span className="caption">{health.provider.source_name}</span>}

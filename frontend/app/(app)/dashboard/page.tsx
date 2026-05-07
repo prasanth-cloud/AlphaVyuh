@@ -15,7 +15,7 @@ import {
   type JournalEntry,
   type MarketOverview,
 } from '@/lib/api'
-import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, EyebrowLabel, Num } from '@/components/ui'
+import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
 import DataFreshnessStrip from '@/components/DataFreshnessStrip'
 import { markAppTiming } from '@/lib/performance'
 
@@ -814,7 +814,7 @@ export default function DashboardPage() {
       <div style={{ minHeight: 54, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 260 }}>
-            <EyebrowLabel>Dashboard · market command center</EyebrowLabel>
+            <h1 className="heading-card" style={{ margin: 0 }}>Dashboard</h1>
             <div className="app-page-copy" style={{ marginTop: 1 }}>
               Scan the latest EOD context, pick the next workspace, and keep review work visible.
             </div>
