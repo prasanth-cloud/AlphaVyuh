@@ -19,7 +19,7 @@ import {
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
-import { DataProvenanceBadge } from "@/components/ui";
+import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -1574,20 +1574,20 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
         <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
-            <div className="workspace-card-title">{symbol} chart</div>
+            <EyebrowLabel>Planning</EyebrowLabel>
             <div className="workspace-card-copy">
-              Read structure, plan the trade, manage the position, and move straight into journal review.
+              {symbol} chart · read structure, plan the trade, manage the position, and move straight into journal review.
             </div>
             {sourcePage === "watchlist" && sourceWatchlist && (
               <div className="caption" style={{ marginTop: 8 }}>
-                Opened from <span className="mono" style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</span>.
+                Opened from <Num style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</Num>.
               </div>
             )}
           </div>
           <div className="workspace-pill-row" style={{ gap: 8 }}>
             {chartSnapshot.map((item) => (
               <span key={item.label} className="workspace-pill" style={{ color: item.tone }}>
-                {item.label}: {item.value}
+                {item.label}: <Num>{item.value}</Num>
               </span>
             ))}
           </div>
@@ -1735,9 +1735,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               >
                 ↑
               </button>
-              <span className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
+              <Num className="text-[11px] font-semibold" style={{ color: "var(--app-text2)" }}>
                 {sourceQueueName ?? "Watchlist"} {sourceQueueIndex >= 0 ? sourceQueueIndex + 1 : "-"} / {sourceQueueCount}
-              </span>
+              </Num>
               <button
                 onClick={() => stepQueueSymbol("next")}
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-full"

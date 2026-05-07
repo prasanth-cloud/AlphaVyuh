@@ -46,7 +46,7 @@ import {
   upsertWorkflowState,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
-import { DataProvenanceBadge, EmptyState } from "@/components/ui";
+import { DataProvenanceBadge, EmptyState, EyebrowLabel, Num } from "@/components/ui";
 import IndicatorMenu from "@/components/charts/IndicatorMenu";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 import { workflowPlanStatus } from "@/lib/workflow";
@@ -1567,10 +1567,10 @@ function WatchlistContent() {
       <div className="workspace-card" style={{ padding: "10px 14px" }}>
         <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
-            <div className="workspace-card-title">Watchlist</div>
+            <EyebrowLabel>Workspace</EyebrowLabel>
             {activeWl && (
-              <div className="caption" style={{ marginTop: 2 }}>
-                {activeWl.name} · {visibleItems.length}/{activeWl.items.length} visible
+              <div className="app-page-copy" style={{ marginTop: 1 }}>
+                {activeWl.name} · <Num>{visibleItems.length}</Num>/<Num>{activeWl.items.length}</Num> visible · chart, plan, and order intent stay focused on one symbol.
               </div>
             )}
           </div>
@@ -1584,11 +1584,11 @@ function WatchlistContent() {
         {activeWl && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
             <div className="workspace-pill-row" style={{ gap: 8 }}>
-              <span className="workspace-pill">All {queueCounts.total}</span>
-              {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned {queueCounts.pinned}</span>}
-              {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review {queueCounts.needsReview}</span>}
-              {queueCounts.total > 0 && <span className="workspace-pill">Setup avg {setupDesk.average}</span>}
-              {setupDesk.watch > 0 && <span className="workspace-pill" style={{ color: "var(--warn)" }}>Watch {setupDesk.watch}</span>}
+              <span className="workspace-pill">All <Num>{queueCounts.total}</Num></span>
+              {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned <Num>{queueCounts.pinned}</Num></span>}
+              {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review <Num>{queueCounts.needsReview}</Num></span>}
+              {queueCounts.total > 0 && <span className="workspace-pill">Setup avg <Num>{setupDesk.average}</Num></span>}
+              {setupDesk.watch > 0 && <span className="workspace-pill" style={{ color: "var(--warn)" }}>Watch <Num>{setupDesk.watch}</Num></span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
@@ -1765,12 +1765,12 @@ function WatchlistContent() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                     <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{selectedItem.symbol}</div>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    <Num style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                       {selectedItem.close != null ? `₹${selectedItem.close.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-"}
-                    </span>
-                    <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: (selectedItem.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                    </Num>
+                    <Num style={{ fontSize: 12, fontWeight: 700, color: (selectedItem.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
                       {selectedItem.pct_change != null ? `${selectedItem.pct_change >= 0 ? "+" : ""}${selectedItem.pct_change.toFixed(2)}%` : "-"}
-                    </span>
+                    </Num>
                     {selectedSetup && (
                       <span
                         style={{
@@ -2025,7 +2025,7 @@ function WatchlistContent() {
             )}
             <div className="caption">
               {visibleItems.length > 0
-                ? `Showing ${pageStart + 1}-${Math.min(pageStart + WATCHLIST_PAGE_SIZE, visibleItems.length)} of ${visibleItems.length}. Arrow keys move through the full queue.`
+                ? <>Showing <Num>{pageStart + 1}</Num>-<Num>{Math.min(pageStart + WATCHLIST_PAGE_SIZE, visibleItems.length)}</Num> of <Num>{visibleItems.length}</Num>. Arrow keys move through the full queue.</>
                 : canReorder ? "Drag to reprioritize. Enter opens chart." : "Filtered or ranked view active."}
             </div>
           </div>

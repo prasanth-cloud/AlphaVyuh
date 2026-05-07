@@ -151,6 +151,41 @@ input, textarea, select {
   color: var(--text-tertiary);
 }
 
+/* Landing voice, tightened for authenticated trading workflows */
+.app-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.app-page-title {
+  font-size: clamp(18px, 2vw, 24px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.08;
+  color: var(--text-primary);
+}
+
+.app-page-copy {
+  margin-top: 4px;
+  max-width: 760px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.app-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' on;
+  letter-spacing: 0;
+}
+
 /* Financial number styling */
 .num-positive { color: var(--gain); }
 .num-negative { color: var(--loss); }

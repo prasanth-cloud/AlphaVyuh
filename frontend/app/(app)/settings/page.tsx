@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { trackEvent } from "@/lib/analytics";
+import { EyebrowLabel } from "@/components/ui";
 
 // ── Razorpay ─────────────────────────────────────────────────────────────────
 
@@ -384,6 +385,13 @@ function SettingsContent() {
           {toast.msg}
         </div>
       )}
+
+      <div className="workspace-card" style={{ padding: "12px 14px" }}>
+        <EyebrowLabel>Settings</EyebrowLabel>
+        <div className="app-page-copy">
+          Keep profile, broker import, and beta billing controls clear without changing the trading workflow.
+        </div>
+      </div>
 
       <div className="workspace-card" style={{ padding: "10px 12px" }}>
         <div className="flex gap-2 flex-wrap">

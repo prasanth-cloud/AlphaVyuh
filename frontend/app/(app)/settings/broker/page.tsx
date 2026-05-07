@@ -11,6 +11,7 @@ import {
   runZerodhaReadOnlySmoke,
   startBrokerConnect,
 } from "@/lib/api";
+import { EyebrowLabel, Num } from "@/components/ui";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -180,7 +181,8 @@ function BrokerSettingsContent() {
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>Broker Connect Hub</div>
+          <EyebrowLabel>Broker import only</EyebrowLabel>
+          <div className="app-page-title" style={{ marginTop: 4 }}>Broker connect hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
             Connect one broker at a time for read-only account checks and filled-trade import. Tokens stay encrypted on the backend. Live and sandbox order placement are disabled for the private beta.
           </div>
@@ -227,9 +229,9 @@ function BrokerSettingsContent() {
                         : "Order capture remains simulated and journaling still works until a read-only broker session is connected."}
                 </div>
               </div>
-              <div className="mono" style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+              <Num style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
                 {state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : lastSyncedLabel}
-              </div>
+              </Num>
             </div>
 
             <div className="broker-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
@@ -249,9 +251,9 @@ function BrokerSettingsContent() {
                 <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>Broker sync</div>
                 <div className="text-[13px]" style={{ color: "var(--text-primary)" }}>{state?.status_label ?? "Simulated fallback active"}</div>
               </div>
-              <div className="mono" style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+              <Num style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                 Last sync: {lastSyncedLabel}
-              </div>
+              </Num>
             </div>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
