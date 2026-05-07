@@ -36,6 +36,7 @@ These block broad paid public launch and require owner-controlled evidence befor
 | Auth surface | `/dev-login` was listed as a public route. It still required a Supabase token, but the route name and public exposure were inappropriate for production-like traffic. | `/dev-login` is now available only when mock app auth is enabled; otherwise it redirects to `/login`. |
 | Auth error leakage | Backend auth fallback returned provider exception text in the 401 response. | Auth fallback now returns the generic message `Authentication failed`; a regression test covers this. |
 | Broker smoke scripts | Kite/Upstox read-only smoke scripts had an explicit `--print-access-token` switch. | Full token printing now requires `ALLOW_PRINT_ACCESS_TOKEN=true`; default and documented behavior remains masked. |
+| Broker provider errors | Broker provider/API error messages could contain request-token, access-token, or session-adjacent material and were logged or returned by some broker routes. | Follow-up PR #72 sanitizes broker error logs/responses to status, code, and error type only; targeted regression tests cover Zerodha callback and adapter callback failures. |
 
 ## P2 Post-Launch Improvements
 
@@ -70,6 +71,12 @@ None were merged as part of this pass.
 | `npm run test:e2e:perf` | Passed: 2 performance smoke tests; mock login dashboard usable test completed in 666 ms in this local run. |
 | `PLAYWRIGHT_BASE_URL=http://localhost:3011 npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/release-readiness.spec.ts` | Passed: 6 production-like public/auth-boundary tests, including `/dev-login` redirect. |
 | `npm run launch:check` | Passed on elevated rerun. First sandbox run reached browser smoke then failed to bind local port 3002 with `EPERM`; rerun with local-server permission completed successfully. |
+
+Follow-up PR #72 validation additionally passed `npm run lint`,
+`npm run typecheck`, `npm --prefix frontend run test -- --run`,
+focused backend broker/security tests, `npm audit --audit-level=moderate`,
+backend `pip-audit`, `npm run test:e2e:mock`, `npm run test:e2e:layout`,
+and `npm run test:e2e:perf`.
 
 Read-only broker smoke was skipped because no owner-provided Kite/Upstox tokens were supplied. Live URL check was skipped because `LIVE_URL` was not set for this local branch validation.
 
