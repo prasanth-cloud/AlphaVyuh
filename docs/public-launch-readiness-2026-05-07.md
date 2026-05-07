@@ -48,9 +48,6 @@ These block broad paid public launch and require owner-controlled evidence befor
 
 Open GitHub PRs observed during this pass:
 
-- `#73` canonical swing scanner presets: mergeable and Vercel green; useful for
-  trader-facing scanner quality but not required to resolve public-launch
-  commercial/legal gates.
 - `#72` full chart workspace cleanup: mergeable and Vercel green; useful product
   polish, not a launch-gate fix.
 - `#41` landing page: conflicting and superseded by current landing work.
@@ -58,7 +55,10 @@ Open GitHub PRs observed during this pass:
 - `#21` authenticated screen strip removal: conflicting and superseded by recent UI cleanup PRs.
 - `#17` ingest sprint: conflicting and has a failing migration drift check.
 
-None were merged as part of this pass.
+Update after scanner follow-up: `#73` canonical swing scanner presets was merged
+to `main` on 2026-05-07 and is now included in this launch-readiness branch.
+That improves scanner preset quality, but it does not resolve the public-launch
+commercial, legal, data-vendor, billing, or production-Supabase gates above.
 
 ## Validation Evidence
 

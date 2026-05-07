@@ -26,7 +26,7 @@ This file maps the full public-launch prompt to concrete artifacts on branch
 | Run performance smoke. | `npm run test:e2e:perf` passed: 2 tests. | Done |
 | Run release-readiness checks. | `npm run launch:check` passed in this refresh, including production build, mock workflow, perf/layout smoke, backend HTTP smoke, backend focused tests, frontend audit, and backend dependency audit. | Done |
 | Update launch docs with exact evidence. | `docs/public-launch-readiness-2026-05-07.md`, `docs/security-codex-scan-2026-05-07.md`, `docs/security-launch-scan-2026-05-07.md`, and this file. | Done |
-| Commit with conventional message. | `02915ed docs(launch): refresh public readiness evidence`, `d65db33 docs(launch): record public readiness pr`, and `32f1251 docs(launch): complete readiness audit evidence`. | Done |
+| Commit with conventional message. | Branch contains conventional launch-readiness documentation commits and was refreshed with latest `main`, including merged scanner PR #73. | Done |
 | Push branch and open draft PR. | Draft PR #74: https://github.com/prasanth-cloud/AlphaVyuh/pull/74. | Done |
 
 ## Public Launch Surface Audit
