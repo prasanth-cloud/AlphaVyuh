@@ -619,26 +619,6 @@ export default function ScannerPage() {
   );
   return (
     <div className="workspace-page">
-      <div className="workspace-card" style={{ padding: '8px 14px' }}>
-        <div className="workspace-toolbar" style={{ minHeight: 'auto', padding: 0, border: 'none', gap: 14 }}>
-          <div>
-            <div className="app-page-copy">
-              Start from EOD presets, shortlist clean ideas, and send only actionable names into the watchlist desk.
-            </div>
-          </div>
-          <div className="workspace-pill-row" style={{ gap: 8 }}>
-            <span className="workspace-pill">Results <Num>{totalMatches.toLocaleString('en-IN')}</Num></span>
-            {selectedResults.size > 0 && <span className="workspace-pill">Selected <Num>{selectedResults.size}</Num></span>}
-            {(tradeDate || scanTrust?.asOf) && (
-              <DataProvenanceBadge
-                kind={scanTrust?.mode === 'demo' ? 'demo' : scanTrust?.mode === 'fallback' || scanTrust?.mode === 'unknown' ? 'fallback' : 'eod'}
-                asOf={scanTrust?.asOf ?? tradeDate}
-                compact
-              />
-            )}
-          </div>
-        </div>
-      </div>
       <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
 
       {/* ── LEFT PANEL ── */}

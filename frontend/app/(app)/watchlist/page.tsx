@@ -626,6 +626,10 @@ function ChartPanel({
               asOf={chartSource?.asOf ?? (latestBar?.time ? String(latestBar.time) : null)}
               compact
             />
+            <span className="workspace-pill">Focus: {symbol}</span>
+            <span className="workspace-pill" title={isMockMode ? "Deterministic mock data for workflow QA, not market data" : "Using latest EOD market data unless a live quote is explicitly enabled"}>
+              Data: {isMockMode ? "Demo fixtures" : "EOD market"}
+            </span>
             <span className="caption">{chartRequest.label} · {chartRequest.timeframe} · {formatCandleRange(candles)}</span>
           </div>
           {chartSource && (
@@ -1121,37 +1125,6 @@ function WatchlistContent() {
     }
     return Array.from(tags).sort();
   }, [activeId, activeWl?.items, getItemMeta]);
-  const queueCounts = useMemo(() => {
-    const items = activeWl?.items ?? [];
-    let pinned = 0;
-    let tagged = 0;
-    let needsReview = 0;
-    for (const item of items) {
-      const meta = getItemMeta(activeId, item.symbol);
-      if (meta.pinned) pinned += 1;
-      if ((meta.tags?.length ?? 0) > 0) tagged += 1;
-      if (!meta.note?.trim()) needsReview += 1;
-    }
-    return {
-      total: items.length,
-      pinned,
-      tagged,
-      needsReview,
-    };
-  }, [activeId, activeWl?.items, getItemMeta]);
-  const setupDesk = useMemo(() => {
-    const items = activeWl?.items ?? [];
-    const ranked = items
-      .map((item) => ({ item, setup: getSetupSignal(item) }))
-      .sort((a, b) => b.setup.score - a.setup.score);
-    return {
-      top: ranked.slice(0, 3),
-      ready: ranked.filter((entry) => entry.setup.score >= 80).length,
-      watch: ranked.filter((entry) => entry.setup.score >= 55 && entry.setup.score < 80).length,
-      weak: ranked.filter((entry) => entry.setup.score < 55).length,
-      average: ranked.length ? Math.round(ranked.reduce((sum, entry) => sum + entry.setup.score, 0) / ranked.length) : 0,
-    };
-  }, [activeWl?.items]);
   const symbolReviewMap = useMemo(() => {
     const next = new Map<string, { state: "reviewed" | "needs-review" | "new"; closed: number; reviewed: number; latestLesson: string | null; lastSetup: string | null }>();
     for (const entry of journalEntries) {
@@ -1575,51 +1548,7 @@ function WatchlistContent() {
 
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
-      <div className="workspace-card" style={{ padding: "8px 14px" }}>
-        <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
-          <div>
-            {activeWl && (
-              <div className="app-page-copy" style={{ marginTop: 1 }}>
-                {activeWl.name} · <Num>{visibleItems.length}</Num>/<Num>{activeWl.items.length}</Num> visible · chart, plan, and order intent stay focused on one symbol.
-              </div>
-            )}
-          </div>
-          <div className="workspace-pill-row" style={{ gap: 8 }}>
-            <span className="workspace-pill" title={isMockMode ? "Deterministic mock data for workflow QA, not market data" : "Using latest EOD market data unless a live quote is explicitly enabled"}>
-              Data: {isMockMode ? "Demo fixtures" : "EOD market"}
-            </span>
-            {chartSymbol && <span className="workspace-pill">Focus: {chartSymbol}</span>}
-          </div>
-        </div>
-        {activeWl && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-            <div className="workspace-pill-row" style={{ gap: 8 }}>
-              <span className="workspace-pill">All <Num>{queueCounts.total}</Num></span>
-              {queueCounts.pinned > 0 && <span className="workspace-pill">Pinned <Num>{queueCounts.pinned}</Num></span>}
-              {queueCounts.needsReview > 0 && <span className="workspace-pill">Needs review <Num>{queueCounts.needsReview}</Num></span>}
-              {queueCounts.total > 0 && <span className="workspace-pill">Setup avg <Num>{setupDesk.average}</Num></span>}
-              {setupDesk.watch > 0 && <span className="workspace-pill" style={{ color: "var(--warn)" }}>Watch <Num>{setupDesk.watch}</Num></span>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
-                <button className="workspace-chip-button" onClick={resetDeskView}>
-                  Reset
-                </button>
-              )}
-              {activeWl.items.length > 0 && (
-                <button className={`workspace-chip-button${sortMode === "setup" ? " active" : ""}`} onClick={() => setSortMode("setup")}>
-                  Sort by metrics
-                </button>
-              )}
-              <button className={`workspace-chip-button${showDeskControls ? " active" : ""}`} onClick={() => setShowDeskControls((current) => !current)}>
-                {showDeskControls ? "Hide controls" : "Desk controls"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 178px)" }}>
+      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
       {/* Toast */}
       {toast && (
         <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
@@ -1981,6 +1910,16 @@ function WatchlistContent() {
                   {view.label}
                 </button>
               ))}
+            </div>
+            <div className="workspace-pill-row">
+              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
+                <button className="workspace-chip-button" onClick={resetDeskView}>
+                  Reset
+                </button>
+              )}
+              <button className={`workspace-chip-button${showDeskControls ? " active" : ""}`} onClick={() => setShowDeskControls((current) => !current)}>
+                {showDeskControls ? "Hide controls" : "Desk controls"}
+              </button>
             </div>
             {showDeskControls && (
               <>

@@ -153,16 +153,30 @@ test.describe("Workflow layout smoke", () => {
   test("requested workspace copy and reminder strip are removed", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText(/Market command center/i);
+    await expect(page.locator("body")).not.toContainText(/Scan the latest EOD context/i);
+    await expect(page.getByRole("button", { name: /Data status/i })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("UNKNOWN");
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
 
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText("DISCOVERY");
+    await expect(page.locator("body")).not.toContainText(/Start from EOD presets/i);
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
 
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText("WORKSPACE");
+    await expect(page.locator("body")).not.toContainText(/chart, plan, and order intent stay focused/i);
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
+  });
+
+  test("login page uses the simplified private beta copy", async ({ page }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Sign in to AlphaVyuh")).toBeVisible();
+    await expect(page.locator("body")).toContainText(/Private beta/i);
+    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Broker import only/i);
+    await expect(page.locator("body")).not.toContainText(/Launch Surface/i);
+    await expect(page.locator("body")).not.toContainText(/Build an EOD trading workflow/i);
   });
 
   test("watchlist chart timeframe switching exposes range and source context", async ({ page }) => {

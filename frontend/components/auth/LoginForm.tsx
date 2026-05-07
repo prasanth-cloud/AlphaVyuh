@@ -90,13 +90,12 @@ export default function LoginForm() {
       width: "100%",
       backdropFilter: "blur(14px)",
     }}>
-      <div style={{ marginBottom: 28 }}>
-        <div className="auth-kicker">Member Access</div>
-        <div style={{ fontSize: 30, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 26, fontWeight: 650, color: "var(--text-primary)", letterSpacing: "-0.035em", lineHeight: 1.05 }}>
           Sign in to AlphaVyuh
         </div>
         <div style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.6 }}>
-          Continue into your trading workspace and pick up exactly where your workflow left off.
+          Continue to your private beta trading desk.
         </div>
         {nextPath !== "/dashboard" && (
           <div
@@ -167,6 +166,9 @@ export default function LoginForm() {
       <p style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
         Don&apos;t have an account?{" "}
         <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Create one</Link>
+      </p>
+      <p style={{ marginTop: 14, textAlign: "center", fontSize: 11, lineHeight: 1.6, color: "var(--text-tertiary)" }}>
+        Private beta · EOD data · Broker import only
       </p>
     </div>
   );
