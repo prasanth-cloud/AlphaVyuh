@@ -61,6 +61,12 @@ class ScanFilters(BaseModel):
     ema50_above_ema200:  bool | None = None   # ema_50 > ema_200
     all_emas_bullish:    bool | None = None   # ema_20 > ema_50 > ema_200
     all_emas_bearish:    bool | None = None
+    price_vs_sma50:      str | None = None    # 'above' | 'below'
+    price_vs_sma150:     str | None = None
+    price_vs_sma200:     str | None = None
+    sma50_above_sma150:  bool | None = None
+    sma150_above_sma200: bool | None = None
+    all_smas_bullish:    bool | None = None   # close > sma_50 > sma_150 > sma_200
     ema20_dist_min:  float | None = None   # (close-ema20)/ema20*100 (%)
     ema20_dist_max:  float | None = None
     ema50_dist_min:  float | None = None
@@ -187,49 +193,94 @@ SORT_KEYS = {
 
 PRESETS = [
     {
-        "id": "stage2_trend",
-        "name": "Stage 2 trend",
-        "description": "EMA 20 above EMA 50 above EMA 200, RSI at least 50, and RS score at least 70.",
+        "id": "trend_template",
+        "name": "Trend Template",
+        "description": "Daily Minervini-style trend template using the populated SMA 50/150/200 stack, EMA 200, RSI, and 52-week range context.",
         "color": "#5b63f5",
-        "filters": {"all_emas_bullish": True, "rsi_min": 50, "rs_score_min": 70, "series": ["EQ"]},
+        "filters": {
+            "all_smas_bullish": True,
+            "price_vs_sma50": "above",
+            "price_vs_sma150": "above",
+            "price_vs_sma200": "above",
+            "price_vs_ema200": "above",
+            "rsi_min": 50,
+            "week_52_high_pct_max": 25.0,
+            "w52l_pct_min": 30.0,
+            "series": ["EQ"],
+        },
     },
     {
-        "id": "rs_leaders",
-        "name": "RS leaders near highs",
-        "description": "RS score at least 80, price above EMA 50, and within 12% of the 52-week high.",
-        "color": "#26a65b",
-        "filters": {"rs_score_min": 80, "week_52_high_pct_max": 12.0,
-                    "price_vs_ema50": "above", "series": ["EQ"]},
-    },
-    {
-        "id": "volume_breakout",
-        "name": "Volume breakout",
-        "description": "Price up at least 1%, volume at least 2x average, above EMA 20, and near the 52-week high.",
-        "color": "#d97706",
-        "filters": {"volume_ratio_min": 2.0, "pct_change_min": 1.0,
-                    "week_52_high_pct_max": 10.0, "price_vs_ema20": "above", "series": ["EQ"]},
-    },
-    {
-        "id": "ema_pullback",
-        "name": "EMA pullback",
-        "description": "Price above EMA 50, RSI 45-60, and no large same-day move.",
-        "color": "#e5383b",
-        "filters": {"price_vs_ema50": "above", "rsi_min": 45, "rsi_max": 60,
-                    "pct_change_min": -2.0, "pct_change_max": 2.0, "series": ["EQ"]},
-    },
-    {
-        "id": "fresh_52w_high",
-        "name": "Fresh 52W high",
-        "description": "Stocks marked as new 52-week highs on the latest complete market day.",
-        "color": "#7c6af0",
-        "filters": {"new_52w_high": True, "series": ["EQ"]},
-    },
-    {
-        "id": "high_volume",
-        "name": "High volume",
-        "description": "Volume at least 3x average for liquidity and activity review.",
+        "id": "vcp_breakout",
+        "name": "VCP Breakout",
+        "description": "Volatility Contraction Pattern candidates near highs with a constructive trend stack and controlled ATR risk.",
         "color": "#0f766e",
-        "filters": {"volume_ratio_min": 3.0, "series": ["EQ"]},
+        "filters": {
+            "vcp_contraction": True,
+            "vcp_min_pivots": 2,
+            "vcp_max_depth_pct": 15.0,
+            "vcp_pivot_proximity_pct": 10.0,
+            "all_smas_bullish": True,
+            "price_vs_sma50": "above",
+            "week_52_high_pct_max": 12.0,
+            "atr_pct_max": 8.0,
+            "volume_ratio_min": 0.8,
+            "series": ["EQ"],
+        },
+    },
+    {
+        "id": "stage2_breakout",
+        "name": "Stage 2 Breakout",
+        "description": "Daily Stage 2 approximation: price above the SMA trend stack, close near 52-week highs, and volume expanding.",
+        "color": "#d97706",
+        "filters": {
+            "all_smas_bullish": True,
+            "price_vs_sma50": "above",
+            "price_vs_sma200": "above",
+            "week_52_high_pct_max": 15.0,
+            "volume_ratio_min": 1.2,
+            "rsi_min": 50,
+            "series": ["EQ"],
+        },
+    },
+    {
+        "id": "high_52w_breakout",
+        "name": "52W High Breakout",
+        "description": "Stocks closing within 2% of the 52-week high with positive price action and above-average volume.",
+        "color": "#e5383b",
+        "filters": {
+            "week_52_high_pct_max": 2.0,
+            "pct_change_min": 0.0,
+            "volume_ratio_min": 1.2,
+            "price_vs_sma50": "above",
+            "series": ["EQ"],
+        },
+    },
+    {
+        "id": "episodic_pivot",
+        "name": "Episodic Pivot",
+        "description": "Large positive move with volume expansion, above the intermediate trend, for news/earnings-style pivot review.",
+        "color": "#7c6af0",
+        "filters": {
+            "pct_change_min": 3.0,
+            "volume_ratio_min": 2.0,
+            "price_vs_sma50": "above",
+            "rsi_min": 55,
+            "week_52_high_pct_max": 30.0,
+            "series": ["EQ"],
+        },
+    },
+    {
+        "id": "darvas_box_breakout",
+        "name": "Darvas Box",
+        "description": "Tight high-base breakout approximation: near 52-week highs, above SMA 50, with volume confirmation and manageable ATR.",
+        "color": "#26a65b",
+        "filters": {
+            "week_52_high_pct_max": 8.0,
+            "price_vs_sma50": "above",
+            "volume_ratio_min": 1.2,
+            "atr_pct_max": 6.0,
+            "series": ["EQ"],
+        },
     },
 ]
 
@@ -288,6 +339,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         ema20_v    = float(row["ema_20"])        if row.get("ema_20")       is not None else None
         ema50_v    = float(row["ema_50"])        if row.get("ema_50")       is not None else None
         ema200_v   = float(row["ema_200"])       if row.get("ema_200")      is not None else None
+        sma50_v    = float(row["sma_50"])        if row.get("sma_50")       is not None else None
+        sma150_v   = float(row["sma_150"])       if row.get("sma_150")      is not None else None
+        sma200_v   = float(row["sma_200"])       if row.get("sma_200")      is not None else None
         atr_v      = float(row["atr_14"])        if row.get("atr_14")       is not None else None
         w52h_v     = float(row["week_52_high"])  if row.get("week_52_high") is not None else None
         w52l_v     = float(row["week_52_low"])   if row.get("week_52_low")  is not None else None
@@ -351,6 +405,19 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.all_emas_bearish and (
             ema20_v is None or ema50_v is None or ema200_v is None
             or not (ema20_v < ema50_v < ema200_v)
+        ): continue
+        if f.price_vs_sma50 == "above" and (sma50_v is None or close <= sma50_v): continue
+        if f.price_vs_sma50 == "below" and (sma50_v is None or close >= sma50_v): continue
+        if f.price_vs_sma150 == "above" and (sma150_v is None or close <= sma150_v): continue
+        if f.price_vs_sma150 == "below" and (sma150_v is None or close >= sma150_v): continue
+        if f.price_vs_sma200 == "above" and (sma200_v is None or close <= sma200_v): continue
+        if f.price_vs_sma200 == "below" and (sma200_v is None or close >= sma200_v): continue
+        if f.sma50_above_sma150 and (sma50_v is None or sma150_v is None or sma50_v <= sma150_v): continue
+        if f.sma150_above_sma200 and (sma150_v is None or sma200_v is None or sma150_v <= sma200_v): continue
+        if f.all_smas_bullish and (
+            sma50_v is None or sma150_v is None or sma200_v is None
+            or close <= sma50_v
+            or not (sma50_v > sma150_v > sma200_v)
         ): continue
         if f.ema20_dist_min is not None and (ema20_dist is None or ema20_dist < f.ema20_dist_min): continue
         if f.ema20_dist_max is not None and (ema20_dist is None or ema20_dist > f.ema20_dist_max): continue
@@ -515,6 +582,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "ema_20":         ema20_v,
             "ema_50":         ema50_v,
             "ema_200":        ema200_v,
+            "sma_50":         sma50_v,
+            "sma_150":        sma150_v,
+            "sma_200":        sma200_v,
             "ema_20_dist":    ema20_dist,
             "ema_50_dist":    ema50_dist,
             "week_52_high":   w52h_v,

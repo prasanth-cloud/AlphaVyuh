@@ -197,6 +197,7 @@ export type ScanFilters = {
   ema20_above_ema50?: boolean;
   ema50_above_ema200?: boolean;
   all_emas_bullish?: boolean;
+  all_smas_bullish?: boolean;
   all_emas_bearish?: boolean;
   ema20_dist_min?: number;
   ema20_dist_max?: number;
@@ -217,6 +218,13 @@ export type ScanFilters = {
   price_vs_ema20?: string;
   price_vs_ema50?: string;
   price_vs_ema200?: string;
+  price_vs_sma50?: string;
+  price_vs_sma150?: string;
+  price_vs_sma200?: string;
+  vcp_contraction?: boolean;
+  vcp_min_pivots?: number;
+  vcp_max_depth_pct?: number;
+  vcp_pivot_proximity_pct?: number;
   // Market
   series?: string[];
   sector?: string;
