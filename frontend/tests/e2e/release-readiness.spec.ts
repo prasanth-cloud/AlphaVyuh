@@ -14,6 +14,18 @@ test.describe("Release readiness — public and auth boundary", () => {
     await expect(page.getByRole("link", { name: /Request access/i }).first()).toBeVisible();
   });
 
+  test("beta guide exposes feedback loop and limitations", async ({ page }) => {
+    const response = await page.goto("/beta");
+
+    expect(response?.ok()).toBeTruthy();
+    await expect(page.getByRole("heading", { name: /Test the complete EOD trading workflow/i })).toBeVisible();
+    await expect(page.locator("body")).toContainText(/support@alphavyuh\.com/i);
+    await expect(page.locator("body")).toContainText(/Feedback and bug report paths/i);
+    await expect(page.locator("body")).toContainText(/Beta onboarding checklist/i);
+    await expect(page.locator("body")).toContainText(/Known beta limitations/i);
+    await expect(page.locator("body")).toContainText(/No live\/sandbox broker order placement/i);
+  });
+
   test("baseline browser security headers are present", async ({ request }) => {
     const response = await request.get("/");
 
