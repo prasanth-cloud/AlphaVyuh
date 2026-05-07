@@ -9,7 +9,7 @@ import {
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
 } from "@/lib/api";
 import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
-import { StatCard } from "@/components/ui";
+import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getTradeFlowMeta } from "./components/utils";
 import { TradeTable } from "./components/TradeTable";
@@ -279,12 +279,10 @@ export default function JournalPage() {
         style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}
       >
         <div style={{ minWidth: 240, flex: "1 1 320px" }}>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)" }}>
-            Review queue
-          </div>
+          <EyebrowLabel>Review and improvement</EyebrowLabel>
           <div className="mt-1 text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
             {journalQueue.needsReview > 0
-              ? `${journalQueue.needsReview} closed ${journalQueue.needsReview === 1 ? "trade needs" : "trades need"} review`
+              ? <><Num>{journalQueue.needsReview}</Num> closed {journalQueue.needsReview === 1 ? "trade needs" : "trades need"} review</>
               : "No closed trades waiting for review"}
           </div>
           <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
@@ -305,7 +303,7 @@ export default function JournalPage() {
               style={{ background: "rgba(244,247,251,0.05)", border: "1px solid var(--border-subtle)", minWidth: 92 }}
             >
               <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</div>
-              <div className="text-[16px] font-semibold" style={{ color }}>{value}</div>
+              <Num className="text-[16px] font-semibold" style={{ color }}>{value}</Num>
             </div>
           ))}
         </div>

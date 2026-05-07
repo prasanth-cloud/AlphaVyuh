@@ -15,7 +15,7 @@ import {
   type JournalEntry,
   type MarketOverview,
 } from '@/lib/api'
-import { Card, StatCard, EmptyState, Button, DataProvenanceBadge } from '@/components/ui'
+import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, EyebrowLabel, Num } from '@/components/ui'
 import DataFreshnessStrip from '@/components/DataFreshnessStrip'
 import { markAppTiming } from '@/lib/performance'
 
@@ -23,9 +23,9 @@ function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ textAlign: 'right' }}>
       <div className="label" style={{ marginBottom: 2 }}>{label}</div>
-      <div className="mono" style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+      <Num style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
         {value}
-      </div>
+      </Num>
     </div>
   )
 }
@@ -156,12 +156,12 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
               <div key={idx.symbol} style={{ minWidth: 0, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.018)' }}>
                 <div className="label" style={{ marginBottom: 4 }}>{idx.label}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                  <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <Num style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
                     {close != null && Number.isFinite(close) ? close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : 'Pending'}
-                  </span>
-                  <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: idx.pct_change == null ? 'var(--text-tertiary)' : tone }}>
+                  </Num>
+                  <Num style={{ fontSize: 12, fontWeight: 700, color: idx.pct_change == null ? 'var(--text-tertiary)' : tone }}>
                     {pct != null && Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '-'}
-                  </span>
+                  </Num>
                 </div>
               </div>
             )
@@ -181,9 +181,9 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
             }}
           >
             <div className="label" style={{ marginBottom: 6 }}>{card.label}</div>
-            <div className="mono" style={{ fontSize: 15, fontWeight: 700, color: card.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Num style={{ fontSize: 15, fontWeight: 700, color: card.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {card.value}
-            </div>
+            </Num>
             <div className="caption" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {card.detail}
             </div>
@@ -811,18 +811,23 @@ export default function DashboardPage() {
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Status bar */}
-      <div style={{ height: 44, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>Dashboard</span>
+      <div style={{ minHeight: 54, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 260 }}>
+            <EyebrowLabel>Dashboard · market command center</EyebrowLabel>
+            <div className="app-page-copy" style={{ marginTop: 1 }}>
+              Scan the latest EOD context, pick the next workspace, and keep review work visible.
+            </div>
+          </div>
           {data?.trade_date && (
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD {data.trade_date}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD <Num>{data.trade_date}</Num></span>
           )}
           <span style={{ fontSize: 12, color: workflow.brokerConnected ? 'var(--gain)' : 'var(--text-tertiary)' }}>
             {workflow.brokerStatusLabel ?? 'Broker simulated'}
           </span>
         </div>
         {lastUpdated && (
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated {lastUpdated}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated <Num>{lastUpdated}</Num></span>
         )}
       </div>
 
@@ -858,7 +863,7 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
               <div>
                 <h2 className="heading-card" style={{ marginBottom: 4 }}>Continue your workflow</h2>
-                <div className="caption">Open a workspace, import trade history, or review journal analytics.</div>
+                <div className="caption">Move from market context into discovery, planning, or review without leaving the desk.</div>
               </div>
             </div>
             <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>

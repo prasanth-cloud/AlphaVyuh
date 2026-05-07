@@ -12,7 +12,7 @@ import {
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
 import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
-import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
+import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, EyebrowLabel, Num } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -82,13 +82,13 @@ const PRESETS = [
   },
   {
     id: 'new_highs',
-    name: '52W Highs',
+    name: '52W highs',
     description: 'Filter for stocks making a new 52-week high today.',
     filters: { new_52w_high: true },
   },
   {
     id: 'golden_cross',
-    name: 'Golden Cross',
+    name: 'Golden cross',
     description: 'Filter for EMA 20 above EMA 50 with price above EMA 200.',
     filters: { ema20_vs_ema50: 'golden', price_vs_ema200: 'above', volume_ratio_min: 1.0 },
   },
@@ -607,6 +607,27 @@ export default function ScannerPage() {
   );
   return (
     <div className="workspace-page">
+      <div className="workspace-card" style={{ padding: '10px 14px' }}>
+        <div className="workspace-toolbar" style={{ minHeight: 'auto', padding: 0, border: 'none', gap: 14 }}>
+          <div>
+            <EyebrowLabel>Discovery</EyebrowLabel>
+            <div className="app-page-copy">
+              Start from EOD presets, shortlist clean ideas, and send only actionable names into the watchlist desk.
+            </div>
+          </div>
+          <div className="workspace-pill-row" style={{ gap: 8 }}>
+            <span className="workspace-pill">Results <Num>{totalMatches.toLocaleString('en-IN')}</Num></span>
+            {selectedResults.size > 0 && <span className="workspace-pill">Selected <Num>{selectedResults.size}</Num></span>}
+            {(tradeDate || scanTrust?.asOf) && (
+              <DataProvenanceBadge
+                kind={scanTrust?.mode === 'demo' ? 'demo' : scanTrust?.mode === 'fallback' || scanTrust?.mode === 'unknown' ? 'fallback' : 'eod'}
+                asOf={scanTrust?.asOf ?? tradeDate}
+                compact
+              />
+            )}
+          </div>
+        </div>
+      </div>
       <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
 
       {/* ── LEFT PANEL ── */}
@@ -784,7 +805,7 @@ export default function ScannerPage() {
           {results.length > 0 ? (
             <>
               <div>
-                <span className="heading-card">{totalMatches > 0 ? `${totalMatches} stocks` : 'Scanner'}</span>
+                <span className="heading-card">{totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> stocks</> : 'Scanner'}</span>
                 {(tradeDate || scanTrust?.asOf) && (
                   <DataProvenanceBadge
                     kind={scanTrust?.mode === 'demo' ? 'demo' : scanTrust?.mode === 'fallback' || scanTrust?.mode === 'unknown' ? 'fallback' : 'eod'}
@@ -807,7 +828,7 @@ export default function ScannerPage() {
                 )}
                 {selectedResults.size > 0 && (
                   <span className="workspace-pill" aria-live="polite">
-                    {selectedResults.size} selected · bulk actions enabled
+                    <Num>{selectedResults.size}</Num> selected · bulk actions enabled
                   </span>
                 )}
                 {SORT_COLS.map(([col, lbl]) => {
@@ -1045,7 +1066,7 @@ export default function ScannerPage() {
             </DataTable>
             <div className="workspace-toolbar" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none' }}>
               <div className="workspace-card-copy">
-                Showing {visibleStart}-{visibleEnd} of {totalMatches} matches.
+                Showing <Num>{visibleStart}</Num>-<Num>{visibleEnd}</Num> of <Num>{totalMatches.toLocaleString('en-IN')}</Num> matches.
               </div>
               <div className="workspace-toolbar-group">
                 <button
