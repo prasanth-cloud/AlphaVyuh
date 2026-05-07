@@ -18,6 +18,7 @@ import { JournalAnalytics as JournalAnalyticsTab } from "./components/JournalAna
 import { JournalAiInsights } from "./components/JournalAiInsights";
 import type { PanelMode, Tab } from "./components/types";
 import { useWorkflowState } from "@/lib/workflow";
+import { trackEvent } from "@/lib/analytics";
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
@@ -176,6 +177,7 @@ export default function JournalPage() {
     setSaving(true);
     try {
       await createJournalEntry({ ...addForm, symbol: selectedSymbol } as CreateJournalEntry);
+      trackEvent("journal_entry_created", { source: "manual", symbol: selectedSymbol, trade_type: addForm.trade_type ?? "unknown" });
       setAddForm({ trade_type: "long", entry_date: new Date().toISOString().split("T")[0] });
       setSelectedSymbol(""); setSymbolQ(""); setPanelMode(null);
       showToast("Trade logged"); load();
@@ -203,6 +205,7 @@ export default function JournalPage() {
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       if (selectedEntry?.id === updated.id) setSelectedEntry(updated);
       completeReview(updated.symbol);
+      trackEvent("journal_entry_reviewed", { source: getTradeFlowMeta(updated).sourceLabel, symbol: updated.symbol });
       showToast("Trade lesson generated");
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Trade lesson failed"); }
     finally { setLessonLoading(null); }
@@ -212,6 +215,7 @@ export default function JournalPage() {
     setImporting(true);
     try {
       const r = await importZerodhaTrades();
+      trackEvent("journal_entry_created", { source: "broker_import", imported: r.imported, skipped: r.skipped });
       showToast(r.message);
       setBrokerLastSyncedAt(r.last_synced_at ?? new Date().toISOString());
       refreshBrokerStatus();

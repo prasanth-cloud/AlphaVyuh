@@ -50,6 +50,7 @@ import { DataProvenanceBadge, EmptyState, EyebrowLabel, Num } from "@/components
 import IndicatorMenu from "@/components/charts/IndicatorMenu";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 import { workflowPlanStatus } from "@/lib/workflow";
+import { trackEvent } from "@/lib/analytics";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -322,6 +323,7 @@ function DecisionDesk({
   async function markReady() {
     if (!status.valid) return;
     await patch({ lifecycle: "ready" });
+    trackEvent("decision_desk_plan_ready", { symbol, watchlist_id: watchlistId ?? null });
     onToast(`${symbol} marked ready`);
   }
 
@@ -592,6 +594,7 @@ function ChartPanel({
       };
       req.live_confirmed = false;
       await placeOrder(req);
+      trackEvent("mock_order_drafted", { source: "watchlist", symbol, side, order_type: orderType });
       setOrderMsg({ ok: true, text: `${side === "buy" ? "Buy" : "Sell"} plan saved as a simulated journal draft.`, journalReady: true });
       setTradeNote("");
     } catch (e: unknown) {

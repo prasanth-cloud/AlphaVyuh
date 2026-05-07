@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button, Input, Label } from "@/components/ui";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 import { markAppTiming } from "@/lib/performance";
+import { trackEvent } from "@/lib/analytics";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -46,6 +47,7 @@ export default function LoginForm() {
         return;
       }
       markAppTiming("auth-session-set");
+      trackEvent("login_success", { next_path: nextPath });
       router.replace(nextPath);
       router.refresh();
     } catch {
