@@ -252,7 +252,7 @@ export function mockLiveQuote(symbol: string): LiveQuote | null {
 
 export function mockCandles(symbol: string, timeframe = "D", limit = 180): CandlesResponse {
   const q = mockQuote(symbol) ?? MOCK_STOCKS[0];
-  const candles = makeCandles(q, Math.min(limit, 240));
+  const candles = makeCandles(q, timeframe, limit);
   const last = candles[candles.length - 1];
   return {
     symbol: q.symbol,
@@ -405,8 +405,30 @@ export function mockPortfolio(): PortfolioResponse {
   };
 }
 
-function makeCandles(base: ScanResult, count: number): CandleBar[] {
-  const start = new Date("2025-09-01T00:00:00Z");
+function makeCandles(base: ScanResult, timeframe: string, requestedCount: number): CandleBar[] {
+  const normalizedTimeframe = timeframe.toUpperCase();
+  const stepDays = normalizedTimeframe === "W" ? 7 : normalizedTimeframe === "M" ? 30 : 1;
+  const maxCount = normalizedTimeframe === "W" ? 620 : normalizedTimeframe === "M" ? 180 : 3200;
+  const count = Math.max(2, Math.min(requestedCount || 180, maxCount));
+  const end = new Date("2026-04-24T00:00:00Z");
+  const dates: Date[] = [];
+  if (normalizedTimeframe === "D") {
+    const cursor = new Date(end);
+    while (dates.length < count) {
+      const day = cursor.getUTCDay();
+      if (day !== 0 && day !== 6) dates.push(new Date(cursor));
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+    dates.reverse();
+  } else {
+    const start = new Date(end);
+    start.setUTCDate(end.getUTCDate() - (count - 1) * stepDays);
+    for (let i = 0; i < count; i++) {
+      const dt = new Date(start);
+      dt.setUTCDate(start.getUTCDate() + i * stepDays);
+      dates.push(dt);
+    }
+  }
   const rows: CandleBar[] = [];
   let price = base.close * 0.78;
   for (let i = 0; i < count; i++) {
@@ -416,8 +438,7 @@ function makeCandles(base: ScanResult, count: number): CandleBar[] {
     const close = price + trend + wave;
     const high = Math.max(open, close) * 1.01;
     const low = Math.min(open, close) * 0.99;
-    const dt = new Date(start);
-    dt.setDate(start.getDate() + i);
+    const dt = dates[i];
     price = close;
     rows.push({
       time: dt.toISOString().slice(0, 10),

@@ -1,10 +1,10 @@
 "use client";
 
-import { use, useState, useEffect, useCallback, useRef } from "react";
+import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Trash2, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -21,6 +21,14 @@ import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
+import {
+  FULL_CHART_TIMEFRAMES,
+  formatCandleRange,
+  getFullChartRequest,
+  getRangeAvailabilityMessage,
+  isIntradayTimeframe,
+  type FullChartTimeframe,
+} from "@/lib/watchlist-chart-range";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -63,19 +71,18 @@ const INDICATOR_CONFIG = [
   { id: "ema20",  label: "EMA 20",  color: "#f4f7fb", bg: "rgba(244,247,251,0.10)" },
   { id: "ema50",  label: "EMA 50",  color: "#bac4d1", bg: "rgba(186,196,209,0.10)" },
   { id: "ema200", label: "EMA 200", color: "#7a8695", bg: "rgba(122,134,149,0.12)" },
-  { id: "bb",     label: "BB",      color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
+  { id: "sma50",  label: "SMA 50",  color: "#cbd5e1", bg: "rgba(203,213,225,0.10)" },
+  { id: "sma200", label: "SMA 200", color: "#94a3b8", bg: "rgba(148,163,184,0.10)" },
   { id: "vwap",   label: "VWAP",    color: "#d6dce5", bg: "rgba(214,220,229,0.10)" },
   { id: "rsi",    label: "RSI",     color: "#f4f7fb", bg: "rgba(244,247,251,0.10)" },
   { id: "macd",   label: "MACD",    color: "#bac4d1", bg: "rgba(186,196,209,0.10)" },
-  { id: "stoch",    label: "Stoch",    color: "#9ca3af", bg: "rgba(156,163,175,0.10)" },
-  { id: "atr",      label: "ATR",      color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
-  { id: "ichimoku", label: "Ichimoku", color: "#d6dce5", bg: "rgba(214,220,229,0.10)" },
+  { id: "volume", label: "Volume",  color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
 ];
 
 const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "LongPosition", "ShortPosition", "Text"] as const;
 const FULL_CHART_DRAWING_TOOLS = DRAWING_TOOLS;
-const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
+const INTRADAY_UNAVAILABLE_MESSAGE = "Intraday data is not available in EOD beta mode.";
 type DrawingTool = typeof DRAWING_TOOLS[number];
 type ChartDataCacheEntry = {
   data: CandlesResponse;
@@ -168,16 +175,6 @@ function getPersistedDrawingPoints(drawing: ChartDrawing) {
   return points;
 }
 
-function formatDrawingSummary(item: ChartDrawing): string {
-  if (isPositionDrawingTool(item.tool)) {
-    const risk = Math.abs(item.p1.price - item.p2.price);
-    const reward = item.p3 ? Math.abs(item.p3.price - item.p1.price) : 0;
-    const rr = risk > 0 && reward > 0 ? ` · R:R ${(reward / risk).toFixed(2)}` : "";
-    return `Entry ${item.p1.price.toFixed(2)} · Stop ${item.p2.price.toFixed(2)} · Target ${(item.p3?.price ?? item.p1.price).toFixed(2)}${rr}`;
-  }
-  return item.text ?? `${item.p1.price.toFixed(2)} → ${item.p2.price.toFixed(2)}`;
-}
-
 function normalizeDrawingColor(color?: string | null): string {
   const value = color?.trim().toLowerCase();
   if (!value) return DRAWING_DEFAULT_COLOR;
@@ -260,6 +257,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const initialDrawMode = searchParams.get("draw");
 
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
+  const [selectedRange, setSelectedRange] = useState<FullChartTimeframe>("1Y");
+  const [timeframeNotice, setTimeframeNotice] = useState("");
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
 
@@ -290,7 +289,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [alertMsg, setAlertMsg] = useState("");
   const [quickAlertMsg, setQuickAlertMsg] = useState("");
 
-  const [activeIndicators, setActiveIndicators] = useState<string[]>(["ema20", "ema50"]);
+  const [activeIndicators, setActiveIndicators] = useState<string[]>(["ema20", "ema50", "volume"]);
   const [layoutMsg, setLayoutMsg] = useState("");
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
   const [, setDrawings] = useState<Drawing[]>([]);
@@ -324,7 +323,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
-  const [showTradePlan, setShowTradePlan] = useState(true);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
   const [showPositionsPanel, setShowPositionsPanel] = useState(true);
   const [showFundamentals, setShowFundamentals] = useState(false);
@@ -333,7 +331,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Order modal
   const [showOrder, setShowOrder] = useState(false);
   const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
-  const [tradePlan, setTradePlan] = useState<{ entry: string; stop: string; target: string }>({ entry: "", stop: "", target: "" });
   const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string; nextActions?: string[]; riskReward?: number | null } | null>(null);
   const [symbolPositions, setSymbolPositions] = useState<PortfolioPosition[]>([]);
   const [positionsLoading, setPositionsLoading] = useState(false);
@@ -365,24 +362,49 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [userPlan, setUserPlan] = useState<string>("free");
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
-  const FREE_INDICATORS = ["ema20", "ema50", "ema200", "rsi"];
+  const FREE_INDICATORS = ["ema20", "ema50", "ema200", "sma50", "sma200", "vwap", "rsi", "macd", "volume"];
 
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
 
+  const chartRangeRequest = useMemo(
+    () => getFullChartRequest(selectedRange),
+    [selectedRange],
+  );
+  const chartRangeParams = useMemo(() => ({
+    limit: chartRangeRequest?.limit ?? (timeframe === "D" ? 270 : timeframe === "W" ? 170 : 130),
+    timeframe: chartRangeRequest?.timeframe ?? timeframe,
+    from_date: chartRangeRequest?.from_date,
+    to_date: chartRangeRequest?.to_date,
+  }), [chartRangeRequest, timeframe]);
+
+  function handleSelectRange(nextRange: FullChartTimeframe) {
+    setSelectedRange(nextRange);
+    if (isIntradayTimeframe(nextRange)) {
+      setTimeframeNotice(`${INTRADAY_UNAVAILABLE_MESSAGE} Showing the last selected EOD chart.`);
+      setActiveDrawingTool(null);
+      return;
+    }
+    const request = getFullChartRequest(nextRange);
+    if (!request) return;
+    setTimeframeNotice("");
+    setTimeframe(request.timeframe);
+  }
+
+  function handleSelectTool(next: string) {
+    setSelectedDrawingId(null);
+    setActiveDrawingTool(next === "Cursor" ? null : next as DrawingTool);
+  }
+
   // Toolbar dropdowns
   const [showMoreIndicators, setShowMoreIndicators] = useState(false);
-  const [showDrawMenu, setShowDrawMenu] = useState(false);
-  const [showObjectList, setShowObjectList] = useState(true);
   const moreIndRef = useRef<HTMLDivElement>(null);
-  const drawMenuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (moreIndRef.current && !moreIndRef.current.contains(e.target as Node)) setShowMoreIndicators(false);
-      if (drawMenuRef.current && !drawMenuRef.current.contains(e.target as Node)) setShowDrawMenu(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -403,9 +425,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [positionDragState, setPositionDragState] = useState<{
     positionId: string;
     field: "stop" | "target";
-  } | null>(null);
-  const [planDragState, setPlanDragState] = useState<{
-    field: "entry" | "stop" | "target";
   } | null>(null);
   const [snapToPrice, setSnapToPrice] = useState(true);
   const [textEditor, setTextEditor] = useState<{ drawingId: string | null; value: string; x: number; y: number; isNew: boolean } | null>(null);
@@ -476,18 +495,24 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Load compare symbol data
   useEffect(() => {
     if (!compareSymbol) { setCompareData(null); return; }
-    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
-    getCandles(compareSymbol, { limit, timeframe }).then(setCompareData).catch(() => setCompareData(null));
-  }, [compareSymbol, timeframe]);
+    if (isIntradayTimeframe(selectedRange)) { setCompareData(null); return; }
+    getCandles(compareSymbol, chartRangeParams).then(setCompareData).catch(() => setCompareData(null));
+  }, [chartRangeParams, compareSymbol, selectedRange]);
 
   // Load chart data
   useEffect(() => {
     let cancelled = false;
-    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
-    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap", "ichimoku"].includes(i));
-    const panelInds = activeIndicators.filter(i => ["rsi", "macd", "stoch", "atr"].includes(i));
+    if (isIntradayTimeframe(selectedRange)) {
+      setLoading(false);
+      setError("");
+      return () => {
+        cancelled = true;
+      };
+    }
+    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "vwap"].includes(i));
+    const panelInds = activeIndicators.filter(i => ["rsi", "macd"].includes(i));
     const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
-    const baseCacheKey = [symbol, timeframe, liveMode ? "live" : "eod"].join(":");
+    const baseCacheKey = [symbol, selectedRange, timeframe, liveMode ? "live" : "eod", chartRangeParams.from_date ?? "", chartRangeParams.to_date ?? "", chartRangeParams.limit].join(":");
     const cacheKey = [baseCacheKey, allInds.sort().join(",")].join(":");
     const cached = chartDataCache.get(cacheKey);
     const freshCached = cached && Date.now() - cached.loadedAt < CHART_CACHE_TTL_MS ? cached : null;
@@ -520,13 +545,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     }
 
     const candlesPromise = liveMode
-      ? getCandlesLive(symbol, { limit: Math.min(limit, 1000), timeframe }).catch(() => {
+      ? getCandlesLive(symbol, { limit: Math.min(chartRangeParams.limit, 1000), timeframe: chartRangeParams.timeframe }).catch(() => {
           if (!cancelled) setLiveMode(false);
-          return getCandles(symbol, { limit, timeframe });
+          return getCandles(symbol, chartRangeParams);
         })
-      : getCandles(symbol, { limit, timeframe });
+      : getCandles(symbol, chartRangeParams);
     const indicatorsPromise = allInds.length
-      ? getIndicators(symbol, allInds, timeframe).catch(() => null)
+      ? getIndicators(symbol, allInds, chartRangeParams.timeframe).catch(() => null)
       : Promise.resolve(null);
 
     Promise.all([candlesPromise, indicatorsPromise])
@@ -556,7 +581,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return () => {
       cancelled = true;
     };
-  }, [activeIndicators, applyIndicatorPayload, liveMode, symbol, timeframe]);
+  }, [activeIndicators, applyIndicatorPayload, chartRangeParams, liveMode, selectedRange, symbol, timeframe]);
 
   // Auto-refresh every 5 minutes in live mode
   useEffect(() => {
@@ -573,8 +598,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Load saved layout + plan + alerts
   useEffect(() => {
     getChartLayout(symbol).then(layout => {
-      if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") setTimeframe(layout.timeframe);
-      if (layout.indicators?.length) setActiveIndicators(layout.indicators);
+      if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") {
+        setTimeframe(layout.timeframe);
+        setSelectedRange(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "10Y");
+      }
+      if (layout.indicators?.length) {
+        const supported = new Set(INDICATOR_CONFIG.map((indicator) => indicator.id));
+        const next = layout.indicators.filter((indicator) => supported.has(indicator));
+        if (next.length) setActiveIndicators(next);
+      }
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
     getQuote(symbol).then(q => { if (q?.currency) setSymbolCurrency(q.currency); }).catch(() => {});
@@ -889,20 +921,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }
 
   function handleOverlayMouseMove(e: React.MouseEvent) {
-    if (planDragState && overlayRef.current) {
-      const rect = overlayRef.current.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const rawPrice = chartHandleRef.current?.coordinateToPrice(y) ?? null;
-      const anchorTime = data?.candles.at(-1)?.time ?? null;
-      if (rawPrice != null) {
-        const nextPrice = anchorTime && !e.altKey ? getSnappedPrice(anchorTime, rawPrice) : rawPrice;
-        setTradePlan((current) => ({
-          ...current,
-          [planDragState.field]: nextPrice.toFixed(2),
-        }));
-      }
-      return;
-    }
     if (positionDragState && overlayRef.current) {
       const rect = overlayRef.current.getBoundingClientRect();
       const y = e.clientY - rect.top;
@@ -1025,10 +1043,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }
 
   async function handleOverlayMouseUp(e: React.MouseEvent) {
-    if (planDragState) {
-      setPlanDragState(null);
-      return;
-    }
     if (positionDragState) {
       const positionId = positionDragState.positionId;
       const draft = closeDraft[positionId];
@@ -1287,22 +1301,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     setTextEditor({ drawingId: drawing.id, value: drawing.text ?? "Note", x: editorX, y: editorY, isNew: false });
   }, []);
 
-  const applyPositionDrawingToPlan = useCallback((drawing: ChartDrawing) => {
-    if (!isPositionDrawingTool(drawing.tool) || !drawing.p3) return;
-    setTradePlan({
-      entry: drawing.p1.price.toFixed(2),
-      stop: drawing.p2.price.toFixed(2),
-      target: drawing.p3.price.toFixed(2),
-    });
-    setOrderToast({
-      message: "Trade plan filled from risk/reward drawing.",
-      journalId: null,
-      broker: "simulated",
-      riskReward: Math.abs(drawing.p3.price - drawing.p1.price) / Math.max(Math.abs(drawing.p1.price - drawing.p2.price), 0.01),
-    });
-    setTimeout(() => setOrderToast(null), 3500);
-  }, []);
-
   const createZoneNoteFromDrawing = useCallback(async (drawing: ChartDrawing) => {
     if (drawing.tool !== "Rectangle") return;
     const high = Math.max(drawing.p1.price, drawing.p2.price);
@@ -1403,17 +1401,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return () => window.removeEventListener("keydown", handleQueueKeys);
   }, [fullChartMode, sourceQueueSymbols.length, stepQueueSymbol]);
 
-  useEffect(() => {
-    if (!displayClose) return;
-    setTradePlan((current) => ({
-      entry: current.entry || displayClose.toFixed(2),
-      stop: current.stop,
-      target: current.target,
-    }));
-  }, [displayClose]);
-
   // Stale data warning: show if last candle is > 1 trading day old
   const lastCandleDate = data?.candles?.at(-1)?.time ?? null;
+  const candleRangeLabel = data?.candles?.length ? formatCandleRange(data.candles) : "No candles";
+  const chartAvailabilityMessage = chartRangeRequest && data?.candles?.length
+    ? getRangeAvailabilityMessage(data.candles, chartRangeRequest)
+    : null;
   const dataAgeDays = lastCandleDate
     ? Math.floor((Date.now() - new Date(lastCandleDate).getTime()) / 86400000)
     : null;
@@ -1442,21 +1435,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     stop: activeManagedPosition.stop_loss != null ? String(activeManagedPosition.stop_loss) : "",
     target: activeManagedPosition.target_price != null ? String(activeManagedPosition.target_price) : "",
   }) : null;
-  const planEntryValue = tradePlan.entry ? parseFloat(tradePlan.entry) : null;
-  const planStopValue = tradePlan.stop ? parseFloat(tradePlan.stop) : null;
-  const planTargetValue = tradePlan.target ? parseFloat(tradePlan.target) : null;
-  const planRiskReward = (
-    planEntryValue != null
-    && planStopValue != null
-    && planTargetValue != null
-    && !Number.isNaN(planEntryValue)
-    && !Number.isNaN(planStopValue)
-    && !Number.isNaN(planTargetValue)
-    && Math.abs(planEntryValue - planStopValue) > 0
-  )
-    ? Math.abs(planTargetValue - planEntryValue) / Math.abs(planEntryValue - planStopValue)
-    : null;
-
   const showRsi   = activeIndicators.includes("rsi");
   const showMacd  = activeIndicators.includes("macd");
   const showStoch = activeIndicators.includes("stoch");
@@ -1464,14 +1442,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const selectedDrawing = drawnLines.find(item => item.id === selectedDrawingId) ?? null;
   const activeToolMeta = activeDrawingTool ? DRAW_TOOL_META[activeDrawingTool] : null;
   const visibleDrawings = drawnLines.filter((item) => !item.hidden);
-  const hiddenCount = drawnLines.length - visibleDrawings.length;
   const activeIndicatorLabels = INDICATOR_CONFIG
     .filter((indicator) => activeIndicators.includes(indicator.id))
     .map((indicator) => indicator.label);
-  const candleRange = displayBar ? displayBar.high - displayBar.low : null;
-  const candleBody = displayBar ? displayBar.close - displayBar.open : null;
-  const candleRangePct = displayBar && displayBar.open ? ((displayBar.high - displayBar.low) / displayBar.open) * 100 : null;
-  const candleBodyPct = displayBar && displayBar.open ? ((displayBar.close - displayBar.open) / displayBar.open) * 100 : null;
   const latestVolumeRatio = latest?.volume_ratio ?? null;
   const recentCandles = data?.candles?.slice(-40) ?? [];
   const recentHigh = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : null;
@@ -1487,8 +1460,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const nearResistance = latest?.close != null && recentHigh != null && recentHigh > 0
     ? ((recentHigh - latest.close) / recentHigh) * 100
     : null;
-  const stopReady = planEntryValue != null && planStopValue != null && !Number.isNaN(planEntryValue) && !Number.isNaN(planStopValue);
-  const targetReady = planEntryValue != null && planTargetValue != null && !Number.isNaN(planEntryValue) && !Number.isNaN(planTargetValue);
   const setupLabel = (() => {
     if (structureReady && latestVolumeRatio != null && latestVolumeRatio >= 1.4 && nearResistance != null && nearResistance <= 3) return "Breakout watch";
     if (structureReady && nearSupport != null && nearSupport <= 4) return "Pullback watch";
@@ -1526,8 +1497,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     {
       key: "risk",
       label: "Risk",
-      status: stopReady && targetReady && planRiskReward != null && planRiskReward >= 2 ? "ready" : stopReady || targetReady ? "watch" : "missing",
-      detail: planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set entry, stop, target",
+      status: "watch",
+      detail: "Build the executable plan in Watchlist Decision Desk",
     },
   ];
   const playbookReadyCount = playbookItems.filter((item) => item.status === "ready").length;
@@ -1549,7 +1520,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
-    selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `Objects · ${visibleDrawings.length}`,
+    selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `Drawings · ${visibleDrawings.length}`,
     symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
   ].filter(Boolean) as string[];
 
@@ -1758,22 +1729,31 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
         {/* Right: timeframe + indicators + drawing tools + save */}
         <div className="workspace-toolbar-group">
-          {/* Timeframe */}
-          <div className="flex items-center gap-0.5 mr-1 rounded-[999px] p-0.5" style={{ background: "var(--app-surface3)" }}>
-            {(["D", "W", "M"] as const).map(tf => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className="text-[11px] px-3 py-1.5 rounded-[999px] font-semibold transition-colors"
-                style={timeframe === tf
-                  ? { background: "var(--app-teal)", color: "#0D0F14" }
-                  : { background: "transparent", color: "var(--app-text3)" }
-                }
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
+          <label className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--app-text3)" }}>
+            Timeframe
+            <select
+              aria-label="Chart timeframe"
+              value={selectedRange}
+              onChange={(event) => handleSelectRange(event.target.value as FullChartTimeframe)}
+              className="text-[11px] rounded-[999px] px-3 py-1.5 font-semibold outline-none"
+              style={{
+                background: "var(--app-surface3)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "var(--app-text1)",
+              }}
+            >
+              <optgroup label="Intraday unavailable in EOD beta">
+                {FULL_CHART_TIMEFRAMES.filter(isIntradayTimeframe).map((tf) => (
+                  <option key={tf} value={tf}>{tf} unavailable</option>
+                ))}
+              </optgroup>
+              <optgroup label="EOD ranges">
+                {FULL_CHART_TIMEFRAMES.filter((tf) => !isIntradayTimeframe(tf)).map((tf) => (
+                  <option key={tf} value={tf}>{tf}</option>
+                ))}
+              </optgroup>
+            </select>
+          </label>
 
           <label className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--app-text3)" }}>
             Chart
@@ -1793,127 +1773,67 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             </select>
           </label>
 
-          {/* Primary indicator toggles */}
-          {INDICATOR_CONFIG.filter(ind => PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
-            const active = activeIndicators.includes(ind.id);
-            const locked = !FREE_INDICATORS.includes(ind.id) && userPlan === "free";
-            return (
-              <button
-                key={ind.id}
-                onClick={() => toggleIndicator(ind.id)}
-                title={locked ? "Pro plan required" : undefined}
-                className={`workspace-chip-button ${active ? "active" : ""} flex items-center gap-1`}
-                style={active
-                  ? { background: ind.color + "22", color: ind.color, border: `1px solid ${ind.color}44` }
-                  : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
-                }
-              >
-                {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
-                {ind.label}
-              </button>
-            );
-          })}
-
-          {/* More indicators dropdown */}
-          <div ref={moreIndRef} className="relative">
+          <div ref={moreIndRef} className="relative" onMouseDown={(event) => event.stopPropagation()}>
             <button
+              aria-label="Indicators"
               onClick={() => setShowMoreIndicators(s => !s)}
-              className={`workspace-chip-button ${INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id)) ? 'active' : ''} flex items-center gap-1`}
-              style={
-                INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id))
-                  ? { background: "rgba(139,150,166,0.15)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.3)" }
-                  : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
-              }
+              className={`workspace-chip-button ${activeIndicators.length ? 'active' : ''} flex items-center gap-1`}
+              style={activeIndicators.length
+                ? { background: "rgba(139,150,166,0.15)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.3)" }
+                : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
             >
-              More ▾
+              Indicators · {activeIndicators.length} ▾
             </button>
             {showMoreIndicators && (
               <div className="absolute top-full left-0 mt-1 z-50 rounded-[8px] py-1 shadow-xl"
-                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 130 }}>
-                {INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
+                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 170 }}>
+                {INDICATOR_CONFIG.map(ind => {
                   const active = activeIndicators.includes(ind.id);
                   const locked = !FREE_INDICATORS.includes(ind.id) && userPlan === "free";
                   return (
-                    <button
+                    <label
                       key={ind.id}
-                      onClick={() => { toggleIndicator(ind.id); }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors"
+                      className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors cursor-pointer"
                       style={{ color: active ? ind.color : "var(--app-text2)" }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                     >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: active ? ind.color : "var(--app-border)" }} />
+                      <input
+                        aria-label={ind.label}
+                        type="checkbox"
+                        checked={active}
+                        onChange={() => toggleIndicator(ind.id)}
+                        className="h-3 w-3"
+                      />
                       {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ flexShrink: 0 }}><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
                       {ind.label}
-                    </button>
+                    </label>
                   );
                 })}
               </div>
             )}
           </div>
 
-          {/* Draw dropdown */}
-          <div ref={drawMenuRef} className="relative">
-            <button
-              onClick={() => setShowDrawMenu(s => !s)}
-              className={`workspace-chip-button ${activeDrawingTool ? 'active' : ''} flex items-center gap-1`}
-              style={activeDrawingTool
-                ? { background: "rgba(139,150,166,0.2)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.4)" }
-                : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
-              }
+          <label className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--app-text3)" }}>
+            Tools
+            <select
+              aria-label="Tools"
+              value={activeDrawingTool ?? "Cursor"}
+              onInput={(event) => handleSelectTool(event.currentTarget.value)}
+              onChange={(event) => handleSelectTool(event.currentTarget.value)}
+              className="text-[11px] rounded-[999px] px-3 py-1.5 font-semibold outline-none"
+              style={{
+                background: activeDrawingTool ? "rgba(139,150,166,0.2)" : "var(--app-surface3)",
+                border: activeDrawingTool ? "1px solid rgba(139,150,166,0.4)" : "1px solid var(--app-border)",
+                color: activeDrawingTool ? "#bac4d1" : "var(--app-text1)",
+              }}
             >
-              {activeDrawingTool ?? "Draw"} ▾
-            </button>
-            {showDrawMenu && (
-              <div className="absolute top-full left-0 mt-1 z-50 rounded-[8px] py-1 shadow-xl"
-                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 190 }}>
-                <button
-                  onClick={() => { setActiveDrawingTool(null); setShowDrawMenu(false); }}
-                  className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
-                  style={{ color: !activeDrawingTool ? "#bac4d1" : "var(--app-text2)" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  <MousePointer2 size={14} />
-                  <span className="flex-1">Select / move</span>
-                  <span className="text-[10px] opacity-60">Esc</span>
-                </button>
-                <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
-                {FULL_CHART_DRAWING_TOOLS.map(tool => {
-                  const meta = DRAW_TOOL_META[tool];
-                  const Icon = meta.icon;
-                  return (
-                    <button
-                      key={tool}
-                      onClick={() => { setActiveDrawingTool(t => t === tool ? null : tool); setShowDrawMenu(false); }}
-                      className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
-                      style={{ color: activeDrawingTool === tool ? "#bac4d1" : "var(--app-text2)" }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                    >
-                      <Icon size={14} />
-                      <span className="flex-1">{meta.label}</span>
-                      <span className="text-[10px] opacity-60">{meta.short}</span>
-                    </button>
-                  );
-                })}
-                {drawnLines.length > 0 && (
-                  <>
-                    <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
-                    <button
-                      onClick={() => { clearDrawings(); setShowDrawMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-[12px] transition-colors"
-                      style={{ color: "var(--app-loss)" }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                    >
-                      Clear all
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+              <option value="Cursor">Cursor / select</option>
+              {FULL_CHART_DRAWING_TOOLS.map((tool) => (
+                <option key={tool} value={tool}>{DRAW_TOOL_META[tool].label}</option>
+              ))}
+            </select>
+          </label>
 
           <button
             onClick={handleUndoDrawing}
@@ -1934,7 +1854,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           </button>
 
           {/* Clear drawings shortcut (when active) */}
-          {drawnLines.length > 0 && !showDrawMenu && (
+          {drawnLines.length > 0 && (
             <button
               onClick={clearDrawings}
               className="workspace-chip-button"
@@ -2058,9 +1978,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             currentPrice={displayClose}
             defaultSide={orderSide}
             initialPlan={{
-              entry: tradePlan.entry ? parseFloat(tradePlan.entry) : displayClose,
-              stop: tradePlan.stop ? parseFloat(tradePlan.stop) : null,
-              target: tradePlan.target ? parseFloat(tradePlan.target) : null,
+              entry: displayClose,
+              stop: null,
+              target: null,
             }}
             onClose={() => setShowOrder(false)}
             onFilled={(result: OrderResult) => {
@@ -2209,37 +2129,56 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    {playbookItems.map((item) => (
-                      <div key={item.key} className="rounded-[10px] px-3 py-2"
-                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-semibold" style={{ color: "var(--app-text1)" }}>{item.label}</span>
-                          <span className="text-[9px] uppercase tracking-[0.4px] font-bold"
-                            style={{ color: item.status === "ready" ? "#4ade80" : item.status === "watch" ? "#fbbf24" : "var(--app-text3)" }}>
-                            {item.status === "ready" ? "Ready" : item.status === "watch" ? "Watch" : "Missing"}
-                          </span>
-                        </div>
-                        <div className="text-[10px] leading-4 mt-1" style={{ color: "var(--app-text3)" }}>{item.detail}</div>
+                    <details open className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                      <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold" style={{ color: "var(--app-text1)" }}>
+                        Setup checks
+                      </summary>
+                      <div className="px-3 pb-2 space-y-1.5">
+                        {playbookItems.filter((item) => item.key !== "risk").map((item) => (
+                          <div key={item.key} className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="text-[11px] font-semibold" style={{ color: "var(--app-text1)" }}>{item.label}</div>
+                              <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>{item.detail}</div>
+                            </div>
+                            <span className="text-[9px] uppercase tracking-[0.4px] font-bold"
+                              style={{ color: item.status === "ready" ? "#4ade80" : item.status === "watch" ? "#fbbf24" : "var(--app-text3)" }}>
+                              {item.status === "ready" ? "Ready" : item.status === "watch" ? "Watch" : "Missing"}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <button
-                      onClick={() => void handleQuickAlert("above", recentHigh, `${symbol} breakout above recent resistance`)}
-                      disabled={alertSaving || recentHigh == null}
-                      className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
-                      style={{ background: "rgba(38,166,91,0.12)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }}
-                    >
-                      Alert breakout
-                    </button>
-                    <button
-                      onClick={() => void handleQuickAlert("below", recentLow, `${symbol} lost recent support`)}
-                      disabled={alertSaving || recentLow == null}
-                      className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
-                      style={{ background: "rgba(229,56,59,0.12)", color: "#f87171", border: "1px solid rgba(229,56,59,0.22)" }}
-                    >
-                      Alert support
-                    </button>
+                    </details>
+                    <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                      <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold" style={{ color: "var(--app-text1)" }}>
+                        Trade plan
+                      </summary>
+                      <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                        Use Watchlist Decision Desk for entry, stop, target, sizing, and order gating. Full chart stays focused on planning and drawings.
+                      </div>
+                    </details>
+                    <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                      <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold" style={{ color: "var(--app-text1)" }}>
+                        Alerts
+                      </summary>
+                      <div className="grid grid-cols-2 gap-2 px-3 pb-3">
+                        <button
+                          onClick={() => void handleQuickAlert("above", recentHigh, `${symbol} breakout above recent resistance`)}
+                          disabled={alertSaving || recentHigh == null}
+                          className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
+                          style={{ background: "rgba(38,166,91,0.12)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }}
+                        >
+                          Breakout
+                        </button>
+                        <button
+                          onClick={() => void handleQuickAlert("below", recentLow, `${symbol} lost recent support`)}
+                          disabled={alertSaving || recentLow == null}
+                          className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
+                          style={{ background: "rgba(229,56,59,0.12)", color: "#f87171", border: "1px solid rgba(229,56,59,0.22)" }}
+                        >
+                          Support
+                        </button>
+                      </div>
+                    </details>
                   </div>
                   {quickAlertMsg && (
                     <div className="text-[10px] mt-2" style={{ color: quickAlertMsg.includes("failed") || quickAlertMsg.includes("unavailable") ? "#f87171" : "#4ade80" }}>
@@ -2249,82 +2188,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </div>
               </div>
 
-              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
-                <button
-                  onClick={() => setShowTradePlan((current) => !current)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
-                  style={{ color: "var(--app-text2)" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Trade plan</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
-                      {planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set levels"}
-                    </span>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showTradePlan ? "rotate(180deg)" : "rotate(0deg)" }}>
-                      <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
-                </button>
-                {showTradePlan && (
-                  <div className="px-4 pb-4 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
-                        Drag the plan guides on the chart or enter the levels here.
-                      </div>
-                      <button
-                        onClick={() => setTradePlan({
-                          entry: latest?.close?.toFixed(2) ?? "",
-                          stop: "",
-                          target: "",
-                        })}
-                        className="px-2 py-1 rounded-[7px] text-[10px] font-semibold"
-                        style={{ background: "var(--app-surface3)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}
-                      >
-                        Reset
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={tradePlan.entry}
-                        onChange={(e) => setTradePlan((current) => ({ ...current, entry: e.target.value }))}
-                        placeholder="Entry"
-                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
-                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      />
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={tradePlan.stop}
-                        onChange={(e) => setTradePlan((current) => ({ ...current, stop: e.target.value }))}
-                        placeholder="Stop"
-                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
-                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      />
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={tradePlan.target}
-                        onChange={(e) => setTradePlan((current) => ({ ...current, target: e.target.value }))}
-                        placeholder="Target"
-                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
-                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
-                      <div className="text-[10px]" style={{ color: "var(--app-text3)" }}>
-                        Entry {planEntryValue != null && !Number.isNaN(planEntryValue) ? fmtPrice(planEntryValue, symbolCurrency) : "—"} · Stop {planStopValue != null && !Number.isNaN(planStopValue) ? fmtPrice(planStopValue, symbolCurrency) : "—"} · Target {planTargetValue != null && !Number.isNaN(planTargetValue) ? fmtPrice(planTargetValue, symbolCurrency) : "—"}
-                      </div>
-                      <div className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
-                        {planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set all 3"}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
               <div style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
                   onClick={() => setShowReviewPanel((current) => !current)}
@@ -2783,48 +2646,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           )}
         </aside>
 
-        <aside
-          className="w-[88px] flex-shrink-0 flex flex-col items-center gap-3 px-3 py-4"
-          style={{ borderRight: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
-        >
-          <div className="label" style={{ fontSize: 9, color: "var(--app-text3)" }}>Tools</div>
-          {DRAWING_TOOLS.map(tool => {
-            const meta = DRAW_TOOL_META[tool];
-            const Icon = meta.icon;
-            const active = activeDrawingTool === tool;
-            return (
-              <button
-                key={tool}
-                onClick={() => {
-                  setActiveDrawingTool(prev => prev === tool ? null : tool);
-                  setSelectedDrawingId(null);
-                }}
-                title={`${meta.label} (${meta.short})`}
-                className="w-full flex flex-col items-center gap-1 rounded-[14px] px-2 py-2 transition-colors"
-                style={active
-                  ? { background: "rgba(139,150,166,0.16)", border: "1px solid rgba(139,150,166,0.38)", color: "#a5b4fc" }
-                  : { background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--app-text3)" }}
-              >
-                <Icon size={15} />
-                <span style={{ fontSize: 10, fontWeight: 600 }}>{meta.label}</span>
-                <span className="mono" style={{ fontSize: 9, color: "var(--app-text3)" }}>{meta.short}</span>
-              </button>
-            );
-          })}
-
-          <div className="w-full h-px" style={{ background: "rgba(255,255,255,0.06)", margin: "2px 0" }} />
-
-          <button
-            onClick={() => setShowObjectList(prev => !prev)}
-            className="w-full rounded-[14px] px-2 py-2 transition-colors"
-            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--app-text2)" }}
-          >
-            <div className="flex justify-center"><Activity size={15} /></div>
-            <div style={{ fontSize: 10, fontWeight: 600, marginTop: 4 }}>Objects</div>
-            <div className="mono" style={{ fontSize: 9, color: "var(--app-text3)" }}>{drawnLines.length}</div>
-          </button>
-        </aside>
-
         {/* Chart area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "transparent" }}>
           <div
@@ -2848,6 +2669,24 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   {activeToolMeta.label} armed · press ESC to cancel
                 </div>
               )}
+              {timeframeNotice && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.22)" }}>
+                  {timeframeNotice}
+                </div>
+              )}
+              {chartAvailabilityMessage && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.22)" }}>
+                  {chartAvailabilityMessage}
+                </div>
+              )}
+              {data?.candles?.length ? (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {selectedRange} · {chartRangeParams.timeframe} · {candleRangeLabel}
+                </div>
+              ) : null}
               <button
                 onClick={() => setSnapToPrice((prev) => !prev)}
                 className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
@@ -2873,16 +2712,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 >
                   <Bell size={12} />
                   Alert from drawing
-                </button>
-              )}
-              {selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && (
-                <button
-                  onClick={() => applyPositionDrawingToPlan(selectedDrawing)}
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
-                  style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.22)" }}
-                >
-                  <TrendingUp size={12} />
-                  Use as plan
                 </button>
               )}
               {selectedDrawing?.tool === "Rectangle" && (
@@ -2986,126 +2815,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     <span>Vol <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtVol(displayBar.volume)}</span></span>
                   </div>
                 </div>
-                <div
-                  className="absolute top-[58px] left-3 z-10 pointer-events-none rounded-[14px] px-3 py-2"
-                  style={{ background: "rgba(13,15,20,0.76)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(10px)" }}
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
-                      Range {candleRange != null ? fmtPrice(candleRange, symbolCurrency) : "—"}
-                    </span>
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)", color: candleBody != null && candleBody >= 0 ? "#4ade80" : "#f87171" }}>
-                      Body {candleBodyPct != null ? `${candleBodyPct >= 0 ? "+" : ""}${candleBodyPct.toFixed(2)}%` : "—"}
-                    </span>
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
-                      Vol ratio {latestVolumeRatio != null ? `${latestVolumeRatio.toFixed(2)}x` : "—"}
-                    </span>
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
-                      Range % {candleRangePct != null ? `${candleRangePct.toFixed(2)}%` : "—"}
-                    </span>
-                  </div>
-                </div>
               </>
-            )}
-
-            {showObjectList && (
-              <div
-                className="absolute top-3 right-3 z-30 w-[220px] rounded-[16px] p-3"
-                style={{ background: "rgba(13,15,20,0.88)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(14px)" }}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="label" style={{ fontSize: 9, marginBottom: 4 }}>Objects</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--app-text1)" }}>{visibleDrawings.length} visible · {drawnLines.length} total</div>
-                    {hiddenCount > 0 && (
-                      <div style={{ fontSize: 10, color: "var(--app-text3)", marginTop: 2 }}>{hiddenCount} hidden in this session</div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setShowObjectList(false)}
-                    style={{ color: "var(--app-text3)", fontSize: 16, lineHeight: 1 }}
-                  >
-                    ×
-                  </button>
-                </div>
-                {drawnLines.length === 0 ? (
-                  <div style={{ fontSize: 11, lineHeight: 1.6, color: "var(--app-text3)" }}>
-                    Use the left tool rail to add levels, zones, rays, Fibonacci retracements, and notes.
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
-                    {drawnLines.map((item, idx) => (
-                      <div
-                        key={item.id}
-                        onClick={() => setSelectedDrawingId(item.id)}
-                        className="w-full text-left rounded-[12px] px-3 py-2 transition-colors cursor-pointer"
-                        style={selectedDrawingId === item.id
-                          ? { background: "rgba(139,150,166,0.16)", border: "1px solid rgba(139,150,166,0.34)" }
-                          : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--app-text1)" }}>
-                            {idx + 1}. {DRAW_TOOL_META[item.tool].label}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleDrawingHidden(item.id);
-                              }}
-                              title={item.hidden ? "Show drawing" : "Hide drawing"}
-                              style={{ color: item.hidden ? "#fbbf24" : "var(--app-text3)", lineHeight: 0 }}
-                            >
-                              {item.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleDrawingLock(item.id);
-                              }}
-                              title={item.locked ? "Unlock drawing" : "Lock drawing"}
-                              style={{ color: item.locked ? "#a5b4fc" : "var(--app-text3)", lineHeight: 0 }}
-                            >
-                              {item.locked ? <Unlock size={12} /> : <Lock size={12} />}
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleDeleteSingleDrawing(item.id);
-                              }}
-                              title="Delete drawing"
-                              disabled={item.locked}
-                              style={{ color: "#f87171", lineHeight: 0, opacity: item.locked ? 0.35 : 1 }}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ marginTop: 5, fontSize: 10, color: item.hidden ? "#fbbf24" : "var(--app-text3)" }}>
-                          {formatDrawingSummary(item)}
-                        </div>
-                        <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {item.locked && (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#a5b4fc", letterSpacing: "0.04em", textTransform: "uppercase" }}>Locked</span>
-                          )}
-                          {item.hidden && (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#fbbf24", letterSpacing: "0.04em", textTransform: "uppercase" }}>Hidden</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="label" style={{ fontSize: 9, marginBottom: 6 }}>Desk shortcuts</div>
-                  <div style={{ display: "grid", gap: 5, fontSize: 10, color: "var(--app-text3)" }}>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>T / R / H / J / Z / F / L / S / N</span> arm tools</div>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Z</span> undo · <span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Y</span> redo</div>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Esc</span> cancel tool · <span className="mono" style={{ color: "var(--app-text1)" }}>Delete</span> remove selection</div>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Shift</span> lock angle/box · <span className="mono" style={{ color: "var(--app-text1)" }}>Alt</span> bypass magnet</div>
-                  </div>
-                </div>
-              </div>
             )}
 
             {textEditor && (
@@ -3166,11 +2876,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               ref={overlayRef}
               data-testid="chart-drawing-overlay"
               className="absolute inset-0 z-20"
-              style={{ cursor: activeDrawingTool ? "crosshair" : dragState || positionDragState || planDragState ? "grabbing" : "default", pointerEvents: activeDrawingTool || selectedDrawing || dragState || positionDragState || planDragState || activeManagedPosition ? "all" : "none" }}
+              style={{ cursor: activeDrawingTool ? "crosshair" : dragState || positionDragState ? "grabbing" : "default", pointerEvents: activeDrawingTool || selectedDrawing || dragState || positionDragState || activeManagedPosition ? "all" : "none" }}
               onMouseDown={handleOverlayMouseDown}
               onMouseMove={handleOverlayMouseMove}
               onMouseUp={handleOverlayMouseUp}
-              onMouseLeave={() => { setDragState(null); setPositionDragState(null); setPlanDragState(null); }}
+              onMouseLeave={() => { setDragState(null); setPositionDragState(null); }}
             >
               {/* Preview line while drawing */}
               {drawingPreview && (
@@ -3224,83 +2934,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
               {/* Persisted drawings — projected from price/time coords each render */}
               <svg className="absolute inset-0 w-full h-full">
-                {(() => {
-                  const chartW = overlayRef.current?.clientWidth ?? 0;
-                  const planDefs = [
-                    { key: "entry", label: "Plan entry", price: tradePlan.entry ? parseFloat(tradePlan.entry) : null, color: "#a78bfa" },
-                    { key: "stop", label: "Plan stop", price: tradePlan.stop ? parseFloat(tradePlan.stop) : null, color: "#e5383b" },
-                    { key: "target", label: "Plan target", price: tradePlan.target ? parseFloat(tradePlan.target) : null, color: "#26a65b" },
-                  ] as const;
-                  return planDefs.map((line) => {
-                    if (line.price == null || Number.isNaN(line.price)) return null;
-                    const y = chartHandleRef.current?.priceToCoordinate(line.price) ?? null;
-                    if (y == null) return null;
-                    const glowId = `plan-glow-${line.key}`;
-                    return (
-                      <g key={line.key} style={{ pointerEvents: "all" }}>
-                        <defs>
-                          <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur stdDeviation="2.2" result="blur" />
-                            <feMerge>
-                              <feMergeNode in="blur" />
-                              <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                          </filter>
-                        </defs>
-                        <line
-                          x1={0}
-                          y1={y}
-                          x2={chartW}
-                          y2={y}
-                          stroke={line.color}
-                          strokeWidth={1.8}
-                          strokeDasharray="6 4"
-                          opacity={0.92}
-                          filter={`url(#${glowId})`}
-                        />
-                        <rect
-                          x={8}
-                          y={y - 12}
-                          width={124}
-                          height={24}
-                          rx={10}
-                          fill="rgba(13,15,20,0.94)"
-                          stroke={line.color}
-                        />
-                        <text
-                          x={16}
-                          y={y + 5}
-                          fontSize="10.5"
-                          fill={line.color}
-                          fontFamily="Inter, sans-serif"
-                          fontWeight="700"
-                        >
-                          {line.label} {line.price.toFixed(2)}
-                        </text>
-                        <circle
-                          cx={138}
-                          cy={y}
-                          r={9}
-                          fill="rgba(13,15,20,0.96)"
-                          opacity={0.22}
-                        />
-                        <circle
-                          cx={138}
-                          cy={y}
-                          r={6.5}
-                          fill="#0D0F14"
-                          stroke={line.color}
-                          strokeWidth={1.8}
-                          style={{ cursor: "ns-resize" }}
-                          onMouseDown={(event) => {
-                            event.stopPropagation();
-                            setPlanDragState({ field: line.key });
-                          }}
-                        />
-                      </g>
-                    );
-                  });
-                })()}
                 {activeManagedPosition && activeManagedDraft && (() => {
                   const chartW = overlayRef.current?.clientWidth ?? 0;
                   const lineDefs = [
@@ -3384,7 +3017,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
                   if (line.tool === "Horizontal") {
                     return (
-                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         <line x1={0} y1={y1} x2={chartW} y2={y1}
                           stroke={stroke} strokeWidth={strokeWidth} />
                         <text x={chartW - 4} y={y1 - 4} textAnchor="end"
@@ -3413,7 +3046,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p1"); }}
 
                   if (line.tool === "HorizontalRay") {
                     return (
-                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         <line x1={x1} y1={y1} x2={chartW} y2={y1} stroke={stroke} strokeWidth={strokeWidth} />
                         <circle cx={x1} cy={y1} r={3} fill={stroke} />
                         {editable && (
@@ -3450,7 +3083,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                     const slope = dx === 0 ? 0 : dy / dx;
                     const rayY = y1 + slope * (chartW - x1);
                     return (
-                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         <line x1={x1} y1={y1} x2={chartW} y2={rayY} stroke={stroke} strokeWidth={strokeWidth} />
                         <circle cx={x1} cy={y1} r={3} fill={stroke} />
                         {editable && (
@@ -3487,7 +3120,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                     const rectW = Math.max(8, Math.abs(x2 - x1));
                     const rectH = Math.max(8, Math.abs(y2 - y1));
                     return (
-                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         <rect
                           x={rectX}
                           y={rectY}
@@ -3530,7 +3163,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                     const levels = [0, 0.236, 0.382, 0.5, 0.618, 1];
                     const priceRange = line.p2.price - line.p1.price;
                     return (
-                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         {levels.map(lvl => {
                           const priceLvl = line.p1.price + priceRange * (1 - lvl);
                           const yLvl = chartHandleRef.current?.priceToCoordinate(priceLvl) ?? null;
@@ -3592,7 +3225,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                     const tagX = Math.max(4, Math.min(chartW - 112, x + rectW + 6));
 
                     return (
-                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         <rect x={x} y={rewardTop} width={rectW} height={rewardH} fill="rgba(34,197,94,0.16)" stroke={selected ? "#bbf7d0" : "#22c55e"} strokeWidth={strokeWidth} />
                         <rect x={x} y={riskTop} width={rectW} height={riskH} fill="rgba(239,68,68,0.16)" stroke={selected ? "#fecaca" : "#ef4444"} strokeWidth={strokeWidth} />
                         <line x1={x} y1={y1} x2={x + rectW} y2={y1} stroke="#e5e7eb" strokeWidth={1.4} />
@@ -3648,7 +3281,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
 
                   if (line.tool === "Text") {
                     return (
-                      <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onDoubleClick={() => editTextDrawing(line)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                      <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onDoubleClick={() => editTextDrawing(line)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                         <circle cx={x1} cy={y1} r={3} fill={stroke} />
                         <rect
                           x={Math.min(chartW - 120, x1 + 8)}
@@ -3686,7 +3319,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
 
                   // Trendline
                   return (
-                    <g key={line.id} style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
+                    <g key={line.id} data-testid="chart-drawing-object" style={{ pointerEvents: "all", cursor: editable ? "grab" : "pointer" }} onClick={() => setSelectedDrawingId(line.id)} onMouseDown={(e) => beginWholeDrawingDrag(e, line)}>
                       <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth={strokeWidth} />
                       {selected && (
                         <>
@@ -3727,7 +3360,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
             {/* Main chart */}
             {data && (
               <CandlestickChart
-                key={`${symbol}-${timeframe}-${chartType}-${liveMode ? "live" : "eod"}`}
+                key={`${symbol}-${selectedRange}-${timeframe}-${chartType}-${liveMode ? "live" : "eod"}`}
                 candles={data.candles}
                 indicators={indicatorData}
                 activeIndicators={activeIndicators}

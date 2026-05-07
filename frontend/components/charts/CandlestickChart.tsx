@@ -31,6 +31,8 @@ export type IndicatorData = {
   ema20?: LinePoint[];
   ema50?: LinePoint[];
   ema200?: LinePoint[];
+  sma50?: LinePoint[];
+  sma200?: LinePoint[];
   vwap?: LinePoint[];
   bb?: BBPoint[];
   ichimoku?: IchimokuPoint[];
@@ -73,6 +75,19 @@ function applyDefaultVisibleRange(chart: IChartApi, candles: CandleBar[]) {
   chart.timeScale().setVisibleLogicalRange({ from, to: to + 10 });
 }
 
+function simpleMovingAverage(candles: CandleBar[], period: number): LinePoint[] {
+  const points: LinePoint[] = [];
+  let rolling = 0;
+  candles.forEach((candle, index) => {
+    rolling += candle.close;
+    if (index >= period) rolling -= candles[index - period].close;
+    if (index >= period - 1) {
+      points.push({ time: candle.time, value: rolling / period });
+    }
+  });
+  return points;
+}
+
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
   { candles, indicators, activeIndicators, chartType = "candles", onCrosshairMove, onRangeChange, onReady },
   ref
@@ -86,6 +101,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     ema20: ISeriesApi<"Line"> | null;
     ema50: ISeriesApi<"Line"> | null;
     ema200: ISeriesApi<"Line"> | null;
+    sma50: ISeriesApi<"Line"> | null;
+    sma200: ISeriesApi<"Line"> | null;
     vwap: ISeriesApi<"Line"> | null;
     bbUpper: ISeriesApi<"Line"> | null;
     bbMid: ISeriesApi<"Line"> | null;
@@ -96,7 +113,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     ichiSenkouB: ISeriesApi<"Line"> | null;
     ichiChikou: ISeriesApi<"Line"> | null;
   }>({
-    price: null, volume: null, ema20: null, ema50: null, ema200: null,
+    price: null, volume: null, ema20: null, ema50: null, ema200: null, sma50: null, sma200: null,
     vwap: null, bbUpper: null, bbMid: null, bbLower: null,
     ichiTenkan: null, ichiKijun: null, ichiSenkouA: null, ichiSenkouB: null, ichiChikou: null,
   });
@@ -220,6 +237,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     seriesRef.current.ema200 = chart.addSeries(LineSeries, {
       color: "#7a8695", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
     });
+    seriesRef.current.sma50 = chart.addSeries(LineSeries, {
+      color: "#cbd5e1", lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
+    });
+    seriesRef.current.sma200 = chart.addSeries(LineSeries, {
+      color: "#94a3b8", lineWidth: 1, lineStyle: 1, priceLineVisible: false, lastValueVisible: false,
+    });
 
     // VWAP
     seriesRef.current.vwap = chart.addSeries(LineSeries, {
@@ -309,13 +332,15 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     const lineData = candles.map(c => ({ time: c.time as Time, value: c.close }));
     s.price.setData(chartType === "line" ? lineData : ohlcData);
     s.volume.setData(
-      candles.map(c => ({ time: c.time as Time, value: c.volume, color: candleToVolColor(c) }))
+      activeIndicators.includes("volume")
+        ? candles.map(c => ({ time: c.time as Time, value: c.volume, color: candleToVolColor(c) }))
+        : []
     );
     if (!didInitialFitRef.current) {
       if (chartRef.current) applyDefaultVisibleRange(chartRef.current, candles);
       didInitialFitRef.current = true;
     }
-  }, [candles, chartType]);
+  }, [activeIndicators, candles, chartType]);
 
   // Crosshair move → notify parent
   useEffect(() => {
@@ -367,6 +392,16 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       s.ema200?.setData(indicators.ema200.map(p => ({ time: p.time as Time, value: p.value })));
     }
 
+    const sma50 = indicators.sma50?.length ? indicators.sma50 : simpleMovingAverage(candles, 50);
+    const showSma50 = activeIndicators.includes("sma50");
+    s.sma50?.applyOptions({ visible: showSma50 });
+    s.sma50?.setData(showSma50 ? sma50.map(p => ({ time: p.time as Time, value: p.value })) : []);
+
+    const sma200 = indicators.sma200?.length ? indicators.sma200 : simpleMovingAverage(candles, 200);
+    const showSma200 = activeIndicators.includes("sma200");
+    s.sma200?.applyOptions({ visible: showSma200 });
+    s.sma200?.setData(showSma200 ? sma200.map(p => ({ time: p.time as Time, value: p.value })) : []);
+
     // VWAP
     const showVwap = activeIndicators.includes("vwap");
     s.vwap?.applyOptions({ visible: showVwap });
@@ -405,7 +440,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       s.ichiSenkouB?.setData(toLine("senkou_b"));
       s.ichiChikou?.setData(toLine("chikou"));
     }
-  }, [indicators, activeIndicators]);
+  }, [indicators, activeIndicators, candles]);
 
   return <div ref={containerRef} className="w-full h-full" />;
 });

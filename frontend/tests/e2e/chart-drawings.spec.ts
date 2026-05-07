@@ -30,8 +30,9 @@ test.describe("Full chart drawings", () => {
     await page.mouse.move(box.x + box.width * 0.72, box.y + box.height * 0.35);
     await page.mouse.up();
 
-    await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(1, { timeout: 10000 });
     await page.reload();
-    await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("Objects")).toHaveCount(0);
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(1, { timeout: 15000 });
   });
 });

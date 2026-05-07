@@ -1,4 +1,7 @@
-export type WatchlistChartTimeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "10Y";
+export type EodChartTimeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "10Y";
+export type IntradayChartTimeframe = "5m" | "15m" | "30m" | "1h";
+export type FullChartTimeframe = IntradayChartTimeframe | EodChartTimeframe;
+export type WatchlistChartTimeframe = EodChartTimeframe;
 
 export type WatchlistChartRequest = {
   label: WatchlistChartTimeframe;
@@ -20,6 +23,26 @@ const REQUESTS: Record<WatchlistChartTimeframe, { timeframe: "D" | "W" | "M"; da
   "5Y": { timeframe: "W", months: 60, limit: 270, expectedMonths: 60 },
   "10Y": { timeframe: "M", months: 120, limit: 130, expectedMonths: 120 },
 };
+
+export const FULL_CHART_TIMEFRAMES: FullChartTimeframe[] = [
+  "5m",
+  "15m",
+  "30m",
+  "1h",
+  "1D",
+  "1W",
+  "1M",
+  "3M",
+  "6M",
+  "1Y",
+  "3Y",
+  "5Y",
+  "10Y",
+];
+
+export function isIntradayTimeframe(label: string): label is IntradayChartTimeframe {
+  return label === "5m" || label === "15m" || label === "30m" || label === "1h";
+}
 
 function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -45,6 +68,11 @@ export function getWatchlistChartRequest(label: string, now = new Date()): Watch
     limit: config.limit,
     expectedMonths: config.expectedMonths,
   };
+}
+
+export function getFullChartRequest(label: string, now = new Date()): WatchlistChartRequest | null {
+  if (isIntradayTimeframe(label)) return null;
+  return getWatchlistChartRequest(label, now);
 }
 
 export function candleRangeMonths(candles: Array<{ time: string }>) {

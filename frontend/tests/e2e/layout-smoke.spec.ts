@@ -192,6 +192,50 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · M · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
   });
 
+  test("full chart workspace keeps chart controls compact and explicit", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/charts/SMARTWORKS?full=1", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("chart-drawing-overlay")).toBeVisible({ timeout: 20_000 });
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
+
+    await expect(page.getByText("Objects")).toHaveCount(0);
+    await expect(page.getByText(/Plan entry/i)).toHaveCount(0);
+    await expect(page.getByText("Vol ratio", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/Range %/i)).toHaveCount(0);
+
+    const magnet = page.getByRole("button", { name: /Magnet/i });
+    await magnet.click();
+    await expect(magnet).toContainText(/Off/, { timeout: 10_000 });
+
+    const tools = page.locator('select[aria-label="Tools"]');
+    await expect(tools).toBeVisible();
+    await expect(tools).toContainText("Trendline");
+    await tools.selectOption("Trendline");
+    if (await tools.inputValue() !== "Trendline") {
+      await tools.evaluate((select) => {
+        const node = select as HTMLSelectElement;
+        node.value = "Trendline";
+        node.dispatchEvent(new Event("input", { bubbles: true }));
+        node.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
+    await expect(page.getByText(/Trendline armed/i)).toBeVisible({ timeout: 10_000 });
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(/Trendline armed/i)).toHaveCount(0);
+
+    const timeframe = page.getByLabel("Chart timeframe");
+    await expect(timeframe).toContainText("5m unavailable");
+    await timeframe.selectOption("5m");
+    await expect(page.getByText(/Intraday data is not available in EOD beta mode/i)).toBeVisible();
+    await timeframe.selectOption("5Y");
+    await expect(page.getByText(/5Y · W · \d{4}-\d{2}-\d{2}/)).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: /Indicators/i }).click();
+    await page.getByLabel("EMA 200").check();
+    await page.getByLabel("RSI").check();
+    await expect(page.getByRole("button", { name: /Indicators/i })).toContainText(/Indicators · \d+/);
+  });
+
   test("feedback widget does not cover top workflow controls", async ({ page }) => {
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });

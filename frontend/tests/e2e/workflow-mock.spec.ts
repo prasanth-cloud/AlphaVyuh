@@ -299,21 +299,21 @@ test.describe("Mock workflow smoke", () => {
     await page.mouse.move(box.x + box.width * 0.72, box.y + box.height * 0.35);
     await page.mouse.up();
 
-    await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(1, { timeout: 10_000 });
     await page.reload();
-    await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(1, { timeout: 15_000 });
 
-    await page.getByText(/1\. Trendline/).click();
+    await page.getByTestId("chart-drawing-object").first().click({ force: true });
     await expect(page.getByText(/Selected: Trendline/i)).toBeVisible({ timeout: 10_000 });
     await page.keyboard.press("Delete");
-    await expect(page.getByText(/0 visible .* 0 total/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(0, { timeout: 10_000 });
     await page.reload();
-    await expect(page.getByText(/0 visible .* 0 total/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(0, { timeout: 15_000 });
 
     expect(errors).toEqual([]);
   });
 
-  test("risk reward drawing can fill the chart trade plan", async ({ page }) => {
+  test("risk reward drawing stays selectable without chart trade-plan inputs", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
     page.on("console", (message) => {
@@ -325,7 +325,7 @@ test.describe("Mock workflow smoke", () => {
     const overlay = page.getByTestId("chart-drawing-overlay");
     await expect(overlay).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: /Long Position/i }).first().click();
+    await page.locator('select[aria-label="Tools"]').selectOption("LongPosition");
     await expect(page.getByText(/Long Position armed/i)).toBeVisible({ timeout: 10_000 });
 
     const box = await overlay.boundingBox();
@@ -337,15 +337,13 @@ test.describe("Mock workflow smoke", () => {
     await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.66);
     await page.mouse.up();
 
-    await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 10_000 });
-    await page.getByText(/1\. Long Position/).click();
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(1, { timeout: 10_000 });
+    await page.getByTestId("chart-drawing-object").first().click({ force: true });
     await expect(page.getByText(/Selected: Long Position/i)).toBeVisible({ timeout: 10_000 });
-    await page.getByRole("button", { name: /Use as plan/i }).click();
-    await expect(page.getByText("Trade plan filled from risk/reward drawing.")).toBeVisible({ timeout: 10_000 });
-
-    await expect(page.getByPlaceholder("Entry")).not.toHaveValue("");
-    await expect(page.getByPlaceholder("Stop")).not.toHaveValue("");
-    await expect(page.getByPlaceholder("Target")).not.toHaveValue("");
+    await expect(page.getByText(/Use as plan/i)).toHaveCount(0);
+    await expect(page.getByPlaceholder("Entry")).toHaveCount(0);
+    await expect(page.getByPlaceholder("Stop")).toHaveCount(0);
+    await expect(page.getByPlaceholder("Target")).toHaveCount(0);
 
     expect(errors).toEqual([]);
   });
@@ -362,7 +360,7 @@ test.describe("Mock workflow smoke", () => {
     const overlay = page.getByTestId("chart-drawing-overlay");
     await expect(overlay).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: /Zone/i }).first().click();
+    await page.locator('select[aria-label="Tools"]').selectOption("Rectangle");
     await expect(page.getByText(/Zone armed/i)).toBeVisible({ timeout: 10_000 });
 
     const box = await overlay.boundingBox();
@@ -374,16 +372,15 @@ test.describe("Mock workflow smoke", () => {
     await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.57);
     await page.mouse.up();
 
-    await expect(page.getByText(/1 visible .* 1 total/)).toBeVisible({ timeout: 10_000 });
-    await page.getByText(/1\. Zone/).click();
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(1, { timeout: 10_000 });
+    await page.getByTestId("chart-drawing-object").first().click({ force: true });
     await expect(page.getByText(/Selected: Zone/i)).toBeVisible({ timeout: 10_000 });
     await page.getByRole("button", { name: /Zone note/i }).click();
-    await expect(page.getByText(/2 visible .* 2 total/)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/2\. Text/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(2, { timeout: 10_000 });
     await expect(page.getByText(/Zone \d+\.\d+-\d+\.\d+/).first()).toBeVisible({ timeout: 10_000 });
 
     await page.reload();
-    await expect(page.getByText(/2 visible .* 2 total/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(2, { timeout: 15_000 });
 
     expect(errors).toEqual([]);
   });
@@ -402,9 +399,10 @@ test.describe("Mock workflow smoke", () => {
     const box = await overlay.boundingBox();
     expect(box).not.toBeNull();
     if (!box) return;
+    const tools = page.locator('select[aria-label="Tools"]');
 
     const drawSegment = async (
-      buttonName: RegExp,
+      tool: string,
       armedText: RegExp,
       startX: number,
       startY: number,
@@ -412,22 +410,22 @@ test.describe("Mock workflow smoke", () => {
       endY: number,
       expectedCount: number,
     ) => {
-      await page.getByRole("button", { name: buttonName }).first().click();
+      await tools.selectOption(tool);
       await expect(page.getByText(armedText)).toBeVisible({ timeout: 10_000 });
       await page.mouse.move(box.x + box.width * startX, box.y + box.height * startY);
       await page.mouse.down();
       await page.mouse.move(box.x + box.width * endX, box.y + box.height * endY);
       await page.mouse.up();
-      await expect(page.getByText(new RegExp(`${expectedCount} visible .* ${expectedCount} total`))).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId("chart-drawing-object")).toHaveCount(expectedCount, { timeout: 10_000 });
     };
 
-    await drawSegment(/^Ray\b/i, /Ray armed/i, 0.22, 0.68, 0.58, 0.45, 1);
-    await drawSegment(/^Horizontal\b/i, /Horizontal armed/i, 0.18, 0.50, 0.66, 0.50, 2);
-    await drawSegment(/^H-Ray\b/i, /H-Ray armed/i, 0.26, 0.38, 0.62, 0.38, 3);
-    await drawSegment(/^Fib\b/i, /Fib armed/i, 0.35, 0.72, 0.70, 0.32, 4);
-    await drawSegment(/^Short Position\b/i, /Short Position armed/i, 0.42, 0.40, 0.64, 0.24, 5);
+    await drawSegment("Ray", /Ray armed/i, 0.22, 0.68, 0.58, 0.45, 1);
+    await drawSegment("Horizontal", /Horizontal armed/i, 0.18, 0.50, 0.66, 0.50, 2);
+    await drawSegment("HorizontalRay", /H-Ray armed/i, 0.26, 0.38, 0.62, 0.38, 3);
+    await drawSegment("Fib", /Fib armed/i, 0.35, 0.72, 0.70, 0.32, 4);
+    await drawSegment("ShortPosition", /Short Position armed/i, 0.42, 0.40, 0.64, 0.24, 5);
 
-    await page.getByRole("button", { name: /^Text\b/i }).first().click();
+    await tools.selectOption("Text");
     await expect(page.getByText(/Text armed/i)).toBeVisible({ timeout: 10_000 });
     await page.mouse.move(box.x + box.width * 0.52, box.y + box.height * 0.55);
     await page.mouse.down();
@@ -436,12 +434,11 @@ test.describe("Mock workflow smoke", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByText(/Text Note/)).toBeHidden({ timeout: 10_000 });
 
-    await expect(page.getByText(/6 visible .* 6 total/)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/6\. Text/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(6, { timeout: 10_000 });
     await expect(page.getByText(/^Note$/).first()).toBeVisible({ timeout: 10_000 });
 
     await page.reload();
-    await expect(page.getByText(/6 visible .* 6 total/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("chart-drawing-object")).toHaveCount(6, { timeout: 15_000 });
     await expect(page.getByText(/^Note$/).first()).toBeVisible({ timeout: 10_000 });
 
     expect(errors).toEqual([]);

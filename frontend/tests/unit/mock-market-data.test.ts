@@ -26,4 +26,16 @@ describe("mock market data trust", () => {
       company_name: "AU Small Finance Bank",
     });
   });
+
+  it("returns enough deterministic EOD depth for long full-chart ranges", async () => {
+    const { getCandles } = await import("@/lib/api");
+
+    const oneYear = await getCandles("AUBANK", { timeframe: "D", limit: 270 });
+    const fiveYear = await getCandles("AUBANK", { timeframe: "W", limit: 270 });
+    const tenYear = await getCandles("AUBANK", { timeframe: "M", limit: 130 });
+
+    expect(new Date(oneYear.candles[0].time).getTime()).toBeLessThan(new Date("2025-06-01").getTime());
+    expect(new Date(fiveYear.candles[0].time).getTime()).toBeLessThan(new Date("2021-06-01").getTime());
+    expect(new Date(tenYear.candles[0].time).getTime()).toBeLessThan(new Date("2016-07-01").getTime());
+  });
 });

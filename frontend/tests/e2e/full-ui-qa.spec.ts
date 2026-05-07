@@ -74,20 +74,23 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
     }
 
     await page.goto("/charts/RELIANCE");
-    await expect(page.getByText("Trendline")).toBeVisible({ timeout: 15000 });
+    const tools = page.locator('select[aria-label="Tools"]');
+    await expect(tools).toBeVisible({ timeout: 15000 });
     await expectAnyCanvasHasPixels(page);
 
-    for (const label of ["W", "M", "D"]) {
-      await page.getByRole("button", { name: label, exact: true }).click();
+    for (const label of ["1W", "1M", "1Y"]) {
+      await page.getByLabel("Chart timeframe").selectOption(label);
       await expectAnyCanvasHasPixels(page);
     }
 
     for (const label of ["EMA 20", "EMA 50", "RSI"]) {
-      await page.getByRole("button", { name: label, exact: true }).click();
-      await page.getByRole("button", { name: label, exact: true }).click();
+      await page.getByRole("button", { name: /Indicators/i }).click();
+      await page.getByLabel(label).click();
+      await page.getByLabel(label).click();
+      await page.keyboard.press("Escape");
     }
 
-    await page.getByRole("button", { name: /Trendline/ }).last().click();
-    await expect(page.getByRole("button", { name: /Trendline/ }).last()).toBeVisible();
+    await tools.selectOption("Trendline");
+    await expect(page.getByText(/Trendline armed/i)).toBeVisible();
   });
 });

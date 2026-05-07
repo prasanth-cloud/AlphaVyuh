@@ -3,6 +3,8 @@ import {
   candleRangeMonths,
   formatCandleRange,
   getRangeAvailabilityMessage,
+  getFullChartRequest,
+  isIntradayTimeframe,
   getWatchlistChartRequest,
 } from "@/lib/watchlist-chart-range";
 
@@ -36,6 +38,18 @@ describe("watchlist chart range mapping", () => {
       timeframe: "M",
       from_date: "2016-05-07",
       limit: 130,
+    });
+  });
+
+  it("shares full-chart EOD range mapping and marks intraday unavailable", () => {
+    expect(getFullChartRequest("5m", NOW)).toBeNull();
+    expect(isIntradayTimeframe("1h")).toBe(true);
+    expect(getFullChartRequest("5Y", NOW)).toMatchObject({
+      label: "5Y",
+      timeframe: "W",
+      from_date: "2021-05-07",
+      limit: 270,
+      expectedMonths: 60,
     });
   });
 
