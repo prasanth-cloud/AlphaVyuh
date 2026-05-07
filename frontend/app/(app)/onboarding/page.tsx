@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { addToWatchlist, createWatchlist, updateMe } from "@/lib/api";
 
-const STEPS = ["About you", "Your broker", "Get started"];
+const STEPS = ["About you", "Beta limits", "Get started"];
 
 type FormState = {
   experience: string;
@@ -122,10 +122,17 @@ export default function OnboardingPage() {
           marginBottom: 16,
         }}>
           <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Onboarding</div>
-          <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Set up your desk before the first real workflow.</h1>
+          <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Set up your private beta desk.</h1>
           <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-            Tell AlphaVyuh how you trade, connect your preferred broker, and start with the same visual language as the public site and product workspace.
+            AlphaVyuh starts with an EOD workflow: scan the latest completed session, move ideas to a watchlist, plan on charts, then journal and review. Broker connections are read-only/import only during beta.
           </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {["Private beta", "EOD data", "Broker import only", "Execution disabled"].map((label) => (
+              <span key={label} className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "var(--text-secondary)" }}>
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
@@ -185,8 +192,24 @@ export default function OnboardingPage() {
         {/* Step 2 — Broker */}
         {step === 1 && (
           <div className="p-6" style={cardStyle}>
-            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>Connect your broker</h2>
-            <p className="text-[13px] mb-5" style={{ color: "var(--text-secondary)" }}>Orders placed on AlphaVyuh will route through your broker</p>
+            <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>Understand beta limits</h2>
+            <p className="text-[13px] mb-5" style={{ color: "var(--text-secondary)" }}>Use AlphaVyuh as an educational workflow and journal system. It is not investment advice, not live data, and not a broker order terminal.</p>
+
+            <div className="grid gap-2 mb-5 sm:grid-cols-2">
+              {[
+                ["Private beta", "Access is founder-gated while workflow reliability is tested."],
+                ["EOD data", "Scans and charts use the latest completed market session unless explicitly labeled demo."],
+                ["Broker import only", "Broker connections are for read-only smoke and filled-trade import."],
+                ["Execution disabled", "Live and sandbox order placement stay off during this beta."],
+              ].map(([title, detail]) => (
+                <div key={title} className="rounded-[10px] p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  <div className="text-[12px] font-bold mb-1" style={{ color: "var(--text-primary)" }}>{title}</div>
+                  <div className="text-[11px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>{detail}</div>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--text-tertiary)" }}>Optional broker import setup</p>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
               {BROKERS.map((b) => (

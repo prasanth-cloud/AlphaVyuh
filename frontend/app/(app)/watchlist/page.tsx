@@ -590,20 +590,9 @@ function ChartPanel({
         ...(plan?.thesis?.trim() ? { thesis: plan.thesis.trim() } : {}),
         ...(plan?.invalidation_rule?.trim() ? { invalidation_rule: plan.invalidation_rule.trim() } : {}),
       };
-      const broker = await getBrokerStatus();
-      if (broker.connected && broker.broker && !broker.token_expired) {
-        const brokerName = broker.broker.charAt(0).toUpperCase() + broker.broker.slice(1);
-        const confirmed = window.confirm(
-          `Submit live ${brokerName} ${side.toUpperCase()} order for ${qtyN} ${symbol} at ₹${priceN.toFixed(2)}?\n\nConfirm only after checking symbol, side, quantity, price, stop, target, and risk.`
-        );
-        if (!confirmed) {
-          setOrderMsg({ ok: false, text: "Live order cancelled before broker submission.", journalReady: false });
-          return;
-        }
-        req.live_confirmed = true;
-      }
+      req.live_confirmed = false;
       await placeOrder(req);
-      setOrderMsg({ ok: true, text: `${side === "buy" ? "Buy" : "Sell"} order placed and journal capture is ready.`, journalReady: true });
+      setOrderMsg({ ok: true, text: `${side === "buy" ? "Buy" : "Sell"} plan saved as a simulated journal draft.`, journalReady: true });
       setTradeNote("");
     } catch (e: unknown) {
       setOrderMsg({ ok: false, text: e instanceof Error ? e.message : "Order failed", journalReady: false });
@@ -748,7 +737,7 @@ function ChartPanel({
         <div className="order-ticket-header">
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">Keep execution attached to the active queue and auto-send the trade into journal review.</div>
+            <div className="caption">Private beta capture only: save the plan to Journal. Place any real trade directly with your broker.</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -763,7 +752,7 @@ function ChartPanel({
             {brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
-            {brokerStatus?.connected ? "Live submit needs final confirmation" : "Order will record as simulated"}
+            {brokerStatus?.connected ? "Broker read-only/import only" : "Order capture records as simulated"}
           </span>
         </div>
 
@@ -883,7 +872,7 @@ function ChartPanel({
             fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid ? "not-allowed" : "pointer",
             opacity: orderBusy || !planValid ? 0.5 : 1,
           }}>
-          {orderBusy ? "Placing…" : planValid ? `Place ${side === "buy" ? "buy" : "sell"} order` : planNextAction}
+          {orderBusy ? "Saving…" : planValid ? `Save simulated ${side === "buy" ? "buy" : "sell"} draft` : planNextAction}
         </button>
         </div>
       )}

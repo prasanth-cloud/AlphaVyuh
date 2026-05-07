@@ -140,9 +140,24 @@ def test_order_from_valid_plan_carries_context_into_journal(monkeypatch):
     assert "Invalidation: Exit if price closes below" in entry["entry_reason"]
 
 
+def test_private_beta_blocks_live_confirmation_before_broker_call(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", False)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert exc.value.status_code == 403
+    assert "disabled for the private beta" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
 def test_live_order_requires_explicit_confirmation(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
 
     with pytest.raises(HTTPException) as exc:
@@ -156,6 +171,7 @@ def test_live_order_requires_explicit_confirmation(monkeypatch):
 def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
     monkeypatch.setattr(broker_router, "_place_zerodha_order", lambda *_args, **_kwargs: None)
 
@@ -199,6 +215,7 @@ def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
             )
 
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
     monkeypatch.setattr(
         broker_router,
         "_get_user_broker_credentials",

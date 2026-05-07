@@ -164,7 +164,7 @@ export default function DataFreshnessPage() {
     if (!broker.connected || broker.token_expired) {
       next.push({
         title: broker.token_expired ? "Reconnect broker token" : "Keep broker in simulated mode or connect it",
-        detail: "Order tickets are guarded as broker beta; reconnect only when you are ready to verify live broker execution.",
+        detail: "Broker connections are read-only/import only for private beta. Order tickets remain simulated journal capture.",
         href: "/settings/broker",
       });
     }
@@ -215,7 +215,7 @@ export default function DataFreshnessPage() {
             <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Data freshness center</div>
             <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.04, marginBottom: 8 }}>Know what is fresh before you trade.</h1>
             <p style={{ maxWidth: 760, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-              One place to inspect market ingest health, symbol coverage, broker connection state, and journal review readiness before moving from analysis to execution.
+              One place to inspect market ingest health, symbol coverage, broker import state, and journal review readiness before moving from analysis to planning.
             </p>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
@@ -250,7 +250,7 @@ export default function DataFreshnessPage() {
         <HealthTile
           label="Broker channel"
           value={broker.connected && !broker.token_expired ? "READY" : broker.token_expired ? "TOKEN EXPIRED" : "SIMULATED"}
-          detail={broker.connected ? `${broker.broker ?? "Broker"} connected in ${broker.mode} mode.` : "Execution remains simulated until a broker is connected."}
+          detail={broker.connected ? `${broker.broker ?? "Broker"} connected read-only for import.` : "Order capture remains simulated; broker import is optional."}
           status={broker.connected && !broker.token_expired ? "good" : broker.token_expired ? "bad" : "warn"}
         />
         <HealthTile
@@ -316,9 +316,9 @@ export default function DataFreshnessPage() {
         <div className="data-surface-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
           {[
             ["Scanner", "Uses the latest complete market day and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
-            ["Charts", "Shows EOD or Kite live-beta provenance directly in the chart toolbar before order planning.", "/charts/RELIANCE"],
+            ["Charts", "Shows EOD provenance directly in the chart toolbar before planning.", "/charts/RELIANCE"],
             ["Dashboard", "Separates live sector-index movement from latest complete session breadth.", "/dashboard"],
-            ["Broker", "Broker beta remains explicit at order time; simulated mode still records review context.", "/settings/broker"],
+            ["Broker", "Broker beta is read-only/import only; simulated order capture still records review context.", "/settings/broker"],
           ].map(([title, detail, href]) => (
             <Link key={title} href={href} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", textDecoration: "none" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{title}</div>

@@ -10,8 +10,8 @@ const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; c
     background: "rgba(91, 99, 245, 0.10)",
   },
   "live-beta": {
-    label: "Live beta",
-    detail: "Intraday feed is in beta; verify freshness before acting",
+    label: "Provider beta",
+    detail: "Provider feed is beta; private launch defaults to EOD workflow",
     color: "#26a65b",
     background: "rgba(38, 166, 91, 0.12)",
   },
@@ -28,8 +28,8 @@ const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; c
     background: "rgba(124, 106, 240, 0.12)",
   },
   "broker-beta": {
-    label: "Broker beta",
-    detail: "Broker execution is beta; verify every order before placing",
+    label: "Import only",
+    detail: "Broker connection is read-only for beta; live and sandbox order placement are disabled",
     color: "#d97706",
     background: "rgba(217, 119, 6, 0.12)",
   },

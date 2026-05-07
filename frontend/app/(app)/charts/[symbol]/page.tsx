@@ -1708,8 +1708,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          Data is {dataAgeDays} days old. Scanner/chart context is using the latest complete session.
-          <button onClick={() => setLiveMode(true)} className="underline font-semibold hover:no-underline">Try live quote</button>
+          Data is {dataAgeDays} days old. Scanner/chart context is using the latest complete session. Provider/live quote mode is disabled for private beta.
         </div>
       )}
 
@@ -1978,18 +1977,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             )}
           </div>
 
-          {/* Live data toggle */}
+          {/* Provider data badge */}
           <button
-            onClick={() => setLiveMode(m => !m)}
+            onClick={() => setLiveMode(false)}
+            disabled
             className="workspace-chip-button flex items-center gap-1.5"
-            style={liveMode
-              ? { background: "rgba(38,166,91,0.10)", color: "#26a65b", border: "1px solid rgba(38,166,91,0.22)" }
-              : undefined}
-            title={liveMode ? "Live provider data — refresh every 5 min" : "Switch to configured live provider data"}
+            style={{ opacity: 0.85 }}
+            title="Provider/live quote mode is disabled for private beta; charts use EOD or demo data."
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : ""}`}
-              style={!liveMode ? { background: "var(--app-text3)" } : {}} />
-            <DataProvenanceBadge kind={liveMode ? "live-beta" : isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
+            <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
           </button>
 
           {/* Price alert bell */}
@@ -2938,14 +2935,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 Alerts
               </button>
               <button
-                onClick={() => setLiveMode(prev => !prev)}
+                onClick={() => setLiveMode(false)}
+                disabled
                 className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                style={liveMode
-                  ? { background: "rgba(38,166,91,0.14)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }
-                  : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
+                style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)", opacity: 0.85 }}
+                title="Provider/live quote mode is disabled for private beta."
               >
                 <Activity size={12} />
-                <DataProvenanceBadge kind={liveMode ? "live-beta" : isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
+                <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
               </button>
             </div>
           </div>

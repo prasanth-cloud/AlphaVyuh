@@ -380,8 +380,8 @@ function WorkflowChecklistCard({
     {
       label: 'Connect your broker',
       description: workflow.brokerConnected
-        ? `${workflow.brokerName ?? 'Broker'} connected and ready for chart-side execution.`
-        : 'Optional, but this is what turns chart analysis into execution flow.',
+        ? `${workflow.brokerName ?? 'Broker'} connected for read-only import and journal sync.`
+        : 'Optional for beta; broker connections are read-only/import only.',
       completed: workflow.brokerConnected,
     },
     {
