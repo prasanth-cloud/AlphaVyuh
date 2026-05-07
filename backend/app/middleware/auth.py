@@ -47,8 +47,8 @@ async def get_current_user_id(
         return str(user.id)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication failed: {e}",
+            detail="Authentication failed",
         )

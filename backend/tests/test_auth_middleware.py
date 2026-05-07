@@ -57,3 +57,18 @@ def test_get_current_user_id_falls_back_to_supabase_auth(monkeypatch):
     monkeypatch.setattr(auth, "get_admin_client", lambda: SimpleNamespace(auth=FakeAuth()))
 
     assert asyncio.run(auth.get_current_user_id(_credentials("opaque-token"))) == user_id
+
+
+def test_get_current_user_id_hides_provider_errors(monkeypatch):
+    class FakeAuth:
+        def get_user(self, token):
+            raise RuntimeError("provider secret detail")
+
+    monkeypatch.setattr(auth.settings, "supabase_jwt_secret", "")
+    monkeypatch.setattr(auth, "get_admin_client", lambda: SimpleNamespace(auth=FakeAuth()))
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(auth.get_current_user_id(_credentials("opaque-token")))
+
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "Authentication failed"
