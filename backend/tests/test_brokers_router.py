@@ -12,7 +12,7 @@ os.environ.setdefault("BROKER_CREDS_KEY", secrets.token_bytes(32).hex())
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
-from app.brokers.adapter import BrokerCredentials
+from app.brokers.adapter import BrokerCredentials, BrokerError
 from app.routers import brokers as brokers_router
 
 
@@ -73,3 +73,38 @@ def test_broker_connect_start_reports_missing_configuration(monkeypatch):
 
     assert exc_info.value.status_code == 503
     assert "missing UPSTOX_API_KEY" in str(exc_info.value.detail)
+
+
+def test_broker_connect_callback_sanitizes_provider_error(monkeypatch, caplog):
+    class _SensitiveAdapter:
+        def get_auth_url(self, _state):
+            return "https://upstox.test/login"
+
+        async def exchange_code(self, _code):
+            raise BrokerError(
+                kind="UNKNOWN",
+                broker_id="upstox",
+                message="provider echoed code=oauth-secret access_token=broker-token",
+                retryable=False,
+                broker_code="ProviderError",
+            )
+
+    monkeypatch.setattr(brokers_router, "get_adapter", lambda broker_id: _SensitiveAdapter())
+
+    with caplog.at_level("WARNING", logger="app.routers.brokers"):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(
+                brokers_router.connect_callback(
+                    "upstox",
+                    request_token=None,
+                    code="oauth-secret",
+                    state="state",
+                    user_id="user-1",
+                )
+            )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Broker connection failed. Reconnect or try again shortly."
+    assert "ProviderError" in caplog.text
+    assert "oauth-secret" not in caplog.text
+    assert "broker-token" not in caplog.text

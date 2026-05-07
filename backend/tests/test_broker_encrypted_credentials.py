@@ -2,12 +2,16 @@ import os
 import secrets
 import asyncio
 
+import pytest
+from fastapi import HTTPException
+
 os.environ.setdefault("BROKER_CREDS_KEY", secrets.token_bytes(32).hex())
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import broker as broker_router  # noqa: E402
 from app.routers import users as users_router  # noqa: E402
+from app.brokers.kite.api import KiteApiError  # noqa: E402
 
 
 class _MaybeSingleQuery:
@@ -169,3 +173,30 @@ def test_update_me_does_not_write_plaintext_broker_secret(monkeypatch):
 
     assert saved[("zerodha", "api_secret")] == "kite-secret"
     assert client.updated["broker_api_secret"] is None
+
+
+def test_zerodha_callback_does_not_log_or_return_sensitive_provider_message(monkeypatch, caplog):
+    secret_message = "bad request_token=req-secret api_secret=kite-secret access_token=broker-token"
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: object())
+    monkeypatch.setattr(
+        broker_router,
+        "_get_user_broker_credentials",
+        lambda _user_id, _broker: {"api_key": "kite-key", "api_secret": "kite-secret"},
+    )
+    monkeypatch.setattr(
+        broker_router.kite_api,
+        "exchange_code",
+        lambda **_kwargs: (_ for _ in ()).throw(KiteApiError(400, "InputException", secret_message)),
+    )
+
+    with caplog.at_level("ERROR", logger="app.routers.broker"):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(broker_router.zerodha_callback(request_token="req-secret", user_id="user-123"))
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Zerodha session failed — check your API key and secret"
+    assert "InputException" in caplog.text
+    assert "req-secret" not in caplog.text
+    assert "kite-secret" not in caplog.text
+    assert "broker-token" not in caplog.text

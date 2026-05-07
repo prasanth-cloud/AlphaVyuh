@@ -70,7 +70,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<FormState>({
-    experience: "", trades: "", broker: "", broker_api_key: "", broker_api_secret: "",
+    experience: "intermediate", trades: "equity", broker: "", broker_api_key: "", broker_api_secret: "",
   });
 
   const selectRadio = (name: keyof FormState, value: string) => {

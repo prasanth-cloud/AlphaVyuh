@@ -105,7 +105,7 @@ def _place_upstox_order(
         )
         if r.status_code == 200:
             return r.json().get("data", {}).get("order_id")
-        logger.error(f"Upstox order failed {r.status_code}: {r.text[:200]}")
+        logger.error("Upstox order failed: status=%s", r.status_code)
     except Exception as e:
         logger.error(f"Upstox order error: {e}")
     return None
@@ -138,7 +138,7 @@ def _place_zerodha_order(
         )
         return str(data.get("order_id") or "")
     except KiteApiError as e:
-        logger.error("Zerodha order failed: %s", e)
+        logger.error("Zerodha order failed: status=%s error_type=%s", e.status, e.error_type)
     except Exception as e:
         logger.error("Zerodha order error: %s", e)
         return None
@@ -694,7 +694,7 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             api_key=str(creds["api_key"]),
         )
     except KiteApiError as e:
-        raise HTTPException(status_code=400, detail=f"Zerodha API error: {e.message}")
+        raise HTTPException(status_code=400, detail=f"Zerodha API error: {e.error_type}")
     except Exception:
         logger.exception("Zerodha import failed for user %s", user_id)
         raise HTTPException(status_code=400, detail="Could not connect to Zerodha — check your credentials")
@@ -794,8 +794,14 @@ async def zerodha_callback(
         )
         access_token = session_data["access_token"]
     except KiteApiError as e:
-        # Never include `e` in the response — it may contain api_secret or request_token.
-        logger.error("Zerodha session generation failed for user %s: %s", user_id, e.message)
+        # Never include provider message text in responses or logs; it may contain
+        # api_secret, request_token, or other broker session material.
+        logger.error(
+            "Zerodha session generation failed for user %s: status=%s error_type=%s",
+            user_id,
+            e.status,
+            e.error_type,
+        )
         raise HTTPException(status_code=400, detail="Zerodha session failed — check your API key and secret")
     except Exception:
         logger.exception("Zerodha session generation failed for user %s", user_id)

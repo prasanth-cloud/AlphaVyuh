@@ -43,6 +43,16 @@ def _validate_broker(broker: str) -> BrokerId:
     return broker  # type: ignore[return-value]
 
 
+def _safe_broker_error_detail(exc: BrokerError) -> str:
+    if exc.kind == "AUTH_EXPIRED":
+        return "Broker session expired — reconnect required."
+    if exc.kind == "RATE_LIMITED":
+        return "Broker rate limit — try again shortly."
+    if exc.kind == "INVALID_REQUEST":
+        return "Broker request was rejected. Check the broker setup and try again."
+    return "Broker connection failed. Reconnect or try again shortly."
+
+
 def _load_creds(user_id: str, broker: BrokerId) -> BrokerCredentials:
     try:
         token = get_broker_credential(user_id, broker, "access_token")
@@ -111,8 +121,13 @@ async def connect_callback(
     try:
         creds = await adapter.exchange_code(auth_code)
     except BrokerError as exc:
-        logger.warning("Broker %s code exchange failed: %s", broker_id, exc)
-        raise HTTPException(status_code=400, detail=str(exc))
+        logger.warning(
+            "Broker %s code exchange failed: kind=%s broker_code=%s",
+            broker_id,
+            exc.kind,
+            exc.broker_code,
+        )
+        raise HTTPException(status_code=400, detail=_safe_broker_error_detail(exc))
 
     upsert_broker_credential(user_id, broker_id, "access_token", creds.access_token)
     upsert_broker_credential(
@@ -174,7 +189,7 @@ async def disconnect_broker(
 
 def _raise_for_broker_error(exc: BrokerError) -> None:
     if exc.kind == "AUTH_EXPIRED":
-        raise HTTPException(status_code=401, detail="Broker session expired — reconnect required.")
+        raise HTTPException(status_code=401, detail=_safe_broker_error_detail(exc))
     if exc.kind == "RATE_LIMITED":
-        raise HTTPException(status_code=429, detail="Broker rate limit — try again shortly.")
-    raise HTTPException(status_code=502, detail=f"Broker error: {exc}")
+        raise HTTPException(status_code=429, detail=_safe_broker_error_detail(exc))
+    raise HTTPException(status_code=502, detail=_safe_broker_error_detail(exc))
