@@ -27,7 +27,7 @@ This file maps the full public-launch prompt to concrete artifacts on branch
 | Run release-readiness checks. | `npm run launch:check` passed in this refresh, including production build, mock workflow, perf/layout smoke, backend HTTP smoke, backend focused tests, frontend audit, and backend dependency audit. | Done |
 | Update launch docs with exact evidence. | `docs/public-launch-readiness-2026-05-07.md`, `docs/security-codex-scan-2026-05-07.md`, `docs/security-launch-scan-2026-05-07.md`, and this file. | Done |
 | Commit with conventional message. | This refresh should be committed as `docs(launch): refresh public readiness evidence`. | Pending until commit |
-| Push branch and open draft PR. | Pending for this refreshed branch after validation. | Pending |
+| Push branch and open draft PR. | Draft PR #74: https://github.com/prasanth-cloud/AlphaVyuh/pull/74. | Done |
 
 ## Public Launch Surface Audit
 
