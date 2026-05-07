@@ -16,7 +16,6 @@ import {
   type MarketOverview,
 } from '@/lib/api'
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
-import DataFreshnessStrip from '@/components/DataFreshnessStrip'
 import { markAppTiming } from '@/lib/performance'
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -655,7 +654,6 @@ export default function DashboardPage() {
   const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [lastUpdated, setLastUpdated] = useState('')
   const [checklistDismissed, setChecklistDismissed] = useState(false)
   const [workflow, setWorkflow] = useState<WorkflowState>({
     watchlists: 0,
@@ -698,7 +696,6 @@ export default function DashboardPage() {
             setData(lateSnapshot.overview)
             setDataHealth(lateSnapshot.health)
             writeDashboardSnapshotCache(lateSnapshot.overview, lateSnapshot.health)
-            setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
           })
           .catch(() => {})
         return
@@ -708,7 +705,6 @@ export default function DashboardPage() {
       setDataHealth(snapshot.health)
       markAppTiming('market-overview-loaded')
       writeDashboardSnapshotCache(snapshot.overview, snapshot.health)
-      setLastUpdated(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load market data')
     } finally {
@@ -724,7 +720,6 @@ export default function DashboardPage() {
       dataRef.current = cached.data
       setData(cached.data)
       setDataHealth(cached.dataHealth)
-      setLastUpdated('cached')
       setLoading(false)
     }
   }, [])
@@ -810,38 +805,6 @@ export default function DashboardPage() {
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Status bar */}
-      <div style={{ minHeight: 54, background: 'var(--surface-1)', borderBottom: '1px solid var(--border-subtle)', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 260 }}>
-            <h1 className="heading-card" style={{ margin: 0 }}>Dashboard</h1>
-            <div className="app-page-copy" style={{ marginTop: 1 }}>
-              Scan the latest EOD context, pick the next workspace, and keep review work visible.
-            </div>
-          </div>
-          {data?.trade_date && (
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>EOD <Num>{data.trade_date}</Num></span>
-          )}
-          <span style={{ fontSize: 12, color: workflow.brokerConnected ? 'var(--gain)' : 'var(--text-tertiary)' }}>
-            {workflow.brokerStatusLabel ?? 'Broker simulated'}
-          </span>
-        </div>
-        {lastUpdated && (
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>Updated <Num>{lastUpdated}</Num></span>
-        )}
-      </div>
-
-      <DataFreshnessStrip health={dataHealth} tradeDate={data?.trade_date ?? null} />
-
-      <WorkflowChecklistCard
-        workflow={workflow}
-        dismissed={checklistDismissed}
-        onDismiss={() => {
-          setChecklistDismissed(true)
-          if (typeof window !== 'undefined') window.localStorage.setItem('alphavyuh-onboarding-dismissed', '1')
-        }}
-      />
-
       {/* Error */}
       {error && (
         <div style={{ padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -855,6 +818,15 @@ export default function DashboardPage() {
       {!loading && data && (
         <div>
           <MarketPulsePanel data={data} dataHealth={dataHealth} />
+
+          <WorkflowChecklistCard
+            workflow={workflow}
+            dismissed={checklistDismissed}
+            onDismiss={() => {
+              setChecklistDismissed(true)
+              if (typeof window !== 'undefined') window.localStorage.setItem('alphavyuh-onboarding-dismissed', '1')
+            }}
+          />
 
           {/* Phase card */}
           <PhaseCard data={data} dataHealth={dataHealth} />

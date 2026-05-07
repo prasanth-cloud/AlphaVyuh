@@ -849,24 +849,23 @@ input, textarea, select {
   position: relative;
   padding: 48px;
   background:
-    radial-gradient(circle at 20% 20%, rgba(244, 247, 251, 0.13), transparent 30%),
+    radial-gradient(circle at 20% 20%, rgba(244, 247, 251, 0.09), transparent 30%),
     linear-gradient(180deg, rgba(13, 16, 21, 0.96), rgba(7, 9, 12, 0.96));
   border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.app-auth-aside::after {
-  content: "";
-  position: absolute;
-  right: 32px;
-  bottom: 32px;
-  width: 180px;
-  height: 180px;
-  border-radius: 28px;
-  border: 1px solid rgba(244, 247, 251, 0.12);
-  background:
-    linear-gradient(180deg, rgba(244, 247, 251, 0.12), rgba(244, 247, 251, 0.03)),
-    rgba(255, 255, 255, 0.02);
-  transform: rotate(14deg);
+.auth-brand-mark {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(244, 247, 251, 0.16), rgba(244, 247, 251, 0.04));
+  color: var(--text-primary);
+  font-weight: 800;
+  letter-spacing: -0.04em;
 }
 
 .app-auth-panel {
@@ -929,7 +928,7 @@ input, textarea, select {
   }
 
   .app-auth-aside {
-    min-height: 280px;
+    min-height: auto;
     padding: 32px;
     border-right: 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
