@@ -199,6 +199,8 @@ test.describe("Workflow layout smoke", () => {
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
 
     await expect(page.getByText("Objects")).toHaveCount(0);
+    await expect(page.getByText("TOOLS", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Draw", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Plan entry/i)).toHaveCount(0);
     await expect(page.getByText("Vol ratio", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/Range %/i)).toHaveCount(0);
@@ -234,6 +236,10 @@ test.describe("Workflow layout smoke", () => {
     await page.getByLabel("EMA 200").check();
     await page.getByLabel("RSI").check();
     await expect(page.getByRole("button", { name: /Indicators/i })).toContainText(/Indicators · \d+/);
+
+    await page.goto("/charts/AUBANK?full=1", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("chart-drawing-overlay")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Objects")).toHaveCount(0);
   });
 
   test("feedback widget does not cover top workflow controls", async ({ page }) => {
