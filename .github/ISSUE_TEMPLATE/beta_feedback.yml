@@ -1,0 +1,45 @@
+name: Founder beta workflow feedback
+description: Capture trader feedback after the beta onboarding checklist.
+title: "[Beta feedback]: "
+labels: ["beta", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask the tester to complete: run scanner, add 3 symbols, open full chart, create a trade plan, log/import a trade, and review Journal.
+  - type: input
+    id: tester
+    attributes:
+      label: Tester profile
+      placeholder: "Swing trader, active 3x/week, NSE cash"
+  - type: textarea
+    id: hesitation
+    attributes:
+      label: Where did they hesitate?
+      description: What confused them or slowed the workflow?
+    validations:
+      required: true
+  - type: textarea
+    id: trust
+    attributes:
+      label: Did the data feel trustworthy?
+      description: Note reaction to EOD/source/freshness labels and any mismatch noticed.
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Scanner -> watchlist -> chart -> journal feedback
+      description: Did the flow feel useful enough to repeat?
+    validations:
+      required: true
+  - type: textarea
+    id: willingness
+    attributes:
+      label: What would make this worth paying for?
+      description: Capture must-have features, missing data, and pricing sensitivity.
+  - type: textarea
+    id: next_actions
+    attributes:
+      label: Follow-up actions
+      description: Product fixes, owner-gated items, or support follow-up needed.

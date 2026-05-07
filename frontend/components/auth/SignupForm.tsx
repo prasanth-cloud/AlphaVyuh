@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 export default function SignupForm() {
   const [showPass, setShowPass] = useState(false);
@@ -16,6 +17,7 @@ export default function SignupForm() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [nextPath, setNextPath] = useState("/onboarding");
 
   const [form, setForm] = useState({
     full_name: "",
@@ -27,10 +29,10 @@ export default function SignupForm() {
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  function safeNext() {
+  useEffect(() => {
     const next = new URLSearchParams(window.location.search).get("next");
-    return isSafeRedirect(next) ? next : "/dashboard";
-  }
+    setNextPath(isSafeRedirect(next) ? next : "/onboarding");
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,7 +45,6 @@ export default function SignupForm() {
 
     setLoading(true);
     try {
-      const next = safeNext();
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,7 +52,7 @@ export default function SignupForm() {
           email: form.email.trim().toLowerCase(),
           password: form.password,
           full_name: form.full_name,
-          next,
+          next: nextPath,
         }),
       });
       const data = await res.json();
@@ -64,10 +65,12 @@ export default function SignupForm() {
         return;
       }
       if (data.pending_confirmation) {
+        trackEvent("signup_success", { next_path: nextPath, pending_confirmation: true });
         setDone(true);
         return;
       }
-      window.location.replace(next);
+      trackEvent("signup_success", { next_path: nextPath, pending_confirmation: false });
+      window.location.replace(nextPath);
     } catch {
       setError("Network error — please try again.");
     } finally {
@@ -83,7 +86,7 @@ export default function SignupForm() {
       const res = await fetch("/api/auth/resend-confirmation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.email.trim().toLowerCase(), next: safeNext() }),
+        body: JSON.stringify({ email: form.email.trim().toLowerCase(), next: nextPath }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -182,7 +185,7 @@ export default function SignupForm() {
         </form>
         <p style={{ marginTop: 16, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
           Already have an account?{" "}
-          <Link href="/login" style={{ color: "var(--accent)" }}>Log in</Link>
+          <Link href={`/login?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Log in</Link>
         </p>
       </CardContent>
     </Card>

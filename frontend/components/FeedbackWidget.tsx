@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { createFeedbackReport } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 type FeedbackWidgetProps = {
   defaultCategory?: "general" | "bug" | "data_issue" | "feature_request";
@@ -37,6 +38,7 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
           user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
         },
       });
+      trackEvent("feedback_submitted", { category, page: pathname, has_symbol: Boolean(defaultSymbol) });
       setMessage("");
       setOpen(false);
       setStatus("Feedback sent.");
@@ -49,7 +51,7 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
   }
 
   return (
-    <div style={{ position: "fixed", right: 18, bottom: 18, zIndex: 60 }}>
+    <div className="feedback-widget" style={{ position: "fixed", right: 14, bottom: 14, zIndex: 60 }}>
       {open && (
         <div
           style={{

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/brokers", tags=["brokers"])
 
 _FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-_VALID_BROKERS: set[str] = {"zerodha"}
+_VALID_BROKERS: set[str] = {"zerodha", "upstox"}
 
 
 def _validate_broker(broker: str) -> BrokerId:
@@ -56,10 +56,17 @@ def _load_creds(user_id: str, broker: BrokerId) -> BrokerCredentials:
     expires_raw = get_broker_credential(user_id, broker, "expires_at")
     expires_at = datetime.fromisoformat(expires_raw) if expires_raw else datetime.now(timezone.utc)
 
+    refresh_token = None
+    try:
+        refresh_token = get_broker_credential(user_id, broker, "refresh_token")
+    except Exception:
+        refresh_token = None
+
     return BrokerCredentials(
         broker_id=broker,
         access_token=token,
         expires_at=expires_at,
+        refresh_token=refresh_token,
     )
 
 
@@ -75,23 +82,34 @@ async def connect_start(
     broker_id = _validate_broker(broker)
     adapter = get_adapter(broker_id)
     state = secrets.token_urlsafe(16)
-    auth_url = adapter.get_auth_url(state)
+    try:
+        auth_url = adapter.get_auth_url(state)
+    except KeyError as exc:
+        missing = str(exc).strip("'")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"{broker_id} connect is not configured: missing {missing}",
+        ) from exc
     return {"auth_url": auth_url, "state": state}
 
 
 @router.get("/{broker}/connect/callback")
 async def connect_callback(
     broker: str,
-    request_token: str = Query(...),
+    request_token: str | None = Query(default=None),
+    code: str | None = Query(default=None),
     state: str = Query(default=""),
     user_id: str = Depends(get_current_user_id),
 ):
     """Exchange the OAuth request_token, store encrypted credentials, redirect to UI."""
     broker_id = _validate_broker(broker)
     adapter = get_adapter(broker_id)
+    auth_code = request_token or code
+    if not auth_code:
+        raise HTTPException(status_code=400, detail="Missing broker authorization code")
 
     try:
-        creds = await adapter.exchange_code(request_token)
+        creds = await adapter.exchange_code(auth_code)
     except BrokerError as exc:
         logger.warning("Broker %s code exchange failed: %s", broker_id, exc)
         raise HTTPException(status_code=400, detail=str(exc))
@@ -100,6 +118,8 @@ async def connect_callback(
     upsert_broker_credential(
         user_id, broker_id, "expires_at", creds.expires_at.isoformat()
     )
+    if creds.refresh_token:
+        upsert_broker_credential(user_id, broker_id, "refresh_token", creds.refresh_token)
 
     redirect_to = f"{_FRONTEND_URL}/settings/broker?connected={broker_id}"
     return RedirectResponse(url=redirect_to, status_code=302)

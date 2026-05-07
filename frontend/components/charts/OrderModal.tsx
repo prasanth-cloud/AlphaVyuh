@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { placeOrder, getBrokerStatus } from "@/lib/api";
 import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
 import { DataProvenanceBadge } from "@/components/ui";
+import { trackEvent } from "@/lib/analytics";
 
 const SETUP_TYPES = [
   { value: "", label: "— Select setup —" },
@@ -71,11 +72,12 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const reward = tgtNum > 0 ? Math.abs(tgtNum   - priceNum) * qtyNum : null;
   const rr     = risk && reward && risk > 0 ? (reward / risk).toFixed(2) : null;
   const invest = priceNum * qtyNum;
+  const brokerLabel = brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "Broker";
   const executionPath = brokerLive && brokerName
-    ? `${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} live route`
+    ? `${brokerLabel} import-only`
     : brokerTokenExpired
-      ? "Token expired · simulated route"
-      : "Simulated route";
+      ? "Token expired · simulated capture"
+      : "Simulated capture";
 
   async function submit() {
     if (!quantity || !price || parseFloat(price) <= 0 || parseInt(quantity) <= 0) {
@@ -93,12 +95,14 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         order_type: "market",
         source_page: "chart",
         source_context: symbol,
+        live_confirmed: false,
         ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
         ...(tgtNum > 0 ? { target_price: tgtNum } : {}),
         ...(setupType   ? { setup_type:  setupType } : {}),
         ...(notes       ? { notes }               : {}),
       };
       const result = await placeOrder(req);
+      trackEvent("mock_order_drafted", { source: "chart", symbol, side });
       onFilled(result);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Order failed");
@@ -132,7 +136,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               <DataProvenanceBadge kind="broker-beta" compact />
             </div>
             <p className="text-[11px] leading-5 text-[#7b5a2b]">
-              Verify symbol, side, quantity, price, and risk before placing. Simulated orders still write to your journal for review.
+              Private beta uses simulated journal capture only. Broker connections are read-only/import only; live and sandbox order placement are disabled.
             </p>
           </div>
 
@@ -141,7 +145,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <div className="grid grid-cols-4 gap-1 text-center text-[10px] font-semibold text-[#777]">
               {[
                 executionPath,
-                "Broker order",
+                "No broker submit",
                 "Journal draft",
                 "AI review after close",
               ].map((step, idx) => (
@@ -251,6 +255,12 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             </div>
           )}
 
+          <div className="rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
+            <span className="text-[11px] leading-5 text-[#7b5a2b]">
+              Execution disabled for private beta. This creates a simulated journal draft only; verify and place any real order directly in your broker terminal.
+            </span>
+          </div>
+
           {/* Setup */}
           <div>
             <label className="text-[11px] font-semibold text-[#888] uppercase tracking-wide block mb-1">
@@ -288,15 +298,17 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
             style={{ background: accent }}
           >
-            {placing ? "Placing order…" : `Place ${side.toUpperCase()} Order`}
+            {placing
+              ? "Saving journal draft…"
+              : `Save simulated ${side.toUpperCase()} draft`}
           </button>
 
           <p className="text-[10px] text-[#ccc] text-center">
             {brokerLive && brokerName
-              ? `Broker beta via ${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} — verify the order in your broker before relying on the journal record`
+              ? `${brokerLabel} is connected read-only. Use broker import for filled trades; this modal never submits orders during beta.`
               : brokerTokenExpired
-                ? `Simulated order for now — your ${brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "broker"} token expired, so reconnect to go live again`
-                : "Simulated order — auto-recorded in your Journal and ready for post-trade review"}
+                ? `Simulated journal draft only — your ${brokerLabel} token expired.`
+                : "Simulated journal draft — ready for post-trade review"}
           </p>
         </div>
       </div>

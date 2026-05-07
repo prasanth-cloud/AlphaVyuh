@@ -195,7 +195,7 @@ class TestOrderMethodsNotImplemented:
 
     def test_place_order_not_implemented(self):
         with pytest.raises(NotImplementedError):
-            _run(KiteAdapter().place_order(_creds(), MagicMock()))
+            _run(KiteAdapter().place_order("user-1", _creds(), MagicMock()))
 
     def test_modify_order_not_implemented(self):
         with pytest.raises(NotImplementedError):

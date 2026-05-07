@@ -12,7 +12,7 @@ import {
   type DataHealth,
   type JournalStats,
 } from "@/lib/api";
-import { Card, DataProvenanceBadge } from "@/components/ui";
+import { Card, DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
@@ -70,7 +70,7 @@ function HealthTile({
         <div className="label">{label}</div>
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
       </div>
-      <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{value}</div>
+      <Num style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6, display: "block" }}>{value}</Num>
       <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)" }}>{detail}</div>
     </div>
   );
@@ -164,7 +164,7 @@ export default function DataFreshnessPage() {
     if (!broker.connected || broker.token_expired) {
       next.push({
         title: broker.token_expired ? "Reconnect broker token" : "Keep broker in simulated mode or connect it",
-        detail: "Order tickets are guarded as broker beta; reconnect only when you are ready to verify live broker execution.",
+        detail: "Broker connections are read-only/import only for private beta. Order tickets remain simulated journal capture.",
         href: "/settings/broker",
       });
     }
@@ -188,7 +188,6 @@ export default function DataFreshnessPage() {
 
   const health = state.dataHealth;
   const broker = state.broker ?? fallbackBroker;
-  const reviewCoverage = state.closedTrades ? Math.round((state.reviewedTrades / state.closedTrades) * 100) : 0;
   const coveragePct = health?.symbols_on_latest_date != null && health.universe_active
     ? Math.round((health.symbols_on_latest_date / health.universe_active) * 100)
     : null;
@@ -213,18 +212,18 @@ export default function DataFreshnessPage() {
       <div style={{ padding: "22px 24px", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015)), var(--surface-1)", boxShadow: "var(--shadow-panel)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20 }}>
           <div>
-            <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Data freshness center</div>
-            <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.04, marginBottom: 8 }}>Know what is fresh before you trade.</h1>
-            <p style={{ maxWidth: 760, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-              One place to inspect market ingest health, symbol coverage, broker connection state, and journal review readiness before moving from analysis to execution.
+            <EyebrowLabel style={{ marginBottom: 8 }}>Data trust</EyebrowLabel>
+            <h1 className="app-page-title" style={{ marginBottom: 6 }}>Know what is fresh before you trade.</h1>
+            <p style={{ maxWidth: 760, fontSize: 13, lineHeight: 1.65, color: "var(--text-secondary)" }}>
+              One place to inspect market ingest health, symbol coverage, broker import state, and journal review readiness before moving from analysis to planning.
             </p>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
             <DataProvenanceBadge
-              kind={health?.status === "degraded" ? "fallback" : "eod"}
+              kind={health?.mode === "demo" ? "demo" : health?.status === "degraded" || health?.status === "stale" || health?.fallback_active ? "fallback" : "eod"}
               asOf={health?.latest_trade_date ?? null}
             />
-            {loadedAt && <span className="caption">Checked {loadedAt}</span>}
+            {loadedAt && <span className="caption">Checked <Num>{loadedAt}</Num></span>}
           </div>
         </div>
       </div>
@@ -235,7 +234,7 @@ export default function DataFreshnessPage() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
           value={health?.status ? health.status.toUpperCase() : "UNKNOWN"}
@@ -251,7 +250,7 @@ export default function DataFreshnessPage() {
         <HealthTile
           label="Broker channel"
           value={broker.connected && !broker.token_expired ? "READY" : broker.token_expired ? "TOKEN EXPIRED" : "SIMULATED"}
-          detail={broker.connected ? `${broker.broker ?? "Broker"} connected in ${broker.mode} mode.` : "Execution remains simulated until a broker is connected."}
+          detail={broker.connected ? `${broker.broker ?? "Broker"} connected read-only for import.` : "Order capture remains simulated; broker import is optional."}
           status={broker.connected && !broker.token_expired ? "good" : broker.token_expired ? "bad" : "warn"}
         />
         <HealthTile
@@ -262,13 +261,17 @@ export default function DataFreshnessPage() {
         />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 16 }}>
+      <div className="data-detail-grid" style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 16 }}>
         <Card padding="lg">
           <h2 className="heading-card" style={{ marginBottom: 14 }}>Freshness details</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+          <div className="data-metric-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             {[
               ["Latest trade date", fmtDate(health?.latest_trade_date)],
+              ["Last successful EOD", fmtDate(health?.last_successful_eod_date ?? health?.latest_trade_date)],
+              ["Source", health?.provider?.source_name ?? "Unknown"],
+              ["Fallback active", health?.fallback_active ? "Yes" : "No"],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
+              ["Last bhavcopy", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],
               ["EMA 200 missing", fmtNumber(health?.indicators_missing.ema_200)],
               ["Last ingest run", health?.last_run.id ?? "Not available"],
@@ -280,7 +283,7 @@ export default function DataFreshnessPage() {
             ].map(([label, value]) => (
               <div key={label} style={{ padding: "11px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
                 <div className="label" style={{ marginBottom: 4 }}>{label}</div>
-                <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+                <Num style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{value}</Num>
               </div>
             ))}
           </div>
@@ -310,12 +313,12 @@ export default function DataFreshnessPage() {
 
       <Card padding="lg">
         <h2 className="heading-card" style={{ marginBottom: 14 }}>Product surface map</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
+        <div className="data-surface-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
           {[
             ["Scanner", "Uses the latest complete market day and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
-            ["Charts", "Shows EOD or Kite live-beta provenance directly in the chart toolbar before order planning.", "/charts/RELIANCE"],
+            ["Charts", "Shows EOD provenance directly in the chart toolbar before planning.", "/charts/RELIANCE"],
             ["Dashboard", "Separates live sector-index movement from latest complete session breadth.", "/dashboard"],
-            ["Broker", "Broker beta remains explicit at order time; simulated mode still records review context.", "/settings/broker"],
+            ["Broker", "Broker beta is read-only/import only; simulated order capture still records review context.", "/settings/broker"],
           ].map(([title, detail, href]) => (
             <Link key={title} href={href} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", textDecoration: "none" }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>{title}</div>

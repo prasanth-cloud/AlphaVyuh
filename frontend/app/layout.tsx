@@ -63,13 +63,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" data-theme="dark" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
         <Script
           id="theme-init"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: "try{document.documentElement.dataset.theme=localStorage.getItem('alphavyuh-theme')==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}",
+            __html: "try{var p=location.pathname;var app=/^\\/(dashboard|scanner|watchlist|charts|journal|settings|data|alerts|admin|upload|broker|onboarding)(\\/|$)/.test(p);document.documentElement.dataset.theme=app?'dark':(localStorage.getItem('alphavyuh-theme')==='light'?'light':'dark')}catch(e){document.documentElement.dataset.theme='dark'}",
           }}
         />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

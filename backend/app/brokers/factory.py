@@ -15,4 +15,8 @@ def get_adapter(broker_id: BrokerId) -> BrokerAdapter:
         from app.brokers.kite.adapter import KiteAdapter
         return KiteAdapter()
 
+    if broker_id == "upstox":
+        from app.brokers.upstox.adapter import UpstoxAdapter
+        return UpstoxAdapter()
+
     raise NotImplementedError(f"No adapter implemented for broker: {broker_id!r}")

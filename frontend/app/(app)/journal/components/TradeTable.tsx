@@ -81,12 +81,12 @@ export function TradeTable({
       )}
 
       {/* Table */}
-      <div style={{ background: "var(--surface-1)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
-        <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+      <div className="journal-table-shell">
+        <table className="journal-table">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
-              {["Symbol", "Type", "Entry", "Source", "P&L", "Review", "Status", ""].map(h => (
-                <th key={h} className="label" style={{ textAlign: "left", padding: "10px 12px" }}>{h}</th>
+              {["Symbol", "Side", "Setup", "Dates", "Entry / Exit", "P&L / R", "Review", "Source", ""].map(h => (
+                <th key={h} className="label" style={{ textAlign: "left", padding: "8px 10px", whiteSpace: "nowrap" }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -94,8 +94,8 @@ export function TradeTable({
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                  {Array.from({ length: 8 }).map((__, j) => (
-                    <td key={j} style={{ padding: "10px 12px" }}>
+                  {Array.from({ length: 9 }).map((__, j) => (
+                    <td key={j} style={{ padding: "8px 10px" }}>
                       <div style={{ height: 14, borderRadius: "var(--radius-sm)", background: "var(--surface-3)", width: 60 }} />
                     </td>
                   ))}
@@ -103,7 +103,7 @@ export function TradeTable({
               ))
             ) : entries.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: "48px 0", textAlign: "center" }}>
+                <td colSpan={9} style={{ padding: "48px 0", textAlign: "center" }}>
                   <div className="body-secondary">No trades yet.</div>
                   <button onClick={onAddTrade} style={{ marginTop: 8, fontSize: 13, color: "var(--accent)", cursor: "pointer" }}>
                     Log your first trade
@@ -113,6 +113,11 @@ export function TradeTable({
             ) : (
               entries.map(e => {
                 const flow = getTradeFlowMeta(e);
+                const rMultiple = e.risk_reward ?? (
+                  e.pnl != null && e.stop_loss != null && e.entry_price !== e.stop_loss && e.quantity > 0
+                    ? e.pnl / (Math.abs(e.entry_price - e.stop_loss) * e.quantity)
+                    : null
+                );
                 return (
                 <tr key={e.id}
                   onClick={() => onSelectEntry(e)}
@@ -125,46 +130,55 @@ export function TradeTable({
                   onMouseEnter={ev => { if (selectedEntry?.id !== e.id) (ev.currentTarget as HTMLElement).style.background = "var(--surface-2)"; }}
                   onMouseLeave={ev => { if (selectedEntry?.id !== e.id) (ev.currentTarget as HTMLElement).style.background = "transparent"; }}
                 >
-                  <td style={{ padding: "10px 12px" }}>
+                  <td style={{ padding: "8px 10px" }}>
                     <span className="mono" style={{ fontWeight: 600, color: "var(--text-primary)" }}>{e.symbol}</span>
-                    {e.setup_type && <span className="caption" style={{ marginLeft: 6 }}>{e.setup_type}</span>}
+                    {e.company_name && <div className="caption" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.company_name}</div>}
                   </td>
-                  <td style={{ padding: "10px 12px" }}>
+                  <td style={{ padding: "8px 10px" }}>
                     <Badge variant={e.trade_type === "long" ? "gain" : "loss"}>
                       {e.trade_type === "long" ? "L" : "S"}
                     </Badge>
                   </td>
-                  <td style={{ padding: "10px 12px", color: "var(--text-secondary)" }}>{fmtDate(e.entry_date)}</td>
-                  <td style={{ padding: "10px 12px" }}>
+                  <td style={{ padding: "8px 10px" }}>
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{e.setup_type || "—"}</span>
+                  </td>
+                  <td style={{ padding: "8px 10px", color: "var(--text-secondary)" }}>
+                    <div>{fmtDate(e.entry_date)}</div>
+                    <div className="caption">{e.exit_date ? fmtDate(e.exit_date) : "Open"}</div>
+                  </td>
+                  <td style={{ padding: "8px 10px" }}>
+                    <div className="mono" style={{ fontSize: 12, color: "var(--text-primary)" }}>₹{e.entry_price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
+                    <div className="caption">{e.exit_price != null ? `₹${e.exit_price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "No exit"}</div>
+                  </td>
+                  <td style={{ padding: "8px 10px" }}>
+                    {e.pnl == null ? (
+                      <span className="caption">Open</span>
+                    ) : (
+                      <div style={{ display: "grid", gap: 3 }}>
+                        <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: e.pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                          {e.pnl >= 0 ? "+" : ""}{fmtCcy(e.pnl)}
+                        </span>
+                        <span className="caption">
+                          {rMultiple != null ? `${rMultiple >= 0 ? "+" : ""}${rMultiple.toFixed(2)}R` : e.pnl_pct != null ? `${e.pnl_pct >= 0 ? "+" : ""}${e.pnl_pct.toFixed(2)}%` : "R pending"}
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px 10px" }}>
+                    <Badge variant={flow.reviewTone}>
+                      {flow.reviewLabel}
+                    </Badge>
+                    {flow.reviewLabel === "Needs review" && (
+                      <div className="caption" style={{ marginTop: 3, color: "var(--warn)" }}>Primary action</div>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px 10px" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                       <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{flow.sourceLabel}</span>
                       <span className="caption">{flow.brokerLabel ? `${flow.brokerLabel} • auto` : (flow.autoRecorded ? "Auto-recorded" : "Manual")}</span>
                     </div>
                   </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    {e.pnl == null ? (
-                      <span className="caption">Open</span>
-                    ) : (
-                      <span className="mono" style={{ fontSize: 12, fontWeight: 600, padding: "2px 6px", borderRadius: "var(--radius-sm)", color: e.pnl >= 0 ? "var(--gain)" : "var(--loss)", background: e.pnl >= 0 ? "var(--gain-subtle)" : "var(--loss-subtle)" }}>
-                        {e.pnl >= 0 ? "+" : ""}{fmtCcy(e.pnl)}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    <Badge variant={flow.reviewTone}>
-                      {flow.reviewLabel}
-                    </Badge>
-                  </td>
-                  <td style={{ padding: "10px 12px" }}>
-                    {e.status === "open" ? (
-                      <Badge variant="accent">Open</Badge>
-                    ) : e.pnl != null ? (
-                      <Badge variant={e.pnl >= 0 ? "gain" : "loss"}>{e.pnl >= 0 ? "Win" : "Loss"}</Badge>
-                    ) : (
-                      <Badge variant="neutral">{e.status}</Badge>
-                    )}
-                  </td>
-                  <td style={{ padding: "10px 12px" }} onClick={ev => ev.stopPropagation()}>
+                  <td style={{ padding: "8px 10px" }} onClick={ev => ev.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8 }}>
                       {e.status === "open" && (
                         <button onClick={() => onCloseEntry(e)} style={{ fontSize: 11, color: "var(--accent)", cursor: "pointer" }}>

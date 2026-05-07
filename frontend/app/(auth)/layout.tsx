@@ -3,18 +3,19 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     <div className="app-auth-shell">
       <div className="app-auth-grid">
         <aside className="app-auth-aside">
-          <div className="auth-kicker">Launch Surface</div>
-          <h1 style={{ fontSize: 'clamp(34px, 5vw, 58px)', lineHeight: 1.02, letterSpacing: '-0.04em', maxWidth: 420 }}>
-            Trade the full workflow in one dark, focused workspace.
+          <div className="auth-brand-mark" aria-hidden="true">A</div>
+          <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.05, letterSpacing: '-0.035em', maxWidth: 420 }}>
+            AlphaVyuh
           </h1>
-          <p style={{ marginTop: 18, maxWidth: 420, fontSize: 15, lineHeight: 1.65, color: 'var(--text-secondary)' }}>
-            Scan strong setups, move names into watchlists, review charts, place orders, and let your journal turn every trade into feedback.
+          <p style={{ marginTop: 14, maxWidth: 420, fontSize: 15, lineHeight: 1.65, color: 'var(--text-secondary)' }}>
+            A private beta trading desk for EOD scanning, watchlist planning, chart review, and journal feedback.
           </p>
-          <div style={{ marginTop: 36, display: 'grid', gap: 12, maxWidth: 360 }}>
+          <div style={{ marginTop: 26, display: 'grid', gap: 10, maxWidth: 380 }}>
             {[
-              'Scanner, charts, watchlists, orders, and journal in one flow',
-              'Same cinematic trading aesthetic as the landing page',
-              'Built for Indian traders with disciplined execution in mind',
+              'Private beta access',
+              'EOD/free-first market data',
+              'Broker import only; execution disabled',
+              'Educational workflow tool, not investment advice',
             ].map(item => (
               <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-primary)' }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 0 6px rgba(86, 215, 193, 0.10)' }} />

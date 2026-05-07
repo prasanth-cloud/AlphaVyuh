@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from app.middleware.auth import get_current_user_id
 from app.services import indicators as ta
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
+from app.services.market_context import eod_source_metadata, fallback_source_metadata, live_source_metadata
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
@@ -360,11 +361,23 @@ async def get_candles(
     limit: int = Query(365, ge=1, le=3000),
 ):
     sym = symbol.upper()
-    sb = get_admin_client()
-
-    # Fetch metadata
-    uni = sb.table("stock_universe").select("company_name,sector,series").eq("symbol", sym).maybe_single().execute()
-    meta = uni.data or {}
+    try:
+        sb = get_admin_client()
+        # Fetch metadata
+        uni = sb.table("stock_universe").select("company_name,sector,series").eq("symbol", sym).maybe_single().execute()
+        meta = uni.data or {}
+    except Exception:
+        metadata = fallback_source_metadata("Candle metadata is temporarily unavailable.")
+        return {
+            "symbol": sym,
+            "company_name": None,
+            "sector": None,
+            "timeframe": timeframe.upper(),
+            "candles": [],
+            "latest": None,
+            "mode": "unavailable",
+            "source_metadata": metadata,
+        }
 
     # For W/M we need more raw daily bars to aggregate into enough candles
     tf = timeframe.upper()
@@ -375,16 +388,29 @@ async def get_candles(
     fd = date.fromisoformat(from_date) if from_date else (td - timedelta(days=365 * 12))
     td2 = date.fromisoformat(to_date) if to_date else td
 
-    q = (
-        sb.table("daily_ohlcv")
-        .select("trade_date,open,high,low,close,volume,prev_close,avg_volume_20d,rsi_14,ema_20,ema_50,ema_200,atr_14,week_52_high,week_52_low")
-        .eq("symbol", sym)
-        .gte("trade_date", str(fd))
-        .lte("trade_date", str(td2))
-        .order("trade_date", desc=False)
-        .limit(raw_limit)
-        .execute()
-    )
+    try:
+        q = (
+            sb.table("daily_ohlcv")
+            .select("trade_date,open,high,low,close,volume,prev_close,avg_volume_20d,rsi_14,ema_20,ema_50,ema_200,atr_14,week_52_high,week_52_low")
+            .eq("symbol", sym)
+            .gte("trade_date", str(fd))
+            .lte("trade_date", str(td2))
+            .order("trade_date", desc=False)
+            .limit(raw_limit)
+            .execute()
+        )
+    except Exception:
+        metadata = fallback_source_metadata("Candle query is temporarily unavailable.", as_of=None)
+        return {
+            "symbol": sym,
+            "company_name": meta.get("company_name"),
+            "sector": meta.get("sector"),
+            "timeframe": tf,
+            "candles": [],
+            "latest": None,
+            "mode": "unavailable",
+            "source_metadata": metadata,
+        }
 
     if not q.data:
         raise HTTPException(status_code=404, detail=f"No candle data found for {sym}")
@@ -460,6 +486,12 @@ async def get_candles(
             "low": float(latest_row["low"]), "prev_close": prev_close,
         }
 
+    latest_time = candles[-1]["time"] if candles else None
+    metadata = eod_source_metadata(
+        as_of=latest_time,
+        status="healthy" if candles else "unknown",
+        symbols_count=1 if candles else 0,
+    )
     return {
         "symbol": sym,
         "company_name": meta.get("company_name"),
@@ -467,6 +499,9 @@ async def get_candles(
         "timeframe": tf,
         "candles": candles,
         "latest": latest,
+        "mode": metadata["mode"],
+        "source": metadata["source_name"],
+        "source_metadata": metadata,
     }
 
 
@@ -482,7 +517,10 @@ async def get_candles_live(
     sym = symbol.upper()
     tf = timeframe.upper()
     try:
-        return get_market_data_provider().live_candles(sym, tf, limit, _lookup_market_identity(sym))
+        data = get_market_data_provider().live_candles(sym, tf, limit, _lookup_market_identity(sym))
+        data["mode"] = "live"
+        data["source_metadata"] = live_source_metadata(provider=data.get("source") or "configured provider")
+        return data
     except ProviderNotConfiguredError as e:
         raise HTTPException(status_code=501, detail=str(e))
     except MarketDataError as e:

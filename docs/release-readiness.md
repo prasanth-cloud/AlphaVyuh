@@ -14,7 +14,7 @@ Use this checklist before every customer-facing release.
    - Frontend: `NEXT_PUBLIC_FORCE_LIVE_DATA=true`
    - Backend: official/free EOD bhavcopy as primary store; `MARKET_DATA_PROVIDER=kite` only for user-connected broker quote/order workflows.
    - Purpose: internal validation with reliable EOD scanner/chart data and broker flows.
-   - App badge should show `Live data`.
+   - App badge should show `EOD data`, `delayed`, or `live beta` only when that exact provider mode is configured and approved.
 
 3. Licensed production data
    - Frontend: `NEXT_PUBLIC_FORCE_LIVE_DATA=true`
@@ -27,6 +27,13 @@ Run these before release:
 
 ```bash
 npm run launch:check
+# To skip local browser server smoke in constrained shells only:
+# SKIP_BROWSER_SMOKE=1 npm run launch:check
+# To include read-only Kite/Upstox account smoke when tokens are available:
+# RUN_BROKER_SMOKE=1 npm run launch:check
+# To validate one broker at a time:
+# RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=kite npm run launch:check
+# RUN_BROKER_SMOKE=1 BROKER_SMOKE_TARGET=upstox npm run launch:check
 
 cd frontend
 npm run lint
@@ -34,7 +41,10 @@ npm run test
 npm run build
 NEXT_PUBLIC_DATA_MODE=mock npm run build
 npx playwright test tests/e2e/release-readiness.spec.ts
-npm audit --audit-level=high
+npx playwright test --config=playwright.mock.config.ts tests/e2e/performance-smoke.spec.ts
+npx playwright test --config=playwright.mock.config.ts tests/e2e/layout-smoke.spec.ts
+npx playwright test --config=playwright.backend.config.ts
+npm audit --audit-level=moderate
 
 cd ../backend
 .venv/bin/pytest
@@ -43,6 +53,22 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 ```
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
+
+Read-only broker account smoke, when real credentials are available:
+
+```bash
+npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --login-url
+BROKER_SMOKE_TARGET=kite npm run broker:smoke -- --request-token <request_token>
+BROKER_SMOKE_TARGET=upstox npm run broker:smoke -- --code <authorization_code>
+```
+
+These broker scripts verify account/data reads only. Do not run live order placement
+as a release gate unless the account owner explicitly confirms the exact broker,
+symbol, side, quantity, order type, and sandbox/live mode.
 
 ## Security Checklist
 
@@ -60,7 +86,8 @@ The release owner should also complete `docs/customer-launch-runbook.md` before 
 
 ## Current Audit Notes
 
-- Frontend: `npm audit --audit-level=high` still reports Next.js 14 advisories and the related `eslint-config-next` `glob` advisory. The automated fix upgrades to Next 16, so treat this as a planned Next migration before production if self-hosting.
+- 2026-05-07 public launch readiness pass: see `docs/public-launch-readiness-2026-05-07.md` and `docs/security-launch-scan-2026-05-07.md`.
+- Frontend uses Next.js 16.2.4 at the time of the 2026-05-07 pass. Treat any future Next.js audit as current-version evidence, not the older Next 14 migration note.
 - Backend: the legacy `kiteconnect` package was removed from production requirements. Kite routes use the internal HTTP wrapper in `app.brokers.kite.api`, avoiding the old `autobahn==19.11.2` dependency path.
 
 ## Data Checklist

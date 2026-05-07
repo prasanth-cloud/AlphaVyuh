@@ -9,15 +9,16 @@ import {
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
 } from "@/lib/api";
 import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
-import { StatCard } from "@/components/ui";
+import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
-import { fmtCcy } from "./components/utils";
+import { fmtCcy, getTradeFlowMeta } from "./components/utils";
 import { TradeTable } from "./components/TradeTable";
 import { TradePanel } from "./components/TradePanel";
 import { JournalAnalytics as JournalAnalyticsTab } from "./components/JournalAnalytics";
 import { JournalAiInsights } from "./components/JournalAiInsights";
 import type { PanelMode, Tab } from "./components/types";
 import { useWorkflowState } from "@/lib/workflow";
+import { trackEvent } from "@/lib/analytics";
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
@@ -34,6 +35,9 @@ export default function JournalPage() {
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [brokerConnected, setBrokerConnected] = useState(false);
   const [brokerName, setBrokerName] = useState<string | null>(null);
+  const [brokerStatusLabel, setBrokerStatusLabel] = useState<string | null>(null);
+  const [brokerCanImport, setBrokerCanImport] = useState(false);
+  const [brokerLastSyncedAt, setBrokerLastSyncedAt] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [lessonLoading, setLessonLoading] = useState<string | null>(null);
   const [stats, setStats] = useState<JournalStats | null>(null);
@@ -91,9 +95,17 @@ export default function JournalPage() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    getBrokerStatus().then(s => { setBrokerConnected(s.connected); setBrokerName(s.broker); }).catch(() => {});
+  const refreshBrokerStatus = useCallback(() => {
+    getBrokerStatus().then(s => {
+      setBrokerConnected(s.connected);
+      setBrokerName(s.broker);
+      setBrokerStatusLabel(s.status_label ?? null);
+      setBrokerCanImport(Boolean(s.can_import));
+      setBrokerLastSyncedAt(s.last_synced_at ?? null);
+    }).catch(() => {});
   }, []);
+
+  useEffect(() => { refreshBrokerStatus(); }, [refreshBrokerStatus]);
 
   useEffect(() => {
     if (tab !== "ai" || patterns !== null) return;
@@ -149,6 +161,15 @@ export default function JournalPage() {
       return true;
     })
   ), [entries, reviewFocus, symbolFocus]);
+  const journalQueue = useMemo(() => {
+    const closed = entries.filter((entry) => entry.status === "closed");
+    const needsReview = closed.filter((entry) => !entry.lessons?.trim()).length;
+    const reviewed = closed.length - needsReview;
+    const imported = entries.filter((entry) => getTradeFlowMeta(entry).sourceLabel === "Broker import").length;
+    const chartOrders = entries.filter((entry) => getTradeFlowMeta(entry).sourceLabel === "Chart order").length;
+    const manual = entries.length - imported - chartOrders;
+    return { needsReview, reviewed, imported, chartOrders, manual };
+  }, [entries]);
   const handleAddTrade = async () => {
     if (!selectedSymbol || !addForm.entry_price || !addForm.quantity || !addForm.entry_date || !addForm.trade_type) {
       showToast("Fill in symbol, date, price and quantity"); return;
@@ -156,6 +177,7 @@ export default function JournalPage() {
     setSaving(true);
     try {
       await createJournalEntry({ ...addForm, symbol: selectedSymbol } as CreateJournalEntry);
+      trackEvent("journal_entry_created", { source: "manual", symbol: selectedSymbol, trade_type: addForm.trade_type ?? "unknown" });
       setAddForm({ trade_type: "long", entry_date: new Date().toISOString().split("T")[0] });
       setSelectedSymbol(""); setSymbolQ(""); setPanelMode(null);
       showToast("Trade logged"); load();
@@ -183,6 +205,7 @@ export default function JournalPage() {
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       if (selectedEntry?.id === updated.id) setSelectedEntry(updated);
       completeReview(updated.symbol);
+      trackEvent("journal_entry_reviewed", { source: getTradeFlowMeta(updated).sourceLabel, symbol: updated.symbol });
       showToast("Trade lesson generated");
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Trade lesson failed"); }
     finally { setLessonLoading(null); }
@@ -192,7 +215,10 @@ export default function JournalPage() {
     setImporting(true);
     try {
       const r = await importZerodhaTrades();
+      trackEvent("journal_entry_created", { source: "broker_import", imported: r.imported, skipped: r.skipped });
       showToast(r.message);
+      setBrokerLastSyncedAt(r.last_synced_at ?? new Date().toISOString());
+      refreshBrokerStatus();
       if (r.imported > 0) load();
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Import failed"); }
     finally { setImporting(false); }
@@ -240,6 +266,9 @@ export default function JournalPage() {
       <JournalStatusBar
         brokerConnected={brokerConnected}
         brokerName={brokerName}
+        brokerStatusLabel={brokerStatusLabel}
+        canImport={brokerCanImport}
+        lastSyncedAt={brokerLastSyncedAt}
         importing={importing}
         closedTrades={closedTrades}
         reviewedTrades={reviewedTrades}
@@ -247,6 +276,42 @@ export default function JournalPage() {
         onImport={handleImportZerodha}
         onAddTrade={openAddPanel}
       />
+
+      <div
+        className="workspace-card"
+        data-testid="journal-review-queue"
+        style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}
+      >
+        <div style={{ minWidth: 240, flex: "1 1 320px" }}>
+          <EyebrowLabel>Review and improvement</EyebrowLabel>
+          <div className="mt-1 text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
+            {journalQueue.needsReview > 0
+              ? <><Num>{journalQueue.needsReview}</Num> closed {journalQueue.needsReview === 1 ? "trade needs" : "trades need"} review</>
+              : "No closed trades waiting for review"}
+          </div>
+          <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+            Broker imports, chart orders, simulated orders, and manual logs stay labeled so reviews can explain what happened and why.
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "Needs review", value: journalQueue.needsReview, color: "var(--warn)" },
+            { label: "Reviewed", value: journalQueue.reviewed, color: "var(--gain)" },
+            { label: "Broker import", value: journalQueue.imported, color: "var(--accent)" },
+            { label: "Chart/sim", value: journalQueue.chartOrders, color: "var(--text-secondary)" },
+            { label: "Manual", value: Math.max(0, journalQueue.manual), color: "var(--text-tertiary)" },
+          ].map(({ label, value, color }) => (
+            <div
+              key={label}
+              className="rounded-[8px] px-3 py-2"
+              style={{ background: "rgba(244,247,251,0.05)", border: "1px solid var(--border-subtle)", minWidth: 92 }}
+            >
+              <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</div>
+              <Num className="text-[16px] font-semibold" style={{ color }}>{value}</Num>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.describe("Release readiness — public and auth boundary", () => {
   test.beforeEach(async ({ context }) => {
-    await context.clearCookies();
+    if (!process.env.PLAYWRIGHT_ACCESS_URL) await context.clearCookies();
   });
 
   test("homepage serves the customer landing page", async ({ page }) => {
@@ -10,8 +10,20 @@ test.describe("Release readiness — public and auth boundary", () => {
 
     expect(response?.ok()).toBeTruthy();
     await expect(page).toHaveTitle(/AlphaVyuh/);
-    await expect(page.locator(".hero-h1-static").getByText("India's Trading OS.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Start free/i }).first()).toBeVisible();
+    await expect(page.locator(".lp-h1-s1").getByText("India's Trading OS.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Request access/i }).first()).toBeVisible();
+  });
+
+  test("beta guide exposes feedback loop and limitations", async ({ page }) => {
+    const response = await page.goto("/beta");
+
+    expect(response?.ok()).toBeTruthy();
+    await expect(page.getByRole("heading", { name: /Test the complete EOD trading workflow/i })).toBeVisible();
+    await expect(page.locator("body")).toContainText(/support@alphavyuh\.com/i);
+    await expect(page.locator("body")).toContainText(/Feedback and bug report paths/i);
+    await expect(page.locator("body")).toContainText(/Beta onboarding checklist/i);
+    await expect(page.locator("body")).toContainText(/Known beta limitations/i);
+    await expect(page.locator("body")).toContainText(/No live\/sandbox broker order placement/i);
   });
 
   test("baseline browser security headers are present", async ({ request }) => {
@@ -34,6 +46,13 @@ test.describe("Release readiness — public and auth boundary", () => {
 
     await page.goto("/charts/RELIANCE");
     await expect(page).toHaveURL(/\/login\?next=%2Fcharts%2FRELIANCE/);
+  });
+
+  test("dev login is not exposed on production-like routes", async ({ page }) => {
+    test.skip(process.env.PLAYWRIGHT_MOCK_AUTH === "true", "Dev login is intentionally available in mock auth mode.");
+
+    await page.goto("/dev-login?email=tester%40example.com&token=fake");
+    await expect(page).toHaveURL(/\/login/);
   });
 
   test("login page renders and rejects obvious open redirect vectors", async ({ page }) => {

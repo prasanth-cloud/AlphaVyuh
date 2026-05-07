@@ -11,6 +11,7 @@ export async function GET(request: Request) {
 
   if (code) {
     const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin));
+    redirectResponse.headers.set("Server-Timing", 'alphavyuh_auth_callback;desc="session_set"');
 
     // Write session cookies directly onto the redirect response so the browser
     // receives Set-Cookie headers. Using cookieStore.set() alone (the previous

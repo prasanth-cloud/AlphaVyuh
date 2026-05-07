@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
+from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
@@ -81,14 +82,17 @@ async def get_watchlists(
     client = get_admin_client()
 
     # 1 – all watchlists
-    wl_res = client.table("watchlists") \
-        .select("id, name, sort_order, created_at") \
-        .eq("user_id", user_id) \
-        .order("sort_order") \
-        .execute()
+    try:
+        wl_res = client.table("watchlists") \
+            .select("id, name, sort_order, created_at") \
+            .eq("user_id", user_id) \
+            .order("sort_order") \
+            .execute()
+    except Exception:
+        return {"watchlists": [], "mode": "unavailable", "message": "Watchlist shell is temporarily unavailable."}
     watchlists = wl_res.data or []
     if not watchlists:
-        return {"watchlists": []}
+        return {"watchlists": [], "source_metadata": eod_source_metadata(as_of=None, status="unknown"), "mode": "eod"}
 
     wl_ids = [wl["id"] for wl in watchlists]
 
@@ -119,37 +123,45 @@ async def get_watchlists(
             })
         for wl in watchlists:
             wl["items"] = items_by_wl.get(wl["id"], [])
-        return {"watchlists": watchlists, "mode": "lite"}
+        return {
+            "watchlists": watchlists,
+            "mode": "lite",
+            "source_metadata": eod_source_metadata(as_of=None, status="unknown", symbols_count=len(all_items)),
+        }
 
     # 3 – latest complete trade date (once)
     quote_map: dict = {}
     all_symbols = list({item["symbol"] for item in all_items})
+    latest_date = None
     if all_symbols:
         latest_date = get_latest_complete_trade_date(client)
         if latest_date:
             # 4 – quotes for ALL symbols in ONE query
-            quotes_res = client.table("daily_ohlcv") \
-                .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14,"
-                        "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector)") \
-                .eq("trade_date", latest_date) \
-                .in_("symbol", all_symbols) \
-                .execute()
-            for q in (quotes_res.data or []):
-                su = q.get("stock_universe") or {}
-                if isinstance(su, list):
-                    su = su[0] if su else {}
-                close = float(q["close"] or 0)
-                prev  = float(q["prev_close"] or 0)
-                vol   = int(q["volume"] or 0)
-                avg   = int(q["avg_volume_20d"] or 0)
-                quote_map[q["symbol"]] = {
-                    "company_name": su.get("company_name"),
-                    "sector":       su.get("sector"),
-                    "close":        close,
-                    "pct_change":   round((close - prev) / prev * 100, 2) if prev else None,
-                    "volume_ratio": round(vol / avg, 2) if avg else None,
-                    "rsi_14":       float(q["rsi_14"]) if q["rsi_14"] is not None else None,
-                }
+            try:
+                quotes_res = client.table("daily_ohlcv") \
+                    .select("symbol, close, prev_close, volume, avg_volume_20d, rsi_14,"
+                            "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector)") \
+                    .eq("trade_date", latest_date) \
+                    .in_("symbol", all_symbols) \
+                    .execute()
+                for q in (quotes_res.data or []):
+                    su = q.get("stock_universe") or {}
+                    if isinstance(su, list):
+                        su = su[0] if su else {}
+                    close = float(q["close"] or 0)
+                    prev  = float(q["prev_close"] or 0)
+                    vol   = int(q["volume"] or 0)
+                    avg   = int(q["avg_volume_20d"] or 0)
+                    quote_map[q["symbol"]] = {
+                        "company_name": su.get("company_name"),
+                        "sector":       su.get("sector"),
+                        "close":        close,
+                        "pct_change":   round((close - prev) / prev * 100, 2) if prev else None,
+                        "volume_ratio": round(vol / avg, 2) if avg else None,
+                        "rsi_14":       float(q["rsi_14"]) if q["rsi_14"] is not None else None,
+                    }
+            except Exception:
+                quote_map = {}
 
     # group items by watchlist_id and merge quotes
     items_by_wl: dict = {}
@@ -166,7 +178,19 @@ async def get_watchlists(
     for wl in watchlists:
         wl["items"] = items_by_wl.get(wl["id"], [])
 
-    return {"watchlists": watchlists}
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="healthy" if quote_map or not all_symbols else "degraded",
+        coverage_pct=round((len(quote_map) / len(all_symbols)) * 100, 1) if all_symbols else 100,
+        symbols_count=len(quote_map),
+        universe_active=len(all_symbols),
+    )
+    return {
+        "watchlists": watchlists,
+        "source_metadata": metadata,
+        "mode": metadata["mode"],
+        "trade_date": latest_date,
+    }
 
 
 class CreateWatchlistRequest(BaseModel):

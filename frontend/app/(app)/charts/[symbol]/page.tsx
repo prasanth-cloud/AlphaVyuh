@@ -15,11 +15,12 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes,
+  streamLiveQuotes, isMockMode,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
-import { DataProvenanceBadge } from "@/components/ui";
+import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
+import { trackEvent } from "@/lib/analytics";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -262,6 +263,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
 
+  useEffect(() => {
+    if (!fullChartMode) return;
+    trackEvent("full_chart_opened", { symbol, timeframe });
+  }, [fullChartMode, symbol, timeframe]);
+
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -389,7 +395,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [dragState, setDragState] = useState<{
     drawingId: string;
     mode: "point" | "whole";
-    point?: "p1" | "p2";
+    point?: "p1" | "p2" | "p3";
     startX: number;
     startY: number;
     original: ChartDrawing;
@@ -929,6 +935,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           const snappedPrice = e.altKey ? price : getSnappedPrice(time, price);
           setDrawnLines((prev) => prev.map((item) => {
             if (item.id !== dragState.drawingId) return item;
+            if (dragState.point === "p3" && isPositionDrawingTool(item.tool)) {
+              return { ...item, p3: { time, price: snappedPrice } };
+            }
             const next = {
               ...item,
               [dragState.point!]: { time, price: snappedPrice },
@@ -942,7 +951,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             if (item.tool === "Text") {
               next.p2 = { ...next.p1 };
             }
-            if (isPositionDrawingTool(item.tool)) {
+            if (isPositionDrawingTool(item.tool) && dragState.point !== "p3") {
               const built = buildPositionDrawingPoints(item.tool, next.p1, next.p2);
               next.p2 = built.p2;
               next.p3 = built.p3;
@@ -1104,6 +1113,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     updateDrawingsWithHistory((prev) => [...prev, line]);
     setSelectedDrawingId(line.id);
     setActiveDrawingTool(null);
+    trackEvent("drawing_created", { symbol, timeframe, tool: activeDrawingTool });
 
     // Persist to DB (non-blocking)
     try {
@@ -1253,7 +1263,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     });
   }, [updateDrawingsWithHistory]);
 
-  const beginPointDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing, point: "p1" | "p2") => {
+  const beginPointDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing, point: "p1" | "p2" | "p3") => {
     if (drawing.locked || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
     updateDrawingsWithHistory((prev) => cloneDrawings(prev));
@@ -1276,6 +1286,51 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     const editorY = Math.max(12, y - 12);
     setTextEditor({ drawingId: drawing.id, value: drawing.text ?? "Note", x: editorX, y: editorY, isNew: false });
   }, []);
+
+  const applyPositionDrawingToPlan = useCallback((drawing: ChartDrawing) => {
+    if (!isPositionDrawingTool(drawing.tool) || !drawing.p3) return;
+    setTradePlan({
+      entry: drawing.p1.price.toFixed(2),
+      stop: drawing.p2.price.toFixed(2),
+      target: drawing.p3.price.toFixed(2),
+    });
+    setOrderToast({
+      message: "Trade plan filled from risk/reward drawing.",
+      journalId: null,
+      broker: "simulated",
+      riskReward: Math.abs(drawing.p3.price - drawing.p1.price) / Math.max(Math.abs(drawing.p1.price - drawing.p2.price), 0.01),
+    });
+    setTimeout(() => setOrderToast(null), 3500);
+  }, []);
+
+  const createZoneNoteFromDrawing = useCallback(async (drawing: ChartDrawing) => {
+    if (drawing.tool !== "Rectangle") return;
+    const high = Math.max(drawing.p1.price, drawing.p2.price);
+    const low = Math.min(drawing.p1.price, drawing.p2.price);
+    const note: ChartDrawing = {
+      id: crypto.randomUUID(),
+      tool: "Text",
+      p1: { time: drawing.p1.time, price: high },
+      p2: { time: drawing.p1.time, price: high },
+      color: DRAWING_DEFAULT_COLOR,
+      text: `Zone ${low.toFixed(2)}-${high.toFixed(2)}`,
+    };
+    updateDrawingsWithHistory((prev) => [...prev, note]);
+    setSelectedDrawingId(note.id);
+    try {
+      const saved = await saveDrawing(symbol, {
+        tool_type: "text",
+        points: getPersistedDrawingPoints(note),
+        style: { color: note.color, text: note.text },
+        timeframe,
+      });
+      setDrawings(prev => [...prev, saved]);
+      setDrawnLines(prev => prev.map(item => item.id === note.id ? { ...item, id: saved.id } : item));
+      setSelectedDrawingId(saved.id);
+    } catch {
+      // local note remains available even if persistence is temporarily offline
+    }
+  }, [symbol, timeframe, updateDrawingsWithHistory]);
 
   const commitTextEditor = useCallback(async () => {
     if (!textEditor?.drawingId) return;
@@ -1526,20 +1581,20 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
         <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
-            <div className="workspace-card-title">{symbol} chart</div>
+            <EyebrowLabel>Planning</EyebrowLabel>
             <div className="workspace-card-copy">
-              Read structure, plan the trade, manage the position, and move straight into journal review.
+              {symbol} chart · read structure, plan the trade, manage the position, and move straight into journal review.
             </div>
             {sourcePage === "watchlist" && sourceWatchlist && (
               <div className="caption" style={{ marginTop: 8 }}>
-                Opened from <span className="mono" style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</span>.
+                Opened from <Num style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</Num>.
               </div>
             )}
           </div>
           <div className="workspace-pill-row" style={{ gap: 8 }}>
             {chartSnapshot.map((item) => (
               <span key={item.label} className="workspace-pill" style={{ color: item.tone }}>
-                {item.label}: {item.value}
+                {item.label}: <Num>{item.value}</Num>
               </span>
             ))}
           </div>
@@ -1660,8 +1715,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          Data is {dataAgeDays} days old — bhavcopy may not have run.
-          <button onClick={() => setLiveMode(true)} className="underline font-semibold hover:no-underline">Switch to live data</button>
+          Data is {dataAgeDays} days old. Scanner/chart context is using the latest complete session. Provider/live quote mode is disabled for private beta.
         </div>
       )}
 
@@ -1688,9 +1742,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               >
                 ↑
               </button>
-              <span className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
+              <Num className="text-[11px] font-semibold" style={{ color: "var(--app-text2)" }}>
                 {sourceQueueName ?? "Watchlist"} {sourceQueueIndex >= 0 ? sourceQueueIndex + 1 : "-"} / {sourceQueueCount}
-              </span>
+              </Num>
               <button
                 onClick={() => stepQueueSymbol("next")}
                 className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
@@ -1930,18 +1984,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             )}
           </div>
 
-          {/* Live data toggle */}
+          {/* Provider data badge */}
           <button
-            onClick={() => setLiveMode(m => !m)}
+            onClick={() => setLiveMode(false)}
+            disabled
             className="workspace-chip-button flex items-center gap-1.5"
-            style={liveMode
-              ? { background: "rgba(38,166,91,0.10)", color: "#26a65b", border: "1px solid rgba(38,166,91,0.22)" }
-              : undefined}
-            title={liveMode ? "Live provider data — refresh every 5 min" : "Switch to configured live provider data"}
+            style={{ opacity: 0.85 }}
+            title="Provider/live quote mode is disabled for private beta; charts use EOD or demo data."
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${liveMode ? "bg-[#26a65b] animate-pulse" : ""}`}
-              style={!liveMode ? { background: "var(--app-text3)" } : {}} />
-            <DataProvenanceBadge kind={liveMode ? "live-beta" : "eod"} compact />
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
+            <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
           </button>
 
           {/* Price alert bell */}
@@ -2823,6 +2875,26 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   Alert from drawing
                 </button>
               )}
+              {selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && (
+                <button
+                  onClick={() => applyPositionDrawingToPlan(selectedDrawing)}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.22)" }}
+                >
+                  <TrendingUp size={12} />
+                  Use as plan
+                </button>
+              )}
+              {selectedDrawing?.tool === "Rectangle" && (
+                <button
+                  onClick={() => void createZoneNoteFromDrawing(selectedDrawing)}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(139,150,166,0.14)", color: "#cbd5e1", border: "1px solid rgba(139,150,166,0.24)" }}
+                >
+                  <Type size={12} />
+                  Zone note
+                </button>
+              )}
               {selectedDrawing && (
                 <button
                   onClick={() => toggleDrawingLock(selectedDrawing.id)}
@@ -2870,14 +2942,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 Alerts
               </button>
               <button
-                onClick={() => setLiveMode(prev => !prev)}
+                onClick={() => setLiveMode(false)}
+                disabled
                 className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                style={liveMode
-                  ? { background: "rgba(38,166,91,0.14)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }
-                  : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
+                style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)", opacity: 0.85 }}
+                title="Provider/live quote mode is disabled for private beta."
               >
                 <Activity size={12} />
-                <DataProvenanceBadge kind={liveMode ? "live-beta" : "eod"} compact />
+                <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
               </button>
             </div>
           </div>
@@ -2938,7 +3010,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
             {showObjectList && (
               <div
-                className="absolute top-3 right-3 z-10 w-[220px] rounded-[16px] p-3"
+                className="absolute top-3 right-3 z-30 w-[220px] rounded-[16px] p-3"
                 style={{ background: "rgba(13,15,20,0.88)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(14px)" }}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -3557,6 +3629,16 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                               strokeWidth={1.5}
                               style={{ pointerEvents: "all", cursor: "ns-resize" }}
                               onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
+                            />
+                            <circle
+                              cx={x2}
+                              cy={targetY}
+                              r={5}
+                              fill="#0D0F14"
+                              stroke="#bbf7d0"
+                              strokeWidth={1.5}
+                              style={{ pointerEvents: "all", cursor: "ns-resize" }}
+                              onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p3"); }}
                             />
                           </>
                         )}

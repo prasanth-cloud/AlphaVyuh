@@ -164,7 +164,7 @@ class KiteAdapter(BrokerAdapter):
     # ─── Orders (Phase C) ─────────────────────────────────────────────────────
 
     async def place_order(
-        self, creds: BrokerCredentials, order: OrderRequest
+        self, user_id: str, creds: BrokerCredentials, order: OrderRequest
     ) -> OrderResult:
         raise NotImplementedError("place_order is implemented in feat/broker-connect-ui")
 

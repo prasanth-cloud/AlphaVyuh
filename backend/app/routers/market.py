@@ -16,6 +16,7 @@ from starlette.responses import StreamingResponse
 from app.middleware.auth import get_current_user_id
 from app.services.kite_stream import KiteStreamError, kite_live_ticker
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, _kite_access_token, _kite_api_key, get_market_data_provider
+from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
@@ -56,6 +57,12 @@ def _finite_float(value, default=None):
 
 
 def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices_live: bool) -> dict:
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="unknown" if latest_date is None else "healthy",
+        symbols_count=0,
+        cache_status="miss",
+    )
     return {
         "trade_date": latest_date,
         "advances": 0,
@@ -86,7 +93,19 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
         "as_of": latest_date,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cache_status": "miss",
+        "provider": metadata,
+        "source_metadata": metadata,
     }
+
+
+def _unavailable_overview(latest_date, indices: list[dict], quote_source: str, indices_live: bool) -> dict:
+    overview = _empty_overview(latest_date, indices, quote_source, indices_live)
+    overview["mode"] = "unavailable"
+    overview["message"] = "Market summary is temporarily unavailable; dashboard will use the latest known shell data."
+    metadata = fallback_source_metadata(overview["message"], as_of=latest_date)
+    overview["provider"] = metadata
+    overview["source_metadata"] = metadata
+    return overview
 
 
 def _index_quotes() -> tuple[list[dict], str, bool]:
@@ -177,10 +196,23 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         cached["cache_status"] = "hit"
         return cached
 
-    sb = get_admin_client()
     indices, quote_source, indices_live = _index_quotes()
 
-    latest_date = get_latest_complete_trade_date(sb)
+    try:
+        sb = get_admin_client()
+    except Exception:
+        overview = _unavailable_overview(None, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
+
+    try:
+        latest_date = get_latest_complete_trade_date(sb)
+    except Exception:
+        overview = _unavailable_overview(None, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
     if not latest_date:
         overview = _empty_overview(None, indices, quote_source, indices_live)
         _overview_cache = deepcopy(overview)
@@ -188,18 +220,24 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         return overview
 
     # Fetch all NSE EQ rows for latest date
-    rows = (
-        sb.table("daily_ohlcv")
-        .select(
-            "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
-            "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,"
-            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
+    try:
+        rows = (
+            sb.table("daily_ohlcv")
+            .select(
+                "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
+                "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,"
+                "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
+            )
+            .eq("trade_date", latest_date)
+            .limit(3000)
+            .execute()
+            .data or []
         )
-        .eq("trade_date", latest_date)
-        .limit(3000)
-        .execute()
-        .data or []
-    )
+    except Exception:
+        overview = _unavailable_overview(latest_date, indices, quote_source, indices_live)
+        _overview_cache = deepcopy(overview)
+        _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
+        return overview
 
     # Filter NSE EQ active only (avoid double-counting BSE cross-listings)
     rows = [
@@ -338,6 +376,14 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
             "volume_ratio": r["volume_ratio"],
         }
 
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="healthy",
+        coverage_pct=round((total / total) * 100, 1) if total else None,
+        symbols_count=total,
+        universe_active=total,
+        cache_status="miss",
+    )
     overview = {
         "trade_date": latest_date,
         "advances": advances,
@@ -368,6 +414,8 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "as_of": latest_date,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cache_status": "miss",
+        "provider": metadata,
+        "source_metadata": metadata,
     }
     _overview_cache = deepcopy(overview)
     _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS

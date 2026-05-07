@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services.supabase import get_admin_client
+from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
 
@@ -305,7 +306,19 @@ async def create_entry(
         "status": "open",
     }
     result = sb.table("trade_journal").insert(row).execute()
-    return result.data[0]
+    created = result.data[0]
+    sync_workflow_state(sb, user_id, row["symbol"], {
+        "source": "journal",
+        "lifecycle": "open",
+        "entry": body.entry_price,
+        "stop": body.stop_loss,
+        "target": body.target_price,
+        "position_size": body.quantity,
+        "setup_type": body.setup_type,
+        "notes": body.entry_reason,
+        "journal_id": created["id"],
+    })
+    return created
 
 
 @router.patch("/{entry_id}")
@@ -357,6 +370,11 @@ async def update_entry(
             _trigger_ai_analysis(sb, updated_entry)
         except Exception:
             pass  # non-blocking
+        sync_workflow_state(sb, user_id, str(updated_entry["symbol"]), {
+            "source": "journal",
+            "lifecycle": "closed",
+            "journal_id": entry_id,
+        })
 
     return updated_entry
 

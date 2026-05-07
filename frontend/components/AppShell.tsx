@@ -2,9 +2,9 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import TraderReminderStrip from '@/components/TraderReminderStrip'
 import FeedbackWidget from '@/components/FeedbackWidget'
-import { clearAuthHeaderCache, warmCoreMarketData } from '@/lib/api'
+import { clearAuthHeaderCache, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
+import { markAppTiming } from '@/lib/performance'
 import { useWorkflowState } from '@/lib/workflow'
 
 const NAV_LINKS = [
@@ -29,6 +29,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
 
   useEffect(() => {
+    window.requestAnimationFrame(() => markAppTiming('first-app-shell-paint'))
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = 'dark'
+    window.localStorage.setItem('alphavyuh-theme', 'dark')
+    window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: 'dark' }))
+  }, [])
+
+  useEffect(() => {
     const prefetchCoreRoutes = () => {
       for (const href of IDLE_PREFETCH_ROUTES) {
         if (href !== pathname) {
@@ -38,21 +48,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     const warmData = () => warmCoreMarketData()
+    const warmSecondaryData = () => warmSecondaryWorkflowData()
 
     if ('requestIdleCallback' in window) {
       const routeId = window.requestIdleCallback(prefetchCoreRoutes, { timeout: 3000 })
       const dataId = window.requestIdleCallback(warmData, { timeout: 6000 })
+      const secondaryDataId = window.requestIdleCallback(warmSecondaryData, { timeout: 10_000 })
       return () => {
         window.cancelIdleCallback(routeId)
         window.cancelIdleCallback(dataId)
+        window.cancelIdleCallback(secondaryDataId)
       }
     }
 
     const routeId = globalThis.setTimeout(prefetchCoreRoutes, 1200)
     const dataId = globalThis.setTimeout(warmData, 4500)
+    const secondaryDataId = globalThis.setTimeout(warmSecondaryData, 9000)
     return () => {
       globalThis.clearTimeout(routeId)
       globalThis.clearTimeout(dataId)
+      globalThis.clearTimeout(secondaryDataId)
     }
   }, [pathname, router])
 
@@ -107,7 +122,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <AccountMenuButton />
           </div>
         </div>
-        <TraderReminderStrip tone="app" />
       </nav>
       )}
 
@@ -123,13 +137,13 @@ function DataModePill() {
   const configuredMock = process.env.NEXT_PUBLIC_DATA_MODE === 'mock'
   const allowFallback = process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === 'true'
   const demo = !forceLive && (configuredMock || allowFallback)
-  const label = forceLive ? 'Live data' : demo ? 'Demo data' : 'Backend data'
+  const label = forceLive ? 'Provider data' : demo ? 'Demo data' : 'EOD data'
   const color = forceLive ? 'var(--gain)' : demo ? 'var(--warn)' : 'var(--text-tertiary)'
   const title = forceLive
-    ? 'Forced live-data mode. No mock fallback is used.'
+    ? 'Provider-data mode. Private beta still treats market data as informational and requires source/freshness checks.'
     : demo
-      ? 'Demo data mode. Charts and market views use deterministic sample data when live data is unavailable.'
-      : 'Backend data mode. Data depends on configured API providers.'
+      ? 'Demo data mode. Charts and market views use deterministic sample data when EOD data is unavailable.'
+      : 'EOD data mode. Market views use the latest completed market session.'
 
   return (
     <Link
@@ -197,15 +211,12 @@ function MarketStatus() {
 /* ── ACCOUNT MENU ────────────────────────────────────────────────────────── */
 function AccountMenuButton() {
   const [open, setOpen] = useState(false)
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const ref = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
   useEffect(() => {
-    const stored = window.localStorage.getItem('alphavyuh-theme')
-    const nextTheme = stored === 'light' ? 'light' : 'dark'
-    setTheme(nextTheme)
-    document.documentElement.dataset.theme = nextTheme
+    document.documentElement.dataset.theme = 'dark'
+    window.localStorage.setItem('alphavyuh-theme', 'dark')
   }, [])
 
   useEffect(() => {
@@ -221,14 +232,6 @@ function AccountMenuButton() {
     clearAuthHeaderCache()
     await createClient().auth.signOut()
     router.push('/login')
-  }
-
-  function toggleTheme() {
-    const nextTheme = theme === 'light' ? 'dark' : 'light'
-    setTheme(nextTheme)
-    document.documentElement.dataset.theme = nextTheme
-    window.localStorage.setItem('alphavyuh-theme', nextTheme)
-    window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: nextTheme }))
   }
 
   return (
@@ -284,21 +287,16 @@ function AccountMenuButton() {
               {item.label}
             </Link>
           ))}
-          <button
-            onClick={toggleTheme}
+          <div
             style={{
-              width: '100%', textAlign: 'left',
               padding: '7px 10px',
-              fontSize: 12, color: 'var(--text-secondary)',
-              cursor: 'pointer', background: 'none', border: 'none',
-              borderRadius: 4,
-              transition: 'background var(--motion-instant)',
+              fontSize: 11,
+              color: 'var(--text-tertiary)',
+              lineHeight: 1.45,
             }}
-            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'}
-            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
           >
-            {theme === 'light' ? 'Use dark theme' : 'Use light theme'}
-          </button>
+            Authenticated workspace locked to dark trading desk mode.
+          </div>
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
           <button
             onClick={signOut}
@@ -407,12 +405,7 @@ function SymbolSearch() {
             if (e.key === 'Enter' && displayResults[0]) select(displayResults[0].symbol)
           }}
           placeholder="Search symbols, shortlist, recent..."
-          style={{
-            flex: 1, height: '100%',
-            fontSize: 12,
-            color: 'var(--text-primary)',
-            background: 'transparent', border: 'none', outline: 'none',
-          }}
+          className="app-search-input"
         />
         <kbd style={{
           fontSize: 10,

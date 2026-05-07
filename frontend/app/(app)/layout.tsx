@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import AppShell from "@/components/AppShell";
+import { allowMockAppAuth } from "@/lib/runtime-mode";
 
 export default async function AppLayout({
   children,
@@ -9,6 +10,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const pathname = (await headers()).get("x-pathname") ?? "/";
+
+  if (allowMockAppAuth()) {
+    return <AppShell>{children}</AppShell>;
+  }
 
   const supabase = await createServerSupabaseClient();
 

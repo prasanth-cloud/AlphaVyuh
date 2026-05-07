@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { trackEvent } from "@/lib/analytics";
+import { EyebrowLabel } from "@/components/ui";
 
 // ── Razorpay ─────────────────────────────────────────────────────────────────
 
@@ -135,6 +136,10 @@ function SettingsContent() {
   const initialTab: Tab = (rawTab === "profile" || rawTab === "broker" || rawTab === "billing") ? rawTab : "profile";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [toast, setToast] = useState<{ msg: string; ok?: boolean } | null>(null);
+
+  useEffect(() => {
+    if (rawTab === "profile" || rawTab === "broker" || rawTab === "billing") setTab(rawTab);
+  }, [rawTab]);
 
   function showToast(msg: string, ok?: boolean) {
     setToast({ msg, ok });
@@ -354,6 +359,7 @@ function SettingsContent() {
   }
 
   const currentPlan = planStatus?.plan ?? "free";
+  const checkoutEnabled = false;
   const expiresAt = planStatus?.expires_at
     ? new Date(planStatus.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : null;
@@ -379,6 +385,13 @@ function SettingsContent() {
           {toast.msg}
         </div>
       )}
+
+      <div className="workspace-card" style={{ padding: "12px 14px" }}>
+        <EyebrowLabel>Settings</EyebrowLabel>
+        <div className="app-page-copy">
+          Keep profile, broker import, and beta billing controls clear without changing the trading workflow.
+        </div>
+      </div>
 
       <div className="workspace-card" style={{ padding: "10px 12px" }}>
         <div className="flex gap-2 flex-wrap">
@@ -680,6 +693,28 @@ function SettingsContent() {
                 </div>
               </div>
 
+              <div
+                className="mb-5 rounded-[12px] px-4 py-3 text-[12px] flex items-start justify-between gap-3 flex-wrap"
+                data-testid="billing-launch-posture"
+                style={{
+                  background: checkoutEnabled ? "rgba(38,166,91,0.08)" : "rgba(217,119,6,0.10)",
+                  border: "1px solid var(--app-border)",
+                  color: "var(--app-text2)",
+                }}
+              >
+                <div className="max-w-[640px]">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.12em] mb-1" style={{ color: checkoutEnabled ? "var(--gain)" : "var(--warn)" }}>
+                    Billing disabled for private beta
+                  </div>
+                  <div className="leading-relaxed">
+                    Production checkout is disabled until the release candidate, legal, and billing approvals are complete. Founder beta access can still be applied with an approved invite code.
+                  </div>
+                </div>
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)" }}>
+                  Checkout blocked
+                </div>
+              </div>
+
               {paymentConfig && (
                 <div className="mb-5 rounded-[12px] px-4 py-3 text-[12px] flex items-center justify-between gap-3 flex-wrap"
                   style={{ background: paymentConfig.configured ? "rgba(38,166,91,0.08)" : "rgba(229,56,59,0.08)", border: "1px solid var(--app-border)", color: "var(--app-text2)" }}>
@@ -773,10 +808,12 @@ function SettingsContent() {
                       ) : isHigher ? (
                         <button
                           onClick={() => handleUpgrade(plan.id as "pro" | "elite")}
-                          disabled={!!paying}
+                          disabled={!!paying || !checkoutEnabled}
                           className="w-full py-2 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-60"
-                          style={{ background: plan.color }}>
-                          {paying === plan.id ? "Processing…" : `Upgrade to ${plan.label}`}
+                          aria-disabled={!checkoutEnabled}
+                          title={!checkoutEnabled ? "Billing is disabled until production checkout is approved and configured." : undefined}
+                          style={{ background: checkoutEnabled ? plan.color : "rgba(244,247,251,0.10)", color: checkoutEnabled ? "#fff" : "var(--app-text3)" }}>
+                          {paying === plan.id ? "Processing…" : checkoutEnabled ? `Upgrade to ${plan.label}` : "Checkout disabled"}
                         </button>
                       ) : (
                         <div className="w-full text-center py-2 rounded-[8px] text-[13px]"

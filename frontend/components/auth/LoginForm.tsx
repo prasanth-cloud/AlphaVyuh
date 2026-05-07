@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Input, Label } from "@/components/ui";
 import { isSafeRedirect } from "@/lib/safe-redirect";
+import { markAppTiming } from "@/lib/performance";
+import { trackEvent } from "@/lib/analytics";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -15,22 +17,21 @@ export default function LoginForm() {
   const [error, setError]       = useState("");
   const [notice, setNotice]     = useState("");
   const [showResend, setShowResend] = useState(false);
+  const [nextPath, setNextPath] = useState("/dashboard");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const requestedNext = params.get("next");
+    setNextPath(isSafeRedirect(requestedNext) ? requestedNext : "/dashboard");
     if (params.get("error") === "auth_callback_failed") {
       setError("Confirmation link expired or could not be verified. Please sign in, or request a fresh link.");
       setShowResend(true);
     }
   }, []);
 
-  function safeNext() {
-    const next = new URLSearchParams(window.location.search).get("next");
-    return isSafeRedirect(next) ? next : "/dashboard";
-  }
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    markAppTiming("login-submit");
     setError("");
     setNotice("");
     setLoading(true);
@@ -45,7 +46,9 @@ export default function LoginForm() {
         setError(data.error || "Login failed");
         return;
       }
-      router.replace(safeNext());
+      markAppTiming("auth-session-set");
+      trackEvent("login_success", { next_path: nextPath });
+      router.replace(nextPath);
       router.refresh();
     } catch {
       setError("Network error — please try again.");
@@ -62,7 +65,7 @@ export default function LoginForm() {
       const res = await fetch("/api/auth/resend-confirmation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), next: safeNext() }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), next: nextPath }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -87,14 +90,28 @@ export default function LoginForm() {
       width: "100%",
       backdropFilter: "blur(14px)",
     }}>
-      <div style={{ marginBottom: 28 }}>
-        <div className="auth-kicker">Member Access</div>
-        <div style={{ fontSize: 30, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 26, fontWeight: 650, color: "var(--text-primary)", letterSpacing: "-0.035em", lineHeight: 1.05 }}>
           Sign in to AlphaVyuh
         </div>
         <div style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.6 }}>
-          Continue into your trading workspace and pick up exactly where your workflow left off.
+          Continue to your private beta trading desk.
         </div>
+        {nextPath !== "/dashboard" && (
+          <div
+            style={{
+              marginTop: 12,
+              border: "1px solid rgba(244,247,251,0.12)",
+              borderRadius: 10,
+              background: "rgba(244,247,251,0.06)",
+              color: "var(--text-secondary)",
+              fontSize: 12,
+              padding: "8px 10px",
+            }}
+          >
+            After sign-in, you will continue to <span style={{ color: "var(--text-primary)" }}>{nextPath}</span>.
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleLogin} style={{ display: "grid", gap: 16 }}>
@@ -148,7 +165,10 @@ export default function LoginForm() {
 
       <p style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
         Don&apos;t have an account?{" "}
-        <Link href="/signup" style={{ color: "var(--accent)" }}>Create one</Link>
+        <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Create one</Link>
+      </p>
+      <p style={{ marginTop: 14, textAlign: "center", fontSize: 11, lineHeight: 1.6, color: "var(--text-tertiary)" }}>
+        Private beta · EOD data · Broker import only
       </p>
     </div>
   );

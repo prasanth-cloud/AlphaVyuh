@@ -4,12 +4,16 @@ import { useRouter } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
   authHeaders,
+  bulkUpsertWorkflowStates,
+  createFeedbackReport,
   createWatchlist,
   getWatchlists as getCachedWatchlists,
   isMockMode,
 } from '@/lib/api'
-import { mockRunScan, mockWatchlists } from '@/lib/mock-data'
-import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge } from '@/components/ui'
+import { mockRunScan } from '@/lib/mock-data'
+import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
+import { trackEvent } from '@/lib/analytics'
+import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -43,6 +47,15 @@ interface ScanResult {
   dividend_yield: number | null
   roe: number | null
   roce: number | null
+}
+
+type ScanTrust = {
+  mode: 'demo' | 'eod' | 'fallback' | 'live' | 'unknown'
+  source: string
+  asOf: string | null
+  coveragePct: number | null
+  universeSize: number | null
+  message?: string
 }
 
 interface SavedScreen { id: string; name: string; filters: Record<string, unknown>; created_at: string }
@@ -137,6 +150,7 @@ const PRESETS = [
 ] as const
 
 type Preset = (typeof PRESETS)[number]
+type WorkflowMark = 'shortlist' | 'ignored' | 'review_later' | 'watch'
 
 type Filters = {
   price_min: string; price_max: string
@@ -321,6 +335,8 @@ export default function ScannerPage() {
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
+  const [workflowMarks, setWorkflowMarks] = useState<Record<string, WorkflowMark>>({})
+  const [scanTrust, setScanTrust] = useState<ScanTrust | null>(null)
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -335,14 +351,28 @@ export default function ScannerPage() {
   }
 
   async function loadWatchlists() {
-    if (isMockMode) {
-      setWatchlists(mockWatchlists().map(({ id, name }) => ({ id, name })))
-      return
-    }
     try {
       const lists = await getCachedWatchlists()
       setWatchlists(lists.map(({ id, name }) => ({ id, name })))
     } catch { /* ignore */ }
+  }
+
+  async function reportScannerDataIssue(symbol?: string) {
+    try {
+      await createFeedbackReport({
+        category: 'data_issue',
+        page: '/scanner',
+        symbol,
+        severity: 'high',
+        message: symbol
+          ? `Scanner data issue reported for ${symbol}.`
+          : `Scanner returned no matches for filters that may need data review.`,
+        context: { filters: buildPayload(filters, sortBy, sortDesc).filters, trade_date: tradeDate, total_matches: totalMatches },
+      });
+      showToast('Data issue reported')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not report issue')
+    }
   }
 
   async function loadSavedScreens() {
@@ -408,7 +438,7 @@ export default function ScannerPage() {
     return { filters: fil, sort_by: sb, sort_order: sd ? 'desc' : 'asc', limit: 200 }
   }, [])
 
-  const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize) => {
+  const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
     setLoading(true); setError(''); setResults([]); setExpandedSymbol(null)
     try {
       if (isMockMode) {
@@ -419,7 +449,16 @@ export default function ScannerPage() {
         setCurrentPage(data.page || page)
         setTradeDate(data.trade_date || '')
         setIsLimited(data.is_limited || false)
+        setScanTrust({
+          mode: data.source_metadata?.mode ?? 'demo',
+          source: data.source_metadata?.source_name ?? 'AlphaVyuh mock fixtures',
+          asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
+          coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
+          universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
+          message: data.source_metadata?.license_notes,
+        })
         setHasRun(true)
+        trackEvent('scanner_run', { mode: 'demo', results: data.results.length, preset: eventPreset })
         return
       }
       const headers = await getAuthHeaders()
@@ -432,23 +471,37 @@ export default function ScannerPage() {
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
       const data = await res.json()
       setResults(data.results || [])
+      setSelectedResults(new Set())
       setTotalMatches(data.total_matches || 0)
       setTotalPages(data.total_pages || 1)
       setCurrentPage(data.page || page)
       setTradeDate(data.trade_date || '')
       setIsLimited(data.is_limited || false)
+      setScanTrust({
+        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
+        source: data.source_metadata?.source_name ?? data.source ?? 'NSE bhavcopy EOD',
+        asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
+        coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
+        universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
+        message: data.message ?? data.source_metadata?.license_notes,
+      })
       setHasRun(true)
+      trackEvent('scanner_run', {
+        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
+        results: (data.results || []).length,
+        preset: eventPreset,
+      })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Scan failed')
     } finally { setLoading(false) }
-  }, [buildPayload, currentPage, filters, getAuthHeaders, pageSize, sortBy, sortDesc])
+  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, sortBy, sortDesc])
 
   const applyPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
       Object.entries(p.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
     )
     const f = { ...emptyFilters(), ...normalizedFilters } as Filters
-    setFilters(f); setActivePreset(p.id); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize)
+    setFilters(f); setActivePreset(p.id); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, p.id)
   }, [pageSize, runScan, sortBy, sortDesc])
 
   useEffect(() => {
@@ -460,7 +513,7 @@ export default function ScannerPage() {
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
-    setFilters(f); setActivePreset(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize)
+    setFilters(f); setActivePreset(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
   }
 
   async function saveCurrentScreen() {
@@ -502,28 +555,44 @@ export default function ScannerPage() {
   }
 
   async function addToWatchlist(symbol: string, wlId: string) {
-    if (isMockMode) {
-      showToast(`${symbol} added to mock watchlist`)
-      return
+    try {
+      await addSymbolToWatchlist(wlId, symbol)
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches([symbol], wlId))
+      setWorkflowMarks(prev => ({ ...prev, [symbol]: 'watch' }))
+      trackEvent('add_to_watchlist', { source: 'scanner', symbol, watchlist_id: wlId })
+      showToast(`${symbol} added`)
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Add to watchlist failed')
     }
-    await addSymbolToWatchlist(wlId, symbol)
-    showToast(`${symbol} added`)
+  }
+
+  async function markWorkflow(symbols: string[], label: 'shortlist' | 'ignored' | 'review_later') {
+    if (symbols.length === 0) return
+    setWorkflowMarks(prev => {
+      const next = { ...prev }
+      for (const symbol of symbols) next[symbol] = label
+      return next
+    })
+    await bulkUpsertWorkflowStates(symbols.map(symbol => scannerWorkflowPatch(symbol, label)))
+    trackEvent(label === 'shortlist' ? 'scanner_shortlist' : label === 'review_later' ? 'scanner_review_later' : 'scanner_ignore', {
+      count: symbols.length,
+    })
+    showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
+  }
+
+  function selectedSymbols() {
+    return selectedScannerSymbols(results, selectedResults)
   }
 
   async function createWatchlistFromResults() {
     if (!newWlName.trim()) return
-    if (isMockMode) {
-      setShowWlModal(false); setNewWlName('')
-      showToast('Mock watchlist created')
-      router.push('/watchlist')
-      return
-    }
     try {
       const wl = await createWatchlist(newWlName.trim())
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
-      for (const s of toAdd.slice(0, 50)) {
-        await addSymbolToWatchlist(wl.id, s.symbol).catch(() => {})
-      }
+      const symbols = toAdd.slice(0, 50).map((s) => s.symbol)
+      await Promise.all(symbols.map((symbol) => addSymbolToWatchlist(wl.id, symbol).catch(() => {})))
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches(symbols, wl.id))
+      trackEvent('add_to_watchlist', { source: 'scanner_bulk_create', count: symbols.length, watchlist_id: wl.id })
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       router.push(`/watchlist?id=${wl.id}`)
@@ -815,13 +884,30 @@ export default function ScannerPage() {
           {results.length > 0 ? (
             <>
               <div>
-                <span className="heading-card">{totalMatches > 0 ? `${totalMatches} stocks` : 'Scanner'}</span>
-                {tradeDate && <DataProvenanceBadge kind="eod" asOf={tradeDate} compact className="ml-2" />}
+                <span className="heading-card">{totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> stocks</> : 'Scanner'}</span>
+                {(tradeDate || scanTrust?.asOf) && (
+                  <DataProvenanceBadge
+                    kind={scanTrust?.mode === 'demo' ? 'demo' : scanTrust?.mode === 'fallback' || scanTrust?.mode === 'unknown' ? 'fallback' : 'eod'}
+                    asOf={scanTrust?.asOf ?? tradeDate}
+                    compact
+                    className="ml-2"
+                  />
+                )}
               </div>
               <div className="workspace-toolbar-group">
+                {scanTrust && (
+                  <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
+                    {scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
+                  </span>
+                )}
                 {isLimited && (
                   <span className="workspace-pill" style={{ background: 'var(--warn-subtle)', color: 'var(--warn)' }}>
                     Free plan · 200 cap
+                  </span>
+                )}
+                {selectedResults.size > 0 && (
+                  <span className="workspace-pill" aria-live="polite">
+                    <Num>{selectedResults.size}</Num> selected · bulk actions enabled
                   </span>
                 )}
                 {SORT_COLS.map(([col, lbl]) => {
@@ -850,7 +936,16 @@ export default function ScannerPage() {
                   ))}
                 </select>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
-                  Add selected to watchlist
+                  Create watchlist
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')} disabled={selectedResults.size === 0}>
+                  Shortlist selected
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'ignored')} disabled={selectedResults.size === 0}>
+                  Ignore selected
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')} disabled={selectedResults.size === 0}>
+                  Review later selected
                 </Button>
               </div>
             </>
@@ -896,9 +991,12 @@ export default function ScannerPage() {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
               title="No stocks matched"
-              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Use broader RSI, volume, trend, or RS conditions.` : 'No matches yet. Use a broader preset or adjust the filters.'}
+              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Widen RSI/volume filters, start from a preset, or report it if this looks like a data issue.` : 'No matches yet. Try a broader preset, or report it if this looks like a data issue.'}
               action={{ label: 'Reset filters', onClick: resetFilters }}
             />
+            <button className="workspace-chip-button" style={{ marginTop: 12 }} onClick={() => reportScannerDataIssue()}>
+              Report data issue
+            </button>
           </div>
         )}
 
@@ -952,6 +1050,17 @@ export default function ScannerPage() {
                         <Td>
                           <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
                           <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                          {workflowMarks[r.symbol] && (
+                            <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
+                              {workflowMarks[r.symbol] === 'shortlist'
+                                ? 'Shortlisted'
+                                : workflowMarks[r.symbol] === 'review_later'
+                                  ? 'Review later'
+                                  : workflowMarks[r.symbol] === 'watch'
+                                    ? 'Watching'
+                                    : 'Ignored'}
+                            </div>
+                          )}
                         </Td>
                         <Td align="right" mono emphasized>₹{r.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Td>
                         <Td align="right">
@@ -976,24 +1085,45 @@ export default function ScannerPage() {
                           {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
                         </Td>
                         <Td>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6 }}>
+                          <div className="scanner-row-actions">
                             <button
+                              className="scanner-row-action"
+                              title={`Shortlist ${r.symbol}`}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'shortlist') }}
+                              style={{ color: 'var(--accent)', cursor: 'pointer' }}
+                            >
+                              Shortlist
+                            </button>
+                            <button
+                              className="scanner-row-action"
+                              title={`Open ${r.symbol} chart`}
                               onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
-                              style={{ fontSize: 10, color: 'var(--text-secondary)', cursor: 'pointer' }}
+                              style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
                             >
                               Chart
                             </button>
                             <button
-                              onClick={e => { e.stopPropagation(); router.push(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`) }}
-                              style={{ fontSize: 10, color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                              className="scanner-row-action"
+                              title={`Review ${r.symbol} later`}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later') }}
+                              style={{ color: 'var(--warn)', cursor: 'pointer' }}
                             >
-                              Journal
+                              Later
+                            </button>
+                            <button
+                              className="scanner-row-action"
+                              title={`Ignore ${r.symbol}`}
+                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored') }}
+                              style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
+                            >
+                              Ignore
                             </button>
                             {watchlists.length > 0 && (
                               <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
                                 onClick={e => e.stopPropagation()}
-                                style={{ fontSize: 10, padding: '2px 4px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                                <option value="">+WL</option>
+                                aria-label={`Add ${r.symbol} to watchlist`}
+                                className="scanner-row-select scanner-watchlist-select">
+                                <option value="">Add to watchlist</option>
                                 {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
                               </select>
                             )}
@@ -1015,7 +1145,7 @@ export default function ScannerPage() {
             </DataTable>
             <div className="workspace-toolbar" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none' }}>
               <div className="workspace-card-copy">
-                Showing {visibleStart}-{visibleEnd} of {totalMatches} matches.
+                Showing <Num>{visibleStart}</Num>-<Num>{visibleEnd}</Num> of <Num>{totalMatches.toLocaleString('en-IN')}</Num> matches.
               </div>
               <div className="workspace-toolbar-group">
                 <button

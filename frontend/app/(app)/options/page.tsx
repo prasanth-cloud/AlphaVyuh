@@ -2,8 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { allowClientMockFallback } from "@/lib/runtime-mode";
 
 const API = process.env.NEXT_PUBLIC_API_URL!;
+const useMockFallback = allowClientMockFallback();
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,24 @@ type Preset = {
   name: string;
   description: string;
   legs_template: { type: LegType; action: LegAction; strike: number; premium: number }[];
+};
+
+const MOCK_OPTION_PRESETS: Record<string, Preset> = {
+  bull_call_spread: {
+    name: "Bull Call Spread",
+    description: "Defined-risk bullish structure for demo planning.",
+    legs_template: [
+      { type: "call", action: "buy", strike: 22000, premium: 180 },
+      { type: "call", action: "sell", strike: 22300, premium: 80 },
+    ],
+  },
+  protective_put: {
+    name: "Protective Put",
+    description: "Hedge a long equity/index exposure while keeping upside open.",
+    legs_template: [
+      { type: "put", action: "buy", strike: 21800, premium: 120 },
+    ],
+  },
 };
 
 // ── Payoff SVG chart ─────────────────────────────────────────────────────────
@@ -169,6 +189,10 @@ export default function OptionsPage() {
   const [presetDraft, setPresetDraft] = useState<PresetDraft | null>(null);
 
   useEffect(() => {
+    if (useMockFallback) {
+      setPresets(MOCK_OPTION_PRESETS);
+      return;
+    }
     fetch(`${API}/api/v1/options/presets`)
       .then(r => r.json())
       .then(d => setPresets(d.presets || {}))
@@ -182,6 +206,30 @@ export default function OptionsPage() {
 
     setLoading(true);
     setError("");
+    if (useMockFallback) {
+      const spotValue = Number(spot);
+      const points = Array.from({ length: 31 }, (_, i) => {
+        const price = Math.round(spotValue * (0.85 + i * 0.01));
+        const pnl = validLegs.reduce((sum, leg) => {
+          const strike = Number(leg.strike);
+          const premium = Number(leg.premium);
+          const intrinsic = leg.type === "call" ? Math.max(price - strike, 0) : Math.max(strike - price, 0);
+          const value = leg.action === "buy" ? intrinsic - premium : premium - intrinsic;
+          return sum + value * leg.quantity * leg.lot_size;
+        }, 0);
+        return { price, pnl: Math.round(pnl) };
+      });
+      setResult({
+        payoff: points,
+        greeks: { delta: 0.32, gamma: 0.04, theta: -0.11, vega: 0.18, rho: 0.03 },
+        max_profit_str: "Demo payoff estimate",
+        max_loss_str: "Defined by entered premium/strike",
+        breakevens: [spotValue],
+        net_premium: validLegs.reduce((sum, leg) => sum + Number(leg.premium) * (leg.action === "buy" ? 1 : -1), 0),
+      });
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`${API}/api/v1/options/payoff`, {
         method: "POST",

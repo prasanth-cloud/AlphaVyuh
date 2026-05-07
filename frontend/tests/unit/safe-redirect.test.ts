@@ -30,6 +30,18 @@ describe("isSafeRedirect", () => {
     expect(isSafeRedirect("/\\evil.com")).toBe(false);
   });
 
+  it("rejects encoded protocol-relative URL", () => {
+    expect(isSafeRedirect("/%2F%2Fevil.com")).toBe(false);
+  });
+
+  it("rejects encoded backslash variant", () => {
+    expect(isSafeRedirect("/%5Cevil.com")).toBe(false);
+  });
+
+  it("rejects control characters", () => {
+    expect(isSafeRedirect("/dashboard%0ASet-Cookie:%20bad=1")).toBe(false);
+  });
+
   it("rejects absolute URL https://evil.com", () => {
     expect(isSafeRedirect("https://evil.com")).toBe(false);
   });

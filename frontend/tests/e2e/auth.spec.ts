@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Auth gate — unauthenticated", () => {
   test.beforeEach(async ({ context }) => {
-    await context.clearCookies();
+    if (!process.env.PLAYWRIGHT_ACCESS_URL) await context.clearCookies();
   });
 
   test("/dashboard redirects to /login", async ({ page }) => {
@@ -37,7 +37,7 @@ test.describe("Auth gate — unauthenticated", () => {
 
 test.describe("Public pages — no redirect", () => {
   test.beforeEach(async ({ context }) => {
-    await context.clearCookies();
+    if (!process.env.PLAYWRIGHT_ACCESS_URL) await context.clearCookies();
   });
 
   test("/login is accessible", async ({ page }) => {
@@ -55,6 +55,16 @@ test.describe("Public pages — no redirect", () => {
     await page.goto("/reset-password");
     await expect(page).toHaveURL(/\/reset-password/);
   });
+
+  test("/privacy and /terms are accessible before login", async ({ page }) => {
+    await page.goto("/privacy");
+    await expect(page).toHaveURL(/\/privacy/);
+    await expect(page.getByRole("heading", { name: "Privacy Policy" })).toBeVisible();
+
+    await page.goto("/terms");
+    await expect(page).toHaveURL(/\/terms/);
+    await expect(page.getByRole("heading", { name: "Terms of Service" })).toBeVisible();
+  });
 });
 
 // ── Open-redirect protection ──────────────────────────────────────────────────
@@ -67,6 +77,9 @@ test.describe("Open-redirect protection", () => {
   const attackVectors = [
     { label: "protocol-relative //evil.com", next: "//evil.com" },
     { label: "backslash /\\\\evil.com", next: "/\\evil.com" },
+    { label: "encoded protocol-relative /%2F%2Fevil.com", next: "/%2F%2Fevil.com" },
+    { label: "encoded backslash /%5Cevil.com", next: "/%5Cevil.com" },
+    { label: "encoded newline", next: "/dashboard%0ASet-Cookie:%20bad=1" },
     { label: "absolute https://evil.com", next: "https://evil.com" },
     { label: "javascript: scheme", next: "javascript:alert(1)" },
   ];

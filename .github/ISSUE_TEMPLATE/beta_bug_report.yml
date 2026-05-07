@@ -1,0 +1,58 @@
+name: Founder beta bug report
+description: Report a beta bug that blocks or confuses the trading workflow.
+title: "[Beta bug]: "
+labels: ["beta", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for founder beta issues. Do not paste broker tokens, account ids, passwords, or private portfolio data.
+  - type: input
+    id: route
+    attributes:
+      label: Page or workflow
+      placeholder: "Scanner -> Watchlist, /charts/AUBANK?full=1, Journal review"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: What happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Workflow impact
+      options:
+        - P0 - cannot continue core workflow
+        - P1 - serious confusion or trust issue
+        - P2 - polish or usability issue
+    validations:
+      required: true
+  - type: textarea
+    id: data_state
+    attributes:
+      label: Data state shown
+      description: Capture source/mode/as-of/freshness badges if relevant.
+      placeholder: "EOD · NSE bhavcopy · as of 2026-05-06 · healthy"
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Screenshots, console errors, device/browser, and reproduction steps.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I did not include secrets, broker tokens, passwords, or private account data.
+          required: true
