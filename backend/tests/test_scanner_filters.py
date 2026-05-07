@@ -164,6 +164,9 @@ def _scanner_row(**overrides):
         "ema_20": 100,
         "ema_50": 95,
         "ema_200": 90,
+        "sma_50": 96,
+        "sma_150": 92,
+        "sma_200": 88,
         "atr_14": 2,
         "week_52_high": 110,
         "week_52_low": 70,
@@ -214,6 +217,36 @@ class TestScanner52WeekFilters:
         rows = [_scanner_row(w52h_pct=-8.0)]
 
         assert _apply_filters(rows, ScanFilters(week_52_high_pct_max=5)) == []
+
+
+class TestCanonicalSwingPresets:
+    def test_backend_exposes_six_trader_presets(self):
+        from app.routers.scanner import PRESETS
+
+        assert [preset["id"] for preset in PRESETS] == [
+            "trend_template",
+            "vcp_breakout",
+            "stage2_breakout",
+            "high_52w_breakout",
+            "episodic_pivot",
+            "darvas_box_breakout",
+        ]
+
+    def test_sma_trend_stack_filter_accepts_constructive_stack(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(close=105, sma_50=96, sma_150=92, sma_200=88)]
+        results = _apply_filters(rows, ScanFilters(all_smas_bullish=True))
+
+        assert len(results) == 1
+        assert results[0]["symbol"] == "TEST"
+
+    def test_sma_trend_stack_filter_rejects_broken_stack(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(close=105, sma_50=90, sma_150=92, sma_200=88)]
+
+        assert _apply_filters(rows, ScanFilters(all_smas_bullish=True)) == []
 
 
 class TestVCPAsyncPass2:
