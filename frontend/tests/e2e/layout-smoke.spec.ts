@@ -188,14 +188,32 @@ test.describe("Workflow layout smoke", () => {
 
   test("billing launch posture blocks checkout until production payments are configured", async ({ page }) => {
     await page.goto("/settings?tab=billing", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("billing-launch-posture")).toContainText(/Billing disabled for launch|Billing ready/i, { timeout: 15_000 });
+    await expect(page.getByTestId("billing-launch-posture")).toContainText(/Billing disabled for private beta|Production billing ready/i, { timeout: 15_000 });
 
     const posture = await page.getByTestId("billing-launch-posture").textContent();
-    if (posture?.includes("Billing disabled for launch")) {
+    if (posture?.includes("Billing disabled for private beta")) {
       await expect(page.getByRole("button", { name: "Checkout disabled" }).first()).toBeDisabled();
       await expect(page.locator("body")).toContainText(/Founder beta access/i);
     }
 
     expect(await layoutProblems(page)).toEqual([]);
+  });
+
+  test("private beta labels and no-execution posture are visible", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toContainText(/Private beta/i);
+    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Broker import only/i);
+    await expect(page.locator("body")).toContainText(/not investment advice/i);
+    await expect(page.locator("body")).toContainText(/checkout is disabled|No production checkout/i);
+
+    await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toContainText(/Private beta/i, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Execution disabled/i);
+
+    await page.goto("/settings/broker", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toContainText(/read-only|import only/i, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Live and sandbox order placement (are )?disabled/i);
   });
 });

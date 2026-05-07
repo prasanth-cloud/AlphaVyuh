@@ -32,7 +32,7 @@ from app.brokers.credentials import CredentialNotFoundError, get_broker_credenti
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, settings
 from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
@@ -276,6 +276,12 @@ async def place_order(
     sb = get_admin_client()
     sym = body.symbol.strip().upper()
 
+    if body.live_confirmed and not settings.broker_live_orders_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Broker live/sandbox order placement is disabled for the private beta. Use simulated journal capture or broker trade import.",
+        )
+
     # Validate symbol
     sym_check = sb.table("stock_universe").select("symbol, company_name, isin") \
         .eq("symbol", sym).maybe_single().execute()
@@ -285,13 +291,13 @@ async def place_order(
     company_name = sym_check.data.get("company_name", sym)
     isin = sym_check.data.get("isin")
 
-    # Try real broker if connected
+    # Try real broker if connected and explicitly enabled for a future release.
     broker_order_id: str | None = None
     broker_used = "simulated"
 
-    creds = _get_user_broker_credentials(user_id, "zerodha")
-    bt = creds.get("broker_type")
-    if bt and bt != "zerodha":
+    creds = _get_user_broker_credentials(user_id, "zerodha") if settings.broker_live_orders_enabled else {}
+    bt = creds.get("broker_type") if settings.broker_live_orders_enabled else None
+    if settings.broker_live_orders_enabled and bt and bt != "zerodha":
         creds = _get_user_broker_credentials(user_id, str(bt))
         bt = creds.get("broker_type")
 

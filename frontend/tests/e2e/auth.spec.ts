@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 
 test.describe("Auth gate — unauthenticated", () => {
   test.beforeEach(async ({ context }) => {
-    await context.clearCookies();
+    if (!process.env.PLAYWRIGHT_ACCESS_URL) await context.clearCookies();
   });
 
   test("/dashboard redirects to /login", async ({ page }) => {
@@ -37,7 +37,7 @@ test.describe("Auth gate — unauthenticated", () => {
 
 test.describe("Public pages — no redirect", () => {
   test.beforeEach(async ({ context }) => {
-    await context.clearCookies();
+    if (!process.env.PLAYWRIGHT_ACCESS_URL) await context.clearCookies();
   });
 
   test("/login is accessible", async ({ page }) => {

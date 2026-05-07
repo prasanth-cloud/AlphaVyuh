@@ -29,7 +29,7 @@ const BROKERS: BrokerCard[] = [
     status: "active",
     auth: "Kite Connect request-token flow",
     sessionPolicy: "Daily broker session expires around 06:00 IST",
-    scope: "Profile, holdings, orders, filled-trade import, chart-backed execution",
+    scope: "Profile, holdings, positions, orderbook, tradebook, and filled-trade import only",
   },
   {
     id: "upstox",
@@ -37,7 +37,7 @@ const BROKERS: BrokerCard[] = [
     status: "next",
     auth: "OAuth 2.0 authorization-code flow",
     sessionPolicy: "Standard session expires at 03:30 AM next day; extended read mode needs approval",
-    scope: "Holdings, positions, order book, execution after adapter is added",
+    scope: "Holdings, positions, and order book reads before import support is promoted",
   },
   {
     id: "dhan",
@@ -83,7 +83,7 @@ function BrokerSettingsContent() {
   useEffect(() => {
     if (searchParams.get("connected")) {
       loadStatus();
-      setToast("Zerodha connected. Live execution and trade import are enabled while the token is valid.");
+      setToast("Zerodha connected for read-only smoke and trade import. Live and sandbox order placement stay disabled for private beta.");
     }
   }, [searchParams]);
 
@@ -182,17 +182,17 @@ function BrokerSettingsContent() {
         <div style={{ marginBottom: 18 }}>
           <div className="text-[22px] font-semibold" style={{ color: "var(--text-primary)" }}>Broker Connect Hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time, keep tokens encrypted on the backend, and route chart/watchlist orders through the active adapter. Zerodha is the live-order beta first; Upstox OAuth is staged next for account validation and adapter-readiness.
+            Connect one broker at a time for read-only account checks and filled-trade import. Tokens stay encrypted on the backend. Live and sandbox order placement are disabled for the private beta.
           </div>
         </div>
 
         <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(244,247,251,0.16)" }}>
           <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Broker adapter path</div>
           <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>
-            Zerodha OAuth is active for live-order beta. Simulated fallback remains available. Upstox now uses the same OAuth adapter contract for connect, profile, and holdings before order routing is promoted.
+            Zerodha OAuth is active for read-only smoke, holdings, orderbook, and filled-trade import. Simulated journal capture remains available. Upstox uses the same OAuth adapter contract for connect, profile, and holdings before import support is promoted.
           </div>
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
-            This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every order can still auto-create a journal draft before AI review after close.
+            This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every imported or simulated trade can still create a journal draft before review after close.
           </div>
         </div>
 
@@ -219,12 +219,12 @@ function BrokerSettingsContent() {
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {mode === "read-only"
-                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Live orders still require explicit final confirmation."
+                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Live and sandbox order placement are disabled for the beta."
                     : mode === "token-expired"
                       ? "Your API key is saved, but Kite needs a fresh daily access token."
                       : mode === "credentials-missing"
                         ? "Save the Zerodha API key and secret, then connect Kite from this hub."
-                        : "Orders remain simulated and journaling still works until a broker session is connected."}
+                        : "Order capture remains simulated and journaling still works until a read-only broker session is connected."}
                 </div>
               </div>
               <div className="mono" style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
@@ -296,9 +296,9 @@ function BrokerSettingsContent() {
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
                 "Expired sessions fall back to simulated mode instead of blocking chart/journal workflows.",
-                "Live order submission requires an explicit final confirmation of symbol, side, quantity, price, and risk.",
+                "Live and sandbox order submission are disabled for private beta; filled broker trades can be imported into Journal.",
                 "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
-                "Every live order should still create a journal entry with broker context.",
+                "Every imported or simulated trade should still create a journal entry with source context.",
               ].map((line) => (
                 <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {line}
@@ -350,7 +350,7 @@ function BrokerSettingsContent() {
           </div>
           <div style={{ display: "grid", gap: 8 }}>
             {[
-              "1. Stabilize Zerodha connect, reconnect, holdings, import, and chart/watchlist order flow.",
+              "1. Stabilize Zerodha connect, reconnect, holdings, orderbook, and filled-trade import.",
               "2. Add a shared broker token status API so every adapter reports connected, expired, and permissions consistently.",
               "3. Add Upstox OAuth adapter next because its authorization-code flow maps cleanly to the current hub.",
               "4. Add Dhan after Upstox, using longer token validity for easier beta-user onboarding.",

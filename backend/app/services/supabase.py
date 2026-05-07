@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""    # set via Railway: TELEGRAM_BOT_TOKEN
     feedback_storage_mode: str = "auto"  # auto, table, or waitlist
     enable_yfinance_refresh: bool = False  # optional fallback; official EOD ingest is primary
+    broker_live_orders_enabled: bool = False  # private beta: broker is read-only/import only by default
 
     class Config:
         env_file = ".env"

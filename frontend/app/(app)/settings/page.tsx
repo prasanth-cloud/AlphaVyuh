@@ -136,6 +136,10 @@ function SettingsContent() {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [toast, setToast] = useState<{ msg: string; ok?: boolean } | null>(null);
 
+  useEffect(() => {
+    if (rawTab === "profile" || rawTab === "broker" || rawTab === "billing") setTab(rawTab);
+  }, [rawTab]);
+
   function showToast(msg: string, ok?: boolean) {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
@@ -354,7 +358,7 @@ function SettingsContent() {
   }
 
   const currentPlan = planStatus?.plan ?? "free";
-  const checkoutEnabled = Boolean(paymentConfig?.configured && RAZORPAY_KEY);
+  const checkoutEnabled = false;
   const expiresAt = planStatus?.expires_at
     ? new Date(planStatus.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : null;
@@ -692,16 +696,14 @@ function SettingsContent() {
               >
                 <div className="max-w-[640px]">
                   <div className="text-[12px] font-semibold uppercase tracking-[0.12em] mb-1" style={{ color: checkoutEnabled ? "var(--gain)" : "var(--warn)" }}>
-                    {checkoutEnabled ? "Billing ready" : "Billing disabled for launch"}
+                    Billing disabled for private beta
                   </div>
                   <div className="leading-relaxed">
-                    {checkoutEnabled
-                      ? "Razorpay checkout is configured. Plan upgrades can open from this page."
-                      : "Public checkout is disabled until the owner confirms production billing. Founder beta access can still be applied with an approved invite code."}
+                    Production checkout is disabled until the release candidate, legal, and billing approvals are complete. Founder beta access can still be applied with an approved invite code.
                   </div>
                 </div>
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)" }}>
-                  {checkoutEnabled ? "Checkout enabled" : "Checkout blocked"}
+                  Checkout blocked
                 </div>
               </div>
 
@@ -801,7 +803,7 @@ function SettingsContent() {
                           disabled={!!paying || !checkoutEnabled}
                           className="w-full py-2 rounded-[8px] text-[13px] font-semibold text-white transition-opacity disabled:opacity-60"
                           aria-disabled={!checkoutEnabled}
-                          title={!checkoutEnabled ? "Billing is disabled until production checkout is configured." : undefined}
+                          title={!checkoutEnabled ? "Billing is disabled until production checkout is approved and configured." : undefined}
                           style={{ background: checkoutEnabled ? plan.color : "rgba(244,247,251,0.10)", color: checkoutEnabled ? "#fff" : "var(--app-text3)" }}>
                           {paying === plan.id ? "Processing…" : checkoutEnabled ? `Upgrade to ${plan.label}` : "Checkout disabled"}
                         </button>

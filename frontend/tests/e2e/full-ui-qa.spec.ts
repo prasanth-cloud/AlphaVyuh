@@ -54,11 +54,11 @@ test.setTimeout(60000);
 test("public landing and auth buttons navigate without runtime errors", async ({ page }) => {
   await expectNoRuntimeErrors(page, async () => {
     await page.goto("/");
-    await expect(page.getByRole("link", { name: /Start free/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Request access/i }).first()).toBeVisible();
     await page.getByRole("link", { name: /Sign in/i }).first().click();
     await expect(page).toHaveURL(/\/login/);
     await page.goto("/");
-    await page.getByRole("link", { name: /Start free/i }).first().click();
+    await page.getByRole("link", { name: /Request access/i }).first().click();
     await expect(page).toHaveURL(/\/signup/);
   });
 });
@@ -70,7 +70,7 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
     for (const path of ["/dashboard", "/scanner", "/watchlist", "/charts/RELIANCE", "/journal", "/alerts", "/settings"]) {
       await page.goto(path);
       await expect(page.locator("body")).toBeVisible();
-      await expect(page.getByRole("link", { name: /Demo data|Live data|Backend data/ })).toBeVisible();
+      await expect(page.getByRole("link", { name: /Demo data|EOD data|Provider data/ })).toBeVisible();
     }
 
     await page.goto("/charts/RELIANCE");

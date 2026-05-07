@@ -41,7 +41,6 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [brokerLive, setBrokerLive] = useState(false);
   const [brokerTokenExpired, setBrokerTokenExpired] = useState(false);
-  const [liveConfirmed, setLiveConfirmed] = useState(false);
 
   useEffect(() => {
     getBrokerStatus()
@@ -58,10 +57,6 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   }, [defaultSide]);
 
   useEffect(() => {
-    if (!brokerLive) setLiveConfirmed(false);
-  }, [brokerLive]);
-
-  useEffect(() => {
     setPrice((initialPlan?.entry ?? currentPrice).toFixed(2));
     setStopLoss(initialPlan?.stop != null ? initialPlan.stop.toFixed(2) : "");
     setTarget(initialPlan?.target != null ? initialPlan.target.toFixed(2) : "");
@@ -76,19 +71,16 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const reward = tgtNum > 0 ? Math.abs(tgtNum   - priceNum) * qtyNum : null;
   const rr     = risk && reward && risk > 0 ? (reward / risk).toFixed(2) : null;
   const invest = priceNum * qtyNum;
+  const brokerLabel = brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "Broker";
   const executionPath = brokerLive && brokerName
-    ? `${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} live route`
+    ? `${brokerLabel} import-only`
     : brokerTokenExpired
-      ? "Token expired · simulated route"
-      : "Simulated route";
+      ? "Token expired · simulated capture"
+      : "Simulated capture";
 
   async function submit() {
     if (!quantity || !price || parseFloat(price) <= 0 || parseInt(quantity) <= 0) {
       setError("Enter a valid price and quantity");
-      return;
-    }
-    if (brokerLive && brokerName && !liveConfirmed) {
-      setError(`Confirm the live ${brokerName} order before submitting`);
       return;
     }
     setPlacing(true);
@@ -102,7 +94,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         order_type: "market",
         source_page: "chart",
         source_context: symbol,
-        live_confirmed: Boolean(brokerLive && brokerName && liveConfirmed),
+        live_confirmed: false,
         ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
         ...(tgtNum > 0 ? { target_price: tgtNum } : {}),
         ...(setupType   ? { setup_type:  setupType } : {}),
@@ -142,7 +134,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               <DataProvenanceBadge kind="broker-beta" compact />
             </div>
             <p className="text-[11px] leading-5 text-[#7b5a2b]">
-              Verify symbol, side, quantity, price, and risk before placing. Simulated orders still write to your journal for review.
+              Private beta uses simulated journal capture only. Broker connections are read-only/import only; live and sandbox order placement are disabled.
             </p>
           </div>
 
@@ -151,7 +143,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <div className="grid grid-cols-4 gap-1 text-center text-[10px] font-semibold text-[#777]">
               {[
                 executionPath,
-                "Broker order",
+                "No broker submit",
                 "Journal draft",
                 "AI review after close",
               ].map((step, idx) => (
@@ -261,19 +253,11 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             </div>
           )}
 
-          {brokerLive && brokerName && (
-            <label className="flex cursor-pointer items-start gap-2 rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
-              <input
-                type="checkbox"
-                checked={liveConfirmed}
-                onChange={(event) => setLiveConfirmed(event.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-[#9a5f07]"
-              />
-              <span className="text-[11px] leading-5 text-[#7b5a2b]">
-                I have verified this is a live {brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} order for {symbol}, {side.toUpperCase()} {qtyNum} at ₹{priceNum.toFixed(2)} and I am ready to submit it to the broker.
-              </span>
-            </label>
-          )}
+          <div className="rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
+            <span className="text-[11px] leading-5 text-[#7b5a2b]">
+              Execution disabled for private beta. This creates a simulated journal draft only; verify and place any real order directly in your broker terminal.
+            </span>
+          </div>
 
           {/* Setup */}
           <div>
@@ -308,23 +292,21 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
           {/* Submit */}
           <button
             onClick={submit}
-            disabled={placing || (brokerLive && brokerName ? !liveConfirmed : false)}
+            disabled={placing}
             className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
             style={{ background: accent }}
           >
             {placing
-              ? "Placing order…"
-              : brokerLive && brokerName
-                ? `Confirm live ${side.toUpperCase()} order`
-                : `Place simulated ${side.toUpperCase()} order`}
+              ? "Saving journal draft…"
+              : `Save simulated ${side.toUpperCase()} draft`}
           </button>
 
           <p className="text-[10px] text-[#ccc] text-center">
             {brokerLive && brokerName
-              ? `Broker beta via ${brokerName.charAt(0).toUpperCase() + brokerName.slice(1)} — verify the order in your broker before relying on the journal record`
+              ? `${brokerLabel} is connected read-only. Use broker import for filled trades; this modal never submits orders during beta.`
               : brokerTokenExpired
-                ? `Simulated order for now — your ${brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "broker"} token expired, so reconnect to go live again`
-                : "Simulated order — auto-recorded in your Journal and ready for post-trade review"}
+                ? `Simulated journal draft only — your ${brokerLabel} token expired.`
+                : "Simulated journal draft — ready for post-trade review"}
           </p>
         </div>
       </div>

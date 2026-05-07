@@ -26,7 +26,7 @@ const sections = [
   },
   {
     title: "6. Broker Integrations",
-    body: "Broker connections are beta workflows. Read-only smoke, profile, holdings, positions, orderbook, tradebook, import, and simulated order paths may be available. Live or sandbox broker order placement remains gated behind explicit owner confirmation and broker security flows.",
+    body: "Broker connections are beta workflows for read-only smoke, profile, holdings, positions, orderbook, tradebook, filled-trade import, and simulated journal capture. Live and sandbox broker order placement are disabled for private beta.",
   },
   {
     title: "7. Data Accuracy",
