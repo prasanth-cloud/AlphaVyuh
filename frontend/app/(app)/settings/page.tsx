@@ -136,6 +136,10 @@ function SettingsContent() {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [toast, setToast] = useState<{ msg: string; ok?: boolean } | null>(null);
 
+  useEffect(() => {
+    if (rawTab === "profile" || rawTab === "broker" || rawTab === "billing") setTab(rawTab);
+  }, [rawTab]);
+
   function showToast(msg: string, ok?: boolean) {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);

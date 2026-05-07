@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.describe("Release readiness — public and auth boundary", () => {
   test.beforeEach(async ({ context }) => {
-    await context.clearCookies();
+    if (!process.env.PLAYWRIGHT_ACCESS_URL) await context.clearCookies();
   });
 
   test("homepage serves the customer landing page", async ({ page }) => {
@@ -10,8 +10,8 @@ test.describe("Release readiness — public and auth boundary", () => {
 
     expect(response?.ok()).toBeTruthy();
     await expect(page).toHaveTitle(/AlphaVyuh/);
-    await expect(page.locator(".hero-h1-static").getByText("India's Trading OS.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Start free/i }).first()).toBeVisible();
+    await expect(page.locator(".lp-h1-s1").getByText("India's Trading OS.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Request access/i }).first()).toBeVisible();
   });
 
   test("baseline browser security headers are present", async ({ request }) => {
