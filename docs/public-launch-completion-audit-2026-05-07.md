@@ -10,7 +10,7 @@ This file maps the full public-launch prompt to concrete artifacts on branch
 | Use the real GitHub repo `prasanth-cloud/AlphaVyuh`. | Git remote is `https://github.com/prasanth-cloud/AlphaVyuh.git`; GitHub PR #71 was opened from this branch and has since merged. | Done |
 | Work on branch `launch/public-release-readiness-2026-05-07`. | Branch exists locally and on origin. | Done |
 | Use `github:github` to resolve repo state. | GitHub repo metadata and PR state were inspected; stale open PRs are documented in `docs/public-launch-readiness-2026-05-07.md`. | Done |
-| Use `codex-security:security-scan`. | Skill is not installed in this Codex session. Manual repository-wide fallback scans are documented in `docs/security-launch-scan-2026-05-07.md` and `docs/security-codex-scan-2026-05-07.md`. | Blocked by environment |
+| Use `codex-security:security-scan`. | Skill is not installed in this Codex session. Tool discovery was rechecked after PR #72 and still did not expose the requested scan. Manual repository-wide fallback scans are documented in `docs/security-launch-scan-2026-05-07.md` and `docs/security-codex-scan-2026-05-07.md`. | Blocked by environment |
 | Inspect `PRODUCT.md`, `BETA_LAUNCH_CHECKLIST.md`, `docs/release-readiness.md`, `docs/customer-launch-runbook.md`, and recent launch audit files. | Findings are summarized in `docs/public-launch-readiness-2026-05-07.md`; stale Next.js note was corrected in `docs/release-readiness.md`. | Done |
 | Create public launch readiness audit with P0/P1/P2/owner gates. | `docs/public-launch-readiness-2026-05-07.md`. | Done |
 | Implement high-confidence P0/P1 fixes. | `/dev-login` gating, generic backend auth failure detail, broker smoke token-print guard, broker provider error sanitization. | Done |
