@@ -48,6 +48,11 @@ These block broad paid public launch and require owner-controlled evidence befor
 
 Open GitHub PRs observed during this pass:
 
+- `#73` canonical swing scanner presets: mergeable and Vercel green; useful for
+  trader-facing scanner quality but not required to resolve public-launch
+  commercial/legal gates.
+- `#72` full chart workspace cleanup: mergeable and Vercel green; useful product
+  polish, not a launch-gate fix.
 - `#41` landing page: conflicting and superseded by current landing work.
 - `#22` chart-library ADR: mergeable, but inconsistent with the current hard constraint to keep `lightweight-charts`.
 - `#21` authenticated screen strip removal: conflicting and superseded by recent UI cleanup PRs.
@@ -67,11 +72,16 @@ None were merged as part of this pass.
 | `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off` | Passed: no known vulnerabilities found. |
 | `npm run test:e2e:mock` | Passed: 9 workflow tests. |
 | `npm run test:e2e:layout` | Passed: 12 layout/public-posture tests. |
-| `npm run test:e2e:perf` | Passed: 2 performance smoke tests; mock login dashboard usable test completed in 666 ms in this local run. |
+| `npm run test:e2e:perf` | Passed: 2 performance smoke tests. |
 | `PLAYWRIGHT_BASE_URL=http://localhost:3011 npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/release-readiness.spec.ts` | Passed: 6 production-like public/auth-boundary tests, including `/dev-login` redirect. |
-| `npm run launch:check` | Passed on elevated rerun. First sandbox run reached browser smoke then failed to bind local port 3002 with `EPERM`; rerun with local-server permission completed successfully. |
+| `npm run launch:check` | Passed in this refresh, including production build, mock workflow, perf/layout smoke, backend HTTP smoke, backend focused tests, frontend audit, and backend dependency audit. |
 
 Read-only broker smoke was skipped because no owner-provided Kite/Upstox tokens were supplied. Live URL check was skipped because `LIVE_URL` was not set for this local branch validation.
+
+The requested exact `codex-security:security-scan` plugin was unavailable in
+this session. The local cached instructions were used as a manual fallback and
+the refreshed report is saved at
+`docs/security-codex-scan-2026-05-07.md`.
 
 Read-only Supabase advisor checks were run against the documented staging project
 `fyxltykqdvacbdgmeucf`. Security advisors returned WARN-level findings for

@@ -13,7 +13,9 @@ Use this before inviting each new batch of beta users. Private beta is allowed; 
 
 - `/data` loads and shows latest freshness status.
 - Dashboard shows an EOD or fallback provenance badge.
-- Scanner returns results for Momentum, Breakout, Near 52W High, and 52W Highs.
+- Scanner presets return results or a clear no-match/error state with EOD source,
+  coverage, and as-of metadata visible. Keep preset names in this checklist
+  generic so old preset labels do not become release criteria.
 - Charts show EOD/live-beta provenance before trade planning.
 - Any Global Datafeeds/TrueData trial is kept behind beta wording until license terms allow customer display.
 
