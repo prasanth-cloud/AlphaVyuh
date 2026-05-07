@@ -22,6 +22,7 @@ const viewports = [
 
 const launchRoutes = [
   "/",
+  "/beta",
   "/signup",
   "/login",
   "/reset-password",
@@ -206,6 +207,15 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/checkout is disabled|No production checkout/i);
+
+    await page.goto("/beta", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).toContainText(/Founder beta operations/i);
+    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Broker read-only|filled-trade import/i);
+    await expect(page.locator("body")).toContainText(/not investment advice/i);
+    await expect(page.locator("body")).toContainText(/Production billing disabled|waitlist-gated/i);
+    await expect(page.locator("body")).toContainText(/support@alphavyuh\.com/i);
+    await expect(page.locator("body")).toContainText(/Known beta limitations/i);
 
     await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/Private beta/i, { timeout: 15_000 });
