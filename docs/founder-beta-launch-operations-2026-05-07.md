@@ -27,6 +27,9 @@ Mode: private/founder beta
 
 - In-app feedback form: signed-in users can use the fixed `Feedback` widget. Categories: General feedback, Bug, Data issue, Feature request.
 - Bug report path: email `support@alphavyuh.com` with registered email, page URL, symbol/timeframe if relevant, expected result, actual result, screenshot, and whether the issue blocks the workflow.
+- GitHub intake templates for internal triage:
+  - `.github/ISSUE_TEMPLATE/beta_bug_report.yml`
+  - `.github/ISSUE_TEMPLATE/beta_feedback.yml`
 - Public beta guide: `/beta`.
 - Admin intake surface: `/admin/beta` for waitlist and feedback review.
 
@@ -67,3 +70,7 @@ Mode: private/founder beta
 ## User Testing Instructions
 
 Ask each founder beta trader to complete the onboarding checklist in one sitting, then answer the interview questions within 24 hours. Prioritize fixes that block trust, workflow continuity, or data clarity before adding new scanner/chart/broker features.
+
+## EOD Operations
+
+Daily refresh commands, verification steps, stale/degraded recovery, and beta data guardrails are maintained in `docs/eod-refresh-operations.md`.

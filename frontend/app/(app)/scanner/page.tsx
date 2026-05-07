@@ -12,6 +12,7 @@ import {
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
 import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
+import { trackEvent } from '@/lib/analytics'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, EyebrowLabel, Num } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -372,7 +373,7 @@ export default function ScannerPage() {
     return { filters: fil, sort_by: sb, sort_order: sd ? 'desc' : 'asc', limit: 200 }
   }, [])
 
-  const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize) => {
+  const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
     setLoading(true); setError(''); setResults([]); setExpandedSymbol(null)
     try {
       if (isMockMode) {
@@ -392,6 +393,7 @@ export default function ScannerPage() {
           message: data.source_metadata?.license_notes,
         })
         setHasRun(true)
+        trackEvent('scanner_run', { mode: 'demo', results: data.results.length, preset: eventPreset })
         return
       }
       const headers = await getAuthHeaders()
@@ -419,17 +421,22 @@ export default function ScannerPage() {
         message: data.message ?? data.source_metadata?.license_notes,
       })
       setHasRun(true)
+      trackEvent('scanner_run', {
+        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
+        results: (data.results || []).length,
+        preset: eventPreset,
+      })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Scan failed')
     } finally { setLoading(false) }
-  }, [buildPayload, currentPage, filters, getAuthHeaders, pageSize, sortBy, sortDesc])
+  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, sortBy, sortDesc])
 
   const applyPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
       Object.entries(p.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
     )
     const f = { ...emptyFilters(), ...normalizedFilters } as Filters
-    setFilters(f); setActivePreset(p.id); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize)
+    setFilters(f); setActivePreset(p.id); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, p.id)
   }, [pageSize, runScan, sortBy, sortDesc])
 
   useEffect(() => {
@@ -441,7 +448,7 @@ export default function ScannerPage() {
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
-    setFilters(f); setActivePreset(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize)
+    setFilters(f); setActivePreset(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
   }
 
   async function saveCurrentScreen() {
@@ -487,6 +494,7 @@ export default function ScannerPage() {
       await addSymbolToWatchlist(wlId, symbol)
       await bulkUpsertWorkflowStates(scannerWatchlistPatches([symbol], wlId))
       setWorkflowMarks(prev => ({ ...prev, [symbol]: 'watch' }))
+      trackEvent('add_to_watchlist', { source: 'scanner', symbol, watchlist_id: wlId })
       showToast(`${symbol} added`)
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Add to watchlist failed')
@@ -501,6 +509,9 @@ export default function ScannerPage() {
       return next
     })
     await bulkUpsertWorkflowStates(symbols.map(symbol => scannerWorkflowPatch(symbol, label)))
+    trackEvent(label === 'shortlist' ? 'scanner_shortlist' : label === 'review_later' ? 'scanner_review_later' : 'scanner_ignore', {
+      count: symbols.length,
+    })
     showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
   }
 
@@ -516,6 +527,7 @@ export default function ScannerPage() {
       const symbols = toAdd.slice(0, 50).map((s) => s.symbol)
       await Promise.all(symbols.map((symbol) => addSymbolToWatchlist(wl.id, symbol).catch(() => {})))
       await bulkUpsertWorkflowStates(scannerWatchlistPatches(symbols, wl.id))
+      trackEvent('add_to_watchlist', { source: 'scanner_bulk_create', count: symbols.length, watchlist_id: wl.id })
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       router.push(`/watchlist?id=${wl.id}`)

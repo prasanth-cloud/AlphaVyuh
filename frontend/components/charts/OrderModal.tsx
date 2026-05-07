@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { placeOrder, getBrokerStatus } from "@/lib/api";
 import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
 import { DataProvenanceBadge } from "@/components/ui";
+import { trackEvent } from "@/lib/analytics";
 
 const SETUP_TYPES = [
   { value: "", label: "— Select setup —" },
@@ -101,6 +102,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         ...(notes       ? { notes }               : {}),
       };
       const result = await placeOrder(req);
+      trackEvent("mock_order_drafted", { source: "chart", symbol, side });
       onFilled(result);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Order failed");

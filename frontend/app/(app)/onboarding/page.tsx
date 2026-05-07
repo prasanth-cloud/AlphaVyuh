@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { addToWatchlist, createWatchlist, updateMe } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 
 const STEPS = ["About you", "Beta limits", "Get started"];
 
@@ -76,6 +77,10 @@ export default function OnboardingPage() {
     setForm((f) => ({ ...f, [name]: value }));
   };
 
+  useEffect(() => {
+    trackEvent("onboarding_viewed", { surface: "private_beta" });
+  }, []);
+
   async function finish(destination = "/dashboard", seedStarterQueue = false) {
     setLoading(true);
     setError("");
@@ -100,6 +105,7 @@ export default function OnboardingPage() {
           destination = `/watchlist?id=${encodeURIComponent(starter.id)}&symbol=${encodeURIComponent(STARTER_SYMBOLS[0])}`;
         }
       }
+      trackEvent("onboarding_completed", { broker: form.broker || "unknown", starter_queue: seedStarterQueue });
       window.location.replace(destination);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Something went wrong");

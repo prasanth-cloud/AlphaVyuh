@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 export default function SignupForm() {
   const [showPass, setShowPass] = useState(false);
@@ -64,9 +65,11 @@ export default function SignupForm() {
         return;
       }
       if (data.pending_confirmation) {
+        trackEvent("signup_success", { next_path: nextPath, pending_confirmation: true });
         setDone(true);
         return;
       }
+      trackEvent("signup_success", { next_path: nextPath, pending_confirmation: false });
       window.location.replace(nextPath);
     } catch {
       setError("Network error — please try again.");

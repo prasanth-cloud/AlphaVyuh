@@ -20,6 +20,7 @@ import {
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
+import { trackEvent } from "@/lib/analytics";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 
 type LinePoint = { time: string; value: number };
@@ -261,6 +262,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
+
+  useEffect(() => {
+    if (!fullChartMode) return;
+    trackEvent("full_chart_opened", { symbol, timeframe });
+  }, [fullChartMode, symbol, timeframe]);
 
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1107,6 +1113,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     updateDrawingsWithHistory((prev) => [...prev, line]);
     setSelectedDrawingId(line.id);
     setActiveDrawingTool(null);
+    trackEvent("drawing_created", { symbol, timeframe, tool: activeDrawingTool });
 
     // Persist to DB (non-blocking)
     try {
