@@ -36,7 +36,6 @@ These block broad paid public launch and require owner-controlled evidence befor
 | Auth surface | `/dev-login` was listed as a public route. It still required a Supabase token, but the route name and public exposure were inappropriate for production-like traffic. | `/dev-login` is now available only when mock app auth is enabled; otherwise it redirects to `/login`. |
 | Auth error leakage | Backend auth fallback returned provider exception text in the 401 response. | Auth fallback now returns the generic message `Authentication failed`; a regression test covers this. |
 | Broker smoke scripts | Kite/Upstox read-only smoke scripts had an explicit `--print-access-token` switch. | Full token printing now requires `ALLOW_PRINT_ACCESS_TOKEN=true`; default and documented behavior remains masked. |
-| Supabase advisor security | Read-only staging advisors found public/signed-in EXECUTE grants on `SECURITY DEFINER` functions and mutable function search paths. | Added `supabase/migrations/20260507111500_launch_advisor_security_hardening.sql` to revoke direct browser/API execution for backend-only RPCs and set stable function search paths. |
 
 ## P2 Post-Launch Improvements
 
@@ -76,8 +75,10 @@ Read-only broker smoke was skipped because no owner-provided Kite/Upstox tokens 
 
 Read-only Supabase advisor checks were run against the documented staging project
 `fyxltykqdvacbdgmeucf`. Security advisors returned WARN-level findings for
-mutable search paths and direct execution grants on security-definer functions;
-the branch adds a reviewed migration for those repo-fixable items. Performance
+mutable search paths and direct execution grants on security-definer functions.
+Because this repository requires a `migration-applied-to-prod` evidence marker
+for any new migration, and production Supabase application is not approved in
+this pass, those findings remain owner-gated migration work. Performance
 advisors also returned unindexed foreign keys, auth RLS init-plan warnings,
 duplicate indexes, and multiple permissive policy warnings; those are tracked as
 post-launch database hardening unless they block load testing.
