@@ -48,6 +48,13 @@ test.describe("Release readiness — public and auth boundary", () => {
     await expect(page).toHaveURL(/\/login\?next=%2Fcharts%2FRELIANCE/);
   });
 
+  test("dev login is not exposed on production-like routes", async ({ page }) => {
+    test.skip(process.env.PLAYWRIGHT_MOCK_AUTH === "true", "Dev login is intentionally available in mock auth mode.");
+
+    await page.goto("/dev-login?email=tester%40example.com&token=fake");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test("login page renders and rejects obvious open redirect vectors", async ({ page }) => {
     await page.goto("/login?next=https%3A%2F%2Fevil.example");
 

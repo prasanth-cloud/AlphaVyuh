@@ -8,7 +8,6 @@ const PUBLIC_PREFIXES = [
   "/signup",
   "/reset-password",
   "/update-password",
-  "/dev-login",
   "/offline",
   "/blog",
   "/beta",
@@ -47,6 +46,11 @@ export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request });
   // Expose pathname to Server Components via a custom header
   response.headers.set("x-pathname", pathname);
+
+  if (pathname.startsWith("/dev-login")) {
+    if (allowMockAppAuth()) return response;
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
   if (isPublic(pathname)) return response;
   if (allowMockAppAuth()) return response;

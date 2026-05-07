@@ -14,7 +14,7 @@ Use this checklist before every customer-facing release.
    - Frontend: `NEXT_PUBLIC_FORCE_LIVE_DATA=true`
    - Backend: official/free EOD bhavcopy as primary store; `MARKET_DATA_PROVIDER=kite` only for user-connected broker quote/order workflows.
    - Purpose: internal validation with reliable EOD scanner/chart data and broker flows.
-   - App badge should show `Live data`.
+   - App badge should show `EOD data`, `delayed`, or `live beta` only when that exact provider mode is configured and approved.
 
 3. Licensed production data
    - Frontend: `NEXT_PUBLIC_FORCE_LIVE_DATA=true`
@@ -86,7 +86,8 @@ symbol, side, quantity, order type, and sandbox/live mode.
 
 ## Current Audit Notes
 
-- Frontend: `npm audit --audit-level=high` still reports Next.js 14 advisories and the related `eslint-config-next` `glob` advisory. The automated fix upgrades to Next 16, so treat this as a planned Next migration before production if self-hosting.
+- 2026-05-07 public launch readiness pass: see `docs/public-launch-readiness-2026-05-07.md` and `docs/security-launch-scan-2026-05-07.md`.
+- Frontend uses Next.js 16.2.4 at the time of the 2026-05-07 pass. Treat any future Next.js audit as current-version evidence, not the older Next 14 migration note.
 - Backend: the legacy `kiteconnect` package was removed from production requirements. Kite routes use the internal HTTP wrapper in `app.brokers.kite.api`, avoiding the old `autobahn==19.11.2` dependency path.
 
 ## Data Checklist

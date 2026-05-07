@@ -5,7 +5,6 @@ Usage:
     cd backend
     python scripts/test_kite_connection.py --login-url
     python scripts/test_kite_connection.py --request-token <request_token>
-    python scripts/test_kite_connection.py --request-token <request_token> --print-access-token
     python scripts/test_kite_connection.py --access-token <access_token>
 
 If KITE_ACCESS_TOKEN is already set in backend/.env, the script can be run with
@@ -79,7 +78,11 @@ def main() -> None:
     parser.add_argument("--login-url", action="store_true", help="Print the Kite login URL")
     parser.add_argument("--request-token", help="Exchange a Kite request_token for an access_token")
     parser.add_argument("--access-token", help="Verify using this access token instead of KITE_ACCESS_TOKEN")
-    parser.add_argument("--print-access-token", action="store_true", help="Print the full access token after exchange")
+    parser.add_argument(
+        "--print-access-token",
+        action="store_true",
+        help="Unsafe debug only: requires ALLOW_PRINT_ACCESS_TOKEN=true",
+    )
     parser.add_argument("--symbol", default="RELIANCE", help="NSE symbol to test, default RELIANCE")
     args = parser.parse_args()
 
@@ -94,6 +97,8 @@ def main() -> None:
             _require_env("KITE_API_SECRET")
             session = kite_api.exchange_code(args.request_token)
             access_token = session["access_token"]
+            if args.print_access_token and os.getenv("ALLOW_PRINT_ACCESS_TOKEN") != "true":
+                raise SystemExit("--print-access-token requires ALLOW_PRINT_ACCESS_TOKEN=true")
             print(f"Access token OK: {access_token if args.print_access_token else _mask(access_token)}")
             print("Add this value to backend/.env as KITE_ACCESS_TOKEN for today's session.")
             _verify(access_token, args.symbol)
