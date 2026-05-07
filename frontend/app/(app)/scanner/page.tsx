@@ -13,7 +13,7 @@ import {
 import { mockRunScan } from '@/lib/mock-data'
 import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
-import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, EyebrowLabel, Num } from '@/components/ui'
+import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -619,10 +619,9 @@ export default function ScannerPage() {
   );
   return (
     <div className="workspace-page">
-      <div className="workspace-card" style={{ padding: '10px 14px' }}>
+      <div className="workspace-card" style={{ padding: '8px 14px' }}>
         <div className="workspace-toolbar" style={{ minHeight: 'auto', padding: 0, border: 'none', gap: 14 }}>
           <div>
-            <EyebrowLabel>Discovery</EyebrowLabel>
             <div className="app-page-copy">
               Start from EOD presets, shortlist clean ideas, and send only actionable names into the watchlist desk.
             </div>

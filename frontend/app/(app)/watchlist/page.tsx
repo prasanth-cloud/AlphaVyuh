@@ -46,11 +46,17 @@ import {
   upsertWorkflowState,
 } from "@/lib/api";
 import type { SymbolSearchResult } from "@/lib/api";
-import { DataProvenanceBadge, EmptyState, EyebrowLabel, Num } from "@/components/ui";
+import { DataProvenanceBadge, EmptyState, Num } from "@/components/ui";
 import IndicatorMenu from "@/components/charts/IndicatorMenu";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 import { workflowPlanStatus } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
+import {
+  formatCandleRange,
+  getRangeAvailabilityMessage,
+  getWatchlistChartRequest,
+  type WatchlistChartRequest,
+} from "@/lib/watchlist-chart-range";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -419,6 +425,9 @@ function ChartPanel({
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
   const [tf, setTf] = useState("3M");
+  const [chartRequest, setChartRequest] = useState<WatchlistChartRequest>(() => getWatchlistChartRequest("3M"));
+  const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null } | null>(null);
+  const [chartRangeNote, setChartRangeNote] = useState<string | null>(null);
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
   const [showChartDetails, setShowChartDetails] = useState(false);
   const [showOrderTicket, setShowOrderTicket] = useState(false);
@@ -491,18 +500,7 @@ function ChartPanel({
     getBrokerStatus().then(setBrokerStatus).catch(() => setBrokerStatus(null));
   }, [showOrderTicket]);
   const workspaceTimeframe = useMemo(() => {
-    const timeframeMap: Record<string, "D" | "W" | "M"> = {
-      "1D": "D",
-      "1W": "W",
-      "1M": "D",
-      "3M": "D",
-      "6M": "W",
-      "1Y": "W",
-      "3Y": "W",
-      "5Y": "M",
-      "10Y": "M",
-    };
-    return timeframeMap[tf] ?? "D";
+    return getWatchlistChartRequest(tf).timeframe;
   }, [tf]);
   const chartWorkspace = useChartWorkspace(symbol, workspaceTimeframe);
 
@@ -510,31 +508,30 @@ function ChartPanel({
     setChartLoading(true);
     setChartError(false);
     setCandles([]);
-    const timeframeMap: Record<string, "D" | "W" | "M"> = {
-      "1D": "D",
-      "1W": "W",
-      "1M": "D",
-      "3M": "D",
-      "6M": "W",
-      "1Y": "W",
-      "3Y": "W",
-      "5Y": "M",
-      "10Y": "M",
-    };
-    const limitMap: Record<string, number> = {
-      "1D": 60,
-      "1W": 90,
-      "1M": 30,
-      "3M": 120,
-      "6M": 180,
-      "1Y": 260,
-      "3Y": 180,
-      "5Y": 260,
-      "10Y": 520,
-    };
-    getCandles(symbol, { limit: limitMap[tf] ?? 120, timeframe: timeframeMap[tf] ?? "D" })
+    setChartSource(null);
+    setChartRangeNote(null);
+    const request = getWatchlistChartRequest(tf);
+    setChartRequest(request);
+    getCandles(symbol, {
+      limit: request.limit,
+      timeframe: request.timeframe,
+      from_date: request.from_date,
+      to_date: request.to_date,
+    })
       .then(d => {
-        setCandles(d.candles);
+        const responseSymbol = d.symbol?.toUpperCase?.() ?? symbol;
+        if (responseSymbol !== symbol) {
+          throw new Error(`Chart data returned ${responseSymbol} for ${symbol}`);
+        }
+        const rows = d.candles ?? [];
+        setCandles(rows);
+        setChartSource({
+          mode: d.source_metadata?.mode ?? d.mode ?? (isMockMode ? "demo" : "eod"),
+          source: d.source_metadata?.source_name ?? d.source ?? null,
+          asOf: d.source_metadata?.as_of ?? rows[rows.length - 1]?.time ?? null,
+          symbol: responseSymbol,
+        });
+        setChartRangeNote(getRangeAvailabilityMessage(rows, request));
         if (d.latest?.close && !price) setPrice(String(d.latest.close));
       })
       .catch(() => setChartError(true))
@@ -624,8 +621,19 @@ function ChartPanel({
                 {previewChange >= 0 ? "+" : ""}{previewChange.toFixed(2)}%
               </span>
             )}
-            <DataProvenanceBadge kind={isMockMode ? "demo" : "eod"} asOf={latestBar?.time ? String(latestBar.time) : null} compact />
+            <DataProvenanceBadge
+              kind={isMockMode || chartSource?.mode === "demo" ? "demo" : chartSource?.mode === "fallback" ? "fallback" : "eod"}
+              asOf={chartSource?.asOf ?? (latestBar?.time ? String(latestBar.time) : null)}
+              compact
+            />
+            <span className="caption">{chartRequest.label} · {chartRequest.timeframe} · {formatCandleRange(candles)}</span>
           </div>
+          {chartSource && (
+            <div className="caption" style={{ marginTop: 3 }}>
+              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo fixtures" : "EOD market")} · {chartSource.mode ?? (isMockMode ? "demo" : "eod")}
+              {chartRangeNote ? ` · ${chartRangeNote}` : ""}
+            </div>
+          )}
         </div>
         <div className="watchlist-chart-controls">
           <button onClick={() => onStepSymbol("prev")} className="workspace-chip-button">
@@ -1567,10 +1575,9 @@ function WatchlistContent() {
 
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
-      <div className="workspace-card" style={{ padding: "10px 14px" }}>
+      <div className="workspace-card" style={{ padding: "8px 14px" }}>
         <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
-            <EyebrowLabel>Workspace</EyebrowLabel>
             {activeWl && (
               <div className="app-page-copy" style={{ marginTop: 1 }}>
                 {activeWl.name} · <Num>{visibleItems.length}</Num>/<Num>{activeWl.items.length}</Num> visible · chart, plan, and order intent stay focused on one symbol.

@@ -129,6 +129,7 @@ test.describe("Workflow layout smoke", () => {
 
   test("scanner actions and watchlist chart header remain usable", async ({ page }) => {
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toContainText("DISCOVERY");
     await page.getByRole("button", { name: /^Run scan$/i }).click();
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Shortlist" })).toBeVisible();
@@ -136,6 +137,7 @@ test.describe("Workflow layout smoke", () => {
 
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toContainText("WORKSPACE");
     await expect(page.locator(".watchlist-chart-header")).toBeVisible();
 
     const overlap = await page.locator(".watchlist-chart-header").evaluate((header) => {
@@ -146,6 +148,34 @@ test.describe("Workflow layout smoke", () => {
         && children[0].y + children[0].height > children[1].y;
     });
     expect(overlap).toBe(false);
+  });
+
+  test("requested workspace copy and reminder strip are removed", async ({ page }) => {
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toContainText(/Market command center/i);
+    await expect(page.locator("body")).not.toContainText("UNKNOWN");
+    await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
+
+    await page.goto("/scanner", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toContainText("DISCOVERY");
+    await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
+
+    await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("body")).not.toContainText("WORKSPACE");
+    await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
+  });
+
+  test("watchlist chart timeframe switching exposes range and source context", async ({ page }) => {
+    await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/3M · D · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
+
+    await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · D · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · AlphaVyuh mock fixtures · demo/i);
+
+    await page.locator(".watchlist-chart-header").getByRole("button", { name: "10Y" }).click();
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · M · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
   });
 
   test("feedback widget does not cover top workflow controls", async ({ page }) => {

@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import TraderReminderStrip from '@/components/TraderReminderStrip'
 import FeedbackWidget from '@/components/FeedbackWidget'
 import { clearAuthHeaderCache, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
 import { markAppTiming } from '@/lib/performance'
@@ -28,7 +27,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
   const fullChart = pathname.startsWith('/charts/') && searchParams.get('full') === '1'
   const router = useRouter()
-  const [reminderDismissed, setReminderDismissed] = useState(false)
 
   useEffect(() => {
     window.requestAnimationFrame(() => markAppTiming('first-app-shell-paint'))
@@ -38,7 +36,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     document.documentElement.dataset.theme = 'dark'
     window.localStorage.setItem('alphavyuh-theme', 'dark')
     window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: 'dark' }))
-    setReminderDismissed(window.localStorage.getItem('alphavyuh-reminder-strip') === 'dismissed')
   }, [])
 
   useEffect(() => {
@@ -125,22 +122,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <AccountMenuButton />
           </div>
         </div>
-        {!reminderDismissed && (
-          <div className="reminder-strip-shell">
-            <TraderReminderStrip tone="app" />
-            <button
-              type="button"
-              className="reminder-strip-dismiss"
-              aria-label="Dismiss trading reminder strip"
-              onClick={() => {
-                window.localStorage.setItem('alphavyuh-reminder-strip', 'dismissed')
-                setReminderDismissed(true)
-              }}
-            >
-              ×
-            </button>
-          </div>
-        )}
       </nav>
       )}
 
