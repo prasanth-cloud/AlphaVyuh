@@ -27,7 +27,7 @@ These block broad paid public launch and require owner-controlled evidence befor
 | Billing | Production Razorpay checkout is intentionally disabled. | Settings billing has `checkoutEnabled = false`; launch requires Razorpay keys, webhook signature evidence, refund/cancel path, failed-payment path, and owner approval. |
 | Broker execution | Live/sandbox order placement is disabled and must stay gated. | Backend rejects live-confirmed orders unless `BROKER_LIVE_ORDERS_ENABLED=true`; no owner-provided broker tokens or explicit live/sandbox order confirmation were provided. |
 | Legal/compliance | Public-launch legal copy, support policy, and market-data disclaimers need owner sign-off. | Current copy is beta-safe and educational, but not a final paid public-launch legal package. |
-| Production Supabase | Reviewed migration is prepared, but production application is still pending. | Read-only production advisors were run on project `fyxltykqdvacbdgmeucf`. Owner approval was given in chat for the hardening work, but the Supabase migration tool refused the production apply for safety reasons. Do not add the `migration-applied-to-prod` marker until the migration is actually applied and verified. |
+| Production Supabase | Reviewed migration is prepared, but production application is still pending. | Read-only production advisors were run on project `fyxltykqdvacbdgmeucf`. Owner approval was given in chat for the hardening work, but the Supabase migration tool refused the production apply for safety reasons. Do not add the production-applied marker until the migration is actually applied and verified. |
 
 ## P1 Launch Hardening Fixed In This Pass
 
