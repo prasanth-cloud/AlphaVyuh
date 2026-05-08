@@ -48,6 +48,7 @@ import {
 import type { SymbolSearchResult } from "@/lib/api";
 import { DataProvenanceBadge, EmptyState, Num } from "@/components/ui";
 import IndicatorMenu from "@/components/charts/IndicatorMenu";
+import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 import { workflowPlanStatus } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
@@ -55,6 +56,7 @@ import {
   formatCandleRange,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
+  type WatchlistChartTimeframe,
   type WatchlistChartRequest,
 } from "@/lib/watchlist-chart-range";
 
@@ -247,26 +249,6 @@ function SortableRow({
   );
 }
 
-// ─── Timeframe tabs ───────────────────────────────────────────────────────────
-
-function TimeframeTabs({ active, onChange }: { active: string; onChange: (v: string) => void }) {
-  return (
-    <div style={{ display: "flex", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", padding: 2 }}>
-      {["1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "10Y"].map(tf => (
-        <button key={tf} onClick={() => onChange(tf)} style={{
-          padding: "3px 10px",
-          fontSize: 11, fontWeight: 500,
-          color: active === tf ? "var(--text-primary)" : "var(--text-tertiary)",
-          background: active === tf ? "var(--surface-3)" : "transparent",
-          border: "none", borderRadius: "var(--radius-sm)",
-          cursor: "pointer",
-          transition: "all var(--motion-instant) var(--ease-out)",
-        }}>{tf}</button>
-      ))}
-    </div>
-  );
-}
-
 const LIFECYCLES: WorkflowLifecycle[] = ["idea", "watch", "ready", "triggered", "open", "closed", "reviewed", "invalidated"];
 
 function lifecycleLabel(value: WorkflowLifecycle) {
@@ -424,10 +406,11 @@ function ChartPanel({
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
-  const [tf, setTf] = useState("3M");
+  const [tf, setTf] = useState<WatchlistChartTimeframe>("3M");
   const [chartRequest, setChartRequest] = useState<WatchlistChartRequest>(() => getWatchlistChartRequest("3M"));
   const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null } | null>(null);
   const [chartRangeNote, setChartRangeNote] = useState<string | null>(null);
+  const [chartTimeframeMessage, setChartTimeframeMessage] = useState("");
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
   const [showChartDetails, setShowChartDetails] = useState(false);
   const [showOrderTicket, setShowOrderTicket] = useState(false);
@@ -510,6 +493,7 @@ function ChartPanel({
     setCandles([]);
     setChartSource(null);
     setChartRangeNote(null);
+    setChartTimeframeMessage("");
     const request = getWatchlistChartRequest(tf);
     setChartRequest(request);
     getCandles(symbol, {
@@ -693,18 +677,25 @@ function ChartPanel({
               <option value="line">Line</option>
             </select>
           </label>
-          <TimeframeTabs active={tf} onChange={setTf} />
+          <ChartTimeframeDropdown
+            value={tf}
+            onChange={setTf}
+            onUnavailable={setChartTimeframeMessage}
+          />
         </div>
       </div>
 
       {/* Chart */}
+      {(chartRangeNote || chartTimeframeMessage) && (
+        <div className="caption" style={{ padding: "8px 14px 0", color: "#fbbf24" }}>
+          {chartTimeframeMessage || chartRangeNote}
+        </div>
+      )}
       {chartStats && (
         <div className="watchlist-chart-stats" style={{ padding: "10px 14px 2px", flexShrink: 0 }}>
           {[
             { label: "Structure", value: chartStats.trend, tone: chartStats.trend === "Uptrend" ? "var(--gain)" : chartStats.trend === "Downtrend" ? "var(--loss)" : "var(--text-secondary)" },
             { label: `${tf} move`, value: chartStats.change != null ? `${chartStats.change >= 0 ? "+" : ""}${chartStats.change.toFixed(2)}%` : "-", tone: (chartStats.change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" },
-            { label: "Range", value: chartStats.range != null ? `${chartStats.range.toFixed(1)}%` : "-", tone: "var(--text-secondary)" },
-            { label: "Volume", value: chartStats.volumeVsAvg != null ? `${chartStats.volumeVsAvg.toFixed(2)}x avg` : "-", tone: (chartStats.volumeVsAvg ?? 0) >= 1.2 ? "var(--accent)" : "var(--text-secondary)" },
           ].map((item) => (
             <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
               <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>

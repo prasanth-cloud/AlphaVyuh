@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHART_TIMEFRAME_OPTIONS,
+  INTRADAY_UNAVAILABLE_MESSAGE,
   candleRangeMonths,
   formatCandleRange,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
+  isIntradayTimeframe,
 } from "@/lib/watchlist-chart-range";
 
 const NOW = new Date("2026-05-07T12:00:00Z");
@@ -37,6 +40,14 @@ describe("watchlist chart range mapping", () => {
       from_date: "2016-05-07",
       limit: 130,
     });
+  });
+
+  it("exposes intraday options as unavailable in EOD beta mode", () => {
+    const intraday = CHART_TIMEFRAME_OPTIONS.filter((option) => option.group === "Intraday");
+    expect(intraday.map((option) => option.label)).toEqual(["5m", "15m", "30m", "1h"]);
+    expect(intraday.every((option) => option.disabled && option.unavailableReason === INTRADAY_UNAVAILABLE_MESSAGE)).toBe(true);
+    expect(isIntradayTimeframe("15m")).toBe(true);
+    expect(isIntradayTimeframe("1Y")).toBe(false);
   });
 
   it("reports the candle range and availability when history is short", () => {

@@ -11,6 +11,11 @@ type Props = {
 
 export default function IndicatorMenu({ selected, onChange }: Props) {
   const selectedKeys = new Set(selected.map(indicatorKey));
+  const selectedLabel = selected.length === 0
+    ? "Indicators"
+    : selected.length <= 2
+      ? selected.map(indicatorLabel).join(" · ")
+      : `Indicators · ${selected.length}`;
 
   function toggle(indicator: ChartIndicator) {
     const key = indicatorKey(indicator);
@@ -26,7 +31,7 @@ export default function IndicatorMenu({ selected, onChange }: Props) {
         style={{ listStyle: "none", display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}
       >
         <SlidersHorizontal size={13} />
-        Indicators
+        {selectedLabel}
       </summary>
       <div
         style={{
@@ -66,7 +71,24 @@ export default function IndicatorMenu({ selected, onChange }: Props) {
                 cursor: "pointer",
               }}
             >
-              <span>{indicatorLabel(indicator)}</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 13,
+                    height: 13,
+                    borderRadius: 3,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: active ? "1px solid var(--accent)" : "1px solid var(--border-subtle)",
+                    background: active ? "rgba(244,247,251,0.12)" : "transparent",
+                  }}
+                >
+                  {active ? "x" : ""}
+                </span>
+                {indicatorLabel(indicator)}
+              </span>
               <span aria-hidden="true">{active ? "on" : "off"}</span>
             </button>
           );

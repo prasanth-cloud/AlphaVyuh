@@ -33,7 +33,7 @@ export interface IndicatorDef<P> {
 }
 
 export type ChartIndicator = {
-  type: "ema" | "sma" | "vwap" | "rsi" | "macd" | "volume";
+  type: "ema" | "sma" | "vwap" | "rsi" | "macd" | "volume" | "bollinger";
   params?: Record<string, unknown>;
 };
 

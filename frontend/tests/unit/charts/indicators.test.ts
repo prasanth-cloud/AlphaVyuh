@@ -6,6 +6,7 @@ import { rsi } from "@/components/charts/indicators/rsi";
 import { sma } from "@/components/charts/indicators/sma";
 import { volume } from "@/components/charts/indicators/volume";
 import { vwap } from "@/components/charts/indicators/vwap";
+import { bollinger } from "@/components/charts/indicators/bollinger";
 
 const candles: Candle[] = [
   { time: "2026-01-01", open: 9, high: 11, low: 8, close: 10, volume: 100 },
@@ -47,5 +48,9 @@ describe("chart indicators", () => {
     expect(volume.compute(candles.slice(0, 1), {})).toEqual([
       { time: "2026-01-01", value: 100, color: "rgba(34,197,94,0.42)" },
     ]);
+  });
+
+  it("computes Bollinger midline", () => {
+    expect(bollinger.compute(candles, { period: 3, deviation: 2 }).map((point) => "value" in point ? point.value : null)).toEqual([11, 12, 13, 14]);
   });
 });

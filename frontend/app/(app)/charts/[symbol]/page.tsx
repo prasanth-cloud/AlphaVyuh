@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Trash2, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -19,9 +19,16 @@ import {
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
+import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
+import {
+  formatCandleRange,
+  getRangeAvailabilityMessage,
+  getWatchlistChartRequest,
+  type WatchlistChartTimeframe,
+} from "@/lib/watchlist-chart-range";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -63,20 +70,18 @@ const INDICATOR_CONFIG = [
   { id: "ema20",  label: "EMA 20",  color: "#f4f7fb", bg: "rgba(244,247,251,0.10)" },
   { id: "ema50",  label: "EMA 50",  color: "#bac4d1", bg: "rgba(186,196,209,0.10)" },
   { id: "ema200", label: "EMA 200", color: "#7a8695", bg: "rgba(122,134,149,0.12)" },
-  { id: "bb",     label: "BB",      color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
+  { id: "sma50",  label: "SMA 50",  color: "#94a3b8", bg: "rgba(148,163,184,0.10)" },
+  { id: "sma200", label: "SMA 200", color: "#64748b", bg: "rgba(100,116,139,0.12)" },
   { id: "vwap",   label: "VWAP",    color: "#d6dce5", bg: "rgba(214,220,229,0.10)" },
   { id: "rsi",    label: "RSI",     color: "#f4f7fb", bg: "rgba(244,247,251,0.10)" },
   { id: "macd",   label: "MACD",    color: "#bac4d1", bg: "rgba(186,196,209,0.10)" },
-  { id: "stoch",    label: "Stoch",    color: "#9ca3af", bg: "rgba(156,163,175,0.10)" },
-  { id: "atr",      label: "ATR",      color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
-  { id: "ichimoku", label: "Ichimoku", color: "#d6dce5", bg: "rgba(214,220,229,0.10)" },
+  { id: "volume", label: "Volume", color: "#9ca3af", bg: "rgba(156,163,175,0.10)" },
+  { id: "bb",     label: "Bollinger Bands", color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
 ];
 
-const DRAWING_TOOLS = ["Trendline", "Ray", "Horizontal", "HorizontalRay", "Rectangle", "Fib", "LongPosition", "ShortPosition", "Text"] as const;
-const FULL_CHART_DRAWING_TOOLS = DRAWING_TOOLS;
-const PRIMARY_INDICATORS = ["ema20", "ema50", "rsi", "macd"];
+type DrawingTool = "Trendline" | "Ray" | "Horizontal" | "HorizontalRay" | "Rectangle" | "Fib" | "LongPosition" | "ShortPosition" | "Text";
+const FULL_CHART_DRAWING_TOOLS: DrawingTool[] = ["Trendline", "Horizontal", "Ray", "Rectangle", "Fib", "Text", "LongPosition", "ShortPosition"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
-type DrawingTool = typeof DRAWING_TOOLS[number];
 type ChartDataCacheEntry = {
   data: CandlesResponse;
   indicatorData: IndicatorData;
@@ -116,6 +121,19 @@ function fmtPrice(v: number | null | undefined, currency = "INR"): string {
     return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function computeSmaLine(candles: CandleBar[], period: number): LinePoint[] {
+  const out: LinePoint[] = [];
+  let sum = 0;
+  for (let index = 0; index < candles.length; index += 1) {
+    sum += candles[index].close;
+    if (index >= period) sum -= candles[index - period].close;
+    if (index + 1 >= period) {
+      out.push({ time: candles[index].time, value: Number((sum / period).toFixed(4)) });
+    }
+  }
+  return out;
 }
 
 function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
@@ -166,16 +184,6 @@ function getPersistedDrawingPoints(drawing: ChartDrawing) {
     points.push({ time: drawing.p3.time, price: drawing.p3.price });
   }
   return points;
-}
-
-function formatDrawingSummary(item: ChartDrawing): string {
-  if (isPositionDrawingTool(item.tool)) {
-    const risk = Math.abs(item.p1.price - item.p2.price);
-    const reward = item.p3 ? Math.abs(item.p3.price - item.p1.price) : 0;
-    const rr = risk > 0 && reward > 0 ? ` · R:R ${(reward / risk).toFixed(2)}` : "";
-    return `Entry ${item.p1.price.toFixed(2)} · Stop ${item.p2.price.toFixed(2)} · Target ${(item.p3?.price ?? item.p1.price).toFixed(2)}${rr}`;
-  }
-  return item.text ?? `${item.p1.price.toFixed(2)} → ${item.p2.price.toFixed(2)}`;
 }
 
 function normalizeDrawingColor(color?: string | null): string {
@@ -259,7 +267,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const fullChartMode = searchParams.get("full") === "1";
   const initialDrawMode = searchParams.get("draw");
 
+  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
+  const [rangeNote, setRangeNote] = useState<string | null>(null);
+  const [timeframeMessage, setTimeframeMessage] = useState("");
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>("candles");
 
@@ -324,7 +335,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
-  const [showTradePlan, setShowTradePlan] = useState(true);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
   const [showPositionsPanel, setShowPositionsPanel] = useState(true);
   const [showFundamentals, setShowFundamentals] = useState(false);
@@ -365,23 +375,22 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [userPlan, setUserPlan] = useState<string>("free");
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
-  const FREE_INDICATORS = ["ema20", "ema50", "ema200", "rsi"];
+  const FREE_INDICATORS = INDICATOR_CONFIG.map((indicator) => indicator.id);
 
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
 
   // Toolbar dropdowns
-  const [showMoreIndicators, setShowMoreIndicators] = useState(false);
   const [showDrawMenu, setShowDrawMenu] = useState(false);
-  const [showObjectList, setShowObjectList] = useState(true);
-  const moreIndRef = useRef<HTMLDivElement>(null);
+  const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
+  const indicatorMenuRef = useRef<HTMLDivElement>(null);
   const drawMenuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (moreIndRef.current && !moreIndRef.current.contains(e.target as Node)) setShowMoreIndicators(false);
+      if (indicatorMenuRef.current && !indicatorMenuRef.current.contains(e.target as Node)) setShowIndicatorMenu(false);
       if (drawMenuRef.current && !drawMenuRef.current.contains(e.target as Node)) setShowDrawMenu(false);
     }
     document.addEventListener("mousedown", handleClick);
@@ -449,12 +458,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return findNearestCandlePrice(data?.candles, time, price);
   }, [data?.candles, snapToPrice]);
 
-  const applyIndicatorPayload = useCallback((resp: Awaited<ReturnType<typeof getIndicators>> | null) => {
+  const applyIndicatorPayload = useCallback((resp: Awaited<ReturnType<typeof getIndicators>> | null, candles: CandleBar[] = []) => {
     const ind = (resp?.indicators ?? {}) as Record<string, unknown[]>;
     const nextIndicatorData: IndicatorData = {
       ema20:    ind.ema20    as LinePoint[] | undefined,
       ema50:    ind.ema50    as LinePoint[] | undefined,
       ema200:   ind.ema200   as LinePoint[] | undefined,
+      sma50:    computeSmaLine(candles, 50),
+      sma200:   computeSmaLine(candles, 200),
       vwap:     ind.vwap     as LinePoint[] | undefined,
       bb:       ind.bb       as never,
       ichimoku: ind.ichimoku as IchimokuPoint[] | undefined,
@@ -476,18 +487,24 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Load compare symbol data
   useEffect(() => {
     if (!compareSymbol) { setCompareData(null); return; }
-    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
-    getCandles(compareSymbol, { limit, timeframe }).then(setCompareData).catch(() => setCompareData(null));
-  }, [compareSymbol, timeframe]);
+    const request = getWatchlistChartRequest(rangeLabel);
+    getCandles(compareSymbol, {
+      limit: request.limit,
+      timeframe: request.timeframe,
+      from_date: request.from_date,
+      to_date: request.to_date,
+    }).then(setCompareData).catch(() => setCompareData(null));
+  }, [compareSymbol, rangeLabel]);
 
   // Load chart data
   useEffect(() => {
     let cancelled = false;
-    const limit = timeframe === "D" ? 3000 : timeframe === "W" ? 620 : 180;
-    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap", "ichimoku"].includes(i));
-    const panelInds = activeIndicators.filter(i => ["rsi", "macd", "stoch", "atr"].includes(i));
+    const request = getWatchlistChartRequest(rangeLabel);
+    if (request.timeframe !== timeframe) setTimeframe(request.timeframe);
+    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap"].includes(i));
+    const panelInds = activeIndicators.filter(i => ["rsi", "macd"].includes(i));
     const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
-    const baseCacheKey = [symbol, timeframe, liveMode ? "live" : "eod"].join(":");
+    const baseCacheKey = [symbol, rangeLabel, request.timeframe, liveMode ? "live" : "eod"].join(":");
     const cacheKey = [baseCacheKey, allInds.sort().join(",")].join(":");
     const cached = chartDataCache.get(cacheKey);
     const freshCached = cached && Date.now() - cached.loadedAt < CHART_CACHE_TTL_MS ? cached : null;
@@ -499,12 +516,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setData(freshCached.data);
       lastBaseChartKeyRef.current = baseCacheKey;
       setLegendBar(null);
+      setRangeNote(getRangeAvailabilityMessage(freshCached.data.candles ?? [], request));
       setIndicatorData(freshCached.indicatorData);
       setRsiData(freshCached.rsiData);
       setMacdData(freshCached.macdData);
       setStochData(freshCached.stochData);
       setAtrData(freshCached.atrData);
     } else if (canKeepVisibleChart) {
+      setRangeNote(null);
       setIndicatorData({});
       setRsiData([]);
       setMacdData([]);
@@ -512,6 +531,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setAtrData([]);
     } else {
       setData(null);
+      setRangeNote(null);
       setRsiData([]);
       setMacdData([]);
       setStochData([]);
@@ -519,14 +539,20 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setIndicatorData({});
     }
 
+    const candlesParams = {
+      limit: request.limit,
+      timeframe: request.timeframe,
+      from_date: request.from_date,
+      to_date: request.to_date,
+    };
     const candlesPromise = liveMode
-      ? getCandlesLive(symbol, { limit: Math.min(limit, 1000), timeframe }).catch(() => {
+      ? getCandlesLive(symbol, { limit: Math.min(request.limit, 1000), timeframe: request.timeframe }).catch(() => {
           if (!cancelled) setLiveMode(false);
-          return getCandles(symbol, { limit, timeframe });
+          return getCandles(symbol, candlesParams);
         })
-      : getCandles(symbol, { limit, timeframe });
+      : getCandles(symbol, candlesParams);
     const indicatorsPromise = allInds.length
-      ? getIndicators(symbol, allInds, timeframe).catch(() => null)
+      ? getIndicators(symbol, allInds, request.timeframe).catch(() => null)
       : Promise.resolve(null);
 
     Promise.all([candlesPromise, indicatorsPromise])
@@ -535,7 +561,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setData(nextData);
         lastBaseChartKeyRef.current = baseCacheKey;
         setLegendBar(null);
-        const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp);
+        setRangeNote(getRangeAvailabilityMessage(nextData.candles ?? [], request));
+        const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp, nextData.candles ?? []);
         chartDataCache.set(cacheKey, {
           data: nextData,
           indicatorData: nextIndicatorData,
@@ -556,24 +583,27 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return () => {
       cancelled = true;
     };
-  }, [activeIndicators, applyIndicatorPayload, liveMode, symbol, timeframe]);
+  }, [activeIndicators, applyIndicatorPayload, liveMode, rangeLabel, symbol, timeframe]);
 
   // Auto-refresh every 5 minutes in live mode
   useEffect(() => {
     if (!liveMode) return;
     const interval = setInterval(() => {
-      const limit = timeframe === "D" ? 1000 : timeframe === "W" ? 620 : 180;
-      getCandlesLive(symbol, { limit, timeframe })
+      const request = getWatchlistChartRequest(rangeLabel);
+      getCandlesLive(symbol, { limit: Math.min(request.limit, 1000), timeframe: request.timeframe })
         .then(d => { setData(d); setLegendBar(null); })
         .catch(() => {});
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [liveMode, symbol, timeframe]);
+  }, [liveMode, rangeLabel, symbol]);
 
   // Load saved layout + plan + alerts
   useEffect(() => {
     getChartLayout(symbol).then(layout => {
-      if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") setTimeframe(layout.timeframe);
+      if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") {
+        setTimeframe(layout.timeframe);
+        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "10Y");
+      }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
@@ -1287,22 +1317,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     setTextEditor({ drawingId: drawing.id, value: drawing.text ?? "Note", x: editorX, y: editorY, isNew: false });
   }, []);
 
-  const applyPositionDrawingToPlan = useCallback((drawing: ChartDrawing) => {
-    if (!isPositionDrawingTool(drawing.tool) || !drawing.p3) return;
-    setTradePlan({
-      entry: drawing.p1.price.toFixed(2),
-      stop: drawing.p2.price.toFixed(2),
-      target: drawing.p3.price.toFixed(2),
-    });
-    setOrderToast({
-      message: "Trade plan filled from risk/reward drawing.",
-      journalId: null,
-      broker: "simulated",
-      riskReward: Math.abs(drawing.p3.price - drawing.p1.price) / Math.max(Math.abs(drawing.p1.price - drawing.p2.price), 0.01),
-    });
-    setTimeout(() => setOrderToast(null), 3500);
-  }, []);
-
   const createZoneNoteFromDrawing = useCallback(async (drawing: ChartDrawing) => {
     if (drawing.tool !== "Rectangle") return;
     const high = Math.max(drawing.p1.price, drawing.p2.price);
@@ -1464,14 +1478,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const selectedDrawing = drawnLines.find(item => item.id === selectedDrawingId) ?? null;
   const activeToolMeta = activeDrawingTool ? DRAW_TOOL_META[activeDrawingTool] : null;
   const visibleDrawings = drawnLines.filter((item) => !item.hidden);
-  const hiddenCount = drawnLines.length - visibleDrawings.length;
   const activeIndicatorLabels = INDICATOR_CONFIG
     .filter((indicator) => activeIndicators.includes(indicator.id))
     .map((indicator) => indicator.label);
-  const candleRange = displayBar ? displayBar.high - displayBar.low : null;
-  const candleBody = displayBar ? displayBar.close - displayBar.open : null;
-  const candleRangePct = displayBar && displayBar.open ? ((displayBar.high - displayBar.low) / displayBar.open) * 100 : null;
-  const candleBodyPct = displayBar && displayBar.open ? ((displayBar.close - displayBar.open) / displayBar.open) * 100 : null;
+  const activeIndicatorSummary = activeIndicatorLabels.length === 0
+    ? "Indicators"
+    : activeIndicatorLabels.length <= 2
+      ? activeIndicatorLabels.join(" · ")
+      : `Indicators · ${activeIndicatorLabels.length}`;
   const latestVolumeRatio = latest?.volume_ratio ?? null;
   const recentCandles = data?.candles?.slice(-40) ?? [];
   const recentHigh = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : null;
@@ -1549,7 +1563,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
-    selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `Objects · ${visibleDrawings.length}`,
+    selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
   ].filter(Boolean) as string[];
 
@@ -1758,22 +1772,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
         {/* Right: timeframe + indicators + drawing tools + save */}
         <div className="workspace-toolbar-group">
-          {/* Timeframe */}
-          <div className="flex items-center gap-0.5 mr-1 rounded-[999px] p-0.5" style={{ background: "var(--app-surface3)" }}>
-            {(["D", "W", "M"] as const).map(tf => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className="text-[11px] px-3 py-1.5 rounded-[999px] font-semibold transition-colors"
-                style={timeframe === tf
-                  ? { background: "var(--app-teal)", color: "#0D0F14" }
-                  : { background: "transparent", color: "var(--app-text3)" }
-                }
-              >
-                {tf}
-              </button>
-            ))}
-          </div>
+          <ChartTimeframeDropdown
+            value={rangeLabel}
+            onChange={(next) => {
+              const request = getWatchlistChartRequest(next);
+              setRangeLabel(next);
+              setTimeframe(request.timeframe);
+              setRangeNote(null);
+              setTimeframeMessage("");
+            }}
+            onUnavailable={setTimeframeMessage}
+          />
 
           <label className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--app-text3)" }}>
             Chart
@@ -1793,56 +1802,35 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             </select>
           </label>
 
-          {/* Primary indicator toggles */}
-          {INDICATOR_CONFIG.filter(ind => PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
-            const active = activeIndicators.includes(ind.id);
-            const locked = !FREE_INDICATORS.includes(ind.id) && userPlan === "free";
-            return (
-              <button
-                key={ind.id}
-                onClick={() => toggleIndicator(ind.id)}
-                title={locked ? "Pro plan required" : undefined}
-                className={`workspace-chip-button ${active ? "active" : ""} flex items-center gap-1`}
-                style={active
-                  ? { background: ind.color + "22", color: ind.color, border: `1px solid ${ind.color}44` }
-                  : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
-                }
-              >
-                {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
-                {ind.label}
-              </button>
-            );
-          })}
-
-          {/* More indicators dropdown */}
-          <div ref={moreIndRef} className="relative">
+          <div ref={indicatorMenuRef} className="relative">
             <button
-              onClick={() => setShowMoreIndicators(s => !s)}
-              className={`workspace-chip-button ${INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id)) ? 'active' : ''} flex items-center gap-1`}
-              style={
-                INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).some(ind => activeIndicators.includes(ind.id))
-                  ? { background: "rgba(139,150,166,0.15)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.3)" }
-                  : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
-              }
+              onClick={() => setShowIndicatorMenu((current) => !current)}
+              className={`workspace-chip-button ${activeIndicators.length > 0 ? "active" : ""} flex items-center gap-1`}
+              style={activeIndicators.length > 0
+                ? { background: "rgba(139,150,166,0.15)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.3)" }
+                : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
             >
-              More ▾
+              <SlidersHorizontal size={12} />
+              {activeIndicatorSummary} ▾
             </button>
-            {showMoreIndicators && (
+            {showIndicatorMenu && (
               <div className="absolute top-full left-0 mt-1 z-50 rounded-[8px] py-1 shadow-xl"
-                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 130 }}>
-                {INDICATOR_CONFIG.filter(ind => !PRIMARY_INDICATORS.includes(ind.id)).map(ind => {
+                style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 220 }}>
+                {INDICATOR_CONFIG.map(ind => {
                   const active = activeIndicators.includes(ind.id);
                   const locked = !FREE_INDICATORS.includes(ind.id) && userPlan === "free";
                   return (
                     <button
                       key={ind.id}
                       onClick={() => { toggleIndicator(ind.id); }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-1.5 text-[12px] transition-colors"
+                      className="w-full text-left flex items-center gap-2 px-3 py-2 text-[12px] transition-colors"
                       style={{ color: active ? ind.color : "var(--app-text2)" }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                     >
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: active ? ind.color : "var(--app-border)" }} />
+                      <span className="w-3 h-3 rounded-[3px] flex-shrink-0 flex items-center justify-center text-[9px]" style={{ background: active ? ind.color + "22" : "transparent", border: `1px solid ${active ? ind.color : "var(--app-border)"}` }}>
+                        {active ? "x" : ""}
+                      </span>
                       {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ flexShrink: 0 }}><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
                       {ind.label}
                     </button>
@@ -1852,7 +1840,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             )}
           </div>
 
-          {/* Draw dropdown */}
+          {/* Tools dropdown */}
           <div ref={drawMenuRef} className="relative">
             <button
               onClick={() => setShowDrawMenu(s => !s)}
@@ -1862,7 +1850,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }
               }
             >
-              {activeDrawingTool ?? "Draw"} ▾
+              {activeToolMeta ? `Tools · ${activeToolMeta.label}` : "Tools"} ▾
             </button>
             {showDrawMenu && (
               <div className="absolute top-full left-0 mt-1 z-50 rounded-[8px] py-1 shadow-xl"
@@ -1897,6 +1885,28 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     </button>
                   );
                 })}
+                <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
+                <button
+                  onClick={() => { setShowAlertModal(true); setShowDrawMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
+                  style={{ color: "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  <Bell size={14} />
+                  <span className="flex-1">Price alert</span>
+                </button>
+                <button
+                  onClick={() => { setSnapToPrice((prev) => !prev); setShowDrawMenu(false); }}
+                  className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
+                  style={{ color: snapToPrice ? "var(--app-teal)" : "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  <Magnet size={14} />
+                  <span className="flex-1">Magnet / snap</span>
+                  <span className="text-[10px] opacity-60">{snapToPrice ? "On" : "Off"}</span>
+                </button>
                 {drawnLines.length > 0 && (
                   <>
                     <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
@@ -2197,7 +2207,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               </div>
 
               <div style={{ borderBottom: "1px solid var(--app-border)" }}>
-                <div className="px-4 py-3">
+                <div className="px-4 py-3 space-y-2">
                   <div className="flex items-center justify-between gap-3 mb-3">
                     <div>
                       <div className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Chart playbook</div>
@@ -2208,39 +2218,52 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       {playbookScore}
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    {playbookItems.map((item) => (
-                      <div key={item.key} className="rounded-[10px] px-3 py-2"
-                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-semibold" style={{ color: "var(--app-text1)" }}>{item.label}</span>
-                          <span className="text-[9px] uppercase tracking-[0.4px] font-bold"
-                            style={{ color: item.status === "ready" ? "#4ade80" : item.status === "watch" ? "#fbbf24" : "var(--app-text3)" }}>
-                            {item.status === "ready" ? "Ready" : item.status === "watch" ? "Watch" : "Missing"}
+                  <details open className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Setup checks</summary>
+                    <div className="px-3 pb-3 space-y-1.5">
+                      {playbookItems.map((item) => (
+                        <div key={item.key} className="flex items-center justify-between gap-2 text-[10px]">
+                          <span style={{ color: "var(--app-text2)" }}>{item.label}</span>
+                          <span className="truncate text-right" style={{ color: item.status === "ready" ? "#4ade80" : item.status === "watch" ? "#fbbf24" : "var(--app-text3)", maxWidth: 130 }}>
+                            {item.detail}
                           </span>
                         </div>
-                        <div className="text-[10px] leading-4 mt-1" style={{ color: "var(--app-text3)" }}>{item.detail}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <button
-                      onClick={() => void handleQuickAlert("above", recentHigh, `${symbol} breakout above recent resistance`)}
-                      disabled={alertSaving || recentHigh == null}
-                      className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
-                      style={{ background: "rgba(38,166,91,0.12)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }}
-                    >
-                      Alert breakout
-                    </button>
-                    <button
-                      onClick={() => void handleQuickAlert("below", recentLow, `${symbol} lost recent support`)}
-                      disabled={alertSaving || recentLow == null}
-                      className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
-                      style={{ background: "rgba(229,56,59,0.12)", color: "#f87171", border: "1px solid rgba(229,56,59,0.22)" }}
-                    >
-                      Alert support
-                    </button>
-                  </div>
+                      ))}
+                    </div>
+                  </details>
+                  <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Trade plan</summary>
+                    <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                      Plan levels live in the Watchlist Decision Desk. Full chart keeps the visual workspace clear.
+                    </div>
+                  </details>
+                  <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Review context</summary>
+                    <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                      {symbolReview.closed > 0 ? `${symbolReview.closed} closed · ${symbolReview.reviewed} reviewed` : `No closed trades on ${symbol} yet.`}
+                    </div>
+                  </details>
+                  <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Alerts</summary>
+                    <div className="grid grid-cols-2 gap-2 px-3 pb-3">
+                      <button
+                        onClick={() => void handleQuickAlert("above", recentHigh, `${symbol} breakout above recent resistance`)}
+                        disabled={alertSaving || recentHigh == null}
+                        className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
+                        style={{ background: "rgba(38,166,91,0.12)", color: "#4ade80", border: "1px solid rgba(38,166,91,0.22)" }}
+                      >
+                        Breakout
+                      </button>
+                      <button
+                        onClick={() => void handleQuickAlert("below", recentLow, `${symbol} lost recent support`)}
+                        disabled={alertSaving || recentLow == null}
+                        className="rounded-[8px] px-2.5 py-2 text-[11px] font-semibold disabled:opacity-50"
+                        style={{ background: "rgba(229,56,59,0.12)", color: "#f87171", border: "1px solid rgba(229,56,59,0.22)" }}
+                      >
+                        Support
+                      </button>
+                    </div>
+                  </details>
                   {quickAlertMsg && (
                     <div className="text-[10px] mt-2" style={{ color: quickAlertMsg.includes("failed") || quickAlertMsg.includes("unavailable") ? "#f87171" : "#4ade80" }}>
                       {quickAlertMsg}
@@ -2249,82 +2272,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </div>
               </div>
 
-              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
-                <button
-                  onClick={() => setShowTradePlan((current) => !current)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
-                  style={{ color: "var(--app-text2)" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Trade plan</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
-                      {planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set levels"}
-                    </span>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showTradePlan ? "rotate(180deg)" : "rotate(0deg)" }}>
-                      <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
-                </button>
-                {showTradePlan && (
-                  <div className="px-4 pb-4 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
-                        Drag the plan guides on the chart or enter the levels here.
-                      </div>
-                      <button
-                        onClick={() => setTradePlan({
-                          entry: latest?.close?.toFixed(2) ?? "",
-                          stop: "",
-                          target: "",
-                        })}
-                        className="px-2 py-1 rounded-[7px] text-[10px] font-semibold"
-                        style={{ background: "var(--app-surface3)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}
-                      >
-                        Reset
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={tradePlan.entry}
-                        onChange={(e) => setTradePlan((current) => ({ ...current, entry: e.target.value }))}
-                        placeholder="Entry"
-                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
-                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      />
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={tradePlan.stop}
-                        onChange={(e) => setTradePlan((current) => ({ ...current, stop: e.target.value }))}
-                        placeholder="Stop"
-                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
-                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      />
-                      <input
-                        type="number"
-                        step="0.05"
-                        value={tradePlan.target}
-                        onChange={(e) => setTradePlan((current) => ({ ...current, target: e.target.value }))}
-                        placeholder="Target"
-                        className="w-full rounded-[7px] px-2.5 py-2 text-[11px] outline-none"
-                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
-                      <div className="text-[10px]" style={{ color: "var(--app-text3)" }}>
-                        Entry {planEntryValue != null && !Number.isNaN(planEntryValue) ? fmtPrice(planEntryValue, symbolCurrency) : "—"} · Stop {planStopValue != null && !Number.isNaN(planStopValue) ? fmtPrice(planStopValue, symbolCurrency) : "—"} · Target {planTargetValue != null && !Number.isNaN(planTargetValue) ? fmtPrice(planTargetValue, symbolCurrency) : "—"}
-                      </div>
-                      <div className="text-[10px] font-semibold tabular-nums" style={{ color: "var(--app-text2)" }}>
-                        {planRiskReward != null ? `R:R ${planRiskReward.toFixed(2)}` : "Set all 3"}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
               <div style={{ borderBottom: "1px solid var(--app-border)" }}>
                 <button
                   onClick={() => setShowReviewPanel((current) => !current)}
@@ -2783,48 +2730,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           )}
         </aside>
 
-        <aside
-          className="w-[88px] flex-shrink-0 flex flex-col items-center gap-3 px-3 py-4"
-          style={{ borderRight: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
-        >
-          <div className="label" style={{ fontSize: 9, color: "var(--app-text3)" }}>Tools</div>
-          {DRAWING_TOOLS.map(tool => {
-            const meta = DRAW_TOOL_META[tool];
-            const Icon = meta.icon;
-            const active = activeDrawingTool === tool;
-            return (
-              <button
-                key={tool}
-                onClick={() => {
-                  setActiveDrawingTool(prev => prev === tool ? null : tool);
-                  setSelectedDrawingId(null);
-                }}
-                title={`${meta.label} (${meta.short})`}
-                className="w-full flex flex-col items-center gap-1 rounded-[14px] px-2 py-2 transition-colors"
-                style={active
-                  ? { background: "rgba(139,150,166,0.16)", border: "1px solid rgba(139,150,166,0.38)", color: "#a5b4fc" }
-                  : { background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--app-text3)" }}
-              >
-                <Icon size={15} />
-                <span style={{ fontSize: 10, fontWeight: 600 }}>{meta.label}</span>
-                <span className="mono" style={{ fontSize: 9, color: "var(--app-text3)" }}>{meta.short}</span>
-              </button>
-            );
-          })}
-
-          <div className="w-full h-px" style={{ background: "rgba(255,255,255,0.06)", margin: "2px 0" }} />
-
-          <button
-            onClick={() => setShowObjectList(prev => !prev)}
-            className="w-full rounded-[14px] px-2 py-2 transition-colors"
-            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--app-text2)" }}
-          >
-            <div className="flex justify-center"><Activity size={15} /></div>
-            <div style={{ fontSize: 10, fontWeight: 600, marginTop: 4 }}>Objects</div>
-            <div className="mono" style={{ fontSize: 9, color: "var(--app-text3)" }}>{drawnLines.length}</div>
-          </button>
-        </aside>
-
         {/* Chart area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "transparent" }}>
           <div
@@ -2865,6 +2770,18 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   Selected: {DRAW_TOOL_META[selectedDrawing.tool].label}
                 </div>
               )}
+              {data && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {rangeLabel} · {timeframe} · {formatCandleRange(data.candles)}
+                </div>
+              )}
+              {drawnLines.length > 0 && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  Drawings · {drawnLines.length}
+                </div>
+              )}
               {selectedDrawing && (
                 <button
                   onClick={() => void handleAlertFromSelectedDrawing()}
@@ -2873,16 +2790,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 >
                   <Bell size={12} />
                   Alert from drawing
-                </button>
-              )}
-              {selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && (
-                <button
-                  onClick={() => applyPositionDrawingToPlan(selectedDrawing)}
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
-                  style={{ background: "rgba(34,197,94,0.12)", color: "#4ade80", border: "1px solid rgba(34,197,94,0.22)" }}
-                >
-                  <TrendingUp size={12} />
-                  Use as plan
                 </button>
               )}
               {selectedDrawing?.tool === "Rectangle" && (
@@ -2986,125 +2893,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     <span>Vol <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtVol(displayBar.volume)}</span></span>
                   </div>
                 </div>
-                <div
-                  className="absolute top-[58px] left-3 z-10 pointer-events-none rounded-[14px] px-3 py-2"
-                  style={{ background: "rgba(13,15,20,0.76)", border: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(10px)" }}
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
-                      Range {candleRange != null ? fmtPrice(candleRange, symbolCurrency) : "—"}
-                    </span>
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)", color: candleBody != null && candleBody >= 0 ? "#4ade80" : "#f87171" }}>
-                      Body {candleBodyPct != null ? `${candleBodyPct >= 0 ? "+" : ""}${candleBodyPct.toFixed(2)}%` : "—"}
-                    </span>
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
-                      Vol ratio {latestVolumeRatio != null ? `${latestVolumeRatio.toFixed(2)}x` : "—"}
-                    </span>
-                    <span className="workspace-pill" style={{ background: "rgba(255,255,255,0.04)" }}>
-                      Range % {candleRangePct != null ? `${candleRangePct.toFixed(2)}%` : "—"}
-                    </span>
-                  </div>
-                </div>
               </>
             )}
 
-            {showObjectList && (
+            {(rangeNote || timeframeMessage) && (
               <div
-                className="absolute top-3 right-3 z-30 w-[220px] rounded-[16px] p-3"
-                style={{ background: "rgba(13,15,20,0.88)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(14px)" }}
+                className="absolute top-[58px] left-3 z-10 pointer-events-none rounded-[14px] px-3 py-2 text-[11px] font-semibold"
+                style={{ background: "rgba(13,15,20,0.78)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.18)", backdropFilter: "blur(10px)" }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="label" style={{ fontSize: 9, marginBottom: 4 }}>Objects</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--app-text1)" }}>{visibleDrawings.length} visible · {drawnLines.length} total</div>
-                    {hiddenCount > 0 && (
-                      <div style={{ fontSize: 10, color: "var(--app-text3)", marginTop: 2 }}>{hiddenCount} hidden in this session</div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setShowObjectList(false)}
-                    style={{ color: "var(--app-text3)", fontSize: 16, lineHeight: 1 }}
-                  >
-                    ×
-                  </button>
-                </div>
-                {drawnLines.length === 0 ? (
-                  <div style={{ fontSize: 11, lineHeight: 1.6, color: "var(--app-text3)" }}>
-                    Use the left tool rail to add levels, zones, rays, Fibonacci retracements, and notes.
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
-                    {drawnLines.map((item, idx) => (
-                      <div
-                        key={item.id}
-                        onClick={() => setSelectedDrawingId(item.id)}
-                        className="w-full text-left rounded-[12px] px-3 py-2 transition-colors cursor-pointer"
-                        style={selectedDrawingId === item.id
-                          ? { background: "rgba(139,150,166,0.16)", border: "1px solid rgba(139,150,166,0.34)" }
-                          : { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--app-text1)" }}>
-                            {idx + 1}. {DRAW_TOOL_META[item.tool].label}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleDrawingHidden(item.id);
-                              }}
-                              title={item.hidden ? "Show drawing" : "Hide drawing"}
-                              style={{ color: item.hidden ? "#fbbf24" : "var(--app-text3)", lineHeight: 0 }}
-                            >
-                              {item.hidden ? <Eye size={12} /> : <EyeOff size={12} />}
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleDrawingLock(item.id);
-                              }}
-                              title={item.locked ? "Unlock drawing" : "Lock drawing"}
-                              style={{ color: item.locked ? "#a5b4fc" : "var(--app-text3)", lineHeight: 0 }}
-                            >
-                              {item.locked ? <Unlock size={12} /> : <Lock size={12} />}
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void handleDeleteSingleDrawing(item.id);
-                              }}
-                              title="Delete drawing"
-                              disabled={item.locked}
-                              style={{ color: "#f87171", lineHeight: 0, opacity: item.locked ? 0.35 : 1 }}
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ marginTop: 5, fontSize: 10, color: item.hidden ? "#fbbf24" : "var(--app-text3)" }}>
-                          {formatDrawingSummary(item)}
-                        </div>
-                        <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {item.locked && (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#a5b4fc", letterSpacing: "0.04em", textTransform: "uppercase" }}>Locked</span>
-                          )}
-                          {item.hidden && (
-                            <span style={{ fontSize: 9, fontWeight: 700, color: "#fbbf24", letterSpacing: "0.04em", textTransform: "uppercase" }}>Hidden</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div className="label" style={{ fontSize: 9, marginBottom: 6 }}>Desk shortcuts</div>
-                  <div style={{ display: "grid", gap: 5, fontSize: 10, color: "var(--app-text3)" }}>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>T / R / H / J / Z / F / L / S / N</span> arm tools</div>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Z</span> undo · <span className="mono" style={{ color: "var(--app-text1)" }}>Cmd/Ctrl+Y</span> redo</div>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Esc</span> cancel tool · <span className="mono" style={{ color: "var(--app-text1)" }}>Delete</span> remove selection</div>
-                    <div><span className="mono" style={{ color: "var(--app-text1)" }}>Shift</span> lock angle/box · <span className="mono" style={{ color: "var(--app-text1)" }}>Alt</span> bypass magnet</div>
-                  </div>
-                </div>
+                {timeframeMessage || rangeNote}
               </div>
             )}
 
@@ -3224,83 +3021,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
               {/* Persisted drawings — projected from price/time coords each render */}
               <svg className="absolute inset-0 w-full h-full">
-                {(() => {
-                  const chartW = overlayRef.current?.clientWidth ?? 0;
-                  const planDefs = [
-                    { key: "entry", label: "Plan entry", price: tradePlan.entry ? parseFloat(tradePlan.entry) : null, color: "#a78bfa" },
-                    { key: "stop", label: "Plan stop", price: tradePlan.stop ? parseFloat(tradePlan.stop) : null, color: "#e5383b" },
-                    { key: "target", label: "Plan target", price: tradePlan.target ? parseFloat(tradePlan.target) : null, color: "#26a65b" },
-                  ] as const;
-                  return planDefs.map((line) => {
-                    if (line.price == null || Number.isNaN(line.price)) return null;
-                    const y = chartHandleRef.current?.priceToCoordinate(line.price) ?? null;
-                    if (y == null) return null;
-                    const glowId = `plan-glow-${line.key}`;
-                    return (
-                      <g key={line.key} style={{ pointerEvents: "all" }}>
-                        <defs>
-                          <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
-                            <feGaussianBlur stdDeviation="2.2" result="blur" />
-                            <feMerge>
-                              <feMergeNode in="blur" />
-                              <feMergeNode in="SourceGraphic" />
-                            </feMerge>
-                          </filter>
-                        </defs>
-                        <line
-                          x1={0}
-                          y1={y}
-                          x2={chartW}
-                          y2={y}
-                          stroke={line.color}
-                          strokeWidth={1.8}
-                          strokeDasharray="6 4"
-                          opacity={0.92}
-                          filter={`url(#${glowId})`}
-                        />
-                        <rect
-                          x={8}
-                          y={y - 12}
-                          width={124}
-                          height={24}
-                          rx={10}
-                          fill="rgba(13,15,20,0.94)"
-                          stroke={line.color}
-                        />
-                        <text
-                          x={16}
-                          y={y + 5}
-                          fontSize="10.5"
-                          fill={line.color}
-                          fontFamily="Inter, sans-serif"
-                          fontWeight="700"
-                        >
-                          {line.label} {line.price.toFixed(2)}
-                        </text>
-                        <circle
-                          cx={138}
-                          cy={y}
-                          r={9}
-                          fill="rgba(13,15,20,0.96)"
-                          opacity={0.22}
-                        />
-                        <circle
-                          cx={138}
-                          cy={y}
-                          r={6.5}
-                          fill="#0D0F14"
-                          stroke={line.color}
-                          strokeWidth={1.8}
-                          style={{ cursor: "ns-resize" }}
-                          onMouseDown={(event) => {
-                            event.stopPropagation();
-                            setPlanDragState({ field: line.key });
-                          }}
-                        />
-                      </g>
-                    );
-                  });
-                })()}
                 {activeManagedPosition && activeManagedDraft && (() => {
                   const chartW = overlayRef.current?.clientWidth ?? 0;
                   const lineDefs = [
@@ -3727,7 +3447,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
             {/* Main chart */}
             {data && (
               <CandlestickChart
-                key={`${symbol}-${timeframe}-${chartType}-${liveMode ? "live" : "eod"}`}
+                key={`${symbol}-${rangeLabel}-${timeframe}-${chartType}-${liveMode ? "live" : "eod"}`}
                 candles={data.candles}
                 indicators={indicatorData}
                 activeIndicators={activeIndicators}

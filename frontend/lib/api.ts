@@ -946,7 +946,7 @@ export type ChartLayout = {
 };
 
 export type ChartWorkspaceIndicator = {
-  type: "ema" | "sma" | "vwap" | "rsi" | "macd" | "volume";
+  type: "ema" | "sma" | "vwap" | "rsi" | "macd" | "volume" | "bollinger";
   params?: Record<string, unknown>;
 };
 

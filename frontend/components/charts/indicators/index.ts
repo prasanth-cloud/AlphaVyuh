@@ -1,3 +1,4 @@
+import { bollinger } from "./bollinger";
 import { ema } from "./ema";
 import { macd } from "./macd";
 import { rsi } from "./rsi";
@@ -13,6 +14,7 @@ export const indicatorRegistry = {
   rsi,
   macd,
   volume,
+  bollinger,
 } as unknown as Record<ChartIndicator["type"], IndicatorDef<Record<string, unknown>>>;
 
 export const defaultIndicators: ChartIndicator[] = [
@@ -22,12 +24,15 @@ export const defaultIndicators: ChartIndicator[] = [
 
 export const indicatorMenuItems: ChartIndicator[] = [
   { type: "ema", params: { period: 20 } },
+  { type: "ema", params: { period: 50 } },
+  { type: "ema", params: { period: 200 } },
   { type: "sma", params: { period: 50 } },
   { type: "sma", params: { period: 200 } },
   { type: "vwap", params: {} },
   { type: "rsi", params: { period: 14 } },
   { type: "macd", params: { fast: 12, slow: 26, signal: 9 } },
   { type: "volume", params: {} },
+  { type: "bollinger", params: { period: 20, deviation: 2 } },
 ];
 
 export function indicatorKey(indicator: ChartIndicator) {
@@ -50,6 +55,9 @@ export function normalizeIndicators(value: unknown): ChartIndicator[] {
       if (item === "ema20") return [{ type: "ema", params: { period: 20 } }];
       if (item === "ema50") return [{ type: "ema", params: { period: 50 } }];
       if (item === "ema200") return [{ type: "ema", params: { period: 200 } }];
+      if (item === "sma50") return [{ type: "sma", params: { period: 50 } }];
+      if (item === "sma200") return [{ type: "sma", params: { period: 200 } }];
+      if (item === "bb" || item === "bollinger") return [{ type: "bollinger", params: { period: 20, deviation: 2 } }];
       if (item === "vwap" || item === "rsi" || item === "macd" || item === "volume") return [{ type: item, params: {} }];
     }
     if (item && typeof item === "object" && "type" in item && String(item.type) in indicatorRegistry) {
