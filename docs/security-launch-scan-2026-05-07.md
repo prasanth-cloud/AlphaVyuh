@@ -87,22 +87,24 @@ Fix:
 ### SEC-2026-05-07-04 — Supabase SECURITY DEFINER Grants And Search Path
 
 Severity: Medium
-Status: Owner-gated migration
+Status: Migration prepared; production apply pending
 
-Read-only Supabase security advisors for the documented staging project reported
+Read-only Supabase security advisors for the production project reported
 WARN-level findings for direct `anon`/`authenticated` execution of several
 `SECURITY DEFINER` functions and mutable function search paths.
 
-Required fix:
+Prepared fix:
 
-- Add and apply a reviewed migration that sets explicit `search_path = public` on known security-sensitive
-  functions.
-- Revoke direct `PUBLIC`, `anon`, and `authenticated` execution for
+- `supabase/migrations/20260508001000_public_launch_security_hardening.sql`
+  sets explicit `search_path = public` on known security-sensitive functions.
+- It revokes direct `PUBLIC`, `anon`, and `authenticated` execution for
   backend/service-role RPCs such as broker credential access, scanner VCP lookback,
   and RS score recomputation.
-- Grant those backend RPCs to `service_role` only.
-- Add the repository-required production migration evidence marker only after
-  staging/prod application is actually complete.
+- It grants those backend RPCs to `service_role` only.
+- Owner approval was given in chat, but the Supabase migration API refused the
+  production apply for safety reasons. Add the repository-required production
+  migration evidence marker only after production application is actually
+  complete and verified.
 
 ## Validated Safe Posture
 
@@ -114,12 +116,12 @@ Required fix:
 - Frontend `npm audit --audit-level=moderate` reported 0 vulnerabilities.
 - Backend `pip-audit` reported no known vulnerabilities for `backend/requirements.txt`.
 - Full backend tests passed, including broker order safety, encrypted credential, payment signature, rate-limit, and auth middleware coverage.
-- Read-only Supabase advisors were run against staging project `fyxltykqdvacbdgmeucf`. WARN-level function grant/search-path findings remain owner-gated because this PR cannot add a new migration without production-application evidence.
+- Read-only Supabase advisors were run against production project `fyxltykqdvacbdgmeucf`. WARN-level function grant/search-path findings have a reviewed migration prepared, but production application remains pending because the Supabase migration API refused the apply.
 
 ## Residual Owner-Gated Risks
 
-- Production Supabase mutation remains unapproved; the function grant/search-path hardening migration still needs normal staging/prod application evidence before public launch.
-- Supabase Auth leaked-password protection was disabled in the staging advisor output and must be enabled by the project owner in Supabase Auth settings before public launch.
+- Production Supabase hardening remains unapplied; the function grant/search-path hardening migration still needs normal production application evidence before public launch.
+- Supabase Auth leaked-password protection was disabled in the production advisor output and must be enabled by the project owner in Supabase Auth settings before public launch.
 - Real Kite/Upstox read-only smoke was not run because owner-provided tokens were not supplied.
 - Razorpay production checkout is not enabled; payment launch needs owner approval and end-to-end test/live-mode evidence.
 - Paid/live market-data redistribution requires vendor terms and launch-owner approval.

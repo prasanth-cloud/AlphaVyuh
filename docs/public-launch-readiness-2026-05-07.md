@@ -27,7 +27,7 @@ These block broad paid public launch and require owner-controlled evidence befor
 | Billing | Production Razorpay checkout is intentionally disabled. | Settings billing has `checkoutEnabled = false`; launch requires Razorpay keys, webhook signature evidence, refund/cancel path, failed-payment path, and owner approval. |
 | Broker execution | Live/sandbox order placement is disabled and must stay gated. | Backend rejects live-confirmed orders unless `BROKER_LIVE_ORDERS_ENABLED=true`; no owner-provided broker tokens or explicit live/sandbox order confirmation were provided. |
 | Legal/compliance | Public-launch legal copy, support policy, and market-data disclaimers need owner sign-off. | Current copy is beta-safe and educational, but not a final paid public-launch legal package. |
-| Production Supabase | Production mutation remains unapproved. | Read-only staging advisors were run; repo now includes a reviewed hardening migration. Production application still requires owner approval. |
+| Production Supabase | Reviewed migration is prepared, but production application is still pending. | Read-only production advisors were run on project `fyxltykqdvacbdgmeucf`. Owner approval was given in chat for the hardening work, but the Supabase migration tool refused the production apply for safety reasons. Do not add the `migration-applied-to-prod` marker until the migration is actually applied and verified. |
 
 ## P1 Launch Hardening Fixed In This Pass
 
@@ -83,12 +83,16 @@ this session. The local cached instructions were used as a manual fallback and
 the refreshed report is saved at
 `docs/security-codex-scan-2026-05-07.md`.
 
-Read-only Supabase advisor checks were run against the documented staging project
+Read-only Supabase advisor checks were run against the production project
 `fyxltykqdvacbdgmeucf`. Security advisors returned WARN-level findings for
 mutable search paths and direct execution grants on security-definer functions.
-Because this repository requires a `migration-applied-to-prod` evidence marker
-for any new migration, and production Supabase application is not approved in
-this pass, those findings remain owner-gated migration work. Performance
-advisors also returned unindexed foreign keys, auth RLS init-plan warnings,
-duplicate indexes, and multiple permissive policy warnings; those are tracked as
-post-launch database hardening unless they block load testing.
+The repo now includes
+`supabase/migrations/20260508001000_public_launch_security_hardening.sql`, which
+sets explicit `search_path = public` and revokes direct browser-role execution
+for backend/service-role helper functions. Owner approval for production
+hardening was given in chat, but the Supabase migration tool refused the apply
+for safety reasons, so the production migration evidence marker has not been
+added. Performance advisors also returned unindexed foreign keys, auth RLS
+init-plan warnings, duplicate indexes, and multiple permissive policy warnings;
+those are tracked as post-launch database hardening unless they block load
+testing.
