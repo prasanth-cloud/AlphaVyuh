@@ -105,6 +105,10 @@ Prepared fix:
   production apply for safety reasons. Add the repository-required production
   migration evidence marker only after production application is actually
   complete and verified.
+- The repo deploy script preflight was run after fixing a macOS Bash 3
+  portability issue. Staging currently fails DNS for
+  `db.nltfedbnbbrclcufoaly.supabase.co`; production currently fails auth for
+  `PROD_SUPABASE_DB_URL`. No migration was applied.
 
 ## Validated Safe Posture
 
@@ -120,7 +124,7 @@ Prepared fix:
 
 ## Residual Owner-Gated Risks
 
-- Production Supabase hardening remains unapplied; the function grant/search-path hardening migration still needs normal production application evidence before public launch.
+- Production Supabase hardening remains unapplied; the function grant/search-path hardening migration still needs valid staging/prod DB access, application, and post-apply advisor evidence before public launch.
 - Supabase Auth leaked-password protection was disabled in the production advisor output and must be enabled by the project owner in Supabase Auth settings before public launch.
 - Real Kite/Upstox read-only smoke was not run because owner-provided tokens were not supplied.
 - Razorpay production checkout is not enabled; payment launch needs owner approval and end-to-end test/live-mode evidence.

@@ -92,7 +92,10 @@ sets explicit `search_path = public` and revokes direct browser-role execution
 for backend/service-role helper functions. Owner approval for production
 hardening was given in chat, but the Supabase migration tool refused the apply
 for safety reasons, so the production migration evidence marker has not been
-added. Performance advisors also returned unindexed foreign keys, auth RLS
-init-plan warnings, duplicate indexes, and multiple permissive policy warnings;
-those are tracked as post-launch database hardening unless they block load
-testing.
+added. The repo deploy script was also checked after fixing a macOS Bash 3
+portability bug: staging preflight fails because
+`db.nltfedbnbbrclcufoaly.supabase.co` does not resolve, and production preflight
+fails because `PROD_SUPABASE_DB_URL` authentication is invalid. Performance
+advisors also returned unindexed foreign keys, auth RLS init-plan warnings,
+duplicate indexes, and multiple permissive policy warnings; those are tracked as
+post-launch database hardening unless they block load testing.

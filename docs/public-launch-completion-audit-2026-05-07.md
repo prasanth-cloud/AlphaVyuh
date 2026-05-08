@@ -39,7 +39,7 @@ This file maps the full public-launch prompt to concrete artifacts on branch
 | Data provenance visible and not confused with live data. | Existing E2E coverage checks provenance across dashboard/scanner/watchlist/full chart/data page. | Done |
 | Broker execution cannot accidentally place live orders. | Backend order safety tests passed; live/sandbox execution remains disabled unless explicit backend flag and user confirmation are present. | Done |
 | Billing/Razorpay safely enabled or disabled. | Billing UI remains disabled/waitlist-gated; Razorpay checkout is not production-enabled. | Done for disabled posture |
-| Supabase migrations reviewed and production-safe. | Repo migration docs reviewed; read-only production advisors were run. `supabase/migrations/20260508001000_public_launch_security_hardening.sql` is prepared for function search-path/direct-execute hardening, but the Supabase migration API refused the production apply. | Apply pending |
+| Supabase migrations reviewed and production-safe. | Repo migration docs reviewed; read-only production advisors were run. `supabase/migrations/20260508001000_public_launch_security_hardening.sql` is prepared for function search-path/direct-execute hardening, but the Supabase migration API refused the production apply. The repo deploy script was made macOS Bash 3 compatible; staging preflight fails DNS and production preflight fails DB auth with current local URLs. | Apply pending |
 | Security-sensitive flows reviewed. | Auth, redirects, service keys, broker credentials, payment webhooks, rate limits, public API exposure, and dependency posture are covered by scan docs and tests. | Done for repo-local evidence |
 
 ## Remaining Owner-Controlled No-Go Items
@@ -50,8 +50,8 @@ These are outside autonomous repo work and prevent marking the app as a paid ful
 2. Final public-launch legal/support copy.
 3. Razorpay production checkout approval with webhook, refund/cancel, failed-payment, and owner sign-off evidence.
 4. Owner-provided Kite/Upstox tokens for read-only smoke, if broker validation is desired.
-5. Production Supabase hardening migration application evidence, including post-apply RLS/advisor evidence.
-6. Apply/verify `supabase/migrations/20260508001000_public_launch_security_hardening.sql` for function search paths and direct EXECUTE grants in production.
+5. Valid staging/prod Supabase DB URLs or a Supabase dashboard apply path for the prepared hardening migration.
+6. Apply/verify `supabase/migrations/20260508001000_public_launch_security_hardening.sql` for function search paths and direct EXECUTE grants in staging/prod, then add post-apply advisor evidence.
 7. A real activated `codex-security:security-scan` run, if that skill becomes available in the environment.
 
 ## Conclusion
