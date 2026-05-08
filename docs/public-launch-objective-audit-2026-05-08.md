@@ -21,13 +21,13 @@ posture until owner-controlled gates are resolved.
 
 | Requirement | Evidence | Status |
 | --- | --- | --- |
-| Use the real GitHub repository `prasanth-cloud/AlphaVyuh`. | Local checkout remote and PR #74 target the real repo; GitHub PR/check state inspected with `gh pr view` and `gh pr checks`. | Done |
+| Use the real GitHub repository `prasanth-cloud/AlphaVyuh`. | Local checkout remote and PR #74 target the real repo; GitHub PR/check state inspected with the GitHub connector plus `gh pr view` and `gh pr checks`. | Done |
 | Work from latest real GitHub code. | Branch includes latest `origin/main` through merge commit `d40dd8c`, plus merged scanner commit `8d7369f`. | Done |
 | Dedicated branch `launch/public-release-readiness-2026-05-07`. | Current branch and PR #74 use this branch. | Done |
 | Inspect launch docs and current private-beta state. | `PRODUCT.md`, `BETA_LAUNCH_CHECKLIST.md`, `docs/release-readiness.md`, `docs/customer-launch-runbook.md`, and recent launch/security docs are summarized in `docs/public-launch-readiness-2026-05-07.md`. | Done |
 | Create P0/P1/P2 public-launch readiness audit. | `docs/public-launch-readiness-2026-05-07.md`. | Done |
 | Implement high-confidence P0/P1 fixes. | `/dev-login` production-like gating, generic backend auth failure detail, broker smoke token-print guard; documented in launch/security docs. | Done |
-| Use `github:github`. | The named skill was not available as an activated skill in this session; GitHub state was inspected and updated through authenticated GitHub CLI calls (`gh pr view`, `gh pr checks`, `gh pr edit`, `gh pr comment`). | Fallback used |
+| Use `github:github`. | The GitHub connector was used on 2026-05-08 to inspect open PR state for `prasanth-cloud/AlphaVyuh`, including PR #74 and current branch/check evidence. Authenticated GitHub CLI calls (`gh pr view`, `gh pr checks`, `gh pr edit`, `gh pr comment`) were also used for check/body updates. | Done |
 | Use exact `codex-security:security-scan`. | The installed Codex Security `security-scan` skill was active in the later session and was run repository-wide. The plugin-specific MCP tool name `codex-security:security-scan` was not exposed as a separate callable tool; evidence is documented at `docs/security-codex-scan-2026-05-08.md` and `/tmp/codex-security-scans/alphavyuh/5a013a85b444_20260508-084003/report.md`. | Done with activated installed skill |
 | Do not claim exact Codex Security pass unless active. | The historical fallback report remains marked as fallback; the current report distinguishes the active installed skill workflow from the non-exposed plugin-specific MCP tool name. | Done |
 | Repository-wide security report with threat model, discovery, validation, attack-path analysis, final findings. | `docs/security-codex-scan-2026-05-08.md` and `/tmp/codex-security-scans/alphavyuh/5a013a85b444_20260508-084003/`. | Done |
@@ -55,8 +55,7 @@ posture until owner-controlled gates are resolved.
 ## Current PR Check State
 
 - Vercel: green.
-- Migration Drift Check: expected to pass after PR #74 body includes the
-  production-applied evidence marker for the verified direct-SQL apply.
+- Migration Drift Check: green.
 - PR state: open draft, mergeable.
 
 ## Remaining Owner-Controlled Gates
