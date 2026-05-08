@@ -15,6 +15,21 @@ This report is therefore a manual skill-guided fallback, not an activated
 Codex Security plugin run. Do not treat it as proof that the exact
 `codex-security:security-scan` plugin passed.
 
+2026-05-08 update: the cached Codex Security skill files were installed into
+`/Users/PRASAANTH/.codex/skills` for future Codex sessions:
+
+- `security-scan`
+- `threat-model`
+- `finding-discovery`
+- `validation`
+- `attack-path-analysis`
+- `fix-finding`
+
+The current running session still did not expose an activated
+`codex-security:security-scan` tool after installation, so this remains a
+skill-guided fallback report for the current PR. Discovery commands were rerun
+after installation; no new high or critical finding was validated.
+
 ## Phase 1 — Threat Model
 
 Primary assets:
@@ -145,3 +160,11 @@ Residual owner-gated items remain:
 See `docs/public-launch-readiness-2026-05-07.md` and
 `docs/public-launch-completion-audit-2026-05-07.md` for command evidence from
 the release validation pass.
+
+2026-05-08 refresh:
+
+- `npm audit --audit-level=moderate` passed with 0 vulnerabilities.
+- `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off` passed with no known vulnerabilities.
+- Repository-wide discovery patterns were rerun for service-role exposure,
+  token logging, unsafe HTML/eval patterns, redirects, broker order gates,
+  payment/webhook paths, and public trading/data claims.

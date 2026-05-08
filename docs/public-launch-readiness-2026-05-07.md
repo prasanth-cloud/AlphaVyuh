@@ -82,6 +82,11 @@ The requested exact `codex-security:security-scan` plugin was unavailable in
 this session. The local cached instructions were used as a manual fallback and
 the refreshed report is saved at
 `docs/security-codex-scan-2026-05-07.md`.
+On 2026-05-08, the cached Codex Security skill files were installed into
+`/Users/PRASAANTH/.codex/skills` for future sessions, but the running session
+still did not expose an activated `codex-security:security-scan` tool. Security
+discovery and dependency audit checks were rerun after installation; no new high
+or critical finding was validated.
 
 Read-only Supabase advisor checks were run against the production project
 `fyxltykqdvacbdgmeucf`. Security advisors returned WARN-level findings for
@@ -95,7 +100,9 @@ for safety reasons, so the production migration evidence marker has not been
 added. The repo deploy script was also checked after fixing a macOS Bash 3
 portability bug: staging preflight fails because
 `db.nltfedbnbbrclcufoaly.supabase.co` does not resolve, and production preflight
-fails because `PROD_SUPABASE_DB_URL` authentication is invalid. Performance
+fails because `PROD_SUPABASE_DB_URL` authentication is invalid. A later
+Supabase migration API apply attempt also refused the production apply for
+safety reasons despite owner authorization in chat. Performance
 advisors also returned unindexed foreign keys, auth RLS init-plan warnings,
 duplicate indexes, and multiple permissive policy warnings; those are tracked as
 post-launch database hardening unless they block load testing.

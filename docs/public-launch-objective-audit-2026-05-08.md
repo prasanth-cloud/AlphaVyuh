@@ -28,7 +28,7 @@ posture until owner-controlled gates are resolved.
 | Create P0/P1/P2 public-launch readiness audit. | `docs/public-launch-readiness-2026-05-07.md`. | Done |
 | Implement high-confidence P0/P1 fixes. | `/dev-login` production-like gating, generic backend auth failure detail, broker smoke token-print guard; documented in launch/security docs. | Done |
 | Use `github:github`. | The named skill was not available as an activated skill in this session; GitHub state was inspected and updated through authenticated GitHub CLI calls (`gh pr view`, `gh pr checks`, `gh pr edit`, `gh pr comment`). | Fallback used |
-| Use exact `codex-security:security-scan`. | Exact activated plugin/skill was unavailable. Manual cached skill-guided fallback is documented at `docs/security-codex-scan-2026-05-07.md`. | Blocked by environment |
+| Use exact `codex-security:security-scan`. | Exact activated plugin/skill was unavailable. Cached Codex Security skill files were installed into `/Users/PRASAANTH/.codex/skills` on 2026-05-08, but the running session still did not expose the activated tool. Manual cached skill-guided fallback is documented at `docs/security-codex-scan-2026-05-07.md`. | Installed for future session; current run fallback |
 | Do not claim exact Codex Security pass unless active. | PR #74 and security docs explicitly say the exact activated scan was unavailable and must not be treated as a pass. | Done |
 | Repository-wide security report with threat model, discovery, validation, attack-path analysis, final findings. | `docs/security-codex-scan-2026-05-07.md` and `docs/security-launch-scan-2026-05-07.md`. | Done via fallback |
 | Fix validated high/critical findings. | No high/critical finding was validated in fallback scan. Medium fixes were completed and documented. | Done |
@@ -38,7 +38,7 @@ posture until owner-controlled gates are resolved.
 | Broker live/sandbox execution safely gated. | Backend order safety tests and release docs confirm flag + explicit confirmation gates; no live/sandbox order paths were run. | Done |
 | Billing/Razorpay safely enabled or disabled. | Billing remains disabled/waitlist-gated; production checkout not enabled. | Done for disabled posture |
 | Supabase migrations reviewed and production-safe. | Reviewed migration `supabase/migrations/20260508001000_public_launch_security_hardening.sql` prepared for function search-path/direct-execute hardening. | Prepared, not applied |
-| Supabase production mutation evidence. | Supabase migration API refused production apply. Repo deploy preflight fails staging DNS and production DB auth with current local URLs. PR #74 intentionally does not include production-applied evidence. | Blocked |
+| Supabase production mutation evidence. | Supabase migration API refused production apply. Repo deploy preflight fails staging DNS and production DB auth with current local URLs. A 2026-05-08 migration API retry also refused the production apply despite owner authorization in chat. PR #74 intentionally does not include production-applied evidence. | Blocked |
 | Frontend lint. | `npm run lint` passed. | Done |
 | Frontend typecheck/build. | `npm run typecheck` passed. | Done |
 | Frontend unit tests. | `npm --prefix frontend run test -- --run` passed: 13 files / 47 tests. | Done |
@@ -74,8 +74,8 @@ posture until owner-controlled gates are resolved.
 7. Provide owner broker tokens only if real read-only Kite/Upstox smoke is
    desired; do not run live/sandbox order validation without explicit owner
    confirmation.
-8. Run the exact activated `codex-security:security-scan` if it becomes
-   available in the Codex environment.
+8. Restart Codex or otherwise activate the installed `codex-security` skills if
+   an exact activated `codex-security:security-scan` run is required.
 
 ## Exact Next Action
 
