@@ -17,13 +17,22 @@ class IngestRequest(BaseModel):
     trade_date: DateType | None = None
 
 
+def _require_ingest_service_key(x_service_key: str | None) -> None:
+    if not settings.ingest_service_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingest service key is not configured",
+        )
+    if x_service_key != settings.ingest_service_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service key")
+
+
 @router.post("/bhavcopy")
 async def ingest_bhavcopy(
     body: IngestRequest = IngestRequest(),
     x_service_key: str | None = Header(default=None),
 ):
-    if not settings.ingest_service_key or x_service_key != settings.ingest_service_key:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service key")
+    _require_ingest_service_key(x_service_key)
 
     target_date = body.trade_date or DateType.today()
     result = await download_and_ingest(target_date)
@@ -38,10 +47,9 @@ async def refresh_today(
     """
     Pull last 5 days of OHLCV data from Yahoo Finance for NSE stocks and
     upsert into daily_ohlcv. Safe to call multiple times (idempotent).
-    Protected by INGEST_SERVICE_KEY header (or open locally when key not set).
+    Protected by INGEST_SERVICE_KEY header.
     """
-    if settings.ingest_service_key and x_service_key != settings.ingest_service_key:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service key")
+    _require_ingest_service_key(x_service_key)
 
     from app.services.yfinance_ingest import fetch_and_ingest, NSE_UNIVERSE
 

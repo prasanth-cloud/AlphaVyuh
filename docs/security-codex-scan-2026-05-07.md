@@ -25,10 +25,11 @@ Codex Security plugin run. Do not treat it as proof that the exact
 - `attack-path-analysis`
 - `fix-finding`
 
-The current running session still did not expose an activated
-`codex-security:security-scan` tool after installation, so this remains a
-skill-guided fallback report for the current PR. Discovery commands were rerun
-after installation; no new high or critical finding was validated.
+This 2026-05-07 report remains historical fallback evidence. A later Codex
+session exposed the installed `security-scan` skill, and the activated skill
+workflow was run on 2026-05-08. See
+`docs/security-codex-scan-2026-05-08.md` for the current scan report and the
+validated ingest endpoint fix.
 
 ## Phase 1 — Threat Model
 

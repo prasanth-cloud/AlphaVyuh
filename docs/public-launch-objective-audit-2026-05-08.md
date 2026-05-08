@@ -28,10 +28,10 @@ posture until owner-controlled gates are resolved.
 | Create P0/P1/P2 public-launch readiness audit. | `docs/public-launch-readiness-2026-05-07.md`. | Done |
 | Implement high-confidence P0/P1 fixes. | `/dev-login` production-like gating, generic backend auth failure detail, broker smoke token-print guard; documented in launch/security docs. | Done |
 | Use `github:github`. | The named skill was not available as an activated skill in this session; GitHub state was inspected and updated through authenticated GitHub CLI calls (`gh pr view`, `gh pr checks`, `gh pr edit`, `gh pr comment`). | Fallback used |
-| Use exact `codex-security:security-scan`. | Exact activated plugin/skill was unavailable. Cached Codex Security skill files were installed into `/Users/PRASAANTH/.codex/skills` on 2026-05-08, but the running session still did not expose the activated tool. Manual cached skill-guided fallback is documented at `docs/security-codex-scan-2026-05-07.md`. | Installed for future session; current run fallback |
-| Do not claim exact Codex Security pass unless active. | PR #74 and security docs explicitly say the exact activated scan was unavailable and must not be treated as a pass. | Done |
-| Repository-wide security report with threat model, discovery, validation, attack-path analysis, final findings. | `docs/security-codex-scan-2026-05-07.md` and `docs/security-launch-scan-2026-05-07.md`. | Done via fallback |
-| Fix validated high/critical findings. | No high/critical finding was validated in fallback scan. Medium fixes were completed and documented. | Done |
+| Use exact `codex-security:security-scan`. | The installed Codex Security `security-scan` skill was active in the later session and was run repository-wide. The plugin-specific MCP tool name `codex-security:security-scan` was not exposed as a separate callable tool; evidence is documented at `docs/security-codex-scan-2026-05-08.md` and `/tmp/codex-security-scans/alphavyuh/5a013a85b444_20260508-084003/report.md`. | Done with activated installed skill |
+| Do not claim exact Codex Security pass unless active. | The historical fallback report remains marked as fallback; the current report distinguishes the active installed skill workflow from the non-exposed plugin-specific MCP tool name. | Done |
+| Repository-wide security report with threat model, discovery, validation, attack-path analysis, final findings. | `docs/security-codex-scan-2026-05-08.md` and `/tmp/codex-security-scans/alphavyuh/5a013a85b444_20260508-084003/`. | Done |
+| Fix validated high/critical findings. | No high/critical finding survived validation. One medium ingest fail-open finding was fixed in `backend/app/routers/ingest.py` with `backend/tests/test_ingest_security.py`. | Done |
 | Landing/pricing/signup/login/onboarding/app routes work. | `npm run launch:check`, release-readiness E2E, layout/perf/mock checks documented in `docs/public-launch-readiness-2026-05-07.md`. | Verified locally |
 | No misleading advice, signal-service, fake, or guaranteed-return claims. | Copy scan and legal posture documented in security/readiness docs. Product remains educational/not-advice. | Verified for beta posture |
 | Data provenance visibly labels EOD/demo/fallback/live-beta surfaces. | Existing layout/mock E2E and launch docs cover dashboard/scanner/watchlist/full chart/data surfaces. | Verified locally |
@@ -43,7 +43,7 @@ posture until owner-controlled gates are resolved.
 | Frontend typecheck/build. | `npm run typecheck` passed. | Done |
 | Frontend unit tests. | `npm --prefix frontend run test -- --run` passed: 13 files / 47 tests. | Done |
 | Frontend audit. | `npm audit --audit-level=moderate` passed: 0 vulnerabilities. | Done |
-| Backend tests. | `backend/.venv/bin/python -m pytest backend/tests` passed: 169 tests. | Done |
+| Backend tests. | `backend/.venv/bin/python -m pytest backend/tests -q` passed after the ingest security fix: 175 tests. `npm run launch:check` backend focused tests also passed: 40 tests. | Done |
 | Backend dependency audit. | `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off` passed. | Done |
 | Mock workflow E2E. | `npm run test:e2e:mock` passed: 9 tests. | Done |
 | Layout smoke. | `npm run test:e2e:layout` passed: 12 tests. | Done |
@@ -69,12 +69,12 @@ posture until owner-controlled gates are resolved.
 5. Provide owner broker tokens only if real read-only Kite/Upstox smoke is
    desired; do not run live/sandbox order validation without explicit owner
    confirmation.
-6. Restart Codex or otherwise activate the installed `codex-security` skills if
-   an exact activated `codex-security:security-scan` run is required.
+6. Add Telegram webhook secret validation before broad Telegram bot promotion.
 
 ## Exact Next Action
 
 Reconcile Supabase migration history when valid DB URL access is restored, then
 continue owner-controlled public-launch gates: Auth leaked-password protection,
 final legal/support/data-vendor policy, Razorpay production payment evidence,
-and optional read-only broker smoke credentials.
+optional read-only broker smoke credentials, and Telegram webhook secret
+validation before public bot promotion.
