@@ -20,22 +20,31 @@ The prepared migration keeps app behavior unchanged while reducing direct RPC
 attack surface. It targets helper functions used by triggers or backend
 service-role paths.
 
-## Current Blocker
+## Current State
 
-The migration has not been applied.
+The reviewed SQL was applied to production on 2026-05-08 via direct Supabase SQL
+execution after owner authorization. Staging remained unavailable/inactive and
+the Supabase migration API refused the apply, so Supabase migration history was
+not updated.
 
-Observed local preflight blockers:
+Observed apply-path blockers:
 
 - staging DB host `db.nltfedbnbbrclcufoaly.supabase.co` does not resolve
 - production `PROD_SUPABASE_DB_URL` fails password authentication
 - the Supabase migration API refused the production apply for safety reasons
 
-Do not add production-applied evidence to PR #74 until the migration is actually
-applied and verified.
+Post-apply production verification confirmed the targeted functions now use
+`search_path=public` and no longer grant direct `anon`/`authenticated` execute.
+Post-apply security advisors no longer report the mutable search-path or direct
+security-definer execute warnings.
+
+Remaining task: reconcile migration history when valid DB URL access is restored
+so the local migration file and Supabase migration ledger are aligned.
 
 ## Apply Path A — Repo Script
 
-Use this path when valid DB URLs are available in `.env.local`.
+Use this path when valid DB URLs are available in `.env.local` to reconcile
+migration history and future schema changes.
 
 Required variables:
 
@@ -145,12 +154,13 @@ Expected remaining owner-controlled items:
 
 ## PR Evidence Update
 
-Only after production apply and advisor verification are complete:
+Production apply and advisor verification are complete via direct SQL execution.
+PR #74 should record:
 
 1. Update PR #74 with:
-   - apply method
+   - apply method: direct Supabase SQL execution
    - production project id
-   - migration list or dashboard evidence
+   - function grant/search-path verification evidence
    - post-apply advisor summary
 2. Add the repository-required production-applied marker to the PR description.
 3. Re-run the Migration Drift Check.

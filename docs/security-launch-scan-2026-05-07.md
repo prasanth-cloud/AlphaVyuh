@@ -87,13 +87,13 @@ Fix:
 ### SEC-2026-05-07-04 — Supabase SECURITY DEFINER Grants And Search Path
 
 Severity: Medium
-Status: Migration prepared; production apply pending
+Status: Applied and verified on production
 
 Read-only Supabase security advisors for the production project reported
 WARN-level findings for direct `anon`/`authenticated` execution of several
 `SECURITY DEFINER` functions and mutable function search paths.
 
-Prepared fix:
+Fix:
 
 - `supabase/migrations/20260508001000_public_launch_security_hardening.sql`
   sets explicit `search_path = public` on known security-sensitive functions.
@@ -101,14 +101,14 @@ Prepared fix:
   backend/service-role RPCs such as broker credential access, scanner VCP lookback,
   and RS score recomputation.
 - It grants those backend RPCs to `service_role` only.
-- Owner approval was given in chat, but the Supabase migration API refused the
-  production apply for safety reasons. Add the repository-required production
-  migration evidence marker only after production application is actually
-  complete and verified.
-- The repo deploy script preflight was run after fixing a macOS Bash 3
-  portability issue. Staging currently fails DNS for
-  `db.nltfedbnbbrclcufoaly.supabase.co`; production currently fails auth for
-  `PROD_SUPABASE_DB_URL`. No migration was applied.
+- Owner approval was given in chat. Staging remained unavailable/inactive and
+  the repo prod DB URL failed auth, while the Supabase migration API refused the
+  apply. The reviewed SQL was therefore applied to production via Supabase SQL
+  execution on 2026-05-08.
+- Post-apply verification shows the targeted functions now have
+  `search_path=public` and grants limited to `postgres` and `service_role`.
+- Post-apply security advisors no longer report the mutable search-path or
+  direct security-definer execute warnings.
 
 ## Validated Safe Posture
 
@@ -120,11 +120,11 @@ Prepared fix:
 - Frontend `npm audit --audit-level=moderate` reported 0 vulnerabilities.
 - Backend `pip-audit` reported no known vulnerabilities for `backend/requirements.txt`.
 - Full backend tests passed, including broker order safety, encrypted credential, payment signature, rate-limit, and auth middleware coverage.
-- Read-only Supabase advisors were run against production project `fyxltykqdvacbdgmeucf`. WARN-level function grant/search-path findings have a reviewed migration prepared, but production application remains pending because the Supabase migration API refused the apply.
+- Read-only Supabase advisors were run against production project `fyxltykqdvacbdgmeucf`. WARN-level function grant/search-path findings were applied and verified on production via direct SQL execution because staging was unavailable and the migration API refused the apply.
 
 ## Residual Owner-Gated Risks
 
-- Production Supabase hardening remains unapplied; the function grant/search-path hardening migration still needs valid staging/prod DB access, application, and post-apply advisor evidence before public launch.
+- Supabase migration history was not updated because the migration API refused the apply; keep the local migration file for provenance and reconcile history when DB URL access is restored.
 - Supabase Auth leaked-password protection was disabled in the production advisor output and must be enabled by the project owner in Supabase Auth settings before public launch.
 - Real Kite/Upstox read-only smoke was not run because owner-provided tokens were not supplied.
 - Razorpay production checkout is not enabled; payment launch needs owner approval and end-to-end test/live-mode evidence.

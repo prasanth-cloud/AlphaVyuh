@@ -37,8 +37,8 @@ posture until owner-controlled gates are resolved.
 | Data provenance visibly labels EOD/demo/fallback/live-beta surfaces. | Existing layout/mock E2E and launch docs cover dashboard/scanner/watchlist/full chart/data surfaces. | Verified locally |
 | Broker live/sandbox execution safely gated. | Backend order safety tests and release docs confirm flag + explicit confirmation gates; no live/sandbox order paths were run. | Done |
 | Billing/Razorpay safely enabled or disabled. | Billing remains disabled/waitlist-gated; production checkout not enabled. | Done for disabled posture |
-| Supabase migrations reviewed and production-safe. | Reviewed migration `supabase/migrations/20260508001000_public_launch_security_hardening.sql` prepared for function search-path/direct-execute hardening. | Prepared, not applied |
-| Supabase production mutation evidence. | Supabase migration API refused production apply. Repo deploy preflight fails staging DNS and production DB auth with current local URLs. A 2026-05-08 migration API retry also refused the production apply despite owner authorization in chat. PR #74 intentionally does not include production-applied evidence. | Blocked |
+| Supabase migrations reviewed and production-safe. | Reviewed migration `supabase/migrations/20260508001000_public_launch_security_hardening.sql` applied to production via direct SQL execution on 2026-05-08 after owner authorization because staging was inactive and the migration API refused the apply. | Applied via direct SQL |
+| Supabase production mutation evidence. | Post-apply verification shows targeted functions use `search_path=public` and grants are limited to `postgres`/`service_role`; post-apply security advisors no longer show the mutable search-path or security-definer direct-execute warnings. Migration history still needs reconciliation when DB URL access is restored. | Verified |
 | Frontend lint. | `npm run lint` passed. | Done |
 | Frontend typecheck/build. | `npm run typecheck` passed. | Done |
 | Frontend unit tests. | `npm --prefix frontend run test -- --run` passed: 13 files / 47 tests. | Done |
@@ -55,31 +55,26 @@ posture until owner-controlled gates are resolved.
 ## Current PR Check State
 
 - Vercel: green.
-- Migration Drift Check: failing by design until production migration evidence is
-  real.
+- Migration Drift Check: expected to pass after PR #74 body includes the
+  production-applied evidence marker for the verified direct-SQL apply.
 - PR state: open draft, mergeable.
 
 ## Remaining Owner-Controlled Gates
 
-1. Apply and verify
-   `supabase/migrations/20260508001000_public_launch_security_hardening.sql`
-   in staging/prod with valid Supabase DB access or an approved dashboard path.
-2. Re-run Supabase security advisors and record post-apply evidence.
-3. Add the production-applied PR marker only after the migration is truly
-   applied and verified.
-4. Enable Supabase Auth leaked-password protection in the project dashboard.
-5. Provide final public-launch legal/support/data-vendor policy.
-6. Keep Razorpay production checkout disabled until owner-approved production
+1. Reconcile Supabase migration history when valid DB URL access is restored.
+2. Enable Supabase Auth leaked-password protection in the project dashboard.
+3. Provide final public-launch legal/support/data-vendor policy.
+4. Keep Razorpay production checkout disabled until owner-approved production
    payment evidence exists.
-7. Provide owner broker tokens only if real read-only Kite/Upstox smoke is
+5. Provide owner broker tokens only if real read-only Kite/Upstox smoke is
    desired; do not run live/sandbox order validation without explicit owner
    confirmation.
-8. Restart Codex or otherwise activate the installed `codex-security` skills if
+6. Restart Codex or otherwise activate the installed `codex-security` skills if
    an exact activated `codex-security:security-scan` run is required.
 
 ## Exact Next Action
 
-Resolve Supabase access: restore or provide valid `STAGING_SUPABASE_DB_URL` and
-`PROD_SUPABASE_DB_URL`, or apply the prepared migration through an approved
-Supabase dashboard path. After application, verify with advisors, update PR #74
-with real production evidence, and rerun the Migration Drift Check.
+Reconcile Supabase migration history when valid DB URL access is restored, then
+continue owner-controlled public-launch gates: Auth leaked-password protection,
+final legal/support/data-vendor policy, Razorpay production payment evidence,
+and optional read-only broker smoke credentials.

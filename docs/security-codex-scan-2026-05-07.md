@@ -147,8 +147,11 @@ Residual owner-gated items remain:
 
 1. Run the exact activated `codex-security:security-scan` plugin if/when it is
    available in the Codex environment.
-2. Apply and verify the prepared production Supabase hardening migration:
-   `supabase/migrations/20260508001000_public_launch_security_hardening.sql`.
+2. Reconcile Supabase migration history when valid DB URL access is restored;
+   the production hardening SQL from
+   `supabase/migrations/20260508001000_public_launch_security_hardening.sql`
+   was applied and verified on 2026-05-08 via direct SQL execution after the
+   migration API refused the apply.
 3. Provide final public-launch legal, support, market-data, and billing policy.
 4. Provide owner-approved Razorpay production checkout evidence before enabling
    paid checkout.
