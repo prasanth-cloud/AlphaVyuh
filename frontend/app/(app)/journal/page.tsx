@@ -294,6 +294,25 @@ export default function JournalPage() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setTab("trades");
+              setFilterStatus("closed");
+              setReviewFocus("needs-review");
+            }}
+            className="rounded-[8px] px-3 py-2 text-left"
+            style={{
+              background: journalQueue.needsReview > 0 ? "rgba(217,119,6,0.12)" : "rgba(244,247,251,0.04)",
+              border: "1px solid var(--border-subtle)",
+              color: journalQueue.needsReview > 0 ? "var(--warn)" : "var(--text-secondary)",
+              cursor: "pointer",
+              minWidth: 112,
+            }}
+          >
+            <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>Next action</div>
+            <div className="text-[12px] font-semibold">{journalQueue.needsReview > 0 ? "Review now" : "Log next trade"}</div>
+          </button>
           {[
             { label: "Needs review", value: journalQueue.needsReview, color: "var(--warn)" },
             { label: "Reviewed", value: journalQueue.reviewed, color: "var(--gain)" },

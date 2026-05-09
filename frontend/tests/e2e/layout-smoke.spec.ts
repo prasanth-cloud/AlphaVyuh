@@ -134,11 +134,16 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Shortlist" })).toBeVisible();
     await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Chart" })).toBeVisible();
+    await expect(page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first()).toContainText(/A|B|C|D|\d{2,3}/);
+    await page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first().click();
+    await expect(page.getByText("Why this matched")).toBeVisible();
+    await expect(page.getByText("Next action")).toBeVisible();
 
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText("WORKSPACE");
     await expect(page.locator(".watchlist-chart-header")).toBeVisible();
+    await expect(page.getByTestId("decision-desk-nudges")).toBeVisible();
 
     const overlap = await page.locator(".watchlist-chart-header").evaluate((header) => {
       const children = Array.from(header.children).map((child) => child.getBoundingClientRect());
@@ -148,6 +153,17 @@ test.describe("Workflow layout smoke", () => {
         && children[0].y + children[0].height > children[1].y;
     });
     expect(overlap).toBe(false);
+  });
+
+  test("top search opens workflow commands", async ({ page }) => {
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Market pulse")).toBeVisible({ timeout: 15_000 });
+    await page.keyboard.press("/");
+    await page.getByPlaceholder("Search symbol or command...").fill("journal");
+    await expect(page.getByText("Review Journal")).toBeVisible();
+    await page.getByText("Review Journal").click();
+    await expect(page).toHaveURL(/\/journal/);
+    await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
   });
 
   test("requested workspace copy and reminder strip are removed", async ({ page }) => {

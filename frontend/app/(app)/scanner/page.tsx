@@ -307,6 +307,15 @@ function MetricCell({ label, value, direction }: { label: string; value: string;
   )
 }
 
+function scannerNextAction(r: ScanResult): string {
+  if (r.data_warnings?.length) return 'Check data before planning'
+  if ((r.setup_score ?? 0) >= 80) return 'Open chart and plan risk'
+  if ((r.setup_score ?? 0) >= 65) return 'Review chart structure'
+  if (r.rsi_14 != null && r.rsi_14 > 78) return 'Check extension risk'
+  if (r.week_52_high_pct != null && r.week_52_high_pct > 15) return 'Wait for cleaner base'
+  return 'Shortlist for review'
+}
+
 // Inline detail expansion for a selected row
 function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
   r: ScanResult
@@ -316,7 +325,7 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
 }) {
   return (
     <tr>
-      <td colSpan={9} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
+      <td colSpan={10} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ padding: '16px 20px 8px', display: 'grid', gridTemplateColumns: 'minmax(220px,1.15fr) minmax(220px,1fr)', gap: 16 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
@@ -345,6 +354,10 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
                 ))}
               </div>
             )}
+            <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-subtle)' }}>
+              <div className="label" style={{ marginBottom: 3 }}>Next action</div>
+              <div className="caption" style={{ color: 'var(--text-secondary)' }}>{scannerNextAction(r)}</div>
+            </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
             <MetricCell label="EMA 200 slope" value={r.ema_200_slope_30d != null ? `${r.ema_200_slope_30d.toFixed(1)}%` : '—'} direction={r.ema_200_slope_30d != null ? (r.ema_200_slope_30d > 0 ? 'above' : 'below') : undefined} />
@@ -382,6 +395,80 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
         </div>
       </td>
     </tr>
+  )
+}
+
+function ScannerRowActions({
+  result,
+  watchlists,
+  onMark,
+  onAddToWatchlist,
+  onOpenChart,
+  onReport,
+}: {
+  result: ScanResult
+  watchlists: Watchlist[]
+  onMark: (symbols: string[], mark: Exclude<WorkflowMark, 'watch'>) => void
+  onAddToWatchlist: (symbol: string, wlId: string) => void
+  onOpenChart: (symbol: string) => void
+  onReport: (symbol: string) => void
+}) {
+  return (
+    <div className="scanner-row-actions">
+      <button
+        className="scanner-row-action"
+        title={`Shortlist ${result.symbol}`}
+        onClick={e => { e.stopPropagation(); onMark([result.symbol], 'shortlist') }}
+        style={{ color: 'var(--accent)', cursor: 'pointer' }}
+      >
+        Shortlist
+      </button>
+      <button
+        className="scanner-row-action"
+        title={`Open ${result.symbol} chart`}
+        onClick={e => { e.stopPropagation(); onOpenChart(result.symbol) }}
+        style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
+      >
+        Chart
+      </button>
+      <button
+        className="scanner-row-action"
+        title={`Ignore ${result.symbol}`}
+        onClick={e => { e.stopPropagation(); onMark([result.symbol], 'ignored') }}
+        style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
+      >
+        Ignore
+      </button>
+      {watchlists.length > 0 && (
+        <select
+          onChange={e => { if (e.target.value) { onAddToWatchlist(result.symbol, e.target.value); e.target.value = '' } }}
+          onClick={e => e.stopPropagation()}
+          aria-label={`Add ${result.symbol} to watchlist`}
+          className="scanner-row-select scanner-watchlist-select"
+        >
+          <option value="">Add</option>
+          {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+      )}
+      <select
+        aria-label={`More actions for ${result.symbol}`}
+        className="scanner-row-select scanner-more-select"
+        onClick={e => e.stopPropagation()}
+        onChange={e => {
+          e.stopPropagation()
+          const action = e.target.value
+          e.target.value = ''
+          if (action === 'later') onMark([result.symbol], 'review_later')
+          if (action === 'journal') window.location.assign(`/journal?symbol=${encodeURIComponent(result.symbol)}&review=needs-review`)
+          if (action === 'report') onReport(result.symbol)
+        }}
+      >
+        <option value="">More</option>
+        <option value="later">Review later</option>
+        <option value="journal">Journal</option>
+        <option value="report">Report</option>
+      </select>
+    </div>
   )
 }
 
@@ -1116,7 +1203,8 @@ export default function ScannerPage() {
                 <Th align="right" width={60}>RSI</Th>
                 <Th align="right" width={50}>RS</Th>
                 <Th align="right" width={90}>52W H%</Th>
-                <Th width={60}>{''}</Th>
+                <Th align="right" width={78}>Score</Th>
+                <Th width={170}>Action</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {
@@ -1184,50 +1272,27 @@ export default function ScannerPage() {
                         <Td align="right" mono>
                           {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
                         </Td>
+                        <Td align="right">
+                          {r.setup_score != null ? (
+                            <Badge
+                              variant={r.setup_score >= 80 ? 'gain' : r.setup_score >= 65 ? 'accent' : 'warn'}
+                              mono
+                            >
+                              {r.setup_grade ?? '—'} {r.setup_score}
+                            </Badge>
+                          ) : (
+                            <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
+                          )}
+                        </Td>
                         <Td>
-                          <div className="scanner-row-actions">
-                            <button
-                              className="scanner-row-action"
-                              title={`Shortlist ${r.symbol}`}
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'shortlist') }}
-                              style={{ color: 'var(--accent)', cursor: 'pointer' }}
-                            >
-                              Shortlist
-                            </button>
-                            <button
-                              className="scanner-row-action"
-                              title={`Open ${r.symbol} chart`}
-                              onClick={e => { e.stopPropagation(); router.push(`/charts/${r.symbol}`) }}
-                              style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
-                            >
-                              Chart
-                            </button>
-                            <button
-                              className="scanner-row-action"
-                              title={`Review ${r.symbol} later`}
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'review_later') }}
-                              style={{ color: 'var(--warn)', cursor: 'pointer' }}
-                            >
-                              Later
-                            </button>
-                            <button
-                              className="scanner-row-action"
-                              title={`Ignore ${r.symbol}`}
-                              onClick={e => { e.stopPropagation(); markWorkflow([r.symbol], 'ignored') }}
-                              style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
-                            >
-                              Ignore
-                            </button>
-                            {watchlists.length > 0 && (
-                              <select onChange={e => { if (e.target.value) { addToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
-                                onClick={e => e.stopPropagation()}
-                                aria-label={`Add ${r.symbol} to watchlist`}
-                                className="scanner-row-select scanner-watchlist-select">
-                                <option value="">Add to watchlist</option>
-                                {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                              </select>
-                            )}
-                          </div>
+                          <ScannerRowActions
+                            result={r}
+                            watchlists={watchlists}
+                            onMark={markWorkflow}
+                            onAddToWatchlist={addToWatchlist}
+                            onOpenChart={sym => router.push(`/charts/${sym}`)}
+                            onReport={reportScannerDataIssue}
+                          />
                         </Td>
                       </Tr>
                       {expanded && (

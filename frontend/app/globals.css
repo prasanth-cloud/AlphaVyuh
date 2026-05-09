@@ -673,8 +673,8 @@ input, textarea, select {
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
-  flex-wrap: wrap;
-  min-width: 300px;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .scanner-row-action {
@@ -703,11 +703,11 @@ input, textarea, select {
 
 .scanner-lifecycle-select,
 .scanner-more-select {
-  max-width: 78px;
+  max-width: 70px;
 }
 
 .scanner-watchlist-select {
-  max-width: 132px;
+  max-width: 86px;
 }
 
 .decision-desk-progress {
