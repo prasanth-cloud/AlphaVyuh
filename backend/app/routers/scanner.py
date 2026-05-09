@@ -185,6 +185,7 @@ class ScanFilters(BaseModel):
 
 class ScanRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
+    preset_id:  str | None = None
     sort_by:    str = "volume_ratio"   # column key (see SORT_KEYS below)
     sort_order: str = "desc"           # "asc" | "desc"
     page:       int = 1
@@ -202,14 +203,14 @@ class SaveScreenRequest(BaseModel):
 SORT_KEYS = {
     "symbol", "close", "pct_change", "volume", "volume_ratio",
     "rsi_14", "ema_20", "atr_14", "week_52_high_pct", "gap_pct",
-    "atr_pct", "turnover", "adx_14", "stoch_k",
+    "atr_pct", "turnover", "adx_14", "stoch_k", "setup_score",
 }
 
 PRESETS = [
     {
         "id": "trend_template",
         "name": "Trend Template",
-        "description": "Daily Minervini-style trend template using the populated SMA 50/150/200 stack, EMA 200, RSI, and 52-week range context.",
+        "description": "Daily trend template using the populated SMA 50/150/200 stack, EMA 200, RSI, and 52-week range context.",
         "color": "#5b63f5",
         "filters": {
             "all_smas_bullish": True,
@@ -300,7 +301,7 @@ PRESETS = [
     },
     {
         "id": "darvas_box_breakout",
-        "name": "Darvas Box",
+        "name": "Box Breakout",
         "description": "Tight high-base breakout approximation: near 52-week highs, above SMA 50, with volume confirmation and manageable ATR.",
         "color": "#26a65b",
         "filters": {
@@ -336,7 +337,136 @@ def _safe(val, default=0.0):
         return default
 
 
-def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
+def _clamp_score(value: float) -> int:
+    return max(0, min(100, int(round(value))))
+
+
+def _score_setup(result: dict, preset_id: str | None) -> dict:
+    """Return trader-facing prioritization metadata for a scanner match.
+
+    This is intentionally deterministic and explanation-first. It does not
+    change whether a row matches a scanner; it only helps a trader decide what
+    to review first.
+    """
+    score = 48.0
+    reasons: list[str] = []
+
+    rs_score = result.get("rs_score")
+    volume_ratio = result.get("volume_ratio")
+    w52h_pct = result.get("week_52_high_pct")
+    ema_slope = result.get("ema_200_slope_30d")
+    price_perf_6m = result.get("price_perf_6m_pct")
+    box_height = result.get("darvas_box_height_pct")
+    atr_pct = result.get("atr_pct")
+    pct_change = result.get("pct_change")
+    data_warnings = result.get("data_warnings") or []
+
+    if rs_score is not None:
+        if rs_score >= 85:
+            score += 14
+            reasons.append("strong relative strength")
+        elif rs_score >= 70:
+            score += 9
+            reasons.append("healthy relative strength")
+        elif rs_score < 55:
+            score -= 8
+
+    if volume_ratio is not None:
+        if volume_ratio >= 2:
+            score += 12
+            reasons.append("volume expansion")
+        elif volume_ratio >= 1.2:
+            score += 7
+            reasons.append("above-average volume")
+        elif volume_ratio < 0.7:
+            score -= 5
+
+    if w52h_pct is not None:
+        if w52h_pct <= 3:
+            score += 12
+            reasons.append("near 52-week high")
+        elif w52h_pct <= 12:
+            score += 7
+            reasons.append("within striking distance of highs")
+        elif w52h_pct > 30:
+            score -= 6
+
+    if ema_slope is not None:
+        if ema_slope > 2:
+            score += 10
+            reasons.append("long-term trend rising")
+        elif ema_slope > 0:
+            score += 6
+        else:
+            score -= 12
+
+    if price_perf_6m is not None:
+        if price_perf_6m >= 35:
+            score += 10
+            reasons.append("strong 6-month leadership")
+        elif price_perf_6m >= 15:
+            score += 6
+        elif price_perf_6m < 0:
+            score -= 8
+
+    if box_height is not None:
+        if box_height <= 10:
+            score += 9
+            reasons.append("tight consolidation")
+        elif box_height <= 15:
+            score += 5
+        elif box_height > 25:
+            score -= 6
+
+    if atr_pct is not None:
+        if atr_pct <= 6:
+            score += 5
+            reasons.append("manageable daily range")
+        elif atr_pct > 10:
+            score -= 7
+
+    if pct_change is not None and preset_id in {"high_52w_breakout", "episodic_pivot"}:
+        if pct_change >= 3:
+            score += 10
+            reasons.append("fresh price thrust")
+        elif pct_change > 0:
+            score += 4
+
+    if preset_id == "trend_template":
+        score += 4 if result.get("ema_150") is not None else -4
+    elif preset_id == "vcp_breakout":
+        score += 5 if box_height is not None and box_height <= 15 else 0
+    elif preset_id == "stage2_breakout":
+        score += 5 if result.get("sma_200") is not None else -3
+    elif preset_id == "darvas_box_breakout":
+        score += 6 if box_height is not None and box_height <= 15 else 0
+
+    if data_warnings:
+        score -= min(18, len(data_warnings) * 6)
+
+    final_score = _clamp_score(score)
+    if final_score >= 80:
+        grade = "A"
+        label = "High confidence"
+    elif final_score >= 65:
+        grade = "B"
+        label = "Worth review"
+    elif final_score >= 50:
+        grade = "C"
+        label = "Needs confirmation"
+    else:
+        grade = "D"
+        label = "Low confidence"
+
+    return {
+        "setup_score": final_score,
+        "setup_grade": grade,
+        "confidence_label": label,
+        "confidence_reasons": reasons[:3],
+    }
+
+
+def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = None) -> list[dict]:
     """
     Enrich each row with computed columns, then apply Python-side filters.
     Returns only matching rows (with computed fields attached).
@@ -694,7 +824,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         # Use stored pct_change if available, else computed
         final_pct = float(row["pct_change"]) if row.get("pct_change") is not None else pct_change
 
-        results.append({
+        result = {
             "symbol":         row["symbol"],
             "company_name":   su.get("company_name") or row["symbol"],
             "series":         su.get("series") or "",
@@ -756,7 +886,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "debt_to_equity":  su.get("debt_to_equity"),
             "roe":             su.get("roe"),
             "roce":            su.get("roce"),
-        })
+        }
+        result.update(_score_setup(result, preset_id))
+        results.append(result)
 
     return results
 
@@ -999,7 +1131,7 @@ async def run_scanner(
             }
 
     # Python-side filter for computed columns
-    results = _apply_filters(rows, f)
+    results = _apply_filters(rows, f, body.preset_id)
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
     if f.vcp_contraction is True and results:

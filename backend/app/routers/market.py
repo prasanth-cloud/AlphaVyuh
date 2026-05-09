@@ -336,7 +336,14 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
     # Sector breadth
     from collections import defaultdict
-    sector_map: dict = defaultdict(lambda: {"total": 0, "advances": 0, "declines": 0, "pct_sum": 0.0})
+    sector_map: dict = defaultdict(lambda: {
+        "total": 0,
+        "advances": 0,
+        "declines": 0,
+        "pct_sum": 0.0,
+        "ema20_valid": 0,
+        "above_ema20": 0,
+    })
     for r in enriched:
         sec = r["sector"] or "Unknown"
         sector_map[sec]["total"] += 1
@@ -345,20 +352,29 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         elif r["pct_change"] < -0.05:
             sector_map[sec]["declines"] += 1
         sector_map[sec]["pct_sum"] += r["pct_change"]
+        if r["ema_20"]:
+            sector_map[sec]["ema20_valid"] += 1
+            if r["close"] > r["ema_20"]:
+                sector_map[sec]["above_ema20"] += 1
 
     sector_breadth = []
     for sec, d in sector_map.items():
         if d["total"] < 3:
             continue
+        advance_breadth = round(d["advances"] / d["total"] * 100, 1)
+        above_ema20_pct = round(d["above_ema20"] / d["ema20_valid"] * 100, 1) if d["ema20_valid"] else None
         sector_breadth.append({
             "sector": sec,
             "total": d["total"],
             "advances": d["advances"],
             "declines": d["declines"],
             "avg_pct_change": round(d["pct_sum"] / d["total"], 2),
-            "breadth_pct": round(d["advances"] / d["total"] * 100, 1),
+            "breadth_pct": advance_breadth,
+            "advance_breadth_pct": advance_breadth,
+            "above_ema20_pct": above_ema20_pct,
+            "basis": "advancing_constituents",
         })
-    sector_breadth.sort(key=lambda x: x["breadth_pct"], reverse=True)
+    sector_breadth.sort(key=lambda x: (x["avg_pct_change"], x["breadth_pct"]), reverse=True)
 
     # Top movers
     with_pct = [r for r in enriched if r["pct_change"] is not None]
@@ -402,8 +418,8 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "market_phase": phase,
         "market_phase_desc": phase_desc,
         "sector_breadth": sector_breadth[:12],
-        "sector_breadth_basis": "latest_complete_session",
-        "sector_breadth_source": "daily_ohlcv",
+        "sector_breadth_basis": "advancing_constituents",
+        "sector_breadth_source": "daily_ohlcv_nse_eq_universe",
         "top_sectors": sector_breadth[:5],
         "top_gainers": [_mover(r) for r in top_gainers],
         "top_losers":  [_mover(r) for r in top_losers],

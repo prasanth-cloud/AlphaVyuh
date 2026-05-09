@@ -22,7 +22,7 @@ import { allowClientMockFallback } from './runtime-mode'
 const API = process.env.NEXT_PUBLIC_API_URL!;
 const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
 export const liveQuotePollingEnabled =
-  process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES !== "false";
+  process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES === "true";
 export const isMockMode =
   !forceLiveData && allowClientMockFallback();
 
@@ -168,6 +168,10 @@ export type ScanResult = {
   rs_score?: number | null;
   match_reasons?: string[];
   data_warnings?: string[];
+  setup_score?: number | null;
+  setup_grade?: string | null;
+  confidence_label?: string | null;
+  confidence_reasons?: string[];
   market_cap_cr?: number | null;
   pe_ratio?: number | null;
   pb_ratio?: number | null;
@@ -440,9 +444,7 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
   if (options?.force) {
     invalidateClientCache([cacheKey]);
   }
-  if (shouldUseMockFallback()) {
-    return cachedClientRequest(cacheKey, options?.lite ? 10_000 : 30_000, async () => readMockWatchlists());
-  }
+  if (shouldUseMockFallback()) return readMockWatchlists();
   return cachedClientRequest(cacheKey, options?.lite ? 10_000 : 30_000, async () => {
     try {
       const headers = await authHeaders();
@@ -674,24 +676,28 @@ export async function getWorkflowStates(options?: { symbols?: string[]; watchlis
       ? localValues.filter((state) => options.symbols!.includes(state.symbol))
       : localValues;
   }
-  try {
-    const headers = await authHeaders();
-    const qs = new URLSearchParams();
-    if (options?.symbols?.length) qs.set("symbols", options.symbols.map((s) => s.toUpperCase()).join(","));
-    if (options?.watchlistId) qs.set("watchlist_id", options.watchlistId);
-    const res = await fetch(`${API}/api/v1/workflow/states?${qs}`, { headers });
-    if (!res.ok) return localValues;
-    const data = await res.json();
-    const remote: WorkflowState[] = data.states ?? [];
-    if (remote.length) {
-      const merged = { ...local };
-      for (const state of remote) merged[state.symbol] = state;
-      writeLocalWorkflowStates(merged);
+  const normalizedSymbols = options?.symbols?.map((s) => s.toUpperCase()).sort() ?? [];
+  const cacheKey = `workflow:states:${options?.watchlistId ?? "all"}:${normalizedSymbols.join(",")}`;
+  return cachedClientRequest(cacheKey, 15_000, async () => {
+    try {
+      const headers = await authHeaders();
+      const qs = new URLSearchParams();
+      if (normalizedSymbols.length) qs.set("symbols", normalizedSymbols.join(","));
+      if (options?.watchlistId) qs.set("watchlist_id", options.watchlistId);
+      const res = await fetch(`${API}/api/v1/workflow/states?${qs}`, { headers });
+      if (!res.ok) return localValues;
+      const data = await res.json();
+      const remote: WorkflowState[] = data.states ?? [];
+      if (remote.length) {
+        const merged = { ...local };
+        for (const state of remote) merged[state.symbol] = state;
+        writeLocalWorkflowStates(merged);
+      }
+      return remote.length ? remote : localValues;
+    } catch {
+      return localValues;
     }
-    return remote.length ? remote : localValues;
-  } catch {
-    return localValues;
-  }
+  });
 }
 
 export async function upsertWorkflowState(patch: WorkflowStatePatch): Promise<WorkflowState> {
@@ -707,6 +713,7 @@ export async function upsertWorkflowState(patch: WorkflowStatePatch): Promise<Wo
     if (!res.ok) return local;
     const remote = await res.json();
     saveLocalWorkflowState(remote);
+    invalidateClientCache(["workflow:"]);
     return remote;
   } catch {
     return local;
@@ -728,6 +735,7 @@ export async function bulkUpsertWorkflowStates(patches: WorkflowStatePatch[]): P
     const data = await res.json();
     const remote: WorkflowState[] = data.states ?? [];
     if (remote.length) saveLocalWorkflowStates(remote);
+    invalidateClientCache(["workflow:"]);
     return remote.length ? remote : local;
   } catch {
     return local;
@@ -1091,21 +1099,38 @@ export async function getIndicators(
   indicators: string[],
   timeframe = "D"
 ): Promise<IndicatorsResponse> {
-  if (shouldUseMockFallback()) return mockIndicators(symbol);
-  try {
-    const res = await fetch(
-      `${API}/api/v1/charts/${symbol}/indicators?indicators=${indicators.join(",")}&timeframe=${timeframe}`,
-      { headers: publicHeaders }
-    );
-    if (!res.ok) {
-      if (shouldUseMockFallback()) return mockIndicators(symbol);
-      throw new Error("Indicator fetch failed");
+  const sym = symbol.trim().toUpperCase();
+  const cleanIndicators = Array.from(new Set(indicators)).sort();
+  const cacheKey = `indicators:${sym}:${timeframe}:${cleanIndicators.join(",")}`;
+  if (shouldUseMockFallback()) return cachedClientRequest(cacheKey, 60_000, async () => mockIndicators(sym));
+  return cachedClientRequest(cacheKey, 60_000, async () => {
+    try {
+      const res = await fetch(
+        `${API}/api/v1/charts/${sym}/indicators?indicators=${cleanIndicators.join(",")}&timeframe=${timeframe}`,
+        { headers: publicHeaders }
+      );
+      if (!res.ok) {
+        if (shouldUseMockFallback()) return mockIndicators(sym);
+        throw new Error("Indicator fetch failed");
+      }
+      return res.json();
+    } catch (error) {
+      if (shouldUseMockFallback()) return mockIndicators(sym);
+      throw error;
     }
-    return res.json();
-  } catch (error) {
-    if (shouldUseMockFallback()) return mockIndicators(symbol);
-    throw error;
-  }
+  });
+}
+
+export function prefetchCandles(
+  symbol: string,
+  params?: { from_date?: string; to_date?: string; limit?: number; timeframe?: string }
+) {
+  void getCandles(symbol, params).catch(() => {});
+}
+
+export function prefetchIndicators(symbol: string, indicators: string[], timeframe = "D") {
+  if (!indicators.length) return;
+  void getIndicators(symbol, indicators, timeframe).catch(() => {});
 }
 
 export type MarketMover = {
@@ -2722,12 +2747,12 @@ export interface MarketOverview {
   market_phase: string;
   market_phase_desc: string;
   indices?: { symbol: string; label: string; close: number | null; pct_change: number | null; prev_close: number | null; source: string; error?: string }[];
-  top_sectors?: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
+  top_sectors?: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number; advance_breadth_pct?: number | null; above_ema20_pct?: number | null; basis?: string }[];
   market_data_source?: string;
   is_live?: boolean;
   sector_breadth_basis?: "latest_complete_session" | string;
   sector_breadth_source?: string;
-  sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number }[];
+  sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number; advance_breadth_pct?: number | null; above_ema20_pct?: number | null; basis?: string }[];
   top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   most_active: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];

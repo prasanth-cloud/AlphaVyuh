@@ -317,7 +317,7 @@ export default function DataFreshnessPage() {
           {[
             ["Scanner", "Uses the latest complete market day and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
             ["Charts", "Shows source and freshness directly in the chart toolbar before planning.", "/charts/RELIANCE"],
-            ["Dashboard", "Separates live sector-index movement from latest complete session breadth.", "/dashboard"],
+            ["Dashboard", "Shows market pulse, sector participation, and freshness without mixing data sources.", "/dashboard"],
             ["Broker", "Broker beta is read-only/import only; simulated order capture still records review context.", "/settings/broker"],
           ].map(([title, detail, href]) => (
             <Link key={title} href={href} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", textDecoration: "none" }}>

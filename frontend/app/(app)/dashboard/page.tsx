@@ -135,9 +135,6 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
           <div className="caption">One glance summary before scanning, charting, or placing alerts.</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {data.market_data_source && (
-            <span className="caption">{data.is_live ? 'Index live' : 'Index fallback'} · {data.market_data_source}</span>
-          )}
           <DataProvenanceBadge
             kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
             asOf={data.trade_date}
@@ -193,9 +190,20 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
   )
 }
 
-function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; breadth_pct: number; avg_pct_change: number }) {
+function SectorBar({
+  sector,
+  breadth_pct,
+  avg_pct_change,
+  above_ema20_pct,
+}: {
+  sector: string
+  breadth_pct: number
+  avg_pct_change: number
+  above_ema20_pct?: number | null
+}) {
   const breadth = safeNumber(breadth_pct)
   const avg = safeNumber(avg_pct_change)
+  const ema20 = above_ema20_pct == null ? null : safeNumber(above_ema20_pct)
   const color = breadth > 60 ? 'var(--gain)' : breadth > 40 ? 'var(--warn)' : 'var(--loss)'
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -210,6 +218,9 @@ function SectorBar({ sector, breadth_pct, avg_pct_change }: { sector: string; br
       </span>
       <span className="mono" style={{ flex: '0 0 52px', textAlign: 'right', fontSize: 11, color: avg >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
         {avg >= 0 ? '+' : ''}{avg.toFixed(2)}%
+      </span>
+      <span className="mono" style={{ flex: '0 0 44px', textAlign: 'right', fontSize: 11, color: 'var(--text-tertiary)' }}>
+        {ema20 == null ? '—' : `${ema20.toFixed(0)}%`}
       </span>
     </div>
   )
@@ -897,7 +908,7 @@ export default function DashboardPage() {
             <Card padding="lg">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
                 <h2 className="heading-card">Sector breadth</h2>
-                <span className="caption">% above EMA 20 · avg chg%</span>
+                <span className="caption">Advancers · avg chg · above EMA20</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (
@@ -906,7 +917,13 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   data.sector_breadth.map(s => (
-                    <SectorBar key={s.sector} sector={s.sector} breadth_pct={s.breadth_pct} avg_pct_change={s.avg_pct_change} />
+                    <SectorBar
+                      key={s.sector}
+                      sector={s.sector}
+                      breadth_pct={s.advance_breadth_pct ?? s.breadth_pct}
+                      avg_pct_change={s.avg_pct_change}
+                      above_ema20_pct={s.above_ema20_pct}
+                    />
                   ))
                 )}
               </div>
