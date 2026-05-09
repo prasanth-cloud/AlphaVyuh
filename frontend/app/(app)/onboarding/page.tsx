@@ -130,10 +130,10 @@ export default function OnboardingPage() {
           <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Onboarding</div>
           <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Set up your private beta desk.</h1>
           <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-            AlphaVyuh starts with an EOD workflow: scan the latest completed session, move ideas to a watchlist, plan on charts, then journal and review. Broker connections are read-only/import only during beta.
+            AlphaVyuh starts with a structured workflow: scan the latest completed session, move ideas to a watchlist, plan on charts, then journal and review. Broker connections are read-only/import only during beta.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Private beta", "EOD data", "Broker import only", "Execution disabled"].map((label) => (
+            {["Private beta", "Market data", "Broker import only", "Execution disabled"].map((label) => (
               <span key={label} className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "var(--text-secondary)" }}>
                 {label}
               </span>
@@ -204,7 +204,7 @@ export default function OnboardingPage() {
             <div className="grid gap-2 mb-5 sm:grid-cols-2">
               {[
                 ["Private beta", "Access is founder-gated while workflow reliability is tested."],
-                ["EOD data", "Scans and charts use the latest completed market session unless explicitly labeled demo."],
+                ["Market data", "Scans and charts use the latest completed market session unless explicitly labeled demo."],
                 ["Broker import only", "Broker connections are for read-only smoke and filled-trade import."],
                 ["Execution disabled", "Live and sandbox order placement stay off during this beta."],
               ].map(([title, detail]) => (

@@ -267,7 +267,7 @@ export default function DataFreshnessPage() {
           <div className="data-metric-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
             {[
               ["Latest trade date", fmtDate(health?.latest_trade_date)],
-              ["Last successful EOD", fmtDate(health?.last_successful_eod_date ?? health?.latest_trade_date)],
+              ["Last successful refresh", fmtDate(health?.last_successful_eod_date ?? health?.latest_trade_date)],
               ["Source", health?.provider?.source_name ?? "Unknown"],
               ["Fallback active", health?.fallback_active ? "Yes" : "No"],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
@@ -316,7 +316,7 @@ export default function DataFreshnessPage() {
         <div className="data-surface-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
           {[
             ["Scanner", "Uses the latest complete market day and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
-            ["Charts", "Shows EOD provenance directly in the chart toolbar before planning.", "/charts/RELIANCE"],
+            ["Charts", "Shows source and freshness directly in the chart toolbar before planning.", "/charts/RELIANCE"],
             ["Dashboard", "Separates live sector-index movement from latest complete session breadth.", "/dashboard"],
             ["Broker", "Broker beta is read-only/import only; simulated order capture still records review context.", "/settings/broker"],
           ].map(([title, detail, href]) => (

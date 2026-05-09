@@ -5,7 +5,7 @@ const supportEmail = "support@alphavyuh.com";
 
 const betaPosture = [
   "Private/founder beta access only",
-  "EOD/free-first market data, clearly labeled in product",
+  "Market data with source and freshness shown in product",
   "Broker read-only checks and filled-trade import only",
   "Live and sandbox broker order placement disabled",
   "Production billing disabled and waitlist-gated",
@@ -13,7 +13,7 @@ const betaPosture = [
 ];
 
 const onboardingChecklist = [
-  "Run one scanner preset after reviewing the EOD data badge.",
+  "Run one scanner preset after reviewing the data freshness badge.",
   "Add at least 3 stocks to a watchlist.",
   "Open the focused watchlist symbol in the full chart.",
   "Create a trade plan with entry, stop, target, thesis, and invalidation.",
@@ -22,7 +22,7 @@ const onboardingChecklist = [
 
 const interviewQuestions = [
   "Where did you hesitate or wonder what to do next?",
-  "Did the EOD/source/freshness labels make the data trustworthy enough for planning?",
+  "Did the source/freshness labels make the data trustworthy enough for planning?",
   "Did scanner to watchlist to chart feel faster than your current workflow?",
   "What field in the Decision Desk felt missing, noisy, or unclear?",
   "Would the Journal review loop change your next trading session?",
@@ -30,7 +30,7 @@ const interviewQuestions = [
 ];
 
 const limitations = [
-  "No live or real-time market-data claim in beta; scanner and chart workflows are EOD/free-first unless explicitly labeled demo/provider.",
+  "No live or real-time market-data claim in beta; scanner and chart workflows use the latest completed market session unless explicitly labeled demo/provider.",
   "No investment advice, trade calls, guaranteed accuracy, or promise of returns.",
   "No live/sandbox broker order placement. Place real trades directly with your broker.",
   "Production Razorpay checkout is disabled. Founder access is invite/waitlist-gated.",
@@ -57,7 +57,7 @@ export default function BetaPage() {
             Founder beta operations
           </div>
           <h1 className="max-w-4xl text-4xl font-semibold leading-[1.02] tracking-[-0.04em] md:text-6xl">
-            Test the complete EOD trading workflow.
+            Test the complete trading workflow.
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-[#b6c0ce]">
             AlphaVyuh beta testers should move through scanner, watchlist, full chart,

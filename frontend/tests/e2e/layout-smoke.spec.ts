@@ -153,14 +153,14 @@ test.describe("Workflow layout smoke", () => {
   test("requested workspace copy and reminder strip are removed", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText(/Market command center/i);
-    await expect(page.locator("body")).not.toContainText(/Scan the latest EOD context/i);
+    await expect(page.locator("body")).not.toContainText(/Scan the latest context/i);
     await expect(page.getByRole("button", { name: /Data status/i })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("UNKNOWN");
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
 
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText("DISCOVERY");
-    await expect(page.locator("body")).not.toContainText(/Start from EOD presets/i);
+    await expect(page.locator("body")).not.toContainText(/Start from presets/i);
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
 
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
@@ -173,10 +173,10 @@ test.describe("Workflow layout smoke", () => {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("Sign in to AlphaVyuh")).toBeVisible();
     await expect(page.locator("body")).toContainText(/Private beta/i);
-    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).not.toContainText(/Launch Surface/i);
-    await expect(page.locator("body")).not.toContainText(/Build an EOD trading workflow/i);
+    await expect(page.locator("body")).not.toContainText(/Build a trading workflow/i);
   });
 
   test("watchlist chart timeframe switching exposes range and source context", async ({ page }) => {
@@ -186,7 +186,7 @@ test.describe("Workflow layout smoke", () => {
 
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
     await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toBeDisabled();
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available in EOD beta mode/i);
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available in this beta/i);
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · D · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · AlphaVyuh mock fixtures · demo/i);
@@ -255,14 +255,14 @@ test.describe("Workflow layout smoke", () => {
   test("private beta labels and no-execution posture are visible", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/Private beta/i);
-    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/checkout is disabled|No production checkout/i);
 
     await page.goto("/beta", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/Founder beta operations/i);
-    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Broker read-only|filled-trade import/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/Production billing disabled|waitlist-gated/i);
@@ -271,7 +271,7 @@ test.describe("Workflow layout smoke", () => {
 
     await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/Private beta/i, { timeout: 15_000 });
-    await expect(page.locator("body")).toContainText(/EOD data/i);
+    await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Execution disabled/i);
 
     await page.goto("/settings/broker", { waitUntil: "domcontentloaded" });

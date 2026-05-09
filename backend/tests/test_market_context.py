@@ -18,7 +18,7 @@ def test_health_status_marks_low_coverage_degraded():
 def test_eod_source_metadata_never_claims_live_data():
     metadata = eod_source_metadata(as_of="2026-04-24", status="healthy", coverage_pct=99.2)
 
-    assert metadata["source_name"] == "NSE bhavcopy EOD"
+    assert metadata["source_name"] == "NSE bhavcopy"
     assert metadata["mode"] == "eod"
     assert "realtime" in metadata["license_notes"].lower()
 
@@ -46,4 +46,4 @@ def test_normalize_health_row_exposes_operator_fields():
     assert health["mode"] == "eod"
     assert health["last_successful_eod_date"] == "2026-04-24"
     assert health["last_bhavcopy"]["status"] == "success"
-    assert health["provider"]["source_name"] == "NSE bhavcopy EOD"
+    assert health["provider"]["source_name"] == "NSE bhavcopy"

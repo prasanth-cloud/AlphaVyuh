@@ -49,7 +49,7 @@ test.describe("Mock workflow smoke", () => {
 
     for (const route of ["/dashboard", "/scanner", "/watchlist", "/charts/AUBANK?full=1", "/data"]) {
       await page.goto(route, { waitUntil: "domcontentloaded" });
-      await expect(page.locator("body")).toContainText(/Demo|EOD|BACKEND DATA|DEMO DATA/i, { timeout: 15_000 });
+      await expect(page.locator("body")).toContainText(/Demo|Market data|BACKEND DATA|DEMO DATA/i, { timeout: 15_000 });
       await expect(page.locator("body")).toContainText(/As of|Updated|Data is|Source|Provider|coverage|Data: Demo fixtures/i, { timeout: 15_000 });
     }
 
@@ -59,7 +59,7 @@ test.describe("Mock workflow smoke", () => {
 
     await page.goto("/charts/AUBANK?full=1");
     await expect(page.locator("body")).toContainText("AU Small Finance Bank", { timeout: 15_000 });
-    await expect(page.locator("body")).toContainText(/Data is .* old|EOD|Demo|As of/i, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Data is .* old|Market data|Demo|As of/i, { timeout: 15_000 });
 
     expect(errors).toEqual([]);
   });

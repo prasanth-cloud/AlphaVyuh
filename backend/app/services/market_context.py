@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-EOD_SOURCE_NAME = "NSE bhavcopy EOD"
-EOD_LICENSE_NOTE = "NSE end-of-day bhavcopy data; not a licensed realtime feed."
+EOD_SOURCE_NAME = "NSE bhavcopy"
+EOD_LICENSE_NOTE = "NSE bhavcopy data from the latest completed market session; not a licensed realtime feed."
 LIVE_LICENSE_NOTE = "Broker/provider data is account-scoped beta data; verify freshness before trading."
 FALLBACK_LICENSE_NOTE = "Fallback or cached market data; verify before acting."
 
@@ -129,9 +129,9 @@ def normalize_health_row(row: dict[str, Any]) -> dict[str, Any]:
         last_run_errors=last_run_errors,
     )
     if status == "healthy":
-        message = "Latest complete EOD market day is available."
+        message = "Latest complete market day is available."
     elif status == "degraded":
-        message = "Newest EOD ingest has gaps; product views use the latest usable market day."
+        message = "Newest market-data ingest has gaps; product views use the latest usable market day."
     elif status == "stale":
         message = "Market data refresh is overdue; verify before acting."
     else:
@@ -171,5 +171,5 @@ def normalize_health_row(row: dict[str, Any]) -> dict[str, Any]:
             universe_active=universe_active,
         ),
         "fallback_active": mode in {"fallback", "unknown"},
-        "next_refresh_hint": "After NSE EOD bhavcopy is published on the next trading day.",
+        "next_refresh_hint": "After NSE bhavcopy is published on the next trading day.",
     }

@@ -38,7 +38,7 @@ const sections = [
         <ul>
           <li><strong>Supabase</strong> for database and authentication.</li>
           <li><strong>Razorpay</strong> for payment processing when billing is enabled.</li>
-          <li><strong>NSE/EOD provider paths</strong> and configured market-data providers for market data.</li>
+          <li><strong>NSE/provider paths</strong> and configured market-data providers for market data.</li>
           <li><strong>Telegram</strong> for optional scan alert notifications.</li>
         </ul>
         <p className="mt-3 text-[12px]" style={{ color: "var(--text-tertiary)" }}>

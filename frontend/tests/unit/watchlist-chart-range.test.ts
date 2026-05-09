@@ -12,7 +12,7 @@ import {
 const NOW = new Date("2026-05-07T12:00:00Z");
 
 describe("watchlist chart range mapping", () => {
-  it("maps short ranges to daily EOD candle windows", () => {
+  it("maps short ranges to daily candle windows", () => {
     expect(getWatchlistChartRequest("3M", NOW)).toMatchObject({
       label: "3M",
       timeframe: "D",
@@ -42,7 +42,7 @@ describe("watchlist chart range mapping", () => {
     });
   });
 
-  it("exposes intraday options as unavailable in EOD beta mode", () => {
+  it("exposes intraday options as unavailable in beta mode", () => {
     const intraday = CHART_TIMEFRAME_OPTIONS.filter((option) => option.group === "Intraday");
     expect(intraday.map((option) => option.label)).toEqual(["5m", "15m", "30m", "1h"]);
     expect(intraday.every((option) => option.disabled && option.unavailableReason === INTRADAY_UNAVAILABLE_MESSAGE)).toBe(true);

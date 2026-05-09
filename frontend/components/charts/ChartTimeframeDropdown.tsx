@@ -69,9 +69,9 @@ export default function ChartTimeframeDropdown({ value, onChange, onUnavailable,
           {INTRADAY_UNAVAILABLE_MESSAGE}
         </div>
 
-        <div className="label" style={{ marginBottom: 6 }}>EOD ranges</div>
+        <div className="label" style={{ marginBottom: 6 }}>Historical ranges</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 6 }}>
-          {CHART_TIMEFRAME_OPTIONS.filter((option) => option.group === "EOD").map((option) => (
+          {CHART_TIMEFRAME_OPTIONS.filter((option) => option.group === "Historical").map((option) => (
             <button
               key={option.label}
               type="button"

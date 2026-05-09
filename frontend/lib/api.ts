@@ -2647,7 +2647,7 @@ const mockSharedScreens: SharedScreen[] = [
     user_id: "demo-trader-02",
     screen_id: "mock-pullback-quality",
     title: "Quality pullbacks near prior breakout zones",
-    description: "Uses mock EOD fixtures. Treat as workflow guidance, not live market advice.",
+    description: "Uses mock market fixtures. Treat as workflow guidance, not live market advice.",
     tags: ["Demo", "Pullback"],
     upvotes: 28,
     is_featured: false,

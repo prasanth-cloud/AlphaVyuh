@@ -70,7 +70,7 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
     for (const path of ["/dashboard", "/scanner", "/watchlist", "/charts/RELIANCE", "/journal", "/alerts", "/settings"]) {
       await page.goto(path);
       await expect(page.locator("body")).toBeVisible();
-      await expect(page.getByRole("link", { name: /Demo data|EOD data|Provider data/ })).toBeVisible();
+      await expect(page.getByRole("link", { name: /Demo data|Market data|Provider data/ })).toBeVisible();
     }
 
     await page.goto("/charts/RELIANCE");

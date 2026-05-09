@@ -611,14 +611,14 @@ function ChartPanel({
               compact
             />
             <span className="workspace-pill">Focus: {symbol}</span>
-            <span className="workspace-pill" title={isMockMode ? "Deterministic mock data for workflow QA, not market data" : "Using latest EOD market data unless a live quote is explicitly enabled"}>
-              Data: {isMockMode ? "Demo fixtures" : "EOD market"}
+            <span className="workspace-pill" title={isMockMode ? "Deterministic mock data for workflow QA, not market data" : "Using the latest completed market session unless a live quote is explicitly enabled"}>
+              Data: {isMockMode ? "Demo fixtures" : "Market data"}
             </span>
             <span className="caption">{chartRequest.label} · {chartRequest.timeframe} · {formatCandleRange(candles)}</span>
           </div>
           {chartSource && (
             <div className="caption" style={{ marginTop: 3 }}>
-              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo fixtures" : "EOD market")} · {chartSource.mode ?? (isMockMode ? "demo" : "eod")}
+              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo fixtures" : "Market data")} · {chartSource.mode === "eod" ? "market" : chartSource.mode ?? (isMockMode ? "demo" : "market")}
               {chartRangeNote ? ` · ${chartRangeNote}` : ""}
             </div>
           )}

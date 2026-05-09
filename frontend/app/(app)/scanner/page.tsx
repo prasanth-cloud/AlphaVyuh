@@ -553,7 +553,7 @@ export default function ScannerPage() {
       setIsLimited(data.is_limited || false)
       setScanTrust({
         mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
-        source: data.source_metadata?.source_name ?? data.source ?? 'NSE bhavcopy EOD',
+        source: data.source_metadata?.source_name ?? data.source ?? 'NSE bhavcopy',
         asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
         coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
         universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
