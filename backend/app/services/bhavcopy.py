@@ -160,6 +160,8 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
             ind["prev_close"] = pc
             avg_vol_20 = _safe_float(vol_s.iloc[:-1].tail(20).mean())
             ind["avg_volume_20d"] = _safe_int(avg_vol_20) if avg_vol_20 is not None else None
+            avg_vol_50 = _safe_float(vol_s.iloc[:-1].tail(50).mean())
+            ind["avg_volume_50d"] = _safe_int(avg_vol_50) if avg_vol_50 is not None else None
             if pc and pc > 0 and cur_close is not None:
                 ind["pct_change"] = round((cur_close - pc) / pc * 100, 2)
             # volume_ratio: today's volume / avg of previous 20 sessions
@@ -168,6 +170,22 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
 
         ind["week_52_high"] = _safe_float(high_s.max())
         ind["week_52_low"]  = _safe_float(low_s.min())
+        ind["high_3w"] = _safe_float(high_s.tail(15).max())
+        ind["low_3w"] = _safe_float(low_s.tail(15).min())
+
+        if ind["high_3w"] is not None and ind["low_3w"] and ind["low_3w"] > 0:
+            ind["darvas_box_height_pct"] = round((ind["high_3w"] - ind["low_3w"]) / ind["low_3w"] * 100.0, 4)
+
+        if n >= 7:
+            ranges = (high_s - low_s).tail(7)
+            latest_range = _safe_float(ranges.iloc[-1])
+            min_range = _safe_float(ranges.min())
+            ind["is_nr7"] = latest_range is not None and min_range is not None and latest_range <= min_range
+
+        if n >= 127 and cur_close is not None:
+            close_126 = _safe_float(close_s.iloc[-127])
+            if close_126 and close_126 > 0:
+                ind["price_perf_6m_pct"] = round((cur_close - close_126) / close_126 * 100.0, 4)
 
         # w52h_pct / w52l_pct: % distance from 52w high/low
         w52h = ind["week_52_high"]
@@ -191,10 +209,16 @@ def _compute_indicators_bulk(client, symbols: list[str], trade_date: date) -> li
                 ind["ema_50"] = _safe_float(ta.ema(close_s, 50).iloc[-1])
                 ind["sma_50"] = _safe_float(close_s.rolling(50, min_periods=50).mean().iloc[-1])
             if n >= 150:
+                ind["ema_150"] = _safe_float(ta.ema(close_s, 150).iloc[-1])
                 ind["sma_150"] = _safe_float(close_s.rolling(150, min_periods=150).mean().iloc[-1])
             if n >= 200:
-                ind["ema_200"] = _safe_float(ta.ema(close_s, 200).iloc[-1])
+                ema_200_series = ta.ema(close_s, 200)
+                ind["ema_200"] = _safe_float(ema_200_series.iloc[-1])
                 ind["sma_200"] = _safe_float(close_s.rolling(200, min_periods=200).mean().iloc[-1])
+                if n >= 230:
+                    prev_ema_200 = _safe_float(ema_200_series.iloc[-31])
+                    if prev_ema_200 and prev_ema_200 > 0 and ind["ema_200"] is not None:
+                        ind["ema_200_slope_30d"] = round((ind["ema_200"] - prev_ema_200) / prev_ema_200 * 100.0, 4)
         except Exception as e:
             logger.warning(f"indicator error for {symbol}: {e}")
 

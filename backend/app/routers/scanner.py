@@ -59,6 +59,8 @@ class ScanFilters(BaseModel):
     below_ema200:    bool | None = None
     ema20_above_ema50:   bool | None = None   # ema_20 > ema_50
     ema50_above_ema200:  bool | None = None   # ema_50 > ema_200
+    ema50_above_ema150:  bool | None = None
+    ema150_above_ema200: bool | None = None
     all_emas_bullish:    bool | None = None   # ema_20 > ema_50 > ema_200
     all_emas_bearish:    bool | None = None
     price_vs_sma50:      str | None = None    # 'above' | 'below'
@@ -67,6 +69,9 @@ class ScanFilters(BaseModel):
     sma50_above_sma150:  bool | None = None
     sma150_above_sma200: bool | None = None
     all_smas_bullish:    bool | None = None   # close > sma_50 > sma_150 > sma_200
+    ema_200_trending_up: bool | None = None
+    ema_200_slope_30d_min: float | None = None
+    ema_200_slope_30d_max: float | None = None
     ema20_dist_min:  float | None = None   # (close-ema20)/ema20*100 (%)
     ema20_dist_max:  float | None = None
     ema50_dist_min:  float | None = None
@@ -88,11 +93,20 @@ class ScanFilters(BaseModel):
     # ── EMA position aliases (new scanner UI: 'above' | 'below' | '') ───
     price_vs_ema20:  str | None = None   # 'above' | 'below'
     price_vs_ema50:  str | None = None
+    price_vs_ema150: str | None = None
     price_vs_ema200: str | None = None
 
     # ── Relative Strength score (1–99) ──────────────────────────────────
     rs_score_min:    float | None = None   # >= X
     rs_score_max:    float | None = None
+
+    # ── Swing setup read-model fields ────────────────────────────────────
+    price_perf_6m_min: float | None = None
+    price_perf_6m_max: float | None = None
+    avg_volume_50d_min: float | None = None
+    avg_volume_50d_max: float | None = None
+    darvas_box_height_pct_max: float | None = None
+    nr7: bool | None = None
 
     # ── MACD ─────────────────────────────────────────────────────────────
     macd_signal:        str | None = None   # "bullish_cross"|"bearish_cross"|"above_signal"|"below_signal"
@@ -199,11 +213,17 @@ PRESETS = [
         "color": "#5b63f5",
         "filters": {
             "all_smas_bullish": True,
+            "price_vs_ema50": "above",
+            "price_vs_ema150": "above",
             "price_vs_sma50": "above",
             "price_vs_sma150": "above",
             "price_vs_sma200": "above",
             "price_vs_ema200": "above",
+            "ema50_above_ema150": True,
+            "ema150_above_ema200": True,
+            "ema_200_trending_up": True,
             "rsi_min": 50,
+            "rs_score_min": 70,
             "week_52_high_pct_max": 25.0,
             "w52l_pct_min": 30.0,
             "series": ["EQ"],
@@ -220,7 +240,13 @@ PRESETS = [
             "vcp_max_depth_pct": 15.0,
             "vcp_pivot_proximity_pct": 10.0,
             "all_smas_bullish": True,
+            "price_vs_ema50": "above",
+            "price_vs_ema150": "above",
             "price_vs_sma50": "above",
+            "ema50_above_ema150": True,
+            "ema150_above_ema200": True,
+            "ema_200_trending_up": True,
+            "rs_score_min": 70,
             "week_52_high_pct_max": 12.0,
             "atr_pct_max": 8.0,
             "volume_ratio_min": 0.8,
@@ -236,9 +262,11 @@ PRESETS = [
             "all_smas_bullish": True,
             "price_vs_sma50": "above",
             "price_vs_sma200": "above",
+            "ema_200_trending_up": True,
             "week_52_high_pct_max": 15.0,
             "volume_ratio_min": 1.2,
             "rsi_min": 50,
+            "rs_score_min": 70,
             "series": ["EQ"],
         },
     },
@@ -263,6 +291,7 @@ PRESETS = [
         "filters": {
             "pct_change_min": 3.0,
             "volume_ratio_min": 2.0,
+            "price_perf_6m_min": 20.0,
             "price_vs_sma50": "above",
             "rsi_min": 55,
             "week_52_high_pct_max": 30.0,
@@ -279,6 +308,7 @@ PRESETS = [
             "price_vs_sma50": "above",
             "volume_ratio_min": 1.2,
             "atr_pct_max": 6.0,
+            "darvas_box_height_pct_max": 15.0,
             "series": ["EQ"],
         },
     },
@@ -314,6 +344,8 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
     results = []
 
     for row in rows:
+        match_reasons: list[str] = []
+        data_warnings: list[str] = []
         su = row.get("stock_universe") or {}
         if isinstance(su, list):
             su = su[0] if su else {}
@@ -338,11 +370,19 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         rsi_v      = float(row["rsi_14"])       if row.get("rsi_14")       is not None else None
         ema20_v    = float(row["ema_20"])        if row.get("ema_20")       is not None else None
         ema50_v    = float(row["ema_50"])        if row.get("ema_50")       is not None else None
+        ema150_v   = float(row["ema_150"])       if row.get("ema_150")      is not None else None
         ema200_v   = float(row["ema_200"])       if row.get("ema_200")      is not None else None
+        ema200_slope_30d_v = float(row["ema_200_slope_30d"]) if row.get("ema_200_slope_30d") is not None else None
         sma50_v    = float(row["sma_50"])        if row.get("sma_50")       is not None else None
         sma150_v   = float(row["sma_150"])       if row.get("sma_150")      is not None else None
         sma200_v   = float(row["sma_200"])       if row.get("sma_200")      is not None else None
         atr_v      = float(row["atr_14"])        if row.get("atr_14")       is not None else None
+        avg_vol50_v = int(row.get("avg_volume_50d") or 0) if row.get("avg_volume_50d") is not None else None
+        price_perf_6m_v = float(row["price_perf_6m_pct"]) if row.get("price_perf_6m_pct") is not None else None
+        high_3w_v = float(row["high_3w"]) if row.get("high_3w") is not None else None
+        low_3w_v = float(row["low_3w"]) if row.get("low_3w") is not None else None
+        darvas_box_height_v = float(row["darvas_box_height_pct"]) if row.get("darvas_box_height_pct") is not None else None
+        is_nr7_v = bool(row.get("is_nr7")) if row.get("is_nr7") is not None else None
         w52h_v     = float(row["week_52_high"])  if row.get("week_52_high") is not None else None
         w52l_v     = float(row["week_52_low"])   if row.get("week_52_low")  is not None else None
         rs_score_v = float(row["rs_score"])      if row.get("rs_score")     is not None else None
@@ -368,6 +408,8 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.price_max       is not None and close > f.price_max:            continue
         if f.pct_change_min  is not None and (pct_change is None or pct_change < f.pct_change_min): continue
         if f.pct_change_max  is not None and (pct_change is None or pct_change > f.pct_change_max): continue
+        if pct_change is not None and (f.pct_change_min is not None or f.pct_change_max is not None):
+            match_reasons.append(f"Price move {pct_change:+.1f}%")
         if f.gap_pct_min     is not None and (gap_pct is None or gap_pct < f.gap_pct_min):          continue
         if f.gap_pct_max     is not None and (gap_pct is None or gap_pct > f.gap_pct_max):          continue
         if f.high_min        is not None and high < f.high_min:              continue
@@ -378,16 +420,32 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.volume_max      is not None and volume > f.volume_max:          continue
         if f.volume_ratio_min is not None and (volume_ratio is None or volume_ratio < f.volume_ratio_min): continue
         if f.volume_ratio_max is not None and (volume_ratio is None or volume_ratio > f.volume_ratio_max): continue
+        if volume_ratio is not None and (f.volume_ratio_min is not None or f.volume_ratio_max is not None):
+            match_reasons.append(f"Volume {volume_ratio:.1f}x 20-day average")
+        if f.avg_volume_50d_min is not None:
+            if avg_vol50_v is None:
+                data_warnings.append("50-day average volume is unavailable.")
+            elif avg_vol50_v < f.avg_volume_50d_min:
+                continue
+        if f.avg_volume_50d_max is not None:
+            if avg_vol50_v is None:
+                data_warnings.append("50-day average volume is unavailable.")
+            elif avg_vol50_v > f.avg_volume_50d_max:
+                continue
         if f.turnover_min    is not None and turnover < f.turnover_min:      continue
         if f.turnover_max    is not None and turnover > f.turnover_max:      continue
 
         # ── Momentum ─────────────────────────────────────────────────────
         if f.rsi_min is not None and (rsi_v is None or rsi_v < f.rsi_min):  continue
         if f.rsi_max is not None and (rsi_v is None or rsi_v > f.rsi_max):  continue
+        if rsi_v is not None and (f.rsi_min is not None or f.rsi_max is not None):
+            match_reasons.append(f"RSI {rsi_v:.0f}")
 
         # ── Relative Strength score ────────────────────────────────────────
         if f.rs_score_min is not None and (rs_score_v is None or rs_score_v < f.rs_score_min): continue
         if f.rs_score_max is not None and (rs_score_v is None or rs_score_v > f.rs_score_max): continue
+        if rs_score_v is not None and (f.rs_score_min is not None or f.rs_score_max is not None):
+            match_reasons.append(f"RS score {rs_score_v:.0f}")
 
         # ── Trend / EMAs ─────────────────────────────────────────────────
         if f.above_ema20  and (ema20_v  is None or close <= ema20_v):  continue
@@ -398,6 +456,20 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.below_ema200 and (ema200_v is None or close >= ema200_v): continue
         if f.ema20_above_ema50  and (ema20_v is None or ema50_v  is None or ema20_v  <= ema50_v):  continue
         if f.ema50_above_ema200 and (ema50_v is None or ema200_v is None or ema50_v  <= ema200_v): continue
+        if f.ema50_above_ema150:
+            if ema50_v is None or ema150_v is None:
+                data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+            elif ema50_v <= ema150_v:
+                continue
+            else:
+                match_reasons.append("EMA 50 above EMA 150")
+        if f.ema150_above_ema200:
+            if ema150_v is None or ema200_v is None:
+                data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+            elif ema150_v <= ema200_v:
+                continue
+            else:
+                match_reasons.append("EMA 150 above EMA 200")
         if f.all_emas_bullish and (
             ema20_v is None or ema50_v is None or ema200_v is None
             or not (ema20_v > ema50_v > ema200_v)
@@ -419,6 +491,25 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             or close <= sma50_v
             or not (sma50_v > sma150_v > sma200_v)
         ): continue
+        if f.all_smas_bullish:
+            match_reasons.append("Price above SMA 50/150/200 trend stack")
+        if f.ema_200_trending_up is True:
+            if ema200_slope_30d_v is None:
+                data_warnings.append("EMA 200 slope is unavailable until the scanner intelligence migration is applied/backfilled.")
+            elif ema200_slope_30d_v <= 0:
+                continue
+            else:
+                match_reasons.append(f"EMA 200 rising over 30 sessions ({ema200_slope_30d_v:.1f}%)")
+        if f.ema_200_slope_30d_min is not None:
+            if ema200_slope_30d_v is None:
+                data_warnings.append("EMA 200 slope is unavailable.")
+            elif ema200_slope_30d_v < f.ema_200_slope_30d_min:
+                continue
+        if f.ema_200_slope_30d_max is not None:
+            if ema200_slope_30d_v is None:
+                data_warnings.append("EMA 200 slope is unavailable.")
+            elif ema200_slope_30d_v > f.ema_200_slope_30d_max:
+                continue
         if f.ema20_dist_min is not None and (ema20_dist is None or ema20_dist < f.ema20_dist_min): continue
         if f.ema20_dist_max is not None and (ema20_dist is None or ema20_dist > f.ema20_dist_max): continue
         if f.ema50_dist_min is not None and (ema50_dist is None or ema50_dist < f.ema50_dist_min): continue
@@ -429,6 +520,8 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.atr_max     is not None and (atr_v    is None or atr_v    > f.atr_max):     continue
         if f.atr_pct_min is not None and (atr_pct_v is None or atr_pct_v < f.atr_pct_min): continue
         if f.atr_pct_max is not None and (atr_pct_v is None or atr_pct_v > f.atr_pct_max): continue
+        if atr_pct_v is not None and (f.atr_pct_min is not None or f.atr_pct_max is not None):
+            match_reasons.append(f"ATR risk {atr_pct_v:.1f}%")
 
         # ── 52-Week ───────────────────────────────────────────────────────
         w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
@@ -436,12 +529,54 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
         if f.w52l_pct_min  is not None and (w52l_pct is None or w52l_pct < f.w52l_pct_min): continue
         if f.new_52w_high and not row_new_52w_high: continue
         if f.new_52w_low and not row_new_52w_low: continue
+        if w52h_pct is not None and w52h_limit is not None:
+            match_reasons.append(f"{w52h_pct:.1f}% from 52W high")
+        if w52l_pct is not None and f.w52l_pct_min is not None:
+            match_reasons.append(f"{w52l_pct:.1f}% above 52W low")
+
+        # ── Swing setup read-model fields ────────────────────────────────
+        if f.price_perf_6m_min is not None:
+            if price_perf_6m_v is None:
+                data_warnings.append("6-month price performance is unavailable until the scanner intelligence migration is applied/backfilled.")
+            elif price_perf_6m_v < f.price_perf_6m_min:
+                continue
+        if f.price_perf_6m_max is not None:
+            if price_perf_6m_v is None:
+                data_warnings.append("6-month price performance is unavailable.")
+            elif price_perf_6m_v > f.price_perf_6m_max:
+                continue
+        if price_perf_6m_v is not None and (f.price_perf_6m_min is not None or f.price_perf_6m_max is not None):
+            match_reasons.append(f"6M performance {price_perf_6m_v:+.1f}%")
+        if f.darvas_box_height_pct_max is not None:
+            if darvas_box_height_v is None:
+                data_warnings.append("3-week box height is unavailable until the scanner intelligence migration is applied/backfilled.")
+            elif darvas_box_height_v > f.darvas_box_height_pct_max:
+                continue
+            else:
+                match_reasons.append(f"3W box height {darvas_box_height_v:.1f}%")
+        if f.nr7 is True:
+            if is_nr7_v is None:
+                data_warnings.append("NR7 range flag is unavailable.")
+            elif not is_nr7_v:
+                continue
+            else:
+                match_reasons.append("NR7 narrow-range day")
 
         # ── EMA position aliases (price_vs_ema*) ─────────────────────────
         if f.price_vs_ema20 == "above"  and (ema20_v  is None or close <= ema20_v):  continue
         if f.price_vs_ema20 == "below"  and (ema20_v  is None or close >= ema20_v):  continue
         if f.price_vs_ema50 == "above"  and (ema50_v  is None or close <= ema50_v):  continue
         if f.price_vs_ema50 == "below"  and (ema50_v  is None or close >= ema50_v):  continue
+        if f.price_vs_ema150 == "above":
+            if ema150_v is None:
+                data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+            elif close <= ema150_v:
+                continue
+        if f.price_vs_ema150 == "below":
+            if ema150_v is None:
+                data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+            elif close >= ema150_v:
+                continue
         if f.price_vs_ema200 == "above" and (ema200_v is None or close <= ema200_v): continue
         if f.price_vs_ema200 == "below" and (ema200_v is None or close >= ema200_v): continue
 
@@ -575,13 +710,16 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "gap_pct":        gap_pct,
             "volume":         volume,
             "avg_volume_20d": avg_vol,
+            "avg_volume_50d": avg_vol50_v,
             "volume_ratio":   volume_ratio,
             "turnover":       turnover,
             "turnover_cr":    round(turnover / 10_000_000, 2) if turnover else None,
             "rsi_14":         rsi_v,
             "ema_20":         ema20_v,
             "ema_50":         ema50_v,
+            "ema_150":        ema150_v,
             "ema_200":        ema200_v,
+            "ema_200_slope_30d": ema200_slope_30d_v,
             "sma_50":         sma50_v,
             "sma_150":        sma150_v,
             "sma_200":        sma200_v,
@@ -591,6 +729,10 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "week_52_low":    w52l_v,
             "week_52_high_pct": w52h_pct,
             "week_52_low_pct":  w52l_pct,
+            "price_perf_6m_pct": price_perf_6m_v,
+            "high_3w":        high_3w_v,
+            "low_3w":         low_3w_v,
+            "darvas_box_height_pct": darvas_box_height_v,
             "atr_14":         atr_v,
             "atr_pct":        atr_pct_v,
             "macd_hist":      float(row["macd_hist"]) if row.get("macd_hist") is not None else None,
@@ -602,6 +744,9 @@ def _apply_filters(rows: list[dict], f: ScanFilters) -> list[dict]:
             "is_new_52w_high": row_new_52w_high,
             "is_new_52w_low":  row_new_52w_low,
             "is_inside_bar":   bool(row.get("is_inside_bar")),
+            "is_nr7":          is_nr7_v,
+            "match_reasons":   match_reasons[:6],
+            "data_warnings":   data_warnings[:4],
             # Fundamentals
             "market_cap_cr":   su.get("market_cap_cr"),
             "pe_ratio":        su.get("pe_ratio"),
@@ -753,20 +898,29 @@ async def run_scanner(
     f = body.filters
     series_list = f.series or ["EQ", "BE"]
 
-    q = (
-        client.table("daily_ohlcv")
-        .select(
-            "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
-            "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
-            "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
-            "bb_upper,bb_middle,bb_lower,bb_width,"
-            "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
-            "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-            "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
-        )
-        .eq("trade_date", latest_date)
+    base_select = (
+        "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
+        "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
+        "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
+        "bb_upper,bb_middle,bb_lower,bb_width,"
+        "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
+        "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
+        "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
     )
+    intelligence_select = (
+        "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,avg_volume_50d,"
+        "turnover,rsi_14,ema_20,ema_50,ema_150,ema_200,ema_200_slope_30d,"
+        "week_52_high,week_52_low,high_3w,low_3w,darvas_box_height_pct,price_perf_6m_pct,is_nr7,atr_14,"
+        "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
+        "bb_upper,bb_middle,bb_lower,bb_width,"
+        "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
+        "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
+        "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+    )
+
+    q = client.table("daily_ohlcv").select(intelligence_select).eq("trade_date", latest_date)
 
     # ── Push all single-day filters to DB (ADR 005 M3-B) ─────────────────────
     # Precomputed columns already in schema before M3-A:
@@ -815,24 +969,34 @@ async def run_scanner(
     try:
         rows = q.limit(SCAN_ROW_CAP).execute().data or []
     except Exception:
-        metadata = fallback_source_metadata("Scanner query could not complete; try a narrower preset.", as_of=latest_date)
-        return {
-            "trade_date": latest_date,
-            "total_matches": 0,
-            "plan_limit": hard_limit,
-            "plan": plan,
-            "is_limited": False,
-            "page": max(body.page, 1),
-            "page_size": body.page_size,
-            "total_pages": 1,
-            "visible_count": 0,
-            "results": [],
-            "mode": "unavailable",
-            "message": "Scanner query could not complete; try a narrower preset.",
-            "source_metadata": metadata,
-            "coverage_pct": None,
-            "universe_size": None,
-        }
+        try:
+            rows = (
+                client.table("daily_ohlcv")
+                .select(base_select)
+                .eq("trade_date", latest_date)
+                .limit(SCAN_ROW_CAP)
+                .execute()
+                .data or []
+            )
+        except Exception:
+            metadata = fallback_source_metadata("Scanner query could not complete; try a narrower preset.", as_of=latest_date)
+            return {
+                "trade_date": latest_date,
+                "total_matches": 0,
+                "plan_limit": hard_limit,
+                "plan": plan,
+                "is_limited": False,
+                "page": max(body.page, 1),
+                "page_size": body.page_size,
+                "total_pages": 1,
+                "visible_count": 0,
+                "results": [],
+                "mode": "unavailable",
+                "message": "Scanner query could not complete; try a narrower preset.",
+                "source_metadata": metadata,
+                "coverage_pct": None,
+                "universe_size": None,
+            }
 
     # Python-side filter for computed columns
     results = _apply_filters(rows, f)

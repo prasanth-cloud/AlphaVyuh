@@ -30,7 +30,9 @@ interface ScanResult {
   rsi_14: number | null
   ema_20: number | null
   ema_50: number | null
+  ema_150?: number | null
   ema_200: number | null
+  ema_200_slope_30d?: number | null
   macd_hist: number | null
   atr_14: number | null
   adx_14: number | null
@@ -38,8 +40,16 @@ interface ScanResult {
   week_52_low: number | null
   week_52_high_pct: number | null
   is_new_52w_high: boolean
+  is_nr7?: boolean | null
   rs_score: number | null
   bb_width: number | null
+  avg_volume_50d?: number | null
+  price_perf_6m_pct?: number | null
+  high_3w?: number | null
+  low_3w?: number | null
+  darvas_box_height_pct?: number | null
+  match_reasons?: string[]
+  data_warnings?: string[]
   market_cap_cr: number | null
   pe_ratio: number | null
   pb_ratio: number | null
@@ -69,11 +79,17 @@ const PRESETS = [
     description: 'Minervini-style daily trend screen using the available SMA stack, EMA 200, RSI, and 52-week range.',
     filters: {
       all_smas_bullish: true,
+      price_vs_ema50: 'above',
+      price_vs_ema150: 'above',
       price_vs_sma50: 'above',
       price_vs_sma150: 'above',
       price_vs_sma200: 'above',
       price_vs_ema200: 'above',
+      ema50_above_ema150: true,
+      ema150_above_ema200: true,
+      ema_200_trending_up: true,
       rsi_min: 50,
+      rs_score_min: 70,
       week_52_high_pct_max: 25,
       w52l_pct_min: 30,
       series: ['EQ'],
@@ -89,7 +105,13 @@ const PRESETS = [
       vcp_max_depth_pct: 15,
       vcp_pivot_proximity_pct: 10,
       all_smas_bullish: true,
+      price_vs_ema50: 'above',
+      price_vs_ema150: 'above',
       price_vs_sma50: 'above',
+      ema50_above_ema150: true,
+      ema150_above_ema200: true,
+      ema_200_trending_up: true,
+      rs_score_min: 70,
       week_52_high_pct_max: 12,
       atr_pct_max: 8,
       volume_ratio_min: 0.8,
@@ -104,9 +126,11 @@ const PRESETS = [
       all_smas_bullish: true,
       price_vs_sma50: 'above',
       price_vs_sma200: 'above',
+      ema_200_trending_up: true,
       week_52_high_pct_max: 15,
       volume_ratio_min: 1.2,
       rsi_min: 50,
+      rs_score_min: 70,
       series: ['EQ'],
     },
   },
@@ -129,6 +153,7 @@ const PRESETS = [
     filters: {
       pct_change_min: 3,
       volume_ratio_min: 2,
+      price_perf_6m_min: 20,
       price_vs_sma50: 'above',
       rsi_min: 55,
       week_52_high_pct_max: 30,
@@ -144,6 +169,7 @@ const PRESETS = [
       price_vs_sma50: 'above',
       volume_ratio_min: 1.2,
       atr_pct_max: 6,
+      darvas_box_height_pct_max: 15,
       series: ['EQ'],
     },
   },
@@ -158,7 +184,7 @@ type Filters = {
   volume_ratio_min: string; volume_ratio_max: string
   rsi_min: string; rsi_max: string
   adx_min: string; adx_max: string
-  price_vs_ema20: string; price_vs_ema50: string; price_vs_ema200: string
+  price_vs_ema20: string; price_vs_ema50: string; price_vs_ema150: string; price_vs_ema200: string
   price_vs_sma20: string; price_vs_sma50: string; price_vs_sma150: string; price_vs_sma200: string
   ema20_vs_ema50: string; ema50_vs_ema200: string
   macd_hist_positive: string
@@ -168,6 +194,14 @@ type Filters = {
   week_52_high_pct_max: string
   rs_score_min: string
   w52l_pct_min: string
+  ema_200_trending_up: boolean
+  ema50_above_ema150: boolean
+  ema150_above_ema200: boolean
+  ema_200_slope_30d_min: string
+  price_perf_6m_min: string
+  avg_volume_50d_min: string
+  darvas_box_height_pct_max: string
+  nr7: boolean
   all_emas_bullish: boolean
   all_smas_bullish: boolean
   vcp_contraction: boolean
@@ -193,7 +227,7 @@ const emptyFilters = (): Filters => ({
   volume_ratio_min: '', volume_ratio_max: '',
   rsi_min: '', rsi_max: '',
   adx_min: '', adx_max: '',
-  price_vs_ema20: '', price_vs_ema50: '', price_vs_ema200: '',
+  price_vs_ema20: '', price_vs_ema50: '', price_vs_ema150: '', price_vs_ema200: '',
   price_vs_sma20: '', price_vs_sma50: '', price_vs_sma150: '', price_vs_sma200: '',
   ema20_vs_ema50: '', ema50_vs_ema200: '',
   macd_hist_positive: '',
@@ -203,6 +237,14 @@ const emptyFilters = (): Filters => ({
   week_52_high_pct_max: '',
   rs_score_min: '',
   w52l_pct_min: '',
+  ema_200_trending_up: false,
+  ema50_above_ema150: false,
+  ema150_above_ema200: false,
+  ema_200_slope_30d_min: '',
+  price_perf_6m_min: '',
+  avg_volume_50d_min: '',
+  darvas_box_height_pct_max: '',
+  nr7: false,
   all_emas_bullish: false,
   all_smas_bullish: false,
   vcp_contraction: false,
@@ -270,12 +312,35 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
 }) {
   return (
     <tr>
-      <td colSpan={8} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
+      <td colSpan={9} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{ padding: '16px 20px 8px', display: 'grid', gridTemplateColumns: 'minmax(220px,1.15fr) minmax(220px,1fr)', gap: 16 }}>
+          <div>
+            <div className="label" style={{ marginBottom: 8 }}>Why this matched</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(r.match_reasons?.length ? r.match_reasons : ['Matched the active scanner filters']).map(reason => (
+                <span key={reason} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>{reason}</span>
+              ))}
+            </div>
+            {Boolean(r.data_warnings?.length) && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
+                {r.data_warnings!.map(warning => (
+                  <div key={warning} className="caption" style={{ color: 'var(--warn)' }}>{warning}</div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+            <MetricCell label="EMA 200 slope" value={r.ema_200_slope_30d != null ? `${r.ema_200_slope_30d.toFixed(1)}%` : '—'} direction={r.ema_200_slope_30d != null ? (r.ema_200_slope_30d > 0 ? 'above' : 'below') : undefined} />
+            <MetricCell label="6M perf" value={r.price_perf_6m_pct != null ? `${r.price_perf_6m_pct > 0 ? '+' : ''}${r.price_perf_6m_pct.toFixed(1)}%` : '—'} direction={r.price_perf_6m_pct != null ? (r.price_perf_6m_pct > 0 ? 'above' : 'below') : undefined} />
+            <MetricCell label="3W box" value={r.darvas_box_height_pct != null ? `${r.darvas_box_height_pct.toFixed(1)}%` : '—'} />
+            <MetricCell label="NR7" value={r.is_nr7 == null ? '—' : r.is_nr7 ? 'Yes' : 'No'} direction={r.is_nr7 ? 'above' : undefined} />
+          </div>
+        </div>
+        <div style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
           <MetricCell label="EMA 20" value={r.ema_20 ? `₹${r.ema_20.toFixed(0)}` : '—'} direction={r.ema_20 ? (r.close > r.ema_20 ? 'above' : 'below') : undefined} />
           <MetricCell label="EMA 50" value={r.ema_50 ? `₹${r.ema_50.toFixed(0)}` : '—'} direction={r.ema_50 ? (r.close > r.ema_50 ? 'above' : 'below') : undefined} />
+          <MetricCell label="EMA 150" value={r.ema_150 ? `₹${r.ema_150.toFixed(0)}` : '—'} direction={r.ema_150 ? (r.close > r.ema_150 ? 'above' : 'below') : undefined} />
           <MetricCell label="EMA 200" value={r.ema_200 ? `₹${r.ema_200.toFixed(0)}` : '—'} direction={r.ema_200 ? (r.close > r.ema_200 ? 'above' : 'below') : undefined} />
-          <MetricCell label="ATR 14" value={r.atr_14 ? `₹${r.atr_14.toFixed(1)}` : '—'} />
           <MetricCell label="Sector" value={r.sector || '—'} />
           <MetricCell label="P/E" value={r.pe_ratio?.toFixed(1) ?? '—'} />
           <MetricCell label="ROE" value={r.roe ? `${r.roe.toFixed(1)}%` : '—'} />
@@ -403,6 +468,14 @@ export default function ScannerPage() {
     set('week_52_high_pct_max', num(f.week_52_high_pct_max))
     set('rs_score_min', num(f.rs_score_min))
     set('w52l_pct_min', num(f.w52l_pct_min))
+    set('ema_200_slope_30d_min', num(f.ema_200_slope_30d_min))
+    set('price_perf_6m_min', num(f.price_perf_6m_min))
+    set('avg_volume_50d_min', num(f.avg_volume_50d_min))
+    set('darvas_box_height_pct_max', num(f.darvas_box_height_pct_max))
+    if (f.ema_200_trending_up) fil.ema_200_trending_up = true
+    if (f.ema50_above_ema150) fil.ema50_above_ema150 = true
+    if (f.ema150_above_ema200) fil.ema150_above_ema200 = true
+    if (f.nr7) fil.nr7 = true
     if (f.all_emas_bullish) fil.all_emas_bullish = true
     if (f.all_smas_bullish) fil.all_smas_bullish = true
     if (f.vcp_contraction) fil.vcp_contraction = true
@@ -413,6 +486,7 @@ export default function ScannerPage() {
     set('atr_pct_min', num(f.atr_pct_min)); set('atr_pct_max', num(f.atr_pct_max))
     if (f.price_vs_ema20) set('price_vs_ema20', f.price_vs_ema20)
     if (f.price_vs_ema50) set('price_vs_ema50', f.price_vs_ema50)
+    if (f.price_vs_ema150) set('price_vs_ema150', f.price_vs_ema150)
     if (f.price_vs_ema200) set('price_vs_ema200', f.price_vs_ema200)
     if (f.price_vs_sma20) set('price_vs_sma20', f.price_vs_sma20)
     if (f.price_vs_sma50) set('price_vs_sma50', f.price_vs_sma50)
@@ -669,7 +743,7 @@ export default function ScannerPage() {
     )
   }
 
-  function toggleRow(label: string, key: 'new_52w_high' | 'new_52w_low' | 'is_inside_bar' | 'all_emas_bullish' | 'all_smas_bullish' | 'vcp_contraction') {
+  function toggleRow(label: string, key: 'new_52w_high' | 'new_52w_low' | 'is_inside_bar' | 'all_emas_bullish' | 'all_smas_bullish' | 'vcp_contraction' | 'ema50_above_ema150' | 'ema150_above_ema200' | 'ema_200_trending_up' | 'nr7') {
     return (
       <label style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6, cursor: 'pointer' }}>
         <input type="checkbox" checked={!!filters[key]} onChange={e => setF(key, e.target.checked)}
@@ -791,12 +865,15 @@ export default function ScannerPage() {
               <Section title="Trend quality">
                 {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
+                {segRow('vs EMA 150', 'price_vs_ema150', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 200', 'price_vs_ema200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs SMA 50', 'price_vs_sma50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs SMA 150', 'price_vs_sma150', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs SMA 200', 'price_vs_sma200', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('EMA 20 vs 50', 'ema20_vs_ema50', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
                 {segRow('EMA 50 vs 200', 'ema50_vs_ema200', [{ value: 'golden', label: 'Golden' }, { value: 'death', label: 'Death' }])}
+                {toggleRow('EMA 50 above EMA 150', 'ema50_above_ema150')}
+                {toggleRow('EMA 150 above EMA 200', 'ema150_above_ema200')}
                 {toggleRow('All EMAs bullish (20>50>200)', 'all_emas_bullish')}
                 {toggleRow('All SMAs bullish (close>50>150>200)', 'all_smas_bullish')}
               </Section>
