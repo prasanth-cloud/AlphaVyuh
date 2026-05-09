@@ -42,6 +42,19 @@ Validation:
 
 No high or critical finding survived validation in this repository-wide scan.
 
+## Follow-Up Hardening
+
+After owner follow-up on 2026-05-08, the Telegram bot webhook was hardened to
+require Telegram's `X-Telegram-Bot-Api-Secret-Token` header whenever
+`TELEGRAM_BOT_TOKEN` is configured. The endpoint fails closed when
+`TELEGRAM_WEBHOOK_SECRET` is missing and rejects missing or wrong presented
+secrets before parsing the webhook payload.
+
+Validation:
+
+- `backend/.venv/bin/python -m pytest backend/tests/test_telegram_webhook_security.py backend/tests/test_ingest_security.py -q` — passed, 6 tests.
+- `backend/.venv/bin/python -m pytest backend/tests -q` — passed, 178 tests.
+
 ## Coverage Closure
 
 - Auth redirects: suppressed; `isSafeRedirect` rejects hostile values and auth routes use it.
@@ -51,7 +64,9 @@ No high or critical finding survived validation in this repository-wide scan.
 - Payment/Razorpay: suppressed for current launch posture; checkout remains disabled/waitlist-gated, verify/webhook use HMAC checks.
 - Frontend HTML sinks: suppressed; reviewed sinks use static local arrays or static script/CSS.
 - Supabase advisors: production function search-path/direct execute warnings were previously resolved. Current remaining security advisors are no-policy INFO tables, intentional waitlist public insert, and leaked-password protection disabled.
-- Telegram webhook: deferred P2 hardening; add Telegram secret-header validation before broadly promoting Telegram bot usage.
+- Telegram webhook: fixed after owner follow-up; public bot webhooks now require
+  `X-Telegram-Bot-Api-Secret-Token` to match `TELEGRAM_WEBHOOK_SECRET` before
+  payload parsing or Telegram/Supabase side effects.
 - Supabase migration history: deferred owner/DB-url reconciliation. Production hardening SQL was applied and verified, but migration history does not yet list `20260508001000_public_launch_security_hardening`.
 
 ## Supabase Advisor Refresh
@@ -69,12 +84,11 @@ Security advisors after the production hardening SQL:
 
 Performance advisors were also rerun. Remaining warnings are performance/index/RLS-efficiency items, not direct security blockers.
 
-Migration history still does not list `20260508001000_public_launch_security_hardening` because the migration API refused the apply and the production DB URL path failed auth. The SQL was applied by direct Supabase SQL execution after owner authorization and verified by SQL/advisors; migration-history reconciliation remains owner/DB-access work.
+Migration history still does not list `20260508001000_public_launch_security_hardening` because the migration API refused the apply and the production DB URL path failed auth. After the owner authorized Supabase access on 2026-05-08, this pass retried the DB URL path with `npx supabase migration list --db-url "$PROD_SUPABASE_DB_URL"` outside the sandbox. The connection reached `db.fyxltykqdvacbdgmeucf.supabase.co` but failed Postgres password authentication. The Supabase CLI also has no local access token, and the session Supabase connector advertised migration tools but returned `Unknown tool` for project/migration calls. The SQL remains applied and verified by prior direct SQL/advisors; migration-history reconciliation still needs a valid Supabase access token, refreshed DB URL/password, or working dashboard/API migration path.
 
 ## Remaining Owner-Controlled Gates
 
 1. Enable Supabase Auth leaked-password protection in the Supabase dashboard.
-2. Reconcile migration history for `20260508001000_public_launch_security_hardening` when a valid DB URL/dashboard migration path is available.
+2. Reconcile migration history for `20260508001000_public_launch_security_hardening` when a valid DB URL, Supabase access token, or working dashboard migration path is available.
 3. Keep Razorpay production checkout disabled until payment flow, webhook, refund/cancel, and owner approval evidence exists.
 4. Do not run live/sandbox broker order validation without explicit account-owner confirmation.
-5. Add Telegram webhook secret validation before public bot promotion.

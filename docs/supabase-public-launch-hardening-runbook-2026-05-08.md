@@ -30,16 +30,21 @@ not updated.
 Observed apply-path blockers:
 
 - staging DB host `db.nltfedbnbbrclcufoaly.supabase.co` does not resolve
-- production `PROD_SUPABASE_DB_URL` fails password authentication
+- production `PROD_SUPABASE_DB_URL` fails password authentication, confirmed
+  again after owner authorization on 2026-05-08
 - the Supabase migration API refused the production apply for safety reasons
+- local Supabase CLI has no `SUPABASE_ACCESS_TOKEN`, and the session Supabase
+  connector exposed tools but returned `Unknown tool` for project/migration
+  calls
 
 Post-apply production verification confirmed the targeted functions now use
 `search_path=public` and no longer grant direct `anon`/`authenticated` execute.
 Post-apply security advisors no longer report the mutable search-path or direct
 security-definer execute warnings.
 
-Remaining task: reconcile migration history when valid DB URL access is restored
-so the local migration file and Supabase migration ledger are aligned.
+Remaining task: reconcile migration history when valid DB URL access, a
+Supabase access token, or a working dashboard/API migration path is available so
+the local migration file and Supabase migration ledger are aligned.
 
 ## Apply Path A — Repo Script
 

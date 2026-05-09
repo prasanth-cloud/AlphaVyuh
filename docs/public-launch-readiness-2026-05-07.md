@@ -36,6 +36,7 @@ These block broad paid public launch and require owner-controlled evidence befor
 | Auth surface | `/dev-login` was listed as a public route. It still required a Supabase token, but the route name and public exposure were inappropriate for production-like traffic. | `/dev-login` is now available only when mock app auth is enabled; otherwise it redirects to `/login`. |
 | Auth error leakage | Backend auth fallback returned provider exception text in the 401 response. | Auth fallback now returns the generic message `Authentication failed`; a regression test covers this. |
 | Broker smoke scripts | Kite/Upstox read-only smoke scripts had an explicit `--print-access-token` switch. | Full token printing now requires `ALLOW_PRINT_ACCESS_TOKEN=true`; default and documented behavior remains masked. |
+| Telegram webhook | Telegram bot webhook accepted requests whenever a bot token was configured, without validating Telegram's webhook secret header. | `/api/v1/alerts/telegram/webhook` now fails closed unless `X-Telegram-Bot-Api-Secret-Token` matches `TELEGRAM_WEBHOOK_SECRET`; focused regression tests cover missing, wrong, and correct secrets. |
 
 ## P2 Post-Launch Improvements
 
@@ -101,9 +102,15 @@ the reviewed SQL was applied to production via Supabase SQL execution on
 2026-05-08. Post-apply verification showed all targeted functions with
 `search_path=public` and grants limited to `postgres` and `service_role`.
 Post-apply security advisors no longer report the mutable search-path or direct
-security-definer execute warnings. Remaining security advisories are INFO-level
-RLS-enabled/no-policy rows for deny-all/admin tables, the intentional public
-waitlist insert policy, and Supabase Auth leaked-password protection disabled.
+security-definer execute warnings. After owner approval on 2026-05-08, the
+production DB URL path was retried from this session; it reached Supabase but
+failed Postgres password authentication. The local Supabase CLI has no access
+token, and the available Supabase connector returned `Unknown tool` for
+project/migration calls, so migration-history reconciliation is still blocked on
+a refreshed DB password/access token or working dashboard/API migration path.
+Remaining security advisories are INFO-level RLS-enabled/no-policy rows for
+deny-all/admin tables, the intentional public waitlist insert policy, and
+Supabase Auth leaked-password protection disabled.
 Performance advisors also returned unindexed foreign keys, auth RLS init-plan
 warnings, duplicate indexes, and multiple permissive policy warnings; those are
 tracked as post-launch database hardening unless they block load testing.

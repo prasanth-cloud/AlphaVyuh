@@ -5,6 +5,7 @@ The daily ingest cron calls run_all_alerts() after bhavcopy is ingested.
 from __future__ import annotations
 
 from datetime import date
+import hmac
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -314,12 +315,32 @@ async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> No
 
 # ── Telegram Bot Webhook ──────────────────────────────────────────────────────
 
+TELEGRAM_WEBHOOK_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
+
+
+def _require_telegram_webhook_secret(header_value: str | None) -> None:
+    expected_secret = settings.telegram_webhook_secret
+    if not expected_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Telegram webhook is not configured.",
+        )
+
+    if not header_value or not hmac.compare_digest(header_value, expected_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Telegram webhook secret.",
+        )
+
+
 @router.post("/telegram/webhook")
 async def telegram_webhook(request: Request):
     """Receive Telegram bot updates (messages/commands from users)."""
     from app.services.supabase import settings as _settings
     if not _settings.telegram_bot_token:
         return {"ok": True}
+
+    _require_telegram_webhook_secret(request.headers.get(TELEGRAM_WEBHOOK_SECRET_HEADER))
 
     payload = await request.json()
     message = payload.get("message", {})

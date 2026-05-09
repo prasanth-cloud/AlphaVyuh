@@ -38,12 +38,13 @@ posture until owner-controlled gates are resolved.
 | Broker live/sandbox execution safely gated. | Backend order safety tests and release docs confirm flag + explicit confirmation gates; no live/sandbox order paths were run. | Done |
 | Billing/Razorpay safely enabled or disabled. | Billing remains disabled/waitlist-gated; production checkout not enabled. | Done for disabled posture |
 | Supabase migrations reviewed and production-safe. | Reviewed migration `supabase/migrations/20260508001000_public_launch_security_hardening.sql` applied to production via direct SQL execution on 2026-05-08 after owner authorization because staging was inactive and the migration API refused the apply. | Applied via direct SQL |
-| Supabase production mutation evidence. | Post-apply verification shows targeted functions use `search_path=public` and grants are limited to `postgres`/`service_role`; post-apply security advisors no longer show the mutable search-path or security-definer direct-execute warnings. Migration history still needs reconciliation when DB URL access is restored. | Verified |
+| Supabase production mutation evidence. | Post-apply verification shows targeted functions use `search_path=public` and grants are limited to `postgres`/`service_role`; post-apply security advisors no longer show the mutable search-path or security-definer direct-execute warnings. Migration history still needs reconciliation when a valid DB URL, access token, or dashboard/API migration path is available. | Verified |
+| Telegram webhook hardening. | `/api/v1/alerts/telegram/webhook` requires Telegram's `X-Telegram-Bot-Api-Secret-Token` header to match `TELEGRAM_WEBHOOK_SECRET` before payload parsing or side effects. | Done |
 | Frontend lint. | `npm run lint` passed. | Done |
 | Frontend typecheck/build. | `npm run typecheck` passed. | Done |
 | Frontend unit tests. | `npm --prefix frontend run test -- --run` passed: 13 files / 47 tests. | Done |
 | Frontend audit. | `npm audit --audit-level=moderate` passed: 0 vulnerabilities. | Done |
-| Backend tests. | `backend/.venv/bin/python -m pytest backend/tests -q` passed after the ingest security fix: 175 tests. `npm run launch:check` backend focused tests also passed: 40 tests. | Done |
+| Backend tests. | `backend/.venv/bin/python -m pytest backend/tests -q` passed after the Telegram webhook fix: 178 tests. `npm run launch:check` backend focused tests also passed before this follow-up: 40 tests. | Done |
 | Backend dependency audit. | `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off` passed. | Done |
 | Mock workflow E2E. | `npm run test:e2e:mock` passed: 9 tests. | Done |
 | Layout smoke. | `npm run test:e2e:layout` passed: 12 tests. | Done |
@@ -60,7 +61,7 @@ posture until owner-controlled gates are resolved.
 
 ## Remaining Owner-Controlled Gates
 
-1. Reconcile Supabase migration history when valid DB URL access is restored.
+1. Reconcile Supabase migration history when valid DB URL access, a Supabase access token, or a working dashboard/API migration path is available.
 2. Enable Supabase Auth leaked-password protection in the project dashboard.
 3. Provide final public-launch legal/support/data-vendor policy.
 4. Keep Razorpay production checkout disabled until owner-approved production
@@ -68,12 +69,11 @@ posture until owner-controlled gates are resolved.
 5. Provide owner broker tokens only if real read-only Kite/Upstox smoke is
    desired; do not run live/sandbox order validation without explicit owner
    confirmation.
-6. Add Telegram webhook secret validation before broad Telegram bot promotion.
 
 ## Exact Next Action
 
-Reconcile Supabase migration history when valid DB URL access is restored, then
-continue owner-controlled public-launch gates: Auth leaked-password protection,
-final legal/support/data-vendor policy, Razorpay production payment evidence,
-optional read-only broker smoke credentials, and Telegram webhook secret
-validation before public bot promotion.
+Reconcile Supabase migration history when valid DB URL access, a Supabase access
+token, or a working dashboard/API migration path is available, then continue
+owner-controlled public-launch gates: Auth leaked-password protection, final
+legal/support/data-vendor policy, Razorpay production payment evidence, and
+optional read-only broker smoke credentials.
