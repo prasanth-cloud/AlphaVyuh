@@ -184,12 +184,20 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/3M · D · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
 
+    await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
+    await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toBeDisabled();
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available in EOD beta mode/i);
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · D · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · AlphaVyuh mock fixtures · demo/i);
 
-    await page.locator(".watchlist-chart-header").getByRole("button", { name: "10Y" }).click();
+    await page.locator(".watchlist-chart-header").getByRole("button", { name: "10Y", exact: true }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · M · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
+
+    await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
+    await page.locator(".watchlist-chart-header").getByText(/SMA|Indicators/).first().click();
+    await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: /EMA\(20\)|EMA 20/i })).toBeVisible();
+    await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: /Bollinger/i })).toBeVisible();
   });
 
   test("feedback widget does not cover top workflow controls", async ({ page }) => {

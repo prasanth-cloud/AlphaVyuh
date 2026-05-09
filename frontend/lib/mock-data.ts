@@ -252,7 +252,7 @@ export function mockLiveQuote(symbol: string): LiveQuote | null {
 
 export function mockCandles(symbol: string, timeframe = "D", limit = 180): CandlesResponse {
   const q = mockQuote(symbol) ?? MOCK_STOCKS[0];
-  const candles = makeCandles(q, Math.min(limit, 240));
+  const candles = makeCandles(q, Math.min(limit, 3000), timeframe);
   const last = candles[candles.length - 1];
   return {
     symbol: q.symbol,
@@ -405,8 +405,11 @@ export function mockPortfolio(): PortfolioResponse {
   };
 }
 
-function makeCandles(base: ScanResult, count: number): CandleBar[] {
-  const start = new Date("2025-09-01T00:00:00Z");
+function makeCandles(base: ScanResult, count: number, timeframe = "D"): CandleBar[] {
+  const end = new Date("2026-05-07T00:00:00Z");
+  const dayStep = timeframe === "M" ? 30.4375 : timeframe === "W" ? 7 : 1.42;
+  const start = new Date(end);
+  start.setUTCDate(end.getUTCDate() - Math.round(Math.max(0, count - 1) * dayStep));
   const rows: CandleBar[] = [];
   let price = base.close * 0.78;
   for (let i = 0; i < count; i++) {
@@ -417,7 +420,7 @@ function makeCandles(base: ScanResult, count: number): CandleBar[] {
     const high = Math.max(open, close) * 1.01;
     const low = Math.min(open, close) * 0.99;
     const dt = new Date(start);
-    dt.setDate(start.getDate() + i);
+    dt.setUTCDate(start.getUTCDate() + Math.round(i * dayStep));
     price = close;
     rows.push({
       time: dt.toISOString().slice(0, 10),

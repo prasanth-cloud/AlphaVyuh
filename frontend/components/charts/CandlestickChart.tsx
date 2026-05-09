@@ -31,6 +31,8 @@ export type IndicatorData = {
   ema20?: LinePoint[];
   ema50?: LinePoint[];
   ema200?: LinePoint[];
+  sma50?: LinePoint[];
+  sma200?: LinePoint[];
   vwap?: LinePoint[];
   bb?: BBPoint[];
   ichimoku?: IchimokuPoint[];
@@ -63,7 +65,7 @@ function candleToVolColor(c: CandleBar): string {
 
 function applyDefaultVisibleRange(chart: IChartApi, candles: CandleBar[]) {
   if (!candles.length) return;
-  if (candles.length <= 120) {
+  if (candles.length <= 320) {
     chart.timeScale().fitContent();
     return;
   }
@@ -86,6 +88,8 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     ema20: ISeriesApi<"Line"> | null;
     ema50: ISeriesApi<"Line"> | null;
     ema200: ISeriesApi<"Line"> | null;
+    sma50: ISeriesApi<"Line"> | null;
+    sma200: ISeriesApi<"Line"> | null;
     vwap: ISeriesApi<"Line"> | null;
     bbUpper: ISeriesApi<"Line"> | null;
     bbMid: ISeriesApi<"Line"> | null;
@@ -96,7 +100,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     ichiSenkouB: ISeriesApi<"Line"> | null;
     ichiChikou: ISeriesApi<"Line"> | null;
   }>({
-    price: null, volume: null, ema20: null, ema50: null, ema200: null,
+    price: null, volume: null, ema20: null, ema50: null, ema200: null, sma50: null, sma200: null,
     vwap: null, bbUpper: null, bbMid: null, bbLower: null,
     ichiTenkan: null, ichiKijun: null, ichiSenkouA: null, ichiSenkouB: null, ichiChikou: null,
   });
@@ -220,6 +224,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     seriesRef.current.ema200 = chart.addSeries(LineSeries, {
       color: "#7a8695", lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
     });
+    seriesRef.current.sma50 = chart.addSeries(LineSeries, {
+      color: "#94a3b8", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
+    });
+    seriesRef.current.sma200 = chart.addSeries(LineSeries, {
+      color: "#64748b", lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false,
+    });
 
     // VWAP
     seriesRef.current.vwap = chart.addSeries(LineSeries, {
@@ -311,11 +321,12 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     s.volume.setData(
       candles.map(c => ({ time: c.time as Time, value: c.volume, color: candleToVolColor(c) }))
     );
+    s.volume.applyOptions({ visible: activeIndicators.includes("volume") });
     if (!didInitialFitRef.current) {
       if (chartRef.current) applyDefaultVisibleRange(chartRef.current, candles);
       didInitialFitRef.current = true;
     }
-  }, [candles, chartType]);
+  }, [candles, chartType, activeIndicators]);
 
   // Crosshair move → notify parent
   useEffect(() => {
@@ -366,6 +377,20 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
     if (showEma200 && indicators.ema200?.length) {
       s.ema200?.setData(indicators.ema200.map(p => ({ time: p.time as Time, value: p.value })));
     }
+
+    const showSma50 = activeIndicators.includes("sma50");
+    s.sma50?.applyOptions({ visible: showSma50 });
+    if (showSma50 && indicators.sma50?.length) {
+      s.sma50?.setData(indicators.sma50.map(p => ({ time: p.time as Time, value: p.value })));
+    }
+
+    const showSma200 = activeIndicators.includes("sma200");
+    s.sma200?.applyOptions({ visible: showSma200 });
+    if (showSma200 && indicators.sma200?.length) {
+      s.sma200?.setData(indicators.sma200.map(p => ({ time: p.time as Time, value: p.value })));
+    }
+
+    s.volume?.applyOptions({ visible: activeIndicators.includes("volume") });
 
     // VWAP
     const showVwap = activeIndicators.includes("vwap");
