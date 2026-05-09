@@ -239,6 +239,10 @@ class TestCanonicalSwingPresets:
             "episodic_pivot",
             "darvas_box_breakout",
         ]
+        names = {preset["id"]: preset["name"] for preset in PRESETS}
+        descriptions = " ".join(preset["description"] for preset in PRESETS)
+        assert names["darvas_box_breakout"] == "Box Breakout"
+        assert "Minervini" not in descriptions
 
     def test_sma_trend_stack_filter_accepts_constructive_stack(self):
         from app.routers.scanner import ScanFilters, _apply_filters
@@ -260,11 +264,22 @@ class TestCanonicalSwingPresets:
         from app.routers.scanner import ScanFilters, _apply_filters
 
         rows = [_scanner_row()]
-        results = _apply_filters(rows, ScanFilters(all_smas_bullish=True, rs_score_min=70, volume_ratio_min=1))
+        results = _apply_filters(rows, ScanFilters(all_smas_bullish=True, rs_score_min=70, volume_ratio_min=1), "trend_template")
 
         assert results
         assert any("SMA 50/150/200" in reason for reason in results[0]["match_reasons"])
         assert any("RS score" in reason for reason in results[0]["match_reasons"])
+        assert results[0]["setup_score"] >= 65
+        assert results[0]["setup_grade"] in {"A", "B"}
+        assert results[0]["confidence_label"] in {"High confidence", "Worth review"}
+
+    def test_scanner_score_penalizes_missing_data_warnings(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        clean = _apply_filters([_scanner_row()], ScanFilters(all_smas_bullish=True), "trend_template")[0]
+        warned = _apply_filters([_scanner_row(ema_200_slope_30d=None)], ScanFilters(ema_200_trending_up=True), "trend_template")[0]
+
+        assert warned["setup_score"] < clean["setup_score"]
 
     def test_scanner_warns_when_new_intelligence_fields_are_not_backfilled(self):
         from app.routers.scanner import ScanFilters, _apply_filters

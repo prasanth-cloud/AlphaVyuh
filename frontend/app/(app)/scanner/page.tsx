@@ -50,6 +50,10 @@ interface ScanResult {
   darvas_box_height_pct?: number | null
   match_reasons?: string[]
   data_warnings?: string[]
+  setup_score?: number | null
+  setup_grade?: string | null
+  confidence_label?: string | null
+  confidence_reasons?: string[]
   market_cap_cr: number | null
   pe_ratio: number | null
   pb_ratio: number | null
@@ -76,7 +80,7 @@ const PRESETS = [
   {
     id: 'trend_template',
     name: 'Trend Template',
-    description: 'Minervini-style daily trend screen using the available SMA stack, EMA 200, RSI, and 52-week range.',
+    description: 'Daily trend screen using the available SMA stack, EMA 200, RSI, and 52-week range.',
     filters: {
       all_smas_bullish: true,
       price_vs_ema50: 'above',
@@ -162,7 +166,7 @@ const PRESETS = [
   },
   {
     id: 'darvas_box_breakout',
-    name: 'Darvas Box',
+    name: 'Box Breakout',
     description: 'Tight high-base breakout approximation near 52-week highs with volume confirmation and manageable ATR.',
     filters: {
       week_52_high_pct_max: 8,
@@ -315,10 +319,23 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
       <td colSpan={9} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ padding: '16px 20px 8px', display: 'grid', gridTemplateColumns: 'minmax(220px,1.15fr) minmax(220px,1fr)', gap: 16 }}>
           <div>
-            <div className="label" style={{ marginBottom: 8 }}>Why this matched</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+              <div className="label">Why this matched</div>
+              {r.setup_score != null && (
+                <div className="workspace-pill" style={{
+                  color: r.setup_score >= 80 ? 'var(--gain)' : r.setup_score >= 65 ? 'var(--text-primary)' : 'var(--warn)',
+                  borderColor: r.setup_score >= 80 ? 'rgba(38,166,91,0.28)' : r.setup_score >= 65 ? 'var(--border-subtle)' : 'rgba(217,119,6,0.28)',
+                }}>
+                  {r.confidence_label || 'Setup score'} · {r.setup_grade || '—'} · {r.setup_score}
+                </div>
+              )}
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {(r.match_reasons?.length ? r.match_reasons : ['Matched the active scanner filters']).map(reason => (
                 <span key={reason} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>{reason}</span>
+              ))}
+              {r.confidence_reasons?.map(reason => (
+                <span key={`confidence-${reason}`} className="workspace-pill" style={{ color: 'var(--gain)' }}>{reason}</span>
               ))}
             </div>
             {Boolean(r.data_warnings?.length) && (
@@ -532,7 +549,12 @@ export default function ScannerPage() {
           message: data.source_metadata?.license_notes,
         })
         setHasRun(true)
-        trackEvent('scanner_run', { mode: 'demo', results: data.results.length, preset: eventPreset })
+        trackEvent('scanner_run', {
+          mode: 'demo',
+          results: data.results.length,
+          preset: eventPreset,
+          confidence_available: data.results.some((result) => (result as ScanResult).setup_score != null),
+        })
         return
       }
       const headers = await getAuthHeaders()
@@ -540,7 +562,7 @@ export default function ScannerPage() {
       const res = await fetch(`${API}/api/v1/scanner/run`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ ...payload, page, page_size: size }),
+        body: JSON.stringify({ ...payload, preset_id: eventPreset === 'custom' || eventPreset === 'saved_screen' ? null : eventPreset, page, page_size: size }),
       })
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
       const data = await res.json()
@@ -564,6 +586,7 @@ export default function ScannerPage() {
         mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
         results: (data.results || []).length,
         preset: eventPreset,
+        confidence_available: (data.results || []).some((result: ScanResult) => result.setup_score != null),
       })
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Scan failed')

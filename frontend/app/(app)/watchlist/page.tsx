@@ -32,6 +32,7 @@ import {
   getQuote,
   searchSymbols,
   getCandles,
+  prefetchCandles,
   placeOrder,
   getQuoteLive,
   getFundamentals,
@@ -922,6 +923,7 @@ function WatchlistContent() {
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
   const appliedChartDrafts = useRef<Set<string>>(new Set());
+  const pendingRouteSymbolRef = useRef<string | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -1016,11 +1018,14 @@ function WatchlistContent() {
 
   async function loadWatchlists() {
     const requestedWatchlistId = searchParams.get("id");
+    const requestedSymbol = searchParams.get("symbol")?.toUpperCase() ?? null;
+    if (!requestedSymbol) pendingRouteSymbolRef.current = null;
     const liteLists = await getWatchlists({ lite: true });
     setWatchlists(liteLists);
     if (liteLists.length > 0 && !activeId) {
       setActiveId(liteLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : liteLists[0].id);
     }
+    if (requestedSymbol) setChartSymbol(requestedSymbol);
     setLoading(false);
 
     getWatchlists({ force: true })
@@ -1029,6 +1034,7 @@ function WatchlistContent() {
         if (enrichedLists.length > 0 && !activeId) {
           setActiveId(enrichedLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : enrichedLists[0].id);
         }
+        if (requestedSymbol) setChartSymbol(requestedSymbol);
       })
       .catch(() => {});
   }
@@ -1060,18 +1066,26 @@ function WatchlistContent() {
   const watchlistIdParam = searchParams.get("id");
   const planDraftParam = searchParams.get("planDraft");
   useEffect(() => {
+    if (!symbolParam) pendingRouteSymbolRef.current = null;
+  }, [symbolParam]);
+
+  useEffect(() => {
     if (!watchlistIdParam || watchlists.length === 0) return;
     const matched = watchlists.find((watchlist) => watchlist.id === watchlistIdParam);
     if (!matched) return;
     setActiveId(matched.id);
     const requestedSymbol = symbolParam?.toUpperCase() ?? null;
     const matchedRequestedSymbol = requestedSymbol && matched.items?.some((item) => item.symbol === requestedSymbol);
-    if (matchedRequestedSymbol) {
+    if (requestedSymbol) {
+      pendingRouteSymbolRef.current = requestedSymbol;
       setChartSymbol(requestedSymbol);
+      trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: matched.id, source: "route" });
     } else if (matched.items?.[0]?.symbol) {
       setChartSymbol(matched.items[0].symbol);
     }
-    router.replace("/watchlist", { scroll: false });
+    if (!requestedSymbol || matchedRequestedSymbol) {
+      router.replace("/watchlist", { scroll: false });
+    }
   }, [symbolParam, watchlistIdParam, watchlists, router]);
 
   useEffect(() => {
@@ -1083,6 +1097,7 @@ function WatchlistContent() {
       if (wl.items?.some((i: WatchlistItem) => i.symbol === requestedSymbol)) {
         setActiveId(wl.id);
         setChartSymbol(requestedSymbol);
+        trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: wl.id, source: "scanner_handoff" });
         found = true;
         break;
       }
@@ -1096,6 +1111,7 @@ function WatchlistContent() {
             : { symbol: requestedSymbol, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
           setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...(w.items || []), newItem] } : w));
           setChartSymbol(requestedSymbol);
+          trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         })
         .catch(() => {});
     }
@@ -1244,6 +1260,27 @@ function WatchlistContent() {
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
 
   useEffect(() => {
+    if (!chartSymbol || !visibleItems.length) return;
+    const currentIndex = visibleItems.findIndex(item => item.symbol === chartSymbol);
+    if (currentIndex < 0) return;
+    const request = getWatchlistChartRequest("3M");
+    const params = {
+      limit: request.limit,
+      timeframe: request.timeframe,
+      from_date: request.from_date,
+      to_date: request.to_date,
+    };
+    const adjacent = [
+      visibleItems[currentIndex - 1]?.symbol,
+      visibleItems[currentIndex + 1]?.symbol,
+    ].filter(Boolean) as string[];
+    const timer = window.setTimeout(() => {
+      adjacent.forEach((nextSymbol) => prefetchCandles(nextSymbol, params));
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [chartSymbol, visibleItems]);
+
+  useEffect(() => {
     if (!liveQuotePollingEnabled) return;
     if (!activeId || !pageItems.length) return;
     let cancelled = false;
@@ -1285,6 +1322,12 @@ function WatchlistContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, pageSymbolsKey]);
 
+  useEffect(() => {
+    if (symbolParam || !visibleItems.length) return;
+    const selectedIsVisible = chartSymbol && visibleItems.some(item => item.symbol === chartSymbol);
+    if (!selectedIsVisible) setChartSymbol(visibleItems[0].symbol);
+  }, [chartSymbol, symbolParam, visibleItems]);
+
   const moveSelection = useCallback((direction: "prev" | "next") => {
     if (!visibleItems.length) return;
     const currentIndex = visibleItems.findIndex(item => item.symbol === chartSymbol);
@@ -1307,10 +1350,16 @@ function WatchlistContent() {
       return;
     }
     const hasSelectedSymbol = chartSymbol && visibleItems.some(item => item.symbol === chartSymbol);
+    if (hasSelectedSymbol && pendingRouteSymbolRef.current === chartSymbol) {
+      pendingRouteSymbolRef.current = null;
+    }
+    if (!hasSelectedSymbol && (symbolParam?.toUpperCase() === chartSymbol || pendingRouteSymbolRef.current === chartSymbol)) {
+      return;
+    }
     if (!hasSelectedSymbol) {
       setChartSymbol(visibleItems[0].symbol);
     }
-  }, [activeId, chartSymbol, visibleItems]);
+  }, [activeId, chartSymbol, symbolParam, visibleItems]);
 
   useEffect(() => {
     setQueuePage(0);

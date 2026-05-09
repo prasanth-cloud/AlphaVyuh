@@ -4,25 +4,25 @@ type ProvenanceKind = "eod" | "live-beta" | "fallback" | "demo" | "broker-beta";
 
 const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; color: string; background: string }> = {
   eod: {
-    label: "Market data",
+    label: "Data ready",
     detail: "Latest complete market session",
     color: "#f4f7fb",
     background: "rgba(91, 99, 245, 0.10)",
   },
   "live-beta": {
-    label: "Provider beta",
-    detail: "Provider feed is beta; verify source and freshness before trading",
+    label: "Data updating",
+    detail: "Freshness is shown here; verify levels before trading",
     color: "#26a65b",
     background: "rgba(38, 166, 91, 0.12)",
   },
   fallback: {
-    label: "Fallback",
-    detail: "Showing the latest usable completed market day",
+    label: "Check data",
+    detail: "Showing the latest usable market session; some data may be incomplete",
     color: "#d97706",
     background: "rgba(217, 119, 6, 0.12)",
   },
   demo: {
-    label: "Demo",
+    label: "Demo data",
     detail: "Illustrative workflow preview, not live market data",
     color: "#d6dce5",
     background: "rgba(124, 106, 240, 0.12)",

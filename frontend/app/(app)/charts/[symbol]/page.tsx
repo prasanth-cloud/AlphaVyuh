@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect, useCallback, useRef } from "react";
+import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -15,7 +15,7 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes, isMockMode,
+  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -384,6 +384,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Toolbar dropdowns
   const [showDrawMenu, setShowDrawMenu] = useState(false);
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
+  const [planHandoffConfirmOpen, setPlanHandoffConfirmOpen] = useState(false);
   const indicatorMenuRef = useRef<HTMLDivElement>(null);
   const drawMenuRef = useRef<HTMLDivElement>(null);
 
@@ -1373,10 +1374,34 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     displayClose != null && displayPrevClose ? ((displayClose - displayPrevClose) / displayPrevClose) * 100 : null
   );
   const displayPositive = (displayPctChange ?? 0) >= 0;
-  const sourceQueueSymbols = (sourceQueue?.items ?? []).map((item) => item.symbol);
+  const sourceQueueSymbols = useMemo(() => (sourceQueue?.items ?? []).map((item) => item.symbol), [sourceQueue?.items]);
   const sourceQueueIndex = sourceQueueSymbols.findIndex((item) => item === symbol);
   const sourceQueueName = sourceQueue?.name ?? sourceWatchlist ?? null;
   const sourceQueueCount = sourceQueueSymbols.length;
+
+  useEffect(() => {
+    if (!sourceQueueSymbols.length) return;
+    const request = getWatchlistChartRequest(rangeLabel);
+    const params = {
+      limit: request.limit,
+      timeframe: request.timeframe,
+      from_date: request.from_date,
+      to_date: request.to_date,
+    };
+    const currentIndex = sourceQueueIndex >= 0 ? sourceQueueIndex : sourceQueueSymbols.findIndex((item) => item === symbol);
+    const adjacent = [
+      sourceQueueSymbols[currentIndex - 1],
+      sourceQueueSymbols[currentIndex + 1],
+    ].filter(Boolean);
+    const timer = window.setTimeout(() => {
+      adjacent.forEach((nextSymbol) => {
+        prefetchCandles(nextSymbol, params);
+        if (activeIndicators.length) prefetchIndicators(nextSymbol, activeIndicators, request.timeframe);
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [activeIndicators, rangeLabel, sourceQueueIndex, sourceQueueSymbols, symbol]);
+
   const buildQueueChartHref = useCallback((nextSymbol: string, full = fullChartMode) => {
     const params = new URLSearchParams();
     if (sourcePage) params.set("from", sourcePage);
@@ -1479,6 +1504,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const activeToolMeta = activeDrawingTool ? DRAW_TOOL_META[activeDrawingTool] : null;
   const visibleDrawings = drawnLines.filter((item) => !item.hidden);
   const selectedPositionDrawing = selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && selectedDrawing.p3 ? selectedDrawing : null;
+  const selectedPositionDraft = selectedPositionDrawing?.p3 ? {
+    side: selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long",
+    entry: Number(selectedPositionDrawing.p1.price.toFixed(2)),
+    stop: Number(selectedPositionDrawing.p2.price.toFixed(2)),
+    target: Number(selectedPositionDrawing.p3.price.toFixed(2)),
+    riskReward: Math.abs(selectedPositionDrawing.p3.price - selectedPositionDrawing.p1.price) / Math.max(Math.abs(selectedPositionDrawing.p1.price - selectedPositionDrawing.p2.price), 0.01),
+  } : null;
   const activeIndicatorLabels = INDICATOR_CONFIG
     .filter((indicator) => activeIndicators.includes(indicator.id))
     .map((indicator) => indicator.label);
@@ -1487,6 +1519,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     : activeIndicatorLabels.length <= 2
       ? activeIndicatorLabels.join(" · ")
       : `Indicators · ${activeIndicatorLabels.length}`;
+
+  function previewSelectedPositionToDesk() {
+    if (!selectedPositionDrawing?.p3) return;
+    setPlanHandoffConfirmOpen(true);
+    const side = selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long";
+    trackEvent("chart_plan_handoff_previewed", { symbol, timeframe, side });
+  }
 
   function sendSelectedPositionToDesk() {
     if (!selectedPositionDrawing?.p3) return;
@@ -1503,7 +1542,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         drawingId: selectedPositionDrawing.id,
         createdAt: new Date().toISOString(),
       }));
-      trackEvent("chart_plan_draft_created", { symbol, timeframe, side });
+      trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true });
       router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}&planDraft=chart`);
     } catch {
       router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}`);
@@ -1752,7 +1791,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          Data is {dataAgeDays} days old. Scanner/chart context is using the latest complete session. Provider/live quote mode is disabled for private beta.
+          Data is {dataAgeDays} days old. Scanner/chart context is using the latest market snapshot. Provider/live quote mode is disabled for private beta.
         </div>
       )}
 
@@ -2827,13 +2866,52 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               )}
               {selectedPositionDrawing && (
                 <button
-                  onClick={sendSelectedPositionToDesk}
+                  onClick={previewSelectedPositionToDesk}
                   className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
                   style={{ background: "rgba(0,229,196,0.12)", color: "var(--app-teal)", border: "1px solid rgba(0,229,196,0.22)" }}
                 >
                   <MoveRight size={12} />
                   Send to desk
                 </button>
+              )}
+              {planHandoffConfirmOpen && selectedPositionDraft && (
+                <div
+                  className="rounded-lg px-3 py-2 text-[11px]"
+                  style={{
+                    background: "rgba(10,14,22,0.96)",
+                    border: "1px solid rgba(0,229,196,0.22)",
+                    color: "var(--app-text2)",
+                    boxShadow: "0 14px 34px rgba(0,0,0,0.35)",
+                    minWidth: 260,
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-3" style={{ marginBottom: 6 }}>
+                    <span className="font-semibold" style={{ color: "var(--app-text)" }}>Confirm desk handoff</span>
+                    <span className="uppercase" style={{ color: "var(--app-teal)", fontWeight: 700 }}>{selectedPositionDraft.side}</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 mono" style={{ color: "var(--app-text2)", marginBottom: 8 }}>
+                    <span>Entry {fmtPrice(selectedPositionDraft.entry, symbolCurrency)}</span>
+                    <span>Stop {fmtPrice(selectedPositionDraft.stop, symbolCurrency)}</span>
+                    <span>Target {fmtPrice(selectedPositionDraft.target, symbolCurrency)}</span>
+                    <span>R:R {selectedPositionDraft.riskReward.toFixed(1)}</span>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setPlanHandoffConfirmOpen(false)}
+                      className="rounded-full px-2.5 py-1 font-semibold"
+                      style={{ border: "1px solid rgba(255,255,255,0.10)", color: "var(--app-text2)" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={sendSelectedPositionToDesk}
+                      className="rounded-full px-2.5 py-1 font-semibold"
+                      style={{ background: "rgba(0,229,196,0.14)", border: "1px solid rgba(0,229,196,0.28)", color: "var(--app-teal)" }}
+                    >
+                      Send plan
+                    </button>
+                  </div>
+                </div>
               )}
               {selectedDrawing && (
                 <button

@@ -98,6 +98,12 @@ function stock(
       `Volume ${volume_ratio.toFixed(1)}x 20-day average`,
       `${round((close * 1.12 - close) / close * 100).toFixed(1)}% from 52W high`,
     ],
+    setup_score: Math.max(45, Math.min(95, Math.round(48 + (rs_score - 60) * 0.8 + volume_ratio * 6))),
+    setup_grade: rs_score >= 85 ? "A" : rs_score >= 70 ? "B" : "C",
+    confidence_label: rs_score >= 85 ? "High confidence" : rs_score >= 70 ? "Worth review" : "Needs confirmation",
+    confidence_reasons: rs_score >= 80
+      ? ["healthy relative strength", "above-average volume"]
+      : ["needs follow-through"],
     data_warnings: [],
   };
 }
