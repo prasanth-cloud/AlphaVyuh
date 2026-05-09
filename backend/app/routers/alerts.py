@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 import httpx
@@ -315,11 +315,18 @@ async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> No
 # ── Telegram Bot Webhook ──────────────────────────────────────────────────────
 
 @router.post("/telegram/webhook")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(
+    request: Request,
+    x_telegram_bot_api_secret_token: str | None = Header(default=None),
+):
     """Receive Telegram bot updates (messages/commands from users)."""
     from app.services.supabase import settings as _settings
     if not _settings.telegram_bot_token:
         return {"ok": True}
+    if not _settings.telegram_webhook_secret:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Telegram webhook is not configured")
+    if x_telegram_bot_api_secret_token != _settings.telegram_webhook_secret:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Telegram webhook secret")
 
     payload = await request.json()
     message = payload.get("message", {})

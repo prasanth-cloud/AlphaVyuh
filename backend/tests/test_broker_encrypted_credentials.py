@@ -148,7 +148,7 @@ def test_user_broker_credentials_fall_back_to_legacy_columns(monkeypatch):
     assert creds["expires_at"] == "plain-expiry"
 
 
-def test_update_me_does_not_write_plaintext_broker_secret(monkeypatch):
+def test_update_me_does_not_write_plaintext_broker_credentials(monkeypatch):
     client = _FakeUsersSupabase()
     saved: dict[tuple[str, str], str] = {}
 
@@ -168,4 +168,6 @@ def test_update_me_does_not_write_plaintext_broker_secret(monkeypatch):
     asyncio.run(users_router.update_me(request, user_id="user-123"))
 
     assert saved[("zerodha", "api_secret")] == "kite-secret"
+    assert saved[("zerodha", "api_key")] == "kite-key"
+    assert client.updated["broker_api_key"] is None
     assert client.updated["broker_api_secret"] is None
