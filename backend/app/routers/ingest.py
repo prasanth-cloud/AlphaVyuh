@@ -38,9 +38,9 @@ async def refresh_today(
     """
     Pull last 5 days of OHLCV data from Yahoo Finance for NSE stocks and
     upsert into daily_ohlcv. Safe to call multiple times (idempotent).
-    Protected by INGEST_SERVICE_KEY header (or open locally when key not set).
+    Protected by INGEST_SERVICE_KEY header.
     """
-    if settings.ingest_service_key and x_service_key != settings.ingest_service_key:
+    if not settings.ingest_service_key or x_service_key != settings.ingest_service_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid service key")
 
     from app.services.yfinance_ingest import fetch_and_ingest, NSE_UNIVERSE

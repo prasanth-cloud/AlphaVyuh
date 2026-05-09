@@ -104,7 +104,7 @@ async def update_me(
     # secret columns are explicitly cleared so new writes cannot reintroduce them.
     if broker and body.broker_api_key is not None:
         upsert_broker_credential(user_id, broker, "api_key", body.broker_api_key)
-        updates["broker_api_key"] = body.broker_api_key or None  # deprecated sync
+        updates["broker_api_key"] = None  # deprecated plaintext sync; keep cleared on new writes
     if broker and body.broker_api_secret is not None:
         upsert_broker_credential(user_id, broker, "api_secret", body.broker_api_secret)
         updates["broker_api_secret"] = None
