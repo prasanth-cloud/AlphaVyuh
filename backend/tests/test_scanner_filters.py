@@ -159,17 +159,25 @@ def _scanner_row(**overrides):
         "prev_close": 100,
         "volume": 100_000,
         "avg_volume_20d": 100_000,
+        "avg_volume_50d": 120_000,
         "turnover": 10_000_000,
         "rsi_14": 60,
         "ema_20": 100,
         "ema_50": 95,
+        "ema_150": 91,
         "ema_200": 90,
+        "ema_200_slope_30d": 2.4,
         "sma_50": 96,
         "sma_150": 92,
         "sma_200": 88,
         "atr_14": 2,
         "week_52_high": 110,
         "week_52_low": 70,
+        "price_perf_6m_pct": 24.5,
+        "high_3w": 110,
+        "low_3w": 98,
+        "darvas_box_height_pct": 12.2,
+        "is_nr7": False,
         "rs_score": 80,
         "volume_ratio": 1.0,
         "w52h_pct": None,
@@ -247,6 +255,43 @@ class TestCanonicalSwingPresets:
         rows = [_scanner_row(close=105, sma_50=90, sma_150=92, sma_200=88)]
 
         assert _apply_filters(rows, ScanFilters(all_smas_bullish=True)) == []
+
+    def test_scanner_result_explains_why_row_matched(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row()]
+        results = _apply_filters(rows, ScanFilters(all_smas_bullish=True, rs_score_min=70, volume_ratio_min=1))
+
+        assert results
+        assert any("SMA 50/150/200" in reason for reason in results[0]["match_reasons"])
+        assert any("RS score" in reason for reason in results[0]["match_reasons"])
+
+    def test_scanner_warns_when_new_intelligence_fields_are_not_backfilled(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(ema_200_slope_30d=None)]
+        results = _apply_filters(rows, ScanFilters(ema_200_trending_up=True))
+
+        assert results
+        assert any("EMA 200 slope is unavailable" in warning for warning in results[0]["data_warnings"])
+
+    def test_scanner_warns_when_ema150_is_not_backfilled(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [_scanner_row(ema_150=None)]
+        results = _apply_filters(rows, ScanFilters(price_vs_ema150="above", ema50_above_ema150=True))
+
+        assert results
+        assert any("EMA 150 is unavailable" in warning for warning in results[0]["data_warnings"])
+
+    def test_darvas_box_height_filter_uses_backfilled_field_when_available(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        accepted = _apply_filters([_scanner_row(darvas_box_height_pct=12.2)], ScanFilters(darvas_box_height_pct_max=15))
+        rejected = _apply_filters([_scanner_row(darvas_box_height_pct=18.0)], ScanFilters(darvas_box_height_pct_max=15))
+
+        assert len(accepted) == 1
+        assert rejected == []
 
 
 class TestVCPAsyncPass2:

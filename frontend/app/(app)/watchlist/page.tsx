@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   DndContext,
@@ -921,6 +921,7 @@ function WatchlistContent() {
   const [queuePage, setQueuePage] = useState(0);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
+  const appliedChartDrafts = useRef<Set<string>>(new Set());
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -1057,6 +1058,7 @@ function WatchlistContent() {
 
   const symbolParam = searchParams.get("symbol");
   const watchlistIdParam = searchParams.get("id");
+  const planDraftParam = searchParams.get("planDraft");
   useEffect(() => {
     if (!watchlistIdParam || watchlists.length === 0) return;
     const matched = watchlists.find((watchlist) => watchlist.id === watchlistIdParam);
@@ -1099,6 +1101,51 @@ function WatchlistContent() {
     }
     router.replace("/watchlist", { scroll: false });
   }, [symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (planDraftParam !== "chart" || !chartSymbol || appliedChartDrafts.current.has(chartSymbol)) return;
+    const key = `alphavyuh-chart-plan-draft:${chartSymbol}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    try {
+      const draft = JSON.parse(raw) as {
+        symbol?: string;
+        side?: "long" | "short";
+        entry?: number;
+        stop?: number;
+        target?: number;
+        timeframe?: string;
+      };
+      if (draft.symbol?.toUpperCase() !== chartSymbol) return;
+      const patch = {
+        symbol: chartSymbol,
+        watchlist_id: activeId,
+        source: "chart",
+        lifecycle: "watch" as WorkflowLifecycle,
+        setup_type: draft.side === "short" ? "reversal" : "breakout",
+        entry: Number.isFinite(draft.entry) ? draft.entry : null,
+        stop: Number.isFinite(draft.stop) ? draft.stop : null,
+        target: Number.isFinite(draft.target) ? draft.target : null,
+        timeframe: draft.timeframe ?? "D",
+        notes: "Imported from Full chart risk/reward drawing.",
+      };
+      appliedChartDrafts.current.add(chartSymbol);
+      window.localStorage.removeItem(key);
+      setWorkflowBySymbol((prev) => ({
+        ...prev,
+        [chartSymbol]: {
+          ...(prev[chartSymbol] ?? { symbol: chartSymbol, lifecycle: "idea" as WorkflowLifecycle }),
+          ...patch,
+        },
+      }));
+      void upsertWorkflowState(patch);
+      trackEvent("chart_plan_draft_applied", { symbol: chartSymbol, source: "full_chart_drawing" });
+      showToast("Chart levels loaded into Decision Desk");
+    } catch {
+      showToast("Could not load chart plan draft");
+    }
+  }, [activeId, chartSymbol, planDraftParam]);
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
   const chartHref = useCallback((symbol: string, draw?: "trendline") => {

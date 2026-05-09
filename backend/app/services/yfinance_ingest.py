@@ -183,6 +183,13 @@ def fetch_and_ingest(symbol: str, period: str = "1y") -> dict:
         df["week_52_high"]   = high.rolling(min(252, len(df))).max().round(2)
         df["week_52_low"]    = low.rolling(min(252, len(df))).min().round(2)
         df["avg_volume_20d"] = volume.rolling(min(20, len(df))).mean().round(0).astype("Int64")
+        df["avg_volume_50d"] = volume.rolling(min(50, len(df))).mean().round(0).astype("Int64")
+        df["price_perf_6m_pct"] = ((close - close.shift(126)) / close.shift(126) * 100).round(4)
+        df["high_3w"] = high.rolling(15, min_periods=1).max().round(2)
+        df["low_3w"] = low.rolling(15, min_periods=1).min().round(2)
+        df["darvas_box_height_pct"] = ((df["high_3w"] - df["low_3w"]) / df["low_3w"] * 100).round(4)
+        day_range = high - low
+        df["is_nr7"] = day_range <= day_range.rolling(7, min_periods=7).min()
         df["is_new_52w_high"] = high >= df["week_52_high"]
         df["is_new_52w_low"]  = low <= df["week_52_low"]
 
@@ -197,9 +204,11 @@ def fetch_and_ingest(symbol: str, period: str = "1y") -> dict:
             df["rsi_14"] = _compute_rsi(close, 14)
 
         # ── EMAs ──────────────────────────────────────────────────────────
-        for length, col in [(20, "ema_20"), (50, "ema_50"), (200, "ema_200")]:
+        for length, col in [(20, "ema_20"), (50, "ema_50"), (150, "ema_150"), (200, "ema_200")]:
             if len(df) >= length:
                 df[col] = _compute_ema(close, length)
+        if "ema_200" in df.columns:
+            df["ema_200_slope_30d"] = ((df["ema_200"] - df["ema_200"].shift(30)) / df["ema_200"].shift(30) * 100).round(4)
 
         # ── ATR ────────────────────────────────────────────────────────────
         if len(df) >= 14:
@@ -248,17 +257,18 @@ def fetch_and_ingest(symbol: str, period: str = "1y") -> dict:
         # Build rows
         indicator_cols = [
             "trade_date", "open", "high", "low", "close", "volume", "prev_close",
-            "pct_change", "gap_pct", "week_52_high", "week_52_low", "avg_volume_20d",
+            "pct_change", "gap_pct", "week_52_high", "week_52_low", "avg_volume_20d", "avg_volume_50d",
+            "price_perf_6m_pct", "high_3w", "low_3w", "darvas_box_height_pct",
             "is_new_52w_high", "is_new_52w_low", "is_inside_bar", "is_outside_bar",
-            "rsi_14", "ema_20", "ema_50", "ema_200", "atr_14",
+            "is_nr7", "rsi_14", "ema_20", "ema_50", "ema_150", "ema_200", "ema_200_slope_30d", "atr_14",
             "macd_line", "macd_signal", "macd_hist",
             "bb_upper", "bb_middle", "bb_lower", "bb_width",
             "stoch_k", "stoch_d", "adx_14", "cci_20", "williams_r", "obv",
         ]
 
-        bool_cols = {"is_new_52w_high", "is_new_52w_low", "is_inside_bar", "is_outside_bar"}
-        int_cols  = {"avg_volume_20d", "volume", "obv"}
-        round4    = {"atr_14", "pct_change", "gap_pct", "bb_width", "macd_line", "macd_signal", "macd_hist"}
+        bool_cols = {"is_new_52w_high", "is_new_52w_low", "is_inside_bar", "is_outside_bar", "is_nr7"}
+        int_cols  = {"avg_volume_20d", "avg_volume_50d", "volume", "obv"}
+        round4    = {"atr_14", "pct_change", "gap_pct", "bb_width", "macd_line", "macd_signal", "macd_hist", "ema_200_slope_30d", "price_perf_6m_pct", "darvas_box_height_pct"}
 
         rows = []
         for _, row in df.iterrows():

@@ -1478,6 +1478,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const selectedDrawing = drawnLines.find(item => item.id === selectedDrawingId) ?? null;
   const activeToolMeta = activeDrawingTool ? DRAW_TOOL_META[activeDrawingTool] : null;
   const visibleDrawings = drawnLines.filter((item) => !item.hidden);
+  const selectedPositionDrawing = selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && selectedDrawing.p3 ? selectedDrawing : null;
   const activeIndicatorLabels = INDICATOR_CONFIG
     .filter((indicator) => activeIndicators.includes(indicator.id))
     .map((indicator) => indicator.label);
@@ -1486,6 +1487,28 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     : activeIndicatorLabels.length <= 2
       ? activeIndicatorLabels.join(" · ")
       : `Indicators · ${activeIndicatorLabels.length}`;
+
+  function sendSelectedPositionToDesk() {
+    if (!selectedPositionDrawing?.p3) return;
+    const side = selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long";
+    try {
+      window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify({
+        symbol,
+        side,
+        entry: Number(selectedPositionDrawing.p1.price.toFixed(2)),
+        stop: Number(selectedPositionDrawing.p2.price.toFixed(2)),
+        target: Number(selectedPositionDrawing.p3.price.toFixed(2)),
+        timeframe,
+        source: "full_chart_drawing",
+        drawingId: selectedPositionDrawing.id,
+        createdAt: new Date().toISOString(),
+      }));
+      trackEvent("chart_plan_draft_created", { symbol, timeframe, side });
+      router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}&planDraft=chart`);
+    } catch {
+      router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}`);
+    }
+  }
   const latestVolumeRatio = latest?.volume_ratio ?? null;
   const recentCandles = data?.candles?.slice(-40) ?? [];
   const recentHigh = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : null;
@@ -2800,6 +2823,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 >
                   <Type size={12} />
                   Zone note
+                </button>
+              )}
+              {selectedPositionDrawing && (
+                <button
+                  onClick={sendSelectedPositionToDesk}
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
+                  style={{ background: "rgba(0,229,196,0.12)", color: "var(--app-teal)", border: "1px solid rgba(0,229,196,0.22)" }}
+                >
+                  <MoveRight size={12} />
+                  Send to desk
                 </button>
               )}
               {selectedDrawing && (
