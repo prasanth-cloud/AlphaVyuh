@@ -2,11 +2,11 @@ export type IntradayChartTimeframe = "5m" | "15m" | "30m" | "1h";
 export type EodChartTimeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "10Y";
 export type WatchlistChartTimeframe = IntradayChartTimeframe | EodChartTimeframe;
 
-export const INTRADAY_UNAVAILABLE_MESSAGE = "Intraday data is not available in EOD beta mode.";
+export const INTRADAY_UNAVAILABLE_MESSAGE = "Intraday data is not available in this beta.";
 
 export const CHART_TIMEFRAME_OPTIONS: Array<{
   label: WatchlistChartTimeframe;
-  group: "Intraday" | "EOD";
+  group: "Intraday" | "Historical";
   disabled?: boolean;
   unavailableReason?: string;
 }> = [
@@ -14,15 +14,15 @@ export const CHART_TIMEFRAME_OPTIONS: Array<{
   { label: "15m", group: "Intraday", disabled: true, unavailableReason: INTRADAY_UNAVAILABLE_MESSAGE },
   { label: "30m", group: "Intraday", disabled: true, unavailableReason: INTRADAY_UNAVAILABLE_MESSAGE },
   { label: "1h", group: "Intraday", disabled: true, unavailableReason: INTRADAY_UNAVAILABLE_MESSAGE },
-  { label: "1D", group: "EOD" },
-  { label: "1W", group: "EOD" },
-  { label: "1M", group: "EOD" },
-  { label: "3M", group: "EOD" },
-  { label: "6M", group: "EOD" },
-  { label: "1Y", group: "EOD" },
-  { label: "3Y", group: "EOD" },
-  { label: "5Y", group: "EOD" },
-  { label: "10Y", group: "EOD" },
+  { label: "1D", group: "Historical" },
+  { label: "1W", group: "Historical" },
+  { label: "1M", group: "Historical" },
+  { label: "3M", group: "Historical" },
+  { label: "6M", group: "Historical" },
+  { label: "1Y", group: "Historical" },
+  { label: "3Y", group: "Historical" },
+  { label: "5Y", group: "Historical" },
+  { label: "10Y", group: "Historical" },
 ];
 
 export type WatchlistChartRequest = {

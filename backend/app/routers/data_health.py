@@ -24,7 +24,7 @@ def _unavailable_health():
         "last_bhavcopy": {"trade_date": None, "status": None, "rows_ingested": None, "source_url": None, "error_message": None},
         "provider": fallback_source_metadata("Data freshness endpoint unavailable."),
         "fallback_active": True,
-        "next_refresh_hint": "After the next successful EOD ingest.",
+        "next_refresh_hint": "After the next successful market-data ingest.",
         "live_market": _kite_market_status(),
     }
 

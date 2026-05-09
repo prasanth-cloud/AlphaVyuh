@@ -30,7 +30,7 @@ const sections = [
   },
   {
     title: "7. Data Accuracy",
-    body: "Market data may come from exchange files, EOD ingestion, configured provider paths, delayed feeds, broker APIs, or clearly labeled fallback/demo data. EOD, delayed, fallback, and live-beta data are not interchangeable. Always verify market data before trading.",
+    body: "Market data may come from exchange files, configured provider paths, delayed feeds, broker APIs, or clearly labeled fallback/demo data. Different data sources and refresh timings are not interchangeable. Always verify market data before trading.",
   },
   {
     title: "8. Third-Party Notices",

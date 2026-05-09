@@ -168,7 +168,7 @@ export default function LoginForm() {
         <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Create one</Link>
       </p>
       <p style={{ marginTop: 14, textAlign: "center", fontSize: 11, lineHeight: 1.6, color: "var(--text-tertiary)" }}>
-        Private beta · EOD data · Broker import only
+        Private beta · Market data · Broker import only
       </p>
     </div>
   );

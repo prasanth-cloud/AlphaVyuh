@@ -875,7 +875,7 @@ async def run_scanner(
     except Exception:
         latest_date = None
     if not latest_date:
-        metadata = fallback_source_metadata("No complete EOD trade date is available for scanner.")
+        metadata = fallback_source_metadata("No complete trade date is available for scanner.")
         return {
             "trade_date": None,
             "total_matches": 0,
@@ -888,7 +888,7 @@ async def run_scanner(
             "visible_count": 0,
             "results": [],
             "mode": "unavailable",
-            "message": "No complete EOD trade date is available for scanner.",
+            "message": "No complete trade date is available for scanner.",
             "source_metadata": metadata,
             "coverage_pct": None,
             "universe_size": None,

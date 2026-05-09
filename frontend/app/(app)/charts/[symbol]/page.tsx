@@ -2023,7 +2023,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             disabled
             className="workspace-chip-button flex items-center gap-1.5"
             style={{ opacity: 0.85 }}
-            title="Provider/live quote mode is disabled for private beta; charts use EOD or demo data."
+            title="Provider/live quote mode is disabled for private beta; charts use market or demo data."
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
             <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />

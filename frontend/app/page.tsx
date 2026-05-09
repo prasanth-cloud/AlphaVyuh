@@ -300,13 +300,13 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
             <div className="lp-eyebrow">
-              <div className="lp-live-pill"><div className="lp-pulse"></div>Private beta · EOD data</div>
+              <div className="lp-live-pill"><div className="lp-pulse"></div>Private beta · Market data</div>
             </div>
             <h1 className="lp-h1">
               <span className="lp-h1-s1">India&apos;s Trading OS.</span>
               <span className="lp-h1-s2"><span className="lp-h1-muted">A simpler desk for Indian equities.</span></span>
             </h1>
-            <p className="lp-sub">A private-beta workflow system for scanning EOD markets, building watchlists, planning charts, and journaling trades.</p>
+            <p className="lp-sub">A private-beta workflow system for scanning markets, building watchlists, planning charts, and journaling trades.</p>
             <div className="lp-ctas">
               <Link href="/signup" className="lp-btn-primary">Request founder beta access →</Link>
               <a href="#features" className="lp-btn-secondary">
@@ -332,7 +332,7 @@ export default function LandingPage() {
           <div className="lp-hero-visual">
             <div className="lp-notif lp-notif1">
               <div className="lp-ni lp-ni-green">RS</div>
-              <div className="lp-nt"><strong>VCP Review — DEEPAKNTR</strong><span>EOD scan · RS 94 · Vol surge 3.2×</span></div>
+              <div className="lp-nt"><strong>VCP Review — DEEPAKNTR</strong><span>Market scan · RS 94 · Vol surge 3.2×</span></div>
             </div>
             <div className="lp-hero-card lp-tilt">
               <div className="lp-card-bar">
@@ -369,7 +369,7 @@ export default function LandingPage() {
         <div className="lp-wrap">
           <div className="lp-stats-grid">
             <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Beta screens</div><div className="lp-stat-sub">scanner, watchlist, charts, journal</div></div>
-            <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">EOD symbols</div><div className="lp-stat-sub">latest completed market session</div></div>
+            <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">Symbols tracked</div><div className="lp-stat-sub">latest completed market session</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="20" data-suffix="+">0</div><div className="lp-stat-label">Scanner filters</div><div className="lp-stat-sub">momentum, volume, RS, trend</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected desk</div><div className="lp-stat-sub">from signal to review</div></div>
           </div>
@@ -449,7 +449,7 @@ export default function LandingPage() {
               <h3 className="lp-tp-h">Professional charts with RS line and pivot zones</h3>
               <p className="lp-tp-p">TradingView Lightweight Charts v4. Drawing tools, precomputed indicators, earnings overlays, and watchlist context on one screen.</p>
               <ul className="lp-feat-list">
-                {["Candlestick with overlay indicators from EOD candles","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker connections are read-only/import only for beta"].map(f => (
+                {["Candlestick charts with overlay indicators","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker connections are read-only/import only for beta"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -619,7 +619,7 @@ export default function LandingPage() {
           <h2 className="lp-sec-title">Common questions</h2>
           <div className="lp-faq-list">
             {[
-              ["Does AlphaVyuh provide real-time stock data?","No. The private beta uses end-of-day (EOD) OHLCV data updated after market close via NSE bhavcopy. Scanner results are based on the latest completed trading session."],
+              ["Does AlphaVyuh provide real-time stock data?","No. The private beta uses market data updated after the completed trading session. Scanner results are based on the latest completed session."],
               ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 are in read-only beta. Broker connections are for account smoke, holdings/orderbook reads, filled-trade import, and journal sync only. Live and sandbox order placement are disabled."],
               ["How does journal review work?","Every trade you log is stored in your journal. Review analytics summarize patterns from closed trades, including win rate, R:R, holding period, sector, and notes."],
               ["Is my trading data secure?","Yes. All data is stored in Supabase Postgres with Row Level Security — only you can access your trades, watchlists, and journal. Broker API keys are stored encrypted. We never store your trading password."],
@@ -640,10 +640,10 @@ export default function LandingPage() {
         <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 50%,rgba(214,223,232,.06) 0%,transparent 65%)",pointerEvents:"none"}}></div>
         <div style={{position:"relative",zIndex:1}}>
           <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Private beta access</div>
-          <h2 className="lp-sec-title" style={{fontSize:"clamp(2rem,4vw,3.2rem)",marginBottom:18}}>Build a cleaner<br/>EOD trading routine.</h2>
+          <h2 className="lp-sec-title" style={{fontSize:"clamp(2rem,4vw,3.2rem)",marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
           <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Run a scan, build a watchlist, plan on the chart, and close the loop in Journal.</p>
           <Link href="/signup" className="lp-btn-cta-big">Request founder beta access →</Link>
-          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Private beta · EOD data · Broker import only · No investment advice</p>
+          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Private beta · Market data · Broker import only · No investment advice</p>
         </div>
       </section>
 
@@ -656,7 +656,7 @@ export default function LandingPage() {
                 <div className="lp-logo-mark"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="16" cy="6" r="1.5" fill="currentColor"/></svg></div>
                 AlphaVyuh
               </div>
-              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s private-beta trading workflow system. Scan EOD markets, plan charts, and journal decisions in one workspace.</p>
+              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s private-beta trading workflow system. Scan markets, plan charts, and journal decisions in one workspace.</p>
             </div>
             <div className="lp-fcol"><h5>Product</h5><ul><li><Link href="/products#scanner">Scanner</Link></li><li><Link href="/products">Charts</Link></li><li><Link href="/products#journal">Journal</Link></li><li><a href="#pricing">Pricing</a></li></ul></div>
             <div className="lp-fcol"><h5>Company</h5><ul><li><Link href="/products">About</Link></li><li><Link href="/beta">Beta guide</Link></li><li><Link href="/blog">Blog</Link></li><li><Link href="/contact">Contact</Link></li></ul></div>

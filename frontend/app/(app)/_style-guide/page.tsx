@@ -156,7 +156,7 @@ function DsStatusBar() {
   return (
     <div style={{ background: "var(--surface-1)", borderBottom: "1px solid var(--border-subtle)", padding: "0 16px", height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", borderRadius: "var(--radius-lg)", gap: 12 }}>
       <span style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>Scanner</span>
-      <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>EOD 2026-04-19 · 3,046 stocks</span>
+      <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Market data 2026-04-19 · 3,046 stocks</span>
       <div style={{ display: "flex", gap: 8 }}>
         <DsButton variant="ghost">Reset</DsButton>
         <DsButton variant="primary">Run scan</DsButton>

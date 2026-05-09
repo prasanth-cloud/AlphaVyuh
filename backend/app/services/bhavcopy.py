@@ -21,7 +21,7 @@ NSE_HEADERS = {
 }
 
 VALID_SERIES = {"EQ", "BE", "BZ", "SM", "ST"}
-SOURCE_NAME = "NSE bhavcopy EOD"
+SOURCE_NAME = "NSE bhavcopy"
 
 COL_MAP = {
     # Symbol
