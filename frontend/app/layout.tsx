@@ -5,15 +5,15 @@ import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ThemeController from "@/components/ThemeController";
 
-const inter = localFont({
+const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
-  variable: "--font-sans",
+  variable: "--font-geist-sans",
   display: "swap",
 });
 
-const jetbrainsMono = localFont({
+const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-mono",
+  variable: "--font-geist-mono",
   display: "swap",
 });
 
@@ -63,7 +63,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" data-theme="dark" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
         <Script
           id="theme-init"

@@ -82,9 +82,9 @@ export default function LoginForm() {
 
   return (
     <div style={{
-      background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), rgba(10,14,18,0.88)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      borderRadius: 24,
+      background: "linear-gradient(180deg, var(--accent-subtle), transparent), var(--surface-1)",
+      border: "1px solid var(--border-default)",
+      borderRadius: 16,
       boxShadow: "var(--shadow-panel)",
       padding: 32,
       width: "100%",
@@ -101,9 +101,9 @@ export default function LoginForm() {
           <div
             style={{
               marginTop: 12,
-              border: "1px solid rgba(244,247,251,0.12)",
+              border: "1px solid var(--border-default)",
               borderRadius: 10,
-              background: "rgba(244,247,251,0.06)",
+              background: "var(--accent-subtle)",
               color: "var(--text-secondary)",
               fontSize: 12,
               padding: "8px 10px",

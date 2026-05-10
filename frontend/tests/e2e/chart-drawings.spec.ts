@@ -47,9 +47,10 @@ test.describe("Full chart drawings", () => {
     await expect(page.getByRole("button", { name: /^Draw$/ })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
-    for (const tool of ["Trendline T", "Horizontal H", "Ray R", "Zone Z", "Fib F", "Text N", "Long Position L", "Short Position S", "Price alert", "Magnet / snap On"]) {
+    for (const tool of ["Trendline T", "Horizontal H", "Ray R", "Zone Z", "Fib F", "Text N", "Long Position L", "Short Position S", "Price alert"]) {
       await expect(page.getByRole("button", { name: tool, exact: true })).toBeVisible();
     }
+    await expect(page.getByRole("button", { name: /Magnet|snap/i })).toHaveCount(0);
     await page.getByRole("button", { name: /Trendline/ }).click();
     await expect(page.getByText(/Trendline armed/)).toBeVisible();
     await page.keyboard.press("Escape");
@@ -83,5 +84,17 @@ test.describe("Full chart drawings", () => {
     await expect(page.getByRole("button", { name: "SMA 50" })).toBeVisible();
     await page.getByRole("button", { name: "EMA 200" }).click();
     await expect(page.getByRole("button", { name: "Indicators · 3 ▾", exact: true })).toBeVisible();
+  });
+
+  test("full chart preserves selected chart type across symbols", async ({ page }) => {
+    await login(page);
+    await page.goto("/charts/SMARTWORKS?full=1&type=bars");
+    await expect(page.getByTestId("chart-drawing-overlay")).toBeVisible({ timeout: 20000 });
+    const chartTypeSelect = page.locator("select").filter({ has: page.locator("option[value='bars']") }).first();
+    await expect(chartTypeSelect).toHaveValue("bars");
+
+    await page.goto("/charts/AUBANK?full=1");
+    await expect(page.getByTestId("chart-drawing-overlay")).toBeVisible({ timeout: 20000 });
+    await expect(chartTypeSelect).toHaveValue("bars");
   });
 });

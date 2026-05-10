@@ -50,7 +50,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset.theme = 'dark'
-    window.localStorage.setItem('alphavyuh-theme', 'dark')
     window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: 'dark' }))
   }, [])
 
@@ -232,7 +231,6 @@ function AccountMenuButton() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = 'dark'
-    window.localStorage.setItem('alphavyuh-theme', 'dark')
   }, [])
 
   useEffect(() => {

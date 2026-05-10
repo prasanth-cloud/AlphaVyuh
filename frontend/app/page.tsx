@@ -678,7 +678,7 @@ const CSS = `
 #lp-ring{position:fixed;width:36px;height:36px;border:1.5px solid rgba(214,223,232,.3);border-radius:50%;pointer-events:none;z-index:9998;transform:translate(-50%,-50%);transition:width .3s,height .3s,opacity .3s}
 #lp-cursor.lp-ch{transform:scale(1.2);filter:drop-shadow(0 0 8px rgba(214,223,232,.7))}
 #lp-ring.lp-rh{width:48px;height:48px;border-color:rgba(214,223,232,.18)}
-body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter',sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-sans),sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--lp-bg)}::-webkit-scrollbar-thumb{background:var(--lp-border);border-radius:2px}
 #lp-nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:20px 0;transition:all .3s}
 #lp-nav.lp-scrolled{background:rgba(13,15,20,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--lp-border);padding:12px 0}
@@ -733,14 +733,14 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:'Inter
 .lp-col-h{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--lp-muted)}
 .lp-srow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);animation:lp-row-in .4s ease both}
 @keyframes lp-row-in{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
-.lp-sym{font-size:.82rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+.lp-sym{font-size:.82rem;font-weight:700;font-family:var(--font-mono),monospace}
 .lp-sym-sub{font-size:.62rem;color:var(--lp-muted)}
 .lp-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:700;letter-spacing:.04em}
 .lp-tag-teal{background:rgba(214,223,232,.1);color:var(--lp-accent);border:1px solid rgba(214,223,232,.2)}
 .lp-tag-green{background:rgba(45,181,116,.1);color:var(--lp-green);border:1px solid rgba(45,181,116,.2)}
 .lp-tag-purple{background:rgba(167,139,250,.1);color:var(--lp-purple);border:1px solid rgba(167,139,250,.2)}
 .lp-tag-yellow{background:rgba(245,158,11,.08);color:var(--lp-yellow);border:1px solid rgba(245,158,11,.2)}
-.lp-pval{font-size:.82rem;font-weight:600;font-family:'JetBrains Mono',monospace}
+.lp-pval{font-size:.82rem;font-weight:600;font-family:var(--font-mono),monospace}
 .lp-rs-mini{display:flex;align-items:center;gap:5px}
 .lp-rs-track{width:36px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
 .lp-rs-fill{height:100%;background:var(--lp-accent);border-radius:2px}

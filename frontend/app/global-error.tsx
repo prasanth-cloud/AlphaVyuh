@@ -25,7 +25,7 @@ export default function GlobalError({
             padding: 24,
             color: "#f0ede8",
             background: "#0d0f14",
-            fontFamily: "Inter, system-ui, sans-serif",
+            fontFamily: "var(--font-sans), system-ui, sans-serif",
           }}
         >
           <section style={{ maxWidth: 460, textAlign: "center" }}>
