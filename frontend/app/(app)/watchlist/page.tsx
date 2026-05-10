@@ -287,6 +287,17 @@ function DecisionDesk({
     draft.entry && draft.stop && draft.target && draft.entry > draft.stop && draft.target > draft.entry
       ? (Math.abs(draft.target - draft.entry) / Math.abs(draft.entry - draft.stop)).toFixed(2)
       : null;
+  const riskRewardValue = riskReward ? Number(riskReward) : null;
+  const planNudges = [
+    ...requiredFields
+      .filter((field) => !field.complete)
+      .slice(0, 3)
+      .map((field) => `Complete ${field.label.toLowerCase()}`),
+    ...(invalidRisk ? ["Stop must sit below entry for a long plan"] : []),
+    ...(invalidReward ? ["Target must sit above entry for a long plan"] : []),
+    ...(riskRewardValue != null && riskRewardValue < 2 ? ["R:R is below 2.0; confirm the trade is still worth taking"] : []),
+    ...(draft.confidence != null && draft.confidence <= 2 ? ["Setup quality is low; keep it in watch/review"] : []),
+  ].slice(0, 4);
   const inputStyle: React.CSSProperties = {
     width: "100%",
     fontSize: 12,
@@ -344,6 +355,23 @@ function DecisionDesk({
             {invalidRisk ? "Stop must be below entry" : "Target must be above entry"}
           </span>
         )}
+      </div>
+      <div
+        data-testid="decision-desk-nudges"
+        style={{
+          marginBottom: 10,
+          padding: "8px 10px",
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.07)",
+          background: status.valid ? "rgba(27,191,114,0.055)" : "rgba(217,119,6,0.08)",
+        }}
+      >
+        <div className="label" style={{ marginBottom: 4 }}>{status.valid ? "Plan ready" : "Next best action"}</div>
+        <div className="caption" style={{ color: status.valid ? "var(--gain)" : "var(--warn)", lineHeight: 1.55 }}>
+          {status.valid
+            ? (riskReward ? `Ready for simulated order draft. Risk/reward ${riskReward}.` : "Ready for simulated order draft.")
+            : (planNudges.length ? planNudges.join(" · ") : status.next)}
+        </div>
       </div>
       <div className="decision-desk-primary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
         <select value={draft.lifecycle} onChange={(e) => patch({ lifecycle: e.target.value as WorkflowLifecycle })} style={inputStyle}>
@@ -437,6 +465,22 @@ function ChartPanel({
     if (!qtyN || !priceN) return null;
     return qtyN * priceN;
   })();
+  const planRiskReward = plan?.entry && plan?.stop && plan?.target && plan.entry > plan.stop && plan.target > plan.entry
+    ? Math.abs(plan.target - plan.entry) / Math.abs(plan.entry - plan.stop)
+    : null;
+  const orderRiskAmount = (() => {
+    const qtyN = parseInt(qty, 10);
+    const priceN = parseFloat(price || String(referenceClose ?? ""));
+    const stop = plan?.stop;
+    if (!qtyN || !priceN || !stop) return null;
+    return Math.abs(priceN - stop) * qtyN;
+  })();
+  const orderNudges = [
+    ...(planValid ? [] : [planNextAction || "Complete the Decision Desk before order capture"]),
+    ...(planRiskReward != null && planRiskReward < 2 ? ["R:R below 2.0; check whether the setup deserves capital"] : []),
+    ...(chartRangeNote ? [chartRangeNote] : []),
+    ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
+  ].slice(0, 3);
   const chartStats = useMemo(() => {
     if (candles.length < 2) return null;
     const closes = candles.map((c) => c.close).filter((value) => Number.isFinite(value));
@@ -762,6 +806,24 @@ function ChartPanel({
             {brokerStatus?.connected ? "Broker read-only/import only" : "Order capture records as simulated"}
           </span>
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
+          {[
+            { label: "R:R", value: planRiskReward != null ? planRiskReward.toFixed(2) : "—", tone: planRiskReward == null ? "var(--text-tertiary)" : planRiskReward >= 2 ? "var(--gain)" : "var(--warn)" },
+            { label: "Risk", value: orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", tone: "var(--text-secondary)" },
+            { label: "Mode", value: brokerStatus?.connected ? "Import only" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
+          ].map((item) => (
+            <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
+              <div className="label" style={{ marginBottom: 2 }}>{item.label}</div>
+              <div className="mono" style={{ color: item.tone, fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+        {orderNudges.length > 0 && (
+          <div data-testid="order-safety-nudges" style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)" }}>
+            <div className="label" style={{ marginBottom: 4 }}>Safety nudge</div>
+            <div className="caption" style={{ color: "var(--warn)", lineHeight: 1.5 }}>{orderNudges.join(" · ")}</div>
+          </div>
+        )}
 
         {/* Buy / Sell */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 10 }}>

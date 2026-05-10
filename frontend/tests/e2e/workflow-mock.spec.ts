@@ -110,6 +110,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(lockedOrder).toBeVisible();
     await expect(lockedOrder).toBeDisabled();
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
+    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Complete entry|Next best action/i);
+    await expect(page.getByTestId("order-safety-nudges")).toContainText(/Create a plan|Complete entry|Decision Desk/i);
 
     await page.getByPlaceholder("Entry").fill("1500");
     await page.getByPlaceholder("Stop").fill("1440");
@@ -119,6 +121,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByPlaceholder("Invalidation rule").fill("Exit if price closes below the breakout base.");
 
     await expect(page.getByText("Ready for order draft.")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Plan ready|Ready for simulated order draft/i);
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeEnabled();
     await expect(page.getByRole("button", { name: /^Save simulated buy draft$/i })).toBeEnabled();
 
@@ -240,14 +243,14 @@ test.describe("Mock workflow smoke", () => {
     await resultRows.nth(2).locator("input[type=checkbox]").check({ force: true });
     await expect(page.getByText("1 selected")).toBeVisible();
     await page.getByRole("button", { name: /Review later selected/i }).click();
-    await expect(resultRows.nth(2).getByText("Review later")).toBeVisible();
+    await expect(resultRows.nth(2).locator(".caption").filter({ hasText: /^Review later$/ })).toBeVisible();
 
     const workflowMarks = await page.evaluate(() => JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}"));
     expect(workflowMarks[shortlistSymbol]).toMatchObject({ lifecycle: "idea", source: "scanner" });
     expect(workflowMarks[ignoredSymbol]).toMatchObject({ lifecycle: "ignored", ignored: true, source: "scanner" });
     expect(workflowMarks[reviewSymbol]).toMatchObject({ lifecycle: "review_later", review_later: true, source: "scanner" });
 
-    await resultRows.nth(0).locator("select").selectOption({ label: "Leaders" });
+    await resultRows.nth(0).getByLabel(new RegExp(`Add ${shortlistSymbol} to watchlist`)).selectOption({ label: "Leaders" });
     await expect(page.getByText(`${shortlistSymbol} added`)).toBeVisible({ timeout: 10_000 });
     await expect(resultRows.nth(0).getByText("Watching")).toBeVisible({ timeout: 10_000 });
     const leadersWatchlist = await page.evaluate(() => {

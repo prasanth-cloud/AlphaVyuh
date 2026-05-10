@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import FeedbackWidget from '@/components/FeedbackWidget'
@@ -21,6 +21,22 @@ const IDLE_PREFETCH_ROUTES = [
 ]
 
 type SymbolResult = { symbol: string; company_name: string; sector: string }
+type CommandResult = { command: string; label: string; detail: string; href: string }
+type SearchResult = SymbolResult | CommandResult
+
+const COMMAND_RESULTS: CommandResult[] = [
+  { command: 'dashboard', label: 'Open Dashboard', detail: 'Market pulse, review queue, next actions', href: '/dashboard' },
+  { command: 'scanner', label: 'Run Scanner', detail: 'Find setups from the six swing presets', href: '/scanner' },
+  { command: 'watchlist', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
+  { command: 'chart', label: 'Open Full Chart', detail: 'Professional chart workspace', href: '/charts/RELIANCE?full=1' },
+  { command: 'journal', label: 'Review Journal', detail: 'Close the learning loop', href: '/journal?review=needs-review' },
+  { command: 'broker', label: 'Broker Settings', detail: 'Read-only/import status and reconnect flow', href: '/settings/broker' },
+  { command: 'data', label: 'Data Status', detail: 'Freshness, coverage, and operator checks', href: '/data' },
+]
+
+function isCommandResult(result: SearchResult): result is CommandResult {
+  return 'href' in result
+}
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -332,7 +348,13 @@ function SymbolSearch() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+      if (!typing && e.key === '/') {
         e.preventDefault()
         inputRef.current?.focus()
       }
@@ -366,17 +388,26 @@ function SymbolSearch() {
     timer.current = setTimeout(() => search(q), 200)
   }
 
-  function select(symbol: string) {
+  function select(result: SearchResult) {
     setQuery('')
     setResults([])
     setOpen(false)
-    rememberSymbol(symbol)
-    router.push(`/watchlist?symbol=${symbol}`)
+    if (isCommandResult(result)) {
+      router.push(result.href)
+    } else {
+      rememberSymbol(result.symbol)
+      router.push(`/watchlist?symbol=${result.symbol}`)
+    }
     inputRef.current?.blur()
   }
 
-  const quickResults = query.length > 0
-    ? [
+  const quickResults = useMemo<SearchResult[]>(() => {
+    if (!query.length) return []
+    const needle = query.replace(/^\//, '').toLowerCase()
+    const commands = COMMAND_RESULTS
+      .filter(item => item.command.includes(needle) || item.label.toLowerCase().includes(needle) || item.detail.toLowerCase().includes(needle))
+      .slice(0, 4)
+    const symbols = [
         ...state.recentSymbols
           .filter(symbol => symbol.includes(query))
           .map(symbol => ({ symbol, company_name: 'Recent workflow symbol', sector: 'Recent' })),
@@ -384,8 +415,9 @@ function SymbolSearch() {
           .filter(item => item.symbol.includes(query))
           .map(item => ({ symbol: item.symbol, company_name: item.companyName ?? 'Saved symbol', sector: item.lifecycle })),
       ].filter((item, index, arr) => arr.findIndex(other => other.symbol === item.symbol) === index).slice(0, 5)
-    : []
-  const displayResults = results.length > 0 ? results : quickResults
+    return [...commands, ...symbols]
+  }, [query, state.recentSymbols, state.shortlist])
+  const displayResults: SearchResult[] = results.length > 0 ? results : quickResults
 
   return (
     <div style={{ position: 'relative', width: '100%', maxWidth: 400 }}>
@@ -402,9 +434,9 @@ function SymbolSearch() {
           onBlur={() => setTimeout(() => setOpen(false), 180)}
           onKeyDown={e => {
             if (e.key === 'Escape') { setOpen(false); setQuery(''); inputRef.current?.blur() }
-            if (e.key === 'Enter' && displayResults[0]) select(displayResults[0].symbol)
+            if (e.key === 'Enter' && displayResults[0]) select(displayResults[0])
           }}
-          placeholder="Search symbols, shortlist, recent..."
+          placeholder="Search symbol or command..."
           className="app-search-input"
         />
         <kbd style={{
@@ -440,8 +472,8 @@ function SymbolSearch() {
           )}
           {displayResults.map((r, i) => (
             <div
-              key={r.symbol}
-              onMouseDown={() => select(r.symbol)}
+              key={isCommandResult(r) ? r.href : r.symbol}
+              onMouseDown={() => select(r)}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '9px 12px',
@@ -458,20 +490,20 @@ function SymbolSearch() {
                   color: 'var(--text-primary)',
                   fontFamily: 'var(--font-mono)',
                 }}>
-                  {r.symbol}
+                  {isCommandResult(r) ? r.label : r.symbol}
                 </span>
                 <span style={{
                   fontSize: 11, color: 'var(--text-tertiary)',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
-                  {r.company_name}
+                  {isCommandResult(r) ? r.detail : r.company_name}
                 </span>
               </div>
               <span style={{
                 fontSize: 10, color: 'var(--text-tertiary)',
                 flexShrink: 0, marginLeft: 12,
               }}>
-                {r.sector}
+                {isCommandResult(r) ? 'Command' : r.sector}
               </span>
             </div>
           ))}
