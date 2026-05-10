@@ -831,6 +831,13 @@ input, textarea, select {
     linear-gradient(180deg, #071013 0%, #0b0d11 100%);
 }
 
+:root[data-theme="light"] .app-auth-shell {
+  background:
+    radial-gradient(circle at 15% 10%, rgba(15, 23, 42, 0.08), transparent 30%),
+    radial-gradient(circle at 85% 0%, rgba(15, 23, 42, 0.05), transparent 26%),
+    linear-gradient(180deg, #f7f8fa 0%, #ffffff 100%);
+}
+
 .app-auth-grid {
   width: 100%;
   max-width: 1120px;
@@ -845,6 +852,11 @@ input, textarea, select {
   -webkit-backdrop-filter: blur(20px);
 }
 
+:root[data-theme="light"] .app-auth-grid {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.82);
+}
+
 .app-auth-aside {
   position: relative;
   padding: 48px;
@@ -852,6 +864,13 @@ input, textarea, select {
     radial-gradient(circle at 20% 20%, rgba(244, 247, 251, 0.09), transparent 30%),
     linear-gradient(180deg, rgba(13, 16, 21, 0.96), rgba(7, 9, 12, 0.96));
   border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme="light"] .app-auth-aside {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(15, 23, 42, 0.06), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 248, 250, 0.96));
+  border-right-color: rgba(15, 23, 42, 0.10);
 }
 
 .auth-brand-mark {
@@ -866,6 +885,11 @@ input, textarea, select {
   color: var(--text-primary);
   font-weight: 800;
   letter-spacing: -0.04em;
+}
+
+:root[data-theme="light"] .auth-brand-mark {
+  border-color: rgba(15, 23, 42, 0.14);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.03));
 }
 
 .app-auth-panel {

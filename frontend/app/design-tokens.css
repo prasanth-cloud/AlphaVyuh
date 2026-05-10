@@ -46,8 +46,8 @@
 
   /* ── TYPOGRAPHY ────────────────────────────────────────────────────────── */
 
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'SF Mono', Menlo, Consolas, monospace;
 
   /* Type scale — 1.125 ratio, anchored at 13px body */
   --text-2xs:  10px;    /* labels, meta — UPPERCASE with tracking */

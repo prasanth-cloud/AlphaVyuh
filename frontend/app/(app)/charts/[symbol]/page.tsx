@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -106,6 +106,16 @@ const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: 
 
 const chartDataCache = new Map<string, ChartDataCacheEntry>();
 const CHART_CACHE_TTL_MS = 60_000;
+const CHART_TYPE_STORAGE_KEY = "alphavyuh-chart-type";
+
+function normalizeChartType(value: string | null | undefined): ChartDisplayType | null {
+  return value === "bars" || value === "line" || value === "candles" ? value : null;
+}
+
+function readStoredChartType(fallback: ChartDisplayType = "candles"): ChartDisplayType {
+  if (typeof window === "undefined") return fallback;
+  return normalizeChartType(window.localStorage.getItem(CHART_TYPE_STORAGE_KEY)) ?? fallback;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -266,18 +276,28 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const sourceWatchlistId = searchParams.get("watchlistId");
   const fullChartMode = searchParams.get("full") === "1";
   const initialDrawMode = searchParams.get("draw");
+  const initialChartType = normalizeChartType(searchParams.get("type"));
 
   const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [rangeNote, setRangeNote] = useState<string | null>(null);
   const [timeframeMessage, setTimeframeMessage] = useState("");
   const [liveMode, setLiveMode] = useState(false);
-  const [chartType, setChartType] = useState<ChartDisplayType>("candles");
+  const [chartType, setChartType] = useState<ChartDisplayType>(() => initialChartType ?? readStoredChartType());
 
   useEffect(() => {
     if (!fullChartMode) return;
     trackEvent("full_chart_opened", { symbol, timeframe });
   }, [fullChartMode, symbol, timeframe]);
+
+  useEffect(() => {
+    const nextType = normalizeChartType(searchParams.get("type"));
+    if (nextType && nextType !== chartType) setChartType(nextType);
+  }, [chartType, searchParams]);
+
+  useEffect(() => {
+    window.localStorage.setItem(CHART_TYPE_STORAGE_KEY, chartType);
+  }, [chartType]);
 
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -417,7 +437,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [planDragState, setPlanDragState] = useState<{
     field: "entry" | "stop" | "target";
   } | null>(null);
-  const [snapToPrice, setSnapToPrice] = useState(true);
+  const snapToPrice = true;
   const [textEditor, setTextEditor] = useState<{ drawingId: string | null; value: string; x: number; y: number; isNew: boolean } | null>(null);
 
   useEffect(() => {
@@ -1408,8 +1428,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     if (sourceQueue?.id ?? sourceWatchlistId) params.set("watchlistId", sourceQueue?.id ?? sourceWatchlistId ?? "");
     if (sourceQueueName) params.set("watchlist", sourceQueueName);
     if (full) params.set("full", "1");
+    if (chartType !== "candles") params.set("type", chartType);
     return `/charts/${nextSymbol}${params.toString() ? `?${params.toString()}` : ""}`;
-  }, [fullChartMode, sourcePage, sourceQueue?.id, sourceQueueName, sourceWatchlistId]);
+  }, [chartType, fullChartMode, sourcePage, sourceQueue?.id, sourceQueueName, sourceWatchlistId]);
   const stepQueueSymbol = useCallback((direction: "prev" | "next") => {
     if (!sourceQueueSymbols.length) return;
     const currentIndex = sourceQueueIndex >= 0 ? sourceQueueIndex : 0;
@@ -1957,17 +1978,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 >
                   <Bell size={14} />
                   <span className="flex-1">Price alert</span>
-                </button>
-                <button
-                  onClick={() => { setSnapToPrice((prev) => !prev); setShowDrawMenu(false); }}
-                  className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
-                  style={{ color: snapToPrice ? "var(--app-teal)" : "var(--app-text2)" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  <Magnet size={14} />
-                  <span className="flex-1">Magnet / snap</span>
-                  <span className="text-[10px] opacity-60">{snapToPrice ? "On" : "Off"}</span>
                 </button>
                 {drawnLines.length > 0 && (
                   <>
@@ -2815,17 +2825,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   {activeToolMeta.label} armed · press ESC to cancel
                 </div>
               )}
-              <button
-                onClick={() => setSnapToPrice((prev) => !prev)}
-                className="rounded-full px-2.5 py-1 text-[11px] font-semibold flex items-center gap-1.5"
-                style={snapToPrice
-                  ? { background: "rgba(0,229,196,0.12)", color: "var(--app-teal)", border: "1px solid rgba(0,229,196,0.22)" }
-                  : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}
-                title="Snap drawings to nearby OHLC prices. Hold Alt while drawing to bypass."
-              >
-                <Magnet size={12} />
-                Magnet {snapToPrice ? "On" : "Off"}
-              </button>
               {selectedDrawing && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)" }}>
@@ -3099,7 +3098,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     <g>
                       <circle cx={drawingPreview.x1} cy={drawingPreview.y1} r={4} fill="#f4f7fb" />
                       <rect x={drawingPreview.x1 + 8} y={drawingPreview.y1 - 24} width={92} height={20} rx={6} fill="rgba(13,15,20,0.9)" stroke="#f4f7fb" />
-                      <text x={drawingPreview.x1 + 14} y={drawingPreview.y1 - 11} fontSize="10" fill="#f8fafc" fontFamily="Inter, sans-serif">Text note</text>
+                      <text x={drawingPreview.x1 + 14} y={drawingPreview.y1 - 11} fontSize="10" fill="#f8fafc" fontFamily="var(--font-sans), sans-serif">Text note</text>
                     </g>
                   ) : activeDrawingTool === "LongPosition" || activeDrawingTool === "ShortPosition" ? (
                     (() => {
@@ -3115,7 +3114,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                           <rect x={x} y={rewardTop} width={w} height={Math.abs(rewardY - drawingPreview.y1)} fill="rgba(34,197,94,0.14)" stroke="#22c55e" strokeDasharray="4 3" />
                           <rect x={x} y={riskTop} width={w} height={Math.abs(drawingPreview.y2 - drawingPreview.y1)} fill="rgba(239,68,68,0.14)" stroke="#ef4444" strokeDasharray="4 3" />
                           <line x1={x} y1={drawingPreview.y1} x2={x + w} y2={drawingPreview.y1} stroke="#e5e7eb" strokeWidth={1.4} />
-                          <text x={x + 8} y={drawingPreview.y1 - 6} fontSize="10" fill="#e5e7eb" fontFamily="Inter, sans-serif">{activeDrawingTool === "LongPosition" ? "Long" : "Short"} entry</text>
+                          <text x={x + 8} y={drawingPreview.y1 - 6} fontSize="10" fill="#e5e7eb" fontFamily="var(--font-sans), sans-serif">{activeDrawingTool === "LongPosition" ? "Long" : "Short"} entry</text>
                         </g>
                       );
                     })()
@@ -3169,7 +3168,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                           y={y + 5}
                           fontSize="10.5"
                           fill={line.color}
-                          fontFamily="Inter, sans-serif"
+                          fontFamily="var(--font-sans), sans-serif"
                           fontWeight="700"
                         >
                           {line.label} {line.price.toFixed(2)}
@@ -3430,13 +3429,13 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                         <line x1={x} y1={y2} x2={x + rectW} y2={y2} stroke="#ef4444" strokeWidth={1.2} strokeDasharray="5 3" />
                         <line x1={x} y1={targetY} x2={x + rectW} y2={targetY} stroke="#22c55e" strokeWidth={1.2} strokeDasharray="5 3" />
                         <rect x={tagX} y={Math.max(6, y1 - 34)} width={108} height={50} rx={8} fill="rgba(13,15,20,0.92)" stroke={selected ? "#e5e7eb" : "rgba(255,255,255,0.12)"} />
-                        <text x={tagX + 8} y={Math.max(20, y1 - 18)} fontSize="10" fill={line.tool === "LongPosition" ? "#22c55e" : "#ef4444"} fontFamily="Inter, sans-serif" fontWeight="700">
+                        <text x={tagX + 8} y={Math.max(20, y1 - 18)} fontSize="10" fill={line.tool === "LongPosition" ? "#22c55e" : "#ef4444"} fontFamily="var(--font-sans), sans-serif" fontWeight="700">
                           {line.tool === "LongPosition" ? "Long" : "Short"} · {rr.toFixed(2)}R
                         </text>
-                        <text x={tagX + 8} y={Math.max(34, y1 - 4)} fontSize="9" fill="#e5e7eb" fontFamily="Inter, sans-serif">
+                        <text x={tagX + 8} y={Math.max(34, y1 - 4)} fontSize="9" fill="#e5e7eb" fontFamily="var(--font-sans), sans-serif">
                           Entry {line.p1.price.toFixed(2)}
                         </text>
-                        <text x={tagX + 8} y={Math.max(48, y1 + 10)} fontSize="9" fill="#94a3b8" fontFamily="Inter, sans-serif">
+                        <text x={tagX + 8} y={Math.max(48, y1 + 10)} fontSize="9" fill="#94a3b8" fontFamily="var(--font-sans), sans-serif">
                           Stop {line.p2.price.toFixed(2)}
                         </text>
                         {editable && (
@@ -3495,7 +3494,7 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                           y={Math.max(20, y1 - 9)}
                           fontSize="10"
                           fill="#f8fafc"
-                          fontFamily="Inter, sans-serif"
+                          fontFamily="var(--font-sans), sans-serif"
                         >
                           {line.text ?? "Note"}
                         </text>

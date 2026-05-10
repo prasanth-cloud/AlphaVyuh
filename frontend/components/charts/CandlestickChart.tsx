@@ -142,7 +142,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       layout: {
         background: { type: ColorType.Solid, color: "#05070b" },
         textColor: "rgba(209,213,219,0.72)",
-        fontFamily: "Inter, system-ui, sans-serif",
+        fontFamily: "var(--font-sans), system-ui, sans-serif",
         fontSize: 12,
         attributionLogo: true,
       },
