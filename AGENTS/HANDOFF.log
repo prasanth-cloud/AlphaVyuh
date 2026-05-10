@@ -5,3 +5,11 @@
   All advisory copy removed and replaced with informational voice
   Trade report upload added as P1 feature with stub page
   Next: Deploy agent fixes Vercel build, then Feature agent fixes auth on top of clean main
+
+[2026-05-10 08:32] FEATURE — Broker integration shipped
+  Branch: feature/broker-integration-20260510-0803
+  Brokers: Zerodha Kite + Upstox OAuth/REST paths
+  Plan gating: Free users see upgrade prompt, Pro/Elite can connect/import and route only when backend live gate is enabled
+  Order safety: Live/sandbox order submission remains disabled by default through BROKER_LIVE_ORDERS_ENABLED=false and requires explicit user confirmation
+  Manual actions required: see AGENTS/MANUAL_ACTIONS.md
+  Next: Apply migration through reviewed Supabase path, add broker app env vars, then run owner-approved read-only smoke
