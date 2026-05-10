@@ -292,6 +292,6 @@ test.describe("Workflow layout smoke", () => {
 
     await page.goto("/settings/broker", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/read-only|import only/i, { timeout: 15_000 });
-    await expect(page.locator("body")).toContainText(/Live and sandbox order placement (are )?disabled/i);
+    await expect(page.locator("body")).toContainText(/Live orders require Pro\/Elite, backend enablement, and explicit confirmation|Live order submission requires Pro\/Elite, backend enablement, and explicit user confirmation/i);
   });
 });

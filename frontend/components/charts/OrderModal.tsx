@@ -42,12 +42,17 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [brokerLive, setBrokerLive] = useState(false);
   const [brokerTokenExpired, setBrokerTokenExpired] = useState(false);
+  const [planAllowsBroker, setPlanAllowsBroker] = useState(true);
+  const [liveOrderEnabled, setLiveOrderEnabled] = useState(false);
+  const [liveConfirmed, setLiveConfirmed] = useState(false);
 
   useEffect(() => {
     getBrokerStatus()
       .then(s => {
         setBrokerLive(Boolean(s.connected && s.broker));
         setBrokerTokenExpired(Boolean(s.token_expired));
+        setPlanAllowsBroker(s.plan_allows_broker !== false);
+        setLiveOrderEnabled(Boolean(s.live_order_enabled));
         if (s.broker) setBrokerName(s.broker);
       })
       .catch(() => {});
@@ -74,10 +79,13 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const invest = priceNum * qtyNum;
   const brokerLabel = brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "Broker";
   const executionPath = brokerLive && brokerName
-    ? `${brokerLabel} import-only`
+    ? liveOrderEnabled
+      ? `${brokerLabel} explicit confirm`
+      : `${brokerLabel} import-only`
     : brokerTokenExpired
       ? "Token expired · simulated capture"
       : "Simulated capture";
+  const canRouteLive = brokerLive && liveOrderEnabled && planAllowsBroker;
 
   async function submit() {
     if (!quantity || !price || parseFloat(price) <= 0 || parseInt(quantity) <= 0) {
@@ -95,14 +103,14 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         order_type: "market",
         source_page: "chart",
         source_context: symbol,
-        live_confirmed: false,
+        live_confirmed: canRouteLive && liveConfirmed,
         ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
         ...(tgtNum > 0 ? { target_price: tgtNum } : {}),
         ...(setupType   ? { setup_type:  setupType } : {}),
         ...(notes       ? { notes }               : {}),
       };
       const result = await placeOrder(req);
-      trackEvent("mock_order_drafted", { source: "chart", symbol, side });
+      trackEvent(canRouteLive && liveConfirmed ? "broker_order_submitted" : "mock_order_drafted", { source: "chart", symbol, side, broker: brokerName ?? "simulated" });
       onFilled(result);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Order failed");
@@ -136,7 +144,11 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
               <DataProvenanceBadge kind="broker-beta" compact />
             </div>
             <p className="text-[11px] leading-5 text-[#7b5a2b]">
-              Private beta uses simulated journal capture only. Broker connections are read-only/import only; live and sandbox order placement are disabled.
+              {planAllowsBroker
+                ? canRouteLive
+                  ? "Broker order routing is available only after you confirm this exact order. AlphaVyuh never recommends quantity or direction."
+                  : "Broker connections can import filled trades. Live order routing remains disabled unless backend broker execution is enabled."
+                : "Broker integration requires Pro or Elite. Free accounts can still use chart planning and journaling."}
             </p>
           </div>
 
@@ -145,7 +157,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <div className="grid grid-cols-4 gap-1 text-center text-[10px] font-semibold text-[#777]">
               {[
                 executionPath,
-                "No broker submit",
+                canRouteLive ? "Explicit confirm" : "No broker submit",
                 "Journal draft",
                 "AI review after close",
               ].map((step, idx) => (
@@ -257,9 +269,36 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
 
           <div className="rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
             <span className="text-[11px] leading-5 text-[#7b5a2b]">
-              Execution disabled for private beta. This creates a simulated journal draft only; verify and place any real order directly in your broker terminal.
+              {canRouteLive
+                ? "Live order submission requires your explicit confirmation below. Verify symbol, side, quantity, price, and risk before submitting."
+                : "This creates a simulated journal draft only. Broker execution is unavailable for this account/session."}
             </span>
           </div>
+
+          {!planAllowsBroker && (
+            <button
+              type="button"
+              onClick={() => { window.location.href = "/settings/billing"; }}
+              className="w-full py-2.5 rounded-[8px] text-[13px] font-bold transition-opacity"
+              style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
+            >
+              Upgrade to Pro for broker integration
+            </button>
+          )}
+
+          {canRouteLive && (
+            <label className="flex items-start gap-2 rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5 text-[11px] leading-5 text-[#7b5a2b]">
+              <input
+                type="checkbox"
+                checked={liveConfirmed}
+                onChange={(event) => setLiveConfirmed(event.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                I confirm this is my own order decision and I want AlphaVyuh to submit it to {brokerLabel}. I have checked symbol, side, quantity, price, stop, target, and risk.
+              </span>
+            </label>
+          )}
 
           {/* Setup */}
           <div>
@@ -294,18 +333,18 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
           {/* Submit */}
           <button
             onClick={submit}
-            disabled={placing}
+            disabled={placing || (canRouteLive && !liveConfirmed)}
             className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-60"
             style={{ background: accent }}
           >
             {placing
-              ? "Saving journal draft…"
-              : `Save simulated ${side.toUpperCase()} draft`}
+              ? canRouteLive && liveConfirmed ? "Submitting order..." : "Saving journal draft..."
+              : canRouteLive ? `${side.toUpperCase()} ${quantity || ""} ${symbol} via ${brokerLabel}` : `Save simulated ${side.toUpperCase()} draft`}
           </button>
 
           <p className="text-[10px] text-[#ccc] text-center">
             {brokerLive && brokerName
-              ? `${brokerLabel} is connected read-only. Use broker import for filled trades; this modal never submits orders during beta.`
+              ? canRouteLive ? `${brokerLabel} is connected. Submission happens only after explicit confirmation.` : `${brokerLabel} is connected for import. This modal records a simulated journal draft.`
               : brokerTokenExpired
                 ? `Simulated journal draft only — your ${brokerLabel} token expired.`
                 : "Simulated journal draft — ready for post-trade review"}

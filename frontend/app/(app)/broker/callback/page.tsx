@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { connectZerodha } from "@/lib/api";
+import { connectBrokerCallback, connectZerodha } from "@/lib/api";
 
 function BrokerCallbackContent() {
   const router = useRouter();
@@ -11,18 +11,24 @@ function BrokerCallbackContent() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const requestToken = params.get("request_token");
+    const broker = params.get("broker") === "upstox" ? "upstox" : "zerodha";
+    const requestToken = params.get("request_token") || params.get("code");
     if (!requestToken) {
       setStatus("error");
-      setMessage("No request token received from Zerodha.");
+      setMessage("No authorization code received from broker.");
       return;
     }
 
-    connectZerodha(requestToken)
-      .then(() => {
+    const connect = broker === "zerodha" && params.get("request_token")
+      ? connectZerodha(requestToken)
+      : connectBrokerCallback(broker, requestToken);
+
+    connect
+      .then((result) => {
         setStatus("success");
-        setMessage("Zerodha connected! Redirecting to settings…");
-        setTimeout(() => router.replace("/settings/broker?connected=zerodha"), 2000);
+        const name = "broker_user_name" in result && result.broker_user_name ? ` as ${result.broker_user_name}` : "";
+        setMessage(`${broker === "upstox" ? "Upstox" : "Zerodha"} connected${name}. Redirecting to settings...`);
+        setTimeout(() => router.replace(`/settings/broker?connected=${broker}`), 2000);
       })
       .catch((e: Error) => {
         setStatus("error");
@@ -38,7 +44,7 @@ function BrokerCallbackContent() {
           <>
             <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4"
               style={{ borderColor: "#f4f7fb", borderTopColor: "transparent" }} />
-            <p className="text-[14px]" style={{ color: "var(--app-text2)" }}>Connecting Zerodha…</p>
+            <p className="text-[14px]" style={{ color: "var(--app-text2)" }}>Connecting broker...</p>
           </>
         )}
         {status === "success" && (

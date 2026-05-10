@@ -9,14 +9,14 @@ from __future__ import annotations
 import os
 import asyncio
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 os.environ.setdefault("KITE_API_KEY", "test_api_key")
 os.environ.setdefault("KITE_API_SECRET", "test_api_secret")
 
-from app.brokers.adapter import BrokerCredentials, BrokerError
+from app.brokers.adapter import BrokerCredentials, BrokerError, IdempotencyKey, OrderRequest
 from app.brokers.kite.adapter import KiteAdapter, _map_kite_status
 from app.brokers.kite.api import KiteApiError
 
@@ -190,28 +190,87 @@ class TestGetPositions:
         assert p.day_pnl == 100.0
 
 
-class TestOrderMethodsNotImplemented:
-    """Order methods are stubbed until feat/broker-connect-ui."""
+class _FakeOrderQuery:
+    def __init__(self, client):
+        self.client = client
+        self.insert_payload = None
 
-    def test_place_order_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            _run(KiteAdapter().place_order("user-1", _creds(), MagicMock()))
+    def select(self, *_args, **_kwargs):
+        return self
 
-    def test_modify_order_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            _run(KiteAdapter().modify_order(_creds(), "ord_123", MagicMock()))
+    def eq(self, *_args, **_kwargs):
+        return self
 
-    def test_cancel_order_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            _run(KiteAdapter().cancel_order(_creds(), "ord_123"))
+    def maybe_single(self):
+        return self
 
-    def test_get_order_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            _run(KiteAdapter().get_order(_creds(), "ord_123"))
+    def insert(self, payload):
+        self.insert_payload = payload
+        self.client.inserts.append(payload)
+        return self
 
-    def test_list_orders_not_implemented(self):
-        with pytest.raises(NotImplementedError):
-            _run(KiteAdapter().list_orders(_creds()))
+    def update(self, payload):
+        self.client.updates.append(payload)
+        return self
+
+    def execute(self):
+        return type("Result", (), {"data": None})()
+
+
+class _FakeOrderDb:
+    def __init__(self):
+        self.inserts = []
+        self.updates = []
+
+    def table(self, _name):
+        return _FakeOrderQuery(self)
+
+
+def _order_request() -> OrderRequest:
+    return OrderRequest(
+        idempotency_key=IdempotencyKey("11111111-1111-4111-8111-111111111111"),
+        symbol="RELIANCE",
+        exchange="NSE",
+        side="BUY",
+        quantity=1,
+        order_type="MARKET",
+        product="CNC",
+        validity="DAY",
+    )
+
+
+class TestOrderMethods:
+    def test_place_order_reserves_key_calls_kite_and_stores_result(self, monkeypatch):
+        db = _FakeOrderDb()
+        monkeypatch.setattr("app.brokers.kite.adapter.get_admin_client", lambda: db)
+        with patch("app.brokers.kite.api.place_order", return_value={"order_id": "kite-order-1"}) as place:
+            result = _run(KiteAdapter().place_order("user-1", _creds(), _order_request()))
+
+        assert result.order.broker_order_id == "kite-order-1"
+        assert result.from_cache is False
+        assert db.inserts[0]["broker_id"] == "zerodha"
+        assert db.updates[0]["broker_order_id"] == "kite-order-1"
+        assert place.call_args.kwargs["params"]["tradingsymbol"] == "RELIANCE"
+
+    def test_list_orders_maps_kite_rows(self):
+        row = {
+            "order_id": "kite-order-1",
+            "tradingsymbol": "RELIANCE",
+            "exchange": "NSE",
+            "transaction_type": "BUY",
+            "order_type": "MARKET",
+            "product": "CNC",
+            "status": "COMPLETE",
+            "quantity": 1,
+            "filled_quantity": 1,
+            "average_price": 2500,
+            "order_timestamp": "2026-05-05 09:20:00",
+        }
+        with patch("app.brokers.kite.api.list_orders", return_value=[row]):
+            orders = _run(KiteAdapter().list_orders(_creds()))
+        assert orders[0].broker_order_id == "kite-order-1"
+        assert orders[0].status == "COMPLETE"
+        assert orders[0].average_price == 2500
 
     def test_subscribe_fills_returns_callable(self):
         unsubscribe = KiteAdapter().subscribe_fills(_creds(), lambda fill: None)
