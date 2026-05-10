@@ -67,6 +67,16 @@ type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
 const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
 const WATCHLIST_PAGE_SIZE = 5;
+const WATCHLIST_CHART_TYPE_STORAGE_KEY = "alphavyuh-watchlist-chart-type";
+
+function normalizeChartDisplayType(value: string | null | undefined): ChartDisplayType | null {
+  return value === "bars" || value === "line" || value === "candles" ? value : null;
+}
+
+function readWatchlistChartType(): ChartDisplayType {
+  if (typeof window === "undefined") return "candles";
+  return normalizeChartDisplayType(window.localStorage.getItem(WATCHLIST_CHART_TYPE_STORAGE_KEY)) ?? "candles";
+}
 
 function getSetupSignal(item: WatchlistItem): SetupSignal {
   const move = item.pct_change ?? 0;
@@ -440,7 +450,7 @@ function ChartPanel({
   const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null } | null>(null);
   const [chartRangeNote, setChartRangeNote] = useState<string | null>(null);
   const [chartTimeframeMessage, setChartTimeframeMessage] = useState("");
-  const [chartType, setChartType] = useState<ChartDisplayType>("candles");
+  const [chartType, setChartType] = useState<ChartDisplayType>(() => readWatchlistChartType());
   const [showChartDetails, setShowChartDetails] = useState(false);
   const [showOrderTicket, setShowOrderTicket] = useState(false);
 
@@ -530,6 +540,9 @@ function ChartPanel({
     if (!showOrderTicket) return;
     getBrokerStatus().then(setBrokerStatus).catch(() => setBrokerStatus(null));
   }, [showOrderTicket]);
+  useEffect(() => {
+    window.localStorage.setItem(WATCHLIST_CHART_TYPE_STORAGE_KEY, chartType);
+  }, [chartType]);
   const workspaceTimeframe = useMemo(() => {
     return getWatchlistChartRequest(tf).timeframe;
   }, [tf]);

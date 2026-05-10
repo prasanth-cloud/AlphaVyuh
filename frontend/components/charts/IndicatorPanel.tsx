@@ -62,7 +62,7 @@ export default function IndicatorPanel(props: Props) {
       layout: {
         background: { type: ColorType.Solid, color: "#040507" },
         textColor: "rgba(244,247,251,0.38)",
-        fontFamily: "Inter, system-ui, sans-serif",
+        fontFamily: "var(--font-sans), system-ui, sans-serif",
         fontSize: 10,
         attributionLogo: true,
       },

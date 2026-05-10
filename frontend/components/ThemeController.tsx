@@ -24,7 +24,6 @@ export default function ThemeController() {
     ].some((prefix) => currentPath.startsWith(prefix));
     if (appRoute) {
       document.documentElement.dataset.theme = "dark";
-      window.localStorage.setItem("alphavyuh-theme", "dark");
       return;
     }
 

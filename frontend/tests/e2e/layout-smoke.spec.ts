@@ -186,7 +186,9 @@ test.describe("Workflow layout smoke", () => {
   });
 
   test("login page uses the simplified private beta copy", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem("alphavyuh-theme", "light"));
     await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(page.getByText("Sign in to AlphaVyuh")).toBeVisible();
     await expect(page.locator("body")).toContainText(/Private beta/i);
     await expect(page.locator("body")).toContainText(/Market data/i);
