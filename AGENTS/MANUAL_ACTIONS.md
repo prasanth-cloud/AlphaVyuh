@@ -16,14 +16,16 @@ BROKER_LIVE_ORDERS_ENABLED=false
 
 `BROKER_LIVE_ORDERS_ENABLED` should stay `false` until a small owner-approved live-order verification window. Even when enabled, the backend requires Pro/Elite plan status and the frontend sends live orders only after explicit user confirmation.
 
-## 2. Apply migration
+## 2. Optional follow-up migration
 
-Apply one of these equivalent migration files through the reviewed Supabase migration path:
+This PR does not apply a production Supabase migration. The broker flow uses the
+existing encrypted `broker_credentials` storage and fail-soft metadata writes.
 
-- `supabase/migrations/20260510080300_broker_connections_orders.sql`
+For richer operator status and order audit records, review and apply:
+
 - `backend/migrations/030_broker_connections.sql`
 
-The migration creates:
+The optional migration creates:
 
 - `broker_connections` for sanitized broker connection metadata.
 - `broker_orders` for order audit records.
