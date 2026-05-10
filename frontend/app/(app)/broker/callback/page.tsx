@@ -13,15 +13,21 @@ function BrokerCallbackContent() {
   useEffect(() => {
     const broker = params.get("broker") === "upstox" ? "upstox" : "zerodha";
     const requestToken = params.get("request_token") || params.get("code");
+    const stateParam = params.get("state");
     if (!requestToken) {
       setStatus("error");
       setMessage("No authorization code received from broker.");
       return;
     }
+    if (!stateParam) {
+      setStatus("error");
+      setMessage("Broker authorization state missing. Start broker connect again from Settings.");
+      return;
+    }
 
     const connect = broker === "zerodha" && params.get("request_token")
-      ? connectZerodha(requestToken)
-      : connectBrokerCallback(broker, requestToken);
+      ? connectZerodha(requestToken, stateParam)
+      : connectBrokerCallback(broker, requestToken, stateParam);
 
     connect
       .then((result) => {

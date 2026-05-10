@@ -11,7 +11,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import broker as broker_router  # noqa: E402
-from app.brokers.adapter import BrokerOrderId, Order, OrderResult  # noqa: E402
+from app.brokers.adapter import BrokerCredentials, BrokerOrderId, BrokerProfile, Order, OrderResult  # noqa: E402
 
 
 class _Query:
@@ -307,3 +307,70 @@ def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
     assert result["checks"]["holdings"]["count"] == 1
     assert result["checks"]["orderbook"]["count"] == 1
     assert result["checks"]["tradebook"]["count"] == 1
+
+
+def test_broker_json_callback_rejects_invalid_oauth_state_before_exchange(monkeypatch):
+    class _Adapter:
+        async def exchange_code(self, _code):
+            raise AssertionError("exchange_code must not run for invalid state")
+
+    monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            broker_router.broker_oauth_callback(
+                "upstox",
+                broker_router.BrokerCallbackRequest(code_or_token="oauth-code", state="bad-state"),
+                user_id="user-1",
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert "state expired or invalid" in str(exc.value.detail)
+
+
+def test_broker_json_callback_accepts_signed_oauth_state(monkeypatch):
+    client = _FakeSupabase()
+    saved: dict[tuple[str, str], str] = {}
+
+    class _Adapter:
+        async def exchange_code(self, code):
+            assert code == "oauth-code"
+            return BrokerCredentials(
+                broker_id="upstox",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                expires_at=datetime(2026, 5, 5, 22, 0, tzinfo=timezone.utc),
+            )
+
+        async def get_profile(self, _creds):
+            return BrokerProfile(
+                broker_id="upstox",
+                user_id="broker-user-1",
+                display_name="Broker User",
+                email="broker@example.test",
+            )
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+    monkeypatch.setattr(
+        broker_router,
+        "upsert_broker_credential",
+        lambda user_id, broker, key_name, value: saved.__setitem__((broker, key_name), value),
+    )
+    state = broker_router.create_broker_oauth_state("user-1", "upstox")
+
+    result = asyncio.run(
+        broker_router.broker_oauth_callback(
+            "upstox",
+            broker_router.BrokerCallbackRequest(code_or_token="oauth-code", state=state),
+            user_id="user-1",
+        )
+    )
+
+    assert result["status"] == "connected"
+    assert result["broker"] == "upstox"
+    assert saved[("upstox", "access_token")] == "access-token"
+    assert saved[("upstox", "refresh_token")] == "refresh-token"

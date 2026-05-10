@@ -32,6 +32,11 @@ from app.brokers.adapter import (
 )
 from app.brokers.credentials import CredentialNotFoundError, get_broker_credential, upsert_broker_credential
 from app.brokers.factory import get_adapter
+from app.brokers.oauth_state import (
+    BrokerOAuthStateError,
+    create_broker_oauth_state,
+    verify_broker_oauth_state,
+)
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
@@ -67,6 +72,7 @@ class PlaceOrderRequest(BaseModel):
 
 class BrokerCallbackRequest(BaseModel):
     code_or_token: str
+    state: str
 
 
 class ClosePositionRequest(BaseModel):
@@ -221,6 +227,16 @@ def _require_broker_plan(user_id: str) -> tuple[str, str | None]:
             },
         )
     return plan, expires_at
+
+
+def _require_valid_broker_state(state_value: str | None, *, user_id: str, broker: str) -> None:
+    try:
+        verify_broker_oauth_state(state_value, user_id=user_id, broker=broker)
+    except BrokerOAuthStateError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Broker authorization state expired or invalid. Start broker connect again.",
+        ) from exc
 
 
 def _upsert_broker_connection(
@@ -847,7 +863,8 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     if not api_key:
         raise HTTPException(status_code=400, detail="Broker API key not configured")
 
-    login_url = f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3"
+    state_value = create_broker_oauth_state(user_id, "zerodha")
+    login_url = kite_api.get_auth_url(state_value, api_key=str(api_key))
     return {"login_url": login_url}
 
 
@@ -1129,6 +1146,7 @@ async def import_broker_trades(
 @router.get("/broker/zerodha/callback")
 async def zerodha_callback(
     request_token: str = Query(...),
+    state: str = Query(...),
     user_id: str = Depends(get_current_user_id),
 ):
     """
@@ -1136,6 +1154,7 @@ async def zerodha_callback(
     Called after user authorises the Kite login.
     """
     _require_broker_plan(user_id)
+    _require_valid_broker_state(state, user_id=user_id, broker="zerodha")
     sb = get_admin_client()
     creds = _get_user_broker_credentials(user_id, "zerodha")
     if not creds.get("api_key"):
@@ -1200,6 +1219,7 @@ async def broker_oauth_callback(
     Stores tokens through the encrypted broker credential path.
     """
     _require_broker_plan(user_id)
+    _require_valid_broker_state(body.state, user_id=user_id, broker=broker_name)
     sb = get_admin_client()
     adapter = get_adapter(broker_name)
     try:

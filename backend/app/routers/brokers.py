@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 import os
-import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -28,6 +27,11 @@ from app.brokers.credentials import (
     upsert_broker_credential,
 )
 from app.brokers.factory import get_adapter
+from app.brokers.oauth_state import (
+    BrokerOAuthStateError,
+    create_broker_oauth_state,
+    verify_broker_oauth_state,
+)
 from app.middleware.auth import get_current_user_id
 from app.services.supabase import get_admin_client
 
@@ -167,7 +171,7 @@ async def connect_start(
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)
     adapter = get_adapter(broker_id)
-    state = secrets.token_urlsafe(16)
+    state = create_broker_oauth_state(user_id, broker_id)
     try:
         auth_url = adapter.get_auth_url(state)
     except KeyError as exc:
@@ -190,6 +194,13 @@ async def connect_callback(
     """Exchange the OAuth request_token, store encrypted credentials, redirect to UI."""
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)
+    try:
+        verify_broker_oauth_state(state, user_id=user_id, broker=broker_id)
+    except BrokerOAuthStateError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Broker authorization state expired or invalid. Start broker connect again.",
+        ) from exc
     adapter = get_adapter(broker_id)
     auth_code = request_token or code
     if not auth_code:

@@ -2010,9 +2010,10 @@ export async function getZerodhaLoginUrl(): Promise<string> {
   return data.login_url;
 }
 
-export async function connectZerodha(requestToken: string): Promise<{ status: string; message: string }> {
+export async function connectZerodha(requestToken: string, state: string): Promise<{ status: string; message: string }> {
   const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/broker/zerodha/callback?request_token=${encodeURIComponent(requestToken)}`, { headers });
+  const qs = new URLSearchParams({ request_token: requestToken, state });
+  const res = await fetch(`${API}/api/v1/broker/zerodha/callback?${qs.toString()}`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail?.message ?? err.detail ?? "Zerodha connection failed");
@@ -2022,13 +2023,14 @@ export async function connectZerodha(requestToken: string): Promise<{ status: st
 
 export async function connectBrokerCallback(
   broker: "zerodha" | "upstox",
-  codeOrToken: string
+  codeOrToken: string,
+  state: string
 ): Promise<{ status: string; broker: string; broker_user_name?: string; token_expires_at?: string }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/broker/${broker}/callback`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ code_or_token: codeOrToken }),
+    body: JSON.stringify({ code_or_token: codeOrToken, state }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
