@@ -128,15 +128,19 @@ If yes, rewrite before merge. AlphaVyuh informs, organizes, executes, and analyz
 - No animations except micro-interactions (hover transitions < 200ms)
 - No Title Case. Always sentence case. "Start free" not "Start Free"
 
-## Product pricing (founder beta)
+## Pricing (live on landing page)
 
-| Plan | Price/mo | Key limits |
-|------|----------|-----------|
-| Free | ₹0 | 50 scanner results, 5 saved screens, 1 watchlist × 20 stocks, 3mo journal history |
-| Pro | ₹1,999 | 500 results, unlimited screens, 10 watchlists × 200 stocks, unlimited journal, broker beta access, journal review |
-| Elite | ₹4,999 | Everything in Pro + US markets, deeper journal analytics, backtest scanners, priority support |
+| Plan | Monthly | Annual (30% off) | Broker | Scanner results | Watchlists |
+|------|---------|------------------|--------|-----------------|------------|
+| Free | ₹0 | — | Not included | 50 per scan | 1 × 20 stocks |
+| Pro | ₹1,999 | ₹16,800 | Zerodha + Upstox | 500 per scan | 10 × 200 stocks |
+| Elite | ₹4,999 | ₹41,990 | Zerodha + Upstox, advanced features later | 500 per scan | 10 × 200 stocks |
 
-Annual = 30% off monthly.
+Plan gating enforced server-side in:
+- `backend/app/routers/scanner.py` — limits results based on plan.
+- `backend/app/routers/watchlists.py` — limits watchlist count and size.
+- `backend/app/routers/broker.py` and `backend/app/routers/brokers.py` — returns 403 for free users on broker connect/import/live-order routes.
+- `backend/app/routers/journal.py` — limits free history retention.
 
 ## Current product state (as of Apr 2026)
 

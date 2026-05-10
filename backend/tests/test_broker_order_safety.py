@@ -11,7 +11,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import broker as broker_router  # noqa: E402
-from app.brokers.adapter import BrokerOrderId, Order, OrderResult  # noqa: E402
+from app.brokers.adapter import BrokerCredentials, BrokerOrderId, BrokerProfile, Order, OrderResult  # noqa: E402
 
 
 class _Query:
@@ -54,6 +54,8 @@ class _Query:
         return self
 
     def execute(self):
+        if self.table_name == "users":
+            return type("Result", (), {"data": {"plan": "pro", "plan_expires_at": None}})()
         if self.table_name == "stock_universe":
             return type("Result", (), {"data": {"symbol": "RELIANCE", "company_name": "Reliance Industries", "isin": "INE002A01018"}})()
         if self.table_name == "trade_journal" and self.insert_payload is not None:
@@ -154,6 +156,21 @@ def test_private_beta_blocks_live_confirmation_before_broker_call(monkeypatch):
     assert client.journal_inserts == []
 
 
+def test_free_plan_blocks_live_broker_order_when_execution_enabled(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_plan", lambda _user_id: ("free", None))
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail["error"] == "plan_required"
+    assert client.journal_inserts == []
+
+
 def test_live_order_requires_explicit_confirmation(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
@@ -173,7 +190,17 @@ def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypa
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
     monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
-    monkeypatch.setattr(broker_router, "_place_zerodha_order", lambda *_args, **_kwargs: None)
+
+    class _FailingZerodhaAdapter:
+        async def place_order(self, *_args, **_kwargs):
+            raise broker_router.BrokerError(
+                kind="NETWORK",
+                broker_id="zerodha",
+                message="network",
+                retryable=True,
+            )
+
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _FailingZerodhaAdapter())
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
@@ -264,6 +291,7 @@ def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
 
 
 def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
+    monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
     monkeypatch.setattr(broker_router.kite_api, "get_profile", lambda *_args, **_kwargs: {"user_id": "kite-user"})
     monkeypatch.setattr(broker_router.kite_api, "get_positions", lambda *_args, **_kwargs: {"net": [{"tradingsymbol": "RELIANCE"}]})
@@ -279,3 +307,70 @@ def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
     assert result["checks"]["holdings"]["count"] == 1
     assert result["checks"]["orderbook"]["count"] == 1
     assert result["checks"]["tradebook"]["count"] == 1
+
+
+def test_broker_json_callback_rejects_invalid_oauth_state_before_exchange(monkeypatch):
+    class _Adapter:
+        async def exchange_code(self, _code):
+            raise AssertionError("exchange_code must not run for invalid state")
+
+    monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            broker_router.broker_oauth_callback(
+                "upstox",
+                broker_router.BrokerCallbackRequest(code_or_token="oauth-code", state="bad-state"),
+                user_id="user-1",
+            )
+        )
+
+    assert exc.value.status_code == 400
+    assert "state expired or invalid" in str(exc.value.detail)
+
+
+def test_broker_json_callback_accepts_signed_oauth_state(monkeypatch):
+    client = _FakeSupabase()
+    saved: dict[tuple[str, str], str] = {}
+
+    class _Adapter:
+        async def exchange_code(self, code):
+            assert code == "oauth-code"
+            return BrokerCredentials(
+                broker_id="upstox",
+                access_token="access-token",
+                refresh_token="refresh-token",
+                expires_at=datetime(2026, 5, 5, 22, 0, tzinfo=timezone.utc),
+            )
+
+        async def get_profile(self, _creds):
+            return BrokerProfile(
+                broker_id="upstox",
+                user_id="broker-user-1",
+                display_name="Broker User",
+                email="broker@example.test",
+            )
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+    monkeypatch.setattr(
+        broker_router,
+        "upsert_broker_credential",
+        lambda user_id, broker, key_name, value: saved.__setitem__((broker, key_name), value),
+    )
+    state = broker_router.create_broker_oauth_state("user-1", "upstox")
+
+    result = asyncio.run(
+        broker_router.broker_oauth_callback(
+            "upstox",
+            broker_router.BrokerCallbackRequest(code_or_token="oauth-code", state=state),
+            user_id="user-1",
+        )
+    )
+
+    assert result["status"] == "connected"
+    assert result["broker"] == "upstox"
+    assert saved[("upstox", "access_token")] == "access-token"
+    assert saved[("upstox", "refresh_token")] == "refresh-token"

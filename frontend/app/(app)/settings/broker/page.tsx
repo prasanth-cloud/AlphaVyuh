@@ -7,7 +7,7 @@ import { CheckCircle2, Clock3, KeyRound, LockKeyhole, PlugZap, ShieldCheck } fro
 import {
   getBrokerStatus,
   getZerodhaLoginUrl,
-  importZerodhaTrades,
+  importBrokerTrades,
   runZerodhaReadOnlySmoke,
   startBrokerConnect,
 } from "@/lib/api";
@@ -30,7 +30,7 @@ const BROKERS: BrokerCard[] = [
     status: "active",
     auth: "Kite Connect request-token flow",
     sessionPolicy: "Daily broker session expires around 06:00 IST",
-    scope: "Profile, holdings, positions, orderbook, tradebook, and filled-trade import only",
+    scope: "Profile, holdings, positions, orderbook, tradebook, gated order routing, and filled-trade import",
   },
   {
     id: "upstox",
@@ -38,7 +38,7 @@ const BROKERS: BrokerCard[] = [
     status: "next",
     auth: "OAuth 2.0 authorization-code flow",
     sessionPolicy: "Standard session expires at 03:30 AM next day; extended read mode needs approval",
-    scope: "Holdings, positions, and order book reads before import support is promoted",
+    scope: "OAuth, profile, holdings, gated order routing, and filled-trade import where broker data is available",
   },
   {
     id: "dhan",
@@ -84,7 +84,7 @@ function BrokerSettingsContent() {
   useEffect(() => {
     if (searchParams.get("connected")) {
       loadStatus();
-      setToast("Zerodha connected for read-only smoke and trade import. Live and sandbox order placement stay disabled for private beta.");
+      setToast("Broker connected. Account reads and filled-trade import are available. Live orders require Pro/Elite, backend enablement, and explicit confirmation.");
     }
   }, [searchParams]);
 
@@ -96,6 +96,10 @@ function BrokerSettingsContent() {
   }, [state]);
 
   async function handleConnect() {
+    if (!state?.plan_allows_broker) {
+      setError("Broker integration requires Pro or Elite. Upgrade in Billing to connect Zerodha or Upstox.");
+      return;
+    }
     setBusy("connect");
     setError("");
     try {
@@ -108,6 +112,10 @@ function BrokerSettingsContent() {
   }
 
   async function handleAdapterConnect(broker: "upstox") {
+    if (!state?.plan_allows_broker) {
+      setError("Broker integration requires Pro or Elite. Upgrade in Billing to connect Zerodha or Upstox.");
+      return;
+    }
     setBusy(`connect-${broker}`);
     setError("");
     try {
@@ -123,7 +131,8 @@ function BrokerSettingsContent() {
     setBusy("import");
     setError("");
     try {
-      const result = await importZerodhaTrades();
+      const broker = state?.broker === "upstox" ? "upstox" : "zerodha";
+      const result = await importBrokerTrades(broker);
       setToast(result.message);
       await loadStatus();
     } catch (e: unknown) {
@@ -162,6 +171,7 @@ function BrokerSettingsContent() {
     { label: "Expiry", value: state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
   ];
   const lastSyncedLabel = state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
+  const activeBrokerLabel = state?.broker === "upstox" ? "Upstox" : "Zerodha";
 
   if (loading) {
     return (
@@ -181,17 +191,30 @@ function BrokerSettingsContent() {
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <EyebrowLabel>Broker import only</EyebrowLabel>
+          <EyebrowLabel>Broker integration</EyebrowLabel>
           <div className="app-page-title" style={{ marginTop: 4 }}>Broker connect hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time for read-only account checks and filled-trade import. Tokens stay encrypted on the backend. Live and sandbox order placement are disabled for the private beta.
+            Connect one broker at a time for account checks, filled-trade import, and gated order routing. Tokens stay encrypted on the backend. Live orders require Pro/Elite, backend enablement, and explicit confirmation.
           </div>
         </div>
+
+        {!state?.plan_allows_broker && (
+          <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}>
+            <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--warn)", marginBottom: 7 }}>Upgrade required</div>
+            <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>Broker integration is available on Pro and Elite.</div>
+            <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+              Free accounts can use scanner, watchlist, chart planning, and journaling. Broker OAuth, trade import, and gated order routing unlock after upgrade.
+            </div>
+            <Link href="/settings/billing" className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold inline-flex" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
+              View Pro plan
+            </Link>
+          </div>
+        )}
 
         <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(244,247,251,0.16)" }}>
           <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Broker adapter path</div>
           <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>
-            Zerodha OAuth is active for read-only smoke, holdings, orderbook, and filled-trade import. Simulated journal capture remains available. Upstox uses the same OAuth adapter contract for connect, profile, and holdings before import support is promoted.
+            Zerodha OAuth is active for profile, holdings, orderbook, filled-trade import, and gated order routing. Upstox uses the same OAuth adapter contract for connect, profile, holdings, order routing, and import where broker data is available.
           </div>
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
             This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every imported or simulated trade can still create a journal draft before review after close.
@@ -211,7 +234,7 @@ function BrokerSettingsContent() {
                     style={{ color: "var(--text-primary)" }}
                   >
                     {mode === "read-only"
-                      ? "Zerodha connected read-only"
+                      ? `${activeBrokerLabel} connected`
                       : mode === "token-expired"
                         ? "Token expired"
                         : mode === "credentials-missing"
@@ -221,7 +244,7 @@ function BrokerSettingsContent() {
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {mode === "read-only"
-                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Live and sandbox order placement are disabled for the beta."
+                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Live order routing stays gated by plan, backend enablement, and explicit confirmation."
                     : mode === "token-expired"
                       ? "Your API key is saved, but Kite needs a fresh daily access token."
                       : mode === "credentials-missing"
@@ -230,7 +253,7 @@ function BrokerSettingsContent() {
                 </div>
               </div>
               <Num style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
-                {state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : lastSyncedLabel}
+                {state?.plan_allows_broker ? (state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : lastSyncedLabel) : "Upgrade required"}
               </Num>
             </div>
 
@@ -260,7 +283,7 @@ function BrokerSettingsContent() {
               <button
                 data-testid="connect-btn"
                 onClick={handleConnect}
-                disabled={busy === "connect" || !state?.has_api_key}
+                disabled={busy === "connect" || !state?.has_api_key || !state?.plan_allows_broker}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
               >
@@ -268,11 +291,11 @@ function BrokerSettingsContent() {
               </button>
               <button
                 onClick={handleImport}
-                disabled={busy === "import" || !state?.can_import}
+                disabled={busy === "import" || !state?.can_import || !state?.plan_allows_broker}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
               >
-                {busy === "import" ? "Importing..." : "Import today's filled trades"}
+                {busy === "import" ? "Importing..." : `Import ${state?.broker === "upstox" ? "Upstox" : "Zerodha"} filled trades`}
               </button>
               <button
                 onClick={handleSmoke}
@@ -298,7 +321,7 @@ function BrokerSettingsContent() {
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
                 "Expired sessions fall back to simulated mode instead of blocking chart/journal workflows.",
-                "Live and sandbox order submission are disabled for private beta; filled broker trades can be imported into Journal.",
+                "Live order submission requires Pro/Elite, backend enablement, and explicit user confirmation; filled broker trades can be imported into Journal.",
                 "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
                 "Every imported or simulated trade should still create a journal entry with source context.",
               ].map((line) => (
@@ -328,11 +351,11 @@ function BrokerSettingsContent() {
                   <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Scope:</b> {broker.scope}</div>
                 </div>
                 {active ? (
-                  <button onClick={handleConnect} disabled={busy === "connect" || !state?.has_api_key} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
+                  <button onClick={handleConnect} disabled={busy === "connect" || !state?.has_api_key || !state?.plan_allows_broker} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
                     {state?.connected ? "Reconnect" : "Connect"}
                   </button>
                 ) : upstoxConnectable ? (
-                  <button onClick={() => handleAdapterConnect("upstox")} disabled={busy === "connect-upstox"} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
+                  <button onClick={() => handleAdapterConnect("upstox")} disabled={busy === "connect-upstox" || !state?.plan_allows_broker} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
                     {busy === "connect-upstox" ? "Opening Upstox..." : "Connect OAuth beta"}
                   </button>
                 ) : (

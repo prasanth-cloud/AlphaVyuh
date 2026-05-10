@@ -38,18 +38,21 @@ def test_broker_router_accepts_upstox_oauth_code(monkeypatch):
     adapter = _FakeAdapter()
 
     monkeypatch.setattr(brokers_router, "get_adapter", lambda broker_id: adapter)
+    monkeypatch.setattr(brokers_router, "_require_broker_plan", lambda _user_id: None)
     monkeypatch.setattr(
         brokers_router,
         "upsert_broker_credential",
         lambda user_id, broker, key_name, value: saved.__setitem__((broker, key_name), value),
     )
 
+    state = brokers_router.create_broker_oauth_state("user-1", "upstox")
+
     response = asyncio.run(
         brokers_router.connect_callback(
             "upstox",
             request_token=None,
             code="oauth-code",
-            state="state",
+            state=state,
             user_id="user-1",
         )
     )
@@ -61,15 +64,55 @@ def test_broker_router_accepts_upstox_oauth_code(monkeypatch):
     assert response.headers["location"].endswith("/settings/broker?connected=upstox")
 
 
+def test_broker_router_rejects_invalid_oauth_state(monkeypatch):
+    saved: dict[tuple[str, str], str] = {}
+    adapter = _FakeAdapter()
+
+    monkeypatch.setattr(brokers_router, "get_adapter", lambda broker_id: adapter)
+    monkeypatch.setattr(brokers_router, "_require_broker_plan", lambda _user_id: None)
+    monkeypatch.setattr(
+        brokers_router,
+        "upsert_broker_credential",
+        lambda user_id, broker, key_name, value: saved.__setitem__((broker, key_name), value),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            brokers_router.connect_callback(
+                "upstox",
+                request_token=None,
+                code="oauth-code",
+                state="bad-state",
+                user_id="user-1",
+            )
+        )
+
+    assert exc_info.value.status_code == 400
+    assert "state expired or invalid" in str(exc_info.value.detail)
+    assert adapter.code is None
+    assert saved == {}
+
+
 def test_broker_connect_start_reports_missing_configuration(monkeypatch):
     class _MisconfiguredAdapter:
         def get_auth_url(self, _state):
             raise KeyError("UPSTOX_API_KEY")
 
     monkeypatch.setattr(brokers_router, "get_adapter", lambda broker_id: _MisconfiguredAdapter())
+    monkeypatch.setattr(brokers_router, "_require_broker_plan", lambda _user_id: None)
 
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(brokers_router.connect_start("upstox", user_id="user-1"))
 
     assert exc_info.value.status_code == 503
     assert "missing UPSTOX_API_KEY" in str(exc_info.value.detail)
+
+
+def test_broker_connect_start_requires_paid_plan(monkeypatch):
+    monkeypatch.setattr(brokers_router, "_get_user_plan", lambda _user_id: ("free", None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(brokers_router.connect_start("upstox", user_id="user-1"))
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail["error"] == "plan_required"

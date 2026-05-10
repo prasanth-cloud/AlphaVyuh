@@ -12,6 +12,7 @@ Workflow:
 from __future__ import annotations
 
 import logging
+import os
 from datetime import date, datetime, timezone
 from typing import Literal, Optional
 
@@ -27,8 +28,15 @@ from app.brokers.adapter import (
     OrderExtensions,
     OrderRequest as BrokerOrderRequest,
     UpstoxExtensions,
+    ZerodhaExtensions,
 )
 from app.brokers.credentials import CredentialNotFoundError, get_broker_credential, upsert_broker_credential
+from app.brokers.factory import get_adapter
+from app.brokers.oauth_state import (
+    BrokerOAuthStateError,
+    create_broker_oauth_state,
+    verify_broker_oauth_state,
+)
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
@@ -60,6 +68,11 @@ class PlaceOrderRequest(BaseModel):
     source_context: Optional[str]   = None
     live_confirmed: bool = False
     idempotency_key: Optional[str] = None
+
+
+class BrokerCallbackRequest(BaseModel):
+    code_or_token: str
+    state: str
 
 
 class ClosePositionRequest(BaseModel):
@@ -153,6 +166,160 @@ def _zerodha_token_expiry() -> str:
     return expiry.isoformat()
 
 
+def _broker_env_prefix(broker: str) -> str:
+    return "KITE" if broker == "zerodha" else broker.upper()
+
+
+def _broker_env_value(broker: str, key_name: str) -> str | None:
+    prefix = _broker_env_prefix(broker)
+    candidates = {
+        "api_key": [f"{prefix}_API_KEY", "ZERODHA_API_KEY" if broker == "zerodha" else ""],
+        "api_secret": [f"{prefix}_API_SECRET", "ZERODHA_API_SECRET" if broker == "zerodha" else ""],
+    }.get(key_name, [])
+    for name in candidates:
+        if not name:
+            continue
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return None
+
+
+def _get_user_plan(user_id: str) -> tuple[str, str | None]:
+    try:
+        row = (
+            get_admin_client()
+            .table("users")
+            .select("plan, plan_expires_at")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+        ).data or {}
+    except Exception:
+        logger.exception("Failed to read plan for user %s", user_id)
+        return "free", None
+    return str(row.get("plan") or "free"), row.get("plan_expires_at")
+
+
+def _plan_allows_broker(plan: str, expires_at: str | None = None) -> bool:
+    if plan not in {"pro", "elite"}:
+        return False
+    if not expires_at:
+        return True
+    try:
+        expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return expiry > datetime.now(timezone.utc)
+    except Exception:
+        return False
+
+
+def _require_broker_plan(user_id: str) -> tuple[str, str | None]:
+    plan, expires_at = _get_user_plan(user_id)
+    if not _plan_allows_broker(plan, expires_at):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "plan_required",
+                "message": "Broker integration requires Pro or Elite.",
+                "upgrade_url": "/settings/billing",
+            },
+        )
+    return plan, expires_at
+
+
+def _require_valid_broker_state(state_value: str | None, *, user_id: str, broker: str) -> None:
+    try:
+        verify_broker_oauth_state(state_value, user_id=user_id, broker=broker)
+    except BrokerOAuthStateError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Broker authorization state expired or invalid. Start broker connect again.",
+        ) from exc
+
+
+def _upsert_broker_connection(
+    sb,
+    *,
+    user_id: str,
+    broker: str,
+    broker_user_id: str | None = None,
+    broker_user_name: str | None = None,
+    token_expires_at: str | None = None,
+    last_synced_at: str | None = None,
+    connection_status: str = "connected_read_only",
+    scopes: list[str] | None = None,
+    metadata: dict | None = None,
+) -> None:
+    try:
+        payload = {
+            "user_id": user_id,
+            "broker": broker,
+            "broker_user_id": broker_user_id,
+            "broker_user_name": broker_user_name,
+            "token_expires_at": token_expires_at,
+            "is_active": True,
+            "connection_status": connection_status,
+            "scopes": scopes or ["profile", "holdings", "positions", "orders", "trades"],
+            "metadata": metadata or {},
+        }
+        if last_synced_at:
+            payload["last_synced_at"] = last_synced_at
+        sb.table("broker_connections").upsert(payload, on_conflict="user_id,broker").execute()
+    except Exception:
+        logger.debug("Broker connection metadata unavailable; migration may not be applied yet.", exc_info=True)
+
+
+def _mark_broker_disconnected(sb, user_id: str, broker: str) -> None:
+    try:
+        sb.table("broker_connections").update(
+            {"is_active": False, "connection_status": "disconnected"}
+        ).eq("user_id", user_id).eq("broker", broker).execute()
+    except Exception:
+        logger.debug("Broker connection metadata unavailable during disconnect.", exc_info=True)
+
+
+def _record_broker_order(
+    sb,
+    *,
+    user_id: str,
+    broker: str,
+    broker_order_id: str | None,
+    journal_id: str | None,
+    symbol: str,
+    side: str,
+    quantity: int,
+    order_type: str,
+    price: float | None,
+    trigger_price: float | None,
+    status_value: str,
+    idempotency_key: str | None,
+    raw_response: dict,
+) -> None:
+    try:
+        sb.table("broker_orders").insert(
+            {
+                "user_id": user_id,
+                "broker": broker,
+                "broker_order_id": broker_order_id,
+                "journal_id": journal_id,
+                "symbol": symbol,
+                "exchange": "NSE",
+                "side": "BUY" if side == "buy" else "SELL",
+                "quantity": quantity,
+                "order_type": "MARKET" if order_type == "market" else "LIMIT",
+                "price": price,
+                "trigger_price": trigger_price,
+                "status": status_value,
+                "idempotency_key": idempotency_key,
+                "raw_response": raw_response,
+            }
+        ).execute()
+    except Exception:
+        logger.debug("Broker order log unavailable; migration may not be applied yet.", exc_info=True)
+
+
 def _get_stored_credential(user_id: str, broker: str, key_name: str) -> str | None:
     try:
         return get_broker_credential(user_id, broker, key_name)
@@ -177,8 +344,8 @@ def _get_user_broker_credentials(user_id: str, broker: str) -> dict[str, str | N
         return {"broker_type": row.get("broker_type")}
     return {
         "broker_type": row.get("broker_type"),
-        "api_key": _get_stored_credential(user_id, broker, "api_key") or row.get("broker_api_key"),
-        "api_secret": _get_stored_credential(user_id, broker, "api_secret") or row.get("broker_api_secret"),
+        "api_key": _get_stored_credential(user_id, broker, "api_key") or row.get("broker_api_key") or _broker_env_value(broker, "api_key"),
+        "api_secret": _get_stored_credential(user_id, broker, "api_secret") or row.get("broker_api_secret") or _broker_env_value(broker, "api_secret"),
         "access_token": _get_stored_credential(user_id, broker, "access_token") or row.get("broker_access_token"),
         "expires_at": _get_stored_credential(user_id, broker, "expires_at") or row.get("broker_token_expires_at"),
         "connected_at": row.get("broker_connected_at"),
@@ -228,11 +395,17 @@ def _status_payload(
     connected_at: str | None,
     expires_at: str | None,
     last_synced_at: str | None,
+    plan: str = "free",
+    plan_allows_broker: bool = False,
+    broker_user_name: str | None = None,
 ) -> dict:
-    connected = bool(broker and key and token and not token_expired)
+    connected = bool(plan_allows_broker and broker and key and token and not token_expired)
     if connected:
         status_code = "connected_read_only"
         status_label = f"{broker.capitalize()} connected read-only"
+    elif not plan_allows_broker:
+        status_code = "plan_required"
+        status_label = "Upgrade to Pro or Elite to connect a broker"
     elif token_expired:
         status_code = "token_expired"
         status_label = "Broker token expired"
@@ -249,16 +422,20 @@ def _status_payload(
         "mode": broker if connected else "simulated",
         "status": status_code,
         "status_label": status_label,
+        "plan": plan,
+        "plan_allows_broker": plan_allows_broker,
         "has_api_key": bool(key),
         "has_token": bool(token),
         "token_expired": token_expired,
         "connected_at": connected_at,
         "token_expires_at": expires_at,
+        "broker_user_name": broker_user_name,
         "read_only": connected,
-        "can_import": connected and broker == "zerodha",
+        "can_import": connected and broker in {"zerodha", "upstox"},
         "sync_status": "idle",
         "last_synced_at": last_synced_at,
         "live_order_requires_confirmation": True,
+        "live_order_enabled": bool(settings.broker_live_orders_enabled and plan_allows_broker),
     }
 
 
@@ -275,11 +452,22 @@ async def place_order(
     """
     sb = get_admin_client()
     sym = body.symbol.strip().upper()
+    plan, plan_expires_at = _get_user_plan(user_id)
+    plan_allows_broker = _plan_allows_broker(plan, plan_expires_at)
 
     if body.live_confirmed and not settings.broker_live_orders_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Broker live/sandbox order placement is disabled for the private beta. Use simulated journal capture or broker trade import.",
+        )
+    if body.live_confirmed and not plan_allows_broker:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "plan_required",
+                "message": "Live broker order placement requires Pro or Elite.",
+                "upgrade_url": "/settings/billing",
+            },
         )
 
     # Validate symbol
@@ -309,9 +497,38 @@ async def place_order(
                 detail=f"Live {bt} order requires explicit confirmation. Re-submit after confirming symbol, side, quantity, price, and risk.",
             )
         if bt == "zerodha" and live_ready:
-            broker_order_id = _place_zerodha_order(
-                str(creds["api_key"]), str(creds["access_token"]), sym, body.side, body.quantity, body.price, body.order_type
-            )
+            import uuid
+
+            try:
+                adapter_result = await get_adapter("zerodha").place_order(
+                    user_id,
+                    BrokerCredentials(
+                        broker_id="zerodha",
+                        access_token=str(creds["access_token"]),
+                        expires_at=datetime.fromisoformat(str(creds["expires_at"]).replace("Z", "+00:00")),
+                    ),
+                    BrokerOrderRequest(
+                        idempotency_key=IdempotencyKey(body.idempotency_key or str(uuid.uuid4())),
+                        symbol=sym,
+                        exchange="NSE",
+                        side="BUY" if body.side == "buy" else "SELL",
+                        quantity=body.quantity,
+                        order_type="MARKET" if body.order_type == "market" else "LIMIT",
+                        limit_price=body.price if body.order_type == "limit" else None,
+                        product="CNC",
+                        validity="DAY",
+                        extensions=OrderExtensions(zerodha=ZerodhaExtensions(variety="regular")),
+                    ),
+                )
+            except BrokerError as exc:
+                logger.error("Zerodha adapter order failed for user %s: %s", user_id, exc)
+                if exc.kind == "INVALID_REQUEST":
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
+                ) from exc
+            broker_order_id = str(adapter_result.order.broker_order_id)
             if broker_order_id:
                 broker_used = "zerodha"
         elif bt == "upstox" and live_ready:
@@ -333,13 +550,13 @@ async def place_order(
                         quantity=body.quantity,
                         order_type="MARKET" if body.order_type == "market" else "LIMIT",
                         limit_price=body.price if body.order_type == "limit" else None,
-                    product="CNC",
-                    validity="DAY",
-                    extensions=OrderExtensions(
-                        upstox=UpstoxExtensions(instrument_token=f"NSE_EQ|{isin}") if isin else None
+                        product="CNC",
+                        validity="DAY",
+                        extensions=OrderExtensions(
+                            upstox=UpstoxExtensions(instrument_token=f"NSE_EQ|{isin}") if isin else None
+                        ),
                     ),
-                ),
-            )
+                )
             except BrokerError as exc:
                 logger.error("Upstox adapter order failed for user %s: %s", user_id, exc)
                 if exc.kind == "INVALID_REQUEST":
@@ -418,6 +635,27 @@ async def place_order(
         raise HTTPException(status_code=500, detail="Failed to create journal entry")
 
     journal_entry = result.data[0]
+    _record_broker_order(
+        sb,
+        user_id=user_id,
+        broker=broker_used,
+        broker_order_id=broker_order_id,
+        journal_id=journal_entry.get("id"),
+        symbol=sym,
+        side=body.side,
+        quantity=body.quantity,
+        order_type=body.order_type,
+        price=body.price,
+        trigger_price=None,
+        status_value="PLACED" if broker_order_id else "SIMULATED",
+        idempotency_key=body.idempotency_key,
+        raw_response={
+            "broker": broker_used,
+            "broker_order_id": broker_order_id,
+            "journal_id": journal_entry.get("id"),
+            "live_confirmed": body.live_confirmed,
+        },
+    )
     sync_workflow_state(sb, user_id, sym, {
         "source": body.source_page or "chart",
         "lifecycle": "open",
@@ -541,6 +779,8 @@ async def list_open_positions(user_id: str = Depends(get_current_user_id)):
 async def broker_status(user_id: str = Depends(get_current_user_id)):
     """Returns broker connection status for the current user."""
     sb = get_admin_client()
+    plan, plan_expires_at = _get_user_plan(user_id)
+    plan_allows_broker = _plan_allows_broker(plan, plan_expires_at)
     u = sb.table("users").select(
         "broker_type, broker_api_key, broker_connected_at, broker_token_expires_at"
     ).eq("id", user_id).maybe_single().execute()
@@ -554,12 +794,34 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
             connected_at=None,
             expires_at=None,
             last_synced_at=None,
+            plan=plan,
+            plan_allows_broker=plan_allows_broker,
         )
 
     bt  = u.data.get("broker_type") or "zerodha"
     key = _get_stored_credential(user_id, bt, "api_key") or u.data.get("broker_api_key")
+    key = key or _broker_env_value(bt, "api_key")
     tok = _get_stored_credential(user_id, bt, "access_token")
     expires_at = _get_stored_credential(user_id, bt, "expires_at") or u.data.get("broker_token_expires_at")
+    broker_user_name = None
+    metadata_last_synced_at = None
+    try:
+        connection = (
+            sb.table("broker_connections")
+            .select("broker_user_name, last_synced_at, token_expires_at, is_active")
+            .eq("user_id", user_id)
+            .eq("broker", bt)
+            .maybe_single()
+            .execute()
+        ).data or {}
+        if connection.get("broker_user_name"):
+            broker_user_name = connection["broker_user_name"]
+        if connection.get("last_synced_at"):
+            metadata_last_synced_at = connection["last_synced_at"]
+        if connection.get("token_expires_at") and not expires_at:
+            expires_at = connection["token_expires_at"]
+    except Exception:
+        logger.debug("Broker connection metadata unavailable for status.", exc_info=True)
 
     token_expired = False
     if expires_at:
@@ -580,7 +842,10 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
         token_expired=token_expired,
         connected_at=u.data.get("broker_connected_at"),
         expires_at=expires_at,
-        last_synced_at=_latest_broker_import_at(sb, user_id, bt),
+        last_synced_at=metadata_last_synced_at or _latest_broker_import_at(sb, user_id, bt),
+        plan=plan,
+        plan_allows_broker=plan_allows_broker,
+        broker_user_name=broker_user_name,
     )
 
 
@@ -591,13 +856,15 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     Frontend opens this URL in a new tab; user logs in and is redirected
     to /broker/zerodha/callback with request_token.
     """
+    _require_broker_plan(user_id)
     sb = get_admin_client()
     creds = _get_user_broker_credentials(user_id, "zerodha")
     api_key = creds.get("api_key")
     if not api_key:
         raise HTTPException(status_code=400, detail="Broker API key not configured")
 
-    login_url = f"https://kite.zerodha.com/connect/login?api_key={api_key}&v=3"
+    state_value = create_broker_oauth_state(user_id, "zerodha")
+    login_url = kite_api.get_auth_url(state_value, api_key=str(api_key))
     return {"login_url": login_url}
 
 
@@ -607,6 +874,7 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
     Run read-only Kite checks and return sanitized status/counts only.
     This endpoint never places, modifies, or cancels broker orders.
     """
+    _require_broker_plan(user_id)
     creds = _get_user_broker_credentials(user_id, "zerodha")
     api_key = creds.get("api_key")
     access_token = creds.get("access_token")
@@ -681,6 +949,7 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
     Skips orders already recorded using a deterministic broker import marker.
     Requires a valid daily access token set via /broker/zerodha/callback.
     """
+    _require_broker_plan(user_id)
     sb = get_admin_client()
     creds = _get_user_broker_credentials(user_id, "zerodha")
     if not creds.get("api_key") or not creds.get("access_token"):
@@ -758,24 +1027,134 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             })
         imported += 1
 
+    synced_at = datetime.now(timezone.utc).isoformat()
+    _upsert_broker_connection(
+        sb,
+        user_id=user_id,
+        broker="zerodha",
+        token_expires_at=creds.get("expires_at"),
+        last_synced_at=synced_at,
+        connection_status="connected_read_only",
+    )
+
     return {
         "imported": imported,
         "skipped":  skipped,
         "total_filled_orders": len(filled),
-        "last_synced_at": datetime.now(timezone.utc).isoformat(),
+        "last_synced_at": synced_at,
         "message": f"Imported {imported} new trade(s) from Zerodha.",
+    }
+
+
+@router.post("/broker/{broker_name}/import")
+async def import_broker_trades(
+    broker_name: Literal["zerodha", "upstox"],
+    user_id: str = Depends(get_current_user_id),
+):
+    """Import filled broker orders into Journal. Zerodha keeps its legacy route for compatibility."""
+    if broker_name == "zerodha":
+        return await import_zerodha_trades(user_id=user_id)
+
+    _require_broker_plan(user_id)
+    sb = get_admin_client()
+    creds_raw = _get_user_broker_credentials(user_id, broker_name)
+    if not creds_raw.get("access_token"):
+        raise HTTPException(status_code=400, detail=f"{broker_name.capitalize()} not connected. Complete OAuth first.")
+    if _token_is_expired(creds_raw.get("expires_at")):
+        raise HTTPException(status_code=401, detail=f"{broker_name.capitalize()} token expired. Reconnect before importing trades.")
+
+    try:
+        adapter = get_adapter(broker_name)
+        expires_raw = creds_raw.get("expires_at") or datetime.now(timezone.utc).isoformat()
+        creds = BrokerCredentials(
+            broker_id=broker_name,
+            access_token=str(creds_raw["access_token"]),
+            expires_at=datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00")),
+        )
+        orders = await adapter.list_orders(creds)
+    except BrokerError as exc:
+        raise HTTPException(status_code=400, detail=f"{broker_name.capitalize()} import failed: {exc}") from exc
+    except Exception:
+        logger.exception("%s import failed for user %s", broker_name, user_id)
+        raise HTTPException(status_code=400, detail=f"Could not connect to {broker_name.capitalize()}.")
+
+    filled = [o for o in orders if o.status == "COMPLETE" and o.filled_quantity > 0]
+    imported = 0
+    skipped = 0
+    for order in filled:
+        marker = _broker_import_marker(broker_name, str(order.broker_order_id))
+        existing = (
+            sb.table("trade_journal")
+            .select("id")
+            .eq("user_id", user_id)
+            .ilike("entry_reason", f"%{marker}%")
+            .execute()
+        )
+        if existing.data:
+            skipped += 1
+            continue
+
+        stock = sb.table("stock_universe").select("company_name") \
+            .eq("symbol", order.symbol).maybe_single().execute()
+        company_name = stock.data["company_name"] if stock.data else order.symbol
+        entry_price = order.average_price or order.limit_price or 0
+        if not entry_price:
+            continue
+        entry = {
+            "user_id": user_id,
+            "symbol": order.symbol,
+            "company_name": company_name,
+            "trade_type": "long" if order.side == "BUY" else "short",
+            "entry_date": order.updated_at.date().isoformat(),
+            "entry_price": entry_price,
+            "quantity": order.filled_quantity,
+            "entry_reason": f"{broker_name.capitalize()} import — order #{order.broker_order_id} [{marker}] [{broker_name.capitalize()} · auto]",
+            "status": "open",
+        }
+        inserted = sb.table("trade_journal").insert(entry).execute()
+        journal_entry = (inserted.data or [{}])[0]
+        if journal_entry.get("id"):
+            sync_workflow_state(sb, user_id, order.symbol, {
+                "source": "broker-import",
+                "lifecycle": "open",
+                "entry": entry_price,
+                "position_size": order.filled_quantity,
+                "broker_order_id": str(order.broker_order_id),
+                "journal_id": journal_entry["id"],
+                "notes": f"Auto-created from {broker_name.capitalize()} filled-order import.",
+            })
+        imported += 1
+
+    synced_at = datetime.now(timezone.utc).isoformat()
+    _upsert_broker_connection(
+        sb,
+        user_id=user_id,
+        broker=broker_name,
+        token_expires_at=creds_raw.get("expires_at"),
+        last_synced_at=synced_at,
+        connection_status="connected_read_only",
+    )
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "total_filled_orders": len(filled),
+        "last_synced_at": synced_at,
+        "message": f"Imported {imported} new trade(s) from {broker_name.capitalize()}.",
     }
 
 
 @router.get("/broker/zerodha/callback")
 async def zerodha_callback(
     request_token: str = Query(...),
+    state: str = Query(...),
     user_id: str = Depends(get_current_user_id),
 ):
     """
     Exchange Zerodha request_token for a session access_token.
     Called after user authorises the Kite login.
     """
+    _require_broker_plan(user_id)
+    _require_valid_broker_state(state, user_id=user_id, broker="zerodha")
     sb = get_admin_client()
     creds = _get_user_broker_credentials(user_id, "zerodha")
     if not creds.get("api_key"):
@@ -807,6 +1186,8 @@ async def zerodha_callback(
     expiry = _zerodha_token_expiry()
     upsert_broker_credential(user_id, "zerodha", "access_token", access_token)
     upsert_broker_credential(user_id, "zerodha", "expires_at", expiry)
+    broker_user_id = str(session_data.get("user_id") or "")
+    broker_user_name = str(session_data.get("user_name") or session_data.get("user_shortname") or "")
 
     sb.table("users").update({
         "broker_type":            "zerodha",
@@ -814,8 +1195,67 @@ async def zerodha_callback(
         "broker_token_expires_at": expiry,
         "broker_connected_at":    now_iso,
     }).eq("id", user_id).execute()
+    _upsert_broker_connection(
+        sb,
+        user_id=user_id,
+        broker="zerodha",
+        broker_user_id=broker_user_id,
+        broker_user_name=broker_user_name,
+        token_expires_at=expiry,
+        connection_status="connected_read_only",
+    )
 
     return {"status": "connected", "message": "Zerodha connected successfully"}
+
+
+@router.post("/broker/{broker_name}/callback")
+async def broker_oauth_callback(
+    broker_name: Literal["zerodha", "upstox"],
+    body: BrokerCallbackRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    JSON callback endpoint for frontend-hosted OAuth returns.
+    Stores tokens through the encrypted broker credential path.
+    """
+    _require_broker_plan(user_id)
+    _require_valid_broker_state(body.state, user_id=user_id, broker=broker_name)
+    sb = get_admin_client()
+    adapter = get_adapter(broker_name)
+    try:
+        creds = await adapter.exchange_code(body.code_or_token)
+        profile = await adapter.get_profile(creds)
+    except BrokerError as exc:
+        logger.warning("Broker %s OAuth callback failed for user %s: %s", broker_name, user_id, exc)
+        raise HTTPException(status_code=400, detail="Broker connection failed. Reconnect from Settings.")
+
+    upsert_broker_credential(user_id, broker_name, "access_token", creds.access_token)
+    upsert_broker_credential(user_id, broker_name, "expires_at", creds.expires_at.isoformat())
+    if creds.refresh_token:
+        upsert_broker_credential(user_id, broker_name, "refresh_token", creds.refresh_token)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    sb.table("users").update({
+        "broker_type": broker_name,
+        "broker_access_token": None,
+        "broker_token_expires_at": creds.expires_at.isoformat(),
+        "broker_connected_at": now_iso,
+    }).eq("id", user_id).execute()
+    _upsert_broker_connection(
+        sb,
+        user_id=user_id,
+        broker=broker_name,
+        broker_user_id=profile.user_id,
+        broker_user_name=profile.display_name,
+        token_expires_at=creds.expires_at.isoformat(),
+        connection_status="connected_read_only",
+    )
+    return {
+        "status": "connected",
+        "broker": broker_name,
+        "broker_user_name": profile.display_name,
+        "token_expires_at": creds.expires_at.isoformat(),
+    }
 
 
 # ── Trade analysis helper ─────────────────────────────────────────────────────

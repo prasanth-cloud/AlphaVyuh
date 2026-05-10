@@ -2004,19 +2004,39 @@ export async function getZerodhaLoginUrl(): Promise<string> {
   const res = await fetch(`${API}/api/v1/broker/zerodha/login`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail ?? "Failed to get login URL");
+    throw new Error(err.detail?.message ?? err.detail ?? "Failed to get login URL");
   }
   const data = await res.json();
   return data.login_url;
 }
 
-export async function connectZerodha(requestToken: string): Promise<{ status: string; message: string }> {
+export async function connectZerodha(requestToken: string, state: string): Promise<{ status: string; message: string }> {
   const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/broker/zerodha/callback?request_token=${encodeURIComponent(requestToken)}`, { headers });
+  const qs = new URLSearchParams({ request_token: requestToken, state });
+  const res = await fetch(`${API}/api/v1/broker/zerodha/callback?${qs.toString()}`, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail ?? "Zerodha connection failed");
+    throw new Error(err.detail?.message ?? err.detail ?? "Zerodha connection failed");
   }
+  return res.json();
+}
+
+export async function connectBrokerCallback(
+  broker: "zerodha" | "upstox",
+  codeOrToken: string,
+  state: string
+): Promise<{ status: string; broker: string; broker_user_name?: string; token_expires_at?: string }> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/${broker}/callback`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ code_or_token: codeOrToken, state }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail?.message ?? err.detail ?? `${broker} connection failed`);
+  }
+  invalidateClientCache(["broker:status"]);
   return res.json();
 }
 
@@ -2083,7 +2103,7 @@ export async function closePosition(
   return closed;
 }
 
-export async function importZerodhaTrades(): Promise<{
+export async function importBrokerTrades(broker: "zerodha" | "upstox" = "zerodha"): Promise<{
   imported: number; skipped: number; total_filled_orders: number; message: string; last_synced_at?: string | null
 }> {
   if (shouldUseMockFallback()) {
@@ -2120,19 +2140,21 @@ export async function importZerodhaTrades(): Promise<{
       skipped,
       total_filled_orders: mockOrders.length,
       last_synced_at: now,
-      message: `Imported ${imported} new mock trade(s) from Zerodha.`,
+      message: `Imported ${imported} new mock trade(s) from ${broker === "upstox" ? "Upstox" : "Zerodha"}.`,
     };
   }
   const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/broker/zerodha/import`, { method: "POST", headers });
+  const res = await fetch(`${API}/api/v1/broker/${broker}/import`, { method: "POST", headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-    throw new Error(body.detail ?? "Import failed");
+    throw new Error(body.detail?.message ?? body.detail ?? "Import failed");
   }
   const imported = await res.json();
   invalidateClientCache(["journal:", "portfolio", "broker:status"]);
   return imported;
 }
+
+export const importZerodhaTrades = () => importBrokerTrades("zerodha");
 
 export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
   if (shouldUseMockFallback()) {
@@ -2163,18 +2185,22 @@ export async function getBrokerStatus(): Promise<{
   connected: boolean;
   broker: string | null;
   mode: string;
-  status?: "credentials_missing" | "not_connected" | "token_expired" | "connected_read_only";
+  status?: "plan_required" | "credentials_missing" | "not_connected" | "token_expired" | "connected_read_only";
   status_label?: string;
+  plan?: string;
+  plan_allows_broker?: boolean;
   has_api_key: boolean;
   has_token: boolean;
   token_expired: boolean;
   connected_at: string | null;
   token_expires_at: string | null;
+  broker_user_name?: string | null;
   read_only?: boolean;
   can_import?: boolean;
   sync_status?: "idle" | "running" | "failed";
   last_synced_at?: string | null;
   live_order_requires_confirmation?: boolean;
+  live_order_enabled?: boolean;
 }> {
   if (shouldUseMockFallback()) {
     return cachedClientRequest("broker:status", 5_000, async () => {
@@ -2185,6 +2211,8 @@ export async function getBrokerStatus(): Promise<{
         mode: "simulated",
         status: "not_connected",
         status_label: "Mock broker import ready",
+        plan: "pro",
+        plan_allows_broker: true,
         has_api_key: true,
         has_token: false,
         token_expired: false,
@@ -2195,6 +2223,7 @@ export async function getBrokerStatus(): Promise<{
         sync_status: "idle",
         last_synced_at: sync.last_synced_at,
         live_order_requires_confirmation: true,
+        live_order_enabled: false,
       };
     });
   }
@@ -2207,6 +2236,9 @@ export async function getBrokerStatus(): Promise<{
           connected: false,
           broker: null,
           mode: "simulated",
+          status: "not_connected",
+          plan: "free",
+          plan_allows_broker: false,
           has_api_key: false,
           has_token: false,
           token_expired: false,
@@ -2219,8 +2251,11 @@ export async function getBrokerStatus(): Promise<{
       return {
         connected: false,
         broker: null,
-        mode: "simulated",
-        has_api_key: false,
+          mode: "simulated",
+          status: "not_connected",
+          plan: "free",
+          plan_allows_broker: false,
+          has_api_key: false,
         has_token: false,
         token_expired: false,
         connected_at: null,
@@ -3072,7 +3107,7 @@ export async function startBrokerConnect(broker: string): Promise<{ auth_url: st
   const res = await fetch(`${API}/api/brokers/${broker}/connect/start`, { method: "POST", headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail ?? "Failed to start broker connect");
+    throw new Error(err.detail?.message ?? err.detail ?? "Failed to start broker connect");
   }
   return res.json();
 }

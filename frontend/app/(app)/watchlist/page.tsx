@@ -463,6 +463,7 @@ function ChartPanel({
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderMsg, setOrderMsg] = useState<{ ok: boolean; text: string; journalReady?: boolean } | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<Awaited<ReturnType<typeof getBrokerStatus>> | null>(null);
+  const [liveConfirmed, setLiveConfirmed] = useState(false);
   const latestBar = candles[candles.length - 1] ?? null;
   const previousBar = candles[candles.length - 2] ?? null;
   const referenceClose = latestClose ?? latestBar?.close ?? null;
@@ -487,10 +488,12 @@ function ChartPanel({
   })();
   const orderNudges = [
     ...(planValid ? [] : [planNextAction || "Complete the Decision Desk before order capture"]),
-    ...(planRiskReward != null && planRiskReward < 2 ? ["R:R below 2.0; check whether the setup deserves capital"] : []),
+    ...(planRiskReward != null && planRiskReward < 2 ? ["R:R below 2.0; review risk before submitting"] : []),
     ...(chartRangeNote ? [chartRangeNote] : []),
+    ...(brokerStatus?.plan_allows_broker === false ? ["Broker integration requires Pro or Elite"] : []),
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
+  const canRouteLiveOrder = Boolean(brokerStatus?.connected && brokerStatus?.live_order_enabled && brokerStatus?.plan_allows_broker);
   const chartStats = useMemo(() => {
     if (candles.length < 2) return null;
     const closes = candles.map((c) => c.close).filter((value) => Number.isFinite(value));
@@ -631,10 +634,17 @@ function ChartPanel({
         ...(plan?.thesis?.trim() ? { thesis: plan.thesis.trim() } : {}),
         ...(plan?.invalidation_rule?.trim() ? { invalidation_rule: plan.invalidation_rule.trim() } : {}),
       };
-      req.live_confirmed = false;
-      await placeOrder(req);
-      trackEvent("mock_order_drafted", { source: "watchlist", symbol, side, order_type: orderType });
-      setOrderMsg({ ok: true, text: `${side === "buy" ? "Buy" : "Sell"} plan saved as a simulated journal draft.`, journalReady: true });
+      req.live_confirmed = canRouteLiveOrder && liveConfirmed;
+      const result = await placeOrder(req);
+      trackEvent(canRouteLiveOrder && liveConfirmed ? "broker_order_submitted" : "mock_order_drafted", { source: "watchlist", symbol, side, order_type: orderType, broker: result.broker });
+      setOrderMsg({
+        ok: true,
+        text: canRouteLiveOrder && liveConfirmed
+          ? `${side === "buy" ? "Buy" : "Sell"} order submitted via ${brokerStatus?.broker ?? "broker"} and journal draft created.`
+          : `${side === "buy" ? "Buy" : "Sell"} plan saved as a simulated journal draft.`,
+        journalReady: true,
+      });
+      setLiveConfirmed(false);
       setTradeNote("");
     } catch (e: unknown) {
       setOrderMsg({ ok: false, text: e instanceof Error ? e.message : "Order failed", journalReady: false });
@@ -816,14 +826,14 @@ function ChartPanel({
             {brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
-            {brokerStatus?.connected ? "Broker read-only/import only" : "Order capture records as simulated"}
+            {canRouteLiveOrder ? "Broker order routing available after confirmation" : brokerStatus?.connected ? "Broker import available; simulated capture unless execution is enabled" : "Order capture records as simulated"}
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
           {[
             { label: "R:R", value: planRiskReward != null ? planRiskReward.toFixed(2) : "—", tone: planRiskReward == null ? "var(--text-tertiary)" : planRiskReward >= 2 ? "var(--gain)" : "var(--warn)" },
             { label: "Risk", value: orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", tone: "var(--text-secondary)" },
-            { label: "Mode", value: brokerStatus?.connected ? "Import only" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
+            { label: "Mode", value: canRouteLiveOrder ? "Confirm live" : brokerStatus?.connected ? "Import" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
           ].map((item) => (
             <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
               <div className="label" style={{ marginBottom: 2 }}>{item.label}</div>
@@ -947,14 +957,43 @@ function ChartPanel({
           </div>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy || !planValid}
+        {brokerStatus?.plan_allows_broker === false && (
+          <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)" }}>
+            <div className="caption" style={{ color: "var(--warn)", lineHeight: 1.5 }}>
+              Broker integration requires Pro or Elite. Simulated journal capture remains available for planning.
+            </div>
+            <button onClick={() => { window.location.href = "/settings/billing"; }} className="workspace-chip-button" style={{ marginTop: 8 }}>
+              View Pro plan
+            </button>
+          </div>
+        )}
+
+        {canRouteLiveOrder && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.5 }}>
+            <input
+              type="checkbox"
+              checked={liveConfirmed}
+              onChange={(event) => setLiveConfirmed(event.target.checked)}
+              style={{ marginTop: 2 }}
+            />
+            <span>
+              I confirm this is my own order decision and want AlphaVyuh to submit it to {brokerStatus?.broker ?? "the broker"}. I checked symbol, side, quantity, price, stop, target, and risk.
+            </span>
+          </label>
+        )}
+
+        <button onClick={handleOrder} disabled={orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed)}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid ? "not-allowed" : "pointer",
-            opacity: orderBusy || !planValid ? 0.5 : 1,
+            opacity: orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed) ? 0.5 : 1,
           }}>
-          {orderBusy ? "Saving…" : planValid ? `Save simulated ${side === "buy" ? "buy" : "sell"} draft` : planNextAction}
+          {orderBusy
+            ? canRouteLiveOrder && liveConfirmed ? "Submitting..." : "Saving..."
+            : planValid
+              ? canRouteLiveOrder ? `${side === "buy" ? "Buy" : "Sell"} via ${brokerStatus?.broker ?? "broker"}` : `Save simulated ${side === "buy" ? "buy" : "sell"} draft`
+              : planNextAction}
         </button>
         </div>
       )}
