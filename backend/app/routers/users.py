@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.brokers.credentials import upsert_broker_credential
 from app.middleware.auth import get_current_user_id
 from app.services.supabase import get_admin_client
 
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/api/v1", tags=["users"])
 _SELECT = (
     "id, email, full_name, avatar_url, plan, plan_expires_at, "
     "onboarding_completed, telegram_chat_id, "
-    "broker_type, broker_api_key, broker_connected_at, "
+    "broker_type, broker_connected_at, "
     "billing_region, billing_currency, billing_period, "
     "referral_code, referred_by, created_at"
 )
@@ -32,7 +31,6 @@ class UserResponse(BaseModel):
     onboarding_completed: bool
     telegram_chat_id: str | None = None
     broker_type: str | None = None
-    broker_api_key: str | None = None       # returned masked
     broker_connected_at: str | None = None
     billing_region: str | None = "IN"       # "IN" | "NRI" | "US" | "INTL"
     billing_currency: str | None = "INR"    # "INR" | "USD"
@@ -48,8 +46,8 @@ class UpdateUserRequest(BaseModel):
     telegram_chat_id: str | None = None
     # Broker setup — set during onboarding or settings
     broker_type: str | None = None          # "zerodha" | "upstox" | "angel" | "fyers" | "none"
-    broker_api_key: str | None = None
-    broker_api_secret: str | None = None    # write-only, never returned
+    broker_api_key: str | None = None       # deprecated; broker app keys are backend-only
+    broker_api_secret: str | None = None    # deprecated; never accepted from users
     # Billing preferences
     billing_region: str | None = None
     billing_currency: str | None = None
@@ -59,6 +57,14 @@ class UpdateUserRequest(BaseModel):
 def _generate_code() -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "AV-" + "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+def _sanitize_user_response(row: dict) -> dict:
+    # Legacy DB columns may still exist, but broker app credentials are never
+    # returned through user-profile APIs. Users connect through broker OAuth.
+    row.pop("broker_api_key", None)
+    row.pop("broker_api_secret", None)
+    return row
 
 
 @router.get("/me", response_model=UserResponse)
@@ -73,12 +79,7 @@ async def get_me(user_id: str = Depends(get_current_user_id)):
     )
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    row = result.data
-    # Mask API key — show only last 4 chars
-    if row.get("broker_api_key"):
-        key = row["broker_api_key"]
-        row["broker_api_key"] = ("*" * (len(key) - 4) + key[-4:]) if len(key) > 4 else "****"
-    return row
+    return _sanitize_user_response(result.data)
 
 
 @router.patch("/me", response_model=UserResponse)
@@ -97,17 +98,14 @@ async def update_me(
     broker = body.broker_type if body.broker_type != "none" else None
     if body.broker_type is not None:
         updates["broker_type"] = broker
-    if body.broker_type or body.broker_api_key:
+    if body.broker_type:
         updates["broker_connected_at"] = datetime.now(UTC).isoformat()
 
-    # Credentials are stored encrypted in broker_credentials. Deprecated plaintext
-    # secret columns are explicitly cleared so new writes cannot reintroduce them.
-    if broker and body.broker_api_key is not None:
-        upsert_broker_credential(user_id, broker, "api_key", body.broker_api_key)
-        updates["broker_api_key"] = None  # deprecated plaintext sync; keep cleared on new writes
-    if broker and body.broker_api_secret is not None:
-        upsert_broker_credential(user_id, broker, "api_secret", body.broker_api_secret)
-        updates["broker_api_secret"] = None
+    if body.broker_api_key is not None or body.broker_api_secret is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Broker API keys are managed by AlphaVyuh and cannot be saved on a user profile.",
+        )
     if body.billing_region is not None:
         if body.billing_region not in ("IN", "NRI", "US", "INTL"):
             raise HTTPException(400, "Invalid billing_region")
@@ -128,11 +126,7 @@ async def update_me(
     result = client.table("users").select(_SELECT).eq("id", user_id).single().execute()
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    row = result.data
-    if row.get("broker_api_key"):
-        key = row["broker_api_key"]
-        row["broker_api_key"] = ("*" * (len(key) - 4) + key[-4:]) if len(key) > 4 else "****"
-    return row
+    return _sanitize_user_response(result.data)
 
 
 @router.get("/referral-code")

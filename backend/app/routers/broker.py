@@ -2,7 +2,7 @@
 Broker Integration — Order placement with auto-journal entry creation.
 
 Simulated broker:  instant fill at submitted price, journal entry created.
-Zerodha Kite v3:   routes through Kite Connect when API key + access token exist.
+Zerodha Kite v3:   routes through Kite Connect when platform app config + user access token exist.
                    Access token is fetched via the /broker/zerodha/connect flow.
 
 Workflow:
@@ -334,7 +334,7 @@ def _get_user_broker_credentials(user_id: str, broker: str) -> dict[str, str | N
     sb = get_admin_client()
     user = (
         sb.table("users")
-        .select("broker_type, broker_api_key, broker_api_secret, broker_access_token, broker_token_expires_at, broker_connected_at")
+        .select("broker_type, broker_access_token, broker_token_expires_at, broker_connected_at")
         .eq("id", user_id)
         .maybe_single()
         .execute()
@@ -344,8 +344,8 @@ def _get_user_broker_credentials(user_id: str, broker: str) -> dict[str, str | N
         return {"broker_type": row.get("broker_type")}
     return {
         "broker_type": row.get("broker_type"),
-        "api_key": _get_stored_credential(user_id, broker, "api_key") or row.get("broker_api_key") or _broker_env_value(broker, "api_key"),
-        "api_secret": _get_stored_credential(user_id, broker, "api_secret") or row.get("broker_api_secret") or _broker_env_value(broker, "api_secret"),
+        "api_key": _broker_env_value(broker, "api_key"),
+        "api_secret": _broker_env_value(broker, "api_secret"),
         "access_token": _get_stored_credential(user_id, broker, "access_token") or row.get("broker_access_token"),
         "expires_at": _get_stored_credential(user_id, broker, "expires_at") or row.get("broker_token_expires_at"),
         "connected_at": row.get("broker_connected_at"),
@@ -414,7 +414,7 @@ def _status_payload(
         status_label = "Broker login required"
     else:
         status_code = "credentials_missing"
-        status_label = "Broker credentials missing"
+        status_label = "Broker connect is temporarily unavailable"
 
     return {
         "connected": connected,
@@ -782,7 +782,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
     plan, plan_expires_at = _get_user_plan(user_id)
     plan_allows_broker = _plan_allows_broker(plan, plan_expires_at)
     u = sb.table("users").select(
-        "broker_type, broker_api_key, broker_connected_at, broker_token_expires_at"
+        "broker_type, broker_connected_at, broker_token_expires_at"
     ).eq("id", user_id).maybe_single().execute()
 
     if not u.data:
@@ -799,8 +799,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
         )
 
     bt  = u.data.get("broker_type") or "zerodha"
-    key = _get_stored_credential(user_id, bt, "api_key") or u.data.get("broker_api_key")
-    key = key or _broker_env_value(bt, "api_key")
+    key = _broker_env_value(bt, "api_key")
     tok = _get_stored_credential(user_id, bt, "access_token")
     expires_at = _get_stored_credential(user_id, bt, "expires_at") or u.data.get("broker_token_expires_at")
     broker_user_name = None
@@ -852,7 +851,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
 @router.get("/broker/zerodha/login")
 async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     """
-    Returns the Zerodha Kite login URL for the user's API key.
+    Returns the Zerodha Kite login URL for AlphaVyuh's platform Kite app.
     Frontend opens this URL in a new tab; user logs in and is redirected
     to /broker/zerodha/callback with request_token.
     """
@@ -861,7 +860,7 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     creds = _get_user_broker_credentials(user_id, "zerodha")
     api_key = creds.get("api_key")
     if not api_key:
-        raise HTTPException(status_code=400, detail="Broker API key not configured")
+        raise HTTPException(status_code=503, detail="Zerodha connect is temporarily unavailable. AlphaVyuh broker app credentials are not configured.")
 
     state_value = create_broker_oauth_state(user_id, "zerodha")
     login_url = kite_api.get_auth_url(state_value, api_key=str(api_key))
@@ -889,7 +888,7 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
     }
 
     if not api_key:
-        checks["login_url"]["error"] = "Broker API key is not configured."
+        checks["login_url"]["error"] = "AlphaVyuh broker app credentials are not configured."
     if not api_key or not access_token or token_expired:
         return {
             "broker": "zerodha",
@@ -1158,12 +1157,12 @@ async def zerodha_callback(
     sb = get_admin_client()
     creds = _get_user_broker_credentials(user_id, "zerodha")
     if not creds.get("api_key"):
-        raise HTTPException(status_code=400, detail="Broker credentials not configured")
+        raise HTTPException(status_code=503, detail="Zerodha connect is temporarily unavailable. AlphaVyuh broker app credentials are not configured.")
 
     api_key    = str(creds["api_key"])
     api_secret = str(creds.get("api_secret") or "")
     if not api_secret:
-        raise HTTPException(status_code=400, detail="Broker API secret not configured")
+        raise HTTPException(status_code=503, detail="Zerodha connect is temporarily unavailable. AlphaVyuh broker app secret is not configured.")
 
     try:
         session_data = kite_api.exchange_code(
@@ -1175,10 +1174,10 @@ async def zerodha_callback(
     except KiteApiError as e:
         # Never include `e` in the response — it may contain api_secret or request_token.
         logger.error("Zerodha session generation failed for user %s: %s", user_id, e.message)
-        raise HTTPException(status_code=400, detail="Zerodha session failed — check your API key and secret")
+        raise HTTPException(status_code=400, detail="Zerodha session failed. Start broker connect again.")
     except Exception:
         logger.exception("Zerodha session generation failed for user %s", user_id)
-        raise HTTPException(status_code=400, detail="Zerodha session failed — check your API key and secret")
+        raise HTTPException(status_code=400, detail="Zerodha session failed. Start broker connect again.")
 
     import datetime
     now_iso = datetime.datetime.now(datetime.UTC).isoformat()

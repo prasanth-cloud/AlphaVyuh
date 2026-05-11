@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Clock3, KeyRound, LockKeyhole, PlugZap, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock3, LockKeyhole, PlugZap, ShieldCheck, ServerCog } from "lucide-react";
 import {
   getBrokerStatus,
   getZerodhaLoginUrl,
@@ -89,7 +89,7 @@ function BrokerSettingsContent() {
   }, [searchParams]);
 
   const mode = useMemo(() => {
-    if (!state?.has_api_key) return "credentials-missing" as const;
+    if (!state?.has_api_key) return "platform-unavailable" as const;
     if (state.token_expired) return "token-expired" as const;
     if (state.connected || state.status === "connected_read_only") return "read-only" as const;
     return "simulated" as const;
@@ -166,7 +166,7 @@ function BrokerSettingsContent() {
   };
 
   const healthCards = [
-    { label: "Credentials", value: state?.has_api_key ? "Saved" : "Missing", icon: KeyRound },
+    { label: "Broker app", value: state?.has_api_key ? "Configured" : "Unavailable", icon: ServerCog },
     { label: "Session", value: state?.connected ? "Read-only" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
     { label: "Expiry", value: state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
   ];
@@ -235,20 +235,20 @@ function BrokerSettingsContent() {
                   >
                     {mode === "read-only"
                       ? `${activeBrokerLabel} connected`
-                      : mode === "token-expired"
+                    : mode === "token-expired"
                         ? "Token expired"
-                        : mode === "credentials-missing"
-                          ? "Credentials needed"
+                        : mode === "platform-unavailable"
+                          ? "Connect unavailable"
                           : "Simulated mode"}
                   </div>
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {mode === "read-only"
                     ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Live order routing stays gated by plan, backend enablement, and explicit confirmation."
-                    : mode === "token-expired"
-                      ? "Your API key is saved, but Kite needs a fresh daily access token."
-                      : mode === "credentials-missing"
-                        ? "Save the Zerodha API key and secret, then connect Kite from this hub."
+                      : mode === "token-expired"
+                        ? "Your broker session expired. Reconnect through the broker security flow."
+                      : mode === "platform-unavailable"
+                        ? "AlphaVyuh's broker app is not configured in production yet. Traders do not need to enter API keys."
                         : "Order capture remains simulated and journaling still works until a read-only broker session is connected."}
                 </div>
               </div>
@@ -287,7 +287,7 @@ function BrokerSettingsContent() {
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
               >
-                {busy === "connect" ? "Opening Kite..." : mode === "read-only" ? "Reconnect Zerodha" : "Connect Zerodha"}
+                {busy === "connect" ? "Opening Kite..." : mode === "read-only" ? "Reconnect Zerodha" : mode === "platform-unavailable" ? "Connect unavailable" : "Connect Zerodha"}
               </button>
               <button
                 onClick={handleImport}
@@ -305,9 +305,6 @@ function BrokerSettingsContent() {
               >
                 {smokeBusy ? "Checking..." : "Run read-only smoke"}
               </button>
-              <Link href="/settings?tab=broker" className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
-                Edit Zerodha keys
-              </Link>
             </div>
           </div>
 

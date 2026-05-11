@@ -622,7 +622,7 @@ export default function LandingPage() {
               ["Does AlphaVyuh provide real-time stock data?","No. The private beta uses market data updated after the completed trading session. Scanner results are based on the latest completed session."],
               ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 are in read-only beta. Broker connections are for account smoke, holdings/orderbook reads, filled-trade import, and journal sync only. Live and sandbox order placement are disabled."],
               ["How does journal review work?","Every trade you log is stored in your journal. Review analytics summarize patterns from closed trades, including win rate, R:R, holding period, sector, and notes."],
-              ["Is my trading data secure?","Yes. All data is stored in Supabase Postgres with Row Level Security — only you can access your trades, watchlists, and journal. Broker API keys are stored encrypted. We never store your trading password."],
+              ["Is my trading data secure?","Yes. All data is stored in Supabase Postgres with Row Level Security — only you can access your trades, watchlists, and journal. Broker access tokens are stored encrypted after OAuth. We never ask for your broker password or developer API secrets."],
               ["Can I pay during private beta?","No production checkout is enabled yet. Founder beta access is invite/waitlist-gated until billing, legal, and release-candidate checks are approved."],
               ["Does AlphaVyuh give trade calls?","No. AlphaVyuh is an educational workflow and journal tool, not SEBI-registered investment advice or a guarantee of market-data accuracy."],
             ].map(([q,a]) => (

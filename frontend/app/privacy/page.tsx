@@ -11,7 +11,7 @@ const sections = [
         <ul>
           <li><strong>Account data:</strong> email address and display name.</li>
           <li><strong>Usage data:</strong> saved screens, watchlists, journal entries, scan history, and workflow state.</li>
-          <li><strong>Broker credentials:</strong> API keys you enter for read-only broker workflows, stored encrypted where configured.</li>
+          <li><strong>Broker credentials:</strong> OAuth access tokens for read-only broker workflows, stored encrypted where configured.</li>
           <li><strong>Payment data:</strong> processed by Razorpay when billing is enabled; AlphaVyuh stores only plan status and order IDs.</li>
           <li><strong>Telegram Chat ID:</strong> only when you provide it for alerts.</li>
         </ul>
@@ -51,7 +51,7 @@ const sections = [
     title: "4. Data Storage and Security",
     body: (
       <p>
-        User-owned data is stored with Supabase Row Level Security assumptions so users can access only their own records. Broker API secrets are stored with additional protection where broker connectivity is configured. We do not store payment card numbers or bank account details.
+        User-owned data is stored with Supabase Row Level Security assumptions so users can access only their own records. Broker OAuth tokens are stored with additional protection where broker connectivity is configured. We do not ask traders for broker passwords or developer API secrets, and we do not store payment card numbers or bank account details.
       </p>
     ),
   },

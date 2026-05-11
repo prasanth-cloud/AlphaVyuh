@@ -10,8 +10,6 @@ type FormState = {
   experience: string;
   trades: string;
   broker: string;
-  broker_api_key: string;
-  broker_api_secret: string;
 };
 
 const BROKERS = [
@@ -30,7 +28,6 @@ const cardStyle = {
   borderRadius: "24px",
   boxShadow: "var(--shadow-panel)",
 };
-const inputStyle = { background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02)), var(--surface-2)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" };
 
 function Radio({
   name,
@@ -70,7 +67,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<FormState>({
-    experience: "", trades: "", broker: "", broker_api_key: "", broker_api_secret: "",
+    experience: "", trades: "", broker: "",
   });
 
   const selectRadio = (name: keyof FormState, value: string) => {
@@ -85,16 +82,10 @@ export default function OnboardingPage() {
     setLoading(true);
     setError("");
     try {
-      const updates: Parameters<typeof updateMe>[0] & {
-        broker_type?: string;
-        broker_api_key?: string;
-        broker_api_secret?: string;
-      } = { onboarding_completed: true };
+      const updates: Parameters<typeof updateMe>[0] & { broker_type?: string } = { onboarding_completed: true };
 
       if (form.broker && form.broker !== "none") {
         updates.broker_type = form.broker;
-        if (form.broker_api_key.trim()) updates.broker_api_key = form.broker_api_key.trim();
-        if (form.broker_api_secret.trim()) updates.broker_api_secret = form.broker_api_secret.trim();
       }
 
       await updateMe(updates as Parameters<typeof updateMe>[0]);
@@ -112,8 +103,6 @@ export default function OnboardingPage() {
       setLoading(false);
     }
   }
-
-  const zerodhaSelected = form.broker === "zerodha";
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "transparent" }}>
@@ -237,38 +226,14 @@ export default function OnboardingPage() {
               ))}
             </div>
 
-            {zerodhaSelected && (
+            {form.broker && form.broker !== "none" && (
               <div className="space-y-3 mb-4 p-4 rounded-[14px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
                 <p className="text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
-                  Zerodha Kite Connect — enter your API credentials
+                  Broker connect happens after onboarding
                 </p>
-                <p className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
-                  Get your API key & secret from{" "}
-                  <span style={{ color: "var(--accent)" }}>developers.kite.trade</span>.
-                  Set redirect URL to <code className="px-1 rounded text-[10px]" style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-secondary)" }}>http://localhost:3000/broker/callback</code>
+                <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                  We will only ask you to sign in with your broker from Settings. AlphaVyuh does not ask traders for developer API keys, API secrets, or broker passwords.
                 </p>
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1" style={{ color: "var(--text-tertiary)" }}>API Key</label>
-                  <input
-                    type="text"
-                    value={form.broker_api_key}
-                    onChange={e => setForm(f => ({ ...f, broker_api_key: e.target.value }))}
-                    placeholder="kitexxxxxxxxxxx"
-                    className="w-full text-[13px] rounded-[8px] px-3 py-2 outline-none font-mono"
-                    style={inputStyle}
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wide block mb-1" style={{ color: "var(--text-tertiary)" }}>API Secret</label>
-                  <input
-                    type="password"
-                    value={form.broker_api_secret}
-                    onChange={e => setForm(f => ({ ...f, broker_api_secret: e.target.value }))}
-                    placeholder="••••••••••••••••"
-                    className="w-full text-[13px] rounded-[8px] px-3 py-2 outline-none"
-                    style={inputStyle}
-                  />
-                </div>
               </div>
             )}
 

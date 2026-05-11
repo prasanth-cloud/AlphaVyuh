@@ -276,7 +276,7 @@ export default function DataFreshnessPage() {
               ["EMA 200 missing", fmtNumber(health?.indicators_missing.ema_200)],
               ["Last ingest run", health?.last_run.id ?? "Not available"],
               ["Last ingest errors", fmtNumber(health?.last_run.errors)],
-              ["Kite API key", liveMarket?.api_key_configured ? "Configured" : "Missing"],
+              ["Kite app", liveMarket?.api_key_configured ? "Configured" : "Missing"],
               ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
               ["Open trades", fmtNumber(state.journalStats?.open_trades)],
               ["AI pattern readiness", state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
