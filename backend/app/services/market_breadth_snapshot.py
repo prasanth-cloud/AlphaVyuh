@@ -2,8 +2,9 @@
 Precomputed market breadth snapshots for the dashboard.
 
 The dashboard should not recompute all-market breadth during cold page load.
-This service builds the same overview payload from daily_ohlcv after ingest,
-persists it, and lets the API use that read model first.
+This service builds the same overview payload from daily_ohlcv after ingest
+and stores it in the existing ingest_runs table under a stable run_id. That
+keeps the read path compact without adding launch-blocking schema churn.
 """
 from __future__ import annotations
 
@@ -12,6 +13,8 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from app.services.market_context import eod_source_metadata
+
+SNAPSHOT_RUN_ID_PREFIX = "market-breadth-snapshot"
 
 
 def _f(value: Any, default=None):
@@ -255,9 +258,9 @@ def read_market_breadth_snapshot(
     indices_live: bool,
 ) -> dict | None:
     result = (
-        client.table("market_breadth_snapshots")
-        .select("*")
-        .eq("trade_date", str(trade_date))
+        client.table("ingest_runs")
+        .select("run_id,started_at,meta")
+        .eq("run_id", f"{SNAPSHOT_RUN_ID_PREFIX}-{trade_date}")
         .maybe_single()
         .execute()
     )
@@ -265,47 +268,31 @@ def read_market_breadth_snapshot(
     if not row:
         return None
 
+    meta = row.get("meta") or {}
+    overview = meta.get("overview") if isinstance(meta, dict) else None
+    if not isinstance(overview, dict):
+        return None
+
+    total = overview.get("total") or 0
+    coverage_pct = overview.get("coverage_pct")
+    universe_active = overview.get("universe_active") or total
     metadata = eod_source_metadata(
-        as_of=row.get("trade_date"),
-        status="healthy" if (row.get("coverage_pct") is None or row.get("coverage_pct") >= 90) else "degraded",
-        coverage_pct=row.get("coverage_pct"),
-        symbols_count=row.get("total"),
-        universe_active=row.get("universe_active") or row.get("total"),
+        as_of=overview.get("trade_date") or str(trade_date),
+        status="healthy" if (coverage_pct is None or coverage_pct >= 90) else "degraded",
+        coverage_pct=coverage_pct,
+        symbols_count=total,
+        universe_active=universe_active,
         cache_status="snapshot",
     )
-    source_metadata = row.get("source_metadata") or {}
+    source_metadata = overview.get("source_metadata") or {}
     if isinstance(source_metadata, dict):
         metadata = {**source_metadata, **metadata}
 
     return {
-        "trade_date": row.get("trade_date"),
-        "advances": row.get("advances") or 0,
-        "declines": row.get("declines") or 0,
-        "unchanged": row.get("unchanged") or 0,
-        "total": row.get("total") or 0,
-        "advance_decline_ratio": _f(row.get("advance_decline_ratio"), 0),
-        "new_52w_highs": row.get("new_52w_highs") or 0,
-        "new_52w_lows": row.get("new_52w_lows") or 0,
-        "above_ema20_count": row.get("above_ema20_count") or 0,
-        "above_ema20_pct": _f(row.get("above_ema20_pct"), 0),
-        "above_ema50_count": row.get("above_ema50_count") or 0,
-        "above_ema50_pct": _f(row.get("above_ema50_pct"), 0),
-        "above_ema200_count": row.get("above_ema200_count") or 0,
-        "above_ema200_pct": _f(row.get("above_ema200_pct"), 0),
-        "market_phase": row.get("market_phase") or "Pending",
-        "market_phase_desc": row.get("market_phase_desc") or "Using the latest complete market session.",
-        "sector_breadth": row.get("sector_breadth") or [],
-        "sector_breadth_basis": "advancing_constituents",
-        "sector_breadth_source": row.get("source_name") or "latest_complete_nse_eq_universe",
-        "top_sectors": row.get("top_sectors") or [],
-        "top_gainers": row.get("top_gainers") or [],
-        "top_losers": row.get("top_losers") or [],
-        "most_active": row.get("most_active") or [],
+        **overview,
         "indices": indices,
         "market_data_source": quote_source,
         "is_live": indices_live,
-        "as_of": row.get("trade_date"),
-        "generated_at": row.get("generated_at"),
         "cache_status": "snapshot",
         "provider": metadata,
         "source_metadata": metadata,
@@ -314,33 +301,17 @@ def read_market_breadth_snapshot(
 
 def persist_market_breadth_snapshot(client, trade_date: str | date) -> dict:
     snapshot = build_market_breadth_snapshot(client, trade_date, cache_status="snapshot_build")
-    payload = {
-        "trade_date": snapshot["trade_date"],
-        "advances": snapshot["advances"],
-        "declines": snapshot["declines"],
-        "unchanged": snapshot["unchanged"],
-        "total": snapshot["total"],
-        "advance_decline_ratio": snapshot["advance_decline_ratio"],
-        "new_52w_highs": snapshot["new_52w_highs"],
-        "new_52w_lows": snapshot["new_52w_lows"],
-        "above_ema20_count": snapshot["above_ema20_count"],
-        "above_ema20_pct": snapshot["above_ema20_pct"],
-        "above_ema50_count": snapshot["above_ema50_count"],
-        "above_ema50_pct": snapshot["above_ema50_pct"],
-        "above_ema200_count": snapshot["above_ema200_count"],
-        "above_ema200_pct": snapshot["above_ema200_pct"],
-        "market_phase": snapshot["market_phase"],
-        "market_phase_desc": snapshot["market_phase_desc"],
-        "sector_breadth": snapshot["sector_breadth"],
-        "top_sectors": snapshot["top_sectors"],
-        "top_gainers": snapshot["top_gainers"],
-        "top_losers": snapshot["top_losers"],
-        "most_active": snapshot["most_active"],
-        "coverage_pct": snapshot["coverage_pct"],
-        "universe_active": snapshot["universe_active"],
-        "source_name": "latest_complete_nse_eq_universe",
-        "source_metadata": snapshot["source_metadata"],
-        "generated_at": snapshot["generated_at"],
-    }
-    client.table("market_breadth_snapshots").upsert(payload, on_conflict="trade_date").execute()
+    client.table("ingest_runs").upsert({
+        "run_id": f"{SNAPSHOT_RUN_ID_PREFIX}-{snapshot['trade_date']}",
+        "started_at": snapshot["generated_at"],
+        "duration_s": 0,
+        "event_count": 1,
+        "error_count": 0,
+        "errors": [],
+        "meta": {
+            "kind": "market_breadth_snapshot",
+            "trade_date": snapshot["trade_date"],
+            "overview": snapshot,
+        },
+    }, on_conflict="run_id").execute()
     return snapshot
