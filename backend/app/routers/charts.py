@@ -56,17 +56,10 @@ def _get_user_plan(user_id: str) -> str:
 def _fetch_ohlcv(symbol: str, limit: int = 500) -> pd.DataFrame:
     """Fetch up to `limit` most recent daily bars for a symbol, oldest first."""
     sb = get_admin_client()
-    r = (
-        sb.table("daily_ohlcv")
-        .select("trade_date,open,high,low,close,volume,prev_close,turnover,rsi_14,ema_20,ema_50,ema_200,atr_14,avg_volume_20d,week_52_high,week_52_low")
-        .eq("symbol", symbol.upper())
-        .order("trade_date", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    if not r.data:
+    rows = _fetch_candle_rows(sb, symbol.upper(), limit=limit, desc=True)
+    if not rows:
         return pd.DataFrame()
-    df = pd.DataFrame(r.data)
+    df = pd.DataFrame(rows)
     df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.date
     df = df.sort_values("trade_date").reset_index(drop=True)
     return df
@@ -244,6 +237,48 @@ def _aggregate_to_timeframe(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     return agg
 
 
+def _fetch_candle_rows(
+    client,
+    symbol: str,
+    *,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    limit: int = 3000,
+    desc: bool = False,
+) -> list[dict[str, Any]]:
+    """Fetch candle rows with explicit pagination past PostgREST's page cap."""
+    select_clause = (
+        "trade_date,open,high,low,close,volume,prev_close,avg_volume_20d,"
+        "rsi_14,ema_20,ema_50,ema_200,atr_14,week_52_high,week_52_low"
+    )
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    page_size = min(1000, max(1, limit))
+    while len(rows) < limit:
+        query = (
+            client.table("daily_ohlcv")
+            .select(select_clause)
+            .eq("symbol", symbol.upper())
+        )
+        if from_date:
+            query = query.gte("trade_date", from_date)
+        if to_date:
+            query = query.lte("trade_date", to_date)
+        chunk = (
+            query.order("trade_date", desc=desc)
+            .range(offset, offset + page_size - 1)
+            .execute()
+            .data or []
+        )
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < page_size:
+            break
+        offset += page_size
+    return rows[:limit]
+
+
 def _compute_indicators(df: pd.DataFrame, requested: list[str]) -> dict[str, list[dict]]:
     """Compute requested indicators on df. Returns last 365 rows per indicator."""
     result: dict[str, list[dict]] = {}
@@ -389,16 +424,7 @@ async def get_candles(
     td2 = date.fromisoformat(to_date) if to_date else td
 
     try:
-        q = (
-            sb.table("daily_ohlcv")
-            .select("trade_date,open,high,low,close,volume,prev_close,avg_volume_20d,rsi_14,ema_20,ema_50,ema_200,atr_14,week_52_high,week_52_low")
-            .eq("symbol", sym)
-            .gte("trade_date", str(fd))
-            .lte("trade_date", str(td2))
-            .order("trade_date", desc=False)
-            .limit(raw_limit)
-            .execute()
-        )
+        rows = _fetch_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit)
     except Exception:
         metadata = fallback_source_metadata("Candle query is temporarily unavailable.", as_of=None)
         return {
@@ -412,11 +438,11 @@ async def get_candles(
             "source_metadata": metadata,
         }
 
-    if not q.data:
+    if not rows:
         raise HTTPException(status_code=404, detail=f"No candle data found for {sym}")
 
     # Build daily df then aggregate if needed
-    daily_df = pd.DataFrame(q.data)
+    daily_df = pd.DataFrame(rows)
     daily_df["trade_date"] = pd.to_datetime(daily_df["trade_date"]).dt.date
     for col in ["open", "high", "low", "close", "volume"]:
         daily_df[col] = pd.to_numeric(daily_df[col], errors="coerce")
@@ -455,7 +481,6 @@ async def get_candles(
         }
     else:
         # Daily — original logic
-        rows = q.data
         candles = [
             {
                 "time": str(row["trade_date"]),
@@ -541,7 +566,7 @@ async def get_indicators(
     tf = timeframe.upper()
     # Fetch more daily rows for W/M so aggregation has enough history
     raw_limit = 500 if tf == "D" else (500 * 7 if tf == "W" else 500 * 31)
-    df = _fetch_ohlcv(sym, limit=min(raw_limit, 1000))
+    df = _fetch_ohlcv(sym, limit=min(raw_limit, 3000))
     if df.empty:
         raise HTTPException(status_code=404, detail=f"No data for {sym}")
 
