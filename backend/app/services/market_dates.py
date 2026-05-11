@@ -45,7 +45,7 @@ def get_latest_complete_trade_date(
         result = (
             client.table("daily_ohlcv")
             .select(
-                "trade_date,symbol,close,prev_close,"
+                "trade_date,symbol,close,prev_close,pct_change,"
                 "stock_universe!daily_ohlcv_symbol_fkey!inner(series,market,is_active)"
             )
             .order("trade_date", desc=True)
@@ -74,13 +74,15 @@ def get_latest_complete_trade_date(
                 continue
             if not universe_row.get("is_active", True):
                 continue
-        if "close" in row and "prev_close" in row:
+        if "close" in row:
             try:
                 close = float(row.get("close") or 0)
                 prev_close = float(row.get("prev_close") or 0)
             except (TypeError, ValueError):
                 continue
-            if close <= 0 or prev_close <= 0:
+            if close <= 0:
+                continue
+            if prev_close <= 0 and row.get("pct_change") is None:
                 continue
         date_symbols.setdefault(trade_date, set()).add(row.get("symbol") or "")
 

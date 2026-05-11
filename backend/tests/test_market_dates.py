@@ -56,6 +56,7 @@ def _date_rows(trade_date, count):
             "symbol": f"SYM{i}",
             "close": 100,
             "prev_close": 99,
+            "pct_change": 1.01,
             "stock_universe": {"series": "EQ", "market": "NSE", "is_active": True},
         }
         for i in range(count)
@@ -78,5 +79,15 @@ def test_latest_complete_trade_date_falls_back_when_universe_count_unavailable()
         *_date_rows("2026-05-08", 900),
     ]
     client = _Client(rows, active_count=None)
+
+    assert get_latest_complete_trade_date(client) == "2026-05-11"
+
+
+def test_latest_complete_trade_date_accepts_stored_pct_change_when_prev_close_missing():
+    rows = _date_rows("2026-05-11", 1500)
+    for row in rows:
+        row["prev_close"] = None
+        row["pct_change"] = 0.4
+    client = _Client(rows, active_count=1800)
 
     assert get_latest_complete_trade_date(client) == "2026-05-11"
