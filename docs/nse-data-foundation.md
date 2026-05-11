@@ -39,6 +39,8 @@ cd backend
 python scripts/backfill_bhavcopy.py
 ```
 
+Historical backfill intentionally does not update `stock_universe.is_active`. The current active NSE universe must come from the latest daily refresh so old bhavcopy files do not revive delisted or inactive symbols.
+
 Backfill a bounded window when NSE throttles:
 
 ```bash
