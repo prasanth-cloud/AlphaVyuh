@@ -146,6 +146,8 @@ test.describe("Workflow layout smoke", () => {
   test("scanner actions and watchlist chart header remain usable", async ({ page }) => {
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText("DISCOVERY");
+    await expect(page.getByRole("button", { name: /Technicals/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Fundamentals/i })).toBeVisible();
     await page.getByRole("button", { name: /^Run scan$/i }).click();
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Shortlist" })).toBeVisible();
@@ -159,6 +161,7 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText("WORKSPACE");
     await expect(page.locator(".watchlist-chart-header")).toBeVisible();
+    await expect(page.locator(".workspace-card-title").first().locator("span").first()).toBeVisible();
     await expect(page.getByTestId("decision-desk-nudges")).toBeVisible();
 
     const overlap = await page.locator(".watchlist-chart-header").evaluate((header) => {

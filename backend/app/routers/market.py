@@ -22,7 +22,7 @@ from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
 
-OVERVIEW_CACHE_TTL_SECONDS = 60
+OVERVIEW_CACHE_TTL_SECONDS = 300
 _overview_cache: dict | None = None
 _overview_cache_expires_at = 0.0
 
@@ -219,7 +219,24 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
         return overview
 
-    # Fetch all NSE EQ rows for latest date
+    universe_active = None
+    try:
+        universe_count = (
+            sb.table("stock_universe")
+            .select("symbol", count="exact")
+            .eq("series", "EQ")
+            .eq("market", "NSE")
+            .eq("is_active", True)
+            .limit(1)
+            .execute()
+        )
+        universe_active = universe_count.count
+    except Exception:
+        universe_active = None
+
+    # Fetch NSE EQ rows for the latest complete session. The dashboard is
+    # intentionally session-based so breadth is stable after market close and
+    # does not mix live index ticks with stale constituent rows.
     try:
         rows = (
             sb.table("daily_ohlcv")
@@ -229,7 +246,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
                 "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
             )
             .eq("trade_date", latest_date)
-            .limit(3000)
+            .limit(5000)
             .execute()
             .data or []
         )
@@ -257,12 +274,14 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
     enriched = []
     for r in rows:
         su = r.get("stock_universe") or {}
-        close = _f(r.get("close"))
-        prev_close = _f(r.get("prev_close"))
+        close = _f(r.get("close"), None)
+        prev_close = _f(r.get("prev_close"), None)
+        if not close or close <= 0 or not prev_close or prev_close <= 0:
+            continue
         volume = int(r.get("volume") or 0)
         avg_vol = int(r.get("avg_volume_20d") or 0)
 
-        pct = round((close - prev_close) / prev_close * 100, 2) if prev_close else 0.0
+        pct = round((close - prev_close) / prev_close * 100, 2)
 
         vol_ratio = round(volume / avg_vol, 2) if avg_vol else None
         w52h = _f(r.get("week_52_high"), None)
@@ -392,12 +411,14 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
             "volume_ratio": r["volume_ratio"],
         }
 
+    coverage_pct = round((total / universe_active) * 100, 1) if universe_active else None
+    coverage_status = "healthy" if coverage_pct is None or coverage_pct >= 90 else "degraded"
     metadata = eod_source_metadata(
         as_of=latest_date,
-        status="healthy",
-        coverage_pct=round((total / total) * 100, 1) if total else None,
+        status=coverage_status,
+        coverage_pct=coverage_pct,
         symbols_count=total,
-        universe_active=total,
+        universe_active=universe_active or total,
         cache_status="miss",
     )
     overview = {
@@ -419,7 +440,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
         "market_phase_desc": phase_desc,
         "sector_breadth": sector_breadth[:12],
         "sector_breadth_basis": "advancing_constituents",
-        "sector_breadth_source": "daily_ohlcv_nse_eq_universe",
+        "sector_breadth_source": "latest_complete_nse_eq_universe",
         "top_sectors": sector_breadth[:5],
         "top_gainers": [_mover(r) for r in top_gainers],
         "top_losers":  [_mover(r) for r in top_losers],
