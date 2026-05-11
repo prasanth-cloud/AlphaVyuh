@@ -453,6 +453,7 @@ function ChartPanel({
   const [chartType, setChartType] = useState<ChartDisplayType>(() => readWatchlistChartType());
   const [showChartDetails, setShowChartDetails] = useState(false);
   const [showOrderTicket, setShowOrderTicket] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
@@ -494,6 +495,16 @@ function ChartPanel({
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
   const canRouteLiveOrder = Boolean(brokerStatus?.connected && brokerStatus?.live_order_enabled && brokerStatus?.plan_allows_broker);
+  useEffect(() => {
+    const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+    setTheme(current);
+    const syncTheme = (event: Event) => {
+      const next = (event as CustomEvent<"dark" | "light">).detail ?? document.documentElement.dataset.theme;
+      setTheme(next === "light" ? "light" : "dark");
+    };
+    window.addEventListener("alphavyuh:theme-changed", syncTheme);
+    return () => window.removeEventListener("alphavyuh:theme-changed", syncTheme);
+  }, []);
   const chartStats = useMemo(() => {
     if (candles.length < 2) return null;
     const closes = candles.map((c) => c.close).filter((value) => Number.isFinite(value));
@@ -780,7 +791,7 @@ function ChartPanel({
         ) : chartError || candles.length === 0 ? (
           <span className="caption">No chart data</span>
         ) : (
-          <MiniChart candles={candles} height={chartHeight} dark chartType={chartType} indicators={chartWorkspace.indicators} />
+          <MiniChart candles={candles} height={chartHeight} dark={theme !== "light"} chartType={chartType} indicators={chartWorkspace.indicators} />
         )}
       </div>
       {showChartDetails && (

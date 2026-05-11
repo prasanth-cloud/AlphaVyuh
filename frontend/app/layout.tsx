@@ -69,7 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           id="theme-init"
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
-            __html: "try{var p=location.pathname;var app=/^\\/(dashboard|scanner|watchlist|charts|journal|settings|data|alerts|admin|upload|broker|onboarding)(\\/|$)/.test(p);document.documentElement.dataset.theme=app?'dark':(localStorage.getItem('alphavyuh-theme')==='light'?'light':'dark')}catch(e){document.documentElement.dataset.theme='dark'}",
+            __html: "try{document.documentElement.dataset.theme=localStorage.getItem('alphavyuh-theme')==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}",
           }}
         />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />

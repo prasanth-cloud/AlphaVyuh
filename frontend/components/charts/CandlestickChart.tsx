@@ -54,6 +54,7 @@ type Props = {
   indicators: IndicatorData;
   activeIndicators: string[];
   chartType?: ChartDisplayType;
+  dark?: boolean;
   onCrosshairMove?: (bar: CandleBar | null) => void;
   onRangeChange?: (range: LogicalRange | null) => void;
   onReady?: (handle: ChartHandle) => void;
@@ -76,7 +77,7 @@ function applyDefaultVisibleRange(chart: IChartApi, candles: CandleBar[]) {
 }
 
 const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChart(
-  { candles, indicators, activeIndicators, chartType = "candles", onCrosshairMove, onRangeChange, onReady },
+  { candles, indicators, activeIndicators, chartType = "candles", dark = true, onCrosshairMove, onRangeChange, onReady },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -137,31 +138,39 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
   // Build chart once
   useEffect(() => {
     if (!containerRef.current) return;
+    const bg = dark ? "#05070b" : "#ffffff";
+    const text = dark ? "rgba(209,213,219,0.72)" : "rgba(31,41,55,0.74)";
+    const grid = dark ? "rgba(148,163,184,0.08)" : "rgba(148,163,184,0.22)";
+    const border = dark ? "rgba(148,163,184,0.16)" : "rgba(100,116,139,0.24)";
+    const crosshair = dark ? "rgba(226,232,240,0.34)" : "rgba(51,65,85,0.32)";
+    const crosshairLabel = dark ? "#111827" : "#f8fafc";
+    const lineColor = dark ? "#f4f7fb" : "#111827";
+    const priceLineColor = dark ? "#e5e7eb" : "#334155";
 
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#05070b" },
-        textColor: "rgba(209,213,219,0.72)",
+        background: { type: ColorType.Solid, color: bg },
+        textColor: text,
         fontFamily: "var(--font-sans), system-ui, sans-serif",
         fontSize: 12,
         attributionLogo: true,
       },
       grid: {
-        vertLines: { color: "rgba(148,163,184,0.08)", style: 1 },
-        horzLines: { color: "rgba(148,163,184,0.08)", style: 1 },
+        vertLines: { color: grid, style: 1 },
+        horzLines: { color: grid, style: 1 },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(226,232,240,0.34)", width: 1, style: 3, labelBackgroundColor: "#111827" },
-        horzLine: { color: "rgba(226,232,240,0.34)", width: 1, style: 3, labelBackgroundColor: "#111827" },
+        vertLine: { color: crosshair, width: 1, style: 3, labelBackgroundColor: crosshairLabel },
+        horzLine: { color: crosshair, width: 1, style: 3, labelBackgroundColor: crosshairLabel },
       },
       rightPriceScale: {
-        borderColor: "rgba(148,163,184,0.16)",
+        borderColor: border,
         scaleMargins: { top: 0.06, bottom: 0.2 },
         entireTextOnly: true,
       },
       timeScale: {
-        borderColor: "rgba(148,163,184,0.16)",
+        borderColor: border,
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 10,
@@ -185,11 +194,11 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
         })
       : chartType === "line"
         ? chart.addSeries(LineSeries, {
-            color: "#f4f7fb",
+            color: lineColor,
           lineWidth: 2,
           priceLineVisible: true,
           lastValueVisible: true,
-          priceLineColor: "#f8fafc",
+          priceLineColor,
         })
         : chart.addSeries(CandlestickSeries, {
             upColor: "#22c55e",
@@ -198,7 +207,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
             borderDownColor: "#ef4444",
             wickUpColor: "#22c55e",
             wickDownColor: "#ef4444",
-            priceLineColor: "#e5e7eb",
+            priceLineColor,
             priceLineVisible: true,
             lastValueVisible: true,
           } as Partial<CandlestickSeriesOptions>);
@@ -308,7 +317,7 @@ const CandlestickChart = forwardRef<ChartHandle, Props>(function CandlestickChar
       didInitialFitRef.current = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartType]);
+  }, [chartType, dark]);
 
   // Feed candle + volume data
   useEffect(() => {
