@@ -107,7 +107,16 @@ def _upsert_universe(client, df: pd.DataFrame):
         client.table("stock_universe").upsert(data[i:i+500], on_conflict="symbol").execute()
 
 
-def _upsert_ohlcv(client, df: pd.DataFrame, trade_date: date):
+def _upsert_ohlcv(client, df: pd.DataFrame, trade_date: date, active_symbols: set[str] | None = None):
+    if active_symbols is not None:
+        before = len(df)
+        df = df[df["symbol"].isin(active_symbols)].copy()
+        dropped = before - len(df)
+        if dropped:
+            print(f"    filtered {dropped} historical/inactive symbols")
+    if df.empty:
+        return 0
+
     rows = []
     for _, row in df.iterrows():
         rows.append({
@@ -261,10 +270,13 @@ async def backfill(
     start_date: date | None = None,
     end_date: date | None = None,
     update_universe: bool = False,
+    compute_indicators: bool = True,
 ):
     client = get_admin_client()
+    active_symbols = set(_fetch_all_symbols(client))
     days = _trading_days(days_back, start_date=start_date, end_date=end_date)
     print(f"Trading days to process: {len(days)} (from {days[0]} to {days[-1]})")
+    print(f"Active symbols available for OHLCV FK: {len(active_symbols)}")
     if not update_universe:
         print("Stock universe upsert disabled for historical backfill; daily refresh owns active NSE membership.")
 
@@ -293,7 +305,11 @@ async def backfill(
             try:
                 if update_universe:
                     _upsert_universe(client, df)
-                n = _upsert_ohlcv(client, df, d)
+                n = _upsert_ohlcv(client, df, d, active_symbols=active_symbols)
+                if n == 0:
+                    print(f"  skip {d} (no rows match active universe)")
+                    skipped += 1
+                    continue
                 client.table("bhavcopy_ingestion_log").upsert({
                     "trade_date": str(d), "status": "success", "rows_ingested": n,
                 }).execute()
@@ -319,7 +335,10 @@ async def backfill(
         print(f"\nPhase 1 done — success:{success}  skipped:{skipped}  failed:{failed}")
 
     # ── Phase 2: Compute indicators ───────────────────────────────────────
-    _compute_and_update_indicators(client)
+    if compute_indicators:
+        _compute_and_update_indicators(client)
+    else:
+        print("\nPhase 2 skipped. Run with --indicators-only after raw backfill windows complete.")
     print("\nBackfill complete.")
 
 
@@ -331,6 +350,8 @@ if __name__ == "__main__":
     parser.add_argument("--end-date", help="YYYY-MM-DD end date for bounded historical backfill")
     parser.add_argument("--update-universe", action="store_true",
                         help="Also upsert stock_universe from downloaded files. Use only for current-session repair, not historical backfill.")
+    parser.add_argument("--skip-indicators", action="store_true",
+                        help="Skip latest-indicator recomputation for this raw backfill window")
     parser.add_argument("--indicators-only", action="store_true",
                         help="Skip Phase 1 download, only recompute indicators")
     args = parser.parse_args()
@@ -342,4 +363,5 @@ if __name__ == "__main__":
         start_date=parsed_start,
         end_date=parsed_end,
         update_universe=args.update_universe,
+        compute_indicators=not args.skip_indicators,
     ))
