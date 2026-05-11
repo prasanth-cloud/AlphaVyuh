@@ -299,6 +299,31 @@ def read_market_breadth_snapshot(
     }
 
 
+def read_latest_market_breadth_snapshot(
+    client,
+    indices: list[dict],
+    quote_source: str,
+    indices_live: bool,
+) -> dict | None:
+    result = (
+        client.table("ingest_runs")
+        .select("run_id,started_at,meta")
+        .like("run_id", f"{SNAPSHOT_RUN_ID_PREFIX}-%")
+        .order("started_at", desc=True)
+        .limit(5)
+        .execute()
+    )
+    for row in result.data or []:
+        meta = row.get("meta") or {}
+        overview = meta.get("overview") if isinstance(meta, dict) else None
+        trade_date = overview.get("trade_date") if isinstance(overview, dict) else None
+        if trade_date:
+            snapshot = read_market_breadth_snapshot(client, trade_date, indices, quote_source, indices_live)
+            if snapshot:
+                return snapshot
+    return None
+
+
 def persist_market_breadth_snapshot(client, trade_date: str | date) -> dict:
     snapshot = build_market_breadth_snapshot(client, trade_date, cache_status="snapshot_build")
     client.table("ingest_runs").upsert({
