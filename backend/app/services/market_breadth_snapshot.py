@@ -50,6 +50,33 @@ def _active_universe_count(client) -> int | None:
         return None
 
 
+def _fetch_daily_rows(client, trade_date: str, *, max_rows: int = 10000) -> list[dict]:
+    rows: list[dict] = []
+    offset = 0
+    page_size = 1000
+    select_clause = (
+        "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
+        "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,pct_change,"
+        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
+    )
+    while len(rows) < max_rows:
+        chunk = (
+            client.table("daily_ohlcv")
+            .select(select_clause)
+            .eq("trade_date", trade_date)
+            .range(offset, offset + page_size - 1)
+            .execute()
+            .data or []
+        )
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < page_size:
+            break
+        offset += page_size
+    return rows
+
+
 def build_market_breadth_snapshot(
     client,
     trade_date: str | date,
@@ -60,19 +87,7 @@ def build_market_breadth_snapshot(
 ) -> dict:
     latest_date = str(trade_date)
     universe_active = _active_universe_count(client)
-
-    rows = (
-        client.table("daily_ohlcv")
-        .select(
-            "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
-            "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,"
-            "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
-        )
-        .eq("trade_date", latest_date)
-        .limit(5000)
-        .execute()
-        .data or []
-    )
+    rows = _fetch_daily_rows(client, latest_date)
 
     rows = [
         row for row in rows
@@ -86,12 +101,18 @@ def build_market_breadth_snapshot(
         universe_row = row.get("stock_universe") or {}
         close = _f(row.get("close"), None)
         prev_close = _f(row.get("prev_close"), None)
-        if not close or close <= 0 or not prev_close or prev_close <= 0:
+        stored_pct_change = _f(row.get("pct_change"), None)
+        if not close or close <= 0:
             continue
 
         volume = int(row.get("volume") or 0)
         avg_volume = int(row.get("avg_volume_20d") or 0)
-        pct_change = round((close - prev_close) / prev_close * 100, 2)
+        if prev_close and prev_close > 0:
+            pct_change = round((close - prev_close) / prev_close * 100, 2)
+        elif stored_pct_change is not None:
+            pct_change = round(stored_pct_change, 2)
+        else:
+            continue
         volume_ratio = round(volume / avg_volume, 2) if avg_volume else None
         week_52_high = _f(row.get("week_52_high"), None)
         week_52_low = _f(row.get("week_52_low"), None)
