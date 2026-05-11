@@ -87,7 +87,7 @@ class _FakeUsersSupabase:
         return _UpdateQuery(self)
 
 
-def test_user_broker_credentials_prefer_encrypted_store(monkeypatch):
+def test_user_broker_credentials_use_platform_app_keys_and_user_tokens(monkeypatch):
     monkeypatch.setattr(
         broker_router,
         "get_admin_client",
@@ -104,8 +104,6 @@ def test_user_broker_credentials_prefer_encrypted_store(monkeypatch):
     )
 
     values = {
-        ("zerodha", "api_key"): "encrypted-key",
-        ("zerodha", "api_secret"): "encrypted-secret",
         ("zerodha", "access_token"): "encrypted-token",
         ("zerodha", "expires_at"): "encrypted-expiry",
     }
@@ -114,16 +112,18 @@ def test_user_broker_credentials_prefer_encrypted_store(monkeypatch):
         "_get_stored_credential",
         lambda _user_id, broker, key_name: values.get((broker, key_name)),
     )
+    monkeypatch.setenv("KITE_API_KEY", "platform-key")
+    monkeypatch.setenv("KITE_API_SECRET", "platform-secret")
 
     creds = broker_router._get_user_broker_credentials("user-123", "zerodha")
 
-    assert creds["api_key"] == "encrypted-key"
-    assert creds["api_secret"] == "encrypted-secret"
+    assert creds["api_key"] == "platform-key"
+    assert creds["api_secret"] == "platform-secret"
     assert creds["access_token"] == "encrypted-token"
     assert creds["expires_at"] == "encrypted-expiry"
 
 
-def test_user_broker_credentials_fall_back_to_legacy_columns(monkeypatch):
+def test_user_broker_credentials_do_not_use_legacy_user_app_keys(monkeypatch):
     monkeypatch.setattr(
         broker_router,
         "get_admin_client",
@@ -139,25 +139,23 @@ def test_user_broker_credentials_fall_back_to_legacy_columns(monkeypatch):
         ),
     )
     monkeypatch.setattr(broker_router, "_get_stored_credential", lambda *_args: None)
+    monkeypatch.delenv("KITE_API_KEY", raising=False)
+    monkeypatch.delenv("KITE_API_SECRET", raising=False)
+    monkeypatch.delenv("ZERODHA_API_KEY", raising=False)
+    monkeypatch.delenv("ZERODHA_API_SECRET", raising=False)
 
     creds = broker_router._get_user_broker_credentials("user-123", "zerodha")
 
-    assert creds["api_key"] == "plain-key"
-    assert creds["api_secret"] == "plain-secret"
+    assert creds["api_key"] is None
+    assert creds["api_secret"] is None
     assert creds["access_token"] == "plain-token"
     assert creds["expires_at"] == "plain-expiry"
 
 
-def test_update_me_does_not_write_plaintext_broker_credentials(monkeypatch):
+def test_update_me_rejects_user_submitted_broker_app_credentials(monkeypatch):
     client = _FakeUsersSupabase()
-    saved: dict[tuple[str, str], str] = {}
 
     monkeypatch.setattr(users_router, "get_admin_client", lambda: client)
-    monkeypatch.setattr(
-        users_router,
-        "upsert_broker_credential",
-        lambda _user_id, broker, key_name, value: saved.__setitem__((broker, key_name), value),
-    )
 
     request = users_router.UpdateUserRequest(
         broker_type="zerodha",
@@ -165,9 +163,22 @@ def test_update_me_does_not_write_plaintext_broker_credentials(monkeypatch):
         broker_api_secret="kite-secret",
     )
 
-    asyncio.run(users_router.update_me(request, user_id="user-123"))
+    try:
+        asyncio.run(users_router.update_me(request, user_id="user-123"))
+    except Exception as exc:
+        assert getattr(exc, "status_code", None) == 400
+        assert "managed by AlphaVyuh" in str(getattr(exc, "detail", ""))
+    else:
+        raise AssertionError("Expected user-submitted broker app keys to be rejected")
+    assert client.updated is None
 
-    assert saved[("zerodha", "api_secret")] == "kite-secret"
-    assert saved[("zerodha", "api_key")] == "kite-key"
-    assert client.updated["broker_api_key"] is None
-    assert client.updated["broker_api_secret"] is None
+
+def test_get_me_never_returns_broker_app_secret_fields(monkeypatch):
+    client = _FakeUsersSupabase()
+    client.user_row["broker_api_secret"] = "kite-secret"
+    monkeypatch.setattr(users_router, "get_admin_client", lambda: client)
+
+    response = asyncio.run(users_router.get_me(user_id="user-123"))
+
+    assert "broker_api_key" not in response
+    assert "broker_api_secret" not in response

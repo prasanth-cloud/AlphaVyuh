@@ -1941,7 +1941,6 @@ export type UserProfile = {
   onboarding_completed: boolean;
   telegram_chat_id: string | null;
   broker_type: string | null;
-  broker_api_key: string | null;   // masked — last 4 chars only
   broker_connected_at: string | null;
   billing_region?: string;         // "IN" | "NRI" | "US" | "INTL"
   billing_currency?: string;       // "INR" | "USD"
@@ -1960,7 +1959,6 @@ export async function getMe(): Promise<UserProfile> {
       onboarding_completed: false,
       telegram_chat_id: null,
       broker_type: null,
-      broker_api_key: null,
       broker_connected_at: null,
       billing_region: "IN",
       billing_currency: "INR",
@@ -1978,8 +1976,6 @@ export async function updateMe(updates: {
   onboarding_completed?: boolean;
   telegram_chat_id?: string;
   broker_type?: string;
-  broker_api_key?: string;
-  broker_api_secret?: string;
   billing_region?: string;
   billing_currency?: string;
 }): Promise<UserProfile> {

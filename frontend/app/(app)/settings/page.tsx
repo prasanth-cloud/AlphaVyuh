@@ -1,10 +1,11 @@
 "use client";
 
 import { Suspense, useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Check, Zap, Sparkles, Crown, Copy, Gift } from "lucide-react";
 import {
-  getMe, updateMe, getZerodhaLoginUrl,
+  getMe, updateMe,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
   getPaymentConfig, applyFounderPlan,
   type UserProfile, type PlanStatus, type PaymentConfig,
@@ -189,16 +190,11 @@ function SettingsContent() {
 
   // ── Broker state ─────────────────────────────────────────────────────────
   const [brokerType, setBrokerType] = useState("");
-  const [brokerApiKey, setBrokerApiKey] = useState("");
-  const [brokerApiSecret, setBrokerApiSecret] = useState("");
   const [savingBroker, setSavingBroker] = useState(false);
-  const [connectingZerodha, setConnectingZerodha] = useState(false);
 
   useEffect(() => {
     if (profile) {
       setBrokerType(profile.broker_type ?? "");
-      setBrokerApiKey("");
-      setBrokerApiSecret("");
     }
   }, [profile]);
 
@@ -207,29 +203,14 @@ function SettingsContent() {
     try {
       const updates: Parameters<typeof updateMe>[0] = {};
       if (brokerType) updates.broker_type = brokerType;
-      if (brokerApiKey.trim()) updates.broker_api_key = brokerApiKey.trim();
-      if (brokerApiSecret.trim()) updates.broker_api_secret = brokerApiSecret.trim();
       if (Object.keys(updates).length === 0) { showToast("No changes to save", false); return; }
       const updated = await updateMe(updates);
       setProfile(updated);
-      setBrokerApiKey(""); setBrokerApiSecret("");
-      showToast("Broker settings saved", true);
+      showToast("Broker preference saved", true);
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Save failed", false);
     } finally {
       setSavingBroker(false);
-    }
-  }
-
-  async function handleZerodhaConnect() {
-    setConnectingZerodha(true);
-    try {
-      const url = await getZerodhaLoginUrl();
-      window.open(url, "_blank");
-    } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : "Could not start Zerodha login", false);
-    } finally {
-      setConnectingZerodha(false);
     }
   }
 
@@ -495,8 +476,8 @@ function SettingsContent() {
       {/* ── Broker tab ─────────────────────────────────────────────────── */}
       {tab === "broker" && (
         <div className="max-w-2xl">
-          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Broker Connection</div>
-          <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Connect your broker to route orders directly from charts.</div>
+          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Broker connection</div>
+          <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>Choose your preferred broker here, then use the broker hub for secure OAuth connect, reconnect, and trade import.</div>
 
           {profileLoading ? (
             <div className="animate-pulse h-48 rounded-[10px]" style={cardStyle} />
@@ -533,73 +514,40 @@ function SettingsContent() {
                 </div>
 
                 {brokerType === "zerodha" && (
-                  <>
-                    <div className="text-[11px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
-                      Get your API key &amp; secret from{" "}
-                      <span className="font-medium" style={{ color: "var(--accent)" }}>developers.kite.trade</span>.
-                      Set the redirect URL to{" "}
-                      <code className="font-mono text-[10px] px-1 rounded" style={{ background: "var(--app-surface2)", color: "var(--app-text2)", border: "1px solid var(--app-border)" }}>
-                        {typeof window !== "undefined" ? `${window.location.origin}/broker/callback` : "/broker/callback"}
-                      </code>
-                    </div>
-                    <div>
-                      <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Key</label>
-                      <input
-                        type="text"
-                        value={brokerApiKey}
-                        onChange={e => setBrokerApiKey(e.target.value)}
-                        placeholder={profile?.broker_api_key ? `Current: ${profile.broker_api_key}` : "kitexxxxxxxxxxx"}
-                        className={`${inputCls} font-mono`}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>API Secret</label>
-                      <input
-                        type="password"
-                        value={brokerApiSecret}
-                        onChange={e => setBrokerApiSecret(e.target.value)}
-                        placeholder="Enter new secret to update"
-                        className={inputCls}
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={saveBroker}
-                        disabled={savingBroker}
-                        className="flex-1 py-2.5 rounded-[8px] text-[13px] font-medium transition-opacity disabled:opacity-50"
-                        style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      >
-                        {savingBroker ? "Saving..." : "Save API credentials"}
-                      </button>
-                      {profile?.broker_api_key && (
-                        <button
-                          onClick={handleZerodhaConnect}
-                          disabled={connectingZerodha}
-                          className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold transition-opacity disabled:opacity-50"
-                          style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}
-                        >
-                          {connectingZerodha ? "Opening..." : "Connect Zerodha →"}
-                        </button>
-                      )}
-                    </div>
-                  </>
+                  <div className="text-[12px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
+                    Zerodha connects through AlphaVyuh&apos;s Kite app. You will sign in with Zerodha from the broker hub; AlphaVyuh never asks traders for developer API keys, API secrets, or broker passwords.
+                  </div>
                 )}
 
                 {brokerType && brokerType !== "zerodha" && (
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3">
                     <p className="text-[12px]" style={{ color: "var(--app-text3)" }}>
-                      {brokerType === "other" ? "Orders will be simulated." : `${brokerType} adapter is planned after Zerodha beta verification.`}
+                      {brokerType === "upstox"
+                        ? "Upstox connects through the broker hub OAuth beta where enabled."
+                        : brokerType === "other"
+                          ? "Orders will be simulated."
+                          : `${brokerType} adapter is planned after Zerodha and Upstox beta verification.`}
                     </p>
+                  </div>
+                )}
+
+                {brokerType && (
+                  <div className="flex gap-2 pt-1">
                     <button
                       onClick={saveBroker}
                       disabled={savingBroker}
-                      className="px-4 py-2 rounded-[8px] text-[13px] font-medium transition-opacity disabled:opacity-50"
+                      className="flex-1 py-2.5 rounded-[8px] text-[13px] font-medium transition-opacity disabled:opacity-50"
+                      style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                    >
+                      {savingBroker ? "Saving..." : "Save preference"}
+                    </button>
+                    <Link
+                      href="/settings/broker"
+                      className="flex-1 py-2.5 rounded-[8px] text-[13px] font-semibold text-center"
                       style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}
                     >
-                      {savingBroker ? "Saving..." : "Save"}
-                    </button>
+                      Open broker hub
+                    </Link>
                   </div>
                 )}
               </div>
