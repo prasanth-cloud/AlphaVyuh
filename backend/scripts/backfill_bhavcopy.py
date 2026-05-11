@@ -260,10 +260,13 @@ async def backfill(
     indicators_only: bool = False,
     start_date: date | None = None,
     end_date: date | None = None,
+    update_universe: bool = False,
 ):
     client = get_admin_client()
     days = _trading_days(days_back, start_date=start_date, end_date=end_date)
     print(f"Trading days to process: {len(days)} (from {days[0]} to {days[-1]})")
+    if not update_universe:
+        print("Stock universe upsert disabled for historical backfill; daily refresh owns active NSE membership.")
 
     if not indicators_only:
         # ── Phase 1: Download + insert raw OHLCV ──────────────────────────
@@ -288,7 +291,8 @@ async def backfill(
                 continue
 
             try:
-                _upsert_universe(client, df)
+                if update_universe:
+                    _upsert_universe(client, df)
                 n = _upsert_ohlcv(client, df, d)
                 client.table("bhavcopy_ingestion_log").upsert({
                     "trade_date": str(d), "status": "success", "rows_ingested": n,
@@ -325,6 +329,8 @@ if __name__ == "__main__":
     parser.add_argument("--days", type=int, default=365 * 5 + 30, help="Calendar days to scan when --start-date is not provided")
     parser.add_argument("--start-date", help="YYYY-MM-DD start date for bounded historical backfill")
     parser.add_argument("--end-date", help="YYYY-MM-DD end date for bounded historical backfill")
+    parser.add_argument("--update-universe", action="store_true",
+                        help="Also upsert stock_universe from downloaded files. Use only for current-session repair, not historical backfill.")
     parser.add_argument("--indicators-only", action="store_true",
                         help="Skip Phase 1 download, only recompute indicators")
     args = parser.parse_args()
@@ -335,4 +341,5 @@ if __name__ == "__main__":
         indicators_only=args.indicators_only,
         start_date=parsed_start,
         end_date=parsed_end,
+        update_universe=args.update_universe,
     ))
