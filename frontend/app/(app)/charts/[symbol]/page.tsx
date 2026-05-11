@@ -284,6 +284,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [timeframeMessage, setTimeframeMessage] = useState("");
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>(() => initialChartType ?? readStoredChartType());
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
     if (!fullChartMode) return;
@@ -298,6 +299,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   useEffect(() => {
     window.localStorage.setItem(CHART_TYPE_STORAGE_KEY, chartType);
   }, [chartType]);
+
+  useEffect(() => {
+    const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+    setTheme(current);
+    const syncTheme = (event: Event) => {
+      const next = (event as CustomEvent<"dark" | "light">).detail ?? document.documentElement.dataset.theme;
+      setTheme(next === "light" ? "light" : "dark");
+    };
+    window.addEventListener("alphavyuh:theme-changed", syncTheme);
+    return () => window.removeEventListener("alphavyuh:theme-changed", syncTheme);
+  }, []);
 
   const [data, setData] = useState<CandlesResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -3557,11 +3569,12 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
             {/* Main chart */}
             {data && (
               <CandlestickChart
-                key={`${symbol}-${rangeLabel}-${timeframe}-${chartType}-${liveMode ? "live" : "eod"}`}
+                key={`${symbol}-${rangeLabel}-${timeframe}-${chartType}-${theme}-${liveMode ? "live" : "eod"}`}
                 candles={data.candles}
                 indicators={indicatorData}
                 activeIndicators={activeIndicators}
                 chartType={chartType}
+                dark={theme !== "light"}
                 onCrosshairMove={bar => setLegendBar(bar)}
                 onRangeChange={handleRangeChange}
                 onReady={handle => { chartHandleRef.current = handle; }}

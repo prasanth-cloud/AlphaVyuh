@@ -69,18 +69,22 @@ async function layoutProblems(page: Page) {
   });
 }
 
-async function darkThemeProblems(page: Page) {
+async function themeProblems(page: Page, expected: "dark" | "light") {
   return page.evaluate(() => {
     const problems: string[] = [];
-    if (document.documentElement.dataset.theme !== "dark") {
+    const expectedTheme = (window as unknown as { __expectedTheme: "dark" | "light" }).__expectedTheme;
+    if (document.documentElement.dataset.theme !== expectedTheme) {
       problems.push(`theme is ${document.documentElement.dataset.theme || "unset"}`);
     }
 
     const rgb = window.getComputedStyle(document.body).backgroundColor.match(/\d+/g)?.map(Number) ?? [];
     if (rgb.length >= 3) {
       const luminance = (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2]);
-      if (luminance > 55) problems.push(`body background is too light (${Math.round(luminance)})`);
+      if (expectedTheme === "dark" && luminance > 55) problems.push(`body background is too light (${Math.round(luminance)})`);
+      if (expectedTheme === "light" && luminance < 180) problems.push(`body background is too dark (${Math.round(luminance)})`);
     }
+
+    if (expectedTheme === "light") return problems;
 
     const lightPanels = Array.from(document.querySelectorAll(".app-shell .workspace-card, .app-shell .workspace-hero, .app-shell table, .app-shell aside"))
       .filter((el) => {
@@ -95,7 +99,7 @@ async function darkThemeProblems(page: Page) {
     if (lightPanels.length) problems.push(`${lightPanels.length} workflow panels rendered light`);
 
     return problems;
-  });
+  }, expected);
 }
 
 function intersects(a: DOMRect | { x: number; y: number; width: number; height: number }, b: DOMRect | { x: number; y: number; width: number; height: number }) {
@@ -118,11 +122,23 @@ test.describe("Workflow layout smoke", () => {
     });
   }
 
-  test("authenticated workflow stays in the dark trading desk theme", async ({ page }) => {
+  test("authenticated workflow defaults to the dark trading desk theme", async ({ page }) => {
     for (const workflowPage of pages) {
       await page.goto(workflowPage.path, { waitUntil: "domcontentloaded" });
       await expect(workflowPage.marker(page)).toBeVisible({ timeout: 15_000 });
-      const problems = await darkThemeProblems(page);
+      await page.evaluate(() => ((window as unknown as { __expectedTheme: "dark" | "light" }).__expectedTheme = "dark"));
+      const problems = await themeProblems(page, "dark");
+      expect(problems, workflowPage.name).toEqual([]);
+    }
+  });
+
+  test("authenticated workflow respects the saved light theme", async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem("alphavyuh-theme", "light"));
+    for (const workflowPage of pages) {
+      await page.goto(workflowPage.path, { waitUntil: "domcontentloaded" });
+      await expect(workflowPage.marker(page)).toBeVisible({ timeout: 15_000 });
+      await page.evaluate(() => ((window as unknown as { __expectedTheme: "dark" | "light" }).__expectedTheme = "light"));
+      const problems = await themeProblems(page, "light");
       expect(problems, workflowPage.name).toEqual([]);
     }
   });

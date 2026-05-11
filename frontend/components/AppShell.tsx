@@ -43,15 +43,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams()
   const fullChart = pathname.startsWith('/charts/') && searchParams.get('full') === '1'
   const router = useRouter()
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
     window.requestAnimationFrame(() => markAppTiming('first-app-shell-paint'))
   }, [])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = 'dark'
-    window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: 'dark' }))
+    const stored = window.localStorage.getItem('alphavyuh-theme') === 'light' ? 'light' : 'dark'
+    setTheme(stored)
+    document.documentElement.dataset.theme = stored
+
+    const syncTheme = (event: Event) => {
+      const next = (event as CustomEvent<'dark' | 'light'>).detail ?? document.documentElement.dataset.theme
+      setTheme(next === 'light' ? 'light' : 'dark')
+    }
+    window.addEventListener('alphavyuh:theme-changed', syncTheme)
+    return () => window.removeEventListener('alphavyuh:theme-changed', syncTheme)
   }, [])
+
+  function toggleTheme() {
+    const nextTheme = theme === 'light' ? 'dark' : 'light'
+    setTheme(nextTheme)
+    document.documentElement.dataset.theme = nextTheme
+    window.localStorage.setItem('alphavyuh-theme', nextTheme)
+    window.dispatchEvent(new CustomEvent('alphavyuh:theme-changed', { detail: nextTheme }))
+  }
 
   useEffect(() => {
     const prefetchCoreRoutes = () => {
@@ -134,7 +151,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="app-toolbar">
             <DataModePill />
             <MarketStatus />
-            <AccountMenuButton />
+            <AccountMenuButton theme={theme} onToggleTheme={toggleTheme} />
           </div>
         </div>
       </nav>
@@ -224,14 +241,10 @@ function MarketStatus() {
 }
 
 /* ── ACCOUNT MENU ────────────────────────────────────────────────────────── */
-function AccountMenuButton() {
+function AccountMenuButton({ theme, onToggleTheme }: { theme: 'dark' | 'light'; onToggleTheme: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const router = useRouter()
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = 'dark'
-  }, [])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -309,8 +322,30 @@ function AccountMenuButton() {
               lineHeight: 1.45,
             }}
           >
-            Authenticated workspace locked to dark trading desk mode.
+            Theme follows your site preference across public and app pages.
           </div>
+          <button
+            onClick={() => {
+              onToggleTheme()
+              setOpen(false)
+            }}
+            style={{
+              width: '100%',
+              textAlign: 'left',
+              padding: '7px 10px',
+              fontSize: 12,
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              background: 'none',
+              border: 'none',
+              borderRadius: 4,
+              transition: 'background var(--motion-instant)',
+            }}
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)'}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+          >
+            Switch to {theme === 'light' ? 'dark' : 'light'} theme
+          </button>
           <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
           <button
             onClick={signOut}
