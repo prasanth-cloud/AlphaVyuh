@@ -35,6 +35,10 @@ class _FailingDailyClient:
         return _FailingQuery()
 
 
+class _NoopClient:
+    pass
+
+
 def test_market_overview_fails_soft_when_admin_client_unavailable(monkeypatch):
     _reset_cache()
     monkeypatch.setattr(market_router, "_index_quotes", _indices)
@@ -60,3 +64,41 @@ def test_market_overview_fails_soft_when_daily_rows_unavailable(monkeypatch):
     assert overview["trade_date"] == "2026-05-04"
     assert overview["top_gainers"] == []
     assert overview["cache_status"] == "miss"
+
+
+def test_market_overview_uses_breadth_snapshot_before_recomputing(monkeypatch):
+    _reset_cache()
+    monkeypatch.setattr(market_router, "_index_quotes", _indices)
+    monkeypatch.setattr(market_router, "get_admin_client", lambda: _NoopClient())
+    monkeypatch.setattr(market_router, "get_latest_complete_trade_date", lambda _client: "2026-05-04")
+
+    def _snapshot(_client, trade_date, indices, quote_source, indices_live):
+        return {
+            "trade_date": trade_date,
+            "total": 1234,
+            "advances": 700,
+            "declines": 400,
+            "unchanged": 134,
+            "sector_breadth": [{"sector": "Banks", "breadth_pct": 66.7}],
+            "top_gainers": [],
+            "top_losers": [],
+            "most_active": [],
+            "indices": indices,
+            "market_data_source": quote_source,
+            "is_live": indices_live,
+            "cache_status": "snapshot",
+        }
+
+    monkeypatch.setattr(market_router, "read_market_breadth_snapshot", _snapshot)
+
+    def _unexpected_build(*_args, **_kwargs):
+        raise AssertionError("snapshot miss path should not run when snapshot exists")
+
+    monkeypatch.setattr(market_router, "build_market_breadth_snapshot", _unexpected_build)
+
+    overview = asyncio.run(market_router.market_overview(user_id="user-1"))
+
+    assert overview["cache_status"] == "snapshot"
+    assert overview["trade_date"] == "2026-05-04"
+    assert overview["total"] == 1234
+    assert overview["sector_breadth"][0]["sector"] == "Banks"
