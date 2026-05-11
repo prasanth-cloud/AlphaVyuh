@@ -7,13 +7,13 @@ Strategy:
   Phase 1 — Download + insert raw OHLCV for all dates (fast, ~2s/day)
   Phase 2 — Compute all indicators in one batch pass per symbol (fast, pandas in memory)
 
-Total time: ~15-20 minutes for 300 trading days.
+Five years is a large operator job. Run in bounded windows if NSE throttles.
 """
 import asyncio
 import io
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -43,9 +43,9 @@ NSE_HOLIDAYS = {
 SLEEP_BETWEEN = 2.5
 
 
-def _trading_days(days_back: int) -> list[date]:
-    today = date.today()
-    start = today - timedelta(days=days_back)
+def _trading_days(days_back: int, *, start_date: date | None = None, end_date: date | None = None) -> list[date]:
+    today = end_date or date.today()
+    start = start_date or (today - timedelta(days=days_back))
     result = []
     d = start
     while d <= today:
@@ -255,9 +255,14 @@ def _compute_and_update_indicators(client):
     print(f"  Indicator computation complete: {done}/{total} updated, {failed} failed")
 
 
-async def backfill(days_back: int = 300, indicators_only: bool = False):
+async def backfill(
+    days_back: int = 365 * 5 + 30,
+    indicators_only: bool = False,
+    start_date: date | None = None,
+    end_date: date | None = None,
+):
     client = get_admin_client()
-    days = _trading_days(days_back)
+    days = _trading_days(days_back, start_date=start_date, end_date=end_date)
     print(f"Trading days to process: {len(days)} (from {days[0]} to {days[-1]})")
 
     if not indicators_only:
@@ -317,8 +322,17 @@ async def backfill(days_back: int = 300, indicators_only: bool = False):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--days", type=int, default=300)
+    parser.add_argument("--days", type=int, default=365 * 5 + 30, help="Calendar days to scan when --start-date is not provided")
+    parser.add_argument("--start-date", help="YYYY-MM-DD start date for bounded historical backfill")
+    parser.add_argument("--end-date", help="YYYY-MM-DD end date for bounded historical backfill")
     parser.add_argument("--indicators-only", action="store_true",
                         help="Skip Phase 1 download, only recompute indicators")
     args = parser.parse_args()
-    asyncio.run(backfill(args.days, indicators_only=args.indicators_only))
+    parsed_start = datetime.strptime(args.start_date, "%Y-%m-%d").date() if args.start_date else None
+    parsed_end = datetime.strptime(args.end_date, "%Y-%m-%d").date() if args.end_date else None
+    asyncio.run(backfill(
+        args.days,
+        indicators_only=args.indicators_only,
+        start_date=parsed_start,
+        end_date=parsed_end,
+    ))
