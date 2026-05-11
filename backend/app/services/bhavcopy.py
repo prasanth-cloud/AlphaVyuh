@@ -398,6 +398,19 @@ async def download_and_ingest(trade_date: date) -> dict:
         except Exception as rs_err:
             logger.warning(f"rs_score RPC failed for {trade_date}: {rs_err}")
 
+        try:
+            from app.services.market_breadth_snapshot import persist_market_breadth_snapshot
+
+            snapshot = persist_market_breadth_snapshot(client, trade_date)
+            logger.info(
+                "Market breadth snapshot built for %s: total=%s coverage=%s%%",
+                trade_date,
+                snapshot.get("total"),
+                snapshot.get("coverage_pct"),
+            )
+        except Exception as snapshot_err:
+            logger.warning(f"market breadth snapshot failed for {trade_date}: {snapshot_err}")
+
         # 11. Log success
         _upsert_ingest_log(client, {
             "trade_date": str(trade_date),

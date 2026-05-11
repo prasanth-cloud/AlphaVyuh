@@ -119,6 +119,29 @@ def run_yfinance_top200(target: date, log: Logger, dry_run: bool = False) -> dic
     return {"success": success, "failures": failures[:10]}
 
 
+def build_breadth_snapshot(sb, target: date, log: Logger, dry_run: bool = False) -> dict:
+    """Persist the dashboard breadth read model after all market data updates."""
+    if dry_run:
+        log.info(f"[dry-run] would build market breadth snapshot for {target}")
+        return {"status": "dry-run"}
+
+    from app.services.market_breadth_snapshot import persist_market_breadth_snapshot
+
+    log.info(f"Building market breadth snapshot for {target}...")
+    snapshot = persist_market_breadth_snapshot(sb, target)
+    log.info(
+        "  market breadth snapshot: "
+        f"total={snapshot.get('total', 0)}, coverage={snapshot.get('coverage_pct')}%"
+    )
+    return {
+        "status": "success",
+        "trade_date": str(target),
+        "total": snapshot.get("total", 0),
+        "coverage_pct": snapshot.get("coverage_pct"),
+        "generated_at": snapshot.get("generated_at"),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="AlphaVyuh daily data refresh")
     parser.add_argument("--date", help="YYYY-MM-DD (default: today)")
@@ -171,7 +194,14 @@ def main() -> int:
             log.error("yfinance refresh failed", e)
             result_meta["yfinance"] = {"status": "failed", "error": str(e)}
 
-    # ── Step 3: write run log ─────────────────────────────────────────────────
+    # ── Step 3: dashboard breadth read model ──────────────────────────────────
+    try:
+        result_meta["market_breadth_snapshot"] = build_breadth_snapshot(sb, target, log, dry_run=args.dry_run)
+    except Exception as e:
+        log.error("Market breadth snapshot failed", e)
+        result_meta["market_breadth_snapshot"] = {"status": "failed", "error": str(e)}
+
+    # ── Step 4: write run log ─────────────────────────────────────────────────
     if not args.dry_run:
         write_run_log(sb, log, result_meta)
 
