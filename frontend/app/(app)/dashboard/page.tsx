@@ -122,7 +122,7 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
     {
       label: 'Leadership',
       value: leadingSector?.sector ?? 'Pending',
-      detail: leadingSector ? `${safeNumber(leadingSector.breadth_pct).toFixed(0)}% breadth · ${safeNumber(leadingSector.avg_pct_change) >= 0 ? '+' : ''}${safeNumber(leadingSector.avg_pct_change).toFixed(2)}% avg` : 'Sector breadth loads after market close',
+      detail: leadingSector ? `${safeNumber(leadingSector.breadth_pct).toFixed(0)}% advancing · ${safeNumber(leadingSector.avg_pct_change) >= 0 ? '+' : ''}${safeNumber(leadingSector.avg_pct_change).toFixed(2)}% avg` : 'Waiting for the latest complete session',
       color: leadingSector ? (safeNumber(leadingSector.avg_pct_change) >= 0 ? 'var(--gain)' : 'var(--loss)') : 'var(--text-tertiary)',
     },
   ];
@@ -132,9 +132,14 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
           <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
-          <div className="caption">One glance summary before scanning, charting, or placing alerts.</div>
+          <div className="caption">One glance summary of the latest complete market session.</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {data.source_metadata?.coverage_pct != null && (
+            <span className="workspace-pill" title={`${data.source_metadata.symbols_count ?? data.total} symbols included`}>
+              NSE universe · <Num>{safeNumber(data.source_metadata.coverage_pct).toFixed(0)}%</Num>
+            </span>
+          )}
           <DataProvenanceBadge
             kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
             asOf={data.trade_date}
@@ -192,11 +197,15 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
 
 function SectorBar({
   sector,
+  advances,
+  total,
   breadth_pct,
   avg_pct_change,
   above_ema20_pct,
 }: {
   sector: string
+  advances?: number
+  total?: number
   breadth_pct: number
   avg_pct_change: number
   above_ema20_pct?: number | null
@@ -213,7 +222,7 @@ function SectorBar({
       <div style={{ flex: 1, height: 5, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${Math.min(100, breadth)}%`, background: color, transition: 'width 600ms var(--ease-out)' }} />
       </div>
-      <span className="mono" style={{ flex: '0 0 40px', textAlign: 'right', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+      <span className="mono" title={advances != null && total != null ? `${advances} advancing of ${total}` : undefined} style={{ flex: '0 0 58px', textAlign: 'right', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
         {breadth.toFixed(0)}%
       </span>
       <span className="mono" style={{ flex: '0 0 52px', textAlign: 'right', fontSize: 11, color: avg >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
@@ -913,13 +922,15 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (
                   <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                    <div className="caption">No sector data yet — loads after market close</div>
+                    <div className="caption">No sector data yet — waiting for the latest complete market session.</div>
                   </div>
                 ) : (
                   data.sector_breadth.map(s => (
                     <SectorBar
                       key={s.sector}
                       sector={s.sector}
+                      advances={s.advances}
+                      total={s.total}
                       breadth_pct={s.advance_breadth_pct ?? s.breadth_pct}
                       avg_pct_change={s.avg_pct_change}
                       above_ema20_pct={s.above_ema20_pct}

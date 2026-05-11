@@ -500,7 +500,7 @@ export default function ScannerPage() {
   const [newWlName, setNewWlName] = useState('')
   const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(true)
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
@@ -936,29 +936,37 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* Filters toggle */}
+        {/* Filter groups */}
         <div className="workspace-section" style={{ paddingTop: 12, paddingBottom: 12, borderBottom: filtersOpen ? '1px solid var(--border-subtle)' : 'none', flexShrink: 0 }}>
-          <button onClick={() => setFiltersOpen(o => !o)} style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: 'none', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)',
-            padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
-            color: filtersOpen ? 'var(--accent)' : 'var(--text-secondary)',
-          }}>
-            <span>Filters {filtersOpen ? '▲' : '▼'}</span>
-            {filtersOpen && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                {(['technical', 'fundamental'] as const).map(tab => (
-                  <button key={tab} onClick={e => { e.stopPropagation(); setFilterTab(tab) }} style={{
-                    padding: '2px 8px', borderRadius: 'var(--radius-sm)', fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                    border: `1px solid ${filterTab === tab ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                    background: filterTab === tab ? 'var(--accent-subtle)' : 'transparent',
-                    color: filterTab === tab ? 'var(--accent)' : 'var(--text-tertiary)',
-                    textTransform: 'capitalize',
-                  }}>{tab}</button>
-                ))}
-              </div>
-            )}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            <button onClick={() => setFiltersOpen(o => !o)} style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, fontWeight: 700,
+              color: filtersOpen ? 'var(--accent)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em',
+            }}>
+              Filters {filtersOpen ? '▲' : '▼'}
+            </button>
+            <span className="caption">Technicals and fundamentals stay visible while you scan.</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {([
+              ['technical', 'Technicals', 'Price, trend, RS, volume'],
+              ['fundamental', 'Fundamentals', 'Valuation, ROE, debt'],
+            ] as const).map(([tab, label, detail]) => (
+              <button key={tab} onClick={() => { setFilterTab(tab); setFiltersOpen(true) }} style={{
+                textAlign: 'left',
+                padding: '8px 9px',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 11,
+                cursor: 'pointer',
+                border: `1px solid ${filterTab === tab ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                background: filterTab === tab ? 'var(--accent-subtle)' : 'rgba(255,255,255,0.02)',
+                color: filterTab === tab ? 'var(--accent)' : 'var(--text-secondary)',
+              }}>
+                <div style={{ fontWeight: 800, marginBottom: 3 }}>{label}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1.35 }}>{detail}</div>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Filters scrollable */}

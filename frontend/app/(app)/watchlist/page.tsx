@@ -108,6 +108,44 @@ function formatNullablePrice(value: number | null | undefined): string {
   return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function watchlistInitial(name: string | null | undefined): string {
+  const trimmed = (name || "Watchlist").trim();
+  return (trimmed.match(/[A-Za-z0-9]/)?.[0] || "W").toUpperCase();
+}
+
+function watchlistAccent(name: string | null | undefined): string {
+  const seed = (name || "watchlist").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const colors = ["#26a65b", "#5b63f5", "#d97706", "#14b8a6", "#e11d48", "#8b5cf6"];
+  return colors[seed % colors.length];
+}
+
+function WatchlistAvatar({ name, active = false, size = 26 }: { name: string | null | undefined; active?: boolean; size?: number }) {
+  const color = watchlistAccent(name);
+  return (
+    <span
+      aria-hidden="true"
+      title={name || "Watchlist"}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        fontSize: Math.max(10, Math.round(size * 0.42)),
+        fontWeight: 800,
+        color: active ? "var(--bg-primary)" : color,
+        background: active ? color : `${color}1f`,
+        border: `1px solid ${active ? color : `${color}66`}`,
+        boxShadow: active ? `0 0 0 2px ${color}24` : "none",
+      }}
+    >
+      {watchlistInitial(name)}
+    </span>
+  );
+}
+
 // ─── Sortable row ─────────────────────────────────────────────────────────────
 
 function SortableRow({
@@ -1770,12 +1808,27 @@ function WatchlistContent() {
 
       {/* ── Watchlist tabs sidebar ─── */}
       {sidebarCollapsed ? (
-        <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14 }}>
+        <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
           <button onClick={() => setSidebarCollapsed(false)} style={{ color: "var(--text-tertiary)" }}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
               <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
+          <div style={{ display: "grid", gap: 8 }}>
+            {watchlists.slice(0, 8).map((wl) => (
+              <button
+                key={wl.id}
+                onClick={() => {
+                  setActiveId(wl.id);
+                  setSidebarCollapsed(false);
+                }}
+                title={wl.name}
+                style={{ lineHeight: 0 }}
+              >
+                <WatchlistAvatar name={wl.name} active={activeId === wl.id} size={28} />
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <aside className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -1831,8 +1884,13 @@ function WatchlistContent() {
                         fontWeight: active ? 500 : 400,
                         transition: "all var(--motion-instant) var(--ease-out)",
                       }}>
-                      <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 20 }}>{wl.name}</div>
-                      <div style={{ fontSize: 10, marginTop: 2, color: "var(--text-tertiary)" }}>{wl.items.length} stocks</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, paddingRight: 20 }}>
+                        <WatchlistAvatar name={wl.name} active={active} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{wl.name}</div>
+                          <div style={{ fontSize: 10, marginTop: 2, color: "var(--text-tertiary)" }}>{wl.items.length} stocks</div>
+                        </div>
+                      </div>
                     </button>
                     <button
                       onClick={() => handleDeleteWatchlist(wl.id)}
@@ -1856,8 +1914,9 @@ function WatchlistContent() {
         {/* Header */}
         <div className="workspace-card-header" style={{ paddingBottom: 10, flexShrink: 0 }}>
           <div>
-            <div className="workspace-card-title">
-              {activeWl ? activeWl.name : "Watchlist"}
+            <div className="workspace-card-title" style={{ display: "flex", alignItems: "center", gap: 9 }}>
+              <WatchlistAvatar name={activeWl?.name ?? "Watchlist"} active={Boolean(activeWl)} size={30} />
+              <span>{activeWl ? activeWl.name : "Watchlist"}</span>
             </div>
             {activeWl && (
               <div className="caption">{activeWl.items.length} stock{activeWl.items.length !== 1 ? "s" : ""}</div>

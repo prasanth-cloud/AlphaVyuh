@@ -2858,7 +2858,7 @@ export async function getMarketOverview(): Promise<MarketOverview> {
     const res = await withTimeout(fetch(`${API}/api/v1/market/overview`, { headers }), 2500).catch(() => null);
     if (res?.ok) {
       const value = normalizeMarketOverview(await res.json());
-      marketOverviewCache = { value, expiresAt: Date.now() + 45_000 };
+      marketOverviewCache = { value, expiresAt: Date.now() + 180_000 };
       return value;
     }
 
@@ -2915,7 +2915,7 @@ export async function getMarketOverview(): Promise<MarketOverview> {
       top_losers: moversRes?.losers ?? [],
       most_active: moversRes?.volume_surge ?? [],
     });
-    marketOverviewCache = { value, expiresAt: Date.now() + 45_000 };
+    marketOverviewCache = { value, expiresAt: Date.now() + 180_000 };
     return value;
   })().finally(() => {
     marketOverviewPromise = null;
