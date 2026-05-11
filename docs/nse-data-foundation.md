@@ -39,13 +39,13 @@ cd backend
 python scripts/backfill_bhavcopy.py
 ```
 
-Historical backfill intentionally does not update `stock_universe.is_active`. The current active NSE universe must come from the latest daily refresh so old bhavcopy files do not revive delisted or inactive symbols.
+Historical backfill intentionally does not update `stock_universe.is_active`. The current active NSE universe must come from the latest daily refresh so old bhavcopy files do not revive delisted or inactive symbols. Historical OHLCV rows are filtered to symbols already present in the active universe before insert.
 
 Backfill a bounded window when NSE throttles:
 
 ```bash
 cd backend
-python scripts/backfill_bhavcopy.py --start-date 2021-01-01 --end-date 2021-12-31
+python scripts/backfill_bhavcopy.py --start-date 2021-01-01 --end-date 2021-12-31 --skip-indicators
 ```
 
 Recompute indicators only after raw OHLCV exists:
