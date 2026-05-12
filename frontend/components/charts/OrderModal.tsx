@@ -146,8 +146,8 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <p className="text-[11px] leading-5 text-[#7b5a2b]">
               {planAllowsBroker
                 ? canRouteLive
-                  ? "Broker order routing is available only after you confirm this exact order. AlphaVyuh never recommends quantity or direction."
-                  : "Broker connections can import filled trades. Live order routing remains disabled unless backend broker execution is enabled."
+                  ? "Private beta keeps order execution owner-gated. Confirm any real trade directly with your broker terminal."
+                  : "Broker connections can import filled trades. Live and sandbox order placement remain disabled for beta."
                 : "Broker integration requires Pro or Elite. Free accounts can still use chart planning and journaling."}
             </p>
           </div>

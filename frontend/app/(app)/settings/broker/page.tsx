@@ -30,7 +30,7 @@ const BROKERS: BrokerCard[] = [
     status: "active",
     auth: "Kite Connect request-token flow",
     sessionPolicy: "Daily broker session expires around 06:00 IST",
-    scope: "Profile, holdings, positions, orderbook, tradebook, gated order routing, and filled-trade import",
+    scope: "Profile, holdings, positions, orderbook, tradebook, and filled-trade import",
   },
   {
     id: "upstox",
@@ -38,7 +38,7 @@ const BROKERS: BrokerCard[] = [
     status: "next",
     auth: "OAuth 2.0 authorization-code flow",
     sessionPolicy: "Standard session expires at 03:30 AM next day; extended read mode needs approval",
-    scope: "OAuth, profile, holdings, gated order routing, and filled-trade import where broker data is available",
+    scope: "OAuth, profile, holdings, and filled-trade import where broker data is available",
   },
   {
     id: "dhan",
@@ -194,7 +194,7 @@ function BrokerSettingsContent() {
           <EyebrowLabel>Broker integration</EyebrowLabel>
           <div className="app-page-title" style={{ marginTop: 4 }}>Broker connect hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time for account checks, filled-trade import, and gated order routing. Tokens stay encrypted on the backend. Live orders require Pro/Elite, backend enablement, and explicit confirmation.
+            Connect one broker at a time for account checks and filled-trade import. Tokens stay encrypted on the backend. Live and sandbox order placement are disabled for the private beta.
           </div>
         </div>
 
@@ -203,7 +203,7 @@ function BrokerSettingsContent() {
             <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--warn)", marginBottom: 7 }}>Upgrade required</div>
             <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>Broker integration is available on Pro and Elite.</div>
             <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
-              Free accounts can use scanner, watchlist, chart planning, and journaling. Broker OAuth, trade import, and gated order routing unlock after upgrade.
+              Free accounts can use scanner, watchlist, chart planning, and journaling. Broker OAuth and filled-trade import unlock after upgrade; execution remains disabled during beta.
             </div>
             <Link href="/settings/billing" className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold inline-flex" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
               View Pro plan
@@ -214,7 +214,7 @@ function BrokerSettingsContent() {
         <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(244,247,251,0.16)" }}>
           <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Broker adapter path</div>
           <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>
-            Zerodha OAuth is active for profile, holdings, orderbook, filled-trade import, and gated order routing. Upstox uses the same OAuth adapter contract for connect, profile, holdings, order routing, and import where broker data is available.
+            Zerodha OAuth is active for profile, holdings, orderbook, and filled-trade import. Upstox uses the same OAuth adapter contract for connect, profile, holdings, and import where broker data is available.
           </div>
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
             This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every imported or simulated trade can still create a journal draft before review after close.
@@ -318,7 +318,7 @@ function BrokerSettingsContent() {
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
                 "Expired sessions fall back to simulated mode instead of blocking chart/journal workflows.",
-                "Live order submission requires Pro/Elite, backend enablement, and explicit user confirmation; filled broker trades can be imported into Journal.",
+                "Live and sandbox order submission are disabled for beta; filled broker trades can be imported into Journal.",
                 "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
                 "Every imported or simulated trade should still create a journal entry with source context.",
               ].map((line) => (
