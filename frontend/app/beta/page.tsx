@@ -30,7 +30,7 @@ const interviewQuestions = [
 ];
 
 const limitations = [
-  "No live or real-time market-data claim in beta; scanner and chart workflows use the latest completed market session unless explicitly labeled demo/provider.",
+  "No live or real-time market-data claim in beta; scanner and chart workflows use the latest available market snapshot unless explicitly labeled demo/provider.",
   "No investment advice, trade calls, guaranteed accuracy, or promise of returns.",
   "No live/sandbox broker order placement. Place real trades directly with your broker.",
   "Production Razorpay checkout is disabled. Founder access is invite/waitlist-gated.",

@@ -193,7 +193,7 @@ export default function OnboardingPage() {
             <div className="grid gap-2 mb-5 sm:grid-cols-2">
               {[
                 ["Private beta", "Access is founder-gated while workflow reliability is tested."],
-                ["Market data", "Scans and charts use the latest completed market session unless explicitly labeled demo."],
+                ["Market data", "Scans and charts use the latest available market snapshot unless explicitly labeled demo."],
                 ["Broker import only", "Broker connections are for read-only smoke and filled-trade import."],
                 ["Execution disabled", "Live and sandbox order placement stay off during this beta."],
               ].map(([title, detail]) => (

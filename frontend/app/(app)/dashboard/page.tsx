@@ -121,7 +121,7 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
     {
       label: 'Leadership',
       value: leadingSector?.sector ?? 'Pending',
-      detail: leadingSector ? `${safeNumber(leadingSector.breadth_pct).toFixed(0)}% advancing · ${safeNumber(leadingSector.avg_pct_change) >= 0 ? '+' : ''}${safeNumber(leadingSector.avg_pct_change).toFixed(2)}% avg` : 'Waiting for the latest complete session',
+      detail: leadingSector ? `${safeNumber(leadingSector.breadth_pct).toFixed(0)}% advancing · ${safeNumber(leadingSector.avg_pct_change) >= 0 ? '+' : ''}${safeNumber(leadingSector.avg_pct_change).toFixed(2)}% avg` : 'Waiting for latest market data',
       color: leadingSector ? (safeNumber(leadingSector.avg_pct_change) >= 0 ? 'var(--gain)' : 'var(--loss)') : 'var(--text-tertiary)',
     },
   ];
@@ -131,7 +131,7 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
           <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
-          <div className="caption">One glance summary of the latest complete market session.</div>
+          <div className="caption">One glance summary of the latest market snapshot.</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {data.source_metadata?.coverage_pct != null && (
@@ -822,7 +822,7 @@ export default function DashboardPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (
                   <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                    <div className="caption">No sector data yet — waiting for the latest complete market session.</div>
+                    <div className="caption">No sector data yet — waiting for latest market data.</div>
                   </div>
                 ) : (
                   data.sector_breadth.map(s => (
