@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, Eye, EyeOff, Lock, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -82,7 +82,7 @@ const INDICATOR_CONFIG = [
 ];
 
 type DrawingTool = "Trendline" | "Ray" | "Horizontal" | "HorizontalRay" | "Rectangle" | "Fib" | "LongPosition" | "ShortPosition" | "Text";
-const FULL_CHART_DRAWING_TOOLS: DrawingTool[] = ["Trendline", "Horizontal", "Ray", "Rectangle", "Fib", "Text", "LongPosition", "ShortPosition"];
+const FULL_CHART_DRAWING_TOOLS: DrawingTool[] = ["Trendline", "Horizontal", "HorizontalRay", "Ray", "Rectangle", "Fib", "Text", "LongPosition", "ShortPosition"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
 type ChartDataCacheEntry = {
   data: CandlesResponse;
@@ -97,13 +97,13 @@ type ChartDataCacheEntry = {
 const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: typeof PencilLine; hint: string }> = {
   Trendline: { label: "Trendline", short: "T", icon: PencilLine, hint: "Two-point trendline" },
   Ray: { label: "Ray", short: "R", icon: MoveRight, hint: "Extends to the right edge" },
-  Horizontal: { label: "Horizontal", short: "H", icon: Minus, hint: "Full-width support/resistance" },
+  Horizontal: { label: "Horizontal line", short: "H", icon: Minus, hint: "Full-width support/resistance" },
   HorizontalRay: { label: "H-Ray", short: "J", icon: MoveRight, hint: "Horizontal from anchor to the right" },
-  Rectangle: { label: "Zone", short: "Z", icon: RectangleHorizontal, hint: "Supply / demand box" },
-  Fib: { label: "Fib", short: "F", icon: Waves, hint: "Fibonacci retracement" },
-  LongPosition: { label: "Long Position", short: "L", icon: TrendingUp, hint: "Entry, stop, target risk box" },
-  ShortPosition: { label: "Short Position", short: "S", icon: TrendingDown, hint: "Entry, stop, target risk box" },
-  Text: { label: "Text", short: "N", icon: Type, hint: "Chart annotation" },
+  Rectangle: { label: "Rectangle / zone", short: "Z", icon: RectangleHorizontal, hint: "Supply / demand box" },
+  Fib: { label: "Fibonacci retracement", short: "F", icon: Waves, hint: "Fibonacci retracement" },
+  LongPosition: { label: "Long position", short: "L", icon: TrendingUp, hint: "Entry, stop, target risk box" },
+  ShortPosition: { label: "Short position", short: "S", icon: TrendingDown, hint: "Entry, stop, target risk box" },
+  Text: { label: "Text note", short: "N", icon: Type, hint: "Chart annotation" },
 };
 
 const chartDataCache = new Map<string, ChartDataCacheEntry>();
@@ -343,6 +343,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<ChartDrawing[][]>([]);
   const [redoStack, setRedoStack] = useState<ChartDrawing[][]>([]);
+  const [snapToPrice, setSnapToPrice] = useState(true);
   const chartHandleRef = useRef<ChartHandle | null>(null);
   const dataRef = useRef<CandlesResponse | null>(null);
   const lastBaseChartKeyRef = useRef<string | null>(null);
@@ -451,7 +452,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [planDragState, setPlanDragState] = useState<{
     field: "entry" | "stop" | "target";
   } | null>(null);
-  const snapToPrice = true;
   const [textEditor, setTextEditor] = useState<{ drawingId: string | null; value: string; x: number; y: number; isNew: boolean } | null>(null);
 
   useEffect(() => {
@@ -539,7 +539,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap"].includes(i));
     const panelInds = activeIndicators.filter(i => ["rsi", "macd"].includes(i));
     const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
-    const baseCacheKey = [symbol, rangeLabel, request.timeframe, liveMode ? "live" : "eod"].join(":");
+    const baseCacheKey = [symbol, rangeLabel, request.timeframe, request.from_date, request.to_date, request.limit, liveMode ? "live" : "eod"].join(":");
     const cacheKey = [baseCacheKey, allInds.sort().join(",")].join(":");
     const cached = chartDataCache.get(cacheKey);
     const freshCached = cached && Date.now() - cached.loadedAt < CHART_CACHE_TTL_MS ? cached : null;
@@ -1926,7 +1926,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                     >
                       <span className="w-3 h-3 rounded-[3px] flex-shrink-0 flex items-center justify-center text-[9px]" style={{ background: active ? ind.color + "22" : "transparent", border: `1px solid ${active ? ind.color : "var(--app-border)"}` }}>
-                        {active ? "x" : ""}
+                        {active ? <Check size={9} strokeWidth={3} /> : ""}
                       </span>
                       {locked && <svg width="8" height="8" viewBox="0 0 8 8" fill="none" style={{ flexShrink: 0 }}><rect x="1.5" y="3.5" width="5" height="4" rx="0.5" fill="currentColor"/><path d="M2.5 3.5V2.5a1.5 1.5 0 013 0v1" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>}
                       {ind.label}
@@ -1992,6 +1992,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 >
                   <Bell size={14} />
                   <span className="flex-1">Price alert</span>
+                </button>
+                <button
+                  onClick={() => setSnapToPrice((current) => !current)}
+                  className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
+                  style={{ color: snapToPrice ? "#bac4d1" : "var(--app-text2)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  <Magnet size={14} />
+                  <span className="flex-1">Magnet / snap</span>
+                  <span className="text-[10px] opacity-70">{snapToPrice ? "On" : "Off"}</span>
                 </button>
                 {drawnLines.length > 0 && (
                   <>

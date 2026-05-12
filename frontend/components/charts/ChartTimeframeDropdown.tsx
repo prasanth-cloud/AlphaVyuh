@@ -45,7 +45,7 @@ export default function ChartTimeframeDropdown({ value, onChange, onUnavailable,
             <button
               key={option.label}
               type="button"
-              disabled={option.disabled}
+              aria-disabled={option.disabled ? "true" : undefined}
               title={option.unavailableReason ?? INTRADAY_UNAVAILABLE_MESSAGE}
               onClick={() => {
                 if (isIntradayTimeframe(option.label)) {

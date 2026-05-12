@@ -323,8 +323,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(overlay).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
-    await page.getByRole("button", { name: "Long Position L", exact: true }).click();
-    await expect(page.getByText(/Long Position armed/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Long position L", exact: true }).click();
+    await expect(page.getByText(/Long position armed/i)).toBeVisible({ timeout: 10_000 });
 
     const box = await overlay.boundingBox();
     expect(box).not.toBeNull();
@@ -336,7 +336,7 @@ test.describe("Mock workflow smoke", () => {
     await page.mouse.up();
 
     await expect(page.getByText("Drawings · 1")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Selected: Long Position/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Selected: Long position/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: /Use as plan/i })).toHaveCount(0);
     await expect(page.getByText(/Plan entry/i)).toHaveCount(0);
     await expect(page.getByPlaceholder("Entry")).toHaveCount(0);
@@ -359,8 +359,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(overlay).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
-    await page.getByRole("button", { name: "Zone Z", exact: true }).click();
-    await expect(page.getByText(/Zone armed/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Rectangle / zone Z", exact: true }).click();
+    await expect(page.getByText(/Rectangle \/ zone armed/i)).toBeVisible({ timeout: 10_000 });
 
     const box = await overlay.boundingBox();
     expect(box).not.toBeNull();
@@ -372,7 +372,7 @@ test.describe("Mock workflow smoke", () => {
     await page.mouse.up();
 
     await expect(page.getByText("Drawings · 1")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Selected: Zone/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Selected: Rectangle \/ zone/i)).toBeVisible({ timeout: 10_000 });
     await page.getByRole("button", { name: /Zone note/i }).click();
     await expect(page.getByText("Drawings · 2")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Zone \d+\.\d+-\d+\.\d+/).first()).toBeVisible({ timeout: 10_000 });
@@ -418,13 +418,13 @@ test.describe("Mock workflow smoke", () => {
     };
 
     await drawSegment("Ray R", /Ray armed/i, 0.22, 0.68, 0.58, 0.45, 1);
-    await drawSegment("Horizontal H", /Horizontal armed/i, 0.18, 0.50, 0.66, 0.50, 2);
-    await drawSegment("Fib F", /Fib armed/i, 0.35, 0.72, 0.70, 0.32, 3);
-    await drawSegment("Short Position S", /Short Position armed/i, 0.42, 0.40, 0.64, 0.24, 4);
+    await drawSegment("Horizontal line H", /Horizontal line armed/i, 0.18, 0.50, 0.66, 0.50, 2);
+    await drawSegment("Fibonacci retracement F", /Fibonacci retracement armed/i, 0.35, 0.72, 0.70, 0.32, 3);
+    await drawSegment("Short position S", /Short position armed/i, 0.42, 0.40, 0.64, 0.24, 4);
 
     await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
-    await page.getByRole("button", { name: "Text N", exact: true }).click();
-    await expect(page.getByText(/Text armed/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Text note N", exact: true }).click();
+    await expect(page.getByText(/Text note armed/i)).toBeVisible({ timeout: 10_000 });
     await page.mouse.move(box.x + box.width * 0.52, box.y + box.height * 0.55);
     await page.mouse.down();
     await page.mouse.up();

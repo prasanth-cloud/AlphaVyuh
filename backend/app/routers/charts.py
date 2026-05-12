@@ -16,6 +16,9 @@ from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
 
+SUPPORTED_EOD_TIMEFRAMES = {"D", "W", "M"}
+INTRADAY_UNAVAILABLE_DETAIL = "Intraday candle data is not available in beta mode."
+
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
@@ -131,6 +134,13 @@ def _default_layout(symbol: str) -> dict[str, Any]:
         "indicators": [],
         "drawing_tools": [],
     }
+
+
+def _normalize_eod_timeframe(timeframe: str) -> str:
+    tf = (timeframe or "D").upper()
+    if tf not in SUPPORTED_EOD_TIMEFRAMES:
+        raise HTTPException(status_code=422, detail=INTRADAY_UNAVAILABLE_DETAIL)
+    return tf
 
 
 def _default_workspace(symbol: str, timeframe: str = "D") -> dict[str, Any]:
@@ -461,6 +471,7 @@ async def get_candles(
     adjusted: bool = Query(False),
 ):
     requested_sym = symbol.upper()
+    tf = _normalize_eod_timeframe(timeframe)
     try:
         sb = get_admin_client()
         sym, meta, alias_meta = _resolve_chart_symbol(sb, requested_sym)
@@ -471,7 +482,7 @@ async def get_candles(
             "requested_symbol": requested_sym,
             "company_name": None,
             "sector": None,
-            "timeframe": timeframe.upper(),
+            "timeframe": tf,
             "candles": [],
             "latest": None,
             "mode": "unavailable",
@@ -479,7 +490,6 @@ async def get_candles(
         }
 
     # For W/M we need more raw daily bars to aggregate into enough candles
-    tf = timeframe.upper()
     raw_limit = limit if tf == "D" else (limit * 7 if tf == "W" else limit * 31)
     raw_limit = min(raw_limit, 3000)
 
@@ -615,7 +625,7 @@ async def get_candles_live(
 ):
     """OHLCV from the configured market data provider."""
     sym = symbol.upper()
-    tf = timeframe.upper()
+    tf = _normalize_eod_timeframe(timeframe)
     try:
         data = get_market_data_provider().live_candles(sym, tf, limit, _lookup_market_identity(sym))
         data["mode"] = "live"
@@ -638,7 +648,7 @@ async def get_indicators(
     indicators: str = Query("ema20,ema50,ema200,rsi"),
 ):
     sym = symbol.upper()
-    tf = timeframe.upper()
+    tf = _normalize_eod_timeframe(timeframe)
     # Fetch more daily rows for W/M so aggregation has enough history
     raw_limit = 500 if tf == "D" else (500 * 7 if tf == "W" else 500 * 31)
     df = _fetch_ohlcv(sym, limit=min(raw_limit, 3000))
