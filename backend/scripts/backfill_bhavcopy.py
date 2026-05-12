@@ -43,6 +43,19 @@ NSE_HOLIDAYS = {
 SLEEP_BETWEEN = 2.5
 
 
+def _execute(builder, label: str, attempts: int = 4):
+    """Execute a Supabase request with retries for long operator jobs."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return builder.execute()
+        except Exception as e:
+            if attempt >= attempts:
+                raise
+            wait = min(10, 2 * attempt)
+            print(f"    retry {label} after Supabase error ({attempt}/{attempts}): {e}")
+            time.sleep(wait)
+
+
 def _trading_days(days_back: int, *, start_date: date | None = None, end_date: date | None = None) -> list[date]:
     today = end_date or date.today()
     start = start_date or (today - timedelta(days=days_back))
@@ -104,7 +117,7 @@ def _upsert_universe(client, df: pd.DataFrame):
     rows["is_active"] = True
     data = rows.to_dict("records")
     for i in range(0, len(data), 500):
-        client.table("stock_universe").upsert(data[i:i+500], on_conflict="symbol").execute()
+        _execute(client.table("stock_universe").upsert(data[i:i+500], on_conflict="symbol"), "stock_universe upsert")
 
 
 def _upsert_ohlcv(client, df: pd.DataFrame, trade_date: date, active_symbols: set[str] | None = None):
@@ -131,7 +144,7 @@ def _upsert_ohlcv(client, df: pd.DataFrame, trade_date: date, active_symbols: se
             "turnover": _safe_float(row.get("turnover")),
         })
     for i in range(0, len(rows), 500):
-        client.table("daily_ohlcv").upsert(rows[i:i+500], on_conflict="symbol,trade_date").execute()
+        _execute(client.table("daily_ohlcv").upsert(rows[i:i+500], on_conflict="symbol,trade_date"), "daily_ohlcv upsert")
     return len(rows)
 
 
@@ -140,11 +153,13 @@ def _fetch_all_symbols(client) -> list[str]:
     symbols = []
     offset = 0
     while True:
-        res = client.table("stock_universe") \
-            .select("symbol") \
-            .eq("is_active", True) \
-            .range(offset, offset + 999) \
-            .execute()
+        res = _execute(
+            client.table("stock_universe")
+            .select("symbol")
+            .eq("is_active", True)
+            .range(offset, offset + 999),
+            "stock_universe fetch",
+        )
         if not res.data:
             break
         symbols.extend(r["symbol"] for r in res.data)
@@ -184,12 +199,14 @@ def _compute_and_update_indicators(client):
             all_rows: list[dict] = []
             offset = 0
             while True:
-                chunk = client.table("daily_ohlcv") \
-                    .select("symbol, trade_date, open, high, low, close, volume") \
-                    .in_("symbol", sym_batch) \
-                    .order("trade_date", desc=False) \
-                    .range(offset, offset + 999) \
-                    .execute()
+                chunk = _execute(
+                    client.table("daily_ohlcv")
+                    .select("symbol, trade_date, open, high, low, close, volume")
+                    .in_("symbol", sym_batch)
+                    .order("trade_date", desc=False)
+                    .range(offset, offset + 999),
+                    "daily_ohlcv indicator fetch",
+                )
                 if not chunk.data:
                     break
                 all_rows.extend(chunk.data)
@@ -247,8 +264,11 @@ def _compute_and_update_indicators(client):
                     ind["ema_200"] = _safe_float(ta.ema(close_s, 200).iloc[-1])
 
                 latest_date = str(grp["trade_date"].iloc[-1].date())
-                client.table("daily_ohlcv").update(ind) \
-                    .eq("symbol", symbol).eq("trade_date", latest_date).execute()
+                _execute(
+                    client.table("daily_ohlcv").update(ind)
+                    .eq("symbol", symbol).eq("trade_date", latest_date),
+                    "daily_ohlcv indicator update",
+                )
 
                 done += 1
             except Exception as e:
@@ -289,8 +309,11 @@ async def backfill(
         success = skipped = failed = 0
         for d in days:
             # Check already ingested
-            existing = client.table("bhavcopy_ingestion_log") \
-                .select("status").eq("trade_date", str(d)).execute()
+            existing = _execute(
+                client.table("bhavcopy_ingestion_log")
+                .select("status").eq("trade_date", str(d)),
+                "bhavcopy_ingestion_log fetch",
+            )
             if existing.data and existing.data[0]["status"] == "success":
                 print(f"  skip {d} (done)")
                 skipped += 1
@@ -310,16 +333,16 @@ async def backfill(
                     print(f"  skip {d} (no rows match active universe)")
                     skipped += 1
                     continue
-                client.table("bhavcopy_ingestion_log").upsert({
+                _execute(client.table("bhavcopy_ingestion_log").upsert({
                     "trade_date": str(d), "status": "success", "rows_ingested": n,
-                }).execute()
+                }), "bhavcopy_ingestion_log success upsert")
                 print(f"  ✓ {d}: {n} rows")
                 success += 1
             except Exception as e:
                 print(f"  ✗ {d}: {e}")
-                client.table("bhavcopy_ingestion_log").upsert({
+                _execute(client.table("bhavcopy_ingestion_log").upsert({
                     "trade_date": str(d), "status": "failed", "error_message": str(e)[:300],
-                }).execute()
+                }), "bhavcopy_ingestion_log failed upsert")
                 failed += 1
 
             time.sleep(SLEEP_BETWEEN)
