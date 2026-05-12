@@ -85,6 +85,45 @@ def _lookup_market_identity(symbol: str) -> MarketIdentity:
     return MarketIdentity()
 
 
+def _resolve_chart_symbol(client, symbol: str) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
+    requested = symbol.upper()
+    try:
+        exact = (
+            client.table("stock_universe")
+            .select("symbol,company_name,sector,series")
+            .eq("symbol", requested)
+            .maybe_single()
+            .execute()
+        )
+        if exact and exact.data:
+            return requested, exact.data, None
+    except Exception:
+        return requested, {}, None
+
+    try:
+        alias = (
+            client.table("symbol_aliases")
+            .select("alias_symbol,current_symbol,alias_type,notes")
+            .eq("alias_symbol", requested)
+            .maybe_single()
+            .execute()
+        )
+        if alias and alias.data:
+            current = str(alias.data.get("current_symbol") or requested).upper()
+            meta = (
+                client.table("stock_universe")
+                .select("symbol,company_name,sector,series")
+                .eq("symbol", current)
+                .maybe_single()
+                .execute()
+            )
+            return current, (meta.data if meta else None) or {"symbol": current}, alias.data
+    except Exception:
+        pass
+
+    return requested, {}, None
+
+
 def _default_layout(symbol: str) -> dict[str, Any]:
     return {
         "symbol": symbol.upper(),
@@ -279,6 +318,31 @@ def _fetch_candle_rows(
     return rows[:limit]
 
 
+def _fetch_adjusted_candle_rows(
+    client,
+    symbol: str,
+    *,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    limit: int = 3000,
+) -> list[dict[str, Any]]:
+    """Fetch corporate-action adjusted candles through the database function."""
+    result = (
+        client.rpc(
+            "get_adjusted_candles",
+            {
+                "p_symbol": symbol.upper(),
+                "p_from_date": from_date,
+                "p_to_date": to_date,
+                "p_limit": limit,
+                "p_adjust": True,
+            },
+        )
+        .execute()
+    )
+    return result.data or []
+
+
 def _compute_indicators(df: pd.DataFrame, requested: list[str]) -> dict[str, list[dict]]:
     """Compute requested indicators on df. Returns last 365 rows per indicator."""
     result: dict[str, list[dict]] = {}
@@ -394,17 +458,17 @@ async def get_candles(
     from_date: str | None = Query(None),
     to_date: str | None = Query(None),
     limit: int = Query(365, ge=1, le=3000),
+    adjusted: bool = Query(False),
 ):
-    sym = symbol.upper()
+    requested_sym = symbol.upper()
     try:
         sb = get_admin_client()
-        # Fetch metadata
-        uni = sb.table("stock_universe").select("company_name,sector,series").eq("symbol", sym).maybe_single().execute()
-        meta = uni.data or {}
+        sym, meta, alias_meta = _resolve_chart_symbol(sb, requested_sym)
     except Exception:
         metadata = fallback_source_metadata("Candle metadata is temporarily unavailable.")
         return {
-            "symbol": sym,
+            "symbol": requested_sym,
+            "requested_symbol": requested_sym,
             "company_name": None,
             "sector": None,
             "timeframe": timeframe.upper(),
@@ -424,11 +488,15 @@ async def get_candles(
     td2 = date.fromisoformat(to_date) if to_date else td
 
     try:
-        rows = _fetch_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit)
+        if adjusted:
+            rows = _fetch_adjusted_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit)
+        else:
+            rows = _fetch_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit)
     except Exception:
         metadata = fallback_source_metadata("Candle query is temporarily unavailable.", as_of=None)
         return {
             "symbol": sym,
+            "requested_symbol": requested_sym,
             "company_name": meta.get("company_name"),
             "sector": meta.get("sector"),
             "timeframe": tf,
@@ -436,6 +504,7 @@ async def get_candles(
             "latest": None,
             "mode": "unavailable",
             "source_metadata": metadata,
+            "adjusted": adjusted,
         }
 
     if not rows:
@@ -492,6 +561,7 @@ async def get_candles(
                 "ema_20":  float(row["ema_20"])  if row.get("ema_20")  is not None else None,
                 "ema_50":  float(row["ema_50"])  if row.get("ema_50")  is not None else None,
                 "ema_200": float(row["ema_200"]) if row.get("ema_200") is not None else None,
+                **({"adjustment_factor": float(row["adjustment_factor"])} if row.get("adjustment_factor") is not None else {}),
             }
             for row in rows
         ]
@@ -519,6 +589,9 @@ async def get_candles(
     )
     return {
         "symbol": sym,
+        "requested_symbol": requested_sym,
+        "resolved_from_alias": bool(alias_meta),
+        "alias": alias_meta,
         "company_name": meta.get("company_name"),
         "sector": meta.get("sector"),
         "timeframe": tf,
@@ -527,6 +600,8 @@ async def get_candles(
         "mode": metadata["mode"],
         "source": metadata["source_name"],
         "source_metadata": metadata,
+        "adjusted": adjusted,
+        "adjustment_source": "corporate_actions" if adjusted else None,
     }
 
 

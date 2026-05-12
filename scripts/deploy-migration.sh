@@ -85,6 +85,7 @@ else
 fi
 
 MASKED_URL="$(mask_url "$DB_URL")"
+ENV_UPPER="$(printf "%s" "$ENV" | tr '[:lower:]' '[:upper:]')"
 
 echo ""
 info "deploy-migration.sh"
@@ -106,7 +107,7 @@ if ! npx supabase migration list --db-url "$DB_URL" > "$PREFLIGHT_OUT" 2> "$PREF
   STDERR_CONTENT="$(cat "$PREFLIGHT_ERR")"
 
   if echo "$STDERR_CONTENT" | grep -qi "password authentication failed"; then
-    err "Auth failed — check the password in .env.local for ${ENV^^}_SUPABASE_DB_URL"
+    err "Auth failed — check the password in .env.local for ${ENV_UPPER}_SUPABASE_DB_URL"
     echo "  The password is URL-encoded in the connection string."
     echo "  Regenerate from: Supabase dashboard → Settings → Database → Reset database password"
   elif echo "$STDERR_CONTENT" | grep -qi "connection refused"; then
@@ -114,7 +115,7 @@ if ! npx supabase migration list --db-url "$DB_URL" > "$PREFLIGHT_OUT" 2> "$PREF
     echo "  Check: Supabase dashboard → Settings → Network Bans"
     echo "  Wait for the ban to lift (usually 60 minutes), or unblock via the dashboard."
   elif echo "$STDERR_CONTENT" | grep -qi "could not translate host name"; then
-    err "Bad hostname — check the DB URL in .env.local for ${ENV^^}_SUPABASE_DB_URL"
+    err "Bad hostname — check the DB URL in .env.local for ${ENV_UPPER}_SUPABASE_DB_URL"
     echo "  Expected format: postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres"
   elif echo "$STDERR_CONTENT" | grep -qi "timeout\|timed out"; then
     err "Connection timed out — check your network or Supabase status at status.supabase.com"

@@ -8,6 +8,8 @@ AlphaVyuh's default market-data foundation is official NSE bhavcopy data. This i
 - At least five years of daily OHLCV rows for active NSE EQ symbols where NSE historical bhavcopy data exists.
 - Dashboard breadth built from the latest high-coverage complete session.
 - Charts must explain limited history instead of silently showing a short range.
+- Symbol renames can be mapped through `symbol_aliases` so old NSE archive names do not pollute the active universe.
+- Split/bonus-adjusted candles are available through `get_adjusted_candles` for long-horizon chart/backtest paths that opt in to adjusted history.
 
 ## Operator Commands
 
@@ -30,6 +32,8 @@ Audit current coverage:
 cd backend
 python scripts/audit_market_data_coverage.py
 ```
+
+When migration `20260511193000_data_quality_foundation.sql` is applied, the audit uses the database-side `market_data_coverage_audit()` RPC. That keeps the check fast even after five years of OHLCV history has been loaded.
 
 Backfill five years by default:
 
