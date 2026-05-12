@@ -25,10 +25,12 @@ import { trackEvent } from "@/lib/analytics";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 import {
   formatCandleRange,
+  formatChartGranularity,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
 } from "@/lib/watchlist-chart-range";
+import { formatMarketDataSource } from "@/lib/data-copy";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -2781,7 +2783,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                             <span className="text-[11px] font-medium tabular-nums" style={{ color: "var(--app-text1)" }}>{val}</span>
                           </div>
                         ))}
-                        <div className="text-[9px] mt-1" style={{ color: "var(--app-text3)" }}>Source: Yahoo Finance</div>
+                        <div className="text-[9px] mt-1" style={{ color: "var(--app-text3)" }}>
+                          Source: {formatMarketDataSource("Yahoo Finance")}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -2846,7 +2850,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {rangeLabel} · {timeframe} · {formatCandleRange(data.candles)}
+                  {rangeLabel} · {formatChartGranularity(timeframe)} · {formatCandleRange(data.candles)}
                 </div>
               )}
               {drawnLines.length > 0 && (

@@ -369,7 +369,7 @@ export default function LandingPage() {
         <div className="lp-wrap">
           <div className="lp-stats-grid">
             <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Beta screens</div><div className="lp-stat-sub">scanner, watchlist, charts, journal</div></div>
-            <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">Symbols tracked</div><div className="lp-stat-sub">latest completed market session</div></div>
+            <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">Symbols tracked</div><div className="lp-stat-sub">latest market snapshot</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="20" data-suffix="+">0</div><div className="lp-stat-label">Scanner filters</div><div className="lp-stat-sub">momentum, volume, RS, trend</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected desk</div><div className="lp-stat-sub">from signal to review</div></div>
           </div>

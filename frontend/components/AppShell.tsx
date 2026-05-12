@@ -175,7 +175,7 @@ function DataModePill() {
     ? 'Provider-data mode. Private beta still treats market data as informational and requires source/freshness checks.'
     : demo
       ? 'Demo data mode. Charts and market views use deterministic sample data when market data is unavailable.'
-      : 'Market data mode. Market views use the latest completed market session.'
+      : 'Market data mode. Market views use the latest available market snapshot.'
 
   return (
     <Link

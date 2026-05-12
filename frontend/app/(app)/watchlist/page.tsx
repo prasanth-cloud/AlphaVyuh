@@ -55,11 +55,13 @@ import { workflowPlanStatus } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
 import {
   formatCandleRange,
+  formatChartGranularity,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
   type WatchlistChartRequest,
 } from "@/lib/watchlist-chart-range";
+import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -621,7 +623,7 @@ function ChartPanel({
         setCandles(rows);
         setChartSource({
           mode: d.source_metadata?.mode ?? d.mode ?? (isMockMode ? "demo" : "eod"),
-          source: d.source_metadata?.source_name ?? d.source ?? null,
+          source: formatMarketDataSource(d.source_metadata?.source_name ?? d.source, isMockMode ? "Demo data" : "Market data"),
           asOf: d.source_metadata?.as_of ?? rows[rows.length - 1]?.time ?? null,
           symbol: responseSymbol,
         });
@@ -728,14 +730,14 @@ function ChartPanel({
               compact
             />
             <span className="workspace-pill">Focus: {symbol}</span>
-            <span className="workspace-pill" title={isMockMode ? "Deterministic mock data for workflow QA, not market data" : "Using the latest completed market session unless a live quote is explicitly enabled"}>
-              Data: {isMockMode ? "Demo fixtures" : "Market data"}
+            <span className="workspace-pill" title={isMockMode ? "Demo workflow data, not market data" : "Using the latest available market snapshot unless a live quote is explicitly enabled"}>
+              Data: {isMockMode ? "Demo data" : "Market data"}
             </span>
-            <span className="caption">{chartRequest.label} · {chartRequest.timeframe} · {formatCandleRange(candles)}</span>
+            <span className="caption">{chartRequest.label} · {formatChartGranularity(chartRequest.timeframe)} · {formatCandleRange(candles)}</span>
           </div>
           {chartSource && (
             <div className="caption" style={{ marginTop: 3 }}>
-              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo fixtures" : "Market data")} · {chartSource.mode === "eod" ? "market" : chartSource.mode ?? (isMockMode ? "demo" : "market")}
+              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo data" : "Market data")} · {formatMarketDataMode(chartSource.mode, isMockMode)}
               {chartRangeNote ? ` · ${chartRangeNote}` : ""}
             </div>
           )}

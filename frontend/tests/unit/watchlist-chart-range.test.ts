@@ -3,6 +3,7 @@ import {
   CHART_TIMEFRAME_OPTIONS,
   INTRADAY_UNAVAILABLE_MESSAGE,
   candleRangeMonths,
+  formatChartGranularity,
   formatCandleRange,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
@@ -29,22 +30,25 @@ describe("watchlist chart range mapping", () => {
     });
   });
 
-  it("uses daily candle requests for multi-year ranges", () => {
+  it("uses compressed candle requests for multi-year ranges", () => {
     expect(getWatchlistChartRequest("3Y", NOW)).toMatchObject({
-      timeframe: "D",
+      timeframe: "W",
       from_date: "2023-05-07",
-      limit: 800,
+      limit: 170,
     });
     expect(getWatchlistChartRequest("5Y", NOW)).toMatchObject({
-      timeframe: "D",
+      timeframe: "W",
       from_date: "2021-05-07",
-      limit: 1300,
+      limit: 280,
     });
     expect(getWatchlistChartRequest("10Y", NOW)).toMatchObject({
-      timeframe: "D",
+      timeframe: "M",
       from_date: "2016-05-07",
-      limit: 2600,
+      limit: 130,
     });
+    expect(formatChartGranularity("D")).toBe("Daily");
+    expect(formatChartGranularity("W")).toBe("Weekly");
+    expect(formatChartGranularity("M")).toBe("Monthly");
   });
 
   it("exposes intraday options as unavailable in beta mode", () => {

@@ -14,6 +14,7 @@ import { mockRunScan } from '@/lib/mock-data'
 import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
+import { formatMarketDataSource } from '@/lib/data-copy'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -635,7 +636,7 @@ export default function ScannerPage() {
         setIsLimited(data.is_limited || false)
         setScanTrust({
           mode: data.source_metadata?.mode ?? 'demo',
-          source: data.source_metadata?.source_name ?? 'AlphaVyuh mock fixtures',
+          source: formatMarketDataSource(data.source_metadata?.source_name, 'Demo data'),
           asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
           coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
           universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
@@ -668,7 +669,7 @@ export default function ScannerPage() {
       setIsLimited(data.is_limited || false)
       setScanTrust({
         mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
-        source: data.source_metadata?.source_name ?? data.source ?? 'NSE bhavcopy',
+        source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, 'Exchange market data'),
         asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
         coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
         universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
