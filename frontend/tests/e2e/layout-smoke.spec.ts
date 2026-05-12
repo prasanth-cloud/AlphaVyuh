@@ -229,7 +229,7 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · AlphaVyuh mock fixtures · demo/i);
 
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "10Y", exact: true }).click();
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · M · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · D · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
 
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
     await page.locator(".watchlist-chart-header").getByText(/SMA|Indicators/).first().click();

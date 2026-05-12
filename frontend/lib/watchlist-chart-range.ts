@@ -41,9 +41,9 @@ const REQUESTS: Record<EodChartTimeframe, { timeframe: "D" | "W" | "M"; days?: n
   "3M": { timeframe: "D", months: 3, limit: 80, expectedMonths: 3 },
   "6M": { timeframe: "D", months: 6, limit: 150, expectedMonths: 6 },
   "1Y": { timeframe: "D", months: 12, limit: 270, expectedMonths: 12 },
-  "3Y": { timeframe: "W", months: 36, limit: 170, expectedMonths: 36 },
-  "5Y": { timeframe: "W", months: 60, limit: 270, expectedMonths: 60 },
-  "10Y": { timeframe: "M", months: 120, limit: 130, expectedMonths: 120 },
+  "3Y": { timeframe: "D", months: 36, limit: 800, expectedMonths: 36 },
+  "5Y": { timeframe: "D", months: 60, limit: 1300, expectedMonths: 60 },
+  "10Y": { timeframe: "D", months: 120, limit: 2600, expectedMonths: 120 },
 };
 
 export function isIntradayTimeframe(label: string): label is IntradayChartTimeframe {
