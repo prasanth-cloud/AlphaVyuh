@@ -1,6 +1,6 @@
 "use client";
 
-import { SlidersHorizontal } from "lucide-react";
+import { Check, SlidersHorizontal } from "lucide-react";
 import { indicatorKey, indicatorLabel, indicatorMenuItems } from "./indicators";
 import type { ChartIndicator } from "./types";
 
@@ -85,7 +85,7 @@ export default function IndicatorMenu({ selected, onChange }: Props) {
                     background: active ? "rgba(244,247,251,0.12)" : "transparent",
                   }}
                 >
-                  {active ? "x" : ""}
+                  {active ? <Check size={9} strokeWidth={3} /> : ""}
                 </span>
                 {indicatorLabel(indicator)}
               </span>

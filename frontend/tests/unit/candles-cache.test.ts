@@ -49,8 +49,10 @@ describe("candles client cache", () => {
     const { getCandles } = await import("@/lib/api");
     await getCandles("RELIANCE", { timeframe: "D", limit: 120 });
     await getCandles("RELIANCE", { timeframe: "W", limit: 120 });
+    await getCandles("RELIANCE", { timeframe: "D", limit: 120, from_date: "2025-05-07", to_date: "2026-05-07" });
+    await getCandles("RELIANCE", { timeframe: "D", limit: 120, from_date: "2021-05-07", to_date: "2026-05-07" });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("coalesces AI pattern requests and fails soft", async () => {

@@ -1,6 +1,7 @@
 import os
 
 import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
@@ -136,3 +137,14 @@ def test_resolve_chart_symbol_uses_alias_mapping():
     assert symbol == "CARYSIL"
     assert meta["company_name"] == "Carysil Ltd"
     assert alias["alias_type"] == "rename"
+
+
+def test_normalize_eod_timeframe_rejects_intraday():
+    assert charts._normalize_eod_timeframe("d") == "D"
+    assert charts._normalize_eod_timeframe("W") == "W"
+
+    with pytest.raises(HTTPException) as exc:
+        charts._normalize_eod_timeframe("5m")
+
+    assert exc.value.status_code == 422
+    assert "Intraday candle data is not available" in exc.value.detail

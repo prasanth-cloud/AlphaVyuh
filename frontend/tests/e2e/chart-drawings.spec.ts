@@ -47,10 +47,24 @@ test.describe("Full chart drawings", () => {
     await expect(page.getByRole("button", { name: /^Draw$/ })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
-    for (const tool of ["Trendline T", "Horizontal H", "Ray R", "Zone Z", "Fib F", "Text N", "Long Position L", "Short Position S", "Price alert"]) {
+    for (const tool of [
+      "Trendline T",
+      "Horizontal line H",
+      "H-Ray J",
+      "Ray R",
+      "Rectangle / zone Z",
+      "Fibonacci retracement F",
+      "Text note N",
+      "Long position L",
+      "Short position S",
+      "Price alert",
+      "Magnet / snap On",
+    ]) {
       await expect(page.getByRole("button", { name: tool, exact: true })).toBeVisible();
     }
-    await expect(page.getByRole("button", { name: /Magnet|snap/i })).toHaveCount(0);
+    await page.getByRole("button", { name: "Magnet / snap On", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Magnet / snap Off", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Magnet / snap Off", exact: true }).click();
     await page.getByRole("button", { name: /Trendline/ }).click();
     await expect(page.getByText(/Trendline armed/)).toBeVisible();
     await page.keyboard.press("Escape");
@@ -76,7 +90,8 @@ test.describe("Full chart drawings", () => {
       await expect(page.getByRole("button", { name: tf, exact: true })).toBeVisible();
     }
     await expect(page.getByText("Intraday data is not available in this beta.")).toBeVisible();
-    await expect(page.getByRole("button", { name: "5m", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "5m", exact: true }).click({ force: true });
+    await expect(page.getByText(/Intraday data is not available/).first()).toBeVisible();
 
     await page.locator(".chart-timeframe-dropdown summary").click();
     await page.getByRole("button", { name: /EMA 20/ }).click();
