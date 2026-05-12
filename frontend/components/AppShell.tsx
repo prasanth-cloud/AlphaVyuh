@@ -169,13 +169,13 @@ function DataModePill() {
   const configuredMock = process.env.NEXT_PUBLIC_DATA_MODE === 'mock'
   const allowFallback = process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === 'true'
   const demo = !forceLive && (configuredMock || allowFallback)
-  const label = forceLive ? 'Provider data' : demo ? 'Demo data' : 'Market data'
+  const label = forceLive ? 'Provider data' : demo ? 'Demo data' : 'Latest session'
   const color = forceLive ? 'var(--gain)' : demo ? 'var(--warn)' : 'var(--text-tertiary)'
   const title = forceLive
     ? 'Provider-data mode. Private beta still treats market data as informational and requires source/freshness checks.'
     : demo
       ? 'Demo data mode. Charts and market views use deterministic sample data when market data is unavailable.'
-      : 'Market data mode. Market views use the latest available market snapshot.'
+      : 'Market data mode. Market views use the latest completed market snapshot, not live intraday data.'
 
   return (
     <Link

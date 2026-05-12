@@ -54,6 +54,27 @@ def _enabled_founder_codes() -> set[str]:
     }
 
 
+def _ensure_checkout_enabled() -> None:
+    if not settings.payment_checkout_enabled:
+        raise HTTPException(403, "Payment checkout is disabled for private beta")
+
+
+def _validated_order_context(order: dict, *, expected_user_id: str) -> tuple[str, str, str]:
+    notes = order.get("notes") or {}
+    plan = str(notes.get("plan") or "").lower()
+    currency = str(notes.get("currency") or order.get("currency") or "").upper()
+    billing = str(notes.get("billing") or "").lower()
+    user_id = str(notes.get("user_id") or "")
+    key = (plan, currency, billing)
+    if user_id != expected_user_id:
+        raise HTTPException(400, "Payment order does not belong to this user")
+    if key not in PLAN_PRICES:
+        raise HTTPException(400, "Payment order metadata is invalid")
+    if int(order.get("amount") or 0) != int(PLAN_PRICES[key]["amount"]):
+        raise HTTPException(400, "Payment order amount does not match plan")
+    return plan, currency, billing
+
+
 # ── Create Order ──────────────────────────────────────────────────────────────
 
 class CreateOrderRequest(BaseModel):
@@ -69,6 +90,7 @@ async def payment_config():
     return {
         "gateway": "razorpay",
         "configured": bool(settings.razorpay_key_id and settings.razorpay_key_secret),
+        "checkout_enabled": bool(settings.payment_checkout_enabled),
         "mode": "live" if key.startswith("rzp_live_") else "test" if key.startswith("rzp_test_") else "disabled",
         "key_prefix": key[:12] if key else "",
         "founder_plan_available": bool(_enabled_founder_codes()),
@@ -80,6 +102,7 @@ async def create_order(
     body: CreateOrderRequest,
     user_id: str = Depends(get_current_user_id),
 ):
+    _ensure_checkout_enabled()
     currency = (body.currency or "INR").upper()
     if currency not in SUPPORTED_CURRENCIES:
         raise HTTPException(400, f"Unsupported currency: {currency}")
@@ -192,6 +215,7 @@ async def verify_payment(
     body: VerifyRequest,
     user_id: str = Depends(get_current_user_id),
 ):
+    _ensure_checkout_enabled()
     if not settings.razorpay_key_secret:
         raise HTTPException(503, "Payment gateway is not configured")
 
@@ -205,19 +229,22 @@ async def verify_payment(
     if not hmac.compare_digest(expected, body.razorpay_signature):
         raise HTTPException(400, "Invalid payment signature")
 
-    currency = (body.currency or "INR").upper()
-    billing = (body.billing or "monthly").lower()
-    key = (body.plan, currency, billing)
-    if key not in PLAN_PRICES:
-        raise HTTPException(400, "Invalid plan")
+    try:
+        order = _rzp_client().order.fetch(body.razorpay_order_id)
+    except Exception as e:
+        logger.warning("Razorpay order fetch failed during verification: %s", e)
+        raise HTTPException(400, "Payment order could not be verified")
+
+    plan, currency, billing = _validated_order_context(order, expected_user_id=user_id)
 
     # Activate plan
+    key = (plan, currency, billing)
     meta = PLAN_PRICES[key]
     expires_at = (datetime.now(timezone.utc) + timedelta(days=meta["days"])).isoformat()
 
     sb = get_admin_client()
     sb.table("users").update({
-        "plan": body.plan,
+        "plan": plan,
         "plan_expires_at": expires_at,
         "billing_currency": currency,
         "billing_period": billing,
@@ -228,20 +255,21 @@ async def verify_payment(
         "user_id": user_id,
         "razorpay_order_id": body.razorpay_order_id,
         "razorpay_payment_id": body.razorpay_payment_id,
-        "plan": body.plan,
+        "plan": plan,
         "amount": meta["amount"],
         "currency": currency,
         "status": "success",
     }).execute()
 
-    logger.info(f"Payment verified: user={user_id} plan={body.plan} currency={currency} billing={billing}")
-    return {"status": "success", "plan": body.plan, "expires_at": expires_at, "currency": currency, "billing": billing}
+    logger.info(f"Payment verified: user={user_id} plan={plan} currency={currency} billing={billing}")
+    return {"status": "success", "plan": plan, "expires_at": expires_at, "currency": currency, "billing": billing}
 
 
 # ── Webhook (server-side confirmation from Razorpay) ─────────────────────────
 
 @router.post("/webhook")
 async def razorpay_webhook(request: Request):
+    _ensure_checkout_enabled()
     if not settings.razorpay_webhook_secret:
         raise HTTPException(503, "Payment webhook is not configured")
 

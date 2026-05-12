@@ -1,7 +1,15 @@
 """Tests for payment plan pricing and signature verification."""
 import hashlib
 import hmac
+import os
+
 import pytest
+from fastapi import HTTPException
+
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+
+from app.routers import payments  # noqa: E402
 
 
 # ── Plan prices ────────────────────────────────────────────────────────────────
@@ -92,3 +100,39 @@ class TestPaymentSignature:
         body = f"{order_id}|{payment_id}"
         expected = hmac.new("wrong_secret".encode(), body.encode(), hashlib.sha256).hexdigest()
         assert not hmac.compare_digest(sig, expected)
+
+
+def test_founder_codes_default_to_disabled(monkeypatch):
+    monkeypatch.setattr(payments.settings, "founder_plan_codes", "")
+
+    assert payments._enabled_founder_codes() == set()
+
+
+def test_checkout_kill_switch_defaults_to_disabled(monkeypatch):
+    monkeypatch.setattr(payments.settings, "payment_checkout_enabled", False)
+
+    with pytest.raises(HTTPException) as exc:
+        payments._ensure_checkout_enabled()
+
+    assert exc.value.status_code == 403
+    assert "disabled" in exc.value.detail
+
+
+def test_payment_verify_uses_order_metadata_not_client_plan():
+    order = {
+        "amount": payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "notes": {
+            "user_id": "user-123",
+            "plan": "pro",
+            "currency": "INR",
+            "billing": "monthly",
+        },
+    }
+
+    assert payments._validated_order_context(order, expected_user_id="user-123") == ("pro", "INR", "monthly")
+
+    tampered = {**order, "amount": payments.PLAN_PRICES[("elite", "INR", "annual")]["amount"]}
+    with pytest.raises(HTTPException) as exc:
+        payments._validated_order_context(tampered, expected_user_id="user-123")
+    assert exc.value.status_code == 400

@@ -877,14 +877,14 @@ function ChartPanel({
             {brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
-            {canRouteLiveOrder ? "Broker order routing available after confirmation" : brokerStatus?.connected ? "Broker import available; simulated capture unless execution is enabled" : "Order capture records as simulated"}
+            {brokerStatus?.connected ? "Broker import available; beta order capture still records as simulated" : "Order capture records as simulated"}
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
           {[
             { label: "R:R", value: planRiskReward != null ? planRiskReward.toFixed(2) : "—", tone: planRiskReward == null ? "var(--text-tertiary)" : planRiskReward >= 2 ? "var(--gain)" : "var(--warn)" },
             { label: "Risk", value: orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", tone: "var(--text-secondary)" },
-            { label: "Mode", value: canRouteLiveOrder ? "Confirm live" : brokerStatus?.connected ? "Import" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
+            { label: "Mode", value: brokerStatus?.connected ? "Import only" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
           ].map((item) => (
             <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
               <div className="label" style={{ marginBottom: 2 }}>{item.label}</div>

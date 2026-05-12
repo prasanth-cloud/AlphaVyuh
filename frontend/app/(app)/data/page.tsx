@@ -238,13 +238,13 @@ export default function DataFreshnessPage() {
       <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
-          value={health?.status ? health.status.toUpperCase() : "UNKNOWN"}
-          detail={health?.latest_trade_date ? `Latest complete trade date ${health.latest_trade_date}.` : "Freshness endpoint unavailable."}
+          value={health?.status ? health.status.toUpperCase() : "CHECK DATA"}
+          detail={health?.latest_trade_date ? `Latest complete trade date ${health.latest_trade_date}.` : "Freshness details are not available right now."}
           status={health?.status === "healthy" ? "good" : health?.status === "degraded" ? "warn" : "bad"}
         />
         <HealthTile
           label="Universe coverage"
-          value={coveragePct != null ? `${coveragePct}%` : "UNKNOWN"}
+          value={coveragePct != null ? `${coveragePct}%` : "NOT AVAILABLE"}
           detail={`${fmtNumber(health?.symbols_on_latest_date)} symbols on latest date out of ${fmtNumber(health?.universe_active)} active.`}
           status={coveragePct == null ? "bad" : coveragePct >= 95 ? "good" : coveragePct >= 80 ? "warn" : "bad"}
         />

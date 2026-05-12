@@ -2805,15 +2805,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               {/* ── Broker connect panel ────────────────────────────── */}
               {!brokerConnected && (
                 <div className="p-4" style={{ borderTop: "1px solid var(--app-border)" }}>
-                  <div className="text-[10px] uppercase tracking-[0.5px] mb-2 font-semibold" style={{ color: "var(--app-text3)" }}>Quick order</div>
+                  <div className="text-[10px] uppercase tracking-[0.5px] mb-2 font-semibold" style={{ color: "var(--app-text3)" }}>Broker import</div>
                   <div className="rounded-[8px] p-3 text-center" style={{ background: "rgba(0,229,196,0.08)", border: "1px solid rgba(0,229,196,0.2)" }}>
                     <div className="text-[12px] font-semibold mb-0.5" style={{ color: "var(--app-teal)" }}>
                       {brokerStatus?.token_expired ? "Reconnect your broker" : "Connect your broker"}
                     </div>
                     <div className="text-[11px] mb-2.5" style={{ color: "var(--app-text2)" }}>
                       {brokerStatus?.token_expired
-                        ? "Your broker session expired. Reconnect to route live orders."
-                        : "Trade directly from the chart"}
+                        ? "Your broker session expired. Reconnect to import filled trades."
+                        : "Private beta supports read-only import, not chart order execution."}
                     </div>
                     <Link
                       href="/settings/broker"
