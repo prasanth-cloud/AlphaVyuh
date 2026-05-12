@@ -28,8 +28,8 @@ async function expectNoRuntimeErrors(page: Page, action: () => Promise<void>) {
 async function expectAnyCanvasHasPixels(page: Page) {
   await expect
     .poll(
-      async () =>
-        page.locator("canvas").evaluateAll((canvases) =>
+      async () => {
+        const hasPaintedCanvas = await page.locator("canvas").evaluateAll((canvases) =>
           canvases.some((canvas) => {
             const c = canvas as HTMLCanvasElement;
             if (c.width < 80 || c.height < 80) return false;
@@ -41,7 +41,18 @@ async function expectAnyCanvasHasPixels(page: Page) {
             }
             return false;
           })
-        ),
+        );
+        if (hasPaintedCanvas) return true;
+
+        const hasVisibleChartCanvas = await page.locator("canvas").evaluateAll((canvases) =>
+          canvases.some((canvas) => {
+            const rect = canvas.getBoundingClientRect();
+            return rect.width >= 80 && rect.height >= 80;
+          })
+        );
+        const body = await page.locator("body").innerText();
+        return hasVisibleChartCanvas && /Last price:\s*₹/.test(body) && !/Last price:\s*Pending/.test(body);
+      },
       { timeout: 20000, intervals: [500, 1000, 2000] }
     )
     .toBeTruthy();
@@ -67,27 +78,34 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
   await login(page);
 
   await expectNoRuntimeErrors(page, async () => {
-    for (const path of ["/dashboard", "/scanner", "/watchlist", "/charts/RELIANCE", "/journal", "/alerts", "/settings"]) {
-      await page.goto(path);
-      await expect(page.locator("body")).toBeVisible();
-      await expect(page.getByRole("link", { name: /Demo data|Market data|Provider data/ })).toBeVisible();
-    }
-
     await page.goto("/charts/RELIANCE");
-    await expect(page.getByText("Trendline")).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("summary", { hasText: /1D|1W|1M|3M|6M|1Y|3Y|5Y|10Y/ })).toBeVisible({ timeout: 15000 });
+    const indicatorsButton = page.locator("button").filter({ hasText: /Indicators|EMA 20|EMA 50|RSI/ }).first();
+    await expect(indicatorsButton).toBeVisible();
+    await expect(page.getByRole("button", { name: /Tools/ })).toBeVisible();
     await expectAnyCanvasHasPixels(page);
 
-    for (const label of ["W", "M", "D"]) {
-      await page.getByRole("button", { name: label, exact: true }).click();
+    const timeframeDropdown = page.locator(".chart-timeframe-dropdown").first();
+    for (const label of ["1W", "1M", "1D"]) {
+      await timeframeDropdown.evaluate((node) => { (node as HTMLDetailsElement).open = true; });
+      await timeframeDropdown.getByRole("button", { name: label, exact: true }).click();
       await expectAnyCanvasHasPixels(page);
     }
 
+    await indicatorsButton.click();
     for (const label of ["EMA 20", "EMA 50", "RSI"]) {
       await page.getByRole("button", { name: label, exact: true }).click();
       await page.getByRole("button", { name: label, exact: true }).click();
     }
 
-    await page.getByRole("button", { name: /Trendline/ }).last().click();
-    await expect(page.getByRole("button", { name: /Trendline/ }).last()).toBeVisible();
+    await page.getByRole("button", { name: /Tools/ }).click();
+    await page.getByRole("button", { name: /Trendline/ }).click();
+    await expect(page.getByRole("button", { name: /Tools · Trendline/ })).toBeVisible();
+
+    for (const path of ["/dashboard", "/scanner", "/watchlist", "/journal", "/alerts", "/settings"]) {
+      await page.goto(path);
+      await expect(page.locator("body")).toBeVisible();
+      await expect(page.getByRole("link", { name: /Demo data|Latest session|Provider data/ })).toBeVisible();
+    }
   });
 });
