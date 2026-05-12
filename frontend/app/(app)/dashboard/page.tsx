@@ -12,7 +12,6 @@ import {
   updateMe,
   type AiPatterns,
   type DataHealth,
-  type JournalEntry,
   type MarketOverview,
 } from '@/lib/api'
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
@@ -336,16 +335,6 @@ type WorkflowState = {
   patterns: AiPatterns | null
 }
 
-type ReviewPrompts = {
-  needsReviewCount: number
-  reviewSymbol: string | null
-  reviewSymbolClosed: number
-  weakSetup: string | null
-  weakSetupTrades: number
-  weakSetupWinRate: number | null
-  latestLesson: string | null
-}
-
 const DASHBOARD_SNAPSHOT_CACHE_KEY = 'alphavyuh-dashboard-snapshot-v1'
 
 type DashboardSnapshotCache = {
@@ -590,84 +579,6 @@ function ReviewPulseCard({
   )
 }
 
-function ReviewPromptsCard({ prompts }: { prompts: ReviewPrompts }) {
-  const items = [
-    prompts.needsReviewCount > 0
-      ? `Review ${prompts.needsReviewCount} closed trade${prompts.needsReviewCount === 1 ? '' : 's'} still missing lessons.`
-      : null,
-    prompts.reviewSymbol
-      ? `${prompts.reviewSymbol} has ${prompts.reviewSymbolClosed} closed trade${prompts.reviewSymbolClosed === 1 ? '' : 's'} in the journal sample.`
-      : null,
-    prompts.weakSetup
-      ? `${prompts.weakSetup} is underperforming${prompts.weakSetupWinRate != null ? ` at ${prompts.weakSetupWinRate.toFixed(0)}% win rate` : ''}.`
-      : null,
-  ].filter(Boolean) as string[]
-
-  return (
-    <Card padding="md">
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
-        <h2 className="heading-card">Review prompts</h2>
-        <a href="/journal?tab=ai" className="caption" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Open review</a>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-        {items.length > 0 ? items.map((item) => (
-          <div key={item} style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-            {item}
-          </div>
-        )) : (
-          <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-            No pending review notes in the current sample. Journal analytics remain available for closed-trade summaries.
-          </div>
-        )}
-      </div>
-
-      {prompts.latestLesson && (
-        <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
-          <div className="label" style={{ marginBottom: 4 }}>Latest lesson</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-            {prompts.latestLesson.slice(0, 160)}{prompts.latestLesson.length > 160 ? '…' : ''}
-          </div>
-        </div>
-      )}
-    </Card>
-  )
-}
-
-function deriveReviewPrompts(entries: JournalEntry[]): ReviewPrompts {
-  const closed = entries.filter((entry) => entry.status === 'closed')
-  const unreviewed = closed.filter((entry) => !entry.lessons?.trim())
-  const reviewed = closed.filter((entry) => Boolean(entry.lessons?.trim()))
-
-  const bySymbol = new Map<string, number>()
-  const bySetup = new Map<string, { trades: number; wins: number }>()
-
-  for (const entry of closed) {
-    bySymbol.set(entry.symbol, (bySymbol.get(entry.symbol) ?? 0) + 1)
-    const setup = entry.setup_type ?? 'Untagged'
-    const current = bySetup.get(setup) ?? { trades: 0, wins: 0 }
-    current.trades += 1
-    if ((entry.pnl ?? 0) > 0) current.wins += 1
-    bySetup.set(setup, current)
-  }
-
-  const reviewSymbolEntry = Array.from(bySymbol.entries()).sort((a, b) => b[1] - a[1])[0] ?? null
-  const weakSetupEntry = Array.from(bySetup.entries())
-    .filter(([, value]) => value.trades >= 3)
-    .map(([setup, value]) => ({ setup, trades: value.trades, winRate: value.trades ? (value.wins / value.trades) * 100 : null }))
-    .sort((a, b) => (a.winRate ?? 100) - (b.winRate ?? 100))[0] ?? null
-
-  return {
-    needsReviewCount: unreviewed.length,
-    reviewSymbol: reviewSymbolEntry?.[0] ?? null,
-    reviewSymbolClosed: reviewSymbolEntry?.[1] ?? 0,
-    weakSetup: weakSetupEntry?.setup ?? null,
-    weakSetupTrades: weakSetupEntry?.trades ?? 0,
-    weakSetupWinRate: weakSetupEntry?.winRate ?? null,
-    latestLesson: reviewed[0]?.lessons?.trim() ?? null,
-  }
-}
-
 export default function DashboardPage() {
   const [data, setData] = useState<MarketOverview | null>(null)
   const dataRef = useRef<MarketOverview | null>(null)
@@ -688,16 +599,6 @@ export default function DashboardPage() {
     onboardingCompleted: false,
     patterns: null,
   })
-  const [reviewPrompts, setReviewPrompts] = useState<ReviewPrompts>({
-    needsReviewCount: 0,
-    reviewSymbol: null,
-    reviewSymbolClosed: 0,
-    weakSetup: null,
-    weakSetupTrades: 0,
-    weakSetupWinRate: null,
-    latestLesson: null,
-  })
-
   const load = useCallback(async () => {
     setError('')
     const pendingSnapshot = getMarketSnapshot()
@@ -786,7 +687,6 @@ export default function DashboardPage() {
           patterns: null,
         }
         setWorkflow(nextWorkflow)
-        setReviewPrompts(deriveReviewPrompts(journal.entries))
 
         if (closedTrades >= 3) {
           getAiPatterns()
@@ -943,7 +843,6 @@ export default function DashboardPage() {
             {/* Right: movers + EMA breadth */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <ReviewPulseCard workflow={workflow} />
-              <ReviewPromptsCard prompts={reviewPrompts} />
               <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" />
               <MoversCard title="Top losers" items={data.top_losers} variant="loss" />
               <EmaBreadthCard data={data} />

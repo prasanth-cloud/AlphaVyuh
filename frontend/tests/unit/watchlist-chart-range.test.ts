@@ -29,16 +29,21 @@ describe("watchlist chart range mapping", () => {
     });
   });
 
-  it("uses weekly or monthly compression for multi-year ranges", () => {
+  it("uses daily candle requests for multi-year ranges", () => {
     expect(getWatchlistChartRequest("3Y", NOW)).toMatchObject({
-      timeframe: "W",
+      timeframe: "D",
       from_date: "2023-05-07",
-      limit: 170,
+      limit: 800,
+    });
+    expect(getWatchlistChartRequest("5Y", NOW)).toMatchObject({
+      timeframe: "D",
+      from_date: "2021-05-07",
+      limit: 1300,
     });
     expect(getWatchlistChartRequest("10Y", NOW)).toMatchObject({
-      timeframe: "M",
+      timeframe: "D",
       from_date: "2016-05-07",
-      limit: 130,
+      limit: 2600,
     });
   });
 

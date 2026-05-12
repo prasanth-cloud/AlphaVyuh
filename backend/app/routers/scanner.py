@@ -233,13 +233,13 @@ PRESETS = [
     {
         "id": "vcp_breakout",
         "name": "VCP Breakout",
-        "description": "Volatility Contraction Pattern candidates near highs with a constructive trend stack and controlled ATR risk.",
+        "description": "Volatility Contraction Pattern candidates within 5% of recent highs, with trend alignment, contraction, and liquidity confirmation.",
         "color": "#0f766e",
         "filters": {
             "vcp_contraction": True,
             "vcp_min_pivots": 2,
             "vcp_max_depth_pct": 15.0,
-            "vcp_pivot_proximity_pct": 10.0,
+            "vcp_pivot_proximity_pct": 5.0,
             "all_smas_bullish": True,
             "price_vs_ema50": "above",
             "price_vs_ema150": "above",
@@ -248,49 +248,54 @@ PRESETS = [
             "ema150_above_ema200": True,
             "ema_200_trending_up": True,
             "rs_score_min": 70,
-            "week_52_high_pct_max": 12.0,
+            "week_52_high_pct_max": 10.0,
             "atr_pct_max": 8.0,
-            "volume_ratio_min": 0.8,
+            "volume_ratio_min": 1.0,
+            "avg_volume_50d_min": 100000.0,
             "series": ["EQ"],
         },
     },
     {
         "id": "stage2_breakout",
         "name": "Stage 2 Breakout",
-        "description": "Daily Stage 2 approximation: price above the SMA trend stack, close near 52-week highs, and volume expanding.",
+        "description": "Stage 2 breakout approximation: price above the SMA trend stack, rising EMA 200, near highs, with volume expansion.",
         "color": "#d97706",
         "filters": {
             "all_smas_bullish": True,
             "price_vs_sma50": "above",
+            "price_vs_sma150": "above",
             "price_vs_sma200": "above",
             "ema_200_trending_up": True,
             "week_52_high_pct_max": 15.0,
-            "volume_ratio_min": 1.2,
+            "volume_ratio_min": 1.5,
             "rsi_min": 50,
             "rs_score_min": 70,
+            "avg_volume_50d_min": 100000.0,
             "series": ["EQ"],
         },
     },
     {
         "id": "high_52w_breakout",
         "name": "52W High Breakout",
-        "description": "Stocks closing within 2% of the 52-week high with positive price action and above-average volume.",
+        "description": "Stocks breaking to a new 52-week high or closing within 2% of the high with above-average volume.",
         "color": "#e5383b",
         "filters": {
             "week_52_high_pct_max": 2.0,
+            "new_52w_high": True,
             "pct_change_min": 0.0,
-            "volume_ratio_min": 1.2,
+            "volume_ratio_min": 1.5,
             "price_vs_sma50": "above",
+            "avg_volume_50d_min": 100000.0,
             "series": ["EQ"],
         },
     },
     {
         "id": "episodic_pivot",
         "name": "Episodic Pivot",
-        "description": "Large positive move with volume expansion, above the intermediate trend, for news/earnings-style pivot review.",
+        "description": "Event-style pivot: strong six-month performance, large positive move, volume expansion, and close above the intermediate trend.",
         "color": "#7c6af0",
         "filters": {
-            "pct_change_min": 3.0,
+            "pct_change_min": 4.0,
             "volume_ratio_min": 2.0,
             "price_perf_6m_min": 20.0,
             "price_vs_sma50": "above",
@@ -302,14 +307,15 @@ PRESETS = [
     {
         "id": "darvas_box_breakout",
         "name": "Box Breakout",
-        "description": "Tight high-base breakout approximation: near 52-week highs, above SMA 50, with volume confirmation and manageable ATR.",
+        "description": "Tight box breakout: 3-week box height under 15%, near 52-week highs, above SMA 50, with volume confirmation and manageable ATR.",
         "color": "#26a65b",
         "filters": {
             "week_52_high_pct_max": 8.0,
             "price_vs_sma50": "above",
-            "volume_ratio_min": 1.2,
+            "volume_ratio_min": 1.5,
             "atr_pct_max": 6.0,
             "darvas_box_height_pct_max": 15.0,
+            "avg_volume_50d_min": 100000.0,
             "series": ["EQ"],
         },
     },
@@ -555,11 +561,13 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.avg_volume_50d_min is not None:
             if avg_vol50_v is None:
                 data_warnings.append("50-day average volume is unavailable.")
+                continue
             elif avg_vol50_v < f.avg_volume_50d_min:
                 continue
         if f.avg_volume_50d_max is not None:
             if avg_vol50_v is None:
                 data_warnings.append("50-day average volume is unavailable.")
+                continue
             elif avg_vol50_v > f.avg_volume_50d_max:
                 continue
         if f.turnover_min    is not None and turnover < f.turnover_min:      continue
@@ -589,6 +597,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.ema50_above_ema150:
             if ema50_v is None or ema150_v is None:
                 data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+                continue
             elif ema50_v <= ema150_v:
                 continue
             else:
@@ -596,6 +605,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.ema150_above_ema200:
             if ema150_v is None or ema200_v is None:
                 data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+                continue
             elif ema150_v <= ema200_v:
                 continue
             else:
@@ -626,6 +636,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.ema_200_trending_up is True:
             if ema200_slope_30d_v is None:
                 data_warnings.append("EMA 200 slope is unavailable until the scanner intelligence migration is applied/backfilled.")
+                continue
             elif ema200_slope_30d_v <= 0:
                 continue
             else:
@@ -633,11 +644,13 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.ema_200_slope_30d_min is not None:
             if ema200_slope_30d_v is None:
                 data_warnings.append("EMA 200 slope is unavailable.")
+                continue
             elif ema200_slope_30d_v < f.ema_200_slope_30d_min:
                 continue
         if f.ema_200_slope_30d_max is not None:
             if ema200_slope_30d_v is None:
                 data_warnings.append("EMA 200 slope is unavailable.")
+                continue
             elif ema200_slope_30d_v > f.ema_200_slope_30d_max:
                 continue
         if f.ema20_dist_min is not None and (ema20_dist is None or ema20_dist < f.ema20_dist_min): continue
@@ -668,11 +681,13 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.price_perf_6m_min is not None:
             if price_perf_6m_v is None:
                 data_warnings.append("6-month price performance is unavailable until the scanner intelligence migration is applied/backfilled.")
+                continue
             elif price_perf_6m_v < f.price_perf_6m_min:
                 continue
         if f.price_perf_6m_max is not None:
             if price_perf_6m_v is None:
                 data_warnings.append("6-month price performance is unavailable.")
+                continue
             elif price_perf_6m_v > f.price_perf_6m_max:
                 continue
         if price_perf_6m_v is not None and (f.price_perf_6m_min is not None or f.price_perf_6m_max is not None):
@@ -680,6 +695,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.darvas_box_height_pct_max is not None:
             if darvas_box_height_v is None:
                 data_warnings.append("3-week box height is unavailable until the scanner intelligence migration is applied/backfilled.")
+                continue
             elif darvas_box_height_v > f.darvas_box_height_pct_max:
                 continue
             else:
@@ -687,6 +703,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.nr7 is True:
             if is_nr7_v is None:
                 data_warnings.append("NR7 range flag is unavailable.")
+                continue
             elif not is_nr7_v:
                 continue
             else:
@@ -700,11 +717,13 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         if f.price_vs_ema150 == "above":
             if ema150_v is None:
                 data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+                continue
             elif close <= ema150_v:
                 continue
         if f.price_vs_ema150 == "below":
             if ema150_v is None:
                 data_warnings.append("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.")
+                continue
             elif close >= ema150_v:
                 continue
         if f.price_vs_ema200 == "above" and (ema200_v is None or close <= ema200_v): continue

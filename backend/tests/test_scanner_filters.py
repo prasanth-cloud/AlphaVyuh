@@ -241,8 +241,13 @@ class TestCanonicalSwingPresets:
         ]
         names = {preset["id"]: preset["name"] for preset in PRESETS}
         descriptions = " ".join(preset["description"] for preset in PRESETS)
+        filters = {preset["id"]: preset["filters"] for preset in PRESETS}
         assert names["darvas_box_breakout"] == "Box Breakout"
         assert "Minervini" not in descriptions
+        assert filters["vcp_breakout"]["vcp_pivot_proximity_pct"] == 5.0
+        assert filters["high_52w_breakout"]["new_52w_high"] is True
+        assert filters["stage2_breakout"]["volume_ratio_min"] == 1.5
+        assert filters["darvas_box_breakout"]["avg_volume_50d_min"] == 100000.0
 
     def test_sma_trend_stack_filter_accepts_constructive_stack(self):
         from app.routers.scanner import ScanFilters, _apply_filters
@@ -273,31 +278,26 @@ class TestCanonicalSwingPresets:
         assert results[0]["setup_grade"] in {"A", "B"}
         assert results[0]["confidence_label"] in {"High confidence", "Worth review"}
 
-    def test_scanner_score_penalizes_missing_data_warnings(self):
+    def test_strict_preset_rejects_missing_slope_data(self):
         from app.routers.scanner import ScanFilters, _apply_filters
 
-        clean = _apply_filters([_scanner_row()], ScanFilters(all_smas_bullish=True), "trend_template")[0]
-        warned = _apply_filters([_scanner_row(ema_200_slope_30d=None)], ScanFilters(ema_200_trending_up=True), "trend_template")[0]
+        assert _apply_filters([_scanner_row(ema_200_slope_30d=None)], ScanFilters(ema_200_trending_up=True), "trend_template") == []
 
-        assert warned["setup_score"] < clean["setup_score"]
-
-    def test_scanner_warns_when_new_intelligence_fields_are_not_backfilled(self):
+    def test_scanner_rejects_when_new_intelligence_fields_are_not_backfilled(self):
         from app.routers.scanner import ScanFilters, _apply_filters
 
         rows = [_scanner_row(ema_200_slope_30d=None)]
         results = _apply_filters(rows, ScanFilters(ema_200_trending_up=True))
 
-        assert results
-        assert any("EMA 200 slope is unavailable" in warning for warning in results[0]["data_warnings"])
+        assert results == []
 
-    def test_scanner_warns_when_ema150_is_not_backfilled(self):
+    def test_scanner_rejects_when_ema150_is_not_backfilled(self):
         from app.routers.scanner import ScanFilters, _apply_filters
 
         rows = [_scanner_row(ema_150=None)]
         results = _apply_filters(rows, ScanFilters(price_vs_ema150="above", ema50_above_ema150=True))
 
-        assert results
-        assert any("EMA 150 is unavailable" in warning for warning in results[0]["data_warnings"])
+        assert results == []
 
     def test_darvas_box_height_filter_uses_backfilled_field_when_available(self):
         from app.routers.scanner import ScanFilters, _apply_filters
