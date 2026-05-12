@@ -11,19 +11,18 @@ AlphaVyuh's default market-data foundation is official NSE bhavcopy data. This i
 
 ## Operator Commands
 
-Latest production audit on 2026-05-11:
+Latest production audit after historical backfill on 2026-05-11:
 
 ```text
 Active NSE EQ symbols: 2508
 Latest covered trade date: 2026-05-11
 Symbols on latest date: 2452
-5Y chart-ready: 0
-Partial history: 2508
+5Y chart-ready: 1446
+Partial history: 1062
 Missing history: 0
-Typical current depth: about 226-227 trading rows for established symbols
 ```
 
-This means symbol coverage is broad, but historical depth still needs a bounded backfill before 5Y/10Y charts and strict long-horizon scanners are fully trustworthy.
+Before the backfill, `5Y chart-ready` was 0 and most established symbols had about 226-227 trading rows. The remaining partial-history symbols are mostly newer listings, renamed symbols, or symbols whose historical NSE archive identity does not map cleanly to the current active symbol.
 
 Audit current coverage:
 
