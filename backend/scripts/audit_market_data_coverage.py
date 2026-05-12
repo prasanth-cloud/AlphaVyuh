@@ -85,6 +85,17 @@ def _audit_history(client, symbols: list[str], start_date: date, max_rows: int |
     return by_symbol, latest_counts
 
 
+def _rpc_audit(client, years: int) -> dict | None:
+    try:
+        result = client.rpc("market_data_coverage_audit", {"p_years": years}).execute()
+        rows = result.data or []
+        if rows:
+            return rows[0]
+    except Exception:
+        return None
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit market data coverage for AlphaVyuh.")
     parser.add_argument("--years", type=int, default=5, help="History window to audit")
@@ -92,6 +103,20 @@ def main() -> int:
     args = parser.parse_args()
 
     client = _client()
+    if args.sample_limit is None:
+        rpc = _rpc_audit(client, args.years)
+        if rpc:
+            print("Market data coverage audit")
+            print(f"  Active NSE EQ symbols:      {rpc.get('active_nse_eq_symbols')}")
+            print(f"  Window start:               {rpc.get('window_start')}")
+            print(f"  Latest covered trade date:  {rpc.get('latest_covered_trade_date')}")
+            print(f"  Symbols on latest date:     {rpc.get('symbols_on_latest_date')}")
+            print(f"  {args.years}Y chart-ready:          {rpc.get('chart_ready_symbols')}")
+            print(f"  Partial history:            {rpc.get('partial_history_symbols')}")
+            print(f"  Missing history:            {rpc.get('missing_history_symbols')}")
+            print("  Path:                       database RPC")
+            return 0
+
     symbols = _active_nse_symbols(client)
     start_date = date.today() - timedelta(days=365 * args.years + 10)
 
