@@ -172,7 +172,7 @@ def _fetch_all_symbols(client) -> list[str]:
 def _compute_and_update_indicators(client):
     """
     Fast batch approach:
-      1. Fetch 252 rows for up to 50 symbols at once (one big query per batch).
+      1. Fetch recent rows for a small symbol batch.
       2. Compute all indicators in pandas — zero extra HTTP calls.
       3. One UPDATE per symbol (latest date only) — the sidebar only shows the latest row.
 
@@ -183,7 +183,8 @@ def _compute_and_update_indicators(client):
     total = len(symbols)
     print(f"  {total} symbols to process")
 
-    BATCH = 50   # symbols fetched per query
+    BATCH = 10   # keep queries below Supabase statement timeout after 5Y backfill
+    lookback_start = date.today() - timedelta(days=430)
     done = failed = 0
     start = time.time()
 
@@ -195,7 +196,7 @@ def _compute_and_update_indicators(client):
             client = get_admin_client()
 
         try:
-            # Fetch up to 252 rows per symbol in one query (50 syms × 252 rows = 12600 max)
+            # Fetch enough recent rows for latest 52W/EMA200 fields without scanning 5Y history.
             all_rows: list[dict] = []
             offset = 0
             while True:
@@ -203,6 +204,7 @@ def _compute_and_update_indicators(client):
                     client.table("daily_ohlcv")
                     .select("symbol, trade_date, open, high, low, close, volume")
                     .in_("symbol", sym_batch)
+                    .gte("trade_date", str(lookback_start))
                     .order("trade_date", desc=False)
                     .range(offset, offset + 999),
                     "daily_ohlcv indicator fetch",
