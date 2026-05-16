@@ -104,4 +104,53 @@ describe("workflow local-first persistence", () => {
       ["INFY", "review_later", true],
     ]);
   });
+
+  it("keeps rich scanner context when later patches only change lifecycle", async () => {
+    const { getWorkflowStates, upsertWorkflowState } = await import("@/lib/api");
+    const { scannerWatchlistPatch } = await import("@/lib/scanner-workflow");
+
+    await upsertWorkflowState(scannerWatchlistPatch(
+      {
+        symbol: "AUBANK",
+        match_reasons: ["Price above EMA stack"],
+        confidence_reasons: ["RS near highs"],
+        setup_score: 82,
+        setup_grade: "A",
+        confidence_label: "High confidence",
+      },
+      "watchlist-1",
+      {
+        presetId: "trend_template",
+        presetName: "Trend Template",
+        tradeDate: "2026-05-15",
+        dataSource: "NSE bhavcopy EOD",
+        dataMode: "eod",
+        dataAsOf: "2026-05-15",
+      },
+    ));
+
+    await upsertWorkflowState({
+      symbol: "AUBANK",
+      lifecycle: "ready",
+      entry: 700,
+      stop: 650,
+      target: 820,
+    });
+
+    const [state] = await getWorkflowStates({ symbols: ["AUBANK"] });
+    expect(state).toMatchObject({
+      symbol: "AUBANK",
+      lifecycle: "ready",
+      watchlist_id: "watchlist-1",
+      scanner_context: {
+        preset_name: "Trend Template",
+        match_reasons: ["Price above EMA stack"],
+        setup_score: 82,
+        data_as_of: "2026-05-15",
+      },
+      entry: 700,
+      stop: 650,
+      target: 820,
+    });
+  });
 });

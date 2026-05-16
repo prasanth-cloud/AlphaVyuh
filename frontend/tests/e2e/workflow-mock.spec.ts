@@ -184,6 +184,27 @@ test.describe("Mock workflow smoke", () => {
     await expect(page).toHaveURL(/\/watchlist/, { timeout: 15_000 });
     await expect(page.getByText("Launch Flow QA").first()).toBeVisible();
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("trade-idea-context")).toContainText(/Original scan|Trend Template|As of/i, { timeout: 10_000 });
+
+    const seededContext = await page.evaluate((activeSymbol) => {
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return workflow[activeSymbol];
+    }, symbol);
+    expect(seededContext).toMatchObject({
+      lifecycle: "watch",
+      source: "scanner",
+      scanner_context: {
+        source: "scanner",
+      },
+    });
+    expect(seededContext.scanner_context.match_reasons.length).toBeGreaterThan(0);
+
+    const watchlistUrl = page.url();
+    await page.getByRole("button", { name: /^Open chart$/ }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/charts/${symbol}`), { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
+    await page.goto(watchlistUrl);
+    await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole("button", { name: /^Order$/ }).click();
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
@@ -212,7 +233,22 @@ test.describe("Mock workflow smoke", () => {
       };
     }, symbol);
     expect(state.journal).toMatchObject({ symbol, quantity: 3, status: "open" });
-    expect(state.workflow).toMatchObject({ lifecycle: "open" });
+    expect(state.journal.entry_reason).toContain("Scanner:");
+    expect(state.journal.entry_reason).toContain("Matched:");
+    expect(state.journal.entry_reason).toContain("Thesis: Launch QA setup");
+    expect(state.journal.entry_reason).toContain("Invalidation: Exit if");
+    expect(state.workflow).toMatchObject({
+      lifecycle: "open",
+      entry: 1500,
+      stop: 1440,
+      target: 1650,
+      position_size: 3,
+      thesis: "Launch QA setup from scanner shortlist with clear confirmation.",
+      invalidation_rule: "Exit if the breakout base fails on closing basis.",
+      scanner_context: {
+        source: "scanner",
+      },
+    });
     expect(["scanner", "watchlist"]).toContain(state.workflow.source);
     expect(errors).toEqual([]);
   });
