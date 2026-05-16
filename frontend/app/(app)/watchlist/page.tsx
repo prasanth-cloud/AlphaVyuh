@@ -423,6 +423,38 @@ function DecisionDesk({
             : (planNudges.length ? planNudges.join(" · ") : status.next)}
         </div>
       </div>
+      {draft.scanner_context && (
+        <div
+          data-testid="trade-idea-context"
+          style={{
+            marginBottom: 10,
+            padding: "8px 10px",
+            borderRadius: 12,
+            border: "1px solid rgba(255,255,255,0.07)",
+            background: "rgba(255,255,255,0.035)",
+          }}
+        >
+          <div className="label" style={{ marginBottom: 5 }}>Original scan</div>
+          <div className="workspace-pill-row" style={{ marginTop: 0 }}>
+            {draft.scanner_context.preset_name && (
+              <span className="workspace-pill">{draft.scanner_context.preset_name}</span>
+            )}
+            {(draft.scanner_context.setup_grade || draft.scanner_context.setup_score != null) && (
+              <span className="workspace-pill">
+                {[draft.scanner_context.setup_grade, draft.scanner_context.setup_score].filter((value) => value != null && value !== "").join(" ")}
+              </span>
+            )}
+            {draft.scanner_context.data_as_of && (
+              <span className="workspace-pill">As of {draft.scanner_context.data_as_of}</span>
+            )}
+          </div>
+          {draft.scanner_context.match_reasons?.[0] && (
+            <div className="caption" style={{ marginTop: 6, lineHeight: 1.55 }}>
+              {draft.scanner_context.match_reasons[0]}
+            </div>
+          )}
+        </div>
+      )}
       <div className="decision-desk-primary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
         <select value={draft.lifecycle} onChange={(e) => patch({ lifecycle: e.target.value as WorkflowLifecycle })} style={inputStyle}>
           {LIFECYCLES.map((item) => <option key={item} value={item}>{lifecycleLabel(item)}</option>)}

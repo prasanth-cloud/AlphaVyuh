@@ -11,7 +11,7 @@ import {
   isMockMode,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
-import { scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
+import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
 import { formatMarketDataSource } from '@/lib/data-copy'
@@ -745,10 +745,24 @@ export default function ScannerPage() {
     showToast(`"${name}" deleted`)
   }
 
+  function scanContextOptions() {
+    return {
+      presetId: activePreset,
+      presetName: activePresetMeta?.name ?? (activePreset === 'saved_screen' ? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
+      tradeDate,
+      dataSource: scanTrust?.source ?? null,
+      dataMode: scanTrust?.mode ?? null,
+      dataAsOf: scanTrust?.asOf ?? tradeDate ?? null,
+    }
+  }
+
   async function addToWatchlist(symbol: string, wlId: string) {
     try {
       await addSymbolToWatchlist(wlId, symbol)
-      await bulkUpsertWorkflowStates(scannerWatchlistPatches([symbol], wlId))
+      const result = results.find((row) => row.symbol === symbol)
+      await bulkUpsertWorkflowStates([
+        result ? scannerWatchlistPatch(result, wlId, scanContextOptions()) : scannerWatchlistPatch(symbol, wlId, scanContextOptions()),
+      ])
       setWorkflowMarks(prev => ({ ...prev, [symbol]: 'watch' }))
       trackEvent('add_to_watchlist', { source: 'scanner', symbol, watchlist_id: wlId })
       showToast(`${symbol} added`)
@@ -764,7 +778,10 @@ export default function ScannerPage() {
       for (const symbol of symbols) next[symbol] = label
       return next
     })
-    await bulkUpsertWorkflowStates(symbols.map(symbol => scannerWorkflowPatch(symbol, label)))
+    await bulkUpsertWorkflowStates(symbols.map(symbol => {
+      const result = results.find((row) => row.symbol === symbol)
+      return scannerWorkflowPatch(symbol, label, undefined, result, scanContextOptions())
+    }))
     trackEvent(label === 'shortlist' ? 'scanner_shortlist' : label === 'review_later' ? 'scanner_review_later' : 'scanner_ignore', {
       count: symbols.length,
     })
@@ -782,7 +799,7 @@ export default function ScannerPage() {
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
       const symbols = toAdd.slice(0, 50).map((s) => s.symbol)
       await Promise.all(symbols.map((symbol) => addSymbolToWatchlist(wl.id, symbol).catch(() => {})))
-      await bulkUpsertWorkflowStates(scannerWatchlistPatches(symbols, wl.id))
+      await bulkUpsertWorkflowStates(scannerWatchlistPatches(toAdd.slice(0, 50), wl.id, scanContextOptions()))
       trackEvent('add_to_watchlist', { source: 'scanner_bulk_create', count: symbols.length, watchlist_id: wl.id })
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)

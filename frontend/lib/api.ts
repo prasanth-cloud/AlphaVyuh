@@ -596,6 +596,7 @@ export type WorkflowState = {
   setup_quality?: number | null;
   notes?: string | null;
   tags?: string[];
+  scanner_context?: ScannerIdeaContext | null;
   pinned?: boolean;
   review_later?: boolean;
   ignored?: boolean;
@@ -603,6 +604,23 @@ export type WorkflowState = {
   journal_id?: string | null;
   created_at?: string;
   updated_at?: string;
+};
+
+export type ScannerIdeaContext = {
+  source: "scanner";
+  preset_id?: string | null;
+  preset_name?: string | null;
+  match_reasons?: string[];
+  confidence_reasons?: string[];
+  data_warnings?: string[];
+  setup_score?: number | null;
+  setup_grade?: string | null;
+  confidence_label?: string | null;
+  scan_trade_date?: string | null;
+  data_source?: string | null;
+  data_mode?: string | null;
+  data_as_of?: string | null;
+  captured_at?: string;
 };
 
 export type WorkflowStatePatch = Partial<Omit<WorkflowState, "id" | "user_id" | "created_at" | "updated_at">> & {
@@ -2412,7 +2430,22 @@ export async function triggerTradeLesson(entryId: string): Promise<JournalEntry>
 export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
   if (shouldUseMockFallback()) {
     const side = order.side === "buy" ? "long" : "short";
+    const localWorkflow = readLocalWorkflowStates();
+    const symbol = order.symbol.toUpperCase();
+    const previousWorkflow = localWorkflow[symbol];
+    const ideaContext = previousWorkflow?.scanner_context;
+    const ideaParts = ideaContext
+      ? [
+          ideaContext.preset_name ? `Scanner: ${ideaContext.preset_name}` : "Scanner idea",
+          ideaContext.setup_grade || ideaContext.setup_score != null
+            ? `Score: ${[ideaContext.setup_grade, ideaContext.setup_score].filter((value) => value != null && value !== "").join(" ")}`
+            : null,
+          ideaContext.match_reasons?.[0] ? `Matched: ${ideaContext.match_reasons[0]}` : null,
+          ideaContext.data_as_of ? `As of: ${ideaContext.data_as_of}` : null,
+        ].filter(Boolean)
+      : [];
     const reasonParts = [
+      ...ideaParts,
       order.notes?.trim() || null,
       order.thesis?.trim() ? `Thesis: ${order.thesis.trim()}` : null,
       order.invalidation_rule?.trim() ? `Invalidation: ${order.invalidation_rule.trim()}` : null,
@@ -2429,23 +2462,22 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
       entry_reason: `${reasonParts.length ? reasonParts.join(" | ") : `${order.side.toUpperCase()} mock order`} [Simulated · ${order.source_page ?? "chart"}${order.source_context ? ` · ${order.source_context}` : ""}]`,
     });
     writeLocalJournalEntries([created, ...readLocalJournalEntries()]);
-    const localWorkflow = readLocalWorkflowStates();
-    const symbol = order.symbol.toUpperCase();
     writeLocalWorkflowStates({
       ...localWorkflow,
       [symbol]: {
-        ...(localWorkflow[symbol] ?? { symbol, lifecycle: "open" as WorkflowLifecycle }),
+        ...(previousWorkflow ?? { symbol, lifecycle: "open" as WorkflowLifecycle }),
         symbol,
         lifecycle: "open",
         source: order.source_page ?? "chart",
         entry: order.price,
-        stop: order.stop_loss ?? localWorkflow[symbol]?.stop ?? null,
-        target: order.target_price ?? localWorkflow[symbol]?.target ?? null,
+        stop: order.stop_loss ?? previousWorkflow?.stop ?? null,
+        target: order.target_price ?? previousWorkflow?.target ?? null,
         position_size: order.quantity,
-        setup_type: order.setup_type ?? localWorkflow[symbol]?.setup_type ?? null,
-        notes: order.notes ?? localWorkflow[symbol]?.notes ?? null,
-        thesis: order.thesis ?? localWorkflow[symbol]?.thesis ?? null,
-        invalidation_rule: order.invalidation_rule ?? localWorkflow[symbol]?.invalidation_rule ?? null,
+        setup_type: order.setup_type ?? previousWorkflow?.setup_type ?? null,
+        notes: order.notes ?? previousWorkflow?.notes ?? null,
+        thesis: order.thesis ?? previousWorkflow?.thesis ?? null,
+        invalidation_rule: order.invalidation_rule ?? previousWorkflow?.invalidation_rule ?? null,
+        scanner_context: ideaContext ?? null,
         journal_id: created.id,
         updated_at: new Date().toISOString(),
       },

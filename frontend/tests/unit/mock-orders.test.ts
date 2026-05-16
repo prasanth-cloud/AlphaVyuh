@@ -26,7 +26,28 @@ describe("mock order flow", () => {
   });
 
   it("creates a local journal draft and workflow state for simulated orders", async () => {
-    const { getJournalEntries, getWorkflowStates, placeOrder } = await import("@/lib/api");
+    const { getJournalEntries, getWorkflowStates, placeOrder, upsertWorkflowState } = await import("@/lib/api");
+    const { scannerWatchlistPatch } = await import("@/lib/scanner-workflow");
+
+    await upsertWorkflowState(scannerWatchlistPatch(
+      {
+        symbol: "reliance",
+        match_reasons: ["Volume expansion with trend alignment"],
+        confidence_reasons: ["Near 52-week high"],
+        setup_score: 84,
+        setup_grade: "A",
+        confidence_label: "High confidence",
+      },
+      "workflow-qa-watchlist",
+      {
+        presetId: "trend_template",
+        presetName: "Trend Template",
+        tradeDate: "2026-05-15",
+        dataSource: "NSE bhavcopy EOD",
+        dataMode: "eod",
+        dataAsOf: "2026-05-15",
+      },
+    ));
 
     const result = await placeOrder({
       symbol: "reliance",
@@ -63,15 +84,23 @@ describe("mock order flow", () => {
     });
     expect(journal.entries[0].entry_reason).toContain("Thesis: Breakout holding");
     expect(journal.entries[0].entry_reason).toContain("Invalidation: Close below");
+    expect(journal.entries[0].entry_reason).toContain("Scanner: Trend Template");
+    expect(journal.entries[0].entry_reason).toContain("Matched: Volume expansion with trend alignment");
 
     const workflow = await getWorkflowStates({ symbols: ["RELIANCE"] });
     expect(workflow[0]).toMatchObject({
       lifecycle: "open",
+      watchlist_id: "workflow-qa-watchlist",
       entry: 1500,
       stop: 1440,
       target: 1650,
       position_size: 10,
       journal_id: result.journal_id,
+      scanner_context: {
+        preset_name: "Trend Template",
+        setup_score: 84,
+        data_as_of: "2026-05-15",
+      },
     });
   });
 
