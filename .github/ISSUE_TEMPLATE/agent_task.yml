@@ -1,0 +1,46 @@
+name: Agent task
+description: Track a bounded task owned by an AlphaVyuh agent.
+title: "[Agent Task]: "
+labels: ["type:agent-task", "status:planned"]
+body:
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent owner
+      options:
+        - Manager
+        - Product
+        - Frontend
+        - Backend/Data
+        - QA
+        - Security
+        - Deploy
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What exactly should this agent own?
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Files or surfaces
+      description: Expected file ownership or product surface.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Tests, browser checks, screenshots, or review required.
+

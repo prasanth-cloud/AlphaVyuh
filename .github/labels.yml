@@ -1,0 +1,78 @@
+- name: type:feature
+  color: "1f9d55"
+  description: Trader-facing product improvement
+- name: type:bug
+  color: "d73a4a"
+  description: Broken or confusing behavior
+- name: type:agent-task
+  color: "5319e7"
+  description: Bounded task owned by an agent
+- name: type:launch-blocker
+  color: "b60205"
+  description: Blocks launch confidence
+- name: agent:manager
+  color: "0e8a16"
+  description: Manager Agent ownership
+- name: agent:product
+  color: "fbca04"
+  description: Product Agent ownership
+- name: agent:frontend
+  color: "1d76db"
+  description: Frontend Agent ownership
+- name: agent:backend-data
+  color: "006b75"
+  description: Backend/Data Agent ownership
+- name: agent:qa
+  color: "c2e0c6"
+  description: QA Agent ownership
+- name: agent:security
+  color: "b60205"
+  description: Security Agent ownership
+- name: agent:deploy
+  color: "bfdadc"
+  description: Deploy Agent ownership
+- name: status:planned
+  color: "d4c5f9"
+  description: Planned but not started
+- name: status:in-progress
+  color: "fbca04"
+  description: Work in progress
+- name: status:blocked
+  color: "d93f0b"
+  description: Blocked on input or dependency
+- name: status:ready-review
+  color: "0e8a16"
+  description: Ready for review
+- name: status:merged
+  color: "c5def5"
+  description: Merged or complete
+- name: impact:ux
+  color: "a2eeef"
+  description: Improves usability or clarity
+- name: impact:latency
+  color: "0052cc"
+  description: Improves performance
+- name: impact:data-trust
+  color: "006b75"
+  description: Improves data accuracy or provenance
+- name: impact:retention
+  color: "5319e7"
+  description: Improves repeated user value
+- name: impact:revenue
+  color: "1f883d"
+  description: Improves monetization potential
+- name: impact:security
+  color: "b60205"
+  description: Improves safety or abuse resistance
+- name: risk:low
+  color: "c2e0c6"
+  description: Low implementation or launch risk
+- name: risk:medium
+  color: "fbca04"
+  description: Medium implementation or launch risk
+- name: risk:high
+  color: "d93f0b"
+  description: High implementation or launch risk
+- name: risk:owner-gated
+  color: "000000"
+  description: Requires founder or external approval

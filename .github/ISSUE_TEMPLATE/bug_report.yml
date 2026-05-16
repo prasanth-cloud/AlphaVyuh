@@ -1,0 +1,43 @@
+name: Bug report
+description: Report a broken or confusing AlphaVyuh workflow.
+title: "[Bug]: "
+labels: ["type:bug", "status:planned"]
+body:
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Go to...\n2. Click...\n3. See..."
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - Blocks launch
+        - Breaks core workflow
+        - Confusing but usable
+        - Visual polish
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Screenshots, console errors, URLs, or test output.
+
