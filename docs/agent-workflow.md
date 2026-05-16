@@ -107,6 +107,8 @@ The PR must include:
 
 - What changed.
 - Why it improves AlphaVyuh.
+- What the agent learned.
+- What should improve next.
 - Screenshots for UI.
 - Test results.
 - Risks.
@@ -130,4 +132,3 @@ planned -> in progress -> ready for QA -> ready for review -> merged
 ```
 
 Blocked work must include the exact owner input needed.
-

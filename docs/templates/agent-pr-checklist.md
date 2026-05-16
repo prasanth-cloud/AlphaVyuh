@@ -6,6 +6,13 @@
 - Why it matters:
 - User surfaces touched:
 
+## Required Agent Closeout
+
+- Done:
+- Why:
+- Learned:
+- Improve next:
+
 ## Agent Work Completed
 
 - [ ] Manager plan recorded.
@@ -46,4 +53,3 @@ Paste exact commands and results:
 - Remaining risk:
 - Owner-gated item:
 - Follow-up issue:
-

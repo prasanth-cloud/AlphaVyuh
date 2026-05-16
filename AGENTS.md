@@ -74,5 +74,14 @@ A task is done only when:
 - The old behavior that must be preserved still works.
 - Tests or documented manual verification cover the change.
 - The PR explains user impact, files changed, validation, risks, and owner-gated work.
+- The final agent report includes: what was done, why it was done, what was learned, and how to improve the product or engineering system next.
 - Any blocker is listed in `/Users/PRASAANTH/alphavyuh/BLOCKERS.md` or the PR body.
 
+## Required Agent Summary
+
+Every agent-built change must end with a short summary:
+
+- Done: the concrete product or repo change.
+- Why: the trader, launch, security, or engineering reason.
+- Learned: what the agent discovered while doing the work.
+- Improve next: the next technical, product, UX, data, QA, or security improvement suggested by the evidence.

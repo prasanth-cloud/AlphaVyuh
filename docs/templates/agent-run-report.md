@@ -24,6 +24,13 @@
 - Reliability:
 - Launch readiness:
 
+## Required Closeout
+
+- Done:
+- Why:
+- Learned:
+- Improve next:
+
 ## Validation
 
 ```text
@@ -35,4 +42,3 @@
 ## Blockers
 
 ## Next Recommended Goal
-
