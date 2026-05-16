@@ -9,6 +9,7 @@
     "test:e2e:backend": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.backend.config.ts",
     "test:e2e:perf": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/performance-smoke.spec.ts",
     "test:e2e:layout": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/layout-smoke.spec.ts",
+    "test:e2e:release": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.release.config.ts frontend/tests/e2e/release-readiness.spec.ts",
     "test:e2e:prod:layout": "PLAYWRIGHT_BASE_URL=https://www.alphavyuh.com npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/layout-smoke.spec.ts",
     "launch:check": "bash scripts/launch-readiness-check.sh",
     "broker:smoke": "bash scripts/broker-readonly-smoke.sh",

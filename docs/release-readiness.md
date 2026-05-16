@@ -41,6 +41,7 @@ npm run test
 npm run build
 NEXT_PUBLIC_DATA_MODE=mock npm run build
 npx playwright test tests/e2e/release-readiness.spec.ts
+npm run test:e2e:release
 npx playwright test --config=playwright.mock.config.ts tests/e2e/performance-smoke.spec.ts
 npx playwright test --config=playwright.mock.config.ts tests/e2e/layout-smoke.spec.ts
 npx playwright test --config=playwright.backend.config.ts
