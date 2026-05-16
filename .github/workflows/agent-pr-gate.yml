@@ -1,0 +1,84 @@
+name: Agent PR Gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agent-pr-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agent-pr-gate:
+    name: Agent regression gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_DATA_MODE: mock
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "true"
+      NEXT_PUBLIC_FORCE_LIVE_DATA: "false"
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_SERVICE_ROLE_KEY: test-service-role-key
+      SUPABASE_JWT_SECRET: playwright-secret
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install frontend dependencies
+        run: |
+          npm ci
+          npm --prefix frontend ci
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt pip-audit
+
+      - name: Install Playwright Chromium
+        run: npm --prefix frontend exec playwright install --with-deps chromium
+
+      - name: Frontend lint
+        run: npm run lint
+
+      - name: Frontend typecheck
+        run: npm run typecheck
+
+      - name: Frontend unit tests
+        run: npm run test
+
+      - name: Frontend dependency audit
+        run: npm audit --audit-level=moderate
+
+      - name: Release readiness browser smoke
+        run: npm run test:e2e:release
+
+      - name: Backend tests
+        run: python -m pytest backend/tests
+
+      - name: Backend dependency audit
+        run: python -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off
+
