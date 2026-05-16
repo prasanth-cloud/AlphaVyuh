@@ -17,6 +17,11 @@ if [[ -z "$PYTHON_BIN" ]]; then
   fi
 fi
 
+# Backend tests import settings during collection. Use explicit non-secret
+# placeholders when local/CI environments have no Supabase credentials.
+export SUPABASE_URL="${SUPABASE_URL:-https://example.supabase.co}"
+export SUPABASE_SERVICE_ROLE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-test-service-role-key}"
+
 run_step() {
   local name="$1"
   shift
@@ -40,16 +45,13 @@ else
   run_step "Mock workflow browser smoke" npm run test:e2e:mock
   run_step "Mock workflow performance smoke" npm run test:e2e:perf
   run_step "Mock workflow layout smoke" npm run test:e2e:layout
+  run_step "Release readiness browser smoke" npm run test:e2e:release
   run_step "Live backend HTTP smoke" npm run test:e2e:backend
 fi
 
 if [[ -d backend ]]; then
   if [[ -n "$PYTHON_BIN" ]]; then
-    run_step "Backend focused tests" "$PYTHON_BIN" -m pytest \
-      backend/tests/test_market_data_provider.py \
-      backend/tests/test_payments.py \
-      backend/tests/test_rate_limit.py \
-      backend/tests/test_credentials.py
+    run_step "Backend tests" "$PYTHON_BIN" -m pytest backend/tests
   else
     echo "Skipping backend tests: no Python interpreter is available."
     echo
