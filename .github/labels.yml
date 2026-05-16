@@ -64,6 +64,9 @@
 - name: impact:security
   color: "b60205"
   description: Improves safety or abuse resistance
+- name: impact:reliability
+  color: "bfd4f2"
+  description: Improves release confidence or operational stability
 - name: risk:low
   color: "c2e0c6"
   description: Low implementation or launch risk
