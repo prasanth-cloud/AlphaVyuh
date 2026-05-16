@@ -1,0 +1,45 @@
+name: Launch blocker
+description: Track a blocker that prevents public or beta launch confidence.
+title: "[Launch Blocker]: "
+labels: ["type:launch-blocker", "status:blocked", "risk:owner-gated"]
+body:
+  - type: textarea
+    id: blocker
+    attributes:
+      label: Blocker
+      description: What is blocked?
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Launch impact
+      description: Why does this matter?
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Decision owner
+      options:
+        - Founder
+        - Product
+        - Engineering
+        - Security
+        - Data vendor
+        - Broker
+        - Legal/Compliance
+    validations:
+      required: true
+  - type: textarea
+    id: required_input
+    attributes:
+      label: Required input
+      description: Exact decision, credential, evidence, or approval needed.
+    validations:
+      required: true
+  - type: textarea
+    id: safe_work_done
+    attributes:
+      label: Safe work already completed
+

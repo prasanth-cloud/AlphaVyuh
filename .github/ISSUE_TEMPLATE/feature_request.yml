@@ -1,0 +1,60 @@
+name: Feature request
+description: Propose a trader-facing improvement for AlphaVyuh.
+title: "[Feature]: "
+labels: ["type:feature", "status:planned"]
+body:
+  - type: textarea
+    id: business_goal
+    attributes:
+      label: Business goal
+      description: What outcome should this improve?
+      placeholder: Improve scanner-to-watchlist conversion, reduce chart clutter, improve data trust...
+    validations:
+      required: true
+  - type: textarea
+    id: user_flow
+    attributes:
+      label: User flow
+      description: What should the trader do?
+      placeholder: 1. Open Scanner... 2. Select preset... 3. Add to Watchlist...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete checklist for done.
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Landing/Auth
+        - Dashboard
+        - Scanner
+        - Watchlist
+        - Full Chart
+        - Journal
+        - Settings/Data
+        - Broker
+        - Infrastructure
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Primary impact
+      options:
+        - UX
+        - Latency
+        - Data trust
+        - Retention
+        - Revenue
+        - Security
+        - Reliability
+    validations:
+      required: true
+
