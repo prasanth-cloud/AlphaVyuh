@@ -79,6 +79,16 @@ export const agentLanes: AgentLane[] = [
     lastUpdate: "PR #132 gate passed",
   },
   {
+    id: "security",
+    name: "Security",
+    scope: "Auth, Supabase access, broker/payment gates",
+    autonomy: "Level 3",
+    status: "active",
+    currentWork: "Public intake and feedback RLS hardening is being prepared from the launch safety scan.",
+    ownerFiles: "supabase/migrations, backend/tests, security docs",
+    lastUpdate: "Issue #108 active",
+  },
+  {
     id: "deploy",
     name: "Deploy",
     scope: "Vercel, domains, env, release checks",
@@ -138,20 +148,6 @@ export const agentBlockers: AgentBlocker[] = [
     productImpact: "Founder-beta emails, invite codes, and feedback tables remain the highest-priority database hardening gate.",
   },
   {
-    severity: "database",
-    blocker: "PR #122 requires scan alert migration evidence.",
-    owner: "Founder / Data",
-    nextMove: "Apply 038_scan_alerts.sql to production, then rerun migration drift.",
-    productImpact: "Delays production EOD scan alerts for saved screens.",
-  },
-  {
-    severity: "database",
-    blocker: "PR #123 requires journal idea-context migration evidence.",
-    owner: "Founder / Data",
-    nextMove: "Apply 039_journal_idea_context.sql after #122 lands or rebase.",
-    productImpact: "Delays live persistence of scanner-to-journal context.",
-  },
-  {
     severity: "owner",
     blocker: "Broker read-only smoke still needs real Kite or Upstox tokens.",
     owner: "Founder",
@@ -178,8 +174,7 @@ export const agentRequests: AgentRequest[] = [
 ];
 
 export const nextAgentActions = [
-  "Unblock PR #122 by applying the scan alert migration with production evidence.",
-  "Unblock PR #123 after #122, then land live journal idea-context persistence.",
+  "Unblock PR #128 by applying the public intake RLS migration with production evidence.",
   "Turn saved journal lessons into weekly review clusters after live context is stable.",
   "Keep broker execution hidden until read-only smoke and owner-approved order validation pass.",
   "Keep every future slice on the issue -> agent roster -> PR -> validation cadence.",
