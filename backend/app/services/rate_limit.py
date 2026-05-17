@@ -60,4 +60,15 @@ class PlanCache:
 # Singletons
 scanner_limiter = RateLimiter(max_calls=30, period=60.0)   # 30 scans/minute per user
 ai_limiter      = RateLimiter(max_calls=5,  period=300.0)  # 5 trade-review calls per 5 min per user
+public_market_limiter = RateLimiter(max_calls=120, period=60.0)  # Provider-backed public quotes/candles
 plan_cache      = PlanCache(ttl=60.0)
+
+
+def client_rate_key(request, scope: str) -> str:
+    """Build a coarse per-client key for public route protection."""
+    forwarded = getattr(request, "headers", {}).get("x-forwarded-for", "")
+    client_ip = forwarded.split(",", 1)[0].strip()
+    if not client_ip:
+        client = getattr(request, "client", None)
+        client_ip = getattr(client, "host", None) or "unknown"
+    return f"{scope}:{client_ip}"

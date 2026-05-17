@@ -73,6 +73,74 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(/Trade review|Import from Zerodha|Broker/i, { timeout: 15_000 });
   });
 
+  test("journal review lesson can be saved and survives reload", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.addInitScript(() => {
+      if (localStorage.getItem("alphavyuh-mock-journal-v1")) return;
+      localStorage.setItem("alphavyuh-mock-journal-v1", JSON.stringify([{
+        id: "review-save-1",
+        user_id: "mock-user",
+        symbol: "HDFCBANK",
+        company_name: "HDFC Bank",
+        trade_type: "long",
+        setup_type: "breakout",
+        entry_date: "2026-05-01",
+        entry_price: 1500,
+        quantity: 10,
+        exit_date: "2026-05-08",
+        exit_price: 1535,
+        pnl: 350,
+        pnl_pct: 2.3333,
+        holding_days: 7,
+        stop_loss: 1440,
+        target_price: 1650,
+        risk_reward: 2.5,
+        entry_reason: "Original idea: enter only after volume confirmation above the pivot.",
+        exit_reason: "Exited after momentum faded.",
+        mistakes: null,
+        lessons: null,
+        status: "closed",
+        source_page: "watchlist",
+        source_context: "Review QA",
+        scanner_context: { source: "scanner", preset_name: "Trend Template", match_reasons: ["Volume expansion"], data_as_of: "2026-05-01" },
+        thesis: "Breakout should hold above the pivot with volume.",
+        invalidation_rule: "Close below the base.",
+        created_at: "2026-05-01T09:30:00Z",
+        updated_at: "2026-05-08T15:30:00Z",
+      }]));
+    });
+
+    await page.goto("/journal?review=needs-review", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("tbody tr").filter({ hasText: "HDFCBANK" })).toBeVisible({ timeout: 15_000 });
+    await page.locator("tbody tr").filter({ hasText: "HDFCBANK" }).click();
+    await expect(page.getByTestId("journal-original-idea")).toContainText(/Original scan|Original thesis/i, { timeout: 10_000 });
+    await expect(page.getByText("Save one process lesson")).toBeVisible();
+    await page.getByPlaceholder(/Wait for volume confirmation/i).fill("Wait for volume confirmation before entering the breakout.");
+    await page.getByRole("button", { name: "Save review" }).click();
+    await expect(page.getByText("Review saved")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText("Trade lesson")).toBeVisible();
+    await expect(page.getByText("Wait for volume confirmation before entering the breakout.")).toBeVisible();
+
+    const saved = await page.evaluate(() => {
+      const journal = JSON.parse(localStorage.getItem("alphavyuh-mock-journal-v1") || "[]");
+      return journal.find((entry: { id: string }) => entry.id === "review-save-1");
+    });
+    expect(saved.lessons).toBe("Wait for volume confirmation before entering the breakout.");
+
+    await page.goto("/journal?review=reviewed", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("tbody tr").filter({ hasText: "HDFCBANK" })).toContainText("Reviewed", { timeout: 15_000 });
+    await page.reload();
+    await expect(page.locator("tbody tr").filter({ hasText: "HDFCBANK" })).toContainText("Reviewed", { timeout: 15_000 });
+
+    expect(errors).toEqual([]);
+  });
+
   test("watchlist plan gates ready state and order draft", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];

@@ -31,6 +31,11 @@ test.describe("Auth gate — unauthenticated", () => {
     await page.goto("/settings");
     await expect(page).toHaveURL(/\/login/);
   });
+
+  test("/agents redirects to /login with correct ?next", async ({ page }) => {
+    await page.goto("/agents");
+    await expect(page).toHaveURL(/\/login\?next=%2Fagents/);
+  });
 });
 
 // ── Public pages (no auth required) ──────────────────────────────────────────

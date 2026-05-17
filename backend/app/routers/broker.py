@@ -1261,6 +1261,8 @@ async def broker_oauth_callback(
 
 def _trigger_ai_analysis(sb, entry: dict) -> None:
     try:
+        if str(entry.get("lessons") or "").strip():
+            return
         from app.routers.ai import generate_trade_lesson
 
         analysis = generate_trade_lesson(entry)

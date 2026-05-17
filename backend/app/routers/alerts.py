@@ -15,6 +15,7 @@ import logging
 
 from app.middleware.auth import get_current_user_id
 from app.routers.scanner import ScanFilters, ScanRequest, SORT_KEYS, execute_scan
+from app.services.plans import get_effective_user_plan
 from app.services.supabase import get_admin_client, settings
 
 logger = logging.getLogger(__name__)
@@ -46,8 +47,7 @@ class UpdateAlertRequest(BaseModel):
 
 def _get_user_plan(user_id: str) -> str:
     client = get_admin_client()
-    r = client.table("users").select("plan").eq("id", user_id).single().execute()
-    return r.data["plan"] if r.data else "free"
+    return get_effective_user_plan(client, user_id)
 
 
 def _validate_sort(sort_by: str | None, sort_order: str | None) -> None:

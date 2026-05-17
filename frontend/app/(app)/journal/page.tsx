@@ -47,6 +47,7 @@ export default function JournalPage() {
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [saving, setSaving] = useState(false);
+  const [reviewSaving, setReviewSaving] = useState(false);
   const [toast, setToast] = useState("");
 
   const [symbolQ, setSymbolQ] = useState("");
@@ -209,6 +210,24 @@ export default function JournalPage() {
       showToast("Trade lesson generated");
     } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Trade lesson failed"); }
     finally { setLessonLoading(null); }
+  };
+
+  const handleSaveReviewLesson = async (entry: JournalEntry, lesson: string) => {
+    const cleaned = lesson.trim();
+    if (!cleaned) {
+      showToast("Add one lesson before saving the review");
+      return;
+    }
+    setReviewSaving(true);
+    try {
+      const updated = await updateJournalEntry(entry.id, { lessons: cleaned });
+      setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+      setSelectedEntry(updated);
+      completeReview(updated.symbol);
+      trackEvent("journal_entry_reviewed", { source: getTradeFlowMeta(updated).sourceLabel, symbol: updated.symbol, method: "manual" });
+      showToast("Review saved");
+    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Review save failed"); }
+    finally { setReviewSaving(false); }
   };
 
   const handleImportZerodha = async () => {
@@ -419,7 +438,9 @@ export default function JournalPage() {
             onCloseTrade={handleCloseTrade}
             onClose={() => { setPanelMode(null); setSelectedEntry(null); }}
             onGetLesson={handleGetLesson}
+            onSaveReviewLesson={handleSaveReviewLesson}
             onInitiateClose={openClosePanel}
+            reviewSaving={reviewSaving}
           />
         </div>
       )}

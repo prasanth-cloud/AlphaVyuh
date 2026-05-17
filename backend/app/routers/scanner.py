@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
@@ -330,8 +331,7 @@ def _get_user_plan(user_id: str) -> str:
     if cached:
         return cached
     client = get_admin_client()
-    r = client.table("users").select("plan").eq("id", user_id).single().execute()
-    plan = r.data["plan"] if r.data else "free"
+    plan = get_effective_user_plan(client, user_id)
     plan_cache.set(user_id, plan)
     return plan
 

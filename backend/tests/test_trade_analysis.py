@@ -1,3 +1,8 @@
+import os
+
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+
 from app.routers.ai import generate_journal_analysis, generate_trade_lesson
 
 
@@ -19,6 +24,7 @@ def _trade(symbol: str, pnl: float, setup: str | None = "Breakout", holding_days
         "target_price": 115,
         "entry_reason": "Clean breakout",
         "exit_reason": "Plan exit",
+        "mistakes": "Entered before volume confirmation",
     }
 
 
@@ -28,6 +34,20 @@ def test_generate_trade_lesson_uses_trade_fields():
     assert "RELIANCE" in lesson
     assert "winner" in lesson
     assert "Breakout" in lesson
+
+
+def test_generate_trade_lesson_references_original_review_context():
+    lesson = generate_trade_lesson({
+        **_trade("RELIANCE", -500, "Breakout", 5),
+        "entry_reason": "Enter only after volume confirmation above the pivot",
+        "exit_reason": "Exited after losing the pivot",
+        "mistakes": "Chased before confirmation",
+    })
+
+    assert "Original idea noted" in lesson
+    assert "volume confirmation" in lesson
+    assert "Exit note" in lesson
+    assert "Review note" in lesson
 
 
 def test_generate_journal_analysis_is_local_markdown():

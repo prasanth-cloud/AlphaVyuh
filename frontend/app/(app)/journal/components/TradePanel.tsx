@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
@@ -56,7 +57,9 @@ interface TradePanelProps {
   // View + shared
   onClose: () => void;
   onGetLesson: (e: JournalEntry) => void;
+  onSaveReviewLesson: (e: JournalEntry, lesson: string) => void;
   onInitiateClose: (e: JournalEntry) => void;
+  reviewSaving: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -85,11 +88,20 @@ export function TradePanel({
   onCloseTrade,
   onClose,
   onGetLesson,
+  onSaveReviewLesson,
   onInitiateClose,
+  reviewSaving,
 }: TradePanelProps) {
+  const [lessonDraft, setLessonDraft] = useState("");
+
+  useEffect(() => {
+    setLessonDraft("");
+  }, [selectedEntry?.id]);
+
   if (!mode) return null;
   const flow = selectedEntry ? getTradeFlowMeta(selectedEntry) : null;
   const reviewContext = selectedEntry ? getReviewContext(selectedEntry) : null;
+  const reviewDraft = lessonDraft.trim();
 
   return (
     <div style={{ width: 340, flexShrink: 0 }}>
@@ -207,6 +219,27 @@ export function TradePanel({
               {selectedEntry.trade_type === "long" ? "Long" : "Short"} · {selectedEntry.quantity} qty · Entered ₹{selectedEntry.entry_price.toLocaleString("en-IN")} on {fmtDate(selectedEntry.entry_date)}
             </div>
 
+            {reviewContext && (
+              <div style={{ borderRadius: "var(--radius-md)", padding: "10px 12px", background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)" }}>
+                <div className="label" style={{ marginBottom: 6 }}>Original idea</div>
+                <div style={{ display: "grid", gap: 5 }}>
+                  {(reviewContext.hasContext
+                    ? reviewContext.summary
+                    : [
+                        selectedEntry.entry_reason ? { label: "Entry reason", value: selectedEntry.entry_reason } : null,
+                        selectedEntry.stop_loss ? { label: "Stop", value: `₹${selectedEntry.stop_loss.toLocaleString("en-IN")}` } : null,
+                        selectedEntry.target_price ? { label: "Target", value: `₹${selectedEntry.target_price.toLocaleString("en-IN")}` } : null,
+                      ].filter((item): item is { label: string; value: string } => Boolean(item))
+                  ).slice(0, 3).map(item => (
+                    <div key={`${item.label}-${item.value}`} style={{ fontSize: 12, lineHeight: 1.45 }}>
+                      <span className="caption" style={{ marginRight: 6 }}>{item.label}</span>
+                      <span style={{ color: "var(--text-primary)" }}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <div className="label" style={{ marginBottom: 6 }}>Exit date</div>
               <input type="date" value={closeForm.exit_date || ""} onChange={ev => onCloseFormChange({ ...closeForm, exit_date: ev.target.value })} style={inputStyle} />
@@ -234,13 +267,13 @@ export function TradePanel({
             </div>
 
             <div>
-              <div className="label" style={{ marginBottom: 6 }}>What went wrong?</div>
-              <textarea value={closeForm.mistakes || ""} onChange={ev => onCloseFormChange({ ...closeForm, mistakes: ev.target.value })} rows={2} placeholder="Sized too large, ignored stop…" style={{ ...inputStyle, resize: "none" }} />
+              <div className="label" style={{ marginBottom: 6 }}>What broke or changed?</div>
+              <textarea value={closeForm.mistakes || ""} onChange={ev => onCloseFormChange({ ...closeForm, mistakes: ev.target.value })} rows={2} placeholder="Setup failed, ignored stop, market changed…" style={{ ...inputStyle, resize: "none" }} />
             </div>
 
             <div>
-              <div className="label" style={{ marginBottom: 6 }}>What did I learn?</div>
-              <textarea value={closeForm.lessons || ""} onChange={ev => onCloseFormChange({ ...closeForm, lessons: ev.target.value })} rows={2} placeholder="Always wait for confirmation…" style={{ ...inputStyle, resize: "none" }} />
+              <div className="label" style={{ marginBottom: 6 }}>Lesson to carry forward</div>
+              <textarea value={closeForm.lessons || ""} onChange={ev => onCloseFormChange({ ...closeForm, lessons: ev.target.value })} rows={2} placeholder="One process rule to remember next time…" style={{ ...inputStyle, resize: "none" }} />
             </div>
 
             <button onClick={onCloseTrade} disabled={saving}
@@ -366,10 +399,27 @@ export function TradePanel({
             ) : selectedEntry.status === "closed" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", fontSize: 12, lineHeight: 1.6 }}>
-                  This trade is closed but has not been reviewed yet. A per-trade lesson adds context to journal-wide analytics as closed trades accumulate.
+                  This trade is closed but has not been reviewed yet. Save one process lesson from your original idea and outcome.
                 </div>
+                <div>
+                  <div className="label" style={{ marginBottom: 6 }}>Lesson to carry forward</div>
+                  <textarea
+                    value={lessonDraft}
+                    onChange={ev => setLessonDraft(ev.target.value)}
+                    rows={3}
+                    placeholder="Example: Wait for volume confirmation before treating the breakout as valid."
+                    style={{ ...inputStyle, resize: "none" }}
+                  />
+                </div>
+                <button
+                  onClick={() => onSaveReviewLesson(selectedEntry, reviewDraft)}
+                  disabled={reviewSaving || !reviewDraft}
+                  style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, border: "1px solid var(--accent)", color: "var(--text-on-accent)", background: "var(--accent)", cursor: reviewSaving || !reviewDraft ? "not-allowed" : "pointer", opacity: reviewSaving || !reviewDraft ? 0.5 : 1 }}
+                >
+                  {reviewSaving ? "Saving review..." : "Save review"}
+                </button>
                 <button onClick={() => onGetLesson(selectedEntry)} disabled={lessonLoading === selectedEntry.id}
-                  style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, border: "1px solid var(--accent)", color: "var(--accent)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>
+                  style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 500, border: "1px solid var(--border-subtle)", color: "var(--text-secondary)", background: "transparent", cursor: "pointer", opacity: lessonLoading === selectedEntry.id ? 0.5 : 1 }}>
                   {lessonLoading === selectedEntry.id ? "Generating lesson..." : "Generate lesson for this trade"}
                 </button>
               </div>

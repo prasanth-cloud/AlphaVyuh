@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
@@ -7,6 +8,11 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import charts  # noqa: E402
+
+
+class _FakeRequest:
+    headers = {}
+    client = SimpleNamespace(host="127.0.0.1")
 
 
 class _MaybeSingleQuery:
@@ -258,7 +264,7 @@ async def test_live_candles_metadata_uses_latest_provider_bar(monkeypatch):
     monkeypatch.setattr(charts, "get_market_data_provider", lambda: _Provider())
     monkeypatch.setattr(charts, "_lookup_market_identity", lambda _symbol: charts.MarketIdentity())
 
-    response = await charts.get_candles_live("AUBANK", timeframe="D", limit=5)
+    response = await charts.get_candles_live("AUBANK", _FakeRequest(), timeframe="D", limit=5)
 
     assert response["source_metadata"]["as_of"] == "2026-01-02"
     assert response["coverage"]["available_to"] == "2026-01-02"
