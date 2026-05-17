@@ -11,6 +11,8 @@ import type {
   MarketSummary,
   PortfolioResponse,
   PriceAlert,
+  ScanAlert,
+  ScanAlertMatch,
   ScanResponse,
   ScanResult,
   SectorBreadthItem,
@@ -413,6 +415,42 @@ export function mockPriceAlerts(): PriceAlert[] {
   return [
     { id: "pa1", symbol: "DIXON", condition: "above", target_price: 14500, note: "Breakout trigger", is_active: true, triggered_at: null, created_at: "2026-04-24T09:30:00Z" },
     { id: "pa2", symbol: "RELIANCE", condition: "below", target_price: 1310, note: "Support break", is_active: true, triggered_at: null, created_at: "2026-04-24T09:40:00Z" },
+  ];
+}
+
+export function mockScanAlerts(): ScanAlert[] {
+  return [
+    {
+      id: "sa1",
+      name: "Trend Template",
+      filters: { all_smas_bullish: true, rsi_min: 50, rs_score_min: 70, series: ["EQ"] },
+      sort_by: "volume_ratio",
+      sort_order: "desc",
+      is_active: true,
+      last_run_at: `${TRADE_DATE}T18:00:00Z`,
+      last_match_count: 6,
+      created_at: "2026-04-24T09:20:00Z",
+    },
+  ];
+}
+
+export function mockScanAlertMatches(): ScanAlertMatch[] {
+  const symbols = MOCK_STOCKS.slice(1, 7).map((stock) => ({
+    symbol: stock.symbol,
+    close: stock.close,
+    pct_change: stock.pct_change,
+    volume_ratio: stock.volume_ratio,
+    rsi_14: stock.rsi_14,
+  }));
+  return [
+    {
+      id: "sam1",
+      alert_id: "sa1",
+      run_date: TRADE_DATE,
+      symbols,
+      match_count: symbols.length,
+      scan_alerts: { name: "Trend Template" },
+    },
   ];
 }
 

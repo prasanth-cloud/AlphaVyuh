@@ -50,6 +50,13 @@ def _get_user_plan(user_id: str) -> str:
     return r.data["plan"] if r.data else "free"
 
 
+def _validate_sort(sort_by: str | None, sort_order: str | None) -> None:
+    if sort_by is not None and sort_by not in SORT_KEYS:
+        raise HTTPException(status_code=400, detail=f"Invalid sort_by: {sort_by}")
+    if sort_order is not None and sort_order not in {"asc", "desc"}:
+        raise HTTPException(status_code=400, detail="sort_order must be asc or desc")
+
+
 # ── CRUD endpoints ────────────────────────────────────────────────────────────
 
 @router.get("")
@@ -78,8 +85,7 @@ async def create_alert(body: CreateAlertRequest, user_id: str = Depends(get_curr
             detail=f"{plan.capitalize()} plan allows max {limit} scan alerts.",
         )
 
-    if body.sort_by not in SORT_KEYS:
-        raise HTTPException(status_code=400, detail=f"Invalid sort_by: {body.sort_by}")
+    _validate_sort(body.sort_by, body.sort_order)
 
     row = {
         "user_id":    user_id,
@@ -107,6 +113,7 @@ async def update_alert(
         raise HTTPException(status_code=404, detail="Alert not found")
 
     patch: dict[str, Any] = {"updated_at": "now()"}
+    _validate_sort(body.sort_by, body.sort_order)
     if body.name       is not None: patch["name"]       = body.name.strip()[:80]
     if body.filters    is not None: patch["filters"]    = body.filters
     if body.sort_by    is not None: patch["sort_by"]    = body.sort_by
@@ -127,6 +134,19 @@ async def delete_alert(alert_id: str, user_id: str = Depends(get_current_user_id
     client.table("scan_alerts").delete().eq("id", alert_id).execute()
 
 
+@router.get("/recent/matches")
+async def get_recent_matches(user_id: str = Depends(get_current_user_id)):
+    """Return today's / most-recent matches across all alerts for this user."""
+    client = get_admin_client()
+    res = client.table("scan_alert_matches") \
+        .select("*, scan_alerts(name)") \
+        .eq("user_id", user_id) \
+        .order("run_date", desc=True) \
+        .limit(50) \
+        .execute()
+    return {"matches": res.data or []}
+
+
 @router.get("/{alert_id}/matches")
 async def get_alert_matches(
     alert_id: str,
@@ -145,19 +165,6 @@ async def get_alert_matches(
         .eq("alert_id", alert_id) \
         .order("run_date", desc=True) \
         .limit(max(1, min(limit, 30))) \
-        .execute()
-    return {"matches": res.data or []}
-
-
-@router.get("/recent/matches")
-async def get_recent_matches(user_id: str = Depends(get_current_user_id)):
-    """Return today's / most-recent matches across all alerts for this user."""
-    client = get_admin_client()
-    res = client.table("scan_alert_matches") \
-        .select("*, scan_alerts(name)") \
-        .eq("user_id", user_id) \
-        .order("run_date", desc=True) \
-        .limit(50) \
         .execute()
     return {"matches": res.data or []}
 
@@ -297,11 +304,11 @@ async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> No
             chat_id = chat_map.get(user_id)
             if not chat_id:
                 continue
-            lines = [f"📊 *Artha Scan Alerts — {trade_date}*\n"]
+            lines = [f"📊 *AlphaVyuh EOD Scan Alerts — {trade_date}*\n"]
             for a in fired:
                 count = a.get("last_match_count", 0)
                 lines.append(f"• *{a['name']}*: {count} stock{'s' if count != 1 else ''} matched")
-            lines.append("\nOpen Artha to see results →")
+            lines.append("\nOpen AlphaVyuh to review the list →")
             text = "\n".join(lines)
             try:
                 await http.post(

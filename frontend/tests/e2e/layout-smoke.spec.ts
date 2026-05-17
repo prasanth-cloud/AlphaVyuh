@@ -137,6 +137,11 @@ test.describe("Workflow layout smoke", () => {
     for (const workflowPage of pages) {
       await page.goto(workflowPage.path, { waitUntil: "domcontentloaded" });
       await expect(workflowPage.marker(page)).toBeVisible({ timeout: 15_000 });
+      await page.evaluate(() => {
+        window.localStorage.setItem("alphavyuh-theme", "light");
+        document.documentElement.dataset.theme = "light";
+        window.dispatchEvent(new CustomEvent("alphavyuh:theme-changed", { detail: "light" }));
+      });
       await page.evaluate(() => ((window as unknown as { __expectedTheme: "dark" | "light" }).__expectedTheme = "light"));
       const problems = await themeProblems(page, "light");
       expect(problems, workflowPage.name).toEqual([]);
@@ -174,6 +179,24 @@ test.describe("Workflow layout smoke", () => {
         && children[0].y + children[0].height > children[1].y;
     });
     expect(overlap).toBe(false);
+  });
+
+  test("scanner can create an EOD scan alert and the alerts center shows the digest", async ({ page }) => {
+    await page.goto("/scanner", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await expect(page.getByRole("button", { name: /^Add EOD alert$/i })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: /^Add EOD alert$/i }).click();
+    await expect(page.getByText("Create EOD scan alert")).toBeVisible();
+    await page.getByPlaceholder("Alert name…").fill("Launch QA EOD scan");
+    await page.getByRole("button", { name: /^Create$/i }).click();
+    await expect(page.locator("body")).toContainText("EOD alert created", { timeout: 10_000 });
+
+    await page.goto("/alerts", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("EOD scan matches")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).toContainText("Launch QA EOD scan");
+    await expect(page.locator("body")).toContainText(/stocks matched on \d{4}-\d{2}-\d{2}/);
+    await expect(page.locator("body")).not.toContainText(/Manage price alerts from the same trading desk/i);
+    await expect(page.locator("body")).not.toContainText(/\b(buy|sell|recommended|act now)\b/i);
   });
 
   test("top search opens workflow commands", async ({ page }) => {

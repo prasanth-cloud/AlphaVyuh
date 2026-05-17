@@ -13,6 +13,8 @@ import {
   mockPriceAlerts,
   mockQuote,
   mockRunScan,
+  mockScanAlertMatches,
+  mockScanAlerts,
   mockSearchSymbols,
   mockSectorBreadth,
   mockWatchlists,
@@ -1919,7 +1921,79 @@ export type ScanAlertMatch = {
   scan_alerts?: { name: string };
 };
 
+const mockScanAlertsKey = "alphavyuh-mock-scan-alerts-v1";
+const mockScanAlertMatchesKey = "alphavyuh-mock-scan-alert-matches-v1";
+const scanAlertSortKeys = new Set([
+  "symbol",
+  "close",
+  "pct_change",
+  "volume",
+  "volume_ratio",
+  "rsi_14",
+  "ema_20",
+  "atr_14",
+  "week_52_high_pct",
+  "gap_pct",
+  "atr_pct",
+  "turnover",
+  "adx_14",
+  "stoch_k",
+  "setup_score",
+]);
+
+function readMockScanAlerts(): ScanAlert[] {
+  const defaults = mockScanAlerts();
+  if (typeof window === "undefined") return defaults;
+  try {
+    const raw = window.localStorage.getItem(mockScanAlertsKey);
+    return raw ? JSON.parse(raw) : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function writeMockScanAlerts(alerts: ScanAlert[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockScanAlertsKey, JSON.stringify(alerts));
+}
+
+function readMockScanAlertMatches(): ScanAlertMatch[] {
+  const defaults = mockScanAlertMatches();
+  if (typeof window === "undefined") return defaults;
+  try {
+    const raw = window.localStorage.getItem(mockScanAlertMatchesKey);
+    return raw ? JSON.parse(raw) : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function writeMockScanAlertMatches(matches: ScanAlertMatch[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockScanAlertMatchesKey, JSON.stringify(matches));
+}
+
+function mockAlertSymbols(alertId: string, alertName: string): ScanAlertMatch {
+  const scan = mockRunScan();
+  const symbols = scan.results.slice(0, 10).map((result) => ({
+    symbol: result.symbol,
+    close: result.close,
+    pct_change: result.pct_change,
+    volume_ratio: result.volume_ratio,
+    rsi_14: result.rsi_14,
+  }));
+  return {
+    id: `sam-${alertId}`,
+    alert_id: alertId,
+    run_date: scan.trade_date ?? new Date().toISOString().slice(0, 10),
+    symbols,
+    match_count: scan.total_matches,
+    scan_alerts: { name: alertName },
+  };
+}
+
 export async function listAlerts(): Promise<ScanAlert[]> {
+  if (shouldUseMockFallback()) return readMockScanAlerts();
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts`, { headers });
   if (!res.ok) throw new Error("Failed to load alerts");
@@ -1933,6 +2007,28 @@ export async function createAlert(body: {
   sort_by?: string;
   sort_order?: string;
 }): Promise<ScanAlert> {
+  if (shouldUseMockFallback()) {
+    if (body.sort_by && !scanAlertSortKeys.has(body.sort_by)) throw new Error(`Invalid sort_by: ${body.sort_by}`);
+    if (body.sort_order && !["asc", "desc"].includes(body.sort_order)) throw new Error("sort_order must be asc or desc");
+    const existing = readMockScanAlerts();
+    if (existing.length >= 2) throw new Error("Free plan allows max 2 scan alerts.");
+    const now = new Date().toISOString();
+    const alert: ScanAlert = {
+      id: `sa-${Date.now()}`,
+      name: body.name.trim().slice(0, 80) || "Saved scan",
+      filters: body.filters,
+      sort_by: body.sort_by ?? "volume_ratio",
+      sort_order: body.sort_order ?? "desc",
+      is_active: true,
+      last_run_at: now,
+      last_match_count: mockRunScan().total_matches,
+      created_at: now,
+    };
+    writeMockScanAlerts([alert, ...existing]);
+    writeMockScanAlertMatches([mockAlertSymbols(alert.id, alert.name), ...readMockScanAlertMatches()]);
+    invalidateClientCache(["scan-alerts"]);
+    return alert;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts`, {
     method: "POST",
@@ -1943,14 +2039,29 @@ export async function createAlert(body: {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(typeof err.detail === "string" ? err.detail : "Failed to create alert");
   }
-  return res.json();
+  const created = await res.json();
+  invalidateClientCache(["scan-alerts"]);
+  return created;
 }
 
 export async function updateAlert(id: string, body: {
   name?: string;
   is_active?: boolean;
   filters?: Record<string, unknown>;
+  sort_by?: string;
+  sort_order?: string;
 }): Promise<ScanAlert> {
+  if (shouldUseMockFallback()) {
+    if (body.sort_by && !scanAlertSortKeys.has(body.sort_by)) throw new Error(`Invalid sort_by: ${body.sort_by}`);
+    if (body.sort_order && !["asc", "desc"].includes(body.sort_order)) throw new Error("sort_order must be asc or desc");
+    const alerts = readMockScanAlerts();
+    const next = alerts.map((alert) => alert.id === id ? { ...alert, ...body } : alert);
+    writeMockScanAlerts(next);
+    invalidateClientCache(["scan-alerts"]);
+    const updated = next.find((alert) => alert.id === id);
+    if (!updated) throw new Error("Alert not found");
+    return updated;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts/${id}`, {
     method: "PATCH",
@@ -1958,15 +2069,25 @@ export async function updateAlert(id: string, body: {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error("Failed to update alert");
-  return res.json();
+  const updated = await res.json();
+  invalidateClientCache(["scan-alerts"]);
+  return updated;
 }
 
 export async function deleteAlert(id: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeMockScanAlerts(readMockScanAlerts().filter((alert) => alert.id !== id));
+    writeMockScanAlertMatches(readMockScanAlertMatches().filter((match) => match.alert_id !== id));
+    invalidateClientCache(["scan-alerts"]);
+    return;
+  }
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/alerts/${id}`, { method: "DELETE", headers });
+  invalidateClientCache(["scan-alerts"]);
 }
 
 export async function getAlertMatches(alertId: string): Promise<ScanAlertMatch[]> {
+  if (shouldUseMockFallback()) return readMockScanAlertMatches().filter((match) => match.alert_id === alertId);
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts/${alertId}/matches`, { headers });
   if (!res.ok) throw new Error("Failed to load matches");
@@ -1975,6 +2096,7 @@ export async function getAlertMatches(alertId: string): Promise<ScanAlertMatch[]
 }
 
 export async function getRecentAlertMatches(): Promise<ScanAlertMatch[]> {
+  if (shouldUseMockFallback()) return readMockScanAlertMatches();
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts/recent/matches`, { headers });
   if (!res.ok) return [];
