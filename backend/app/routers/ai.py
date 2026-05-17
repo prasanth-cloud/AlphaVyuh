@@ -107,6 +107,9 @@ def generate_trade_lesson(entry: dict) -> str:
     stop_loss = _num(entry.get("stop_loss"), fallback=0.0)
     target = _num(entry.get("target_price"), fallback=0.0)
     setup = entry.get("setup_type") or "untagged setup"
+    entry_reason = str(entry.get("entry_reason") or "").strip()
+    exit_reason = str(entry.get("exit_reason") or "").strip()
+    mistakes = str(entry.get("mistakes") or "").strip()
 
     lines: list[str] = []
     outcome = "winner" if pnl > 0 else "loser" if pnl < 0 else "flat trade"
@@ -135,12 +138,19 @@ def generate_trade_lesson(entry: dict) -> str:
     elif pnl > 0:
         lines.append("- Winner lacked a target, so planned reward could not be compared with the exit.")
 
+    if entry_reason:
+        lines.append(f"- Original idea noted: {entry_reason[:140]}. Compare the close against that plan.")
+    if exit_reason:
+        lines.append(f"- Exit note: {exit_reason[:120]}. Keep checking whether exit notes match the original invalidation.")
+    if mistakes:
+        lines.append(f"- Review note: {mistakes[:120]}. Turn this into one process rule before the next scan.")
+
     if holding_days > 10 and pnl < 0:
         lines.append("- Losing trade was held more than 10 days; duration exceeded the short swing-trade sample.")
     elif holding_days <= 3 and pnl > 0:
         lines.append("- Quick winner; this setup closed positive inside 3 days in the recorded sample.")
 
-    return "\n".join(lines[:5])
+    return "\n".join(lines[:7])
 
 
 def generate_journal_analysis(trades: list[dict]) -> str:

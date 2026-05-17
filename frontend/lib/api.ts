@@ -1586,13 +1586,53 @@ function createLocalJournalEntry(entry: CreateJournalEntry): JournalEntry {
   };
 }
 
+function mergeMockJournalEntries(local: JournalEntry[], base: JournalEntry[]): JournalEntry[] {
+  const localIds = new Set(local.map((entry) => entry.id));
+  return [...local, ...base.filter((entry) => !localIds.has(entry.id))];
+}
+
+function updateLocalJournalEntry(id: string, update: UpdateJournalEntry): JournalEntry | null {
+  const base = mockJournalEntries().entries;
+  const local = readLocalJournalEntries();
+  const existing = local.find((entry) => entry.id === id) ?? base.find((entry) => entry.id === id);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const { status, ...restUpdate } = update;
+  const next: JournalEntry = {
+    ...existing,
+    ...restUpdate,
+    status: status === "open" || status === "closed" || status === "cancelled" ? status : existing.status,
+    updated_at: now,
+  };
+
+  if (update.exit_date && update.exit_price != null) {
+    const pnl = existing.trade_type === "long"
+      ? (update.exit_price - existing.entry_price) * existing.quantity
+      : (existing.entry_price - update.exit_price) * existing.quantity;
+    const entryDate = new Date(`${existing.entry_date}T00:00:00Z`).getTime();
+    const exitDate = new Date(`${update.exit_date}T00:00:00Z`).getTime();
+    next.pnl = Number(pnl.toFixed(2));
+    next.pnl_pct = Number((pnl / (existing.entry_price * existing.quantity) * 100).toFixed(4));
+    next.status = "closed";
+    next.holding_days = Number.isFinite(entryDate) && Number.isFinite(exitDate)
+      ? Math.max(0, Math.round((exitDate - entryDate) / 86400000))
+      : existing.holding_days;
+  }
+
+  const others = local.filter((entry) => entry.id !== id);
+  writeLocalJournalEntries([next, ...others]);
+  invalidateClientCache(["journal:", "portfolio"]);
+  return next;
+}
+
 export async function getJournalEntries(
   params?: { limit?: number; offset?: number; status?: string; symbol?: string }
 ): Promise<{ entries: JournalEntry[]; total: number; plan?: string; history_months?: number | null }> {
   if (shouldUseMockFallback()) {
     const base = mockJournalEntries();
     const local = readLocalJournalEntries();
-    let entries = [...local, ...base.entries];
+    let entries = mergeMockJournalEntries(local, base.entries);
     if (params?.status) entries = entries.filter((entry) => entry.status === params.status);
     if (params?.symbol) entries = entries.filter((entry) => entry.symbol === params.symbol?.toUpperCase());
     const total = entries.length;
@@ -1651,6 +1691,11 @@ export async function createJournalEntry(entry: CreateJournalEntry): Promise<Jou
 }
 
 export async function updateJournalEntry(id: string, update: UpdateJournalEntry): Promise<JournalEntry> {
+  if (shouldUseMockFallback()) {
+    const updated = updateLocalJournalEntry(id, update);
+    if (!updated) throw new Error("Entry not found");
+    return updated;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/journal/${id}`, {
     method: "PATCH",
@@ -1668,6 +1713,11 @@ export async function updateJournalEntry(id: string, update: UpdateJournalEntry)
 }
 
 export async function deleteJournalEntry(id: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeLocalJournalEntries(readLocalJournalEntries().filter((entry) => entry.id !== id));
+    invalidateClientCache(["journal:", "portfolio"]);
+    return;
+  }
   const headers = await authHeaders();
   await fetch(`${API}/api/v1/journal/${id}`, { method: "DELETE", headers });
   invalidateClientCache(["journal:", "portfolio"]);
@@ -2573,13 +2623,22 @@ export async function getAiPatterns(): Promise<AiPatterns> {
 }
 
 export async function triggerTradeLesson(entryId: string): Promise<JournalEntry> {
+  if (shouldUseMockFallback()) {
+    const updated = updateLocalJournalEntry(entryId, {
+      lessons: "Review completed: compare the exit with the original plan, keep risk fixed, and record one behavior to improve next time.",
+    });
+    if (!updated) throw new Error("Entry not found");
+    return updated;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/journal/${entryId}/lessons`, { method: "POST", headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? "Trade lesson generation failed");
   }
-  return res.json();
+  const updated = await res.json();
+  invalidateClientCache(["journal:", "portfolio"]);
+  return updated;
 }
 
 export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
