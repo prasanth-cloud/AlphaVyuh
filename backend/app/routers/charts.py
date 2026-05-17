@@ -12,6 +12,7 @@ from app.middleware.auth import get_current_user_id
 from app.services import indicators as ta
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
 from app.services.market_context import eod_source_metadata, fallback_source_metadata, live_source_metadata
+from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import client_rate_key, public_market_limiter
 from app.services.supabase import get_admin_client
 
@@ -53,8 +54,7 @@ class WorkspaceSave(BaseModel):
 
 def _get_user_plan(user_id: str) -> str:
     sb = get_admin_client()
-    r = sb.table("users").select("plan").eq("id", user_id).single().execute()
-    return r.data.get("plan", "free") if r.data else "free"
+    return get_effective_user_plan(sb, user_id)
 
 
 def _fetch_ohlcv(symbol: str, limit: int = 500) -> pd.DataFrame:
