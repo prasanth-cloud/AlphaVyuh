@@ -75,18 +75,35 @@ if _ai_available:
 _scheduler: AsyncIOScheduler | None = None
 
 
+def _bhavcopy_result_supports_alerts(result: dict | None) -> bool:
+    if not result:
+        return False
+    status = result.get("status")
+    rows = int(result.get("rows_ingested") or 0)
+    return (
+        status in {"success", "already_done"}
+        and result.get("partial_ingest") is not True
+        and rows > 0
+    )
+
+
 async def _trigger_daily_ingest():
+    target = date.today()
     try:
         from app.services.bhavcopy import download_and_ingest
-        result = await download_and_ingest(date.today())
+        result = await download_and_ingest(target)
         logger.info(f"Scheduled ingest: {result}")
     except Exception as e:
         logger.error(f"Scheduled ingest failed: {e}")
         return
 
-    # After ingest succeeds, run all saved scan alerts
+    if not _bhavcopy_result_supports_alerts(result):
+        logger.info("Scan alerts skipped after scheduled ingest: %s", result)
+        return
+
+    # After trusted ingest succeeds, run all saved scan alerts.
     try:
-        alert_result = await alerts.run_all_alerts(date.today())
+        alert_result = await alerts.run_all_alerts(target)
         logger.info(f"Scan alerts run: {alert_result}")
     except Exception as e:
         logger.error(f"Scan alerts run failed: {e}")

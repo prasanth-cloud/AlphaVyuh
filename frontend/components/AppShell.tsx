@@ -30,6 +30,7 @@ const COMMAND_RESULTS: CommandResult[] = [
   { command: 'watchlist', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
   { command: 'chart', label: 'Open Full Chart', detail: 'Professional chart workspace', href: '/charts/RELIANCE?full=1' },
   { command: 'journal', label: 'Review Journal', detail: 'Close the learning loop', href: '/journal?review=needs-review' },
+  { command: 'agents', label: 'Agent Mission Control', detail: 'Founder view of agent work, blockers, and next actions', href: '/agents' },
   { command: 'broker', label: 'Broker Settings', detail: 'Read-only/import status and reconnect flow', href: '/settings/broker' },
   { command: 'data', label: 'Data Status', detail: 'Freshness, coverage, and operator checks', href: '/data' },
 ]
@@ -294,6 +295,7 @@ function AccountMenuButton({ theme, onToggleTheme }: { theme: 'dark' | 'light'; 
           {[
             { label: 'Settings', href: '/settings' },
             { label: 'Upload trade report', href: '/upload' },
+            { label: 'Agent mission control', href: '/agents' },
             { label: 'Billing',  href: '/settings/billing' },
             { label: 'Broker',   href: '/settings/broker' },
           ].map(item => (

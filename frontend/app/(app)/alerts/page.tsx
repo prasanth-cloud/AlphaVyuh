@@ -16,6 +16,13 @@ function topSymbols(match: ScanAlertMatch) {
   return match.symbols.slice(0, 6);
 }
 
+function runStatusLabel(status?: string) {
+  if (status === "failed") return "Failed";
+  if (status === "skipped") return "Skipped";
+  if (status === "success") return "Checked";
+  return "Waiting";
+}
+
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<ScanAlert[]>([]);
   const [matches, setMatches] = useState<ScanAlertMatch[]>([]);
@@ -133,6 +140,16 @@ export default function AlertsPage() {
                     <span className="workspace-pill" style={{ color: alert.is_active ? "var(--gain)" : "var(--text-tertiary)" }}>
                       {alert.is_active ? "Active" : "Paused"}
                     </span>
+                    {alert.last_run_status && alert.last_run_status !== "waiting" && (
+                      <div className="caption" style={{ marginTop: 6 }}>
+                        Last check: {runStatusLabel(alert.last_run_status)}
+                      </div>
+                    )}
+                    {alert.last_error && (
+                      <div className="caption" style={{ color: "var(--warning)", marginTop: 4 }}>
+                        {alert.last_error}
+                      </div>
+                    )}
                   </Td>
                   <Td mono>{alert.last_run_at ? new Date(alert.last_run_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Waiting for EOD"}</Td>
                   <Td align="right" mono emphasized>
@@ -184,8 +201,15 @@ export default function AlertsPage() {
                   <div>
                     <div className="label" style={{ marginBottom: 5 }}>{match.scan_alerts?.name ?? "Saved scan"}</div>
                     <div className="heading-card" style={{ fontSize: 18 }}>
-                      <Num>{match.match_count.toLocaleString("en-IN")}</Num> stocks matched on {match.run_date}
+                      {match.run_status && match.run_status !== "success"
+                        ? `${runStatusLabel(match.run_status)} on ${match.run_date}`
+                        : <><Num>{match.match_count.toLocaleString("en-IN")}</Num> stocks matched on {match.run_date}</>}
                     </div>
+                    {match.error_message && (
+                      <div className="workspace-card-copy" style={{ marginTop: 5, color: "var(--warning)" }}>
+                        {match.error_message}
+                      </div>
+                    )}
                   </div>
                   <DataProvenanceBadge kind="eod" asOf={match.run_date} compact />
                 </div>

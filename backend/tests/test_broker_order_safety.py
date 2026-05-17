@@ -167,6 +167,20 @@ def test_order_from_valid_plan_carries_context_into_journal(monkeypatch):
     assert client.workflow_upserts[-1]["scanner_context"]["setup_score"] == 84
 
 
+def test_trade_lesson_generation_does_not_overwrite_user_review():
+    client = _FakeSupabase()
+
+    broker_router._trigger_ai_analysis(client, {
+        "id": "journal-1",
+        "symbol": "RELIANCE",
+        "status": "closed",
+        "lessons": "User-written process lesson.",
+        "pnl": -100,
+    })
+
+    assert client.updated == []
+
+
 def test_private_beta_blocks_live_confirmation_before_broker_call(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)

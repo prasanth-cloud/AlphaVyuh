@@ -7,12 +7,14 @@ smaller candidate set returned by the DB push-filters.
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
@@ -329,8 +331,7 @@ def _get_user_plan(user_id: str) -> str:
     if cached:
         return cached
     client = get_admin_client()
-    r = client.table("users").select("plan").eq("id", user_id).single().execute()
-    plan = r.data["plan"] if r.data else "free"
+    plan = get_effective_user_plan(client, user_id)
     plan_cache.set(user_id, plan)
     return plan
 
@@ -988,43 +989,26 @@ async def _run_vcp_pass2(
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.post("/run")
-async def run_scanner(
+async def execute_scan(
+    client,
     body: ScanRequest,
-    user_id: str = Depends(get_current_user_id),
-):
-    if not scanner_limiter.is_allowed(user_id):
-        retry_after = scanner_limiter.retry_after(user_id)
-        raise HTTPException(
-            429,
-            f"Too many requests - try again in {retry_after} seconds.",
-            headers={"Retry-After": str(retry_after)},
-        )
+    *,
+    plan: str = "free",
+    trade_date: str | date | None = None,
+    enforce_plan_limit: bool = True,
+) -> dict:
+    """Run the scanner core for UI scans and saved EOD scan alerts."""
+    hard_limit = (
+        FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
+    ) if enforce_plan_limit else SCAN_ROW_CAP
 
-    try:
-        client = get_admin_client()
-        plan = _get_user_plan(user_id)
-    except Exception:
-        return {
-            "trade_date": None,
-            "total_matches": 0,
-            "plan_limit": FREE_RESULT_LIMIT,
-            "plan": "free",
-            "is_limited": False,
-            "page": max(body.page, 1),
-            "page_size": body.page_size,
-            "total_pages": 1,
-            "visible_count": 0,
-            "results": [],
-            "mode": "unavailable",
-            "message": "Scanner data is temporarily unavailable.",
-        }
-    hard_limit = FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
-
-    try:
-        latest_date = get_latest_complete_trade_date(client)
-    except Exception:
-        latest_date = None
+    if trade_date is not None:
+        latest_date = str(trade_date)
+    else:
+        try:
+            latest_date = get_latest_complete_trade_date(client)
+        except Exception:
+            latest_date = None
     if not latest_date:
         metadata = fallback_source_metadata("No complete trade date is available for scanner.")
         return {
@@ -1213,6 +1197,41 @@ async def run_scanner(
         "coverage_pct": coverage_pct,
         "universe_size": universe_size,
     }
+
+
+@router.post("/run")
+async def run_scanner(
+    body: ScanRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    if not scanner_limiter.is_allowed(user_id):
+        retry_after = scanner_limiter.retry_after(user_id)
+        raise HTTPException(
+            429,
+            f"Too many requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    try:
+        client = get_admin_client()
+        plan = _get_user_plan(user_id)
+    except Exception:
+        return {
+            "trade_date": None,
+            "total_matches": 0,
+            "plan_limit": FREE_RESULT_LIMIT,
+            "plan": "free",
+            "is_limited": False,
+            "page": max(body.page, 1),
+            "page_size": body.page_size,
+            "total_pages": 1,
+            "visible_count": 0,
+            "results": [],
+            "mode": "unavailable",
+            "message": "Scanner data is temporarily unavailable.",
+        }
+
+    return await execute_scan(client, body, plan=plan)
 
 
 @router.get("/screens")

@@ -6,6 +6,7 @@ import yfinance as yf
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services.plans import get_effective_user_plan
 from app.services.supabase import get_admin_client
 from app.services.workflow_state import sync_workflow_state
 
@@ -14,8 +15,7 @@ FREE_JOURNAL_MONTHS = 3
 
 def _get_user_plan(user_id: str) -> str:
     sb = get_admin_client()
-    r = sb.table("users").select("plan").eq("id", user_id).single().execute()
-    return r.data["plan"] if r.data else "free"
+    return get_effective_user_plan(sb, user_id)
 
 router = APIRouter(prefix="/api/v1/journal", tags=["journal"])
 
@@ -436,7 +436,7 @@ async def generate_lessons(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Trade lesson failed: {e}")
 
-    updated = sb.table("trade_journal").select("*").eq("id", entry_id).maybe_single().execute()
+    updated = sb.table("trade_journal").select("*").eq("id", entry_id).eq("user_id", user_id).maybe_single().execute()
     from app.routers.ai import _DISCLAIMER
     result = dict(updated.data or {})
     result["disclaimer"] = _DISCLAIMER
