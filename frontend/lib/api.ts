@@ -1457,6 +1457,11 @@ export type JournalEntry = {
   mistakes: string | null;
   lessons: string | null;
   status: "open" | "closed" | "cancelled";
+  source_page?: "chart" | "watchlist" | "scanner" | "manual" | null;
+  source_context?: string | null;
+  scanner_context?: ScannerIdeaContext | null;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1484,6 +1489,11 @@ export type CreateJournalEntry = {
   stop_loss?: number;
   target_price?: number;
   entry_reason?: string;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual";
+  source_context?: string | null;
+  scanner_context?: ScannerIdeaContext | null;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
 };
 
 export type UpdateJournalEntry = {
@@ -1564,6 +1574,11 @@ function createLocalJournalEntry(entry: CreateJournalEntry): JournalEntry {
     mistakes: null,
     lessons: null,
     status: "open",
+    source_page: entry.source_page ?? null,
+    source_context: entry.source_context ?? null,
+    scanner_context: entry.scanner_context ?? null,
+    thesis: entry.thesis ?? null,
+    invalidation_rule: entry.invalidation_rule ?? null,
     created_at: now,
     updated_at: now,
   };
@@ -2478,6 +2493,11 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
       stop_loss: order.stop_loss,
       target_price: order.target_price,
       entry_reason: `${reasonParts.length ? reasonParts.join(" | ") : `${order.side.toUpperCase()} mock order`} [Simulated · ${order.source_page ?? "chart"}${order.source_context ? ` · ${order.source_context}` : ""}]`,
+      source_page: order.source_page ?? "chart",
+      source_context: order.source_context ?? null,
+      scanner_context: ideaContext ?? null,
+      thesis: order.thesis ?? previousWorkflow?.thesis ?? null,
+      invalidation_rule: order.invalidation_rule ?? previousWorkflow?.invalidation_rule ?? null,
     });
     writeLocalJournalEntries([created, ...readLocalJournalEntries()]);
     writeLocalWorkflowStates({

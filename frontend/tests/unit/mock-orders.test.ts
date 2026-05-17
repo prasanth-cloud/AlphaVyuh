@@ -86,6 +86,17 @@ describe("mock order flow", () => {
     expect(journal.entries[0].entry_reason).toContain("Invalidation: Close below");
     expect(journal.entries[0].entry_reason).toContain("Scanner: Trend Template");
     expect(journal.entries[0].entry_reason).toContain("Matched: Volume expansion with trend alignment");
+    expect(journal.entries[0]).toMatchObject({
+      source_page: "watchlist",
+      source_context: "Workflow QA queue",
+      thesis: "Breakout holding above prior resistance.",
+      invalidation_rule: "Close below the base.",
+      scanner_context: {
+        preset_name: "Trend Template",
+        match_reasons: ["Volume expansion with trend alignment"],
+        data_as_of: "2026-05-15",
+      },
+    });
 
     const workflow = await getWorkflowStates({ symbols: ["RELIANCE"] });
     expect(workflow[0]).toMatchObject({

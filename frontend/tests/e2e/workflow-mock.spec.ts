@@ -227,6 +227,10 @@ test.describe("Mock workflow smoke", () => {
     await page.goto("/journal");
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Review|Needs review|Open/i, { timeout: 15_000 });
+    await page.locator("tbody tr").filter({ hasText: symbol }).first().click();
+    await expect(page.getByTestId("journal-original-idea")).toContainText(/Original scan|Original thesis/i, { timeout: 10_000 });
+    await expect(page.getByTestId("journal-original-idea")).toContainText(/Trend Template|Launch QA setup/i);
+    await expect(page.getByTestId("journal-original-idea")).toContainText(/Review prompts/i);
 
     const state = await page.evaluate((activeSymbol) => {
       const journal = JSON.parse(localStorage.getItem("alphavyuh-mock-journal-v1") || "[]");
@@ -241,6 +245,14 @@ test.describe("Mock workflow smoke", () => {
     expect(state.journal.entry_reason).toContain("Matched:");
     expect(state.journal.entry_reason).toContain("Thesis: Launch QA setup");
     expect(state.journal.entry_reason).toContain("Invalidation: Exit if");
+    expect(state.journal).toMatchObject({
+      source_page: "watchlist",
+      scanner_context: {
+        source: "scanner",
+      },
+      thesis: "Launch QA setup from scanner shortlist with clear confirmation.",
+      invalidation_rule: "Exit if the breakout base fails on closing basis.",
+    });
     expect(state.workflow).toMatchObject({
       lifecycle: "open",
       entry: 1500,
