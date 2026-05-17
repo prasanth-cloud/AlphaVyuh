@@ -1,63 +1,220 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  deleteAlert,
+  getRecentAlertMatches,
+  listAlerts,
+  updateAlert,
+  type ScanAlert,
+  type ScanAlertMatch,
+} from "@/lib/api";
+import { DataProvenanceBadge, DataTable, DataTableHead, EmptyState, Num, Td, Th, Tr } from "@/components/ui";
+
+function topSymbols(match: ScanAlertMatch) {
+  return match.symbols.slice(0, 6);
+}
 
 export default function AlertsPage() {
+  const [alerts, setAlerts] = useState<ScanAlert[]>([]);
+  const [matches, setMatches] = useState<ScanAlertMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  async function loadAlerts() {
+    setLoading(true);
+    setMessage("");
+    try {
+      const [activeAlerts, recentMatches] = await Promise.all([
+        listAlerts(),
+        getRecentAlertMatches(),
+      ]);
+      setAlerts(activeAlerts);
+      setMatches(recentMatches);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not load alerts");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadAlerts();
+  }, []);
+
+  const latestRunDate = useMemo(() => {
+    return matches.map((match) => match.run_date).sort().at(-1) ?? null;
+  }, [matches]);
+
+  async function toggleAlert(alert: ScanAlert) {
+    try {
+      const updated = await updateAlert(alert.id, { is_active: !alert.is_active });
+      setAlerts((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setMessage(updated.is_active ? "EOD scan alert resumed" : "EOD scan alert paused");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update alert");
+    }
+  }
+
+  async function removeAlert(alert: ScanAlert) {
+    try {
+      await deleteAlert(alert.id);
+      setAlerts((current) => current.filter((item) => item.id !== alert.id));
+      setMatches((current) => current.filter((match) => match.alert_id !== alert.id));
+      setMessage("EOD scan alert removed");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not delete alert");
+    }
+  }
+
   return (
-    <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{
-        padding: "22px 24px",
-        borderRadius: 24,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "radial-gradient(circle at top right, rgba(217,163,59,0.14), transparent 28%), linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
-        boxShadow: "var(--shadow-panel)",
-      }}>
-        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Alerts</div>
-        <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Manage price alerts from the same trading desk.</h1>
-        <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-          Alert creation already lives inside the chart workspace. This screen now acts as a clean launch point until a full alerts center is added.
-        </p>
+    <div className="workspace-page" style={{ gap: 16 }}>
+      <div className="workspace-hero" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <div className="label" style={{ marginBottom: 8 }}>Alerts</div>
+          <h1 className="heading-card" style={{ fontSize: 24, marginBottom: 6 }}>EOD scan matches</h1>
+          <p className="workspace-card-copy" style={{ maxWidth: 760 }}>
+            Review saved scans after the latest complete market day is loaded. AlphaVyuh shows matched names for review; execution stays outside this beta flow.
+          </p>
+        </div>
+        <div className="workspace-toolbar-group">
+          {latestRunDate && <DataProvenanceBadge kind="eod" asOf={latestRunDate} compact />}
+          <Link className="workspace-chip-button active" href="/scanner">
+            Open scanner
+          </Link>
+        </div>
       </div>
 
-      <div style={{
-        padding: 24,
-        borderRadius: 24,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)",
-        boxShadow: "var(--shadow-panel)",
-      }}>
-        <div style={{ display: "grid", gap: 16 }}>
+      {message && (
+        <div className="workspace-card-copy" style={{ color: "var(--accent)", padding: "0 4px" }}>
+          {message}
+        </div>
+      )}
+
+      <div className="workspace-card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="workspace-toolbar" style={{ minHeight: 58 }}>
           <div>
-            <div className="heading-card" style={{ marginBottom: 6 }}>Current alert workflow</div>
-            <p style={{ fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-              Open any symbol chart and use the alert control in the chart toolbar to create or remove active price alerts for that name.
-            </p>
+            <div className="workspace-card-title">Saved scan alerts</div>
+            <div className="workspace-card-copy">
+              {loading ? "Loading EOD alert state..." : `${alerts.length} saved ${alerts.length === 1 ? "scan" : "scans"}`}
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <Link href="/charts/RELIANCE" style={{
-              padding: "10px 16px",
-              borderRadius: 999,
-              background: "linear-gradient(180deg, var(--accent-strong), var(--accent))",
-              color: "var(--text-on-accent)",
-              fontSize: 13,
-              fontWeight: 600,
-            }}>
-              Open chart alerts
-            </Link>
-            <Link href="/settings" style={{
-              padding: "10px 16px",
-              borderRadius: 999,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background: "rgba(255,255,255,0.03)",
-              color: "var(--text-primary)",
-              fontSize: 13,
-              fontWeight: 500,
-            }}>
-              Open settings
-            </Link>
+          <Link className="workspace-chip-button" href="/scanner">
+            Add from scanner
+          </Link>
+        </div>
+
+        {alerts.length === 0 && !loading ? (
+          <div style={{ padding: 32 }}>
+            <EmptyState
+              title="No saved scan alerts yet"
+              description="Run a scanner preset, then add an EOD alert so the scan can be checked after the latest complete market day."
+              action={{ label: "Open scanner", onClick: () => { window.location.href = "/scanner"; } }}
+            />
+          </div>
+        ) : (
+          <DataTable style={{ borderRadius: 0, borderLeft: "none", borderRight: "none", borderBottom: "none" }}>
+            <DataTableHead>
+              <Th width={260}>Scan</Th>
+              <Th width={120}>Status</Th>
+              <Th width={150}>Last run</Th>
+              <Th align="right" width={130}>Matches</Th>
+              <Th width={210}>Controls</Th>
+            </DataTableHead>
+            <tbody>
+              {alerts.map((alert) => (
+                <Tr key={alert.id}>
+                  <Td emphasized>
+                    <div className="mono" style={{ fontSize: 13, color: "var(--text-primary)" }}>{alert.name}</div>
+                    <div className="caption">{alert.sort_by} · {alert.sort_order}</div>
+                  </Td>
+                  <Td>
+                    <span className="workspace-pill" style={{ color: alert.is_active ? "var(--gain)" : "var(--text-tertiary)" }}>
+                      {alert.is_active ? "Active" : "Paused"}
+                    </span>
+                  </Td>
+                  <Td mono>{alert.last_run_at ? new Date(alert.last_run_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "Waiting for EOD"}</Td>
+                  <Td align="right" mono emphasized>
+                    {alert.last_match_count == null ? "—" : <Num>{alert.last_match_count.toLocaleString("en-IN")}</Num>}
+                  </Td>
+                  <Td>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="workspace-chip-button" onClick={() => toggleAlert(alert)}>
+                        {alert.is_active ? "Pause" : "Resume"}
+                      </button>
+                      <button className="workspace-chip-button" onClick={() => removeAlert(alert)}>
+                        Delete
+                      </button>
+                    </div>
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )}
+      </div>
+
+      <div className="workspace-card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="workspace-toolbar" style={{ minHeight: 58 }}>
+          <div>
+            <div className="workspace-card-title">Latest EOD digest</div>
+            <div className="workspace-card-copy">
+              {latestRunDate ? `Most recent scan alert run: ${latestRunDate}` : "Waiting for latest EOD data."}
+            </div>
           </div>
         </div>
+
+        {matches.length === 0 && !loading ? (
+          <div style={{ padding: 32 }}>
+            <EmptyState
+              title="No EOD matches yet"
+              description="When a saved scan is checked after market data refresh, the latest match list will appear here."
+            />
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 10, padding: 16 }}>
+            {matches.map((match) => (
+              <div
+                key={`${match.alert_id}-${match.run_date}`}
+                className="workspace-card-muted"
+                style={{ padding: 16, borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)" }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <div className="label" style={{ marginBottom: 5 }}>{match.scan_alerts?.name ?? "Saved scan"}</div>
+                    <div className="heading-card" style={{ fontSize: 18 }}>
+                      <Num>{match.match_count.toLocaleString("en-IN")}</Num> stocks matched on {match.run_date}
+                    </div>
+                  </div>
+                  <DataProvenanceBadge kind="eod" asOf={match.run_date} compact />
+                </div>
+                <div className="workspace-pill-row">
+                  {topSymbols(match).map((symbol) => (
+                    <Link key={symbol.symbol} className="workspace-pill" href={`/charts/${symbol.symbol}`}>
+                      <span className="mono" style={{ color: "var(--text-primary)" }}>{symbol.symbol}</span>
+                      <span className="mono" style={{ color: (symbol.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                        {(symbol.pct_change ?? 0) >= 0 ? "+" : ""}{symbol.pct_change?.toFixed(2) ?? "0.00"}%
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <Link className="workspace-chip-button active" href="/scanner">
+                    Review in scanner
+                  </Link>
+                  <Link className="workspace-chip-button" href="/watchlist">
+                    Open watchlist
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="workspace-card-copy">
+        EOD scan alerts are review aids. They are not live market data, trade execution, or investment advice.
       </div>
     </div>
   );

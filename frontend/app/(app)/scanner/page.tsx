@@ -5,6 +5,7 @@ import {
   addToWatchlist as addSymbolToWatchlist,
   authHeaders,
   bulkUpsertWorkflowStates,
+  createAlert,
   createFeedbackReport,
   createWatchlist,
   getWatchlists as getCachedWatchlists,
@@ -488,8 +489,12 @@ export default function ScannerPage() {
   const [savedScreens, setSavedScreens] = useState<SavedScreen[]>([])
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [showWlModal, setShowWlModal] = useState(false)
+  const [showAlertModal, setShowAlertModal] = useState(false)
   const [newScreenName, setNewScreenName] = useState('')
   const [newWlName, setNewWlName] = useState('')
+  const [alertName, setAlertName] = useState('')
+  const [alertSaving, setAlertSaving] = useState(false)
+  const [activeScreenName, setActiveScreenName] = useState<string | null>(null)
   const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
   const [filtersOpen, setFiltersOpen] = useState(true)
@@ -677,7 +682,7 @@ export default function ScannerPage() {
       Object.entries(p.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
     )
     const f = { ...emptyFilters(), ...normalizedFilters } as Filters
-    setFilters(f); setActivePreset(p.id); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, p.id)
+    setFilters(f); setActivePreset(p.id); setActiveScreenName(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, p.id)
   }, [pageSize, runScan, sortBy, sortDesc])
 
   useEffect(() => {
@@ -689,7 +694,42 @@ export default function ScannerPage() {
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
-    setFilters(f); setActivePreset(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
+    setFilters(f); setActivePreset('saved_screen'); setActiveScreenName(screen.name); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
+  }
+
+  function currentScanName() {
+    return activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom EOD scan' : 'Saved scan')
+  }
+
+  function openAlertModal() {
+    setAlertName(currentScanName())
+    setShowAlertModal(true)
+  }
+
+  async function createEodAlert() {
+    const name = alertName.trim()
+    if (!name) return
+    setAlertSaving(true)
+    try {
+      const payload = buildPayload(filters, sortBy, sortDesc)
+      await createAlert({
+        name,
+        filters: payload.filters,
+        sort_by: payload.sort_by,
+        sort_order: payload.sort_order,
+      })
+      setShowAlertModal(false)
+      showToast(`EOD alert created for "${name}"`)
+      trackEvent('scan_alert_created', {
+        source: 'scanner',
+        preset: activePresetMeta?.id ?? activePreset ?? 'custom',
+        mode: scanTrust?.mode ?? 'unknown',
+      })
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Could not create EOD alert')
+    } finally {
+      setAlertSaving(false)
+    }
   }
 
   async function saveCurrentScreen() {
@@ -733,7 +773,7 @@ export default function ScannerPage() {
   function scanContextOptions() {
     return {
       presetId: activePreset,
-      presetName: activePresetMeta?.name ?? (activePreset === 'saved_screen' ? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
+      presetName: activePresetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
       tradeDate,
       dataSource: scanTrust?.source ?? null,
       dataMode: scanTrust?.mode ?? null,
@@ -873,7 +913,7 @@ export default function ScannerPage() {
     )
   }
 
-  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
+  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setActiveScreenName(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
   const activePresetMeta = PRESETS.find(p => p.id === activePreset) ?? null
   const pageSizeOptions = [
     { value: 25, label: '25' },
@@ -1072,6 +1112,11 @@ export default function ScannerPage() {
             {results.length > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setShowSaveModal(true)} fullWidth>
                 Save screen
+              </Button>
+            )}
+            {results.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={openAlertModal} fullWidth>
+                Add EOD alert
               </Button>
             )}
             <Button variant="ghost" size="sm" onClick={resetFilters} fullWidth>
@@ -1426,6 +1471,31 @@ export default function ScannerPage() {
             <div style={{ display: 'flex', gap: 8 }}>
               <Button variant="ghost" size="md" onClick={() => setShowSaveModal(false)} fullWidth>Cancel</Button>
               <Button variant="primary" size="md" onClick={saveCurrentScreen} disabled={!newScreenName.trim()} fullWidth>Save</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EOD alert modal */}
+      {showAlertModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
+          onClick={() => setShowAlertModal(false)}>
+          <div style={{ background: 'var(--surface-float)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 24, width: 360, boxShadow: 'var(--shadow-modal)' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="heading-card" style={{ marginBottom: 6 }}>Create EOD scan alert</div>
+            <div className="caption" style={{ marginBottom: 16, lineHeight: 1.6 }}>
+              AlphaVyuh will check this scan after the latest complete market day is loaded. Matches appear in Alerts for review.
+            </div>
+            <input autoFocus value={alertName} onChange={e => setAlertName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createEodAlert()}
+              placeholder="Alert name…"
+              style={{ ...inputStyle, marginBottom: 12, padding: '8px 12px' }} />
+            <div className="caption" style={{ marginBottom: 12 }}>
+              {scanTrust?.asOf || tradeDate ? `Latest EOD context: ${scanTrust?.asOf ?? tradeDate}` : 'Waiting for latest EOD context.'}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button variant="ghost" size="md" onClick={() => setShowAlertModal(false)} fullWidth>Cancel</Button>
+              <Button variant="primary" size="md" onClick={createEodAlert} loading={alertSaving} disabled={!alertName.trim()} fullWidth>Create</Button>
             </div>
           </div>
         </div>
