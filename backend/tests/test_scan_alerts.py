@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -7,6 +8,86 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import alerts
+
+
+class _FakeResult:
+    def __init__(self, data=None, count=None):
+        self.data = data or []
+        self.count = count
+
+
+class _FakeTable:
+    def __init__(self, client, name):
+        self.client = client
+        self.name = name
+        self.operation = None
+        self.payload = None
+
+    def select(self, *args, **kwargs):
+        self.operation = "select"
+        return self
+
+    def insert(self, payload):
+        self.operation = "insert"
+        self.payload = payload
+        return self
+
+    def update(self, payload):
+        self.operation = "update"
+        self.payload = payload
+        self.client.updates.append((self.name, payload))
+        return self
+
+    def upsert(self, payload, **kwargs):
+        self.operation = "upsert"
+        self.payload = payload
+        self.client.upserts.append((self.name, payload, kwargs))
+        return self
+
+    def eq(self, *args, **kwargs):
+        return self
+
+    def in_(self, *args, **kwargs):
+        return self
+
+    def order(self, *args, **kwargs):
+        return self
+
+    def limit(self, *args, **kwargs):
+        return self
+
+    def range(self, *args, **kwargs):
+        return self
+
+    def single(self):
+        return self
+
+    def execute(self):
+        if self.name == "scan_alerts" and self.operation == "select":
+            return _FakeResult([
+                {
+                    "id": "alert-1",
+                    "user_id": "user-1",
+                    "name": "Momentum scan",
+                    "filters": {"rsi_min": 60},
+                    "sort_by": "volume_ratio",
+                    "sort_order": "desc",
+                    "is_active": True,
+                    "last_match_count": 99,
+                }
+            ])
+        if self.name == "users":
+            return _FakeResult([{"id": "user-1", "plan": "pro", "telegram_chat_id": "chat-1"}])
+        return _FakeResult([])
+
+
+class _FakeClient:
+    def __init__(self):
+        self.upserts = []
+        self.updates = []
+
+    def table(self, name):
+        return _FakeTable(self, name)
 
 
 def test_scan_alert_sort_validation_rejects_unknown_sort_key():
@@ -32,3 +113,93 @@ def test_recent_matches_route_is_not_shadowed_by_dynamic_alert_route():
     dynamic_index = paths.index("/api/v1/alerts/{alert_id}/matches")
 
     assert recent_index < dynamic_index
+
+
+def test_scan_alerts_migration_defines_rls_and_unique_snapshot_constraint():
+    sql = Path("supabase/migrations/038_scan_alerts.sql").read_text()
+
+    assert "create table if not exists public.scan_alerts" in sql
+    assert "create table if not exists public.scan_alert_matches" in sql
+    assert "unique (alert_id, run_date)" in sql
+    assert "alter table public.scan_alerts enable row level security" in sql
+    assert "alter table public.scan_alert_matches enable row level security" in sql
+    assert "auth.uid() = user_id" in sql
+
+
+def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypatch):
+    fake_client = _FakeClient()
+    calls = []
+
+    async def fake_execute_scan(client, body, *, plan, trade_date, enforce_plan_limit):
+        calls.append({
+            "plan": plan,
+            "trade_date": str(trade_date),
+            "page_size": body.page_size,
+            "filters": body.filters.model_dump(exclude_none=True),
+            "sort_by": body.sort_by,
+            "enforce_plan_limit": enforce_plan_limit,
+        })
+        return {
+            "total_matches": 2,
+            "results": [
+                {"symbol": "AAA", "close": 100, "pct_change": 2.5, "volume_ratio": 3.0, "rsi_14": 72},
+                {"symbol": "BBB", "close": 200, "pct_change": 1.5, "volume_ratio": 2.0, "rsi_14": 68},
+            ],
+        }
+
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: fake_client)
+    monkeypatch.setattr(alerts, "_get_user_plan", lambda user_id: "pro")
+    monkeypatch.setattr(alerts, "execute_scan", fake_execute_scan)
+    monkeypatch.setattr(alerts.settings, "telegram_bot_token", "")
+
+    import asyncio
+    result = asyncio.run(alerts.run_all_alerts(__import__("datetime").date(2026, 5, 15)))
+
+    assert result["alerts_run"] == 1
+    assert result["total_matches"] == 2
+    assert calls == [{
+        "plan": "pro",
+        "trade_date": "2026-05-15",
+        "page_size": 0,
+        "filters": {"rsi_min": 60.0},
+        "sort_by": "volume_ratio",
+        "enforce_plan_limit": False,
+    }]
+    match_upsert = fake_client.upserts[0][1]
+    assert match_upsert["match_count"] == 2
+    assert match_upsert["symbols"][0]["symbol"] == "AAA"
+    assert match_upsert["run_status"] == "success"
+    alert_update = fake_client.updates[0][1]
+    assert alert_update["last_match_count"] == 2
+    assert alert_update["last_run_status"] == "success"
+
+
+def test_telegram_summary_uses_current_run_count_not_stale_alert_count(monkeypatch):
+    sent = []
+
+    class _FakeHttp:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, json):
+            sent.append(json)
+
+    monkeypatch.setattr(alerts.settings, "telegram_bot_token", "token")
+    monkeypatch.setattr(alerts.httpx, "AsyncClient", lambda timeout=10: _FakeHttp())
+
+    summaries = [{
+        "user_id": "user-1",
+        "name": "Momentum scan",
+        "match_count": 3,
+        "run_status": "success",
+    }]
+
+    import asyncio
+    asyncio.run(alerts._send_telegram_summaries(_FakeClient(), summaries, "2026-05-15"))
+
+    assert sent
+    assert "3 stocks matched" in sent[0]["text"]
+    assert "99" not in sent[0]["text"]
