@@ -1953,6 +1953,8 @@ export type ScanAlert = {
   is_active: boolean;
   last_run_at: string | null;
   last_match_count: number | null;
+  last_run_status?: "waiting" | "success" | "skipped" | "failed";
+  last_error?: string | null;
   created_at: string;
 };
 
@@ -1968,6 +1970,8 @@ export type ScanAlertMatch = {
     rsi_14: number | null;
   }>;
   match_count: number;
+  run_status?: "success" | "skipped" | "failed";
+  error_message?: string | null;
   scan_alerts?: { name: string };
 };
 
@@ -2038,6 +2042,8 @@ function mockAlertSymbols(alertId: string, alertName: string): ScanAlertMatch {
     run_date: scan.trade_date ?? new Date().toISOString().slice(0, 10),
     symbols,
     match_count: scan.total_matches,
+    run_status: "success",
+    error_message: null,
     scan_alerts: { name: alertName },
   };
 }
@@ -2072,6 +2078,8 @@ export async function createAlert(body: {
       is_active: true,
       last_run_at: now,
       last_match_count: mockRunScan().total_matches,
+      last_run_status: "success",
+      last_error: null,
       created_at: now,
     };
     writeMockScanAlerts([alert, ...existing]);

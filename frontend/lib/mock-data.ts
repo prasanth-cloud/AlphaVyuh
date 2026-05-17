@@ -429,6 +429,8 @@ export function mockScanAlerts(): ScanAlert[] {
       is_active: true,
       last_run_at: `${TRADE_DATE}T18:00:00Z`,
       last_match_count: 6,
+      last_run_status: "success",
+      last_error: null,
       created_at: "2026-04-24T09:20:00Z",
     },
   ];
@@ -449,6 +451,8 @@ export function mockScanAlertMatches(): ScanAlertMatch[] {
       run_date: TRADE_DATE,
       symbols,
       match_count: symbols.length,
+      run_status: "success",
+      error_message: null,
       scan_alerts: { name: "Trend Template" },
     },
   ];

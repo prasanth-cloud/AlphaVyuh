@@ -640,26 +640,35 @@ export type Database = {
           created_at: string
           id: string
           match_count: number
+          error_message: string | null
           run_date: string
+          run_status: string
           symbols: Json
+          updated_at: string
           user_id: string
         }
         Insert: {
           alert_id: string
           created_at?: string
+          error_message?: string | null
           id?: string
           match_count?: number
           run_date: string
+          run_status?: string
           symbols?: Json
+          updated_at?: string
           user_id: string
         }
         Update: {
           alert_id?: string
           created_at?: string
+          error_message?: string | null
           id?: string
           match_count?: number
           run_date?: string
+          run_status?: string
           symbols?: Json
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -678,8 +687,10 @@ export type Database = {
           filters: Json
           id: string
           is_active: boolean
+          last_error: string | null
           last_match_count: number | null
           last_run_at: string | null
+          last_run_status: string
           name: string
           sort_by: string
           sort_order: string
@@ -691,8 +702,10 @@ export type Database = {
           filters?: Json
           id?: string
           is_active?: boolean
+          last_error?: string | null
           last_match_count?: number | null
           last_run_at?: string | null
+          last_run_status?: string
           name: string
           sort_by?: string
           sort_order?: string
@@ -704,8 +717,10 @@ export type Database = {
           filters?: Json
           id?: string
           is_active?: boolean
+          last_error?: string | null
           last_match_count?: number | null
           last_run_at?: string | null
+          last_run_status?: string
           name?: string
           sort_by?: string
           sort_order?: string
