@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 import yfinance as yf
@@ -32,6 +32,11 @@ class JournalEntry(BaseModel):
     stop_loss: Optional[float] = None
     target_price: Optional[float] = None
     entry_reason: Optional[str] = None
+    source_page: Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
+    source_context: Optional[str] = None
+    scanner_context: Optional[dict[str, Any]] = None
+    thesis: Optional[str] = None
+    invalidation_rule: Optional[str] = None
 
 
 class JournalUpdate(BaseModel):
@@ -44,6 +49,11 @@ class JournalUpdate(BaseModel):
     target_price: Optional[float] = None
     setup_type: Optional[str] = None
     entry_reason: Optional[str] = None
+    source_page: Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
+    source_context: Optional[str] = None
+    scanner_context: Optional[dict[str, Any]] = None
+    thesis: Optional[str] = None
+    invalidation_rule: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -56,6 +66,17 @@ def _compute_pnl(entry_price: float, exit_price: float, quantity: int, trade_typ
         pnl = (entry_price - exit_price) * quantity
     pnl_pct = (pnl / (entry_price * quantity)) * 100
     return round(pnl, 2), round(pnl_pct, 4)
+
+
+def _clean_text(value: str | None, max_len: int) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned[:max_len] if cleaned else None
+
+
+def _clean_context(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -303,6 +324,11 @@ async def create_entry(
         "target_price": body.target_price,
         "risk_reward": risk_reward,
         "entry_reason": body.entry_reason,
+        "source_page": body.source_page or "manual",
+        "source_context": _clean_text(body.source_context, 240),
+        "scanner_context": _clean_context(body.scanner_context),
+        "thesis": _clean_text(body.thesis, 1200),
+        "invalidation_rule": _clean_text(body.invalidation_rule, 800),
         "status": "open",
     }
     result = sb.table("trade_journal").insert(row).execute()
@@ -316,6 +342,9 @@ async def create_entry(
         "position_size": body.quantity,
         "setup_type": body.setup_type,
         "notes": body.entry_reason,
+        "thesis": row["thesis"],
+        "invalidation_rule": row["invalidation_rule"],
+        "scanner_context": row["scanner_context"],
         "journal_id": created["id"],
     })
     return created
@@ -342,6 +371,15 @@ async def update_entry(
 
     entry = existing.data
     update_data = body.model_dump(exclude_unset=True)
+    for key, max_len in {
+        "source_context": 240,
+        "thesis": 1200,
+        "invalidation_rule": 800,
+    }.items():
+        if key in update_data:
+            update_data[key] = _clean_text(update_data[key], max_len)
+    if "scanner_context" in update_data:
+        update_data["scanner_context"] = _clean_context(update_data["scanner_context"])
 
     closing_now = bool(body.exit_price and body.exit_date)
 

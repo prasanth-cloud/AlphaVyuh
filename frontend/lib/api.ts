@@ -1508,6 +1508,11 @@ export type UpdateJournalEntry = {
   target_price?: number | null;
   setup_type?: string;
   entry_reason?: string;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual" | null;
+  source_context?: string | null;
+  scanner_context?: ScannerIdeaContext | null;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
   status?: string;
 };
 
@@ -2288,6 +2293,7 @@ export type PlaceOrderRequest = {
   notes?:       string;
   thesis?:      string;
   invalidation_rule?: string;
+  scanner_context?: ScannerIdeaContext | null;
   source_page?: "chart" | "watchlist" | "scanner" | "manual";
   source_context?: string;
   live_confirmed?: boolean;
@@ -2655,7 +2661,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     const localWorkflow = readLocalWorkflowStates();
     const symbol = order.symbol.toUpperCase();
     const previousWorkflow = localWorkflow[symbol];
-    const ideaContext = previousWorkflow?.scanner_context;
+    const ideaContext = order.scanner_context ?? previousWorkflow?.scanner_context;
     const ideaParts = ideaContext
       ? [
           ideaContext.preset_name ? `Scanner: ${ideaContext.preset_name}` : "Scanner idea",

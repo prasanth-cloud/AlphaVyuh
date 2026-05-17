@@ -719,6 +719,7 @@ function ChartPanel({
         ...(tradeNote.trim() ? { notes: tradeNote.trim() } : {}),
         ...(plan?.thesis?.trim() ? { thesis: plan.thesis.trim() } : {}),
         ...(plan?.invalidation_rule?.trim() ? { invalidation_rule: plan.invalidation_rule.trim() } : {}),
+        ...(plan?.scanner_context ? { scanner_context: plan.scanner_context } : {}),
       };
       req.live_confirmed = canRouteLiveOrder && liveConfirmed;
       const result = await placeOrder(req);

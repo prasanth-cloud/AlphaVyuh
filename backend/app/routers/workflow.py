@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -39,6 +39,7 @@ class WorkflowStatePatch(BaseModel):
     timeframe: str | None = Field(default=None, max_length=12)
     thesis: str | None = Field(default=None, max_length=1200)
     invalidation_rule: str | None = Field(default=None, max_length=800)
+    scanner_context: dict[str, Any] | None = None
     confidence: int | None = Field(default=None, ge=1, le=5)
     setup_quality: int | None = Field(default=None, ge=1, le=5)
     notes: str | None = Field(default=None, max_length=1200)

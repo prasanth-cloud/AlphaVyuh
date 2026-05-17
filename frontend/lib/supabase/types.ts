@@ -950,14 +950,19 @@ export type Database = {
           pnl_pct: number | null
           quantity: number
           risk_reward: number | null
+          scanner_context: Json | null
           setup_type: string | null
+          source_context: string | null
+          source_page: string | null
           status: string
           stop_loss: number | null
           symbol: string
           target_price: number | null
+          thesis: string | null
           trade_type: string
           updated_at: string | null
           user_id: string
+          invalidation_rule: string | null
         }
         Insert: {
           company_name?: string | null
@@ -976,14 +981,19 @@ export type Database = {
           pnl_pct?: number | null
           quantity: number
           risk_reward?: number | null
+          scanner_context?: Json | null
           setup_type?: string | null
+          source_context?: string | null
+          source_page?: string | null
           status?: string
           stop_loss?: number | null
           symbol: string
           target_price?: number | null
+          thesis?: string | null
           trade_type: string
           updated_at?: string | null
           user_id: string
+          invalidation_rule?: string | null
         }
         Update: {
           company_name?: string | null
@@ -1002,14 +1012,19 @@ export type Database = {
           pnl_pct?: number | null
           quantity?: number
           risk_reward?: number | null
+          scanner_context?: Json | null
           setup_type?: string | null
+          source_context?: string | null
+          source_page?: string | null
           status?: string
           stop_loss?: number | null
           symbol?: string
           target_price?: number | null
+          thesis?: string | null
           trade_type?: string
           updated_at?: string | null
           user_id?: string
+          invalidation_rule?: string | null
         }
         Relationships: [
           {
