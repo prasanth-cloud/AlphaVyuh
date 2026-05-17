@@ -21,14 +21,14 @@ test.describe("Agent mission control", () => {
     await expect(page.getByText("Waiting on another agent")).toBeVisible();
     await expect(page.getByText("Queue discipline")).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Impact" }).first()).toBeVisible();
-    await expect(page.getByText(/saving one lesson/i)).toBeVisible();
+    await expect(page.getByText(/cost\/abuse brake/i)).toBeVisible();
     await expect(page.getByText(/production EOD scan alerts/i)).toBeVisible();
 
     for (const agent of ["Manager", "Feature", "Data", "QA", "Deploy"]) {
       await expect(page.getByRole("heading", { name: agent })).toBeVisible();
     }
 
-    await expect(page.getByRole("link", { name: "#125" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "#132" })).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/SUPABASE_SERVICE_ROLE_KEY|KITE_ACCESS_TOKEN|UPSTOX_ACCESS_TOKEN/i);
     expect(errors.filter((entry) => !entry.includes("favicon"))).toEqual([]);
   });
