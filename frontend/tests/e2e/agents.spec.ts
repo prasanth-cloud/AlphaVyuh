@@ -20,6 +20,9 @@ test.describe("Agent mission control", () => {
     await expect(page.getByText("Owner and system gates")).toBeVisible();
     await expect(page.getByText("Waiting on another agent")).toBeVisible();
     await expect(page.getByText("Queue discipline")).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Impact" }).first()).toBeVisible();
+    await expect(page.getByText(/saving one lesson/i)).toBeVisible();
+    await expect(page.getByText(/production EOD scan alerts/i)).toBeVisible();
 
     for (const agent of ["Manager", "Feature", "Data", "QA", "Deploy"]) {
       await expect(page.getByRole("heading", { name: agent })).toBeVisible();
