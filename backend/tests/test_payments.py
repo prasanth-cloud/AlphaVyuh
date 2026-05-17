@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import os
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -10,6 +11,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import payments  # noqa: E402
+from app.services.plans import effective_plan_from_record, get_effective_user_plan  # noqa: E402
 
 
 # ── Plan prices ────────────────────────────────────────────────────────────────
@@ -136,3 +138,98 @@ def test_payment_verify_uses_order_metadata_not_client_plan():
     with pytest.raises(HTTPException) as exc:
         payments._validated_order_context(tampered, expected_user_id="user-123")
     assert exc.value.status_code == 400
+
+
+class _FakeResult:
+    def __init__(self, data=None):
+        self.data = data
+
+
+class _FakeQuery:
+    def __init__(self, client, table_name: str):
+        self.client = client
+        self.table_name = table_name
+        self.operation = None
+        self.payload = None
+
+    def select(self, *_args, **_kwargs):
+        self.operation = "select"
+        return self
+
+    def update(self, payload):
+        self.operation = "update"
+        self.payload = payload
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def single(self):
+        return self
+
+    def maybe_single(self):
+        return self
+
+    def execute(self):
+        if self.operation == "update":
+            self.client.updates.append((self.table_name, self.payload))
+            return _FakeResult({"ok": True})
+        return _FakeResult(self.client.row)
+
+
+class _FakeClient:
+    def __init__(self, row):
+        self.row = row
+        self.updates = []
+
+    def table(self, table_name: str):
+        return _FakeQuery(self, table_name)
+
+
+def test_effective_plan_helper_treats_expired_paid_rows_as_free():
+    expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+
+    plan, expires_at, active = effective_plan_from_record({"plan": "pro", "plan_expires_at": expired})
+
+    assert plan == "free"
+    assert expires_at == expired
+    assert active is False
+
+
+def test_effective_plan_helper_keeps_active_and_lifetime_paid_rows():
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+
+    assert effective_plan_from_record({"plan": "elite", "plan_expires_at": future}) == ("elite", future, True)
+    assert effective_plan_from_record({"plan": "pro", "plan_expires_at": None}) == ("pro", None, True)
+
+
+def test_get_effective_user_plan_reads_expiry_without_mutating():
+    expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    client = _FakeClient({"plan": "pro", "plan_expires_at": expired})
+
+    assert get_effective_user_plan(client, "user-123") == "free"
+    assert client.updates == []
+
+
+@pytest.mark.anyio
+async def test_plan_status_is_read_only_for_expired_paid_rows(monkeypatch):
+    expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    client = _FakeClient({"plan": "pro", "plan_expires_at": expired})
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    result = await payments.plan_status(user_id="user-123")
+
+    assert result == {"plan": "free", "expires_at": expired, "active": False}
+    assert client.updates == []
+
+
+@pytest.mark.anyio
+async def test_plan_reconcile_explicitly_downgrades_expired_paid_rows(monkeypatch):
+    expired = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    client = _FakeClient({"plan": "elite", "plan_expires_at": expired})
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    result = await payments.reconcile_plan_status(user_id="user-123")
+
+    assert result == {"plan": "free", "expires_at": expired, "active": False, "reconciled": True}
+    assert client.updates == [("users", {"plan": "free"})]

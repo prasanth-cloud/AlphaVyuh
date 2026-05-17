@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services.plans import get_effective_user_plan
 from app.services.supabase import get_admin_client
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,7 @@ class CreateAlertRequest(BaseModel):
 
 def _get_user_plan(user_id: str) -> str:
     sb = get_admin_client()
-    r = sb.table("users").select("plan").eq("id", user_id).single().execute()
-    return r.data["plan"] if r.data else "free"
+    return get_effective_user_plan(sb, user_id)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
