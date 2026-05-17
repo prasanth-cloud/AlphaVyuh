@@ -67,4 +67,27 @@ describe("journal review context", () => {
       autoRecorded: true,
     });
   });
+
+  it("uses saved lessons as the reviewed marker for closed trades", () => {
+    expect(getTradeFlowMeta({
+      entry_reason: "Chart order",
+      status: "open",
+      lessons: "Already drafted",
+      source_page: "chart",
+    })).toMatchObject({ reviewLabel: "Open" });
+
+    expect(getTradeFlowMeta({
+      entry_reason: "Manual log",
+      status: "closed",
+      lessons: "   ",
+      source_page: "manual",
+    })).toMatchObject({ reviewLabel: "Needs review", reviewTone: "warn" });
+
+    expect(getTradeFlowMeta({
+      entry_reason: "Manual log",
+      status: "closed",
+      lessons: "Wait for confirmation.",
+      source_page: "manual",
+    })).toMatchObject({ reviewLabel: "Reviewed", reviewTone: "gain" });
+  });
 });

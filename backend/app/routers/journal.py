@@ -398,7 +398,7 @@ async def generate_lessons(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Trade lesson failed: {e}")
 
-    updated = sb.table("trade_journal").select("*").eq("id", entry_id).maybe_single().execute()
+    updated = sb.table("trade_journal").select("*").eq("id", entry_id).eq("user_id", user_id).maybe_single().execute()
     from app.routers.ai import _DISCLAIMER
     result = dict(updated.data or {})
     result["disclaimer"] = _DISCLAIMER
