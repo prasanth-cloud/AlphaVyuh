@@ -3,8 +3,10 @@ import {
   CHART_TIMEFRAME_OPTIONS,
   INTRADAY_UNAVAILABLE_MESSAGE,
   candleRangeMonths,
+  formatChartCoverageRange,
   formatChartGranularity,
   formatCandleRange,
+  getCoverageAvailabilityMessage,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   isIntradayTimeframe,
@@ -65,5 +67,19 @@ describe("watchlist chart range mapping", () => {
     expect(Math.round(candleRangeMonths(candles))).toBe(3);
     expect(getRangeAvailabilityMessage(candles, { label: "1Y", expectedMonths: 12 })).toBe("Only 3 months available for 1Y.");
     expect(getRangeAvailabilityMessage(candles, { label: "3M", expectedMonths: 3 })).toBeNull();
+  });
+
+  it("uses structured coverage metadata when the API marks partial history", () => {
+    const coverage = {
+      available_from: "2026-02-01",
+      available_to: "2026-05-01",
+      returned_candles: 42,
+      partial: true,
+      partial_reason: "history_starts_after_requested_window",
+      coverage_pct: 24.4,
+    };
+
+    expect(formatChartCoverageRange(coverage, [])).toBe("2026-02-01 -> 2026-05-01 · 42 bars");
+    expect(getCoverageAvailabilityMessage(coverage, { label: "1Y" })).toBe("History starts at 2026-02-01 for 1Y (24% coverage).");
   });
 });

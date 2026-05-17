@@ -55,7 +55,9 @@ import { workflowPlanStatus } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
 import {
   formatCandleRange,
+  formatChartCoverageRange,
   formatChartGranularity,
+  getCoverageAvailabilityMessage,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
@@ -519,7 +521,7 @@ function ChartPanel({
   const [chartError, setChartError] = useState(false);
   const [tf, setTf] = useState<WatchlistChartTimeframe>("3M");
   const [chartRequest, setChartRequest] = useState<WatchlistChartRequest>(() => getWatchlistChartRequest("3M"));
-  const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null } | null>(null);
+  const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null; range?: string | null } | null>(null);
   const [chartRangeNote, setChartRangeNote] = useState<string | null>(null);
   const [chartTimeframeMessage, setChartTimeframeMessage] = useState("");
   const [chartType, setChartType] = useState<ChartDisplayType>(() => readWatchlistChartType());
@@ -656,10 +658,11 @@ function ChartPanel({
         setChartSource({
           mode: d.source_metadata?.mode ?? d.mode ?? (isMockMode ? "demo" : "eod"),
           source: formatMarketDataSource(d.source_metadata?.source_name ?? d.source, isMockMode ? "Demo data" : "Market data"),
-          asOf: d.source_metadata?.as_of ?? rows[rows.length - 1]?.time ?? null,
+          asOf: d.coverage?.as_of ?? d.source_metadata?.as_of ?? rows[rows.length - 1]?.time ?? null,
           symbol: responseSymbol,
+          range: formatChartCoverageRange(d.coverage, rows),
         });
-        setChartRangeNote(getRangeAvailabilityMessage(rows, request));
+        setChartRangeNote(getCoverageAvailabilityMessage(d.coverage, request) ?? getRangeAvailabilityMessage(rows, request));
         if (d.latest?.close && !price) setPrice(String(d.latest.close));
       })
       .catch(() => setChartError(true))
@@ -763,13 +766,13 @@ function ChartPanel({
             />
             <span className="workspace-pill">Focus: {symbol}</span>
             <span className="workspace-pill" title={isMockMode ? "Demo workflow data, not market data" : "Using the latest available market snapshot unless a live quote is explicitly enabled"}>
-              Data: {isMockMode ? "Demo data" : "Market data"}
+              {chartSource?.source ?? (isMockMode ? "Demo data" : "Market data")}
             </span>
-            <span className="caption">{chartRequest.label} · {formatChartGranularity(chartRequest.timeframe)} · {formatCandleRange(candles)}</span>
+            <span className="caption">{chartRequest.label} · {formatChartGranularity(chartRequest.timeframe)} · {chartSource?.range ?? formatCandleRange(candles)}</span>
           </div>
           {chartSource && (
             <div className="caption" style={{ marginTop: 3 }}>
-              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo data" : "Market data")} · {formatMarketDataMode(chartSource.mode, isMockMode)}
+              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo data" : "Market data")} · as of {chartSource.asOf ?? "latest available"} · {formatMarketDataMode(chartSource.mode, isMockMode)}
               {chartRangeNote ? ` · ${chartRangeNote}` : ""}
             </div>
           )}

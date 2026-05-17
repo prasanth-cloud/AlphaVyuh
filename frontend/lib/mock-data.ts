@@ -274,6 +274,7 @@ export function mockCandles(symbol: string, timeframe = "D", limit = 180): Candl
   const q = mockQuote(symbol) ?? MOCK_STOCKS[0];
   const candles = makeCandles(q, Math.min(limit, 3000), timeframe);
   const last = candles[candles.length - 1];
+  const first = candles[0];
   return {
     symbol: q.symbol,
     company_name: q.company_name,
@@ -290,6 +291,22 @@ export function mockCandles(symbol: string, timeframe = "D", limit = 180): Candl
       symbols_count: 1,
       universe_active: 1,
       license_notes: "Deterministic mock candles for workflow QA, not market data.",
+    },
+    coverage: {
+      requested_from: first.time,
+      requested_to: last.time,
+      available_from: first.time,
+      available_to: last.time,
+      returned_candles: candles.length,
+      requested_limit: limit,
+      timeframe,
+      requested_days: Math.max(0, Math.round((new Date(`${last.time}T00:00:00Z`).getTime() - new Date(`${first.time}T00:00:00Z`).getTime()) / 86400000)),
+      covered_days: Math.max(0, Math.round((new Date(`${last.time}T00:00:00Z`).getTime() - new Date(`${first.time}T00:00:00Z`).getTime()) / 86400000)),
+      coverage_pct: 100,
+      partial: false,
+      partial_reason: null,
+      source_name: "AlphaVyuh mock fixtures",
+      as_of: last.time,
     },
     candles,
     latest: {

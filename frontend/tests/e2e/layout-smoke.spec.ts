@@ -227,7 +227,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available in this beta/i);
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · Demo data · demo/i);
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · Demo data · as of \d{4}-\d{2}-\d{2} · demo/i);
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/\d+ bars/i);
 
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "10Y", exact: true }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · Monthly · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });

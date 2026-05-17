@@ -143,6 +143,78 @@ def _normalize_eod_timeframe(timeframe: str) -> str:
     return tf
 
 
+def _chart_coverage_metadata(
+    candles: list[dict[str, Any]],
+    *,
+    requested_from: date | str | None,
+    requested_to: date | str | None,
+    requested_limit: int,
+    timeframe: str,
+    source_name: str,
+    as_of: str | None,
+) -> dict[str, Any]:
+    first = candles[0]["time"] if candles else None
+    last = candles[-1]["time"] if candles else None
+    requested_from_s = str(requested_from) if requested_from else None
+    requested_to_s = str(requested_to) if requested_to else None
+
+    def _days_between(start: str | None, end: str | None) -> int | None:
+        if not start or not end:
+            return None
+        try:
+            return max(0, (date.fromisoformat(end) - date.fromisoformat(start)).days)
+        except ValueError:
+            return None
+
+    requested_days = _days_between(requested_from_s, requested_to_s)
+    covered_days = _days_between(first, last)
+    coverage_pct = (
+        round((covered_days / requested_days) * 100, 1)
+        if requested_days and covered_days is not None
+        else None
+    )
+
+    partial_reason: str | None = None
+    if not candles:
+        partial_reason = "no_candles"
+    elif requested_from_s and first:
+        try:
+            requested_start = date.fromisoformat(requested_from_s)
+            first_dt = date.fromisoformat(first)
+            tolerance_days = 10 if timeframe == "D" else 35
+            if first_dt > requested_start + timedelta(days=tolerance_days):
+                partial_reason = "history_starts_after_requested_window"
+        except ValueError:
+            partial_reason = None
+    if not partial_reason and requested_to_s and last:
+        try:
+            requested_end = date.fromisoformat(requested_to_s)
+            last_dt = date.fromisoformat(last)
+            if last_dt < requested_end - timedelta(days=10):
+                partial_reason = "history_ends_before_requested_window"
+        except ValueError:
+            partial_reason = None
+    if not partial_reason and requested_days and covered_days is not None and requested_days >= 45 and covered_days < requested_days * 0.75:
+        partial_reason = "returned_range_shorter_than_requested"
+
+    return {
+        "requested_from": requested_from_s,
+        "requested_to": requested_to_s,
+        "available_from": first,
+        "available_to": last,
+        "returned_candles": len(candles),
+        "requested_limit": requested_limit,
+        "timeframe": timeframe,
+        "requested_days": requested_days,
+        "covered_days": covered_days,
+        "coverage_pct": coverage_pct,
+        "partial": partial_reason is not None,
+        "partial_reason": partial_reason,
+        "source_name": source_name,
+        "as_of": as_of,
+    }
+
+
 def _default_workspace(symbol: str, timeframe: str = "D") -> dict[str, Any]:
     return {
         "symbol": symbol.upper(),
@@ -487,6 +559,15 @@ async def get_candles(
             "latest": None,
             "mode": "unavailable",
             "source_metadata": metadata,
+            "coverage": _chart_coverage_metadata(
+                [],
+                requested_from=from_date,
+                requested_to=to_date,
+                requested_limit=limit,
+                timeframe=tf,
+                source_name=metadata["source_name"],
+                as_of=metadata.get("as_of"),
+            ),
         }
 
     # For W/M we need more raw daily bars to aggregate into enough candles
@@ -514,6 +595,15 @@ async def get_candles(
             "latest": None,
             "mode": "unavailable",
             "source_metadata": metadata,
+            "coverage": _chart_coverage_metadata(
+                [],
+                requested_from=fd,
+                requested_to=td2,
+                requested_limit=limit,
+                timeframe=tf,
+                source_name=metadata["source_name"],
+                as_of=metadata.get("as_of"),
+            ),
             "adjusted": adjusted,
         }
 
@@ -597,6 +687,15 @@ async def get_candles(
         status="healthy" if candles else "unknown",
         symbols_count=1 if candles else 0,
     )
+    coverage = _chart_coverage_metadata(
+        candles,
+        requested_from=fd,
+        requested_to=td2,
+        requested_limit=limit,
+        timeframe=tf,
+        source_name=metadata["source_name"],
+        as_of=latest_time,
+    )
     return {
         "symbol": sym,
         "requested_symbol": requested_sym,
@@ -610,6 +709,7 @@ async def get_candles(
         "mode": metadata["mode"],
         "source": metadata["source_name"],
         "source_metadata": metadata,
+        "coverage": coverage,
         "adjusted": adjusted,
         "adjustment_source": "corporate_actions" if adjusted else None,
     }
@@ -629,7 +729,18 @@ async def get_candles_live(
     try:
         data = get_market_data_provider().live_candles(sym, tf, limit, _lookup_market_identity(sym))
         data["mode"] = "live"
-        data["source_metadata"] = live_source_metadata(provider=data.get("source") or "configured provider")
+        candles = data.get("candles") or []
+        latest_time = candles[-1].get("time") if candles else None
+        data["source_metadata"] = live_source_metadata(provider=data.get("source") or "configured provider", as_of=latest_time)
+        data["coverage"] = _chart_coverage_metadata(
+            candles,
+            requested_from=None,
+            requested_to=None,
+            requested_limit=limit,
+            timeframe=tf,
+            source_name=data["source_metadata"]["source_name"],
+            as_of=latest_time,
+        )
         return data
     except ProviderNotConfiguredError as e:
         raise HTTPException(status_code=501, detail=str(e))

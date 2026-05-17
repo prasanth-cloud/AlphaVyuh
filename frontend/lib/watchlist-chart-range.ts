@@ -91,10 +91,48 @@ export function formatCandleRange(candles: Array<{ time: string }>) {
   return first === last ? first : `${first} -> ${last}`;
 }
 
+type ChartCoverageLike = {
+  available_from?: string | null;
+  available_to?: string | null;
+  returned_candles?: number | null;
+  partial?: boolean;
+  partial_reason?: string | null;
+  coverage_pct?: number | null;
+};
+
+export function formatChartCoverageRange(
+  coverage: ChartCoverageLike | null | undefined,
+  candles: Array<{ time: string }>,
+) {
+  const first = coverage?.available_from ?? candles[0]?.time;
+  const last = coverage?.available_to ?? candles[candles.length - 1]?.time;
+  const count = coverage?.returned_candles ?? candles.length;
+  if (!first || !last) return "No candles";
+  const range = first === last ? first : `${first} -> ${last}`;
+  return `${range} · ${count} bars`;
+}
+
 export function formatChartGranularity(timeframe: Pick<WatchlistChartRequest, "timeframe">["timeframe"]) {
   if (timeframe === "W") return "Weekly";
   if (timeframe === "M") return "Monthly";
   return "Daily";
+}
+
+export function getCoverageAvailabilityMessage(
+  coverage: ChartCoverageLike | null | undefined,
+  request: Pick<WatchlistChartRequest, "label">,
+) {
+  if (!coverage?.partial) return null;
+  const percent = typeof coverage.coverage_pct === "number" && Number.isFinite(coverage.coverage_pct)
+    ? ` (${coverage.coverage_pct.toFixed(0)}% coverage)`
+    : "";
+  if (coverage.partial_reason === "history_starts_after_requested_window") {
+    return `History starts at ${coverage.available_from ?? "the first available candle"} for ${request.label}${percent}.`;
+  }
+  if (coverage.partial_reason === "history_ends_before_requested_window") {
+    return `Latest candle is ${coverage.available_to ?? "not current"} for ${request.label}${percent}.`;
+  }
+  return `Partial chart history for ${request.label}${percent}.`;
 }
 
 export function getRangeAvailabilityMessage(
