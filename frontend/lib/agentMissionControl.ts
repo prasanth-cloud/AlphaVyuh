@@ -77,6 +77,16 @@ export const agentLanes: AgentLane[] = [
     lastUpdate: "PR #125 gate passed",
   },
   {
+    id: "security",
+    name: "Security",
+    scope: "Auth, Supabase access, broker/payment gates",
+    autonomy: "Level 3",
+    status: "active",
+    currentWork: "Public intake and feedback RLS hardening is being prepared from the launch safety scan.",
+    ownerFiles: "supabase/migrations, backend/tests, security docs",
+    lastUpdate: "Issue #108 active",
+  },
+  {
     id: "deploy",
     name: "Deploy",
     scope: "Vercel, domains, env, release checks",
@@ -89,6 +99,14 @@ export const agentLanes: AgentLane[] = [
 ];
 
 export const shippedAgentPrs: ShippedAgentPr[] = [
+  {
+    pr: "#127",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/127",
+    title: "Add Agent Mission Control",
+    agent: "Manager + Product + Frontend + QA",
+    merged: "2026-05-17",
+    notes: "Internal /agents surface shows lanes, blockers, shipped PRs, and next actions.",
+  },
   {
     pr: "#125",
     href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/125",
@@ -124,6 +142,12 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
 ];
 
 export const agentBlockers: AgentBlocker[] = [
+  {
+    severity: "database",
+    blocker: "Public intake and feedback RLS migration requires production evidence.",
+    owner: "Founder / Security",
+    nextMove: "Apply 20260517123000_public_intake_feedback_rls.sql to production, then rerun migration drift.",
+  },
   {
     severity: "database",
     blocker: "PR #122 requires scan alert migration evidence.",

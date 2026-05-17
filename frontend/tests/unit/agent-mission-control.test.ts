@@ -13,7 +13,7 @@ describe("agent mission control data", () => {
     expect(validateMissionControlData()).toBe(true);
     expect(new Set(agentLanes.map((agent) => agent.id)).size).toBe(agentLanes.length);
     expect(agentLanes.map((agent) => agent.name)).toEqual(
-      expect.arrayContaining(["Manager", "Feature", "Data", "QA", "Deploy"]),
+      expect.arrayContaining(["Manager", "Feature", "Data", "QA", "Security", "Deploy"]),
     );
   });
 

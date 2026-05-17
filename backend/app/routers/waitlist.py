@@ -42,20 +42,35 @@ def _new_invite_code() -> str:
     return "AV-" + "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+def _is_missing_launch_column(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(column in text for column in ("invite_code", "status", "source"))
+
+
+def _insert_waitlist_row(client, body: WaitlistRequest) -> None:
+    payload = {"email": body.email, "source": body.source, "invite_code": body.invite_code}
+    try:
+        client.table("waitlist").insert(payload).execute()
+        return
+    except Exception as insert_exc:
+        # Production may briefly run before the launch-readiness migration is applied.
+        # Preserve the public signup path by falling back toward the original schema.
+        if not _is_missing_launch_column(insert_exc):
+            raise
+
+    try:
+        client.table("waitlist").insert({"email": body.email, "source": body.source}).execute()
+    except Exception as fallback_exc:
+        if "source" not in str(fallback_exc).lower():
+            raise
+        client.table("waitlist").insert({"email": body.email}).execute()
+
+
 @router.post("/waitlist")
 async def join_waitlist(body: WaitlistRequest):
     client = get_admin_client()
     try:
-        payload = {"email": body.email, "source": body.source, "invite_code": body.invite_code}
-        try:
-            client.table("waitlist").insert(payload).execute()
-        except Exception as insert_exc:
-            # Production may briefly run before the launch-readiness migration is applied.
-            # Preserve the public signup path by falling back to the original schema.
-            if "invite_code" in str(insert_exc).lower() or "status" in str(insert_exc).lower():
-                client.table("waitlist").insert({"email": body.email, "source": body.source}).execute()
-            else:
-                raise
+        _insert_waitlist_row(client, body)
     except Exception as e:
         # Supabase raises an exception on unique constraint violation
         if "duplicate" in str(e).lower() or "unique" in str(e).lower() or "23505" in str(e):
