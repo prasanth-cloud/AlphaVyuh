@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import date, datetime, timezone
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -64,6 +64,7 @@ class PlaceOrderRequest(BaseModel):
     notes:          Optional[str]   = None
     thesis:         Optional[str]   = None
     invalidation_rule: Optional[str] = None
+    scanner_context: Optional[dict[str, Any]] = None
     source_page:    Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
     source_context: Optional[str]   = None
     live_confirmed: bool = False
@@ -588,27 +589,60 @@ async def place_order(
         "upstox": "Upstox",
     }.get(broker_used, broker_used.capitalize())
 
+    workflow_context = {}
+    try:
+        workflow_context = (
+            sb.table("workflow_states")
+            .select("source,setup_type,thesis,invalidation_rule,scanner_context,notes")
+            .eq("user_id", user_id)
+            .eq("symbol", sym)
+            .maybe_single()
+            .execute()
+            .data or {}
+        )
+    except Exception:
+        workflow_context = {}
+
     source_context = (body.source_context or "").strip()
+    scanner_context = body.scanner_context or workflow_context.get("scanner_context")
+    thesis = body.thesis or workflow_context.get("thesis")
+    invalidation_rule = body.invalidation_rule or workflow_context.get("invalidation_rule")
+    setup_type = body.setup_type or workflow_context.get("setup_type")
+    source_page = body.source_page or workflow_context.get("source") or "chart"
+    if source_page not in {"chart", "watchlist", "scanner", "manual"}:
+        source_page = "chart"
     source_label = {
         "chart": "Chart",
         "watchlist": "Watchlist",
         "scanner": "Scanner",
         "manual": "Manual",
-    }.get(body.source_page or "chart", "Chart")
+    }.get(source_page, "Chart")
 
     reason_parts = []
+    if isinstance(scanner_context, dict):
+        if scanner_context.get("preset_name"):
+            reason_parts.append(f"Scanner: {str(scanner_context['preset_name'])[:80]}")
+        score_bits = [scanner_context.get("setup_grade"), scanner_context.get("setup_score")]
+        score_text = " ".join(str(bit) for bit in score_bits if bit not in (None, ""))
+        if score_text:
+            reason_parts.append(f"Score: {score_text[:40]}")
+        match_reasons = scanner_context.get("match_reasons")
+        if isinstance(match_reasons, list) and match_reasons:
+            reason_parts.append(f"Matched: {str(match_reasons[0])[:120]}")
+        if scanner_context.get("data_as_of"):
+            reason_parts.append(f"As of: {str(scanner_context['data_as_of'])[:32]}")
     if body.notes and body.notes.strip():
         reason_parts.append(body.notes.strip())
-    if body.thesis and body.thesis.strip():
-        reason_parts.append(f"Thesis: {body.thesis.strip()}")
-    if body.invalidation_rule and body.invalidation_rule.strip():
-        reason_parts.append(f"Invalidation: {body.invalidation_rule.strip()}")
+    if thesis and str(thesis).strip():
+        reason_parts.append(f"Thesis: {str(thesis).strip()}")
+    if invalidation_rule and str(invalidation_rule).strip():
+        reason_parts.append(f"Invalidation: {str(invalidation_rule).strip()}")
     base_reason = " | ".join(reason_parts) if reason_parts else f"{body.side.upper()} via {source_label.lower()} — {body.order_type} order"
     context_bits = [broker_context, source_label]
     if source_context:
         context_bits.append(source_context[:80])
-    if body.setup_type:
-        context_bits.append(f"Setup {body.setup_type}")
+    if setup_type:
+        context_bits.append(f"Setup {setup_type}")
 
     entry_reason = f"{base_reason} [{' · '.join(context_bits)}]"
     if broker_order_id:
@@ -624,9 +658,14 @@ async def place_order(
         "quantity":       body.quantity,
         "stop_loss":      body.stop_loss,
         "target_price":   body.target_price,
-        "setup_type":     body.setup_type,
+        "setup_type":     setup_type,
         "entry_reason":   entry_reason,
         "risk_reward":    risk_reward,
+        "source_page":    source_page,
+        "source_context": source_context or None,
+        "scanner_context": scanner_context if isinstance(scanner_context, dict) else None,
+        "thesis":         thesis,
+        "invalidation_rule": invalidation_rule,
         "status":         "open",
     }
 
@@ -657,16 +696,17 @@ async def place_order(
         },
     )
     sync_workflow_state(sb, user_id, sym, {
-        "source": body.source_page or "chart",
+        "source": source_page,
         "lifecycle": "open",
         "entry": body.price,
         "stop": body.stop_loss,
         "target": body.target_price,
         "position_size": body.quantity,
-        "setup_type": body.setup_type,
+        "setup_type": setup_type,
         "notes": body.notes,
-        "thesis": body.thesis,
-        "invalidation_rule": body.invalidation_rule,
+        "thesis": thesis,
+        "invalidation_rule": invalidation_rule,
+        "scanner_context": scanner_context,
         "broker_order_id": broker_order_id,
         "journal_id": journal_entry["id"],
     })
