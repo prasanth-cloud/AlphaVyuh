@@ -152,6 +152,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Shortlist" })).toBeVisible();
     await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Chart" })).toBeVisible();
+    await expect(page.locator(".scanner-row-actions").first().getByRole("combobox", { name: /More actions/i })).toBeVisible();
+    await expect(page.locator(".scanner-row-actions").first().getByRole("button")).toHaveCount(2);
     await expect(page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first()).toContainText(/A|B|C|D|\d{2,3}/);
     await page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first().click();
     await expect(page.getByText("Why this matched")).toBeVisible();
@@ -189,6 +191,7 @@ test.describe("Workflow layout smoke", () => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText(/Market command center/i);
     await expect(page.locator("body")).not.toContainText(/Scan the latest context/i);
+    await expect(page.locator("body")).not.toContainText(/Continue your workflow/i);
     await expect(page.getByRole("button", { name: /Data status/i })).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText("UNKNOWN");
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);

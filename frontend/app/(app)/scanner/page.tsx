@@ -423,7 +423,7 @@ function ScannerRowActions({
   return (
     <div className="scanner-row-actions">
       <button
-        className="scanner-row-action"
+        className="scanner-row-action scanner-row-action-primary"
         title={`Shortlist ${result.symbol}`}
         onClick={e => { e.stopPropagation(); onMark([result.symbol], 'shortlist') }}
         style={{ color: 'var(--accent)', cursor: 'pointer' }}
@@ -438,25 +438,6 @@ function ScannerRowActions({
       >
         Chart
       </button>
-      <button
-        className="scanner-row-action"
-        title={`Ignore ${result.symbol}`}
-        onClick={e => { e.stopPropagation(); onMark([result.symbol], 'ignored') }}
-        style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}
-      >
-        Ignore
-      </button>
-      {watchlists.length > 0 && (
-        <select
-          onChange={e => { if (e.target.value) { onAddToWatchlist(result.symbol, e.target.value); e.target.value = '' } }}
-          onClick={e => e.stopPropagation()}
-          aria-label={`Add ${result.symbol} to watchlist`}
-          className="scanner-row-select scanner-watchlist-select"
-        >
-          <option value="">Add</option>
-          {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
-      )}
       <select
         aria-label={`More actions for ${result.symbol}`}
         className="scanner-row-select scanner-more-select"
@@ -465,12 +446,16 @@ function ScannerRowActions({
           e.stopPropagation()
           const action = e.target.value
           e.target.value = ''
+          if (action.startsWith('add:')) onAddToWatchlist(result.symbol, action.slice(4))
+          if (action === 'ignore') onMark([result.symbol], 'ignored')
           if (action === 'later') onMark([result.symbol], 'review_later')
           if (action === 'journal') window.location.assign(`/journal?symbol=${encodeURIComponent(result.symbol)}&review=needs-review`)
           if (action === 'report') onReport(result.symbol)
         }}
       >
         <option value="">More</option>
+        {watchlists.map(w => <option key={w.id} value={`add:${w.id}`}>Add to {w.name}</option>)}
+        <option value="ignore">Ignore</option>
         <option value="later">Review later</option>
         <option value="journal">Journal</option>
         <option value="report">Report</option>
@@ -1114,7 +1099,7 @@ export default function ScannerPage() {
                   />
                 )}
               </div>
-              <div className="workspace-toolbar-group">
+              <div className="workspace-toolbar-group scanner-results-toolbar">
                 {scanTrust && (
                   <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
                     {scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
@@ -1158,15 +1143,19 @@ export default function ScannerPage() {
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
                   Create watchlist
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')} disabled={selectedResults.size === 0}>
-                  Shortlist selected
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'ignored')} disabled={selectedResults.size === 0}>
-                  Ignore selected
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')} disabled={selectedResults.size === 0}>
-                  Review later selected
-                </Button>
+                {selectedResults.size > 0 && (
+                  <>
+                    <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')}>
+                      Shortlist
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')}>
+                      Review later
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'ignored')}>
+                      Ignore
+                    </Button>
+                  </>
+                )}
               </div>
             </>
           ) : (

@@ -460,6 +460,7 @@ function SymbolSearch() {
           <path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
         </svg>
         <input
+          suppressHydrationWarning
           ref={inputRef}
           value={query}
           onChange={handleChange}
