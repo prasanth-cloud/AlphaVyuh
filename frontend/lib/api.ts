@@ -303,6 +303,23 @@ export type SourceMetadata = {
   message?: string;
 };
 
+export type ChartCoverage = {
+  requested_from?: string | null;
+  requested_to?: string | null;
+  available_from?: string | null;
+  available_to?: string | null;
+  returned_candles?: number | null;
+  requested_limit?: number | null;
+  timeframe?: string | null;
+  requested_days?: number | null;
+  covered_days?: number | null;
+  coverage_pct?: number | null;
+  partial?: boolean;
+  partial_reason?: string | null;
+  source_name?: string | null;
+  as_of?: string | null;
+};
+
 export type MarketSummary = {
   trade_date: string;
   advances: number;
@@ -944,6 +961,7 @@ export type CandlesResponse = {
   mode?: DataMode;
   source?: string;
   source_metadata?: SourceMetadata;
+  coverage?: ChartCoverage;
   candles: CandleBar[];
   latest: {
     close: number;

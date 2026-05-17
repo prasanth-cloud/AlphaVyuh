@@ -803,7 +803,8 @@ export default function ScannerPage() {
       trackEvent('add_to_watchlist', { source: 'scanner_bulk_create', count: symbols.length, watchlist_id: wl.id })
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
-      router.push(`/watchlist?id=${wl.id}`)
+      const focusParam = symbols[0] ? `&symbol=${encodeURIComponent(symbols[0])}` : ""
+      router.push(`/watchlist?id=${wl.id}${focusParam}`)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Watchlist creation failed')
     }

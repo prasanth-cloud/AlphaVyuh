@@ -24,13 +24,14 @@ import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
 import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 import {
-  formatCandleRange,
+  formatChartCoverageRange,
   formatChartGranularity,
+  getCoverageAvailabilityMessage,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
 } from "@/lib/watchlist-chart-range";
-import { formatMarketDataSource } from "@/lib/data-copy";
+import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -551,7 +552,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setData(freshCached.data);
       lastBaseChartKeyRef.current = baseCacheKey;
       setLegendBar(null);
-      setRangeNote(getRangeAvailabilityMessage(freshCached.data.candles ?? [], request));
+      setRangeNote(getCoverageAvailabilityMessage(freshCached.data.coverage, request) ?? getRangeAvailabilityMessage(freshCached.data.candles ?? [], request));
       setIndicatorData(freshCached.indicatorData);
       setRsiData(freshCached.rsiData);
       setMacdData(freshCached.macdData);
@@ -596,7 +597,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setData(nextData);
         lastBaseChartKeyRef.current = baseCacheKey;
         setLegendBar(null);
-        setRangeNote(getRangeAvailabilityMessage(nextData.candles ?? [], request));
+        setRangeNote(getCoverageAvailabilityMessage(nextData.coverage, request) ?? getRangeAvailabilityMessage(nextData.candles ?? [], request));
         const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp, nextData.candles ?? []);
         chartDataCache.set(cacheKey, {
           data: nextData,
@@ -1148,11 +1149,44 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     // Convert pixel → price/time using chart API
     const rawPrice1 = chartHandleRef.current?.coordinateToPrice(start.y) ?? null;
     const time1  = chartHandleRef.current?.coordinateToTime(start.x) ?? null;
+    if (rawPrice1 == null || time1 == null) return;
+    const price1 = e.altKey ? rawPrice1 : getSnappedPrice(time1, rawPrice1);
+
+    if (activeDrawingTool === "Text") {
+      const line: ChartDrawing = {
+        id: crypto.randomUUID(),
+        tool: activeDrawingTool,
+        p1: { time: time1, price: price1 },
+        p2: { time: time1, price: price1 },
+        color: DRAWING_DEFAULT_COLOR,
+        text: "Note",
+      };
+      const editorX = Math.min((overlayRef.current?.clientWidth ?? 360) - 220, start.x + 12);
+      const editorY = Math.max(12, start.y - 12);
+      setTextEditor({ drawingId: line.id, value: "Note", x: editorX, y: editorY, isNew: true });
+      updateDrawingsWithHistory((prev) => [...prev, line]);
+      setSelectedDrawingId(line.id);
+      setActiveDrawingTool(null);
+      trackEvent("drawing_created", { symbol, timeframe, tool: activeDrawingTool });
+      try {
+        const saved = await saveDrawing(symbol, {
+          tool_type: getDrawingToolType(activeDrawingTool),
+          points: getPersistedDrawingPoints(line),
+          style: { color: line.color, text: line.text ?? null },
+          timeframe,
+        });
+        setDrawings(prev => [...prev, saved]);
+        setDrawnLines(prev => prev.map(item => item.id === line.id ? { ...item, id: saved.id } : item));
+        setSelectedDrawingId(saved.id);
+        setTextEditor(prev => prev?.drawingId === line.id ? { ...prev, drawingId: saved.id } : prev);
+      } catch { /* ignore */ }
+      return;
+    }
+
     const rawPrice2 = chartHandleRef.current?.coordinateToPrice(y2) ?? null;
     const time2  = chartHandleRef.current?.coordinateToTime(x2) ?? null;
 
-    if (rawPrice1 == null || time1 == null || rawPrice2 == null || time2 == null) return;
-    const price1 = e.altKey ? rawPrice1 : getSnappedPrice(time1, rawPrice1);
+    if (rawPrice2 == null || time2 == null) return;
     const price2 = e.altKey ? rawPrice2 : getSnappedPrice(time2, rawPrice2);
 
     const finalPrice2 = activeDrawingTool === "Horizontal" || activeDrawingTool === "HorizontalRay" ? price1 : price2;
@@ -1167,13 +1201,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       const built = buildPositionDrawingPoints(activeDrawingTool, line.p1, { time: time2, price: price2 });
       line.p2 = built.p2;
       line.p3 = built.p3;
-    }
-    if (activeDrawingTool === "Text") {
-      line.text = "Note";
-      line.p2 = { time: time1, price: price1 };
-      const editorX = Math.min((overlayRef.current?.clientWidth ?? 360) - 220, start.x + 12);
-      const editorY = Math.max(12, start.y - 12);
-      setTextEditor({ drawingId: line.id, value: "Note", x: editorX, y: editorY, isNew: true });
     }
     updateDrawingsWithHistory((prev) => [...prev, line]);
     setSelectedDrawingId(line.id);
@@ -1315,6 +1342,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }, [drawnLines]);
 
   const beginWholeDrawingDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing) => {
+    if (activeDrawingTool) return;
     if (drawing.locked || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
     updateDrawingsWithHistory((prev) => cloneDrawings(prev));
@@ -1326,9 +1354,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       startY: e.clientY - rect.top,
       original: cloneDrawings([drawing])[0],
     });
-  }, [updateDrawingsWithHistory]);
+  }, [activeDrawingTool, updateDrawingsWithHistory]);
 
   const beginPointDrag = useCallback((e: React.MouseEvent, drawing: ChartDrawing, point: "p1" | "p2" | "p3") => {
+    if (activeDrawingTool) return;
     if (drawing.locked || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
     updateDrawingsWithHistory((prev) => cloneDrawings(prev));
@@ -1341,7 +1370,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       startY: e.clientY - rect.top,
       original: cloneDrawings([drawing])[0],
     });
-  }, [updateDrawingsWithHistory]);
+  }, [activeDrawingTool, updateDrawingsWithHistory]);
 
   const editTextDrawing = useCallback((drawing: ChartDrawing) => {
     if (drawing.tool !== "Text") return;
@@ -2861,7 +2890,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {rangeLabel} · {formatChartGranularity(timeframe)} · {formatCandleRange(data.candles)}
+                  {rangeLabel} · {formatChartGranularity(timeframe)} · {formatChartCoverageRange(data.coverage, data.candles)}
+                </div>
+              )}
+              {data && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {formatMarketDataSource(data.source_metadata?.source_name ?? data.source, isMockMode ? "Demo data" : "Market data")} · as of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"} · {formatMarketDataMode(data.source_metadata?.mode ?? data.mode, isMockMode)}
                 </div>
               )}
               {drawnLines.length > 0 && (
@@ -3101,6 +3136,21 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               data-testid="chart-drawing-overlay"
               className="absolute inset-0 z-20"
               style={{ cursor: activeDrawingTool ? "crosshair" : dragState || positionDragState || planDragState ? "grabbing" : "default", pointerEvents: activeDrawingTool || selectedDrawing || dragState || positionDragState || planDragState || activeManagedPosition ? "all" : "none" }}
+              onMouseDownCapture={(e) => {
+                if (!activeDrawingTool) return;
+                e.stopPropagation();
+                handleOverlayMouseDown(e);
+              }}
+              onMouseMoveCapture={(e) => {
+                if (!activeDrawingTool) return;
+                e.stopPropagation();
+                handleOverlayMouseMove(e);
+              }}
+              onMouseUpCapture={(e) => {
+                if (!activeDrawingTool) return;
+                e.stopPropagation();
+                void handleOverlayMouseUp(e);
+              }}
               onMouseDown={handleOverlayMouseDown}
               onMouseMove={handleOverlayMouseMove}
               onMouseUp={handleOverlayMouseUp}
