@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
-import { SETUP_TYPES, inputStyle, fmtCcy, fmtDate, getTradeFlowMeta } from "./utils";
+import { SETUP_TYPES, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
 
 // ── SetupChips ────────────────────────────────────────────────────────────────
 
@@ -89,6 +89,7 @@ export function TradePanel({
 }: TradePanelProps) {
   if (!mode) return null;
   const flow = selectedEntry ? getTradeFlowMeta(selectedEntry) : null;
+  const reviewContext = selectedEntry ? getReviewContext(selectedEntry) : null;
 
   return (
     <div style={{ width: 340, flexShrink: 0 }}>
@@ -291,6 +292,46 @@ export function TradePanel({
               <div>
                 <div className="label" style={{ marginBottom: 4 }}>Entry reason</div>
                 <p style={{ fontSize: 12, lineHeight: 1.6, color: "var(--text-secondary)" }}>{selectedEntry.entry_reason}</p>
+              </div>
+            )}
+
+            {reviewContext && (
+              <div
+                data-testid="journal-original-idea"
+                style={{
+                  borderRadius: "var(--radius-md)",
+                  padding: "12px 14px",
+                  background: "rgba(244,247,251,0.04)",
+                  border: "1px solid var(--border-subtle)",
+                }}
+              >
+                <div className="label" style={{ marginBottom: 8 }}>Original idea</div>
+                {reviewContext.hasContext ? (
+                  <>
+                    <div style={{ display: "grid", gap: 7, marginBottom: reviewContext.prompts.length ? 12 : 0 }}>
+                      {reviewContext.summary.slice(0, 5).map(item => (
+                        <div key={`${item.label}-${item.value}`} style={{ display: "grid", gap: 2 }}>
+                          <div className="caption" style={{ textTransform: "uppercase", letterSpacing: "0.08em" }}>{item.label}</div>
+                          <div style={{ fontSize: 12, lineHeight: 1.45, color: "var(--text-primary)" }}>{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {reviewContext.prompts.length > 0 && (
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div className="caption" style={{ color: "var(--accent)" }}>Review prompts</div>
+                        {reviewContext.prompts.map(prompt => (
+                          <div key={prompt} style={{ fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)" }}>
+                            {prompt}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)" }}>
+                    {reviewContext.fallback}
+                  </div>
+                )}
               </div>
             )}
 
