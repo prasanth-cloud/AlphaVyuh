@@ -12,6 +12,7 @@ const pages: WorkflowPage[] = [
   { path: "/watchlist", name: "watchlist", marker: (page) => page.getByText("Decision desk") },
   { path: "/charts/AUBANK?full=1", name: "full chart", marker: (page) => page.getByTestId("chart-drawing-overlay") },
   { path: "/journal", name: "journal", marker: (page) => page.getByText(/Review/i).first() },
+  { path: "/agents", name: "agents", marker: (page) => page.getByTestId("agent-mission-control") },
 ];
 
 const viewports = [
@@ -32,6 +33,7 @@ const launchRoutes = [
   "/watchlist",
   "/charts/AUBANK?full=1",
   "/journal",
+  "/agents",
   "/settings",
   "/settings?tab=billing",
   "/settings/broker",
