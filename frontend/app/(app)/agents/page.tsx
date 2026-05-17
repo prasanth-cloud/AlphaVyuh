@@ -102,6 +102,7 @@ export default function AgentMissionControlPage() {
                   <Th>Agent</Th>
                   <Th>Merged</Th>
                   <Th>Notes</Th>
+                  <Th>Impact</Th>
                 </DataTableHead>
                 <tbody>
                   {shippedAgentPrs.map((pr) => (
@@ -111,6 +112,7 @@ export default function AgentMissionControlPage() {
                       <Td>{pr.agent}</Td>
                       <Td mono>{pr.merged}</Td>
                       <Td>{pr.notes}</Td>
+                      <Td>{pr.productImpact}</Td>
                     </Tr>
                   ))}
                 </tbody>
@@ -127,6 +129,7 @@ export default function AgentMissionControlPage() {
                 <Th>Blocker</Th>
                 <Th>Owner</Th>
                 <Th>Next move</Th>
+                <Th>Impact</Th>
               </DataTableHead>
               <tbody>
                 {agentBlockers.map((blocker) => (
@@ -135,6 +138,7 @@ export default function AgentMissionControlPage() {
                     <Td emphasized>{blocker.blocker}</Td>
                     <Td>{blocker.owner}</Td>
                     <Td>{blocker.nextMove}</Td>
+                    <Td>{blocker.productImpact}</Td>
                   </Tr>
                 ))}
               </tbody>

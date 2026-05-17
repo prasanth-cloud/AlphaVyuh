@@ -18,6 +18,7 @@ export type ShippedAgentPr = {
   agent: string;
   merged: string;
   notes: string;
+  productImpact: string;
 };
 
 export type AgentBlocker = {
@@ -25,6 +26,7 @@ export type AgentBlocker = {
   blocker: string;
   owner: string;
   nextMove: string;
+  productImpact: string;
 };
 
 export type AgentRequest = {
@@ -96,6 +98,7 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
     agent: "Feature + QA",
     merged: "2026-05-17",
     notes: "Closed trades can save one lesson and become reviewed.",
+    productImpact: "Traders can close the review loop by saving one lesson per closed trade.",
   },
   {
     pr: "#121",
@@ -104,6 +107,7 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
     agent: "Data + Feature",
     merged: "2026-05-17",
     notes: "Saved scans can run as EOD alert candidates in mock/local mode.",
+    productImpact: "Saved scans become alert candidates instead of one-off scanner runs.",
   },
   {
     pr: "#119",
@@ -112,6 +116,7 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
     agent: "Feature + QA",
     merged: "2026-05-17",
     notes: "Journal review now shows idea context before lesson capture.",
+    productImpact: "Review prompts connect trade outcomes back to the original idea and plan.",
   },
   {
     pr: "#117",
@@ -120,6 +125,7 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
     agent: "Design + Feature",
     merged: "2026-05-17",
     notes: "Frontend polish pass landed and issue #105 closed.",
+    productImpact: "Core workflow screens feel calmer before founder-beta feedback.",
   },
 ];
 
@@ -129,24 +135,28 @@ export const agentBlockers: AgentBlocker[] = [
     blocker: "PR #122 requires scan alert migration evidence.",
     owner: "Founder / Data",
     nextMove: "Apply 038_scan_alerts.sql to production, then rerun migration drift.",
+    productImpact: "Delays production EOD scan alerts for saved screens.",
   },
   {
     severity: "database",
     blocker: "PR #123 requires journal idea-context migration evidence.",
     owner: "Founder / Data",
     nextMove: "Apply 039_journal_idea_context.sql after #122 lands or rebase.",
+    productImpact: "Delays live persistence of scanner-to-journal context.",
   },
   {
     severity: "owner",
     blocker: "Broker read-only smoke still needs real Kite or Upstox tokens.",
     owner: "Founder",
     nextMove: "Provide short-lived read-only token when broker work resumes.",
+    productImpact: "Keeps broker import and execution confidence gated during beta.",
   },
   {
     severity: "external",
     blocker: "Market-data redistribution terms are not finalized.",
     owner: "Founder",
     nextMove: "Choose EOD/free-first beta policy or paid vendor path before paid launch.",
+    productImpact: "Limits how broadly AlphaVyuh can be marketed with real market data.",
   },
 ];
 
@@ -180,7 +190,8 @@ export function validateMissionControlData() {
   return (
     ids.size === agentLanes.length &&
     agentLanes.every((agent) => agent.name && agent.currentWork && agent.ownerFiles) &&
-    shippedAgentPrs.every((pr) => pr.href.startsWith("https://github.com/prasanth-cloud/AlphaVyuh/pull/")) &&
+    shippedAgentPrs.every((pr) => pr.href.startsWith("https://github.com/prasanth-cloud/AlphaVyuh/pull/") && pr.productImpact) &&
+    agentBlockers.every((blocker) => blocker.productImpact) &&
     agentRequests.every((request) => request.id.startsWith("REQ-"))
   );
 }
