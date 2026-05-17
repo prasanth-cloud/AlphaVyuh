@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from app.middleware.auth import get_current_user_id
 from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
+from app.services.plans import get_effective_user_plan
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/watchlists", tags=["watchlists"])
@@ -19,8 +20,7 @@ PRO_ITEMS_LIMIT = 200
 
 def _get_user_plan(user_id: str) -> str:
     client = get_admin_client()
-    result = client.table("users").select("plan").eq("id", user_id).single().execute()
-    return result.data["plan"] if result.data else "free"
+    return get_effective_user_plan(client, user_id)
 
 
 def _verify_watchlist_ownership(client, watchlist_id: str, user_id: str):

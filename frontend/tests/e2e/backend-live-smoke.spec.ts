@@ -32,12 +32,6 @@ test.describe("Live backend smoke", () => {
     await expect(health).toBeOK();
     await expect.poll(async () => (await health.json()).status).toBe("ok");
 
-    const dataHealth = await request.get("/api/v1/data/health");
-    expect(dataHealth.status()).toBe(200);
-    const dataHealthJson = await dataHealth.json();
-    expect(dataHealthJson).toHaveProperty("status");
-    expect(dataHealthJson).toHaveProperty("message");
-
     const presets = await request.get("/api/v1/scanner/presets");
     expect(presets.status()).toBe(200);
     expect((await presets.json()).length).toBeGreaterThan(0);
@@ -49,7 +43,21 @@ test.describe("Live backend smoke", () => {
     expect(candlesJson).toHaveProperty("candles");
   });
 
+  test("data operations endpoints require auth over real HTTP", async ({ request }) => {
+    const health = await request.get("/api/v1/data/health");
+    expect(health.status()).toBe(401);
+
+    const runs = await request.get("/api/v1/data/runs");
+    expect(runs.status()).toBe(401);
+  });
+
   test("authenticated workflow endpoints return controlled responses over real HTTP", async ({ request }) => {
+    const dataHealth = await request.get("/api/v1/data/health", { headers: authHeaders });
+    expect(dataHealth.status()).toBe(200);
+    const dataHealthJson = await dataHealth.json();
+    expect(dataHealthJson).toHaveProperty("status");
+    expect(dataHealthJson).toHaveProperty("message");
+
     const scanner = await request.post("/api/v1/scanner/run", {
       headers: authHeaders,
       data: { filters: { series: ["EQ"] }, page: 1, page_size: 25 },
@@ -68,13 +76,11 @@ test.describe("Live backend smoke", () => {
 
   test("broker routes expose setup and disconnected states without live credentials", async ({ request }) => {
     const start = await request.post("/api/brokers/upstox/connect/start", { headers: authHeaders });
-    expect(start.status()).toBe(200);
-    const startJson = await start.json();
-    expect(startJson.auth_url).toContain("api.upstox.com/v2/login/authorization/dialog");
-    expect(startJson.auth_url).toContain("client_id=upstox-test-key");
+    expect(start.status()).toBe(403);
+    expect(JSON.stringify(await start.json())).toContain("Broker integration requires");
 
     const profile = await request.get("/api/brokers/upstox/profile", { headers: authHeaders });
-    expect(profile.status()).toBe(401);
-    expect((await profile.json()).detail).toContain("not connected");
+    expect(profile.status()).toBe(403);
+    expect(JSON.stringify(await profile.json())).toContain("Broker integration requires");
   });
 });

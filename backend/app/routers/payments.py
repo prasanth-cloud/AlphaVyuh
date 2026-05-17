@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
+from app.services.plans import effective_plan_from_record
 from app.services.supabase import get_admin_client, settings
 
 logger = logging.getLogger(__name__)
@@ -314,22 +315,26 @@ async def razorpay_webhook(request: Request):
 
 # ── Get plan status ───────────────────────────────────────────────────────────
 
+def _plan_status_from_record(data: dict | None) -> tuple[dict, bool]:
+    raw_plan = str((data or {}).get("plan") or "free").lower()
+    plan, expires, active = effective_plan_from_record(data)
+    expired_paid_plan = raw_plan != "free" and plan == "free" and bool(expires)
+    return {"plan": plan, "expires_at": expires, "active": active}, expired_paid_plan
+
+
 @router.get("/status")
 async def plan_status(user_id: str = Depends(get_current_user_id)):
     sb = get_admin_client()
     r = sb.table("users").select("plan, plan_expires_at").eq("id", user_id).single().execute()
-    if not r.data:
-        return {"plan": "free", "expires_at": None, "active": False}
-    data = r.data
-    plan = data.get("plan", "free")
-    expires = data.get("plan_expires_at")
-    active = False
-    if plan != "free" and expires:
-        active = datetime.fromisoformat(expires.replace("Z", "+00:00")) > datetime.now(timezone.utc)
-        if not active:
-            # Downgrade expired plan
-            sb.table("users").update({"plan": "free"}).eq("id", user_id).execute()
-            plan = "free"
-    elif plan != "free":
-        active = True  # no expiry = lifetime
-    return {"plan": plan, "expires_at": expires, "active": active}
+    status, _expired_paid_plan = _plan_status_from_record(r.data)
+    return status
+
+
+@router.post("/status/reconcile")
+async def reconcile_plan_status(user_id: str = Depends(get_current_user_id)):
+    sb = get_admin_client()
+    r = sb.table("users").select("plan, plan_expires_at").eq("id", user_id).single().execute()
+    status, expired_paid_plan = _plan_status_from_record(r.data)
+    if expired_paid_plan:
+        sb.table("users").update({"plan": "free"}).eq("id", user_id).execute()
+    return {**status, "reconciled": expired_paid_plan}

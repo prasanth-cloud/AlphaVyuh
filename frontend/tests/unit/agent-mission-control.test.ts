@@ -25,6 +25,11 @@ describe("agent mission control data", () => {
 
     for (const pr of shippedAgentPrs) {
       expect(pr.href).toMatch(/^https:\/\/github\.com\/prasanth-cloud\/AlphaVyuh\/pull\/\d+$/);
+      expect(pr.productImpact.trim().length).toBeGreaterThan(12);
+    }
+
+    for (const blocker of agentBlockers) {
+      expect(blocker.productImpact.trim().length).toBeGreaterThan(12);
     }
   });
 

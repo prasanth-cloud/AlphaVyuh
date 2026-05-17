@@ -71,6 +71,8 @@ class _Query:
         if self.table_name == "workflow_states" and self.upsert_payload is not None:
             self.client.workflow_upserts.append(self.upsert_payload)
             return type("Result", (), {"data": [self.upsert_payload]})()
+        if self.table_name == "workflow_states" and self.client.workflow_state is not None:
+            return type("Result", (), {"data": self.client.workflow_state})()
         return type("Result", (), {"data": None})()
 
 
@@ -78,6 +80,7 @@ class _FakeSupabase:
     def __init__(self):
         self.journal_inserts = []
         self.workflow_upserts = []
+        self.workflow_state = None
         self.updated = []
 
     def table(self, table_name: str):
@@ -118,6 +121,20 @@ def _order(live_confirmed: bool = False):
 
 def test_order_from_valid_plan_carries_context_into_journal(monkeypatch):
     client = _FakeSupabase()
+    client.workflow_state = {
+        "source": "watchlist",
+        "setup_type": "breakout",
+        "thesis": "Workflow thesis should be overridden by request thesis.",
+        "invalidation_rule": "Workflow invalidation should be overridden.",
+        "scanner_context": {
+            "preset_name": "Trend Template",
+            "match_reasons": ["Volume expansion with trend alignment"],
+            "setup_grade": "A",
+            "setup_score": 84,
+            "data_as_of": "2026-05-15",
+        },
+        "notes": "Workflow note",
+    }
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: {})
 
@@ -138,8 +155,16 @@ def test_order_from_valid_plan_carries_context_into_journal(monkeypatch):
     assert entry["stop_loss"] == 2440
     assert entry["target_price"] == 2680
     assert entry["setup_type"] == "breakout"
+    assert entry["source_page"] == "watchlist"
+    assert entry["source_context"] is None
+    assert entry["scanner_context"]["preset_name"] == "Trend Template"
+    assert entry["thesis"] == "Breakout holding above prior resistance with rising volume."
+    assert entry["invalidation_rule"] == "Exit if price closes below the breakout base."
+    assert "Scanner: Trend Template" in entry["entry_reason"]
+    assert "Matched: Volume expansion with trend alignment" in entry["entry_reason"]
     assert "Thesis: Breakout holding" in entry["entry_reason"]
     assert "Invalidation: Exit if price closes below" in entry["entry_reason"]
+    assert client.workflow_upserts[-1]["scanner_context"]["setup_score"] == 84
 
 
 def test_trade_lesson_generation_does_not_overwrite_user_review():

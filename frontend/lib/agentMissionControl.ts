@@ -18,6 +18,7 @@ export type ShippedAgentPr = {
   agent: string;
   merged: string;
   notes: string;
+  productImpact: string;
 };
 
 export type AgentBlocker = {
@@ -25,6 +26,7 @@ export type AgentBlocker = {
   blocker: string;
   owner: string;
   nextMove: string;
+  productImpact: string;
 };
 
 export type AgentRequest = {
@@ -42,9 +44,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Queue, decomposition, PR integration",
     autonomy: "Coordinates",
     status: "active",
-    currentWork: "Turns founder goals into issue -> agent roster -> PR -> validation loops.",
+    currentWork: "Turns founder goals into issue -> agent roster -> PR -> validation loops; latest loop shipped PRs #130-#132.",
     ownerFiles: "GitHub issues, PR notes, docs/agent-runs",
-    lastUpdate: "PR #125 merged",
+    lastUpdate: "PR #132 merged",
   },
   {
     id: "feature",
@@ -52,9 +54,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Trader-facing workflows",
     autonomy: "Level 2",
     status: "active",
-    currentWork: "Journal review lessons shipped; next useful slice waits on live context migration.",
+    currentWork: "Keeps trader-facing flow minimal while backend/security agents harden launch surfaces.",
     ownerFiles: "frontend/app/(app), frontend/lib/api.ts, feature routers",
-    lastUpdate: "Issue #124 closed",
+    lastUpdate: "PR #132 merged",
   },
   {
     id: "data",
@@ -62,9 +64,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Ingest, snapshots, indicators, alert parity",
     autonomy: "Level 3",
     status: "blocked",
-    currentWork: "EOD scan alert live parity is ready but waiting on production migration evidence.",
+    currentWork: "EOD scan alert live parity and journal idea context are ready but waiting on production migration evidence.",
     ownerFiles: "backend/app/services, backend/scripts, supabase/migrations",
-    lastUpdate: "PR #122 blocked",
+    lastUpdate: "PRs #122/#123 blocked",
   },
   {
     id: "qa",
@@ -72,9 +74,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Workflow regression and launch safety",
     autonomy: "Level 3",
     status: "watching",
-    currentWork: "Protects auth, scanner, watchlist, chart, journal, layout, and perf gates.",
+    currentWork: "Protects auth, scanner, watchlist, chart, journal, layout, perf, and agent PR gates.",
     ownerFiles: "frontend/tests/e2e, backend/tests, QA reports",
-    lastUpdate: "PR #125 gate passed",
+    lastUpdate: "PR #132 gate passed",
   },
   {
     id: "security",
@@ -100,77 +102,64 @@ export const agentLanes: AgentLane[] = [
 
 export const shippedAgentPrs: ShippedAgentPr[] = [
   {
-    pr: "#127",
-    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/127",
-    title: "Add Agent Mission Control",
-    agent: "Manager + Product + Frontend + QA",
+    pr: "#132",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/132",
+    title: "Show product impact in mission control",
+    agent: "Product + QA + Manager",
     merged: "2026-05-17",
-    notes: "Internal /agents surface shows lanes, blockers, shipped PRs, and next actions.",
+    notes: "Agent work now explains what improved, not only what changed.",
+    productImpact: "Founder can judge whether agent work is creating trader value before reading PR details.",
   },
   {
-    pr: "#125",
-    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/125",
-    title: "Save journal review lessons",
-    agent: "Feature + QA",
+    pr: "#131",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/131",
+    title: "Make plan status read only",
+    agent: "Security + Backend + QA",
     merged: "2026-05-17",
-    notes: "Closed trades can save one lesson and become reviewed.",
+    notes: "Payment status reads no longer mutate billing state; explicit reconcile path added.",
+    productImpact: "Billing and entitlement state is more predictable before paid plans are enabled.",
   },
   {
-    pr: "#121",
-    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/121",
-    title: "Add saved EOD scan alerts",
-    agent: "Data + Feature",
+    pr: "#130",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/130",
+    title: "Rate limit public market data routes",
+    agent: "Security + Backend",
     merged: "2026-05-17",
-    notes: "Saved scans can run as EOD alert candidates in mock/local mode.",
+    notes: "Provider-backed quote and candle routes now return 429 before provider calls when throttled.",
+    productImpact: "Public chart and quote access has a cost/abuse brake without forcing login.",
   },
   {
-    pr: "#119",
-    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/119",
-    title: "Surface journal review prompts",
-    agent: "Feature + QA",
+    pr: "#129",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/129",
+    title: "Protect data operations routes",
+    agent: "Security + Backend",
     merged: "2026-05-17",
-    notes: "Journal review now shows idea context before lesson capture.",
-  },
-  {
-    pr: "#117",
-    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/117",
-    title: "Polish issue #105 frontend flow",
-    agent: "Design + Feature",
-    merged: "2026-05-17",
-    notes: "Frontend polish pass landed and issue #105 closed.",
+    notes: "Data health and run-history endpoints require authenticated access.",
+    productImpact: "Operational market-data details are no longer publicly exposed.",
   },
 ];
 
 export const agentBlockers: AgentBlocker[] = [
   {
     severity: "database",
-    blocker: "Public intake and feedback RLS migration requires production evidence.",
-    owner: "Founder / Security",
-    nextMove: "Apply 20260517123000_public_intake_feedback_rls.sql to production, then rerun migration drift.",
-  },
-  {
-    severity: "database",
-    blocker: "PR #122 requires scan alert migration evidence.",
-    owner: "Founder / Data",
-    nextMove: "Apply 038_scan_alerts.sql to production, then rerun migration drift.",
-  },
-  {
-    severity: "database",
-    blocker: "PR #123 requires journal idea-context migration evidence.",
-    owner: "Founder / Data",
-    nextMove: "Apply 039_journal_idea_context.sql after #122 lands or rebase.",
+    blocker: "PR #128 requires public intake RLS migration evidence.",
+    owner: "Founder / Supabase",
+    nextMove: "Apply 20260517123000_public_intake_feedback_rls.sql to production, then add PR evidence.",
+    productImpact: "Founder-beta emails, invite codes, and feedback tables remain the highest-priority database hardening gate.",
   },
   {
     severity: "owner",
     blocker: "Broker read-only smoke still needs real Kite or Upstox tokens.",
     owner: "Founder",
     nextMove: "Provide short-lived read-only token when broker work resumes.",
+    productImpact: "Keeps broker import and execution confidence gated during beta.",
   },
   {
     severity: "external",
     blocker: "Market-data redistribution terms are not finalized.",
     owner: "Founder",
     nextMove: "Choose EOD/free-first beta policy or paid vendor path before paid launch.",
+    productImpact: "Limits how broadly AlphaVyuh can be marketed with real market data.",
   },
 ];
 
@@ -185,8 +174,7 @@ export const agentRequests: AgentRequest[] = [
 ];
 
 export const nextAgentActions = [
-  "Unblock PR #122 by applying the scan alert migration with production evidence.",
-  "Unblock PR #123 after #122, then land live journal idea-context persistence.",
+  "Unblock PR #128 by applying the public intake RLS migration with production evidence.",
   "Turn saved journal lessons into weekly review clusters after live context is stable.",
   "Keep broker execution hidden until read-only smoke and owner-approved order validation pass.",
   "Keep every future slice on the issue -> agent roster -> PR -> validation cadence.",
@@ -204,7 +192,8 @@ export function validateMissionControlData() {
   return (
     ids.size === agentLanes.length &&
     agentLanes.every((agent) => agent.name && agent.currentWork && agent.ownerFiles) &&
-    shippedAgentPrs.every((pr) => pr.href.startsWith("https://github.com/prasanth-cloud/AlphaVyuh/pull/")) &&
+    shippedAgentPrs.every((pr) => pr.href.startsWith("https://github.com/prasanth-cloud/AlphaVyuh/pull/") && pr.productImpact) &&
+    agentBlockers.every((blocker) => blocker.productImpact) &&
     agentRequests.every((request) => request.id.startsWith("REQ-"))
   );
 }

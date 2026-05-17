@@ -14,7 +14,8 @@ import httpx
 import logging
 
 from app.middleware.auth import get_current_user_id
-from app.routers.scanner import ScanFilters, _apply_filters, SORT_KEYS
+from app.routers.scanner import ScanFilters, ScanRequest, SORT_KEYS, execute_scan
+from app.services.plans import get_effective_user_plan
 from app.services.supabase import get_admin_client, settings
 
 logger = logging.getLogger(__name__)
@@ -46,8 +47,7 @@ class UpdateAlertRequest(BaseModel):
 
 def _get_user_plan(user_id: str) -> str:
     client = get_admin_client()
-    r = client.table("users").select("plan").eq("id", user_id).single().execute()
-    return r.data["plan"] if r.data else "free"
+    return get_effective_user_plan(client, user_id)
 
 
 def _validate_sort(sort_by: str | None, sort_order: str | None) -> None:
@@ -188,58 +188,52 @@ async def run_all_alerts(trade_date: date) -> dict:
     if not alerts:
         return {"trade_date": str(trade_date), "alerts_run": 0, "total_matches": 0}
 
-    # Fetch all today's OHLCV data once (paginated)
-    all_rows: list[dict] = []
-    offset = 0
-    while True:
-        chunk = client.table("daily_ohlcv") \
-            .select(
-                "symbol, open, high, low, close, prev_close, volume, avg_volume_20d, "
-                "turnover, rsi_14, ema_20, ema_50, ema_200, atr_14, week_52_high, "
-                "week_52_low, stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series)"
-            ) \
-            .eq("trade_date", str(trade_date)) \
-            .range(offset, offset + 999) \
-            .execute()
-        if not chunk.data:
-            break
-        all_rows.extend(chunk.data)
-        if len(chunk.data) < 1000:
-            break
-        offset += 1000
-
-    if not all_rows:
-        return {"trade_date": str(trade_date), "alerts_run": 0, "total_matches": 0}
-
     total_matches = 0
+    run_summaries: list[dict] = []
     for alert in alerts:
+        run_status = "success"
+        error_message = None
+        snapshot: list[dict] = []
+        match_count = 0
         try:
             filters = ScanFilters(**alert["filters"])
-        except Exception:
-            continue
+            sort_by = alert.get("sort_by", "volume_ratio")
+            sort_order = alert.get("sort_order", "desc")
+            _validate_sort(sort_by, sort_order)
+            plan = _get_user_plan(alert["user_id"])
+            scan = await execute_scan(
+                client,
+                ScanRequest(
+                    filters=filters,
+                    sort_by=sort_by,
+                    sort_order=sort_order,
+                    page=1,
+                    page_size=0,
+                ),
+                plan=plan,
+                trade_date=trade_date,
+                enforce_plan_limit=False,
+            )
+            results = scan.get("results") or []
+            match_count = int(scan.get("total_matches") or 0)
+            total_matches += match_count
 
-        matched = _apply_filters(all_rows, filters)
-
-        # Sort
-        sort_key = alert.get("sort_by", "volume_ratio")
-        sort_desc = alert.get("sort_order", "desc") == "desc"
-        if sort_key in SORT_KEYS:
-            matched.sort(key=lambda r: (r.get(sort_key) or 0), reverse=sort_desc)
-
-        # Keep top 50 symbols in snapshot
-        snapshot = [
-            {
-                "symbol":       r["symbol"],
-                "close":        r.get("close"),
-                "pct_change":   r.get("pct_change"),
-                "volume_ratio": r.get("volume_ratio"),
-                "rsi_14":       r.get("rsi_14"),
-            }
-            for r in matched[:50]
-        ]
-
-        match_count = len(matched)
-        total_matches += match_count
+            snapshot = [
+                {
+                    "symbol":       r["symbol"],
+                    "close":        r.get("close"),
+                    "pct_change":   r.get("pct_change"),
+                    "volume_ratio": r.get("volume_ratio"),
+                    "rsi_14":       r.get("rsi_14"),
+                }
+                for r in results[:50]
+            ]
+        except HTTPException as e:
+            run_status = "skipped"
+            error_message = str(e.detail)
+        except Exception as e:
+            run_status = "failed"
+            error_message = str(e)
 
         # Upsert match row (one per alert per day)
         client.table("scan_alert_matches").upsert(
@@ -249,6 +243,8 @@ async def run_all_alerts(trade_date: date) -> dict:
                 "run_date":    str(trade_date),
                 "symbols":     snapshot,
                 "match_count": match_count,
+                "run_status":  run_status,
+                "error_message": error_message,
             },
             on_conflict="alert_id,run_date",
             ignore_duplicates=False,
@@ -258,21 +254,38 @@ async def run_all_alerts(trade_date: date) -> dict:
         client.table("scan_alerts").update({
             "last_run_at":     "now()",
             "last_match_count": match_count,
+            "last_run_status": run_status,
+            "last_error":      error_message,
             "updated_at":      "now()",
         }).eq("id", alert["id"]).execute()
 
+        run_summaries.append({
+            "alert_id": alert["id"],
+            "user_id": alert["user_id"],
+            "name": alert["name"],
+            "match_count": match_count,
+            "symbols": snapshot,
+            "run_status": run_status,
+            "error_message": error_message,
+        })
+
     # Send Telegram notifications if bot token is configured
     if settings.telegram_bot_token:
-        await _send_telegram_summaries(client, alerts, trade_date)
+        await _send_telegram_summaries(client, run_summaries, trade_date)
 
     return {
         "trade_date":   str(trade_date),
-        "alerts_run":   len(alerts),
+        "alerts_run":   len(run_summaries),
         "total_matches": total_matches,
+        "status_counts": {
+            "success": sum(1 for s in run_summaries if s["run_status"] == "success"),
+            "skipped": sum(1 for s in run_summaries if s["run_status"] == "skipped"),
+            "failed": sum(1 for s in run_summaries if s["run_status"] == "failed"),
+        },
     }
 
 
-async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> None:
+async def _send_telegram_summaries(client, run_summaries: list[dict], trade_date) -> None:
     """
     Send a Telegram message to each user who has a Telegram chat_id stored,
     summarising which of their alerts fired today.
@@ -284,9 +297,9 @@ async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> No
     # Group alerts by user_id
     from collections import defaultdict
     user_alerts: dict[str, list[dict]] = defaultdict(list)
-    for alert in alerts:
-        if alert.get("last_match_count", 0):
-            user_alerts[alert["user_id"]].append(alert)
+    for summary in run_summaries:
+        if summary.get("run_status") == "success" and summary.get("match_count", 0):
+            user_alerts[summary["user_id"]].append(summary)
 
     if not user_alerts:
         return
@@ -306,7 +319,7 @@ async def _send_telegram_summaries(client, alerts: list[dict], trade_date) -> No
                 continue
             lines = [f"📊 *AlphaVyuh EOD Scan Alerts — {trade_date}*\n"]
             for a in fired:
-                count = a.get("last_match_count", 0)
+                count = a.get("match_count", 0)
                 lines.append(f"• *{a['name']}*: {count} stock{'s' if count != 1 else ''} matched")
             lines.append("\nOpen AlphaVyuh to review the list →")
             text = "\n".join(lines)

@@ -1,6 +1,6 @@
 import time
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 import yfinance as yf
 
@@ -12,6 +12,7 @@ from app.services.market_data import (
     get_market_data_provider,
     yf_ticker_symbol,
 )
+from app.services.rate_limit import client_rate_key, public_market_limiter
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
@@ -477,9 +478,21 @@ async def get_fundamentals(symbol: str):
         }
 
 
+def _enforce_public_market_limit(request: Request, scope: str) -> None:
+    key = client_rate_key(request, scope)
+    if not public_market_limiter.is_allowed(key):
+        retry_after = public_market_limiter.retry_after(key)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many live market data requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 @router.get("/stocks/{symbol}/quote-live")
-async def get_quote_live(symbol: str):
+async def get_quote_live(symbol: str, request: Request):
     """Live quote from the configured market data provider."""
+    _enforce_public_market_limit(request, "quote-live")
     try:
         sym = symbol.upper()
         market, currency = _lookup_market(sym)

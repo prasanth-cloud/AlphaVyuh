@@ -1508,6 +1508,11 @@ export type UpdateJournalEntry = {
   target_price?: number | null;
   setup_type?: string;
   entry_reason?: string;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual" | null;
+  source_context?: string | null;
+  scanner_context?: ScannerIdeaContext | null;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
   status?: string;
 };
 
@@ -1953,6 +1958,8 @@ export type ScanAlert = {
   is_active: boolean;
   last_run_at: string | null;
   last_match_count: number | null;
+  last_run_status?: "waiting" | "success" | "skipped" | "failed";
+  last_error?: string | null;
   created_at: string;
 };
 
@@ -1968,6 +1975,8 @@ export type ScanAlertMatch = {
     rsi_14: number | null;
   }>;
   match_count: number;
+  run_status?: "success" | "skipped" | "failed";
+  error_message?: string | null;
   scan_alerts?: { name: string };
 };
 
@@ -2038,6 +2047,8 @@ function mockAlertSymbols(alertId: string, alertName: string): ScanAlertMatch {
     run_date: scan.trade_date ?? new Date().toISOString().slice(0, 10),
     symbols,
     match_count: scan.total_matches,
+    run_status: "success",
+    error_message: null,
     scan_alerts: { name: alertName },
   };
 }
@@ -2072,6 +2083,8 @@ export async function createAlert(body: {
       is_active: true,
       last_run_at: now,
       last_match_count: mockRunScan().total_matches,
+      last_run_status: "success",
+      last_error: null,
       created_at: now,
     };
     writeMockScanAlerts([alert, ...existing]);
@@ -2280,6 +2293,7 @@ export type PlaceOrderRequest = {
   notes?:       string;
   thesis?:      string;
   invalidation_rule?: string;
+  scanner_context?: ScannerIdeaContext | null;
   source_page?: "chart" | "watchlist" | "scanner" | "manual";
   source_context?: string;
   live_confirmed?: boolean;
@@ -2558,7 +2572,7 @@ export async function getDataHealth(): Promise<DataHealth | null> {
 
   dataHealthPromise = (async () => {
     try {
-      const res = await fetch(`${API}/api/v1/data/health`, { headers: publicHeaders });
+      const res = await fetch(`${API}/api/v1/data/health`, { headers: await authHeaders() });
       if (!res.ok) {
         dataHealthCache = { value: null, expiresAt: Date.now() + 15_000 };
         return null;
@@ -2647,7 +2661,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     const localWorkflow = readLocalWorkflowStates();
     const symbol = order.symbol.toUpperCase();
     const previousWorkflow = localWorkflow[symbol];
-    const ideaContext = previousWorkflow?.scanner_context;
+    const ideaContext = order.scanner_context ?? previousWorkflow?.scanner_context;
     const ideaParts = ideaContext
       ? [
           ideaContext.preset_name ? `Scanner: ${ideaContext.preset_name}` : "Scanner idea",

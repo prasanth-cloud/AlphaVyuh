@@ -640,26 +640,35 @@ export type Database = {
           created_at: string
           id: string
           match_count: number
+          error_message: string | null
           run_date: string
+          run_status: string
           symbols: Json
+          updated_at: string
           user_id: string
         }
         Insert: {
           alert_id: string
           created_at?: string
+          error_message?: string | null
           id?: string
           match_count?: number
           run_date: string
+          run_status?: string
           symbols?: Json
+          updated_at?: string
           user_id: string
         }
         Update: {
           alert_id?: string
           created_at?: string
+          error_message?: string | null
           id?: string
           match_count?: number
           run_date?: string
+          run_status?: string
           symbols?: Json
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -678,8 +687,10 @@ export type Database = {
           filters: Json
           id: string
           is_active: boolean
+          last_error: string | null
           last_match_count: number | null
           last_run_at: string | null
+          last_run_status: string
           name: string
           sort_by: string
           sort_order: string
@@ -691,8 +702,10 @@ export type Database = {
           filters?: Json
           id?: string
           is_active?: boolean
+          last_error?: string | null
           last_match_count?: number | null
           last_run_at?: string | null
+          last_run_status?: string
           name: string
           sort_by?: string
           sort_order?: string
@@ -704,8 +717,10 @@ export type Database = {
           filters?: Json
           id?: string
           is_active?: boolean
+          last_error?: string | null
           last_match_count?: number | null
           last_run_at?: string | null
+          last_run_status?: string
           name?: string
           sort_by?: string
           sort_order?: string
@@ -935,14 +950,19 @@ export type Database = {
           pnl_pct: number | null
           quantity: number
           risk_reward: number | null
+          scanner_context: Json | null
           setup_type: string | null
+          source_context: string | null
+          source_page: string | null
           status: string
           stop_loss: number | null
           symbol: string
           target_price: number | null
+          thesis: string | null
           trade_type: string
           updated_at: string | null
           user_id: string
+          invalidation_rule: string | null
         }
         Insert: {
           company_name?: string | null
@@ -961,14 +981,19 @@ export type Database = {
           pnl_pct?: number | null
           quantity: number
           risk_reward?: number | null
+          scanner_context?: Json | null
           setup_type?: string | null
+          source_context?: string | null
+          source_page?: string | null
           status?: string
           stop_loss?: number | null
           symbol: string
           target_price?: number | null
+          thesis?: string | null
           trade_type: string
           updated_at?: string | null
           user_id: string
+          invalidation_rule?: string | null
         }
         Update: {
           company_name?: string | null
@@ -987,14 +1012,19 @@ export type Database = {
           pnl_pct?: number | null
           quantity?: number
           risk_reward?: number | null
+          scanner_context?: Json | null
           setup_type?: string | null
+          source_context?: string | null
+          source_page?: string | null
           status?: string
           stop_loss?: number | null
           symbol?: string
           target_price?: number | null
+          thesis?: string | null
           trade_type?: string
           updated_at?: string | null
           user_id?: string
+          invalidation_rule?: string | null
         }
         Relationships: [
           {

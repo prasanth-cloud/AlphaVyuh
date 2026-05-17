@@ -142,6 +142,38 @@ def build_breadth_snapshot(sb, target: date, log: Logger, dry_run: bool = False)
     }
 
 
+def should_run_scan_alerts(bhavcopy_result: dict | None, *, dry_run: bool, yfinance_only: bool) -> tuple[bool, str]:
+    """Guard saved scan alerts so they only run after a trusted EOD ingest."""
+    if dry_run:
+        return False, "dry_run"
+    if yfinance_only:
+        return False, "yfinance_only"
+    if not bhavcopy_result:
+        return False, "missing_bhavcopy_result"
+
+    status = bhavcopy_result.get("status")
+    rows = int(bhavcopy_result.get("rows_ingested") or 0)
+    if status not in {"success", "already_done"}:
+        return False, f"bhavcopy_{status or 'unknown'}"
+    if bhavcopy_result.get("partial_ingest") is True:
+        return False, "partial_ingest"
+    if rows <= 0:
+        return False, "no_rows_ingested"
+    return True, "eligible"
+
+
+async def run_scan_alerts(target: date, log: Logger) -> dict:
+    from app.routers.alerts import run_all_alerts
+
+    log.info(f"Running saved EOD scan alerts for {target}...")
+    result = await run_all_alerts(target)
+    log.info(
+        "  scan alerts: "
+        f"alerts_run={result.get('alerts_run', 0)}, total_matches={result.get('total_matches', 0)}"
+    )
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="AlphaVyuh daily data refresh")
     parser.add_argument("--date", help="YYYY-MM-DD (default: today)")
@@ -201,7 +233,23 @@ def main() -> int:
         log.error("Market breadth snapshot failed", e)
         result_meta["market_breadth_snapshot"] = {"status": "failed", "error": str(e)}
 
-    # ── Step 4: write run log ─────────────────────────────────────────────────
+    # ── Step 4: saved scan alerts ─────────────────────────────────────────────
+    can_run_alerts, alert_skip_reason = should_run_scan_alerts(
+        result_meta.get("bhavcopy"),
+        dry_run=args.dry_run,
+        yfinance_only=args.yfinance_only,
+    )
+    if can_run_alerts:
+        try:
+            result_meta["scan_alerts"] = asyncio.run(run_scan_alerts(target, log))
+        except Exception as e:
+            log.error("Scan alerts failed", e)
+            result_meta["scan_alerts"] = {"status": "failed", "error": str(e)}
+    else:
+        result_meta["scan_alerts"] = {"status": "skipped", "reason": alert_skip_reason}
+        log.info(f"Skipping saved EOD scan alerts: {alert_skip_reason}")
+
+    # ── Step 5: write run log ─────────────────────────────────────────────────
     if not args.dry_run:
         write_run_log(sb, log, result_meta)
 
