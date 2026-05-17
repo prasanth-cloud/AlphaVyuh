@@ -5,13 +5,14 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services import indicators as ta
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
 from app.services.market_context import eod_source_metadata, fallback_source_metadata, live_source_metadata
+from app.services.rate_limit import client_rate_key, public_market_limiter
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
@@ -720,10 +721,20 @@ async def get_candles(
 @router.get("/{symbol}/candles-live")
 async def get_candles_live(
     symbol: str,
+    request: Request,
     timeframe: str = Query("D"),
     limit: int = Query(500, ge=1, le=1000),
 ):
     """OHLCV from the configured market data provider."""
+    key = client_rate_key(request, "candles-live")
+    if not public_market_limiter.is_allowed(key):
+        retry_after = public_market_limiter.retry_after(key)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many live market data requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
     sym = symbol.upper()
     tf = _normalize_eod_timeframe(timeframe)
     try:
