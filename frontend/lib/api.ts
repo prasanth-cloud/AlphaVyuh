@@ -2558,7 +2558,7 @@ export async function getDataHealth(): Promise<DataHealth | null> {
 
   dataHealthPromise = (async () => {
     try {
-      const res = await fetch(`${API}/api/v1/data/health`, { headers: publicHeaders });
+      const res = await fetch(`${API}/api/v1/data/health`, { headers: await authHeaders() });
       if (!res.ok) {
         dataHealthCache = { value: null, expiresAt: Date.now() + 15_000 };
         return null;

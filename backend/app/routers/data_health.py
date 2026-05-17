@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from app.middleware.auth import get_current_user_id
 from app.brokers.kite import api as kite_api
 from app.services.kite_stream import kite_live_ticker
 from app.services.market_data import _kite_access_token, _kite_api_key
@@ -64,8 +65,8 @@ def _kite_market_status() -> dict:
 
 
 @router.get("/health")
-async def data_health():
-    """Returns overall data freshness — public, no auth required."""
+async def data_health(user_id: str = Depends(get_current_user_id)):
+    """Returns overall data freshness for signed-in workspace users."""
     try:
         sb = get_admin_client()
         health_res = sb.from_("data_health").select("*").limit(1).execute()
@@ -80,8 +81,8 @@ async def data_health():
 
 
 @router.get("/runs")
-async def list_recent_runs(limit: int = 10):
-    """Recent refresh runs — for debugging."""
+async def list_recent_runs(limit: int = 10, user_id: str = Depends(get_current_user_id)):
+    """Recent refresh runs for signed-in workspace diagnostics."""
     try:
         sb = get_admin_client()
         res = sb.table("ingest_runs") \
