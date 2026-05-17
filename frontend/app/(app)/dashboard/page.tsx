@@ -17,17 +17,6 @@ import {
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ textAlign: 'right' }}>
-      <div className="label" style={{ marginBottom: 2 }}>{label}</div>
-      <Num style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
-        {value}
-      </Num>
-    </div>
-  )
-}
-
 function safeNumber(value: unknown, fallback = 0): number {
   const numeric = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(numeric) ? numeric : fallback
@@ -42,50 +31,6 @@ function breadthLabel(phase: string): string {
   if (phase === 'Bullish') return 'Bullish breadth'
   if (phase === 'Bearish') return 'Weak breadth'
   return 'Mixed breadth'
-}
-
-function PhaseCard({ data, dataHealth }: { data: MarketOverview; dataHealth: DataHealth | null }) {
-  const phase = data.market_phase
-  const phaseColor = phase === 'Bullish' ? 'var(--gain)'
-                   : phase === 'Bearish' ? 'var(--loss)'
-                   : 'var(--warn)'
-  const healthColor = dataHealth?.status === 'healthy'
-    ? 'var(--gain)'
-    : dataHealth?.status === 'degraded'
-      ? 'var(--warn)'
-      : 'var(--loss)'
-  return (
-    <Card padding="md" style={{ marginBottom: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: phaseColor, flexShrink: 0 }} />
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <span className="heading-card" style={{ color: phaseColor }}>{breadthLabel(phase)}</span>
-            <span className="caption">{data.market_phase_desc}</span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <Metric label="A/D ratio" value={safeNumber(data.advance_decline_ratio).toFixed(2)} />
-          <Metric label="% above EMA 200" value={formatPercent(data.above_ema200_pct)} />
-          {dataHealth?.status && (
-            <Metric label="Data" value={dataHealth.status.toUpperCase()} />
-          )}
-          <DataProvenanceBadge
-            kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : 'eod'}
-            asOf={data.trade_date}
-            compact
-          />
-        </div>
-      </div>
-      {dataHealth && dataHealth.status !== 'healthy' && (
-        <div style={{ marginTop: 12, fontSize: 12, color: healthColor }}>
-          {dataHealth.status === 'degraded'
-            ? `Market data is usable but incomplete on the newest ingest. AlphaVyuh is falling back to the latest complete day.`
-            : `Market data is stale. Refresh checks are overdue, so some quotes may lag until the next ingest run.`}
-        </div>
-      )}
-    </Card>
-  )
 }
 
 function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHealth: DataHealth | null }) {
@@ -422,72 +367,28 @@ function WorkflowChecklistCard({
   if (dismissed || allComplete) return null
 
   return (
-    <Card padding="lg">
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
-        <div>
-          <div className="label" style={{ color: 'var(--accent)', marginBottom: 6 }}>Onboarding checklist</div>
-          <h2 className="heading-card" style={{ marginBottom: 4 }}>Make the product feel connected in the first session</h2>
-          <div className="body-secondary">
-            Traders stay when the next step is obvious. This checklist is driven by your actual account state, not generic setup copy.
+    <Card padding="md" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'center' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div className="label" style={{ color: 'var(--accent)' }}>Setup progress</div>
+            <span className="workspace-pill">
+              <Num>{completedCount}</Num>/<Num>{steps.length}</Num> done
+            </span>
+          </div>
+          <div className="body-secondary" style={{ marginBottom: 10 }}>
+            Next: {steps.find(step => !step.completed)?.label ?? nextAction.label}
+          </div>
+          <div style={{ height: 6, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
+            <div style={{ width: `${(completedCount / steps.length) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent), #8ef3e2)' }} />
           </div>
         </div>
-        <button onClick={onDismiss} style={{ color: 'var(--text-tertiary)', fontSize: 18, lineHeight: 1, background: 'transparent', border: 'none', cursor: 'pointer' }}>×</button>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ flex: 1, height: 8, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
-          <div style={{ width: `${(completedCount / steps.length) * 100}%`, height: '100%', background: 'linear-gradient(90deg, var(--accent), #8ef3e2)' }} />
-        </div>
-        <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-          {completedCount}/{steps.length}
-        </span>
-      </div>
-
-      <div className="dashboard-checklist-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10, marginBottom: 18 }}>
-        {steps.map((step) => (
-          <div
-            key={step.label}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 10,
-              padding: '10px 11px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              background: step.completed ? 'var(--gain-subtle)' : 'var(--surface-2)',
-            }}
-          >
-            <div
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                fontSize: 11,
-                fontWeight: 700,
-                color: step.completed ? 'var(--gain)' : 'var(--text-tertiary)',
-                background: step.completed ? 'rgba(38,166,91,0.12)' : 'var(--surface-3)',
-                border: `1px solid ${step.completed ? 'rgba(38,166,91,0.18)' : 'var(--border-subtle)'}`,
-              }}
-            >
-              {step.completed ? '✓' : '•'}
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 3, lineHeight: 1.25 }}>{step.label}</div>
-              <div className="caption" style={{ lineHeight: 1.55 }}>{step.description}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <div className="caption">Continue with: {nextAction.label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onDismiss} aria-label="Dismiss setup progress" style={{ color: 'var(--text-tertiary)', fontSize: 18, lineHeight: 1, background: 'transparent', border: 'none', cursor: 'pointer', padding: 6 }}>×</button>
         <Button variant="primary" size="sm" onClick={() => { window.location.href = nextAction.href }}>
           {nextAction.label}
         </Button>
+        </div>
       </div>
     </Card>
   )
@@ -748,14 +649,11 @@ export default function DashboardPage() {
             }}
           />
 
-          {/* Phase card */}
-          <PhaseCard data={data} dataHealth={dataHealth} />
-
-          <Card padding="lg" style={{ marginBottom: 24 }}>
+          <Card padding="md" style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
               <div>
-                <h2 className="heading-card" style={{ marginBottom: 4 }}>Continue your workflow</h2>
-                <div className="caption">Move from market context into discovery, planning, or review without leaving the desk.</div>
+                <h2 className="heading-card" style={{ marginBottom: 4 }}>Next actions</h2>
+                <div className="caption">Move straight into discovery, planning, or review.</div>
               </div>
             </div>
             <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
@@ -770,8 +668,8 @@ export default function DashboardPage() {
                   href={item.href}
                   style={{
                     display: 'block',
-                    minHeight: 96,
-                    padding: '14px 15px',
+                    minHeight: 68,
+                    padding: '12px 14px',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--border-subtle)',
                     background: 'var(--surface-2)',

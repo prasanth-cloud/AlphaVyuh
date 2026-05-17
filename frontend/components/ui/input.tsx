@@ -27,12 +27,18 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
       }}>
         {iconLeft && <span style={{ color: 'var(--text-tertiary)', display: 'flex' }}>{iconLeft}</span>}
         <input
+          suppressHydrationWarning
           ref={ref}
           style={{
-            flex: 1, height: '100%',
+            flexGrow: 1,
+            flexShrink: 1,
+            flexBasis: 0,
+            height: '100%',
             fontSize: size === 'sm' ? 12 : 13,
             color: 'var(--text-primary)',
-            background: 'transparent', border: 'none', outline: 'none',
+            backgroundColor: 'transparent',
+            borderWidth: 0,
+            outlineStyle: 'none',
             ...style,
           }}
           {...rest}

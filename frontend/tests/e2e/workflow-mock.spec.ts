@@ -174,7 +174,7 @@ test.describe("Mock workflow smoke", () => {
 
     await resultRows.first().locator("input[type=checkbox]").check({ force: true });
     await expect(page.getByText("1 selected")).toBeVisible();
-    await page.getByRole("button", { name: /Shortlist selected/i }).click();
+    await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Shortlist$/i }).click();
     await expect(resultRows.first().getByText("Shortlisted")).toBeVisible();
 
     await page.getByRole("button", { name: /Create watchlist/i }).first().click();
@@ -199,7 +199,11 @@ test.describe("Mock workflow smoke", () => {
     });
     expect(seededContext.scanner_context.match_reasons.length).toBeGreaterThan(0);
 
-    const watchlistUrl = page.url();
+    const launchWatchlist = await page.evaluate(() => {
+      const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
+      return lists.find((list: { name: string }) => list.name === "Launch Flow QA");
+    });
+    const watchlistUrl = `/watchlist?id=${launchWatchlist.id}&symbol=${encodeURIComponent(symbol)}`;
     await page.getByRole("button", { name: /^Open chart$/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/charts/${symbol}`), { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
@@ -263,7 +267,7 @@ test.describe("Mock workflow smoke", () => {
 
     await page.goto("/scanner");
     await page.getByRole("button", { name: /^Run scan$/i }).click();
-    await expect(page.getByRole("button", { name: /Review later selected/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
 
     const resultRows = page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) });
     await expect(resultRows.nth(2)).toBeVisible({ timeout: 10_000 });
@@ -273,12 +277,12 @@ test.describe("Mock workflow smoke", () => {
 
     await resultRows.nth(0).getByRole("button", { name: /^Shortlist$/ }).click();
     await expect(resultRows.nth(0).getByText("Shortlisted")).toBeVisible();
-    await resultRows.nth(1).getByRole("button", { name: /^Ignore$/ }).click();
+    await resultRows.nth(1).getByLabel(new RegExp(`More actions for ${ignoredSymbol}`)).selectOption("ignore");
     await expect(resultRows.nth(1).getByText("Ignored")).toBeVisible();
 
     await resultRows.nth(2).locator("input[type=checkbox]").check({ force: true });
     await expect(page.getByText("1 selected")).toBeVisible();
-    await page.getByRole("button", { name: /Review later selected/i }).click();
+    await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Review later$/i }).click();
     await expect(resultRows.nth(2).locator(".caption").filter({ hasText: /^Review later$/ })).toBeVisible();
 
     const workflowMarks = await page.evaluate(() => JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}"));
@@ -286,7 +290,7 @@ test.describe("Mock workflow smoke", () => {
     expect(workflowMarks[ignoredSymbol]).toMatchObject({ lifecycle: "ignored", ignored: true, source: "scanner" });
     expect(workflowMarks[reviewSymbol]).toMatchObject({ lifecycle: "review_later", review_later: true, source: "scanner" });
 
-    await resultRows.nth(0).getByLabel(new RegExp(`Add ${shortlistSymbol} to watchlist`)).selectOption({ label: "Leaders" });
+    await resultRows.nth(0).getByLabel(new RegExp(`More actions for ${shortlistSymbol}`)).selectOption({ label: "Add to Leaders" });
     await expect(page.getByText(`${shortlistSymbol} added`)).toBeVisible({ timeout: 10_000 });
     await expect(resultRows.nth(0).getByText("Watching")).toBeVisible({ timeout: 10_000 });
     const leadersWatchlist = await page.evaluate(() => {
@@ -311,7 +315,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${shortlistSymbol}` }).first()).toBeVisible({ timeout: 10_000 });
     await page.goto("/scanner");
     await page.getByRole("button", { name: /^Run scan$/i }).click();
-    await expect(page.getByRole("button", { name: /Review later selected/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: /Create watchlist/i }).first().click();
     await page.getByPlaceholder(/Watchlist name/).fill("Workflow QA");

@@ -689,6 +689,11 @@ input, textarea, select {
   white-space: nowrap;
 }
 
+.scanner-row-action-primary {
+  border-color: rgba(86, 215, 193, 0.22);
+  background: rgba(86, 215, 193, 0.08);
+}
+
 .scanner-row-select {
   min-height: 24px;
   padding: 3px 7px;
@@ -703,11 +708,15 @@ input, textarea, select {
 
 .scanner-lifecycle-select,
 .scanner-more-select {
-  max-width: 70px;
+  max-width: 76px;
 }
 
 .scanner-watchlist-select {
   max-width: 86px;
+}
+
+.scanner-results-toolbar {
+  row-gap: 8px;
 }
 
 .decision-desk-progress {
