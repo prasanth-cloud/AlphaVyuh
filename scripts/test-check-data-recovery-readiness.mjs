@@ -54,6 +54,15 @@ function serveHealthyApi(request, response) {
     }));
     return;
   }
+  if (request.url === "/api/v1/scanner/run" && request.method === "POST") {
+    response.end(JSON.stringify({
+      trade_date: "2026-05-18",
+      total_matches: 265,
+      results: [{ symbol: "RELIANCE", close: 100, volume_ratio: 2.4 }],
+      source_metadata: { as_of: "2026-05-18" },
+    }));
+    return;
+  }
 
   response.writeHead(404);
   response.end(JSON.stringify({ error: "unexpected path" }));
@@ -128,7 +137,7 @@ process.exit(1);
   return dir;
 }
 
-async function runPreflight(apiUrl, fakeBin) {
+async function runPreflight(apiUrl, fakeBin, extraEnv = {}) {
   const child = spawn(process.execPath, ["scripts/check-data-recovery-readiness.mjs"], {
     cwd: process.cwd(),
     env: {
@@ -140,6 +149,7 @@ async function runPreflight(apiUrl, fakeBin) {
       SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
       ALLOW_LOCAL_API_CHECK: "1",
       ALPHAVYUH_BACKEND_DIR: process.cwd(),
+      ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -159,7 +169,19 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
   assert.equal(code, 0, `preflight should pass on healthy production API:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Production API data smoke/);
+  assert.match(stdout, /Authenticated app smoke/);
+  assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
   assert.match(stdout, /Recovery status: production data API is serving real EOD smoke data/);
+});
+
+await withServer(serveHealthyApi, async (apiUrl) => {
+  const fakeBin = makeFakeBin({ secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"], railwayReady: true });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin, {
+    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+  });
+  assert.equal(code, 0, `preflight should pass on healthy production API with authenticated smoke token:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /Authenticated app smoke/);
+  assert.match(stdout, /Production API check included authenticated scanner verification/);
 });
 
 await withServer(serveRailwayFallback, async (apiUrl) => {

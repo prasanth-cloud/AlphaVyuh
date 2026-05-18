@@ -11,6 +11,7 @@ const backendDir = process.env.ALPHAVYUH_BACKEND_DIR || path.join(rootDir, "back
 const backendEnv = readEnvFile(path.join(backendDir, ".env"));
 const supabaseUrl = normalizeUrl(process.env.SUPABASE_URL || backendEnv.SUPABASE_URL || "");
 const supabaseServiceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || backendEnv.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+const productionApiBearerToken = String(process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN || "").trim();
 
 const requiredGithubSecrets = ["RAILWAY_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE"];
 const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN"];
@@ -316,6 +317,27 @@ async function checkLocalRailway() {
   return true;
 }
 
+function checkAuthenticatedSmokeCoverage(productionApiOk) {
+  if (!productionApiOk) return false;
+
+  if (!productionApiBearerToken) {
+    addResult(
+      "warn",
+      "Authenticated app smoke",
+      "Skipped scanner/watchlist authenticated API verification because PRODUCTION_API_BEARER_TOKEN was not available.",
+      "Provide a short-lived production smoke token before declaring dashboard → scanner → watchlist → chart verification complete.",
+    );
+    return false;
+  }
+
+  addResult(
+    "pass",
+    "Authenticated app smoke",
+    "Production API check included authenticated scanner verification.",
+  );
+  return true;
+}
+
 function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady }) {
   console.log(`AlphaVyuh production data recovery preflight`);
   console.log(`API URL: ${apiUrl}`);
@@ -357,6 +379,7 @@ try {
     checkRecoveryWorkflowRuns(),
     checkLocalRailway(),
   ]);
+  checkAuthenticatedSmokeCoverage(productionApiOk);
 
   printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady });
   process.exit(productionApiOk ? 0 : 1);
