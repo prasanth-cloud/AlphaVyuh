@@ -181,7 +181,7 @@ def test_trade_lesson_generation_does_not_overwrite_user_review():
     assert client.updated == []
 
 
-def test_private_beta_blocks_live_confirmation_before_broker_call(monkeypatch):
+def test_professional_access_blocks_live_confirmation_before_broker_call(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
     monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", False)
@@ -191,7 +191,7 @@ def test_private_beta_blocks_live_confirmation_before_broker_call(monkeypatch):
         asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
 
     assert exc.value.status_code == 403
-    assert "disabled for the private beta" in str(exc.value.detail)
+    assert "Live broker order placement is not enabled" in str(exc.value.detail)
     assert client.journal_inserts == []
 
 

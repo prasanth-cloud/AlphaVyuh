@@ -459,7 +459,7 @@ async def place_order(
     if body.live_confirmed and not settings.broker_live_orders_enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Broker live/sandbox order placement is disabled for the private beta. Use simulated journal capture or broker trade import.",
+            detail="Live broker order placement is not enabled. Use simulated journal capture or broker trade import.",
         )
     if body.live_confirmed and not plan_allows_broker:
         raise HTTPException(

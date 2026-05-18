@@ -23,6 +23,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Renamed visible data provenance copy from beta provider/broker wording to provider/import wording.
 - Updated login, landing, access guide, onboarding, dashboard, watchlist, full chart, journal, settings, broker, data, alerts, products, and terms copy.
 - Updated tests to assert Professional Access copy and block legacy beta posture language on customer-facing routes.
+- Follow-up cleanup removed remaining active-code/backend references to private/founder beta posture from order, payment, config, and safety-test messages.
 
 ## Validation
 
@@ -37,6 +38,10 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - `npm run test:e2e:perf` passed: 2 tests.
 - `npm run test:e2e:release` passed: 6 tests.
 - Local browser smoke covered login, landing, access guide, onboarding, dashboard, scanner, watchlist, full chart, journal, broker settings, and data page with no console errors and no legacy beta posture copy found.
+- Follow-up focused validation passed:
+  - `backend/.venv/bin/python -m pytest backend/tests/test_broker_order_safety.py backend/tests/test_brokers_router.py backend/tests/test_security_hardening.py` passed: 18 tests.
+  - `npm run lint` passed.
+  - `npm run test:e2e:layout` passed: 16 tests.
 
 ## Production Data Recovery Status
 
@@ -45,6 +50,7 @@ Blocked by Railway authentication/deployment state:
 - `railway status --json` fails with `invalid_grant` and `Unauthorized. Please run railway login again.`
 - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` fails because `/health` returns Railway fallback `404 Application not found`.
 - `curl -i https://alphavyuh-production.up.railway.app/health` confirms `x-railway-fallback: true`.
+- Rechecked on 2026-05-18 after the Professional Access cleanup; Railway auth and production `/health` remain in the same blocked state.
 
 Next required owner action:
 

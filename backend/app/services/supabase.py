@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     telegram_webhook_secret: str = ""  # set as Telegram secret_token; validated on webhook updates
     feedback_storage_mode: str = "auto"  # auto, table, or waitlist
     enable_yfinance_refresh: bool = False  # optional fallback; official EOD ingest is primary
-    broker_live_orders_enabled: bool = False  # private beta: broker is read-only/import only by default
+    broker_live_orders_enabled: bool = False  # Professional Access keeps broker read-only/import-only by default
 
     class Config:
         env_file = ".env"
