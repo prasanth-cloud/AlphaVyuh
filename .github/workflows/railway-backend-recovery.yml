@@ -8,15 +8,18 @@ on:
         required: true
         default: https://alphavyuh-production.up.railway.app
       railway_project_id:
-        description: Railway project ID to link in CI
-        required: true
+        description: Railway project ID to link in CI. Optional when RAILWAY_PROJECT_ID secret is set.
+        required: false
       railway_environment:
         description: Railway environment
         required: true
         default: production
       railway_service:
-        description: Railway backend service name or ID
-        required: true
+        description: Railway backend service name or ID. Optional when RAILWAY_SERVICE secret is set.
+        required: false
+      railway_workspace:
+        description: Railway workspace/team ID or slug. Optional when RAILWAY_WORKSPACE secret is set.
+        required: false
 
 permissions:
   contents: read
@@ -52,8 +55,9 @@ jobs:
       - name: Recover backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ github.event.inputs.railway_project_id }}
+          RAILWAY_PROJECT_ID: ${{ github.event.inputs.railway_project_id || secrets.RAILWAY_PROJECT_ID }}
           RAILWAY_ENVIRONMENT: ${{ github.event.inputs.railway_environment }}
-          RAILWAY_SERVICE: ${{ github.event.inputs.railway_service }}
+          RAILWAY_SERVICE: ${{ github.event.inputs.railway_service || secrets.RAILWAY_SERVICE }}
+          RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
           PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
         run: npm run recover:railway-backend

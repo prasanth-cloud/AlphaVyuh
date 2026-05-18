@@ -55,6 +55,14 @@ if ! railway status --json >/tmp/alphavyuh-railway-status.json 2>/tmp/alphavyuh-
   echo "Railway is not ready for deployment from this machine." >&2
   echo "Run 'railway login', then ensure this repo/backend is linked to the AlphaVyuh project." >&2
   echo "If the project is not linked, run 'railway link' from $BACKEND_DIR." >&2
+  if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+    echo >&2
+    echo "RAILWAY_TOKEN is present, but no linked Railway project/service was usable." >&2
+    echo "Known projects visible to this token:" >&2
+    railway list --json >&2 || railway list >&2 || true
+    echo >&2
+    echo "Set RAILWAY_PROJECT_ID and RAILWAY_SERVICE, or pass them to the GitHub workflow inputs." >&2
+  fi
   exit 1
 fi
 
