@@ -49,6 +49,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Added an explicit Data Status page outage state so the dedicated health page says `DATA API DOWN` and points recovery work at the market-data service instead of showing a vague `CHECK DATA` state.
 - Moved the authenticated admin access queue from `/admin/beta` to `/admin/access`, while keeping `/admin/beta` as a compatibility redirect.
 - Removed the visible `FOUNDER100` billing access-code default from Settings and replaced it with a neutral Professional Access code input.
+- Added a Professional Access payment-code API path at `/api/v1/payments/access/apply`; the old `/founder/apply` path remains as a compatibility alias.
 
 ## Validation
 
@@ -107,6 +108,15 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run test:e2e:layout` passed: 16 tests and now asserts billing does not render `FOUNDER`.
   - `npm audit --audit-level=moderate` passed: 0 vulnerabilities.
   - Active frontend scan found no remaining `FOUNDER100`, `founderCode`, `applyFounderPlan`, or `founder_plan_applied` references.
+- Follow-up Professional Access payment API alias validation passed:
+  - `backend/.venv/bin/python -m pytest backend/tests/test_payments.py` passed: 18 tests.
+  - `backend/.venv/bin/python -m pytest backend/tests/test_payments.py backend/tests/test_broker_order_safety.py backend/tests/test_security_hardening.py` passed: 32 tests.
+  - `npm run typecheck` passed.
+  - `npm run lint` passed.
+  - `npm --prefix frontend run test -- --run` passed: 72 tests.
+  - `npm run test:e2e:layout` passed: 16 tests.
+  - `npm audit --audit-level=moderate` passed: 0 vulnerabilities.
+  - `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt` passed: no known vulnerabilities.
 
 ## Production Data Recovery Status
 

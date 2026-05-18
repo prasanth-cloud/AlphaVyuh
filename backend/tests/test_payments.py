@@ -104,10 +104,60 @@ class TestPaymentSignature:
         assert not hmac.compare_digest(sig, expected)
 
 
-def test_founder_codes_default_to_disabled(monkeypatch):
+def test_access_codes_default_to_disabled(monkeypatch):
     monkeypatch.setattr(payments.settings, "founder_plan_codes", "")
 
+    assert payments._enabled_access_codes() == set()
     assert payments._enabled_founder_codes() == set()
+
+
+@pytest.mark.anyio
+async def test_access_code_apply_uses_professional_access_response(monkeypatch):
+    class FakeQuery:
+        def __init__(self, client, table_name):
+            self.client = client
+            self.table_name = table_name
+            self.payload = None
+
+        def update(self, payload):
+            self.payload = payload
+            self.client.updates.append((self.table_name, payload))
+            return self
+
+        def insert(self, payload):
+            self.payload = payload
+            self.client.inserts.append((self.table_name, payload))
+            return self
+
+        def eq(self, *_args, **_kwargs):
+            return self
+
+        def execute(self):
+            return _FakeResult({"ok": True})
+
+    class FakeClient:
+        def __init__(self):
+            self.updates = []
+            self.inserts = []
+
+        def table(self, table_name):
+            return FakeQuery(self, table_name)
+
+    client = FakeClient()
+    monkeypatch.setattr(payments.settings, "founder_plan_codes", "ACCESS100")
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    result = await payments.apply_access_code_plan(
+        payments.AccessCodeApplyRequest(code="access100"),
+        user_id="user-123456",
+    )
+
+    assert result["billing"] == "access_code"
+    assert result["plan"] == "pro"
+    assert client.updates == [("users", {"plan": "pro", "plan_expires_at": result["expires_at"], "billing_period": "monthly"})]
+    assert client.inserts[0][1]["razorpay_order_id"] == "access-ACCESS100"
+    assert client.inserts[0][1]["razorpay_payment_id"] == "access-user-123"
+    assert client.inserts[0][1]["status"] == "access_code"
 
 
 def test_checkout_kill_switch_defaults_to_disabled(monkeypatch):
