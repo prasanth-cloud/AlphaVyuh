@@ -48,6 +48,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Reworded market-data outage errors from live-data language to EOD-compatible market-data service language.
 - Added an explicit Data Status page outage state so the dedicated health page says `DATA API DOWN` and points recovery work at the market-data service instead of showing a vague `CHECK DATA` state.
 - Moved the authenticated admin access queue from `/admin/beta` to `/admin/access`, while keeping `/admin/beta` as a compatibility redirect.
+- Removed the visible `FOUNDER100` billing access-code default from Settings and replaced it with a neutral Professional Access code input.
 
 ## Validation
 
@@ -99,6 +100,13 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run test:e2e:layout` passed: 16 tests after the Data Status probe was adjusted to skip API health pings in mock mode.
   - Active customer-facing code/template sweep still finds no legacy beta posture copy in `frontend/app`, `frontend/components`, `frontend/lib`, `backend/app`, or `supabase/templates`.
   - Active app scan found no remaining `Beta*` page/component names; only intentional legacy redirect tests reference `/beta`.
+- Follow-up Settings access-code validation passed:
+  - `npm run typecheck` passed.
+  - `npm run lint` passed.
+  - `npm --prefix frontend run test -- --run` passed: 72 tests.
+  - `npm run test:e2e:layout` passed: 16 tests and now asserts billing does not render `FOUNDER`.
+  - `npm audit --audit-level=moderate` passed: 0 vulnerabilities.
+  - Active frontend scan found no remaining `FOUNDER100`, `founderCode`, `applyFounderPlan`, or `founder_plan_applied` references.
 
 ## Production Data Recovery Status
 

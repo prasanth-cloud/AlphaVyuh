@@ -314,6 +314,8 @@ test.describe("Workflow layout smoke", () => {
     if (posture?.includes("Professional Access billing is not open yet")) {
       await expect(page.getByRole("button", { name: "Checkout disabled" }).first()).toBeDisabled();
       await expect(page.locator("body")).toContainText(/Professional Access/i);
+      await expect(page.locator("body")).not.toContainText(/FOUNDER/i);
+      await expect(page.getByLabel("Professional Access code")).toHaveAttribute("placeholder", "ACCESS CODE");
     }
 
     expect(await layoutProblems(page)).toEqual([]);
