@@ -38,6 +38,7 @@ function dailyCandles(startDate, count) {
 
 function serveHealthyApi(request, response) {
   response.setHeader("content-type", "application/json");
+  if (serveSupabaseRest(request, response)) return;
   if (request.url === "/health") {
     response.end(JSON.stringify({ status: "ok" }));
     return;
@@ -59,6 +60,7 @@ function serveHealthyApi(request, response) {
 }
 
 function serveRailwayFallback(request, response) {
+  if (serveSupabaseRest(request, response)) return;
   if (request.url === "/health") {
     response.writeHead(404, {
       "content-type": "application/json",
@@ -70,6 +72,27 @@ function serveRailwayFallback(request, response) {
 
   response.writeHead(500, { "content-type": "application/json" });
   response.end(JSON.stringify({ error: "unexpected path" }));
+}
+
+function serveSupabaseRest(request, response) {
+  const url = new URL(request.url, "http://127.0.0.1");
+  if (url.pathname !== "/rest/v1/daily_ohlcv" && url.pathname !== "/rest/v1/stock_universe") {
+    return false;
+  }
+
+  response.setHeader("content-type", "application/json");
+  response.setHeader("content-range", url.pathname.endsWith("daily_ohlcv") ? "0-0/3147" : "0-0/3447");
+
+  if (url.pathname.endsWith("daily_ohlcv") && url.searchParams.get("trade_date") === "eq.2026-05-18") {
+    response.end(JSON.stringify([{ symbol: "RELIANCE" }]));
+    return true;
+  }
+  if (url.pathname.endsWith("daily_ohlcv")) {
+    response.end(JSON.stringify([{ trade_date: "2026-05-18" }]));
+    return true;
+  }
+  response.end(JSON.stringify([{ symbol: "RELIANCE" }]));
+  return true;
 }
 
 function makeFakeBin({ secrets = [], railwayReady = true }) {
@@ -108,6 +131,8 @@ async function runPreflight(apiUrl, fakeBin) {
       PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
       GITHUB_REPOSITORY: "prasanth-cloud/AlphaVyuh",
       PRODUCTION_API_URL: apiUrl,
+      SUPABASE_URL: apiUrl,
+      SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
       ALLOW_LOCAL_API_CHECK: "1",
       ALPHAVYUH_BACKEND_DIR: process.cwd(),
     },
