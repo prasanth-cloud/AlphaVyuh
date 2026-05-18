@@ -7,6 +7,7 @@ import { clearAuthHeaderCache, warmCoreMarketData, warmSecondaryWorkflowData } f
 import { API_BASE_URL } from '@/lib/api-base'
 import { dataModePresentation, type ApiReachability } from '@/lib/data-mode'
 import { markAppTiming } from '@/lib/performance'
+import { allowClientMockFallback } from '@/lib/runtime-mode'
 import { useWorkflowState } from '@/lib/workflow'
 
 const NAV_LINKS = [
@@ -169,9 +170,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 /* ── DATA MODE ───────────────────────────────────────────────────────────── */
 function DataModePill() {
   const forceLive = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === 'true'
-  const configuredMock = process.env.NEXT_PUBLIC_DATA_MODE === 'mock'
-  const allowFallback = process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === 'true'
-  const demo = !forceLive && (configuredMock || allowFallback)
+  const demo = allowClientMockFallback()
   const [apiReachable, setApiReachable] = useState<ApiReachability>(demo ? 'ok' : 'unknown')
 
   useEffect(() => {
