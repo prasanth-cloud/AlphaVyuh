@@ -24,6 +24,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Updated login, landing, access guide, onboarding, dashboard, watchlist, full chart, journal, settings, broker, data, alerts, products, and terms copy.
 - Updated tests to assert Professional Access copy and block legacy beta posture language on customer-facing routes.
 - Follow-up cleanup removed remaining active-code/backend references to private/founder beta posture from order, payment, config, and safety-test messages.
+- Added `npm run recover:railway-backend` as a guarded post-login recovery helper for the Railway backend deploy and production API smoke.
 
 ## Validation
 
@@ -42,6 +43,9 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `backend/.venv/bin/python -m pytest backend/tests/test_payments.py backend/tests/test_broker_order_safety.py backend/tests/test_brokers_router.py backend/tests/test_security_hardening.py` passed: 35 tests.
   - `npm run lint` passed.
   - `npm run test:e2e:layout` passed: 16 tests.
+  - `bash -n scripts/recover-railway-backend.sh` passed.
+  - `npm run typecheck` passed.
+  - `npm run recover:railway-backend` correctly stopped before deployment because Railway auth is still expired.
 
 ## Production Data Recovery Status
 
@@ -55,9 +59,9 @@ Blocked by Railway authentication/deployment state:
 Next required owner action:
 
 1. Run `railway login` locally for the AlphaVyuh Railway account.
-2. Run `cd /Users/PRASAANTH/alphavyuh/backend && railway status`.
-3. Redeploy the backend service after auth is refreshed.
-4. Re-run `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api`.
+2. Run `npm run recover:railway-backend`.
+3. If the repo is not linked, run `cd /Users/PRASAANTH/alphavyuh/backend && railway link`, then rerun `npm run recover:railway-backend`.
+4. The helper deploys the backend, waits for `/health`, prints recent Railway logs on failure, and runs `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api`.
 
 ## Remaining Risks
 
