@@ -19,6 +19,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | Release Hygiene Agent | Removed remaining active repo beta posture from issue templates and backend intraday errors. | Feedback intake and API errors now match the same Professional Access product posture as the app UI. | Historical docs can keep beta launch records, but active templates/errors should not reopen that language. |
 | Operations Agent | Renamed active GitHub feedback templates and current runbooks away from beta/founder wording. | The operating layer now matches the product posture testers and contributors see in the app. | Even after UI cleanup, issue templates and runbooks can quietly preserve old positioning. |
 | Data Verification Agent | Strengthened the production API smoke to require real breadth, deeper chart history, and optional authenticated scanner matches. | Backend recovery will now prove more than `/health`; it will catch shallow/stale chart data before traders see it. | Scanner verification needs an auth token, so the smoke supports an optional `PRODUCTION_API_BEARER_TOKEN` rather than weakening auth. |
+| Public Posture Agent | Added a live public-site posture check for landing, login, access, and legacy beta redirect routes. | Launch checks now verify the visible website reads like Professional Access before sharing with traders. | The old live grep was too loose and tied to outdated landing-page copy. |
 
 ## Changes
 
@@ -56,6 +57,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Renamed active GitHub issue templates from beta-specific filenames to Professional Access product/workflow templates.
 - Reworded active operations docs for EOD refresh, release readiness, customer launch, and mission control from beta/founder posture to Professional Access posture.
 - Strengthened `npm run check:production-api` to validate market breadth counts, at least 120 RELIANCE daily candles spanning at least 180 days, and optional authenticated scanner matches when `PRODUCTION_API_BEARER_TOKEN` is provided.
+- Added `npm run check:public-posture` and wired `LIVE_URL=... npm run launch:check` to verify Professional Access public copy and reject legacy beta posture across `/`, `/login`, `/access`, and `/beta`.
 
 ## Validation
 
@@ -146,6 +148,11 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Follow-up production data smoke-depth validation:
   - `npm run test:production-api-check` passed with coverage for Railway fallback, stale candles, shallow chart history, healthy deep chart history, and optional authenticated scanner smoke.
   - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` still fails at `/health` with Railway fallback `404 Application not found`; deeper checks cannot run until the backend service/domain is restored.
+- Follow-up public posture validation:
+  - `PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture` passed.
+  - `npm run check:public-posture` without `PUBLIC_SITE_URL` or `LIVE_URL` skips safely for local runs.
+  - `bash -n scripts/launch-readiness-check.sh` passed.
+  - `node --check scripts/check-public-posture.mjs` passed.
 
 ## Production Data Recovery Status
 
