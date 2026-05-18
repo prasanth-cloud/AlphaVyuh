@@ -25,6 +25,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Updated tests to assert Professional Access copy and block legacy beta posture language on customer-facing routes.
 - Follow-up cleanup removed remaining active-code/backend references to private/founder beta posture from order, payment, config, and safety-test messages.
 - Added `npm run recover:railway-backend` as a guarded post-login recovery helper for the Railway backend deploy and production API smoke.
+- Added an optional `RUN_RAILWAY_BACKEND_RECOVERY=1 npm run launch:check` path so launch readiness can run the same backend recovery after Railway login.
 
 ## Validation
 
@@ -44,6 +45,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run lint` passed.
   - `npm run test:e2e:layout` passed: 16 tests.
   - `bash -n scripts/recover-railway-backend.sh` passed.
+  - `bash -n scripts/launch-readiness-check.sh` passed.
   - `npm run typecheck` passed.
   - `npm run recover:railway-backend` correctly stopped before deployment because Railway auth is still expired.
 

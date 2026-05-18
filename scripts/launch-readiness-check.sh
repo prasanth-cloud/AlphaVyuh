@@ -91,4 +91,11 @@ else
   echo
 fi
 
+if [[ "${RUN_RAILWAY_BACKEND_RECOVERY:-}" == "1" ]]; then
+  run_step "Railway backend recovery" npm run recover:railway-backend
+else
+  echo "Skipping Railway backend recovery. Set RUN_RAILWAY_BACKEND_RECOVERY=1 after railway login to deploy and verify the backend."
+  echo
+fi
+
 echo "Launch readiness check complete."
