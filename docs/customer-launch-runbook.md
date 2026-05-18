@@ -1,6 +1,6 @@
 # AlphaVyuh Customer Launch Runbook
 
-This is the operating plan for moving from founder beta to a customer-facing paid launch.
+This is the operating plan for moving from Professional Access to a customer-facing paid launch.
 
 ## 1. Full QA Pass
 
@@ -24,9 +24,9 @@ Manual browser pass:
 | Alerts | Manual alert modal and one-click breakout/support alerts create records. |
 | Order simulation | Buy/sell order creates a journal-ready trade without live broker risk. |
 | Journal | Add trade, close trade, review lesson, analytics load. |
-| Settings | Profile saves, billing state loads, founder code path works. |
+| Settings | Profile saves, billing state loads, Professional Access code path works. |
 | Billing | Test checkout opens only when Razorpay keys are configured. |
-| Admin beta | Admin can view leads and create invite codes. |
+| Admin access | Admin can view leads and create invite codes. |
 
 No customer release if any P0/P1 issue remains in auth, payment, data visibility, or trade/journal integrity.
 
@@ -97,7 +97,7 @@ Failure rules:
 
 Recommended path:
 
-1. Keep beta in EOD/demo mode until the first 10-25 testers confirm the workflow is valuable.
+1. Keep Professional Access in EOD/demo mode until the first 10-25 traders confirm the workflow is valuable.
 2. Use Yahoo/broker data only for internal live validation; do not sell it as a guaranteed production feed.
 3. For paid live-data launch, negotiate with Global Datafeeds first because their official API page confirms NSE stocks, NSE indices, NSE F&O, BSE, MCX, realtime, historical, snapshots, and option-chain API coverage. Pricing is sales-led, so get a written quote and redistribution terms before committing.
 4. Keep TrueData as an alternate vendor to evaluate after receiving Global Datafeeds commercial terms.
@@ -123,7 +123,7 @@ Primary recommendation: Razorpay for India-first launch.
 Why:
 
 - Razorpay officially lists standard payment gateway pricing as `2% + GST` with no setup or annual maintenance charges for standard usage.
-- The code already supports Razorpay order creation, signature verification, payment logs, plan activation, webhooks, founder codes, INR/USD, monthly/annual billing.
+- The code already supports Razorpay order creation, signature verification, payment logs, plan activation, webhooks, Professional Access codes, INR/USD, monthly/annual billing.
 - The latest security hardening uses constant-time HMAC signature comparison.
 
 Production checklist:
@@ -132,8 +132,8 @@ Production checklist:
 - Switch to `rzp_live_` only after GST/accounting/refund policy is approved.
 - Configure `RAZORPAY_WEBHOOK_SECRET`.
 - Test `payment.captured` webhook in Razorpay dashboard.
-- Test failed checkout, dismissed modal, invalid signature, expired plan, founder code.
-- Keep founder plan as invite-only until manual support process is ready.
+- Test failed checkout, dismissed modal, invalid signature, expired plan, and Professional Access code.
+- Keep Professional Access plan as approval-managed until manual support process is ready.
 
 Stripe can remain future fallback for international expansion, but Stripe's published standard card pricing is higher for domestic cards in its global pricing model, and Billing adds separate volume-based pricing. Do not add Stripe until international sales justify it.
 
@@ -159,7 +159,7 @@ Manual:
 - Confirm security headers on live site.
 - Confirm Sentry or equivalent error tracking is active before paid launch.
 
-## 5. Beta Launch
+## 5. Professional Access Launch
 
 Target: 10-25 serious traders.
 
@@ -168,15 +168,15 @@ Invite criteria:
 - Active Indian equity/F&O trader.
 - Already uses scanner/chart/journal tools.
 - Will give direct feedback twice per week.
-- Comfortable with beta caveats and data-source badge.
+- Comfortable with EOD data policy and data-source badge.
 
-Beta cadence:
+Professional Access cadence:
 
 - Day 0: onboard personally on a 20-minute call.
 - Day 1-3: watch if they complete scan -> watchlist -> chart -> journal.
 - Day 4-7: collect friction and bug reports.
 - Week 2: ask willingness to pay and missing must-have features.
-- Week 3: convert strongest users to founder plan.
+- Week 3: convert strongest users to a paid plan when billing is approved.
 
 Success metrics:
 
@@ -210,8 +210,8 @@ Create three 60-90 second videos:
 
 Distribution:
 
-- Founder beta landing CTA.
-- LinkedIn founder build updates.
+- Professional Access landing CTA.
+- LinkedIn product build updates.
 - X/Twitter short clips.
 - Telegram/WhatsApp trader communities where allowed.
 - Direct outreach to trading coaches and small paid groups.
@@ -220,11 +220,11 @@ Do not market performance claims. Market process quality: fewer missed reviews, 
 
 ## Launch Decision
 
-Launch paid beta only when:
+Launch paid plans only when:
 
 - `npm run launch:check` passes.
 - One complete manual QA pass is clean.
 - Razorpay live/test mode is intentionally selected and documented.
 - Data mode is intentionally selected and visible.
-- At least 10 beta users have completed the workflow.
+- At least 10 Professional Access users have completed the workflow.
 - Support channel and refund policy are ready.

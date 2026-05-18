@@ -43,7 +43,7 @@ Measure:
 - Watchlist chart render latency.
 - Full chart interaction smoothness.
 - Broken flow count.
-- User confusion count from beta feedback.
+- User confusion count from Professional Access feedback.
 - Number of owner-gated blockers reduced.
 - CI pass rate.
 - Reopened bug rate.
@@ -62,4 +62,3 @@ A change should usually do at least one of these:
 - Improve onboarding clarity.
 
 If a task does none of these, it should be questioned before implementation.
-

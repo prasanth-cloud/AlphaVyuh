@@ -10,11 +10,11 @@ Use this checklist before every customer-facing release.
    - Purpose: stable customer demos, screenshots, onboarding, marketing review.
    - App badge should show `Demo data`.
 
-2. Live internal beta
+2. Professional Access release
    - Frontend: `NEXT_PUBLIC_FORCE_LIVE_DATA=true`
    - Backend: official/free EOD bhavcopy as primary store; `MARKET_DATA_PROVIDER=kite` only for user-connected broker quote/order workflows.
    - Purpose: internal validation with reliable EOD scanner/chart data and broker flows.
-   - App badge should show `EOD data`, `delayed`, or `live beta` only when that exact provider mode is configured and approved.
+   - App badge should show `EOD data`, `delayed`, or an approved provider-specific live label only when that exact provider mode is configured and approved.
 
 3. Licensed production data
    - Frontend: `NEXT_PUBLIC_FORCE_LIVE_DATA=true`
