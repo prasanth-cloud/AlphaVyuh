@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync, readFileSync } from "node:fs";
 
 function normalizeBaseUrl(raw) {
   return String(raw ?? "")
@@ -50,12 +51,26 @@ const pages = [
   },
 ];
 
+const staticFiles = [
+  "frontend/lib/agentMissionControl.ts",
+  "pitch/index.html",
+];
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 function snippet(text, index) {
   return text.slice(Math.max(0, index - 80), Math.min(text.length, index + 120)).replace(/\s+/g, " ");
+}
+
+function assertNoForbiddenCopy(label, body) {
+  for (const pattern of forbidden) {
+    const match = body.match(pattern);
+    if (match?.index !== undefined) {
+      throw new Error(`${label} contains forbidden public posture copy ${pattern}: ${snippet(body, match.index)}`);
+    }
+  }
 }
 
 async function fetchPage(path) {
@@ -86,12 +101,12 @@ try {
       assert(pattern.test(body), `${page.path} did not include expected copy: ${pattern}`);
     }
 
-    for (const pattern of forbidden) {
-      const match = body.match(pattern);
-      if (match?.index !== undefined) {
-        throw new Error(`${page.path} contains forbidden public posture copy ${pattern}: ${snippet(body, match.index)}`);
-      }
-    }
+    assertNoForbiddenCopy(page.path, body);
+  }
+
+  for (const file of staticFiles) {
+    if (!existsSync(file)) continue;
+    assertNoForbiddenCopy(file, readFileSync(file, "utf8"));
   }
 
   console.log(`Public posture ok at ${baseUrl}: Professional Access copy present, legacy beta posture absent.`);
