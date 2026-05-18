@@ -29,6 +29,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Confirmed production Vercel `NEXT_PUBLIC_API_URL` points to the intended Railway backend, so the current empty-data failure is backend deployment recovery rather than frontend env drift.
 - Improved `npm run check:production-api` to identify Railway fallback responses when the backend app is not attached/deployed.
 - Added `npm run test:production-api-check` and wired it into the Agent PR Gate so the Railway fallback diagnosis is regression-tested.
+- Created GitHub launch blocker issue [#137](https://github.com/prasanth-cloud/AlphaVyuh/issues/137) for the owner-gated Railway backend recovery.
 
 ## Validation
 
@@ -64,6 +65,7 @@ Blocked by Railway authentication/deployment state:
 - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` fails because `/health` returns Railway fallback `404 Application not found`.
 - `curl -i https://alphavyuh-production.up.railway.app/health` confirms `x-railway-fallback: true`.
 - Rechecked on 2026-05-18 after the Professional Access cleanup; Railway auth and production `/health` remain in the same blocked state.
+- Owner-gated tracking issue: [#137 Railway production backend recovery](https://github.com/prasanth-cloud/AlphaVyuh/issues/137).
 
 Next required owner action:
 
