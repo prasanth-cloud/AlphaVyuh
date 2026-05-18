@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { allowClientMockFallback } from "@/lib/runtime-mode";
+import { API_BASE_URL } from "@/lib/api-base";
 
-const API = process.env.NEXT_PUBLIC_API_URL!;
+const API = API_BASE_URL;
 const useMockFallback = allowClientMockFallback();
 
 // ── Types ─────────────────────────────────────────────────────────────────────

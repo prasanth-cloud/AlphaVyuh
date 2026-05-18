@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "./supabase/client";
 import type { Session } from "@supabase/supabase-js";
+import { apiUrl } from "./api-base";
 
 export type ApiUser = {
   id: string;
@@ -16,7 +17,7 @@ export type ApiUser = {
 };
 
 export async function fetchMe(accessToken: string): Promise<ApiUser | null> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/me`, {
+  const res = await fetch(apiUrl("/api/v1/me"), {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return null;

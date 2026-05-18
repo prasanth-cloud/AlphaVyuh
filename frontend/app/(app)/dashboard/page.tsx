@@ -16,6 +16,7 @@ import {
 } from '@/lib/api'
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
+import { describeMarketDataError } from '@/lib/data-errors'
 
 function safeNumber(value: unknown, fallback = 0): number {
   const numeric = typeof value === 'number' ? value : Number(value)
@@ -528,7 +529,7 @@ export default function DashboardPage() {
       markAppTiming('market-overview-loaded')
       writeDashboardSnapshotCache(snapshot.overview, snapshot.health)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load market data')
+      setError(describeMarketDataError(e))
     } finally {
       setLoading(false)
     }
@@ -628,9 +629,10 @@ export default function DashboardPage() {
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Error */}
       {error && (
-        <div style={{ padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          {error}
+        <div style={{ padding: '10px 16px', background: 'var(--loss-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 13, color: 'var(--loss)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ flex: '1 1 320px' }}>{error}</span>
           <button onClick={load} style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>Retry</button>
+          <a href="/data" style={{ color: 'var(--accent)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Data status</a>
         </div>
       )}
 
@@ -752,8 +754,8 @@ export default function DashboardPage() {
       {!loading && !data && !error && (
         <div>
           <EmptyState
-            title="No market data available"
-            description="Market data loads after the trading session closes (after 3:30 PM IST)."
+            title="Market data is not connected"
+            description="The dashboard needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
             action={{ label: 'Retry', onClick: load }}
           />
         </div>

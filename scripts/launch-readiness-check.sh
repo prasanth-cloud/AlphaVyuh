@@ -84,4 +84,11 @@ else
   echo
 fi
 
+if [[ "${PRODUCTION_API_URL:-${NEXT_PUBLIC_API_URL:-}}" != "" ]]; then
+  run_step "Production API data smoke" npm run check:production-api
+else
+  echo "Skipping production API data smoke. Set PRODUCTION_API_URL or NEXT_PUBLIC_API_URL to enable it."
+  echo
+fi
+
 echo "Launch readiness check complete."
