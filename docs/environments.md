@@ -110,7 +110,7 @@ bun run db:push:staging
 | Vercel branch | `main` → auto-deploys |
 | Frontend URL | `https://alphavyuh.com` |
 | Backend URL | `https://alphavyuh-production.up.railway.app` |
-| Backend deploy | Railway (auto-rebuild on push to `main`) |
+| Backend deploy | Railway backend service, verified with `npm run check:data-recovery` |
 
 ### Promotion: staging → production
 
@@ -129,6 +129,51 @@ gh pr create --base main --title "feat: promote staging to prod"
 #    Paste contents of supabase/migrations/<NNN>_<description>.sql
 #    Read through the SQL before clicking Run
 ```
+
+### Railway backend recovery
+
+If `https://alphavyuh-production.up.railway.app/health` returns Railway fallback
+`404 Application not found`, the production API is not serving the FastAPI app.
+First prove whether the data store or the hosting layer is failing:
+
+```bash
+npm run check:data-recovery
+```
+
+When the command reports fresh Supabase EOD rows but missing Railway deployment
+access, use one of these recovery paths.
+
+GitHub Actions path:
+
+```bash
+export RAILWAY_TOKEN=...
+export RAILWAY_PROJECT_ID=...
+export RAILWAY_SERVICE=...
+# Optional:
+# export RAILWAY_WORKSPACE=...
+# export PRODUCTION_API_BEARER_TOKEN=...
+
+npm run prepare:railway-recovery-secrets -- --apply --run-workflow
+npm run check:data-recovery
+```
+
+Local Railway CLI path:
+
+```bash
+railway login
+npm run recover:railway-backend
+npm run check:data-recovery
+```
+
+If local Railway says the repo is not linked, run `railway link` from `backend/`,
+then retry `npm run recover:railway-backend`.
+
+Production data recovery is complete only when:
+
+- `npm run check:data-recovery` passes.
+- `npm run check:production-api:railway` passes.
+- Browser smoke confirms dashboard, scanner, watchlist chart, full chart, and
+  data page show real EOD production data.
 
 ### What is gated in production
 

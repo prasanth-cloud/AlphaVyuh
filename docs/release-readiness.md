@@ -27,6 +27,8 @@ Run these before release:
 
 ```bash
 npm run launch:check
+npm run check:data-recovery
+npm run check:production-api:railway
 # To skip local browser server smoke in constrained shells only:
 # SKIP_BROWSER_SMOKE=1 npm run launch:check
 # To include read-only Kite/Upstox account smoke when tokens are available:
@@ -54,6 +56,25 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 ```
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
+
+Railway recovery gate:
+
+- If `npm run check:data-recovery` fails because Supabase has fresh EOD rows but
+  Railway returns fallback `404 Application not found`, this is a backend hosting
+  recovery issue.
+- Add Railway recovery secrets with:
+
+```bash
+export RAILWAY_TOKEN=...
+export RAILWAY_PROJECT_ID=...
+export RAILWAY_SERVICE=...
+npm run prepare:railway-recovery-secrets -- --apply --run-workflow
+npm run check:data-recovery
+```
+
+- Or recover locally after `railway login` with `npm run recover:railway-backend`.
+- Do not claim production EOD data is restored until the production API smoke and
+  authenticated browser smoke pass against `https://www.alphavyuh.com`.
 
 Read-only broker account smoke, when real credentials are available:
 
@@ -100,6 +121,9 @@ symbol, side, quantity, order type, and sandbox/live mode.
 - Kite mode is used only for connected broker users.
 - TrueData/GlobalDatafeeds mode is used only after data redistribution terms are approved.
 - Chart candles, quotes, scanner, watchlists, journal, alerts, and portfolio have visible non-empty states.
+- `npm run check:data-recovery` passes for the production API and raw Supabase EOD store.
+- `npm run check:production-api:railway` returns current market breadth and enough
+  current RELIANCE daily candles for watchlist/full-chart use.
 
 ## UX Checklist
 
