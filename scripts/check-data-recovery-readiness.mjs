@@ -211,7 +211,7 @@ async function checkGithubSecrets() {
       "fail",
       "GitHub recovery secrets",
       `Missing required secrets: ${missingRequired.join(", ")}.`,
-      "Add the missing secrets, then run the manual Railway Backend Recovery workflow.",
+      "Export Railway values and run `npm run prepare:railway-recovery-secrets -- --apply`, then run the manual Railway Backend Recovery workflow.",
     );
     return false;
   }
@@ -266,7 +266,7 @@ async function checkRecoveryWorkflowRuns() {
       "warn",
       "Railway recovery workflow",
       "No Railway Backend Recovery workflow runs found.",
-      "After adding Railway secrets, run the manual Railway Backend Recovery workflow.",
+      "After adding Railway secrets, run the manual Railway Backend Recovery workflow or `npm run prepare:railway-recovery-secrets -- --apply --run-workflow`.",
     );
     return false;
   }
