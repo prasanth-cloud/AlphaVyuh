@@ -1901,7 +1901,7 @@ export async function verifyPayment(data: {
   return res.json();
 }
 
-export async function applyFounderPlan(code: string): Promise<{ status: string; plan: string; expires_at: string; billing: string }> {
+export async function applyAccessPlan(code: string): Promise<{ status: string; plan: string; expires_at: string; billing: string }> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/payments/founder/apply`, {
     method: "POST",

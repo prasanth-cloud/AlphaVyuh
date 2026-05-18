@@ -7,7 +7,7 @@ import { Check, Zap, Sparkles, Crown, Copy, Gift } from "lucide-react";
 import {
   getMe, updateMe,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
-  getPaymentConfig, applyFounderPlan,
+  getPaymentConfig, applyAccessPlan,
   type UserProfile, type PlanStatus, type PaymentConfig,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
@@ -225,8 +225,8 @@ function SettingsContent() {
   const [billingCurrency, setBillingCurrency] = useState<Currency>("INR");
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const [referralCode, setReferralCode] = useState<string>("");
-  const [founderCode, setFounderCode] = useState("FOUNDER100");
-  const [applyingFounder, setApplyingFounder] = useState(false);
+  const [accessCode, setAccessCode] = useState("");
+  const [applyingAccess, setApplyingAccess] = useState(false);
 
   useEffect(() => {
     const c = profile?.billing_currency;
@@ -322,20 +322,20 @@ function SettingsContent() {
     }
   };
 
-  async function handleApplyFounder() {
-    const code = founderCode.trim();
+  async function handleApplyAccess() {
+    const code = accessCode.trim();
     if (!code) { showToast("Enter an access code", false); return; }
-    setApplyingFounder(true);
+    setApplyingAccess(true);
     try {
-      const result = await applyFounderPlan(code);
+      const result = await applyAccessPlan(code);
       showToast("Professional Access plan activated", true);
-      trackEvent("founder_plan_applied", { code });
+      trackEvent("professional_access_code_applied");
       setPlanStatus({ plan: result.plan, expires_at: result.expires_at, active: true });
       await loadBilling();
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Access code failed", false);
     } finally {
-      setApplyingFounder(false);
+      setApplyingAccess(false);
     }
   }
 
@@ -614,23 +614,29 @@ function SettingsContent() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <input
-                    value={founderCode}
-                    onChange={(event) => setFounderCode(event.target.value.toUpperCase())}
+                    value={accessCode}
+                    onChange={(event) => setAccessCode(event.target.value.toUpperCase())}
+                    placeholder="ACCESS CODE"
+                    aria-label="Professional Access code"
                     className="rounded-[8px] px-3 py-2.5 text-[13px] font-mono outline-none"
                     style={{ background: "rgba(244,247,251,0.06)", border: "1px solid rgba(244,247,251,0.14)", color: "var(--app-text1)", width: 140 }}
                   />
                   <button
-                    onClick={handleApplyFounder}
-                    disabled={applyingFounder}
+                    onClick={handleApplyAccess}
+                    disabled={applyingAccess}
                     className="inline-flex items-center gap-2 rounded-[8px] px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60"
                     style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
                   >
                     <Gift size={14} />
-                    {applyingFounder ? "Applying..." : "Apply"}
+                    {applyingAccess ? "Applying..." : "Apply"}
                   </button>
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(founderCode);
+                      if (!accessCode.trim()) {
+                        showToast("Enter an access code first", false);
+                        return;
+                      }
+                      navigator.clipboard.writeText(accessCode);
                       showToast("Access code copied!", true);
                     }}
                     className="inline-flex items-center gap-2 rounded-[8px] px-3 py-2.5 text-[13px] font-semibold"
