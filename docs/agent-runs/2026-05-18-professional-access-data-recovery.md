@@ -44,6 +44,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Replaced the Supabase invite email's founder-beta wording with Professional Access account language.
 - Replaced backend live-source metadata's `beta` confidence/default license wording with account-scoped provider language.
 - Reworked `/access` from a tester/research page into a professional access overview with workflow, included capabilities, support, and data/execution policy.
+- Added a top-bar Data API outage signal so authenticated screens show `Data API down` instead of implying the latest EOD session is reachable when Railway returns fallback 404.
+- Reworded market-data outage errors from live-data language to EOD-compatible market-data service language.
 
 ## Validation
 
@@ -85,6 +87,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run typecheck` passed after adding canonical `/access` and redirecting `/beta`.
   - Active customer-facing code/template sweep no longer finds legacy beta posture copy in `frontend/app`, `frontend/components`, `frontend/lib`, `backend/app`, or `supabase/templates`.
   - `/access` release and layout smoke assertions now verify professional workflow/policy copy instead of tester/interview copy.
+- Frontend unit tests cover the market-data outage copy used when Railway returns fallback 404 or network fetch fails.
+- Frontend unit tests cover the `Data API down` presentation used by the app-shell data mode pill.
 
 ## Production Data Recovery Status
 

@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import FeedbackWidget from '@/components/FeedbackWidget'
 import { clearAuthHeaderCache, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
+import { API_BASE_URL } from '@/lib/api-base'
+import { dataModePresentation, type ApiReachability } from '@/lib/data-mode'
 import { markAppTiming } from '@/lib/performance'
 import { useWorkflowState } from '@/lib/workflow'
 
@@ -170,13 +172,36 @@ function DataModePill() {
   const configuredMock = process.env.NEXT_PUBLIC_DATA_MODE === 'mock'
   const allowFallback = process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === 'true'
   const demo = !forceLive && (configuredMock || allowFallback)
-  const label = forceLive ? 'Provider data' : demo ? 'Demo data' : 'Latest session'
-  const color = forceLive ? 'var(--gain)' : demo ? 'var(--warn)' : 'var(--text-tertiary)'
-  const title = forceLive
-    ? 'Provider-data mode. Market data remains informational and requires source/freshness checks.'
-    : demo
-      ? 'Demo data mode. Charts and market views use deterministic sample data when market data is unavailable.'
-      : 'Market data mode. Market views use the latest completed market snapshot, not live intraday data.'
+  const [apiReachable, setApiReachable] = useState<ApiReachability>(demo ? 'ok' : 'unknown')
+
+  useEffect(() => {
+    if (demo) return
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 1800)
+    fetch(`${API_BASE_URL}/health`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          setApiReachable('down')
+          return
+        }
+        const text = await response.text()
+        setApiReachable(text.toLowerCase().includes('application not found') ? 'down' : 'ok')
+      })
+      .catch(() => setApiReachable('down'))
+      .finally(() => window.clearTimeout(timeout))
+
+    return () => {
+      controller.abort()
+      window.clearTimeout(timeout)
+    }
+  }, [demo])
+
+  const { label, tone, title } = dataModePresentation({ forceLive, demo, apiReachable })
+  const down = tone === 'loss'
+  const color = tone === 'loss' ? 'var(--loss)' : tone === 'gain' ? 'var(--gain)' : tone === 'warn' ? 'var(--warn)' : 'var(--text-tertiary)'
 
   return (
     <Link
@@ -188,7 +213,7 @@ function DataModePill() {
       <span style={{
         width: 6, height: 6, borderRadius: '50%',
         background: color,
-        boxShadow: demo ? '0 0 0 3px rgba(217,119,6,0.14)' : undefined,
+        boxShadow: down ? '0 0 0 3px rgba(255,92,108,0.14)' : demo ? '0 0 0 3px rgba(217,119,6,0.14)' : undefined,
         flexShrink: 0,
       }} />
       <span style={{
