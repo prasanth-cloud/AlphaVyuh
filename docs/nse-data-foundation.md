@@ -1,8 +1,8 @@
 # NSE Data Foundation
 
-AlphaVyuh's default market-data foundation is official NSE bhavcopy data. This is the correct low-cost beta path for Indian swing trading: it is complete after market close, stable for scanning, and suitable for daily/weekly/monthly charting.
+AlphaVyuh's default market-data foundation is official NSE bhavcopy data. This is the correct low-cost Professional Access path for Indian swing trading: it is complete after market close, stable for scanning, and suitable for daily/weekly/monthly charting.
 
-## Beta Data Target
+## Professional Access Data Target
 
 - Active NSE EQ universe available in search, scanner, watchlist, and chart routes.
 - At least five years of daily OHLCV rows for active NSE EQ symbols where NSE historical bhavcopy data exists.

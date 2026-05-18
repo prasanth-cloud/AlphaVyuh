@@ -1,5 +1,5 @@
 name: Launch blocker
-description: Track a blocker that prevents public or beta launch confidence.
+description: Track a blocker that prevents public launch or Professional Access confidence.
 title: "[Launch Blocker]: "
 labels: ["type:launch-blocker", "status:blocked", "risk:owner-gated"]
 body:
@@ -42,4 +42,3 @@ body:
     id: safe_work_done
     attributes:
       label: Safe work already completed
-

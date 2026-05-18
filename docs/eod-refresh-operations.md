@@ -1,11 +1,11 @@
 # AlphaVyuh EOD Refresh Operations
 
 Date: 2026-05-07
-Launch mode: private/founder beta
+Launch mode: Professional Access
 
-AlphaVyuh beta uses EOD/free-first market data. Do not describe beta scanner,
-watchlist, or chart data as live unless a provider is explicitly enabled and
-the UI shows that provider state.
+AlphaVyuh Professional Access uses EOD/free-first market data. Do not describe
+scanner, watchlist, or chart data as live unless a provider is explicitly
+enabled and the UI shows that provider state.
 
 ## Daily Refresh Window
 
@@ -74,7 +74,7 @@ Recovery sequence:
 4. Do not hide degraded state in the UI to make the product look healthier.
 5. Record the failure and recovery notes in the launch issue or PR evidence.
 
-## Beta Guardrails
+## Professional Access Guardrails
 
 - No production Supabase changes outside reviewed migrations.
 - No paid/live provider switch without owner approval.

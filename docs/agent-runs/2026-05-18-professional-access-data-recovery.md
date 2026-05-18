@@ -17,6 +17,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | Backend Recovery Agent | Checked Railway CLI status and production API health. | Confirms data is still blocked at deployment, not frontend API normalization. | Railway CLI token remains expired; production backend still returns Railway fallback 404. |
 | Chart Data Agent | Rechecked production Supabase rows and fixed candle-window selection to return the latest EOD bars oldest-to-newest. | Full chart and watchlist charts will show current EOD context once Railway is restored instead of stale early-history windows. | Supabase had fresh 2026-05-18 rows; the bug was backend ordering/serialization, not missing market data. |
 | Release Hygiene Agent | Removed remaining active repo beta posture from issue templates and backend intraday errors. | Feedback intake and API errors now match the same Professional Access product posture as the app UI. | Historical docs can keep beta launch records, but active templates/errors should not reopen that language. |
+| Operations Agent | Renamed active GitHub feedback templates and current runbooks away from beta/founder wording. | The operating layer now matches the product posture testers and contributors see in the app. | Even after UI cleanup, issue templates and runbooks can quietly preserve old positioning. |
 
 ## Changes
 
@@ -51,6 +52,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Removed the visible `FOUNDER100` billing access-code default from Settings and replaced it with a neutral Professional Access code input.
 - Added a Professional Access payment-code API path at `/api/v1/payments/access/apply`; the old `/founder/apply` path remains as a compatibility alias.
 - Normalized admin-created invite codes to the `professional_access` plan while accepting legacy stored `founder` invite rows as compatible.
+- Renamed active GitHub issue templates from beta-specific filenames to Professional Access product/workflow templates.
+- Reworded active operations docs for EOD refresh, release readiness, customer launch, and mission control from beta/founder posture to Professional Access posture.
 
 ## Validation
 
@@ -127,6 +130,17 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run test:e2e:layout` passed: 16 tests.
   - `npm audit --audit-level=moderate` passed: 0 vulnerabilities.
   - `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt` passed: no known vulnerabilities.
+- Follow-up Professional Access operations cleanup validation:
+  - Active forbidden-posture sweep across app/backend/templates/current ops docs found no `private beta`, `founder beta`, `market beta`, `beta access`, `launch surface`, `market command center`, `FOUNDER100`, `founder plan`, or `founder code` matches.
+  - Remaining `founder` matches in current ops surfaces are owner/role references, not product positioning.
+  - `npm run lint` passed.
+  - `npm run typecheck` passed.
+  - `npm --prefix frontend run test -- --run` passed: 72 tests.
+  - `backend/.venv/bin/python -m pytest backend/tests/test_waitlist_storage.py backend/tests/test_payments.py backend/tests/test_security_hardening.py` passed: 25 tests.
+  - `npm audit --audit-level=moderate` passed: 0 vulnerabilities.
+  - `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt` passed: no known vulnerabilities.
+  - `npm run test:e2e:layout` passed: 16 tests.
+  - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` still fails with Railway fallback `404 Application not found`, confirming the remaining blocker is Railway deployment/domain recovery.
 
 ## Production Data Recovery Status
 
