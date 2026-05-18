@@ -223,6 +223,72 @@ async function checkGithubSecrets() {
   return true;
 }
 
+async function checkRecoveryWorkflowRuns() {
+  const { code, stdout, stderr } = await run("gh", [
+    "run",
+    "list",
+    "--repo",
+    repo,
+    "--workflow",
+    "Railway Backend Recovery",
+    "--limit",
+    "1",
+    "--json",
+    "status,conclusion,createdAt,url,displayTitle",
+  ]);
+
+  if (code !== 0) {
+    addResult(
+      "warn",
+      "Railway recovery workflow",
+      summarizeOutput(stderr || stdout) || "Could not inspect Railway Backend Recovery workflow runs.",
+      "Check GitHub Actions manually after adding Railway secrets.",
+    );
+    return false;
+  }
+
+  let runs = [];
+  try {
+    runs = JSON.parse(stdout || "[]");
+  } catch {
+    addResult(
+      "warn",
+      "Railway recovery workflow",
+      `Could not parse workflow run output: ${summarizeOutput(stdout)}`,
+      "Check GitHub Actions manually after adding Railway secrets.",
+    );
+    return false;
+  }
+
+  const latest = runs[0];
+  if (!latest) {
+    addResult(
+      "warn",
+      "Railway recovery workflow",
+      "No Railway Backend Recovery workflow runs found.",
+      "After adding Railway secrets, run the manual Railway Backend Recovery workflow.",
+    );
+    return false;
+  }
+
+  const status = latest.status === "completed"
+    ? latest.conclusion || "completed"
+    : latest.status || "unknown";
+  const detail = `Latest run ${latest.createdAt || "unknown time"} is ${status}${latest.url ? `: ${latest.url}` : ""}.`;
+  if (latest.status === "completed" && latest.conclusion === "success") {
+    addResult("pass", "Railway recovery workflow", detail);
+    return true;
+  }
+
+  addResult(
+    "warn",
+    "Railway recovery workflow",
+    detail,
+    "Inspect the latest workflow logs or rerun after fixing Railway secrets/project inputs.",
+  );
+  return false;
+}
+
 async function checkLocalRailway() {
   const whoami = await run("railway", ["whoami"], { cwd: backendDir });
   if (whoami.code !== 0) {
@@ -250,7 +316,7 @@ async function checkLocalRailway() {
   return true;
 }
 
-function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, localRailwayReady }) {
+function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady }) {
   console.log(`AlphaVyuh production data recovery preflight`);
   console.log(`API URL: ${apiUrl}`);
   console.log(`GitHub repo: ${repo}`);
@@ -273,7 +339,7 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, loc
     console.log("Data store status: Supabase EOD data is present; the remaining issue is API hosting/recovery.");
   }
 
-  if (githubRecoveryReady || localRailwayReady) {
+  if (githubRecoveryReady || recoveryWorkflowReady || localRailwayReady) {
     console.log("Recovery status: backend still needs recovery, but at least one deploy path appears ready.");
     console.log("Run `npm run recover:railway-backend` locally or the manual Railway Backend Recovery GitHub workflow.");
     return;
@@ -284,14 +350,15 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, loc
 }
 
 try {
-  const [productionApiOk, supabaseFresh, githubRecoveryReady, localRailwayReady] = await Promise.all([
+  const [productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady] = await Promise.all([
     checkProductionApi(),
     checkSupabaseEodFreshness(),
     checkGithubSecrets(),
+    checkRecoveryWorkflowRuns(),
     checkLocalRailway(),
   ]);
 
-  printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, localRailwayReady });
+  printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady });
   process.exit(productionApiOk ? 0 : 1);
 } catch (error) {
   console.error(`Production data recovery preflight failed unexpectedly: ${error instanceof Error ? error.message : String(error)}`);

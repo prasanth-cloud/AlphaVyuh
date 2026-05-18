@@ -95,12 +95,17 @@ function serveSupabaseRest(request, response) {
   return true;
 }
 
-function makeFakeBin({ secrets = [], railwayReady = true }) {
+function makeFakeBin({ secrets = [], railwayReady = true, workflowRuns = [] }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alphavyuh-recovery-bin-"));
   const secretOutput = secrets.map((secret) => `${secret}\t2026-05-18T00:00:00Z`).join("\n");
+  const workflowOutput = JSON.stringify(workflowRuns);
   const gh = `#!/usr/bin/env bash
 if [[ "$1" == "secret" && "$2" == "list" ]]; then
   printf '%b' ${JSON.stringify(secretOutput)}
+  exit 0
+fi
+if [[ "$1" == "run" && "$2" == "list" ]]; then
+  printf '%s' ${JSON.stringify(workflowOutput)}
   exit 0
 fi
 echo "unexpected gh args: $*" >&2
@@ -162,16 +167,27 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
   assert.notEqual(code, 0, "preflight should fail when API is down and no recovery path is ready");
   assert.match(stdout, /Missing required secrets: RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_SERVICE/);
+  assert.match(stdout, /No Railway Backend Recovery workflow runs found/);
   assert.match(stdout, /Unauthorized\. Please run railway login again/);
   assert.match(stdout, /Recovery status: backend is down and no deploy path is ready yet/);
   assert.equal(stderr, "");
 });
 
 await withServer(serveRailwayFallback, async (apiUrl) => {
-  const fakeBin = makeFakeBin({ secrets: requiredSecrets, railwayReady: false });
+  const fakeBin = makeFakeBin({
+    secrets: requiredSecrets,
+    railwayReady: false,
+    workflowRuns: [{
+      status: "completed",
+      conclusion: "failure",
+      createdAt: "2026-05-18T21:00:00Z",
+      url: "https://github.com/prasanth-cloud/AlphaVyuh/actions/runs/1",
+    }],
+  });
   const { code, stdout } = await runPreflight(apiUrl, fakeBin);
   assert.notEqual(code, 0, "preflight should fail until production API recovers");
   assert.match(stdout, /Required Railway recovery secrets are present/);
+  assert.match(stdout, /Latest run 2026-05-18T21:00:00Z is failure/);
   assert.match(stdout, /Recovery status: backend still needs recovery, but at least one deploy path appears ready/);
 });
 
