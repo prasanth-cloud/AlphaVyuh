@@ -1831,19 +1831,19 @@ export type PaymentConfig = {
   configured: boolean;
   mode: "live" | "test" | "disabled";
   key_prefix: string;
-  founder_plan_available: boolean;
+  access_code_available?: boolean;
 };
 
 export async function getPaymentConfig(): Promise<PaymentConfig> {
   if (shouldUseMockFallback()) {
-    return { gateway: "razorpay", configured: false, mode: "disabled", key_prefix: "", founder_plan_available: false };
+    return { gateway: "razorpay", configured: false, mode: "disabled", key_prefix: "", access_code_available: false };
   }
   try {
     const res = await fetch(`${API}/api/v1/payments/config`, { headers: publicHeaders });
     if (!res.ok) throw new Error("Payment config unavailable");
     return res.json();
   } catch {
-    return { gateway: "razorpay", configured: false, mode: "disabled", key_prefix: "", founder_plan_available: false };
+    return { gateway: "razorpay", configured: false, mode: "disabled", key_prefix: "", access_code_available: false };
   }
 }
 
@@ -1903,7 +1903,7 @@ export async function verifyPayment(data: {
 
 export async function applyAccessPlan(code: string): Promise<{ status: string; plan: string; expires_at: string; billing: string }> {
   const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/payments/founder/apply`, {
+  const res = await fetch(`${API}/api/v1/payments/access/apply`, {
     method: "POST",
     headers,
     body: JSON.stringify({ code }),
