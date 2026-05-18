@@ -73,6 +73,9 @@ jobs:
       - name: Frontend dependency audit
         run: npm audit --audit-level=moderate
 
+      - name: Production API checker tests
+        run: npm run test:production-api-check
+
       - name: Release readiness browser smoke
         run: npm run test:e2e:release
 
@@ -81,4 +84,3 @@ jobs:
 
       - name: Backend dependency audit
         run: python -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off
-

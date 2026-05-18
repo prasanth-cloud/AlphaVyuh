@@ -28,6 +28,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Added an optional `RUN_RAILWAY_BACKEND_RECOVERY=1 npm run launch:check` path so launch readiness can run the same backend recovery after Railway login.
 - Confirmed production Vercel `NEXT_PUBLIC_API_URL` points to the intended Railway backend, so the current empty-data failure is backend deployment recovery rather than frontend env drift.
 - Improved `npm run check:production-api` to identify Railway fallback responses when the backend app is not attached/deployed.
+- Added `npm run test:production-api-check` and wired it into the Agent PR Gate so the Railway fallback diagnosis is regression-tested.
 
 ## Validation
 
@@ -53,6 +54,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - Production Vercel env inspection confirmed `NEXT_PUBLIC_API_URL` targets the Railway production backend.
   - `npm --prefix frontend run test -- --run tests/unit/api-base.test.ts` passed: 3 tests.
   - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` now fails with an explicit Railway fallback deployment hint.
+  - `npm run test:production-api-check` passed.
 
 ## Production Data Recovery Status
 
