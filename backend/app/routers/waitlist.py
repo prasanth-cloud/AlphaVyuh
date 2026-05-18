@@ -11,7 +11,7 @@ from app.services.supabase import settings
 router = APIRouter(prefix="/api/v1", tags=["waitlist"])
 
 PROFESSIONAL_ACCESS_PLAN = "professional_access"
-LEGACY_INVITE_PLANS = {"founder"}
+LEGACY_INVITE_PLANS = {"founder"}  # Older invite codes normalize to Professional Access.
 
 
 class WaitlistRequest(BaseModel):

@@ -308,10 +308,10 @@ test.describe("Workflow layout smoke", () => {
 
   test("billing launch posture blocks checkout until production payments are configured", async ({ page }) => {
     await page.goto("/settings?tab=billing", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("billing-launch-posture")).toContainText(/Professional Access billing is not open yet|Production billing ready/i, { timeout: 15_000 });
+    await expect(page.getByTestId("billing-launch-posture")).toContainText(/Billing is not enabled for this account|Production billing ready/i, { timeout: 15_000 });
 
     const posture = await page.getByTestId("billing-launch-posture").textContent();
-    if (posture?.includes("Professional Access billing is not open yet")) {
+    if (posture?.includes("Billing is not enabled for this account")) {
       await expect(page.getByRole("button", { name: "Checkout disabled" }).first()).toBeDisabled();
       await expect(page.locator("body")).toContainText(/Professional Access/i);
       await expect(page.locator("body")).not.toContainText(/FOUNDER/i);

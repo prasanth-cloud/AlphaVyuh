@@ -180,7 +180,7 @@ def test_checkout_kill_switch_defaults_to_disabled(monkeypatch):
         payments._ensure_checkout_enabled()
 
     assert exc.value.status_code == 403
-    assert "disabled" in exc.value.detail
+    assert "unavailable for this account" in exc.value.detail
 
 
 def test_payment_verify_uses_order_metadata_not_client_plan():
