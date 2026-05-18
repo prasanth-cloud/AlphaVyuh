@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import fs from "node:fs";
 import path from "node:path";
 
 const rootDir = process.cwd();
 const repo = process.env.GITHUB_REPOSITORY || process.env.ALPHAVYUH_GITHUB_REPO || "prasanth-cloud/AlphaVyuh";
 const apiUrl = normalizeUrl(process.env.PRODUCTION_API_URL || process.env.NEXT_PUBLIC_API_URL || "https://alphavyuh-production.up.railway.app");
 const backendDir = process.env.ALPHAVYUH_BACKEND_DIR || path.join(rootDir, "backend");
+const backendEnv = readEnvFile(path.join(backendDir, ".env"));
+const supabaseUrl = normalizeUrl(process.env.SUPABASE_URL || backendEnv.SUPABASE_URL || "");
+const supabaseServiceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || backendEnv.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
 const requiredGithubSecrets = ["RAILWAY_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE"];
 const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN"];
@@ -17,6 +21,32 @@ function normalizeUrl(raw) {
     .trim()
     .replace(/[\r\n\t]/g, "")
     .replace(/\/+$/, "");
+}
+
+function readEnvFile(filePath) {
+  try {
+    const text = fs.readFileSync(filePath, "utf8");
+    const values = {};
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const index = line.indexOf("=");
+      if (index <= 0) continue;
+      const key = line.slice(0, index).trim();
+      let value = line.slice(index + 1).trim();
+      if (
+        value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")))
+      ) {
+        value = value.slice(1, -1);
+      }
+      values[key] = value;
+    }
+    return values;
+  } catch {
+    return {};
+  }
 }
 
 async function run(command, args, options = {}) {
@@ -76,6 +106,82 @@ async function checkProductionApi() {
     "Recover/reattach the Railway backend, then rerun this preflight.",
   );
   return false;
+}
+
+async function fetchSupabase(pathname, options = {}) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/${pathname}`, {
+    headers: {
+      apikey: supabaseServiceKey,
+      authorization: `Bearer ${supabaseServiceKey}`,
+      ...(options.count ? { Prefer: "count=exact" } : {}),
+    },
+  });
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text.slice(0, 200) };
+  }
+  if (!response.ok) {
+    throw new Error(`${pathname} returned ${response.status}: ${JSON.stringify(data).slice(0, 160)}`);
+  }
+  return { data, count: response.headers.get("content-range")?.split("/")?.[1] };
+}
+
+async function checkSupabaseEodFreshness() {
+  if (!supabaseUrl || !supabaseServiceKey) {
+    addResult(
+      "warn",
+      "Supabase EOD data",
+      "Skipped because SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY was not available in the environment or backend/.env.",
+      "Run from a configured machine or add Supabase env vars to verify the raw EOD store.",
+    );
+    return false;
+  }
+
+  try {
+    const latest = await fetchSupabase("daily_ohlcv?select=trade_date&order=trade_date.desc&limit=1");
+    const tradeDate = latest.data?.[0]?.trade_date;
+    if (!tradeDate) {
+      addResult("fail", "Supabase EOD data", "No daily_ohlcv rows were found.", "Run the EOD ingest before recovering the API host.");
+      return false;
+    }
+
+    const coverage = await fetchSupabase(
+      `daily_ohlcv?select=symbol&trade_date=eq.${encodeURIComponent(tradeDate)}&limit=1`,
+      { count: true },
+    );
+    const universe = await fetchSupabase("stock_universe?select=symbol&limit=1", { count: true });
+    const coverageCount = Number(coverage.count || 0);
+    const universeCount = Number(universe.count || 0);
+    const coverageRatio = universeCount > 0 ? coverageCount / universeCount : 0;
+
+    if (coverageCount < 100 || coverageRatio < 0.5) {
+      addResult(
+        "fail",
+        "Supabase EOD data",
+        `Latest daily_ohlcv date ${tradeDate} has weak coverage: ${coverageCount}/${universeCount || "unknown"} symbols.`,
+        "Run or inspect the EOD ingest before recovering the API host.",
+      );
+      return false;
+    }
+
+    addResult(
+      "pass",
+      "Supabase EOD data",
+      `Latest daily_ohlcv date ${tradeDate} has ${coverageCount}/${universeCount || "unknown"} symbols (${Math.round(coverageRatio * 100)}% coverage).`,
+    );
+    return true;
+  } catch (error) {
+    addResult(
+      "warn",
+      "Supabase EOD data",
+      error instanceof Error ? error.message : String(error),
+      "Inspect Supabase credentials/connectivity before treating this as an empty-data problem.",
+    );
+    return false;
+  }
 }
 
 async function checkGithubSecrets() {
@@ -144,7 +250,7 @@ async function checkLocalRailway() {
   return true;
 }
 
-function printResults({ productionApiOk, githubRecoveryReady, localRailwayReady }) {
+function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, localRailwayReady }) {
   console.log(`AlphaVyuh production data recovery preflight`);
   console.log(`API URL: ${apiUrl}`);
   console.log(`GitHub repo: ${repo}`);
@@ -163,6 +269,10 @@ function printResults({ productionApiOk, githubRecoveryReady, localRailwayReady 
     return;
   }
 
+  if (supabaseFresh) {
+    console.log("Data store status: Supabase EOD data is present; the remaining issue is API hosting/recovery.");
+  }
+
   if (githubRecoveryReady || localRailwayReady) {
     console.log("Recovery status: backend still needs recovery, but at least one deploy path appears ready.");
     console.log("Run `npm run recover:railway-backend` locally or the manual Railway Backend Recovery GitHub workflow.");
@@ -174,13 +284,14 @@ function printResults({ productionApiOk, githubRecoveryReady, localRailwayReady 
 }
 
 try {
-  const [productionApiOk, githubRecoveryReady, localRailwayReady] = await Promise.all([
+  const [productionApiOk, supabaseFresh, githubRecoveryReady, localRailwayReady] = await Promise.all([
     checkProductionApi(),
+    checkSupabaseEodFreshness(),
     checkGithubSecrets(),
     checkLocalRailway(),
   ]);
 
-  printResults({ productionApiOk, githubRecoveryReady, localRailwayReady });
+  printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, localRailwayReady });
   process.exit(productionApiOk ? 0 : 1);
 } catch (error) {
   console.error(`Production data recovery preflight failed unexpectedly: ${error instanceof Error ? error.message : String(error)}`);

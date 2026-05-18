@@ -23,6 +23,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | Recovery Workflow Agent | Passed optional `PRODUCTION_API_BEARER_TOKEN` through the Railway recovery workflow and recovery helper. | Once Railway is restored, the owner can prove authenticated scanner data from the same recovery run instead of doing a separate manual smoke. | Secrets should come from GitHub Actions secrets, not workflow text inputs. |
 | Product Copy QA Agent | Removed remaining active “early access” and “Founder” posture from public pricing and active launch-blocker intake. | The visible product and operating surfaces now sound like a professional platform, not a tester program. | Adjacent phrases can preserve beta energy even when the literal word “beta” is gone. |
 | Recovery Readiness Agent | Added `npm run check:data-recovery` to aggregate production API health, GitHub Railway secrets, and local Railway CLI readiness. | The owner can now run one command and see whether data recovery is complete, ready to deploy, or blocked by missing auth/secrets. | Repeated manual checks should become productized runbooks with tests, not chat-memory checklists. |
+| Supabase Freshness Agent | Extended the recovery preflight to verify the raw Supabase EOD store when credentials are available. | The command now separates empty database risk from API hosting failure in one report. | Current data is present; the visible website failure is Railway hosting, not missing EOD rows. |
 
 ## Changes
 
@@ -67,6 +68,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Tightened public posture checks so future public landing copy cannot reintroduce `early access` positioning.
 - Added `npm run check:data-recovery` and `npm run test:data-recovery-check` to make production data recovery readiness self-diagnosing.
 - Wired `npm run test:data-recovery-check` into the Agent PR Gate so the recovery preflight stays protected in CI.
+- Extended `npm run check:data-recovery` to load Supabase env from the process or `backend/.env` and verify latest `daily_ohlcv` coverage without printing secret values.
 
 ## Validation
 
@@ -184,7 +186,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `railway whoami && railway status --json` still fails with expired local Railway auth and requires `railway login`.
 - Follow-up recovery-readiness preflight validation:
   - `npm run test:data-recovery-check` passed with deterministic coverage for healthy API, missing deploy path, and ready GitHub-secret deploy path states.
-  - `npm run check:data-recovery` currently fails as designed, reporting Railway fallback `404 Application not found`, missing `RAILWAY_TOKEN` / `RAILWAY_PROJECT_ID` / `RAILWAY_SERVICE`, and expired local Railway auth.
+  - `npm run check:data-recovery` currently fails as designed, reporting Railway fallback `404 Application not found`, missing `RAILWAY_TOKEN` / `RAILWAY_PROJECT_ID` / `RAILWAY_SERVICE`, expired local Railway auth, and a passing Supabase EOD data check for `2026-05-18` with `3,147/3,447` symbols.
   - `npm run test:production-api-check` passed.
   - `npm run test:public-posture-check` passed.
   - `npm run lint` passed.
