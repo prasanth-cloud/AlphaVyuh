@@ -216,6 +216,72 @@ async def test_get_candles_returns_chart_coverage_metadata(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_get_candles_fetches_latest_window_and_returns_oldest_first(monkeypatch):
+    captured = {}
+
+    def _fake_fetch(_client, _symbol, **kwargs):
+        captured.update(kwargs)
+        return [
+            _daily_row("2026-05-03", 104),
+            _daily_row("2026-05-02", 102),
+            _daily_row("2026-05-01", 100),
+        ]
+
+    monkeypatch.setattr(charts, "get_admin_client", lambda: object())
+    monkeypatch.setattr(
+        charts,
+        "_resolve_chart_symbol",
+        lambda _client, symbol: (symbol, {"company_name": "Aubank", "sector": "Financial Services"}, None),
+    )
+    monkeypatch.setattr(charts, "_fetch_candle_rows", _fake_fetch)
+
+    response = await charts.get_candles(
+        "AUBANK",
+        timeframe="D",
+        from_date="2026-01-01",
+        to_date="2026-05-03",
+        limit=3,
+        adjusted=False,
+    )
+
+    assert captured["desc"] is True
+    assert [item["time"] for item in response["candles"]] == ["2026-05-01", "2026-05-02", "2026-05-03"]
+    assert response["latest"]["close"] == 104
+    assert response["source_metadata"]["as_of"] == "2026-05-03"
+
+
+@pytest.mark.anyio
+async def test_get_candles_serializes_missing_indicator_values_as_null(monkeypatch):
+    row = _daily_row("2026-05-03", 104)
+    row["ema_20"] = float("nan")
+    row["ema_50"] = float("nan")
+    row["ema_200"] = float("nan")
+    row["avg_volume_20d"] = float("nan")
+
+    monkeypatch.setattr(charts, "get_admin_client", lambda: object())
+    monkeypatch.setattr(
+        charts,
+        "_resolve_chart_symbol",
+        lambda _client, symbol: (symbol, {"company_name": "Aubank", "sector": "Financial Services"}, None),
+    )
+    monkeypatch.setattr(charts, "_fetch_candle_rows", lambda *_args, **_kwargs: [row])
+
+    response = await charts.get_candles(
+        "AUBANK",
+        timeframe="D",
+        from_date="2026-05-01",
+        to_date="2026-05-03",
+        limit=1,
+        adjusted=False,
+    )
+
+    assert response["candles"][0]["ema_20"] is None
+    assert response["candles"][0]["ema_50"] is None
+    assert response["candles"][0]["ema_200"] is None
+    assert response["latest"]["volume_ratio"] is None
+
+
+@pytest.mark.anyio
 async def test_get_weekly_candles_coverage_uses_aggregated_dates(monkeypatch):
     rows = [
         _daily_row("2026-01-01", 100),

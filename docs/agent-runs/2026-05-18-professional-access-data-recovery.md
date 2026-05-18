@@ -15,6 +15,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | Frontend Polish Agent | Removed legacy beta posture from public, auth, app, chart, broker, billing, and data surfaces. | The product feels more mature while preserving broker/order safety. | Small repeated labels create a large trust impression across the app. |
 | QA Agent | Updated assertions and added a customer-facing legacy-posture route sweep. | Prevents future regressions into old launch-state language. | Playwright mock and release configs must be run with the correct auth mode. |
 | Backend Recovery Agent | Checked Railway CLI status and production API health. | Confirms data is still blocked at deployment, not frontend API normalization. | Railway CLI token remains expired; production backend still returns Railway fallback 404. |
+| Chart Data Agent | Rechecked production Supabase rows and fixed candle-window selection to return the latest EOD bars oldest-to-newest. | Full chart and watchlist charts will show current EOD context once Railway is restored instead of stale early-history windows. | Supabase had fresh 2026-05-18 rows; the bug was backend ordering/serialization, not missing market data. |
 
 ## Changes
 
@@ -31,6 +32,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Added `npm run test:production-api-check` and wired it into the Agent PR Gate so the Railway fallback diagnosis is regression-tested.
 - Created GitHub launch blocker issue [#137](https://github.com/prasanth-cloud/AlphaVyuh/issues/137) for the owner-gated Railway backend recovery.
 - Added a manual `Railway Backend Recovery` GitHub Actions workflow so production recovery can run from GitHub after the owner adds `RAILWAY_TOKEN` and provides the Railway project/service inputs. The workflow fails fast if the token secret is missing.
+- Fixed the candle endpoint to fetch the latest available EOD window and return it oldest-to-newest for chart rendering.
+- Hardened candle serialization so missing indicator fields become `null` instead of leaking `NaN` into JSON responses.
 
 ## Validation
 
@@ -58,6 +61,11 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` now fails with an explicit Railway fallback deployment hint.
   - `npm run test:production-api-check` passed.
   - `bash -n scripts/recover-railway-backend.sh` passed after adding explicit project-link support.
+- Chart recovery follow-up validation passed:
+  - Supabase read-only check found latest `daily_ohlcv` date `2026-05-18` with 3,147 symbols.
+  - `backend/.venv/bin/python -m pytest backend/tests/test_charts.py` passed: 9 tests.
+  - Local backend smoke against production Supabase passed: `ALLOW_LOCAL_API_CHECK=1 PRODUCTION_API_URL=http://127.0.0.1:8017 npm run check:production-api`.
+  - Local `RELIANCE` daily candles with `limit=500` now return `2024-05-30` through `2026-05-18`; `limit=3000` returns all 1,301 available rows from `2021-05-03` through `2026-05-18`.
 
 ## Production Data Recovery Status
 
@@ -69,6 +77,7 @@ Blocked by Railway authentication/deployment state:
 - Rechecked on 2026-05-18 after the Professional Access cleanup; Railway auth and production `/health` remain in the same blocked state.
 - Owner-gated tracking issue: [#137 Railway production backend recovery](https://github.com/prasanth-cloud/AlphaVyuh/issues/137).
 - A repo search found no committed Railway project ID or backend service ID/name, so the GitHub recovery workflow requires the owner to provide those inputs when running it.
+- Supabase production data is present and current; the remaining production outage is Railway hosting/domain recovery.
 
 Next required owner action:
 
