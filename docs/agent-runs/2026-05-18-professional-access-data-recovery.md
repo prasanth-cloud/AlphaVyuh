@@ -43,6 +43,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Promoted the access guide to canonical `/access` and made legacy `/beta` redirect there so public navigation no longer points at beta-branded URLs.
 - Replaced the Supabase invite email's founder-beta wording with Professional Access account language.
 - Replaced backend live-source metadata's `beta` confidence/default license wording with account-scoped provider language.
+- Reworked `/access` from a tester/research page into a professional access overview with workflow, included capabilities, support, and data/execution policy.
 
 ## Validation
 
@@ -83,6 +84,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `backend/.venv/bin/python -m pytest backend/tests/test_market_context.py` passed after replacing live-source beta metadata.
   - `npm run typecheck` passed after adding canonical `/access` and redirecting `/beta`.
   - Active customer-facing code/template sweep no longer finds legacy beta posture copy in `frontend/app`, `frontend/components`, `frontend/lib`, `backend/app`, or `supabase/templates`.
+  - `/access` release and layout smoke assertions now verify professional workflow/policy copy instead of tester/interview copy.
 
 ## Production Data Recovery Status
 

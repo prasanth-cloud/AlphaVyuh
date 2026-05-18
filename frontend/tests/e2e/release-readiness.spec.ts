@@ -18,11 +18,11 @@ test.describe("Release readiness — public and auth boundary", () => {
     const response = await page.goto("/access");
 
     expect(response?.ok()).toBeTruthy();
-    await expect(page.getByRole("heading", { name: /Test the complete trading workflow/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Operate your EOD trading workflow/i })).toBeVisible();
     await expect(page.locator("body")).toContainText(/support@alphavyuh\.com/i);
     await expect(page.locator("body")).toContainText(/Feedback and bug report paths/i);
-    await expect(page.locator("body")).toContainText(/Professional Access checklist/i);
-    await expect(page.locator("body")).toContainText(/Current access limitations/i);
+    await expect(page.locator("body")).toContainText(/Professional Access workflow/i);
+    await expect(page.locator("body")).toContainText(/Data and execution policy/i);
     await expect(page.locator("body")).toContainText(/No live\/sandbox broker order placement/i);
   });
 
@@ -31,7 +31,7 @@ test.describe("Release readiness — public and auth boundary", () => {
 
     expect(response?.ok()).toBeTruthy();
     await expect(page).toHaveURL(/\/access$/);
-    await expect(page.getByRole("heading", { name: /Test the complete trading workflow/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Operate your EOD trading workflow/i })).toBeVisible();
   });
 
   test("baseline browser security headers are present", async ({ request }) => {
