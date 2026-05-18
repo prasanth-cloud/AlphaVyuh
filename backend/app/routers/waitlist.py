@@ -10,6 +10,9 @@ from app.services.supabase import settings
 
 router = APIRouter(prefix="/api/v1", tags=["waitlist"])
 
+PROFESSIONAL_ACCESS_PLAN = "professional_access"
+LEGACY_INVITE_PLANS = {"founder"}
+
 
 class WaitlistRequest(BaseModel):
     email: EmailStr
@@ -20,7 +23,7 @@ class WaitlistRequest(BaseModel):
 class InviteCreateRequest(BaseModel):
     email: EmailStr | None = None
     max_uses: int = 1
-    plan: str = "founder"
+    plan: str = PROFESSIONAL_ACCESS_PLAN
 
 
 def _admin_emails() -> set[str]:
@@ -40,6 +43,13 @@ def _require_admin(user_id: str) -> None:
 def _new_invite_code() -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "AV-" + "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+def _normalize_invite_plan(plan: str | None) -> str:
+    normalized = (plan or "").strip().lower()
+    if not normalized or normalized in LEGACY_INVITE_PLANS:
+        return PROFESSIONAL_ACCESS_PLAN
+    return normalized
 
 
 def _is_missing_launch_column(exc: Exception) -> bool:
@@ -110,7 +120,7 @@ async def create_invite_code(body: InviteCreateRequest, user_id: str = Depends(g
         "email": str(body.email).lower() if body.email else None,
         "max_uses": max(1, min(body.max_uses, 100)),
         "uses": 0,
-        "plan": body.plan,
+        "plan": _normalize_invite_plan(body.plan),
         "created_by": user_id,
     }
     result = client.table("invite_codes").insert(row).execute()
@@ -139,4 +149,4 @@ async def validate_invite_code(code: str):
     data = rows[0] if rows else None
     if not data or data.get("disabled") or int(data.get("uses") or 0) >= int(data.get("max_uses") or 1):
         raise HTTPException(status_code=404, detail="Invalid invite code")
-    return {"valid": True, "code": data["code"], "plan": data.get("plan") or "founder"}
+    return {"valid": True, "code": data["code"], "plan": _normalize_invite_plan(data.get("plan"))}
