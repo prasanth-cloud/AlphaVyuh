@@ -10,6 +10,7 @@ const PUBLIC_PREFIXES = [
   "/update-password",
   "/offline",
   "/blog",
+  "/access",
   "/beta",
   "/careers",
   "/contact",

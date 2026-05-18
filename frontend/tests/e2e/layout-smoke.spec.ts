@@ -327,7 +327,7 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/Checkout opens|No production Razorpay payment/i);
 
-    await page.goto("/beta", { waitUntil: "domcontentloaded" });
+    await page.goto("/access", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/Professional Access operations/i);
     await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Broker read-only|filled-trade import/i);
@@ -364,6 +364,7 @@ test.describe("Workflow layout smoke", () => {
       "/data",
       "/privacy",
       "/terms",
+      "/access",
       "/beta",
     ];
     const forbidden = /\b(private beta|founder beta|market beta|beta access|beta guide|join beta|beta waitlist|waitlist-gated|known beta limitations|beta onboarding checklist)\b/i;

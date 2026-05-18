@@ -6,7 +6,7 @@ from typing import Any
 
 EOD_SOURCE_NAME = "NSE bhavcopy"
 EOD_LICENSE_NOTE = "NSE bhavcopy data from the latest completed market session; not a licensed realtime feed."
-LIVE_LICENSE_NOTE = "Broker/provider data is account-scoped beta data; verify freshness before trading."
+LIVE_LICENSE_NOTE = "Broker/provider data is account-scoped; verify freshness before trading."
 FALLBACK_LICENSE_NOTE = "Fallback or cached market data; verify before acting."
 
 
@@ -57,7 +57,7 @@ def live_source_metadata(
     *,
     provider: str,
     as_of: str | None = None,
-    confidence: str = "beta",
+    confidence: str = "account_scoped",
 ) -> dict[str, Any]:
     return {
         "source_name": provider,

@@ -1,4 +1,4 @@
-from app.services.market_context import eod_source_metadata, health_status_from_counts, normalize_health_row
+from app.services.market_context import eod_source_metadata, health_status_from_counts, live_source_metadata, normalize_health_row
 
 
 def test_health_status_marks_low_coverage_degraded():
@@ -21,6 +21,13 @@ def test_eod_source_metadata_never_claims_live_data():
     assert metadata["source_name"] == "NSE bhavcopy"
     assert metadata["mode"] == "eod"
     assert "realtime" in metadata["license_notes"].lower()
+
+
+def test_live_source_metadata_uses_professional_access_language():
+    metadata = live_source_metadata(provider="Broker import", as_of="2026-05-18T12:00:00Z")
+
+    assert metadata["confidence"] == "account_scoped"
+    assert "beta" not in metadata["license_notes"].lower()
 
 
 def test_normalize_health_row_exposes_operator_fields():
