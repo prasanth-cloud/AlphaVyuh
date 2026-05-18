@@ -108,7 +108,16 @@ echo "Health response:"
 cat /tmp/alphavyuh-health.json
 echo
 
+if [[ -n "${PRODUCTION_API_BEARER_TOKEN:-${PRODUCTION_API_AUTH_TOKEN:-}}" ]]; then
+  echo "Production API smoke will include authenticated scanner verification."
+else
+  echo "Production API smoke will skip authenticated scanner verification. Set PRODUCTION_API_BEARER_TOKEN to verify scanner data."
+fi
+
 (
   cd "$ROOT_DIR"
-  PRODUCTION_API_URL="$PRODUCTION_API_URL" npm run check:production-api
+  PRODUCTION_API_URL="$PRODUCTION_API_URL" \
+    PRODUCTION_API_BEARER_TOKEN="${PRODUCTION_API_BEARER_TOKEN:-}" \
+    PRODUCTION_API_AUTH_TOKEN="${PRODUCTION_API_AUTH_TOKEN:-}" \
+    npm run check:production-api
 )

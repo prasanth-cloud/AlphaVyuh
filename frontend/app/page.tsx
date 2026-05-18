@@ -602,7 +602,7 @@ export default function LandingPage() {
               <p className="lp-pdesc">For full-time traders who need deeper analytics, expanded markets, and priority support.</p>
               <Link href="/signup" className="lp-pcta lp-cta-elite">Request Elite access</Link>
               <div className="lp-pfeats">
-                {[["Everything in Pro",true],["US markets — NASDAQ & NYSE",true],["Deeper journal analytics",true],["Backtest scanner conditions",true],["Priority support & onboarding",true],["Early access to new features",true]].map(f=>(
+                {[["Everything in Pro",true],["US markets — NASDAQ & NYSE",true],["Deeper journal analytics",true],["Backtest scanner conditions",true],["Priority support & onboarding",true],["Advanced workflow controls",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>

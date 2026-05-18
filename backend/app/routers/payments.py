@@ -100,7 +100,6 @@ async def payment_config():
         "mode": "live" if key.startswith("rzp_live_") else "test" if key.startswith("rzp_test_") else "disabled",
         "key_prefix": key[:12] if key else "",
         "access_code_available": bool(_enabled_access_codes()),
-        "founder_plan_available": bool(_enabled_access_codes()),
     }
 
 

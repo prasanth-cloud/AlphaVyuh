@@ -24,6 +24,7 @@ const forbidden = [
   /beta waitlist/i,
   /launch surface/i,
   /market command center/i,
+  /early access/i,
   /FOUNDER100/i,
   /founder plan/i,
   /founder code/i,
