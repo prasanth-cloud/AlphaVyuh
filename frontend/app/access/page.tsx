@@ -12,21 +12,19 @@ const accessPosture = [
   "Educational workflow and journal tool, not investment advice",
 ];
 
-const onboardingChecklist = [
+const workflowSteps = [
   "Run one scanner preset after reviewing the data freshness badge.",
-  "Add at least 3 stocks to a watchlist.",
-  "Open the focused watchlist symbol in the full chart.",
-  "Create a trade plan with entry, stop, target, thesis, and invalidation.",
-  "Save a journal capture draft or import a broker trade, then log/review it in Journal.",
+  "Move qualified symbols into a focused watchlist.",
+  "Review the chart, indicators, and source context before planning.",
+  "Capture entry, stop, target, thesis, and invalidation in the Decision Desk.",
+  "Record simulated or imported trades in Journal and review the outcome.",
 ];
 
-const interviewQuestions = [
-  "Where did you hesitate or wonder what to do next?",
-  "Did the source/freshness labels make the data trustworthy enough for planning?",
-  "Did scanner to watchlist to chart feel faster than your current workflow?",
-  "What field in the Decision Desk felt missing, noisy, or unclear?",
-  "Would the Journal review loop change your next trading session?",
-  "What would block you from using AlphaVyuh twice a week?",
+const accessIncludes = [
+  "EOD scanner presets for finding actionable names.",
+  "Watchlists that keep symbol focus, chart context, notes, and review state together.",
+  "Full chart workspace with saved indicators, drawing tools, and data-source context.",
+  "Broker import and journal capture for turning completed trades into review material.",
 ];
 
 const limitations = [
@@ -54,15 +52,15 @@ export default function AccessPage() {
 
         <header className="border-b border-white/10 pb-8">
           <div className="mb-4 text-xs font-bold uppercase tracking-[0.12em] text-[#c8f7ee]">
-            Professional Access operations
+            Professional Access
           </div>
           <h1 className="max-w-4xl text-4xl font-semibold leading-[1.02] tracking-[-0.04em] md:text-6xl">
-            Test the complete trading workflow.
+            Operate your EOD trading workflow with one focused system.
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-[#b6c0ce]">
-            AlphaVyuh users should move through scanner, watchlist, full chart,
-            trade plan, journal, and review. The goal is workflow clarity, speed, and trust,
-            not live execution or investment advice.
+            AlphaVyuh connects scanner, watchlist, full chart, trade planning, journal capture,
+            and review so every decision keeps its market context. Access is managed by approval
+            while live broker order placement remains disabled.
           </p>
         </header>
 
@@ -75,9 +73,9 @@ export default function AccessPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-          <Panel title="Professional Access checklist">
+          <Panel title="Professional Access workflow">
             <ol className="space-y-3 text-sm leading-6 text-[#b6c0ce]">
-              {onboardingChecklist.map((item, index) => (
+              {workflowSteps.map((item, index) => (
                 <li key={item} className="flex gap-3">
                   <span className="mt-1 h-5 w-5 shrink-0 rounded-full bg-[#c8f7ee] text-center text-[11px] font-bold leading-5 text-[#04120d]">
                     {index + 1}
@@ -110,9 +108,9 @@ export default function AccessPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Trader interview questions">
+          <Panel title="Included in access">
             <ul className="space-y-3 text-sm leading-6 text-[#b6c0ce]">
-              {interviewQuestions.map((item) => (
+              {accessIncludes.map((item) => (
                 <li key={item} className="border-b border-white/10 pb-3 last:border-b-0 last:pb-0">
                   {item}
                 </li>
@@ -120,7 +118,7 @@ export default function AccessPage() {
             </ul>
           </Panel>
 
-          <Panel title="Current access limitations">
+          <Panel title="Data and execution policy">
             <ul className="space-y-3 text-sm leading-6 text-[#b6c0ce]">
               {limitations.map((item) => (
                 <li key={item} className="flex gap-3">

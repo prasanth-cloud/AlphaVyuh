@@ -328,13 +328,13 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).toContainText(/Checkout opens|No production Razorpay payment/i);
 
     await page.goto("/access", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Professional Access operations/i);
+    await expect(page.locator("body")).toContainText(/Professional Access workflow/i);
     await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Broker read-only|filled-trade import/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/Checkout opens|Production Razorpay checkout opens/i);
     await expect(page.locator("body")).toContainText(/support@alphavyuh\.com/i);
-    await expect(page.locator("body")).toContainText(/Current access limitations/i);
+    await expect(page.locator("body")).toContainText(/Data and execution policy/i);
 
     await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/Professional Access/i, { timeout: 15_000 });
