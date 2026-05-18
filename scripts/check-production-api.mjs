@@ -58,7 +58,13 @@ async function fetchJson(path, options = {}) {
       data = { raw: text.slice(0, 200) };
     }
     if (!response.ok) {
-      throw new Error(`${path} returned ${response.status}: ${JSON.stringify(data).slice(0, 220)}`);
+      const railwayFallback =
+        response.headers.get("x-railway-fallback") === "true" ||
+        String(data?.message ?? "").toLowerCase().includes("application not found");
+      const hint = railwayFallback
+        ? " Railway is returning its fallback response, so the backend service is not deployed or the domain is not attached to the service."
+        : "";
+      throw new Error(`${path} returned ${response.status}: ${JSON.stringify(data).slice(0, 220)}${hint}`);
     }
     return data;
   } finally {
