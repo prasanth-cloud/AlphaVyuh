@@ -79,6 +79,9 @@ jobs:
       - name: Public posture checker tests
         run: npm run test:public-posture-check
 
+      - name: Data recovery readiness checker tests
+        run: npm run test:data-recovery-check
+
       - name: Release readiness browser smoke
         run: npm run test:e2e:release
 

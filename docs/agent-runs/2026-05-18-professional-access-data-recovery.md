@@ -22,6 +22,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | Public Posture Agent | Added a live public-site posture check for landing, login, access, and legacy beta redirect routes. | Launch checks now verify the visible website reads like Professional Access before sharing with traders. | The old live grep was too loose and tied to outdated landing-page copy. |
 | Recovery Workflow Agent | Passed optional `PRODUCTION_API_BEARER_TOKEN` through the Railway recovery workflow and recovery helper. | Once Railway is restored, the owner can prove authenticated scanner data from the same recovery run instead of doing a separate manual smoke. | Secrets should come from GitHub Actions secrets, not workflow text inputs. |
 | Product Copy QA Agent | Removed remaining active “early access” and “Founder” posture from public pricing and active launch-blocker intake. | The visible product and operating surfaces now sound like a professional platform, not a tester program. | Adjacent phrases can preserve beta energy even when the literal word “beta” is gone. |
+| Recovery Readiness Agent | Added `npm run check:data-recovery` to aggregate production API health, GitHub Railway secrets, and local Railway CLI readiness. | The owner can now run one command and see whether data recovery is complete, ready to deploy, or blocked by missing auth/secrets. | Repeated manual checks should become productized runbooks with tests, not chat-memory checklists. |
 
 ## Changes
 
@@ -64,6 +65,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Made the recovery helper state whether scanner verification will run before it calls the production API smoke.
 - Removed remaining active public/operations posture leaks: landing-page `Early access to new features`, active launch-blocker `Founder` decision owner, and public payment-config `founder_plan_available`.
 - Tightened public posture checks so future public landing copy cannot reintroduce `early access` positioning.
+- Added `npm run check:data-recovery` and `npm run test:data-recovery-check` to make production data recovery readiness self-diagnosing.
+- Wired `npm run test:data-recovery-check` into the Agent PR Gate so the recovery preflight stays protected in CI.
 
 ## Validation
 
@@ -179,6 +182,16 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run test:e2e:mock` passed: 10 tests after rerunning alone; the first attempt collided with the concurrent perf run on port 3002.
   - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` still fails at `/health` with Railway fallback `404 Application not found`, confirming the remaining blocker is hosting/domain recovery.
   - `railway whoami && railway status --json` still fails with expired local Railway auth and requires `railway login`.
+- Follow-up recovery-readiness preflight validation:
+  - `npm run test:data-recovery-check` passed with deterministic coverage for healthy API, missing deploy path, and ready GitHub-secret deploy path states.
+  - `npm run check:data-recovery` currently fails as designed, reporting Railway fallback `404 Application not found`, missing `RAILWAY_TOKEN` / `RAILWAY_PROJECT_ID` / `RAILWAY_SERVICE`, and expired local Railway auth.
+  - `npm run test:production-api-check` passed.
+  - `npm run test:public-posture-check` passed.
+  - `npm run lint` passed.
+  - `npm run typecheck` passed.
+  - `npm --prefix frontend run test -- --run` passed: 72 tests.
+  - `npm audit --audit-level=moderate` passed: 0 vulnerabilities.
+  - `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt` passed: no known vulnerabilities.
 
 ## Production Data Recovery Status
 
