@@ -77,8 +77,7 @@ else
 fi
 
 if [[ "${LIVE_URL:-}" != "" ]]; then
-  run_step "Live landing workflow check" bash -c \
-    "curl -sSL '${LIVE_URL}' | rg 'Five steps|Scan|Watchlist|Chart|Order|Review'"
+  run_step "Live public posture check" npm run check:public-posture
 else
   echo "Skipping live URL check. Set LIVE_URL=https://www.alphavyuh.com to enable it."
   echo
