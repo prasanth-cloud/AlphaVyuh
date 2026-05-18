@@ -47,7 +47,7 @@ export default function AccessAdminPage() {
     setCreating(true);
     setError("");
     try {
-      const result = await createInviteCode({ email: email.trim() || undefined, max_uses: 1, plan: "founder" });
+      const result = await createInviteCode({ email: email.trim() || undefined, max_uses: 1, plan: "professional_access" });
       setInvite(result.code);
       if (navigator.clipboard) await navigator.clipboard.writeText(result.code).catch(() => {});
     } catch (e: unknown) {

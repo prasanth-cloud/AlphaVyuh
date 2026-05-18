@@ -3,7 +3,13 @@ import os
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
-from app.routers.waitlist import WaitlistRequest, _insert_waitlist_row
+from app.routers.waitlist import (
+    PROFESSIONAL_ACCESS_PLAN,
+    InviteCreateRequest,
+    WaitlistRequest,
+    _insert_waitlist_row,
+    _normalize_invite_plan,
+)
 
 
 class _FakeInsert:
@@ -63,3 +69,13 @@ def test_waitlist_insert_falls_back_to_original_schema_when_launch_columns_are_m
         {"email": "trader@example.com", "source": "landing"},
         {"email": "trader@example.com"},
     ]
+
+
+def test_invite_plan_defaults_to_professional_access():
+    assert InviteCreateRequest().plan == PROFESSIONAL_ACCESS_PLAN
+
+
+def test_invite_plan_normalizes_legacy_founder_rows():
+    assert _normalize_invite_plan(None) == PROFESSIONAL_ACCESS_PLAN
+    assert _normalize_invite_plan("founder") == PROFESSIONAL_ACCESS_PLAN
+    assert _normalize_invite_plan("professional_access") == PROFESSIONAL_ACCESS_PLAN
