@@ -8,13 +8,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             AlphaVyuh
           </h1>
           <p style={{ marginTop: 14, maxWidth: 420, fontSize: 15, lineHeight: 1.65, color: 'var(--text-secondary)' }}>
-            A private beta trading desk for market scanning, watchlist planning, chart review, and journal feedback.
+            A Professional Access trading desk for EOD scanning, watchlist planning, chart review, and journal capture.
           </p>
           <div style={{ marginTop: 26, display: 'grid', gap: 10, maxWidth: 380 }}>
             {[
-              'Private beta access',
-              'Market data with source and freshness',
-              'Broker import only; execution disabled',
+              'Professional Access',
+              'EOD market data with source and freshness',
+              'Broker import only; execution not enabled yet',
               'Educational workflow tool, not investment advice',
             ].map(item => (
               <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-primary)' }}>

@@ -232,13 +232,13 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
   });
 
-  test("login page uses the simplified private beta copy", async ({ page }) => {
+  test("login page uses the simplified Professional Access copy", async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem("alphavyuh-theme", "light"));
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(page.getByText("Sign in to AlphaVyuh")).toBeVisible();
-    await expect(page.locator("body")).toContainText(/Private beta/i);
-    await expect(page.locator("body")).toContainText(/Market data/i);
+    await expect(page.locator("body")).toContainText(/Professional Access/i);
+    await expect(page.locator("body")).toContainText(/EOD market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).not.toContainText(/Launch Surface/i);
     await expect(page.locator("body")).not.toContainText(/Build a trading workflow/i);
@@ -252,7 +252,7 @@ test.describe("Workflow layout smoke", () => {
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
     await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toHaveAttribute("aria-disabled", "true");
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true }).click({ force: true });
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available in this beta/i);
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available for Professional Access yet/i);
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · Demo data · as of \d{4}-\d{2}-\d{2} · demo/i);
@@ -308,41 +308,70 @@ test.describe("Workflow layout smoke", () => {
 
   test("billing launch posture blocks checkout until production payments are configured", async ({ page }) => {
     await page.goto("/settings?tab=billing", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("billing-launch-posture")).toContainText(/Billing disabled for private beta|Production billing ready/i, { timeout: 15_000 });
+    await expect(page.getByTestId("billing-launch-posture")).toContainText(/Professional Access billing is not open yet|Production billing ready/i, { timeout: 15_000 });
 
     const posture = await page.getByTestId("billing-launch-posture").textContent();
-    if (posture?.includes("Billing disabled for private beta")) {
+    if (posture?.includes("Professional Access billing is not open yet")) {
       await expect(page.getByRole("button", { name: "Checkout disabled" }).first()).toBeDisabled();
-      await expect(page.locator("body")).toContainText(/Founder beta access/i);
+      await expect(page.locator("body")).toContainText(/Professional Access/i);
     }
 
     expect(await layoutProblems(page)).toEqual([]);
   });
 
-  test("private beta labels and no-execution posture are visible", async ({ page }) => {
+  test("Professional Access labels and no-execution posture are visible", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Private beta/i);
-    await expect(page.locator("body")).toContainText(/Market data/i);
+    await expect(page.locator("body")).toContainText(/Professional Access/i);
+    await expect(page.locator("body")).toContainText(/EOD market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
-    await expect(page.locator("body")).toContainText(/checkout is disabled|No production checkout/i);
+    await expect(page.locator("body")).toContainText(/Checkout opens|No production Razorpay payment/i);
 
     await page.goto("/beta", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Founder beta operations/i);
+    await expect(page.locator("body")).toContainText(/Professional Access operations/i);
     await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Broker read-only|filled-trade import/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
-    await expect(page.locator("body")).toContainText(/Production billing disabled|waitlist-gated/i);
+    await expect(page.locator("body")).toContainText(/Checkout opens|Production Razorpay checkout opens/i);
     await expect(page.locator("body")).toContainText(/support@alphavyuh\.com/i);
-    await expect(page.locator("body")).toContainText(/Known beta limitations/i);
+    await expect(page.locator("body")).toContainText(/Current access limitations/i);
 
     await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Private beta/i, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Professional Access/i, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Market data/i);
-    await expect(page.locator("body")).toContainText(/Execution disabled/i);
+    await expect(page.locator("body")).toContainText(/Execution not enabled yet/i);
 
     await page.goto("/settings/broker", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/read-only|import only/i, { timeout: 15_000 });
-    await expect(page.locator("body")).toContainText(/Live and sandbox order (placement|submission) (are|is) disabled/i);
+    await expect(page.locator("body")).toContainText(/Live and sandbox order (placement|submission) (are|is) not enabled yet/i);
+  });
+
+  test("customer-facing routes avoid legacy beta posture copy", async ({ page }) => {
+    const routes = [
+      "/",
+      "/signup",
+      "/login",
+      "/reset-password",
+      "/onboarding",
+      "/dashboard",
+      "/scanner",
+      "/watchlist",
+      "/charts/AUBANK?full=1",
+      "/journal",
+      "/settings",
+      "/settings?tab=billing",
+      "/settings/broker",
+      "/data",
+      "/privacy",
+      "/terms",
+      "/beta",
+    ];
+    const forbidden = /\b(private beta|founder beta|market beta|beta access|beta guide|join beta|beta waitlist|waitlist-gated|known beta limitations|beta onboarding checklist)\b/i;
+
+    for (const route of routes) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      const text = await page.locator("body").innerText({ timeout: 15_000 });
+      expect(text, route).not.toMatch(forbidden);
+    }
   });
 });

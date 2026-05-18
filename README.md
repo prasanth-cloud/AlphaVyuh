@@ -1,6 +1,6 @@
 # AlphaVyuh
 
-Founder-beta trading workflow software for Indian NSE/BSE traders. Scan -> analyse -> plan -> journal -> review.
+Professional trading workflow software for Indian NSE/BSE traders. Scan -> analyse -> plan -> journal -> review.
 
 ## Stack
 
@@ -10,14 +10,14 @@ Founder-beta trading workflow software for Indian NSE/BSE traders. Scan -> analy
 | Backend | FastAPI (Python 3.12) |
 | Database | Supabase (PostgreSQL + Auth) |
 | Charts | TradingView Lightweight Charts v5 |
-| Data | NSE/BSE EOD market data pipeline, with live/delayed providers treated as beta until licensed |
+| Data | NSE/BSE EOD market data pipeline, with live/delayed providers enabled only when licensed |
 | Payments | Razorpay (Phase 4) |
 
 ## Features
 
 - **Scanner** — Stock screener with 35+ technical filters (EMA, RSI, ATR, volume, 52-week, gap, trend alignment). Save custom screens.
 - **Watchlist** — Multiple watchlists, drag-to-reorder, and visible data provenance.
-- **Charts** — Interactive candlestick charts with EMA 20/50/200, RSI, MACD, Bollinger Bands, VWAP, drawing tools, and EOD/live-beta badges.
+- **Charts** — Interactive candlestick charts with EMA 20/50/200, RSI, MACD, Bollinger Bands, VWAP, drawing tools, and EOD/provider data badges.
 - **Dashboard** — Market breadth strip (A/D ratio, 52W highs/lows, % above EMA).
 - **Auth** — Supabase Auth (email + Google OAuth), free/pro plans.
 
@@ -78,7 +78,7 @@ INGEST_SERVICE_KEY=generate-with-secrets.token_hex(32)
 MARKET_DATA_PROVIDER=yahoo
 ```
 
-For Zerodha-backed beta chart candles/quotes, set:
+For Zerodha-backed chart candles/quotes, set:
 
 ```
 MARKET_DATA_PROVIDER=kite
@@ -89,7 +89,7 @@ KITE_ACCESS_TOKEN=your-daily-kite-access-token
 
 The chart page uses TradingView Lightweight Charts at `/charts/[symbol]`.
 Daily, weekly, and monthly candles come through `/api/v1/charts/{symbol}/candles-live`
-when live-beta mode is enabled. Indicators are computed server-side with the existing
+when provider-data mode is enabled. Indicators are computed server-side with the existing
 `backend/app/services/indicators.py` pandas/numpy library. Do not market these feeds as production realtime data until exchange/vendor licensing is signed.
 
 Kite access tokens expire daily around 06:00 IST, so `KITE_ACCESS_TOKEN` must be

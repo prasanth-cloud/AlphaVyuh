@@ -1855,7 +1855,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          Data is {dataAgeDays} days old. Scanner/chart context is using the latest market snapshot. Provider/live quote mode is disabled for private beta.
+          Data is {dataAgeDays} days old. Scanner/chart context is using the latest market snapshot. Provider/live quote mode is not enabled yet.
         </div>
       )}
 
@@ -2126,7 +2126,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             disabled
             className="workspace-chip-button flex items-center gap-1.5"
             style={{ opacity: 0.85 }}
-            title="Provider/live quote mode is disabled for private beta; charts use market or demo data."
+            title="Provider/live quote mode is not enabled yet; charts use EOD market data or demo data."
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
             <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
@@ -2228,7 +2228,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{orderToast.message}</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)" }}>
-                {orderToast.broker === "simulated" ? "Simulated fill" : `Broker routed via ${orderToast.broker}`} · journal capture completed
+                {orderToast.broker === "simulated" ? "Journal capture" : `Broker routed via ${orderToast.broker}`} · journal capture completed
                 {orderToast.riskReward != null ? ` · R:R ${orderToast.riskReward.toFixed(2)}` : ""}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -2842,7 +2842,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     <div className="text-[11px] mb-2.5" style={{ color: "var(--app-text2)" }}>
                       {brokerStatus?.token_expired
                         ? "Your broker session expired. Reconnect to import filled trades."
-                        : "Private beta supports read-only import, not chart order execution."}
+                        : "Broker import supports filled-trade import, not chart order execution."}
                     </div>
                     <Link
                       href="/settings/broker"
@@ -3025,7 +3025,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 disabled
                 className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
                 style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)", opacity: 0.85 }}
-                title="Provider/live quote mode is disabled for private beta."
+                title="Provider/live quote mode is not enabled yet."
               >
                 <Activity size={12} />
                 <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />

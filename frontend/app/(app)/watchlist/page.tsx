@@ -421,7 +421,7 @@ function DecisionDesk({
         <div className="label" style={{ marginBottom: 4 }}>{status.valid ? "Plan ready" : "Next best action"}</div>
         <div className="caption" style={{ color: status.valid ? "var(--gain)" : "var(--warn)", lineHeight: 1.55 }}>
           {status.valid
-            ? (riskReward ? `Ready for simulated order draft. Risk/reward ${riskReward}.` : "Ready for simulated order draft.")
+            ? (riskReward ? `Ready for journal capture draft. Risk/reward ${riskReward}.` : "Ready for journal capture draft.")
             : (planNudges.length ? planNudges.join(" · ") : status.next)}
         </div>
       </div>
@@ -728,7 +728,7 @@ function ChartPanel({
         ok: true,
         text: canRouteLiveOrder && liveConfirmed
           ? `${side === "buy" ? "Buy" : "Sell"} order submitted via ${brokerStatus?.broker ?? "broker"} and journal draft created.`
-          : `${side === "buy" ? "Buy" : "Sell"} plan saved as a simulated journal draft.`,
+          : `${side === "buy" ? "Buy" : "Sell"} plan saved as a journal capture draft.`,
         journalReady: true,
       });
       setLiveConfirmed(false);
@@ -898,7 +898,7 @@ function ChartPanel({
         <div className="order-ticket-header">
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">Private beta capture only: save the plan to Journal. Place any real trade directly with your broker.</div>
+            <div className="caption">Journal capture only: save the plan to Journal. Place any real trade directly with your broker.</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -913,7 +913,7 @@ function ChartPanel({
             {brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
-            {brokerStatus?.connected ? "Broker import available; beta order capture still records as simulated" : "Order capture records as simulated"}
+            {brokerStatus?.connected ? "Broker import available; order capture still records as a journal draft" : "Order capture records as a journal draft"}
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
@@ -1047,7 +1047,7 @@ function ChartPanel({
         {brokerStatus?.plan_allows_broker === false && (
           <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)" }}>
             <div className="caption" style={{ color: "var(--warn)", lineHeight: 1.5 }}>
-              Broker integration requires Pro or Elite. Simulated journal capture remains available for planning.
+              Broker integration requires Pro or Elite. Journal capture remains available for planning.
             </div>
             <button onClick={() => { window.location.href = "/settings/billing"; }} className="workspace-chip-button" style={{ marginTop: 8 }}>
               View Pro plan
@@ -1079,7 +1079,7 @@ function ChartPanel({
           {orderBusy
             ? canRouteLiveOrder && liveConfirmed ? "Submitting..." : "Saving..."
             : planValid
-              ? canRouteLiveOrder ? `${side === "buy" ? "Buy" : "Sell"} via ${brokerStatus?.broker ?? "broker"}` : `Save simulated ${side === "buy" ? "buy" : "sell"} draft`
+              ? canRouteLiveOrder ? `${side === "buy" ? "Buy" : "Sell"} via ${brokerStatus?.broker ?? "broker"}` : `Save ${side === "buy" ? "buy" : "sell"} journal draft`
               : planNextAction}
         </button>
         </div>

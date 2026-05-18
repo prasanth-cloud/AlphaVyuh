@@ -309,7 +309,7 @@ export default function JournalPage() {
               : "No closed trades waiting for review"}
           </div>
           <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
-            Broker imports, chart orders, simulated orders, and manual logs stay labeled so reviews can explain what happened and why.
+            Broker imports, chart drafts, journal captures, and manual logs stay labeled so reviews can explain what happened and why.
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

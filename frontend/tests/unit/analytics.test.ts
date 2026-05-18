@@ -10,7 +10,7 @@ describe("trackEvent", () => {
     expect(() => trackEvent("scanner_run", { results: 12 })).not.toThrow();
   });
 
-  it("forwards beta funnel events to configured providers", () => {
+  it("forwards access funnel events to configured providers", () => {
     const va = vi.fn();
     const gtag = vi.fn();
     vi.stubGlobal("window", { va, gtag });

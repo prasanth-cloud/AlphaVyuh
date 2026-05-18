@@ -89,7 +89,7 @@ test.describe("Full chart drawings", () => {
     for (const tf of ["5m", "15m", "30m", "1h", "1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "10Y"]) {
       await expect(page.getByRole("button", { name: tf, exact: true })).toBeVisible();
     }
-    await expect(page.getByText("Intraday data is not available in this beta.")).toBeVisible();
+    await expect(page.getByText("Intraday data is not available for Professional Access yet.")).toBeVisible();
     await page.getByRole("button", { name: "5m", exact: true }).click({ force: true });
     await expect(page.getByText(/Intraday data is not available/).first()).toBeVisible();
 

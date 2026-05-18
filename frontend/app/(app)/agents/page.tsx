@@ -41,7 +41,7 @@ export default function AgentMissionControlPage() {
           <EyebrowLabel>Agent operating system</EyebrowLabel>
           <h1 style={{ margin: "6px 0 4px", fontSize: 22, letterSpacing: 0 }}>Mission control</h1>
           <p className="caption" style={{ maxWidth: 760 }}>
-            Founder view for agent work: what is active, what shipped, what is blocked, and what should happen next.
+            Operator view for agent work: what is active, what shipped, what is blocked, and what should happen next.
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>

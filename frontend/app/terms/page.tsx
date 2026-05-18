@@ -22,11 +22,11 @@ const sections = [
   },
   {
     title: "5. Subscriptions and Payments",
-    body: "Paid plans are billed through Razorpay only when billing is configured and enabled. Until then, billing surfaces may be disabled for founder or private beta access. AlphaVyuh does not store card numbers or bank details.",
+    body: "Paid plans are billed through Razorpay only when billing is configured and enabled. Until then, billing surfaces may show access-managed checkout controls. AlphaVyuh does not store card numbers or bank details.",
   },
   {
     title: "6. Broker Integrations",
-    body: "Broker connections are beta workflows for read-only smoke, profile, holdings, positions, orderbook, tradebook, filled-trade import, and simulated journal capture. Live and sandbox broker order placement are disabled for private beta.",
+    body: "Broker connections support read-only smoke, profile, holdings, positions, orderbook, tradebook, filled-trade import, and journal capture. Live and sandbox broker order placement are not enabled yet.",
   },
   {
     title: "7. Data Accuracy",

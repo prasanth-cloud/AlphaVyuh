@@ -278,7 +278,7 @@ function SettingsContent() {
 
   const handleUpgrade = async (planId: "pro" | "elite") => {
     if (paymentConfig && !paymentConfig.configured) { showToast("Payment gateway is not configured yet", false); return; }
-    if (!RAZORPAY_KEY) { showToast("Founder beta billing is not open yet", false); return; }
+    if (!RAZORPAY_KEY) { showToast("Professional Access billing is not open yet", false); return; }
     setPaying(planId);
     try {
       const loaded = await loadRazorpay();
@@ -324,16 +324,16 @@ function SettingsContent() {
 
   async function handleApplyFounder() {
     const code = founderCode.trim();
-    if (!code) { showToast("Enter a founder code", false); return; }
+    if (!code) { showToast("Enter an access code", false); return; }
     setApplyingFounder(true);
     try {
       const result = await applyFounderPlan(code);
-      showToast("Founder plan activated", true);
+      showToast("Professional Access plan activated", true);
       trackEvent("founder_plan_applied", { code });
       setPlanStatus({ plan: result.plan, expires_at: result.expires_at, active: true });
       await loadBilling();
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : "Founder code failed", false);
+      showToast(e instanceof Error ? e.message : "Access code failed", false);
     } finally {
       setApplyingFounder(false);
     }
@@ -370,7 +370,7 @@ function SettingsContent() {
       <div className="workspace-card" style={{ padding: "12px 14px" }}>
         <EyebrowLabel>Settings</EyebrowLabel>
         <div className="app-page-copy">
-          Keep profile, broker import, and beta billing controls clear without changing the trading workflow.
+          Keep profile, broker import, and billing controls clear without changing the trading workflow.
         </div>
       </div>
 
@@ -509,7 +509,7 @@ function SettingsContent() {
                     <option value="upstox">Upstox</option>
                     <option value="fyers">Fyers</option>
                     <option value="angel">Angel One</option>
-                    <option value="other">Other (simulated)</option>
+                    <option value="other">Other (journal capture)</option>
                   </select>
                 </div>
 
@@ -523,10 +523,10 @@ function SettingsContent() {
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[12px]" style={{ color: "var(--app-text3)" }}>
                       {brokerType === "upstox"
-                        ? "Upstox connects through the broker hub OAuth beta where enabled."
+                        ? "Upstox connects through the broker hub OAuth flow where enabled."
                         : brokerType === "other"
-                          ? "Orders will be simulated."
-                          : `${brokerType} adapter is planned after Zerodha and Upstox beta verification.`}
+                          ? "Orders stay as journal capture drafts."
+                          : `${brokerType} adapter is planned after Zerodha and Upstox verification.`}
                     </p>
                   </div>
                 )}
@@ -602,13 +602,13 @@ function SettingsContent() {
                   </div>
                   <div>
                     <div className="text-[13px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: "var(--accent)" }}>
-                      Founder beta
+                      Professional Access
                     </div>
                     <div className="text-[14px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>
-                      First 100 serious traders can request founder pricing and onboarding help.
+                      Serious traders can request access pricing and onboarding help.
                     </div>
                     <p className="text-[12px] leading-relaxed" style={{ color: "var(--app-text3)" }}>
-                      Apply an approved invite code here. Checkout prices stay standard for everyone else.
+                      Apply an approved access code here. Checkout prices stay standard for everyone else.
                     </p>
                   </div>
                 </div>
@@ -631,7 +631,7 @@ function SettingsContent() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(founderCode);
-                      showToast("Founder code copied!", true);
+                      showToast("Access code copied!", true);
                     }}
                     className="inline-flex items-center gap-2 rounded-[8px] px-3 py-2.5 text-[13px] font-semibold"
                     style={{ background: "rgba(244,247,251,0.08)", border: "1px solid rgba(244,247,251,0.14)", color: "var(--app-text1)" }}
@@ -652,10 +652,10 @@ function SettingsContent() {
               >
                 <div className="max-w-[640px]">
                   <div className="text-[12px] font-semibold uppercase tracking-[0.12em] mb-1" style={{ color: checkoutEnabled ? "var(--gain)" : "var(--warn)" }}>
-                    Billing disabled for private beta
+                    Professional Access billing is not open yet
                   </div>
                   <div className="leading-relaxed">
-                    Production checkout is disabled until the release candidate, legal, and billing approvals are complete. Founder beta access can still be applied with an approved invite code.
+                    Production checkout is disabled until release, legal, and billing approvals are complete. Professional Access can still be applied with an approved access code.
                   </div>
                 </div>
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)" }}>

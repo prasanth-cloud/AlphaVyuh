@@ -300,15 +300,15 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
             <div className="lp-eyebrow">
-              <div className="lp-live-pill"><div className="lp-pulse"></div>Private beta · Market data</div>
+              <div className="lp-live-pill"><div className="lp-pulse"></div>Professional Access · EOD market data</div>
             </div>
             <h1 className="lp-h1">
               <span className="lp-h1-s1">India&apos;s Trading OS.</span>
               <span className="lp-h1-s2"><span className="lp-h1-muted">A simpler desk for Indian equities.</span></span>
             </h1>
-            <p className="lp-sub">A private-beta workflow system for scanning markets, building watchlists, planning charts, and journaling trades.</p>
+            <p className="lp-sub">A professional workflow system for scanning markets, building watchlists, planning charts, and journaling trades.</p>
             <div className="lp-ctas">
-              <Link href="/signup" className="lp-btn-primary">Request founder beta access →</Link>
+              <Link href="/signup" className="lp-btn-primary">Request Professional Access →</Link>
               <a href="#features" className="lp-btn-secondary">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
                 See it in action
@@ -322,7 +322,7 @@ export default function LandingPage() {
                 <div className="lp-av" style={{background:"#2A3A38"}}>VR</div>
               </div>
               <div>
-                <div className="lp-proof-copy"><strong>Private beta workspace</strong> for serious Indian market workflows</div>
+                <div className="lp-proof-copy"><strong>Professional Access workspace</strong> for serious Indian market workflows</div>
                 <div className="lp-stars">Scanner · Watchlist · Charts · Journal</div>
               </div>
             </div>
@@ -368,7 +368,7 @@ export default function LandingPage() {
       <section id="lp-stats">
         <div className="lp-wrap">
           <div className="lp-stats-grid">
-            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Beta screens</div><div className="lp-stat-sub">scanner, watchlist, charts, journal</div></div>
+            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Core screens</div><div className="lp-stat-sub">scanner, watchlist, charts, journal</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">Symbols tracked</div><div className="lp-stat-sub">latest market snapshot</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="20" data-suffix="+">0</div><div className="lp-stat-label">Scanner filters</div><div className="lp-stat-sub">momentum, volume, RS, trend</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected desk</div><div className="lp-stat-sub">from signal to review</div></div>
@@ -380,7 +380,7 @@ export default function LandingPage() {
       <section id="features" style={{padding:"100px 0"}}>
         <div className="lp-wrap">
           <span className="lp-sec-label">Platform</span>
-          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>The private beta focus</h2>
+          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>The Professional Access focus</h2>
           <p className="lp-sec-sub" style={{marginBottom:"40px"}}>Four surfaces. One routine. No feature maze.</p>
           <div className="lp-tabs-wrap" id="lp-tabs-header">
             {["scanner","watchlist","charts","journal"].map((t,i) => (
@@ -449,7 +449,7 @@ export default function LandingPage() {
               <h3 className="lp-tp-h">Professional charts with RS line and pivot zones</h3>
               <p className="lp-tp-p">TradingView Lightweight Charts v4. Drawing tools, precomputed indicators, earnings overlays, and watchlist context on one screen.</p>
               <ul className="lp-feat-list">
-                {["Candlestick charts with overlay indicators","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker connections are read-only/import only for beta"].map(f => (
+                {["Candlestick charts with overlay indicators","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker connections are read-only/import only"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -486,7 +486,7 @@ export default function LandingPage() {
               <h3 className="lp-tp-h">A review layer for closed trades</h3>
               <p className="lp-tp-p">Log closed trades, review P&L by context, and inspect patterns in your own history.</p>
               <ul className="lp-feat-list">
-                {["Manual journal entry for beta routines","P&L by stock, sector, time-of-day, holding period","Review observations based only on closed trades","Lessons saved per trade — searchable, filterable","Equity curve + win rate + avg R:R metrics"].map(f=>(
+                {["Manual journal entry for trading routines","P&L by stock, sector, time-of-day, holding period","Review observations based only on closed trades","Lessons saved per trade — searchable, filterable","Equity curve + win rate + avg R:R metrics"].map(f=>(
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -557,8 +557,8 @@ export default function LandingPage() {
       <section id="pricing" style={{padding:"100px 0",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)"}}>
         <div className="lp-wrap" style={{textAlign:"center"}}>
           <span className="lp-sec-label">Pricing</span>
-          <h2 className="lp-sec-title">Founder beta pricing is waitlist-gated.</h2>
-          <p className="lp-sec-sub" style={{ margin: "0 auto 28px" }}>Pricing is shown for planning only. Production checkout is disabled until the release candidate passes and billing is approved.</p>
+          <h2 className="lp-sec-title">Professional Access plans.</h2>
+          <p className="lp-sec-sub" style={{ margin: "0 auto 28px" }}>Pricing is shown for planning. Checkout opens only when billing is approved for your account.</p>
           <div className="lp-ptoggle">
             <span className="lp-pt-label lp-pt-active" id="lp-ptm">Monthly</span>
             <label className="lp-toggle-pill">
@@ -574,9 +574,9 @@ export default function LandingPage() {
               <span className="lp-plan-tier">Free</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-free">0</span><span className="lp-pper">/mo</span></div>
               <p className="lp-pdesc">Enough to try everything. No credit card needed.</p>
-              <Link href="/signup" className="lp-pcta lp-cta-free">Join beta waitlist</Link>
+              <Link href="/signup" className="lp-pcta lp-cta-free">Request access</Link>
               <div className="lp-pfeats">
-                {[["50 scanner results per scan",true],["5 saved screens",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal review",false],["Broker import beta",false]].map(f=>(
+                {[["50 scanner results per scan",true],["5 saved screens",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal review",false],["Broker import",false]].map(f=>(
                   <div key={f[0] as string} className={"lp-pfi"+(f[1]?" lp-pfi-on":"")}>
                     <div className={"lp-pfcheck"+(f[1]?" lp-pfcheck-on":" lp-pfcheck-off")}>{f[1]?"✓":"–"}</div>
                     {f[0]}
@@ -589,9 +589,9 @@ export default function LandingPage() {
               <span className="lp-plan-tier">Pro</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-pro">1,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-pro-old" style={{display:"none"}}>₹1,999</span></div>
               <p className="lp-pdesc">For active swing traders who scan daily and keep a structured review routine.</p>
-              <Link href="/signup" className="lp-pcta lp-cta-pro">Request Pro invite</Link>
+              <Link href="/signup" className="lp-pcta lp-cta-pro">Request Pro access</Link>
               <div className="lp-pfeats">
-                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting",true],["Unlimited journal history",true],["Broker import beta",true],["Journal review",true],["Priority beta support",true]].map(f=>(
+                {[["500 scanner results per scan",true],["Unlimited saved screens",true],["10 watchlists · 200 stocks",true],["Full charting",true],["Unlimited journal history",true],["Broker import",true],["Journal review",true],["Priority support",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>
@@ -600,7 +600,7 @@ export default function LandingPage() {
               <span className="lp-plan-tier">Elite</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-elite">4,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-elite-old" style={{display:"none"}}>₹4,999</span></div>
               <p className="lp-pdesc">For full-time traders who need deeper analytics, expanded markets, and priority support.</p>
-              <Link href="/signup" className="lp-pcta lp-cta-elite">Request Elite invite</Link>
+              <Link href="/signup" className="lp-pcta lp-cta-elite">Request Elite access</Link>
               <div className="lp-pfeats">
                 {[["Everything in Pro",true],["US markets — NASDAQ & NYSE",true],["Deeper journal analytics",true],["Backtest scanner conditions",true],["Priority support & onboarding",true],["Early access to new features",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
@@ -608,7 +608,7 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <p style={{marginTop:28,fontSize:".82rem",color:"var(--lp-muted)"}}>Checkout is disabled for private beta. Founder access is invite/waitlist-gated; no production Razorpay payment is collected yet.</p>
+          <p style={{marginTop:28,fontSize:".82rem",color:"var(--lp-muted)"}}>Checkout opens only after account approval and billing configuration. No production Razorpay payment is collected until then.</p>
         </div>
       </section>
 
@@ -619,11 +619,11 @@ export default function LandingPage() {
           <h2 className="lp-sec-title">Common questions</h2>
           <div className="lp-faq-list">
             {[
-              ["Does AlphaVyuh provide real-time stock data?","No. The private beta uses market data updated after the completed trading session. Scanner results are based on the latest completed session."],
-              ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 are in read-only beta. Broker connections are for account smoke, holdings/orderbook reads, filled-trade import, and journal sync only. Live and sandbox order placement are disabled."],
+              ["Does AlphaVyuh provide real-time stock data?","No. AlphaVyuh currently uses market data updated after the completed trading session. Scanner results are based on the latest completed session."],
+              ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 support read-only account checks, holdings/orderbook reads, filled-trade import, and journal sync where configured. Live and sandbox order placement are not enabled yet."],
               ["How does journal review work?","Every trade you log is stored in your journal. Review analytics summarize patterns from closed trades, including win rate, R:R, holding period, sector, and notes."],
               ["Is my trading data secure?","Yes. All data is stored in Supabase Postgres with Row Level Security — only you can access your trades, watchlists, and journal. Broker access tokens are stored encrypted after OAuth. We never ask for your broker password or developer API secrets."],
-              ["Can I pay during private beta?","No production checkout is enabled yet. Founder beta access is invite/waitlist-gated until billing, legal, and release-candidate checks are approved."],
+              ["Can I pay today?","Production checkout opens after account approval, billing configuration, and release checks are complete."],
               ["Does AlphaVyuh give trade calls?","No. AlphaVyuh is an educational workflow and journal tool, not SEBI-registered investment advice or a guarantee of market-data accuracy."],
             ].map(([q,a]) => (
               <div key={q} className="lp-faq-item">
@@ -639,11 +639,11 @@ export default function LandingPage() {
       <section style={{padding:"120px 0",textAlign:"center",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 50%,rgba(214,223,232,.06) 0%,transparent 65%)",pointerEvents:"none"}}></div>
         <div style={{position:"relative",zIndex:1}}>
-          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Private beta access</div>
+          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Professional Access</div>
           <h2 className="lp-sec-title" style={{fontSize:"clamp(2rem,4vw,3.2rem)",marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
           <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Run a scan, build a watchlist, plan on the chart, and close the loop in Journal.</p>
-          <Link href="/signup" className="lp-btn-cta-big">Request founder beta access →</Link>
-          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Private beta · Market data · Broker import only · No investment advice</p>
+          <Link href="/signup" className="lp-btn-cta-big">Request Professional Access →</Link>
+          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Professional Access · EOD market data · Broker import only · No investment advice</p>
         </div>
       </section>
 
@@ -656,10 +656,10 @@ export default function LandingPage() {
                 <div className="lp-logo-mark"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="16" cy="6" r="1.5" fill="currentColor"/></svg></div>
                 AlphaVyuh
               </div>
-              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s private-beta trading workflow system. Scan markets, plan charts, and journal decisions in one workspace.</p>
+              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s professional trading workflow system. Scan markets, plan charts, and journal decisions in one workspace.</p>
             </div>
             <div className="lp-fcol"><h5>Product</h5><ul><li><Link href="/products#scanner">Scanner</Link></li><li><Link href="/products">Charts</Link></li><li><Link href="/products#journal">Journal</Link></li><li><a href="#pricing">Pricing</a></li></ul></div>
-            <div className="lp-fcol"><h5>Company</h5><ul><li><Link href="/products">About</Link></li><li><Link href="/beta">Beta guide</Link></li><li><Link href="/blog">Blog</Link></li><li><Link href="/contact">Contact</Link></li></ul></div>
+            <div className="lp-fcol"><h5>Company</h5><ul><li><Link href="/products">About</Link></li><li><Link href="/beta">Access guide</Link></li><li><Link href="/blog">Blog</Link></li><li><Link href="/contact">Contact</Link></li></ul></div>
             <div className="lp-fcol"><h5>Legal</h5><ul><li><Link href="/privacy">Privacy Policy</Link></li><li><Link href="/terms">Terms of Service</Link></li><li><Link href="/policies">Disclaimer</Link></li></ul></div>
           </div>
           <div className="lp-footer-bottom">

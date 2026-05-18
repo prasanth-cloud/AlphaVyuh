@@ -64,7 +64,7 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
             boxShadow: "0 18px 50px rgba(0,0,0,0.35)",
           }}
         >
-          <div className="heading-card" style={{ marginBottom: 8 }}>Send beta feedback</div>
+          <div className="heading-card" style={{ marginBottom: 8 }}>Send feedback</div>
           <select
             value={category}
             onChange={(event) => setCategory(event.target.value as typeof category)}

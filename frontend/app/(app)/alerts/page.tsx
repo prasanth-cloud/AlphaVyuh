@@ -82,7 +82,7 @@ export default function AlertsPage() {
           <div className="label" style={{ marginBottom: 8 }}>Alerts</div>
           <h1 className="heading-card" style={{ fontSize: 24, marginBottom: 6 }}>EOD scan matches</h1>
           <p className="workspace-card-copy" style={{ maxWidth: 760 }}>
-            Review saved scans after the latest complete market day is loaded. AlphaVyuh shows matched names for review; execution stays outside this beta flow.
+            Review saved scans after the latest complete market day is loaded. AlphaVyuh shows matched names for review; execution stays outside AlphaVyuh.
           </p>
         </div>
         <div className="workspace-toolbar-group">
