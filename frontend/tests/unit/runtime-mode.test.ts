@@ -4,6 +4,7 @@ import {
   allowMockAppAuth,
   allowPreviewMockAuth,
   hasSupabasePublicEnv,
+  isPublicProductionRuntime,
 } from "@/lib/runtime-mode";
 
 describe("runtime mode guards", () => {
@@ -41,5 +42,28 @@ describe("runtime mode guards", () => {
     expect(allowPreviewMockAuth()).toBe(false);
     expect(allowMockAppAuth()).toBe(false);
     expect(allowClientMockFallback()).toBe(false);
+  });
+
+  it("does not allow production deployments to silently use demo data", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "mock");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "true");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "false");
+
+    expect(isPublicProductionRuntime()).toBe(true);
+    expect(allowClientMockFallback()).toBe(false);
+  });
+
+  it("still allows unauthenticated preview mock fallback", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "mock");
+
+    expect(isPublicProductionRuntime()).toBe(false);
+    expect(allowClientMockFallback()).toBe(true);
   });
 });

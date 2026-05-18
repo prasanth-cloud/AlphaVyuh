@@ -21,10 +21,18 @@ export function allowMockAppAuth() {
   return allowDevMockAuth() || allowPreviewMockAuth();
 }
 
+export function isPublicProductionRuntime() {
+  return process.env.NODE_ENV === "production" &&
+    hasSupabasePublicEnv() &&
+    process.env.PLAYWRIGHT_MOCK_AUTH !== "true";
+}
+
 export function allowClientMockFallback() {
-  return process.env.NEXT_PUBLIC_FORCE_LIVE_DATA !== "true" &&
-    (process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
-      process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
-      process.env.NODE_ENV === "development" ||
-      !hasSupabasePublicEnv());
+  if (process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true") return false;
+  if (isPublicProductionRuntime()) return false;
+
+  return process.env.NEXT_PUBLIC_DATA_MODE === "mock" ||
+    process.env.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK === "true" ||
+    process.env.NODE_ENV === "development" ||
+    !hasSupabasePublicEnv();
 }
