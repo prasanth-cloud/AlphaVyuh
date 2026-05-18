@@ -37,6 +37,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Hardened candle serialization so missing indicator fields become `null` instead of leaking `NaN` into JSON responses.
 - Tightened `npm run check:production-api` so it now fails if the smoke-tested RELIANCE candles are stale versus the market summary date.
 - Replaced remaining active GitHub issue-template and backend error references to beta/founder posture with Professional Access wording.
+- Made the manual Railway Backend Recovery workflow accept optional `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE`, and `RAILWAY_WORKSPACE` secrets so owner inputs do not need to be retyped on every run.
+- Improved the recovery script diagnostics so, when `RAILWAY_TOKEN` is present but the repo is not linked, it prints visible Railway projects and tells the operator which project/service values are missing.
 
 ## Validation
 
@@ -72,6 +74,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run test:production-api-check` now covers Railway fallback, stale chart candles, and healthy current candles.
   - Local production API checker against the Supabase-backed backend passed with `RELIANCE candles 5 through 2026-05-18`.
   - Active-code posture sweep now finds no legacy beta wording outside the intentional Playwright forbidden-copy assertion.
+  - `bash -n scripts/recover-railway-backend.sh` passed after recovery input improvements.
 
 ## Production Data Recovery Status
 
@@ -88,7 +91,7 @@ Blocked by Railway authentication/deployment state:
 Next required owner action:
 
 1. Local option: run `railway login` locally for the AlphaVyuh Railway account, then run `npm run recover:railway-backend`.
-2. GitHub option: after PR #136 is merged, add a `RAILWAY_TOKEN` repository secret, then run the manual `Railway Backend Recovery` workflow with the Railway project ID, production environment, backend service name/ID, and production API URL.
+2. GitHub option: add a `RAILWAY_TOKEN` repository secret, and either add `RAILWAY_PROJECT_ID` / `RAILWAY_SERVICE` / optional `RAILWAY_WORKSPACE` repository secrets or pass those values when running the manual `Railway Backend Recovery` workflow.
 3. If the repo is not linked locally, run `cd /Users/PRASAANTH/alphavyuh/backend && railway link`, then rerun `npm run recover:railway-backend`.
 4. The helper deploys the backend, waits for `/health`, prints recent Railway logs on failure, and runs `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api`.
 
