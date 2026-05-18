@@ -30,6 +30,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Improved `npm run check:production-api` to identify Railway fallback responses when the backend app is not attached/deployed.
 - Added `npm run test:production-api-check` and wired it into the Agent PR Gate so the Railway fallback diagnosis is regression-tested.
 - Created GitHub launch blocker issue [#137](https://github.com/prasanth-cloud/AlphaVyuh/issues/137) for the owner-gated Railway backend recovery.
+- Added a manual `Railway Backend Recovery` GitHub Actions workflow so production recovery can run from GitHub after the owner adds `RAILWAY_TOKEN` and provides the Railway project/service inputs. The workflow fails fast if the token secret is missing.
 
 ## Validation
 
@@ -56,6 +57,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm --prefix frontend run test -- --run tests/unit/api-base.test.ts` passed: 3 tests.
   - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` now fails with an explicit Railway fallback deployment hint.
   - `npm run test:production-api-check` passed.
+  - `bash -n scripts/recover-railway-backend.sh` passed after adding explicit project-link support.
 
 ## Production Data Recovery Status
 
@@ -69,9 +71,9 @@ Blocked by Railway authentication/deployment state:
 
 Next required owner action:
 
-1. Run `railway login` locally for the AlphaVyuh Railway account.
-2. Run `npm run recover:railway-backend`.
-3. If the repo is not linked, run `cd /Users/PRASAANTH/alphavyuh/backend && railway link`, then rerun `npm run recover:railway-backend`.
+1. Local option: run `railway login` locally for the AlphaVyuh Railway account, then run `npm run recover:railway-backend`.
+2. GitHub option: add a `RAILWAY_TOKEN` repository secret, then run the manual `Railway Backend Recovery` workflow with the Railway project ID, production environment, backend service, and production API URL.
+3. If the repo is not linked locally, run `cd /Users/PRASAANTH/alphavyuh/backend && railway link`, then rerun `npm run recover:railway-backend`.
 4. The helper deploys the backend, waits for `/health`, prints recent Railway logs on failure, and runs `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api`.
 
 ## Remaining Risks

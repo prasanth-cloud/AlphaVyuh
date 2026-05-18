@@ -6,11 +6,25 @@ BACKEND_DIR="$ROOT_DIR/backend"
 PRODUCTION_API_URL="${PRODUCTION_API_URL:-https://alphavyuh-production.up.railway.app}"
 RAILWAY_ENVIRONMENT="${RAILWAY_ENVIRONMENT:-production}"
 RAILWAY_SERVICE="${RAILWAY_SERVICE:-}"
+RAILWAY_PROJECT_ID="${RAILWAY_PROJECT_ID:-}"
+RAILWAY_WORKSPACE="${RAILWAY_WORKSPACE:-}"
 SKIP_RAILWAY_DEPLOY="${SKIP_RAILWAY_DEPLOY:-0}"
 
 service_args=()
 if [[ -n "$RAILWAY_SERVICE" ]]; then
   service_args=(--service "$RAILWAY_SERVICE")
+fi
+
+link_args=()
+if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
+  link_args+=(--project "$RAILWAY_PROJECT_ID")
+fi
+if [[ -n "$RAILWAY_WORKSPACE" ]]; then
+  link_args+=(--workspace "$RAILWAY_WORKSPACE")
+fi
+link_args+=(--environment "$RAILWAY_ENVIRONMENT")
+if [[ -n "$RAILWAY_SERVICE" ]]; then
+  link_args+=(--service "$RAILWAY_SERVICE")
 fi
 
 echo "AlphaVyuh Railway backend recovery"
@@ -25,6 +39,14 @@ fi
 if ! command -v railway >/dev/null 2>&1; then
   echo "Railway CLI is not installed. Install it, then rerun this script." >&2
   exit 1
+fi
+
+if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
+  echo "Linking Railway project before recovery ..."
+  (
+    cd "$BACKEND_DIR"
+    railway link "${link_args[@]}"
+  )
 fi
 
 if ! railway status --json >/tmp/alphavyuh-railway-status.json 2>/tmp/alphavyuh-railway-status.err; then
