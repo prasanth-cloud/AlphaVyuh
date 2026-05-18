@@ -13,12 +13,16 @@ import {
   type JournalStats,
 } from "@/lib/api";
 import { Card, DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
+import { checkApiReachability } from "@/lib/api-reachability";
+import { marketDataHealthPresentation } from "@/lib/data-health-copy";
 import { formatMarketDataSource } from "@/lib/data-copy";
+import type { ApiReachability } from "@/lib/data-mode";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
 type CenterState = {
   dataHealth: DataHealth | null;
+  apiReachable: ApiReachability;
   broker: BrokerStatus | null;
   journalStats: JournalStats | null;
   aiPatterns: AiPatterns | null;
@@ -99,6 +103,7 @@ function ActionItem({ title, detail, href }: { title: string; detail: string; hr
 export default function DataFreshnessPage() {
   const [state, setState] = useState<CenterState>({
     dataHealth: null,
+    apiReachable: "unknown",
     broker: null,
     journalStats: null,
     aiPatterns: null,
@@ -112,7 +117,8 @@ export default function DataFreshnessPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [dataHealth, broker, journalStats, journal, aiPatterns] = await Promise.all([
+        const [apiReachable, dataHealth, broker, journalStats, journal, aiPatterns] = await Promise.all([
+          checkApiReachability(),
           getDataHealth().catch(() => null),
           getBrokerStatus().catch(() => fallbackBroker),
           getJournalStats().catch(() => null),
@@ -125,6 +131,7 @@ export default function DataFreshnessPage() {
 
         setState({
           dataHealth,
+          apiReachable,
           broker,
           journalStats,
           aiPatterns,
@@ -148,7 +155,13 @@ export default function DataFreshnessPage() {
     const broker = state.broker ?? fallbackBroker;
     const reviewCoverage = state.closedTrades ? Math.round((state.reviewedTrades / state.closedTrades) * 100) : 0;
 
-    if (!health) {
+    if (state.apiReachable === "down") {
+      next.push({
+        title: "Restore market data service",
+        detail: "The platform is reachable, but the market data API is down. Scanner, dashboard, and charts need service recovery before data can be trusted.",
+        href: "/data",
+      });
+    } else if (!health) {
       next.push({
         title: "Check market data API",
         detail: "The freshness endpoint did not return data, so scanner and dashboard confidence cannot be shown.",
@@ -188,6 +201,7 @@ export default function DataFreshnessPage() {
   }, [state]);
 
   const health = state.dataHealth;
+  const marketHealth = marketDataHealthPresentation(health, state.apiReachable);
   const broker = state.broker ?? fallbackBroker;
   const coveragePct = health?.symbols_on_latest_date != null && health.universe_active
     ? Math.round((health.symbols_on_latest_date / health.universe_active) * 100)
@@ -238,9 +252,9 @@ export default function DataFreshnessPage() {
       <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
-          value={health?.status ? health.status.toUpperCase() : "CHECK DATA"}
-          detail={health?.latest_trade_date ? `Latest complete trade date ${health.latest_trade_date}.` : "Freshness details are not available right now."}
-          status={health?.status === "healthy" ? "good" : health?.status === "degraded" ? "warn" : "bad"}
+          value={marketHealth.value}
+          detail={marketHealth.detail}
+          status={marketHealth.status}
         />
         <HealthTile
           label="Universe coverage"
