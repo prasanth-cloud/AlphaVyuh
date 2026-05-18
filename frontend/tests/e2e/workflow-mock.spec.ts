@@ -17,7 +17,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByRole("button", { name: /^Create account$/ }).click();
 
     await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
-    await expect(page.getByText("Set up your private beta desk.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Set up your Professional Access desk/i })).toBeVisible();
 
     await page.getByLabel(/Intermediate/).check();
     await page.getByLabel(/Equity/).check();
@@ -189,12 +189,12 @@ test.describe("Mock workflow smoke", () => {
     await page.getByPlaceholder("Invalidation rule").fill("Exit if price closes below the breakout base.");
 
     await expect(page.getByText("Ready for order draft.")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Plan ready|Ready for simulated order draft/i);
+    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Plan ready|Ready for journal capture draft/i);
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeEnabled();
-    await expect(page.getByRole("button", { name: /^Save simulated buy draft$/i })).toBeEnabled();
+    await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
 
-    await page.getByRole("button", { name: /^Save simulated buy draft$/i }).click();
-    await expect(page.getByText(/saved as a simulated journal draft/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: /^Save buy journal draft$/i }).click();
+    await expect(page.getByText(/saved as a journal capture draft/i)).toBeVisible({ timeout: 10_000 });
 
     const localOrder = await page.evaluate(() => {
       const journal = JSON.parse(localStorage.getItem("alphavyuh-mock-journal-v1") || "[]");
@@ -288,9 +288,9 @@ test.describe("Mock workflow smoke", () => {
     await page.getByPlaceholder("Invalidation rule").fill("Exit if the breakout base fails on closing basis.");
 
     await expect(page.getByText("Ready for order draft.")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole("button", { name: /^Save simulated buy draft$/i })).toBeEnabled();
-    await page.getByRole("button", { name: /^Save simulated buy draft$/i }).click();
-    await expect(page.getByText(/saved as a simulated journal draft/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
+    await page.getByRole("button", { name: /^Save buy journal draft$/i }).click();
+    await expect(page.getByText(/saved as a journal capture draft/i)).toBeVisible({ timeout: 10_000 });
 
     await page.goto("/journal");
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });

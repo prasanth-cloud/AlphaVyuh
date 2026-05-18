@@ -86,7 +86,7 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
             </span>
           )}
           <DataProvenanceBadge
-            kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : data.is_live ? 'live-beta' : 'eod'}
+            kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : data.is_live ? 'live-provider' : 'eod'}
             asOf={data.trade_date}
             compact
           />
@@ -335,7 +335,7 @@ function WorkflowChecklistCard({
       label: 'Connect your broker',
       description: workflow.brokerConnected
         ? `${workflow.brokerName ?? 'Broker'} connected for read-only import and journal sync.`
-        : 'Optional for beta; broker connections are read-only/import only.',
+        : 'Optional; broker connections are read-only/import only.',
       completed: workflow.brokerConnected,
     },
     {
@@ -558,7 +558,7 @@ export default function DashboardPage() {
           broker: null,
           mode: 'simulated',
           status: 'not_connected' as const,
-          status_label: 'Broker simulated',
+          status_label: 'Journal capture',
           has_api_key: false,
           has_token: false,
           token_expired: false,

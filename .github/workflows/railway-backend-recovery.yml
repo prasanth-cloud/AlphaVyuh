@@ -1,0 +1,59 @@
+name: Railway Backend Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_api_url:
+        description: Production API base URL to verify
+        required: true
+        default: https://alphavyuh-production.up.railway.app
+      railway_project_id:
+        description: Railway project ID to link in CI
+        required: true
+      railway_environment:
+        description: Railway environment
+        required: true
+        default: production
+      railway_service:
+        description: Railway backend service name or ID
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    name: Recover Railway backend and verify production API
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Validate Railway token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Missing RAILWAY_TOKEN repository secret."
+            echo "Create a Railway token, add it to GitHub Actions secrets as RAILWAY_TOKEN, then rerun this workflow."
+            exit 1
+          fi
+
+      - name: Recover backend
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ github.event.inputs.railway_project_id }}
+          RAILWAY_ENVIRONMENT: ${{ github.event.inputs.railway_environment }}
+          RAILWAY_SERVICE: ${{ github.event.inputs.railway_service }}
+          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
+        run: npm run recover:railway-backend

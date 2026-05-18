@@ -3,12 +3,12 @@ import type { ReactNode } from "react";
 
 const supportEmail = "support@alphavyuh.com";
 
-const betaPosture = [
-  "Private/founder beta access only",
+const accessPosture = [
+  "Professional Access accounts only",
   "Market data with source and freshness shown in product",
   "Broker read-only checks and filled-trade import only",
-  "Live and sandbox broker order placement disabled",
-  "Production billing disabled and waitlist-gated",
+  "Live and sandbox broker order placement not enabled yet",
+  "Checkout opens after account approval and billing configuration",
   "Educational workflow and journal tool, not investment advice",
 ];
 
@@ -17,7 +17,7 @@ const onboardingChecklist = [
   "Add at least 3 stocks to a watchlist.",
   "Open the focused watchlist symbol in the full chart.",
   "Create a trade plan with entry, stop, target, thesis, and invalidation.",
-  "Save a simulated order draft or import a broker trade, then log/review it in Journal.",
+  "Save a journal capture draft or import a broker trade, then log/review it in Journal.",
 ];
 
 const interviewQuestions = [
@@ -26,14 +26,14 @@ const interviewQuestions = [
   "Did scanner to watchlist to chart feel faster than your current workflow?",
   "What field in the Decision Desk felt missing, noisy, or unclear?",
   "Would the Journal review loop change your next trading session?",
-  "What would block you from using AlphaVyuh twice a week during beta?",
+  "What would block you from using AlphaVyuh twice a week?",
 ];
 
 const limitations = [
-  "No live or real-time market-data claim in beta; scanner and chart workflows use the latest available market snapshot unless explicitly labeled demo/provider.",
+  "No live or real-time market-data claim; scanner and chart workflows use the latest available market snapshot unless explicitly labeled demo/provider.",
   "No investment advice, trade calls, guaranteed accuracy, or promise of returns.",
   "No live/sandbox broker order placement. Place real trades directly with your broker.",
-  "Production Razorpay checkout is disabled. Founder access is invite/waitlist-gated.",
+  "Production Razorpay checkout opens only after account approval and billing configuration.",
   "Broker read-only smoke requires owner-provided tokens and is not run automatically.",
   "Production Supabase changes require reviewed migrations and explicit approval.",
 ];
@@ -54,20 +54,20 @@ export default function BetaPage() {
 
         <header className="border-b border-white/10 pb-8">
           <div className="mb-4 text-xs font-bold uppercase tracking-[0.12em] text-[#c8f7ee]">
-            Founder beta operations
+            Professional Access operations
           </div>
           <h1 className="max-w-4xl text-4xl font-semibold leading-[1.02] tracking-[-0.04em] md:text-6xl">
             Test the complete trading workflow.
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-[#b6c0ce]">
-            AlphaVyuh beta testers should move through scanner, watchlist, full chart,
-            trade plan, journal, and review. The goal is workflow clarity and trust,
+            AlphaVyuh users should move through scanner, watchlist, full chart,
+            trade plan, journal, and review. The goal is workflow clarity, speed, and trust,
             not live execution or investment advice.
           </p>
         </header>
 
         <section className="grid gap-4 md:grid-cols-3">
-          {betaPosture.map((item) => (
+          {accessPosture.map((item) => (
             <div key={item} className="rounded-[14px] border border-white/10 bg-white/[0.035] p-4 text-sm leading-6 text-[#d6dfe8]">
               {item}
             </div>
@@ -75,7 +75,7 @@ export default function BetaPage() {
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-          <Panel title="Beta onboarding checklist">
+          <Panel title="Professional Access checklist">
             <ol className="space-y-3 text-sm leading-6 text-[#b6c0ce]">
               {onboardingChecklist.map((item, index) => (
                 <li key={item} className="flex gap-3">
@@ -120,7 +120,7 @@ export default function BetaPage() {
             </ul>
           </Panel>
 
-          <Panel title="Known beta limitations">
+          <Panel title="Current access limitations">
             <ul className="space-y-3 text-sm leading-6 text-[#b6c0ce]">
               {limitations.map((item) => (
                 <li key={item} className="flex gap-3">
@@ -134,7 +134,7 @@ export default function BetaPage() {
 
         <div className="flex flex-wrap items-center gap-3 border-t border-white/10 pt-6">
           <Link href="/signup" className="rounded-full bg-[#c8f7ee] px-5 py-3 text-sm font-bold text-[#04120d]">
-            Request founder beta access
+            Request Professional Access
           </Link>
           <Link href="/login" className="rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-[#f4f7fb]">
             Sign in

@@ -95,7 +95,7 @@ export default function LoginForm() {
           Sign in to AlphaVyuh
         </div>
         <div style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.6 }}>
-          Continue to your private beta trading desk.
+          Continue to your Professional Access workspace.
         </div>
         {nextPath !== "/dashboard" && (
           <div
@@ -168,7 +168,7 @@ export default function LoginForm() {
         <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Create one</Link>
       </p>
       <p style={{ marginTop: 14, textAlign: "center", fontSize: 11, lineHeight: 1.6, color: "var(--text-tertiary)" }}>
-        Private beta · Market data · Broker import only
+        Professional Access · EOD market data · Broker import only
       </p>
     </div>
   );

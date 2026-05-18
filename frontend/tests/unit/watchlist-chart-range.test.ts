@@ -53,7 +53,7 @@ describe("watchlist chart range mapping", () => {
     expect(formatChartGranularity("M")).toBe("Monthly");
   });
 
-  it("exposes intraday options as unavailable in beta mode", () => {
+  it("exposes intraday options as unavailable in Professional Access mode", () => {
     const intraday = CHART_TIMEFRAME_OPTIONS.filter((option) => option.group === "Intraday");
     expect(intraday.map((option) => option.label)).toEqual(["5m", "15m", "30m", "1h"]);
     expect(intraday.every((option) => option.disabled && option.unavailableReason === INTRADAY_UNAVAILABLE_MESSAGE)).toBe(true);

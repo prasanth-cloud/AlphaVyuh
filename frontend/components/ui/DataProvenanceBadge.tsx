@@ -1,6 +1,6 @@
 "use client";
 
-type ProvenanceKind = "eod" | "live-beta" | "fallback" | "demo" | "broker-beta";
+type ProvenanceKind = "eod" | "live-provider" | "fallback" | "demo" | "broker-import";
 
 const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; color: string; background: string }> = {
   eod: {
@@ -9,7 +9,7 @@ const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; c
     color: "#f4f7fb",
     background: "rgba(91, 99, 245, 0.10)",
   },
-  "live-beta": {
+  "live-provider": {
     label: "Data updating",
     detail: "Freshness is shown here; verify levels before trading",
     color: "#26a65b",
@@ -27,9 +27,9 @@ const PROVENANCE_COPY: Record<ProvenanceKind, { label: string; detail: string; c
     color: "#d6dce5",
     background: "rgba(124, 106, 240, 0.12)",
   },
-  "broker-beta": {
+  "broker-import": {
     label: "Import only",
-    detail: "Broker connection is read-only for beta; live and sandbox order placement are disabled",
+    detail: "Broker import is read-only; broker execution is not enabled yet",
     color: "#d97706",
     background: "rgba(217, 119, 6, 0.12)",
   },

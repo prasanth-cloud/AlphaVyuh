@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Agent mission control", () => {
-  test("renders the founder agent operating view without runtime errors", async ({ page }) => {
+  test("renders the operator agent view without runtime errors", async ({ page }) => {
     const errors: string[] = [];
     page.on("response", (response) => {
       if (response.status() >= 500) errors.push(`${response.status()} ${response.url()}`);

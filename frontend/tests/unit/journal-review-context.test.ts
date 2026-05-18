@@ -55,7 +55,7 @@ describe("journal review context", () => {
     expect(context.fallback).toMatch(/Original idea context was not captured/i);
   });
 
-  it("labels simulated watchlist orders without parsing them as manual logs", () => {
+  it("labels journal capture watchlist orders without parsing them as manual logs", () => {
     expect(getTradeFlowMeta({
       entry_reason: "[Simulated · watchlist]",
       status: "open",
@@ -63,7 +63,7 @@ describe("journal review context", () => {
       source_page: "watchlist",
     })).toMatchObject({
       sourceLabel: "Watchlist plan",
-      brokerLabel: "Simulated",
+      brokerLabel: "Journal capture",
       autoRecorded: true,
     });
   });

@@ -1909,8 +1909,8 @@ export async function applyFounderPlan(code: string): Promise<{ status: string; 
     body: JSON.stringify({ code }),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: "Founder code failed" }));
-    throw new Error(body.detail ?? "Founder code failed");
+    const body = await res.json().catch(() => ({ detail: "Access code failed" }));
+    throw new Error(body.detail ?? "Access code failed");
   }
   return res.json();
 }
@@ -3242,7 +3242,7 @@ export type WaitlistLead = {
 export async function getAdminWaitlist(): Promise<WaitlistLead[]> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/waitlist/admin`, { headers });
-  if (!res.ok) throw new Error("Admin waitlist unavailable");
+  if (!res.ok) throw new Error("Admin access queue unavailable");
   const data = await res.json();
   return data.waitlist ?? [];
 }

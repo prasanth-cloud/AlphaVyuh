@@ -23,7 +23,7 @@ export default function BetaAdminPage() {
     if (leadResult.status === "fulfilled") {
       setLeads(leadResult.value);
     } else {
-      setError(leadResult.reason instanceof Error ? leadResult.reason.message : "Admin waitlist unavailable");
+      setError(leadResult.reason instanceof Error ? leadResult.reason.message : "Admin access queue unavailable");
     }
     if (feedbackResult.status === "fulfilled") {
       setFeedback(feedbackResult.value);
@@ -66,10 +66,10 @@ export default function BetaAdminPage() {
         background: "linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
         boxShadow: "var(--shadow-panel)",
       }}>
-        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Founder beta</div>
+        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Professional Access</div>
         <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Customer onboarding queue.</h1>
         <p style={{ maxWidth: 740, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
-          Review landing-page beta leads and issue invite codes before activating founder-plan access.
+          Review access requests and issue invite codes before activating approved account access.
         </p>
       </div>
 
@@ -137,7 +137,7 @@ export default function BetaAdminPage() {
             className="w-full rounded-[8px] px-4 py-2.5 text-[13px] font-semibold disabled:opacity-60"
             style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
           >
-            {creating ? "Creating..." : "Create founder invite"}
+            {creating ? "Creating..." : "Create access invite"}
           </button>
           {invite && (
             <button
@@ -154,7 +154,7 @@ export default function BetaAdminPage() {
         <div className="rounded-[18px] p-5" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <div className="heading-card">Beta leads</div>
+              <div className="heading-card">Access requests</div>
               <div className="caption">{leads.length} latest requests</div>
             </div>
             <button onClick={load} className="workspace-chip-button flex items-center gap-2">

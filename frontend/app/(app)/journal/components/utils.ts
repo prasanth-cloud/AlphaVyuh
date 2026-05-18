@@ -118,7 +118,7 @@ export function getTradeFlowMeta(entry: Pick<JournalEntry, "entry_reason" | "sta
   const brokerLabel =
     reason.includes("zerodha") ? "Zerodha" :
     reason.includes("upstox") ? "Upstox" :
-    reason.includes("simulated") ? "Simulated" :
+    reason.includes("simulated") ? "Journal capture" :
     null;
 
   if (entry.status === "open") {

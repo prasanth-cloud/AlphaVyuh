@@ -194,7 +194,7 @@ function BrokerSettingsContent() {
           <EyebrowLabel>Broker integration</EyebrowLabel>
           <div className="app-page-title" style={{ marginTop: 4 }}>Broker connect hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time for account checks and filled-trade import. Tokens stay encrypted on the backend. Live and sandbox order placement are disabled for the private beta.
+            Connect one broker at a time for account checks and filled-trade import. Tokens stay encrypted on the backend. Live and sandbox order placement are not enabled yet.
           </div>
         </div>
 
@@ -203,7 +203,7 @@ function BrokerSettingsContent() {
             <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--warn)", marginBottom: 7 }}>Upgrade required</div>
             <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>Broker integration is available on Pro and Elite.</div>
             <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
-              Free accounts can use scanner, watchlist, chart planning, and journaling. Broker OAuth and filled-trade import unlock after upgrade; execution remains disabled during beta.
+              Free accounts can use scanner, watchlist, chart planning, and journaling. Broker OAuth and filled-trade import unlock after upgrade; execution is not enabled yet.
             </div>
             <Link href="/settings/billing" className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold inline-flex" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
               View Pro plan
@@ -217,7 +217,7 @@ function BrokerSettingsContent() {
             Zerodha OAuth is active for profile, holdings, orderbook, and filled-trade import. Upstox uses the same OAuth adapter contract for connect, profile, holdings, and import where broker data is available.
           </div>
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
-            This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every imported or simulated trade can still create a journal draft before review after close.
+            This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every imported trade or journal capture can still create a draft before review after close.
           </div>
         </div>
 
@@ -239,7 +239,7 @@ function BrokerSettingsContent() {
                         ? "Token expired"
                         : mode === "platform-unavailable"
                           ? "Connect unavailable"
-                          : "Simulated mode"}
+                          : "Journal capture mode"}
                   </div>
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
@@ -249,7 +249,7 @@ function BrokerSettingsContent() {
                         ? "Your broker session expired. Reconnect through the broker security flow."
                       : mode === "platform-unavailable"
                         ? "AlphaVyuh's broker app is not configured in production yet. Traders do not need to enter API keys."
-                        : "Order capture remains simulated and journaling still works until a read-only broker session is connected."}
+                        : "Order capture remains journal-only and journaling still works until a read-only broker session is connected."}
                 </div>
               </div>
               <Num style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
@@ -317,10 +317,10 @@ function BrokerSettingsContent() {
               {[
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
-                "Expired sessions fall back to simulated mode instead of blocking chart/journal workflows.",
-                "Live and sandbox order submission are disabled for beta; filled broker trades can be imported into Journal.",
+                "Expired sessions fall back to journal capture mode instead of blocking chart/journal workflows.",
+                "Live and sandbox order submission are not enabled yet; filled broker trades can be imported into Journal.",
                 "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
-                "Every imported or simulated trade should still create a journal entry with source context.",
+                "Every imported trade or journal capture should still create a journal entry with source context.",
               ].map((line) => (
                 <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {line}
@@ -353,7 +353,7 @@ function BrokerSettingsContent() {
                   </button>
                 ) : upstoxConnectable ? (
                   <button onClick={() => handleAdapterConnect("upstox")} disabled={busy === "connect-upstox" || !state?.plan_allows_broker} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
-                    {busy === "connect-upstox" ? "Opening Upstox..." : "Connect OAuth beta"}
+                    {busy === "connect-upstox" ? "Opening Upstox..." : "Connect OAuth"}
                   </button>
                 ) : (
                   <button disabled className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
@@ -375,7 +375,7 @@ function BrokerSettingsContent() {
               "1. Stabilize Zerodha connect, reconnect, holdings, orderbook, and filled-trade import.",
               "2. Add a shared broker token status API so every adapter reports connected, expired, and permissions consistently.",
               "3. Add Upstox OAuth adapter next because its authorization-code flow maps cleanly to the current hub.",
-              "4. Add Dhan after Upstox, using longer token validity for easier beta-user onboarding.",
+              "4. Add Dhan after Upstox, using longer token validity for easier onboarding.",
             ].map((line) => (
               <div key={line} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                 <CheckCircle2 size={13} style={{ display: "inline", marginRight: 7, color: "var(--gain)" }} />

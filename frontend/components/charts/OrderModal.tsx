@@ -83,7 +83,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
       ? `${brokerLabel} explicit confirm`
       : `${brokerLabel} import-only`
     : brokerTokenExpired
-      ? "Token expired · simulated capture"
+      ? "Token expired · journal capture"
       : "Simulated capture";
   const canRouteLive = brokerLive && liveOrderEnabled && planAllowsBroker;
 
@@ -141,13 +141,13 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
           <div className="rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <span className="text-[11px] font-bold uppercase tracking-wide text-[#9a5f07]">Execution guardrail</span>
-              <DataProvenanceBadge kind="broker-beta" compact />
+              <DataProvenanceBadge kind="broker-import" compact />
             </div>
             <p className="text-[11px] leading-5 text-[#7b5a2b]">
               {planAllowsBroker
                 ? canRouteLive
-                  ? "Private beta keeps order execution owner-gated. Confirm any real trade directly with your broker terminal."
-                  : "Broker connections can import filled trades. Live and sandbox order placement remain disabled for beta."
+                  ? "Order execution is owner-gated. Confirm any real trade directly with your broker terminal."
+                  : "Broker import can capture filled trades. Live and sandbox order placement are not enabled yet."
                 : "Broker integration requires Pro or Elite. Free accounts can still use chart planning and journaling."}
             </p>
           </div>
@@ -271,7 +271,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
             <span className="text-[11px] leading-5 text-[#7b5a2b]">
               {canRouteLive
                 ? "Live order submission requires your explicit confirmation below. Verify symbol, side, quantity, price, and risk before submitting."
-                : "This creates a simulated journal draft only. Broker execution is unavailable for this account/session."}
+                : "This creates a journal capture draft only. Broker execution is not enabled for this account/session."}
             </span>
           </div>
 
@@ -339,15 +339,15 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
           >
             {placing
               ? canRouteLive && liveConfirmed ? "Submitting order..." : "Saving journal draft..."
-              : canRouteLive ? `${side.toUpperCase()} ${quantity || ""} ${symbol} via ${brokerLabel}` : `Save simulated ${side.toUpperCase()} draft`}
+              : canRouteLive ? `${side.toUpperCase()} ${quantity || ""} ${symbol} via ${brokerLabel}` : `Save ${side.toUpperCase()} journal draft`}
           </button>
 
           <p className="text-[10px] text-[#ccc] text-center">
             {brokerLive && brokerName
-              ? canRouteLive ? `${brokerLabel} is connected. Submission happens only after explicit confirmation.` : `${brokerLabel} is connected for import. This modal records a simulated journal draft.`
+              ? canRouteLive ? `${brokerLabel} is connected. Submission happens only after explicit confirmation.` : `${brokerLabel} is connected for import. This modal records a journal capture draft.`
               : brokerTokenExpired
-                ? `Simulated journal draft only — your ${brokerLabel} token expired.`
-                : "Simulated journal draft — ready for post-trade review"}
+                ? `Journal capture draft only — your ${brokerLabel} token expired.`
+                : "Journal capture draft — ready for post-trade review"}
           </p>
         </div>
       </div>
