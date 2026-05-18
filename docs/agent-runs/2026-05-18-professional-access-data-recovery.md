@@ -34,6 +34,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Added a manual `Railway Backend Recovery` GitHub Actions workflow so production recovery can run from GitHub after the owner adds `RAILWAY_TOKEN` and provides the Railway project/service inputs. The workflow fails fast if the token secret is missing.
 - Fixed the candle endpoint to fetch the latest available EOD window and return it oldest-to-newest for chart rendering.
 - Hardened candle serialization so missing indicator fields become `null` instead of leaking `NaN` into JSON responses.
+- Tightened `npm run check:production-api` so it now fails if the smoke-tested RELIANCE candles are stale versus the market summary date.
 
 ## Validation
 
@@ -66,6 +67,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `backend/.venv/bin/python -m pytest backend/tests/test_charts.py` passed: 9 tests.
   - Local backend smoke against production Supabase passed: `ALLOW_LOCAL_API_CHECK=1 PRODUCTION_API_URL=http://127.0.0.1:8017 npm run check:production-api`.
   - Local `RELIANCE` daily candles with `limit=500` now return `2024-05-30` through `2026-05-18`; `limit=3000` returns all 1,301 available rows from `2021-05-03` through `2026-05-18`.
+  - `npm run test:production-api-check` now covers Railway fallback, stale chart candles, and healthy current candles.
+  - Local production API checker against the Supabase-backed backend passed with `RELIANCE candles 5 through 2026-05-18`.
 
 ## Production Data Recovery Status
 
