@@ -1,12 +1,12 @@
-name: Founder beta bug report
-description: Report a beta bug that blocks or confuses the trading workflow.
-title: "[Beta bug]: "
-labels: ["beta", "bug"]
+name: Professional Access bug report
+description: Report a product issue that blocks or confuses the trading workflow.
+title: "[Product bug]: "
+labels: ["bug", "professional-access"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this for founder beta issues. Do not paste broker tokens, account ids, passwords, or private portfolio data.
+        Use this for Professional Access workflow issues. Do not paste broker tokens, account ids, passwords, or private portfolio data.
   - type: input
     id: route
     attributes:

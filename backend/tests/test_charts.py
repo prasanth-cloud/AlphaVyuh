@@ -173,7 +173,7 @@ def test_normalize_eod_timeframe_rejects_intraday():
         charts._normalize_eod_timeframe("5m")
 
     assert exc.value.status_code == 422
-    assert "Intraday candle data is not available" in exc.value.detail
+    assert "Intraday candle data is not available for Professional Access yet" in exc.value.detail
 
 
 @pytest.mark.anyio

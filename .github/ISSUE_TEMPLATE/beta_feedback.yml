@@ -1,7 +1,7 @@
-name: Founder beta workflow feedback
-description: Capture trader feedback after the beta onboarding checklist.
-title: "[Beta feedback]: "
-labels: ["beta", "feedback"]
+name: Professional Access workflow feedback
+description: Capture trader feedback after the Professional Access workflow checklist.
+title: "[Workflow feedback]: "
+labels: ["feedback", "professional-access"]
 body:
   - type: markdown
     attributes:

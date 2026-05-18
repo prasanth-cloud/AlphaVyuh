@@ -19,7 +19,7 @@ from app.services.supabase import get_admin_client
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
 
 SUPPORTED_EOD_TIMEFRAMES = {"D", "W", "M"}
-INTRADAY_UNAVAILABLE_DETAIL = "Intraday candle data is not available in beta mode."
+INTRADAY_UNAVAILABLE_DETAIL = "Intraday candle data is not available for Professional Access yet."
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
