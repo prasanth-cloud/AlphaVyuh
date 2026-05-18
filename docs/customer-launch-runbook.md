@@ -9,6 +9,8 @@ Run before every release:
 ```bash
 npm run launch:check
 LIVE_URL=https://www.alphavyuh.com npm run launch:check
+npm run check:data-recovery
+npm run check:production-api:railway
 ```
 
 Manual browser pass:
@@ -111,10 +113,35 @@ Data requirements for launch:
 - Charts: daily/weekly/monthly candles first; intraday only after provider contract supports it.
 - Alerts: price alerts reliable from the same provider used for chart quotes.
 
+Railway backend recovery:
+
+- Run `npm run check:data-recovery` before any customer-facing demo or launch.
+- If Supabase EOD data is present but the Railway API returns fallback
+  `404 Application not found`, recover the backend before inviting users.
+- GitHub Actions recovery path:
+
+```bash
+export RAILWAY_TOKEN=...
+export RAILWAY_PROJECT_ID=...
+export RAILWAY_SERVICE=...
+npm run prepare:railway-recovery-secrets -- --apply --run-workflow
+npm run check:data-recovery
+```
+
+- Local recovery path:
+
+```bash
+railway login
+npm run recover:railway-backend
+npm run check:data-recovery
+```
+
 Go/no-go:
 
 - Do not enable `NEXT_PUBLIC_FORCE_LIVE_DATA=true` for paid launch until provider credentials, legal terms, uptime, and failover behavior are tested.
 - Keep visible data badges in the app.
+- No customer launch if the production backend is returning Railway fallback
+  instead of the FastAPI health response.
 
 ## 3. Payment Readiness
 
