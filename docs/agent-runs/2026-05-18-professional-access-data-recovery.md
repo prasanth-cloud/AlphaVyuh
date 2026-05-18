@@ -24,6 +24,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | Product Copy QA Agent | Removed remaining active “early access” and “Founder” posture from public pricing and active launch-blocker intake. | The visible product and operating surfaces now sound like a professional platform, not a tester program. | Adjacent phrases can preserve beta energy even when the literal word “beta” is gone. |
 | Recovery Readiness Agent | Added `npm run check:data-recovery` to aggregate production API health, GitHub Railway secrets, and local Railway CLI readiness. | The owner can now run one command and see whether data recovery is complete, ready to deploy, or blocked by missing auth/secrets. | Repeated manual checks should become productized runbooks with tests, not chat-memory checklists. |
 | Supabase Freshness Agent | Extended the recovery preflight to verify the raw Supabase EOD store when credentials are available. | The command now separates empty database risk from API hosting failure in one report. | Current data is present; the visible website failure is Railway hosting, not missing EOD rows. |
+| Workflow Visibility Agent | Added Railway Backend Recovery workflow-run status to `npm run check:data-recovery`. | The owner can now see whether recovery has never been attempted, is failing, or recently succeeded without opening Actions first. | A missing workflow run is different from a failed recovery run; both need different next steps. |
 
 ## Changes
 
@@ -69,6 +70,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Added `npm run check:data-recovery` and `npm run test:data-recovery-check` to make production data recovery readiness self-diagnosing.
 - Wired `npm run test:data-recovery-check` into the Agent PR Gate so the recovery preflight stays protected in CI.
 - Extended `npm run check:data-recovery` to load Supabase env from the process or `backend/.env` and verify latest `daily_ohlcv` coverage without printing secret values.
+- Extended `npm run check:data-recovery` to report the latest manual `Railway Backend Recovery` workflow run, or clearly say that no run has happened yet.
 
 ## Validation
 
