@@ -22,7 +22,7 @@ body:
     attributes:
       label: Decision owner
       options:
-        - Founder
+        - Owner
         - Product
         - Engineering
         - Security

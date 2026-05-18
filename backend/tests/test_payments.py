@@ -112,6 +112,19 @@ def test_access_codes_default_to_disabled(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_payment_config_uses_professional_access_flags(monkeypatch):
+    monkeypatch.setattr(payments.settings, "founder_plan_codes", "ACCESS100")
+    monkeypatch.setattr(payments.settings, "razorpay_key_id", "")
+    monkeypatch.setattr(payments.settings, "razorpay_key_secret", "")
+    monkeypatch.setattr(payments.settings, "payment_checkout_enabled", False)
+
+    config = await payments.payment_config()
+
+    assert config["access_code_available"] is True
+    assert "founder_plan_available" not in config
+
+
+@pytest.mark.anyio
 async def test_access_code_apply_uses_professional_access_response(monkeypatch):
     class FakeQuery:
         def __init__(self, client, table_name):

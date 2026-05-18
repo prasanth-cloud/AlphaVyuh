@@ -20,6 +20,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | Operations Agent | Renamed active GitHub feedback templates and current runbooks away from beta/founder wording. | The operating layer now matches the product posture testers and contributors see in the app. | Even after UI cleanup, issue templates and runbooks can quietly preserve old positioning. |
 | Data Verification Agent | Strengthened the production API smoke to require real breadth, deeper chart history, and optional authenticated scanner matches. | Backend recovery will now prove more than `/health`; it will catch shallow/stale chart data before traders see it. | Scanner verification needs an auth token, so the smoke supports an optional `PRODUCTION_API_BEARER_TOKEN` rather than weakening auth. |
 | Public Posture Agent | Added a live public-site posture check for landing, login, access, and legacy beta redirect routes. | Launch checks now verify the visible website reads like Professional Access before sharing with traders. | The old live grep was too loose and tied to outdated landing-page copy. |
+| Recovery Workflow Agent | Passed optional `PRODUCTION_API_BEARER_TOKEN` through the Railway recovery workflow and recovery helper. | Once Railway is restored, the owner can prove authenticated scanner data from the same recovery run instead of doing a separate manual smoke. | Secrets should come from GitHub Actions secrets, not workflow text inputs. |
+| Product Copy QA Agent | Removed remaining active “early access” and “Founder” posture from public pricing and active launch-blocker intake. | The visible product and operating surfaces now sound like a professional platform, not a tester program. | Adjacent phrases can preserve beta energy even when the literal word “beta” is gone. |
 
 ## Changes
 
@@ -58,6 +60,10 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Reworded active operations docs for EOD refresh, release readiness, customer launch, and mission control from beta/founder posture to Professional Access posture.
 - Strengthened `npm run check:production-api` to validate market breadth counts, at least 120 RELIANCE daily candles spanning at least 180 days, and optional authenticated scanner matches when `PRODUCTION_API_BEARER_TOKEN` is provided.
 - Added `npm run check:public-posture` and wired `LIVE_URL=... npm run launch:check` to verify Professional Access public copy and reject legacy beta posture across `/`, `/login`, `/access`, and `/beta`.
+- Made the manual Railway Backend Recovery workflow pass `PRODUCTION_API_BEARER_TOKEN` from GitHub Actions secrets when authenticated scanner verification is enabled.
+- Made the recovery helper state whether scanner verification will run before it calls the production API smoke.
+- Removed remaining active public/operations posture leaks: landing-page `Early access to new features`, active launch-blocker `Founder` decision owner, and public payment-config `founder_plan_available`.
+- Tightened public posture checks so future public landing copy cannot reintroduce `early access` positioning.
 
 ## Validation
 
@@ -156,6 +162,23 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Follow-up public posture CI validation:
   - Added `npm run test:public-posture-check` with deterministic local coverage for clean copy, forbidden beta copy, missing Professional Access copy, and legacy `/beta` redirect behavior.
   - Wired `npm run test:public-posture-check` into the Agent PR Gate so every PR protects the public Professional Access posture.
+- Follow-up Railway authenticated scanner recovery validation:
+  - `bash -n scripts/recover-railway-backend.sh` passed.
+  - `.github/workflows/railway-backend-recovery.yml` parsed as YAML.
+  - `npm run test:public-posture-check` passed and now rejects `early access` public positioning.
+  - `npm run test:production-api-check` passed.
+  - `backend/.venv/bin/python -m pytest backend/tests/test_payments.py` passed: 19 tests.
+  - `backend/.venv/bin/python -m pytest backend/tests/test_charts.py backend/tests/test_brokers_router.py backend/tests/test_broker_order_safety.py backend/tests/test_auth_middleware.py backend/tests/test_security_hardening.py backend/tests/test_market_overview_failsoft.py backend/tests/test_fundamentals_failsoft.py backend/tests/test_payments.py` passed: 55 tests.
+  - `npm run lint` passed.
+  - `npm run typecheck` passed.
+  - `npm --prefix frontend run test -- --run` passed: 72 tests.
+  - `npm audit --audit-level=moderate` passed: 0 vulnerabilities.
+  - `backend/.venv/bin/python -m pip_audit -r backend/requirements.txt` passed: no known vulnerabilities.
+  - `npm run test:e2e:layout` passed: 16 tests.
+  - `npm run test:e2e:perf` passed: 2 tests.
+  - `npm run test:e2e:mock` passed: 10 tests after rerunning alone; the first attempt collided with the concurrent perf run on port 3002.
+  - `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api` still fails at `/health` with Railway fallback `404 Application not found`, confirming the remaining blocker is hosting/domain recovery.
+  - `railway whoami && railway status --json` still fails with expired local Railway auth and requires `railway login`.
 
 ## Production Data Recovery Status
 
@@ -173,8 +196,9 @@ Next required owner action:
 
 1. Local option: run `railway login` locally for the AlphaVyuh Railway account, then run `npm run recover:railway-backend`.
 2. GitHub option: add a `RAILWAY_TOKEN` repository secret, and either add `RAILWAY_PROJECT_ID` / `RAILWAY_SERVICE` / optional `RAILWAY_WORKSPACE` repository secrets or pass those values when running the manual `Railway Backend Recovery` workflow.
-3. If the repo is not linked locally, run `cd /Users/PRASAANTH/alphavyuh/backend && railway link`, then rerun `npm run recover:railway-backend`.
-4. The helper deploys the backend, waits for `/health`, prints recent Railway logs on failure, and runs `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api`.
+3. Optional scanner verification: add a `PRODUCTION_API_BEARER_TOKEN` repository secret for a real authenticated user so the recovery workflow can verify scanner results after `/health`, market summary, and chart-history checks pass.
+4. If the repo is not linked locally, run `cd /Users/PRASAANTH/alphavyuh/backend && railway link`, then rerun `npm run recover:railway-backend`.
+5. The helper deploys the backend, waits for `/health`, prints recent Railway logs on failure, and runs `PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run check:production-api`.
 
 ## Remaining Risks
 
