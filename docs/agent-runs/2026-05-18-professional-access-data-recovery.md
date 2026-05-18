@@ -39,6 +39,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Replaced remaining active GitHub issue-template and backend error references to beta/founder posture with Professional Access wording.
 - Made the manual Railway Backend Recovery workflow accept optional `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE`, and `RAILWAY_WORKSPACE` secrets so owner inputs do not need to be retyped on every run.
 - Improved the recovery script diagnostics so, when `RAILWAY_TOKEN` is present but the repo is not linked, it prints visible Railway projects and tells the operator which project/service values are missing.
+- Fixed the recovery script to run Railway status and fallback log commands from `backend/`, matching the directory where the project is linked and deployed.
 
 ## Validation
 
@@ -75,6 +76,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - Local production API checker against the Supabase-backed backend passed with `RELIANCE candles 5 through 2026-05-18`.
   - Active-code posture sweep now finds no legacy beta wording outside the intentional Playwright forbidden-copy assertion.
   - `bash -n scripts/recover-railway-backend.sh` passed after recovery input improvements.
+  - `bash -n scripts/recover-railway-backend.sh` passed after aligning Railway status/log checks with the backend working directory.
 
 ## Production Data Recovery Status
 

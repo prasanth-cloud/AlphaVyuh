@@ -49,7 +49,10 @@ if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
   )
 fi
 
-if ! railway status --json >/tmp/alphavyuh-railway-status.json 2>/tmp/alphavyuh-railway-status.err; then
+if ! (
+  cd "$BACKEND_DIR"
+  railway status --json
+) >/tmp/alphavyuh-railway-status.json 2>/tmp/alphavyuh-railway-status.err; then
   cat /tmp/alphavyuh-railway-status.err >&2 || true
   echo
   echo "Railway is not ready for deployment from this machine." >&2
@@ -94,7 +97,10 @@ done
 
 if [[ "$health_ok" != "1" ]]; then
   echo "Backend health did not recover. Latest Railway logs:" >&2
-  railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" "${service_args[@]}" || true
+  (
+    cd "$BACKEND_DIR"
+    railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" "${service_args[@]}" || true
+  )
   exit 1
 fi
 
