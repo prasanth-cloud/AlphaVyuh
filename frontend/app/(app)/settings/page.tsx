@@ -278,7 +278,7 @@ function SettingsContent() {
 
   const handleUpgrade = async (planId: "pro" | "elite") => {
     if (paymentConfig && !paymentConfig.configured) { showToast("Payment gateway is not configured yet", false); return; }
-    if (!RAZORPAY_KEY) { showToast("Professional Access billing is not open yet", false); return; }
+    if (!RAZORPAY_KEY) { showToast("Billing is not enabled for this account", false); return; }
     setPaying(planId);
     try {
       const loaded = await loadRazorpay();
@@ -658,10 +658,10 @@ function SettingsContent() {
               >
                 <div className="max-w-[640px]">
                   <div className="text-[12px] font-semibold uppercase tracking-[0.12em] mb-1" style={{ color: checkoutEnabled ? "var(--gain)" : "var(--warn)" }}>
-                    Professional Access billing is not open yet
+                    Billing is not enabled for this account
                   </div>
                   <div className="leading-relaxed">
-                    Production checkout is disabled until release, legal, and billing approvals are complete. Professional Access can still be applied with an approved access code.
+                    Checkout remains unavailable until account billing is approved and configured. Professional Access can still be applied with an approved access code.
                   </div>
                 </div>
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)" }}>

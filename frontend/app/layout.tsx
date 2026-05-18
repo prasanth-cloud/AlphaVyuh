@@ -19,7 +19,7 @@ const geistMono = localFont({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://alphavyuh.com"),
-  title: "AlphaVyuh — India’s Trading OS",
+  title: "AlphaVyuh — Indian Equity Workflow Software",
   description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
   manifest: "/manifest.json",
   icons: {
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     shortcut: "/favicon.svg",
   },
   openGraph: {
-    title: "AlphaVyuh — India’s Trading OS",
+    title: "AlphaVyuh — Indian Equity Workflow Software",
     description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
     url: "https://alphavyuh.com",
     siteName: "AlphaVyuh",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "AlphaVyuh — India’s Trading OS",
+    title: "AlphaVyuh — Indian Equity Workflow Software",
     description: "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
     images: ["https://alphavyuh.com/og-image.png"],
   },

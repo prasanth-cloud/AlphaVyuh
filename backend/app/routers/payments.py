@@ -48,9 +48,10 @@ def _rzp_client():
 
 
 def _enabled_access_codes() -> set[str]:
+    raw_codes = settings.access_plan_codes or settings.founder_plan_codes or ""
     return {
         code.strip().upper()
-        for code in (settings.founder_plan_codes or "").split(",")
+        for code in raw_codes.split(",")
         if code.strip()
     }
 
@@ -62,7 +63,7 @@ def _enabled_founder_codes() -> set[str]:
 
 def _ensure_checkout_enabled() -> None:
     if not settings.payment_checkout_enabled:
-        raise HTTPException(403, "Payment checkout is disabled until Professional Access billing opens")
+        raise HTTPException(403, "Payment checkout is unavailable for this account")
 
 
 def _validated_order_context(order: dict, *, expected_user_id: str) -> tuple[str, str, str]:

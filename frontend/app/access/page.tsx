@@ -59,7 +59,7 @@ export default function AccessPage() {
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-[#b6c0ce]">
             AlphaVyuh connects scanner, watchlist, full chart, trade planning, journal capture,
-            and review so every decision keeps its market context. Access is managed by approval
+            and review so every decision keeps its market context. Workspace access is account-managed
             while live broker order placement remains disabled.
           </p>
         </header>

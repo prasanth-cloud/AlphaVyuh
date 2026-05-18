@@ -16,6 +16,7 @@
     "test:data-recovery-check": "node scripts/test-check-data-recovery-readiness.mjs",
     "check:public-posture": "node scripts/check-public-posture.mjs",
     "check:production-api": "node scripts/check-production-api.mjs",
+    "check:production-api:railway": "PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app node scripts/check-production-api.mjs",
     "check:data-recovery": "node scripts/check-data-recovery-readiness.mjs",
     "recover:railway-backend": "bash scripts/recover-railway-backend.sh",
     "launch:check": "bash scripts/launch-readiness-check.sh",

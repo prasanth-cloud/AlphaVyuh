@@ -57,7 +57,7 @@ export default function CommunityPage() {
           <div>
             <div className="text-[20px] font-semibold tracking-tight">Community Screens</div>
             <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>
-              Demo-safe launch preview of shared scan strategies
+              Shared scan strategy examples for review
             </div>
           </div>
           <div className="flex items-center gap-2">

@@ -303,7 +303,7 @@ export default function LandingPage() {
               <div className="lp-live-pill"><div className="lp-pulse"></div>Professional Access · EOD market data</div>
             </div>
             <h1 className="lp-h1">
-              <span className="lp-h1-s1">India&apos;s Trading OS.</span>
+              <span className="lp-h1-s1">A focused workflow system for Indian equities.</span>
               <span className="lp-h1-s2"><span className="lp-h1-muted">A simpler desk for Indian equities.</span></span>
             </h1>
             <p className="lp-sub">A professional workflow system for scanning markets, building watchlists, planning charts, and journaling trades.</p>
@@ -558,7 +558,7 @@ export default function LandingPage() {
         <div className="lp-wrap" style={{textAlign:"center"}}>
           <span className="lp-sec-label">Pricing</span>
           <h2 className="lp-sec-title">Professional Access plans.</h2>
-          <p className="lp-sec-sub" style={{ margin: "0 auto 28px" }}>Pricing is shown for planning. Checkout opens only when billing is approved for your account.</p>
+          <p className="lp-sec-sub" style={{ margin: "0 auto 28px" }}>Pricing is shown for planning. Billing is enabled per approved account.</p>
           <div className="lp-ptoggle">
             <span className="lp-pt-label lp-pt-active" id="lp-ptm">Monthly</span>
             <label className="lp-toggle-pill">
@@ -585,7 +585,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="lp-pcard lp-pcard-featured lp-fade" style={{transitionDelay:".1s"}}>
-              <div className="lp-featured-badge">MOST POPULAR</div>
+              <div className="lp-featured-badge">Recommended</div>
               <span className="lp-plan-tier">Pro</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-pro">1,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-pro-old" style={{display:"none"}}>₹1,999</span></div>
               <p className="lp-pdesc">For active swing traders who scan daily and keep a structured review routine.</p>
@@ -608,7 +608,7 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <p style={{marginTop:28,fontSize:".82rem",color:"var(--lp-muted)"}}>Checkout opens only after account approval and billing configuration. No production Razorpay payment is collected until then.</p>
+          <p style={{marginTop:28,fontSize:".82rem",color:"var(--lp-muted)"}}>Billing is enabled after account approval and payment configuration. No production Razorpay payment is collected until then.</p>
         </div>
       </section>
 
@@ -623,7 +623,7 @@ export default function LandingPage() {
               ["Which brokers are supported?","Zerodha Kite Connect v3 and Upstox v2 support read-only account checks, holdings/orderbook reads, filled-trade import, and journal sync where configured. Live and sandbox order placement are not enabled yet."],
               ["How does journal review work?","Every trade you log is stored in your journal. Review analytics summarize patterns from closed trades, including win rate, R:R, holding period, sector, and notes."],
               ["Is my trading data secure?","Yes. All data is stored in Supabase Postgres with Row Level Security — only you can access your trades, watchlists, and journal. Broker access tokens are stored encrypted after OAuth. We never ask for your broker password or developer API secrets."],
-              ["Can I pay today?","Production checkout opens after account approval, billing configuration, and release checks are complete."],
+              ["How is billing handled?","Billing is enabled for approved accounts once payment configuration is complete."],
               ["Does AlphaVyuh give trade calls?","No. AlphaVyuh is an educational workflow and journal tool, not SEBI-registered investment advice or a guarantee of market-data accuracy."],
             ].map(([q,a]) => (
               <div key={q} className="lp-faq-item">
