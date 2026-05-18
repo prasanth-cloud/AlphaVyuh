@@ -46,6 +46,8 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Reworked `/access` from a tester/research page into a professional access overview with workflow, included capabilities, support, and data/execution policy.
 - Added a top-bar Data API outage signal so authenticated screens show `Data API down` instead of implying the latest EOD session is reachable when Railway returns fallback 404.
 - Reworded market-data outage errors from live-data language to EOD-compatible market-data service language.
+- Added an explicit Data Status page outage state so the dedicated health page says `DATA API DOWN` and points recovery work at the market-data service instead of showing a vague `CHECK DATA` state.
+- Moved the authenticated admin access queue from `/admin/beta` to `/admin/access`, while keeping `/admin/beta` as a compatibility redirect.
 
 ## Validation
 
@@ -89,6 +91,14 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `/access` release and layout smoke assertions now verify professional workflow/policy copy instead of tester/interview copy.
 - Frontend unit tests cover the market-data outage copy used when Railway returns fallback 404 or network fetch fails.
 - Frontend unit tests cover the `Data API down` presentation used by the app-shell data mode pill.
+- Follow-up Data Status outage validation passed:
+  - `npm --prefix frontend run test -- --run tests/unit/data-health-copy.test.ts tests/unit/data-mode.test.ts tests/unit/data-errors.test.ts` passed: 6 tests.
+  - `npm run typecheck` passed.
+  - `npm run lint` passed.
+  - `npm --prefix frontend run test -- --run` passed: 71 tests.
+  - `npm run test:e2e:layout` passed: 16 tests after the Data Status probe was adjusted to skip API health pings in mock mode.
+  - Active customer-facing code/template sweep still finds no legacy beta posture copy in `frontend/app`, `frontend/components`, `frontend/lib`, `backend/app`, or `supabase/templates`.
+  - Active app scan found no remaining `Beta*` page/component names; only intentional legacy redirect tests reference `/beta`.
 
 ## Production Data Recovery Status
 
