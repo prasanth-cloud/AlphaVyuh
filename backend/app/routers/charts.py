@@ -583,7 +583,7 @@ async def get_candles(
         if adjusted:
             rows = _fetch_adjusted_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit)
         else:
-            rows = _fetch_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit)
+            rows = _fetch_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit, desc=True)
     except Exception:
         metadata = fallback_source_metadata("Candle query is temporarily unavailable.", as_of=None)
         return {
@@ -616,6 +616,7 @@ async def get_candles(
     daily_df["trade_date"] = pd.to_datetime(daily_df["trade_date"]).dt.date
     for col in ["open", "high", "low", "close", "volume"]:
         daily_df[col] = pd.to_numeric(daily_df[col], errors="coerce")
+    daily_df = daily_df.sort_values("trade_date").reset_index(drop=True)
 
     if tf in ("W", "M"):
         agg_df = _aggregate_to_timeframe(daily_df, tf)
@@ -650,7 +651,11 @@ async def get_candles(
             "prev_close": prev_close,
         }
     else:
-        # Daily — original logic
+        # Daily — return the latest fetched window oldest-to-newest for charting.
+        def _nullable_float(row: dict[str, Any], col: str) -> float | None:
+            value = row.get(col)
+            return float(value) if value is not None and pd.notna(value) else None
+
         candles = [
             {
                 "time": str(row["trade_date"]),
@@ -658,20 +663,20 @@ async def get_candles(
                 "high":   float(row["high"]),
                 "low":    float(row["low"]),
                 "close":  float(row["close"]),
-                "volume": int(row["volume"]) if row["volume"] else 0,
-                "ema_20":  float(row["ema_20"])  if row.get("ema_20")  is not None else None,
-                "ema_50":  float(row["ema_50"])  if row.get("ema_50")  is not None else None,
-                "ema_200": float(row["ema_200"]) if row.get("ema_200") is not None else None,
-                **({"adjustment_factor": float(row["adjustment_factor"])} if row.get("adjustment_factor") is not None else {}),
+                "volume": int(row["volume"]) if row.get("volume") is not None and pd.notna(row["volume"]) else 0,
+                "ema_20":  _nullable_float(row, "ema_20"),
+                "ema_50":  _nullable_float(row, "ema_50"),
+                "ema_200": _nullable_float(row, "ema_200"),
+                **({"adjustment_factor": _nullable_float(row, "adjustment_factor")} if _nullable_float(row, "adjustment_factor") is not None else {}),
             }
-            for row in rows
+            for row in daily_df.to_dict("records")
         ]
-        latest_row = rows[-1]
-        prev_close = float(latest_row["prev_close"]) if latest_row.get("prev_close") else None
+        latest_row = daily_df.iloc[-1].to_dict()
+        prev_close = _nullable_float(latest_row, "prev_close")
         close_val  = float(latest_row["close"])
-        avg_vol    = float(latest_row["avg_volume_20d"]) if latest_row.get("avg_volume_20d") else None
-        vol        = int(latest_row["volume"]) if latest_row.get("volume") else 0
-        def _f(col): return float(latest_row[col]) if latest_row.get(col) is not None else None  # type: ignore[misc]
+        avg_vol    = _nullable_float(latest_row, "avg_volume_20d")
+        vol        = int(latest_row["volume"]) if latest_row.get("volume") is not None and pd.notna(latest_row["volume"]) else 0
+        def _f(col): return _nullable_float(latest_row, col)  # type: ignore[misc]
         latest = {
             "close": close_val,
             "pct_change": round((close_val - prev_close) / prev_close * 100, 2) if prev_close and prev_close > 0 else None,
