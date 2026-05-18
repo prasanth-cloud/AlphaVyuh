@@ -9,7 +9,7 @@ export function describeMarketDataError(error: unknown): string {
     lower.includes("application not found") ||
     lower.includes("404")
   ) {
-    return "Live market data service is unavailable. Retry after the data API is restored, or open Data status for the latest source health.";
+    return "Market data service is unavailable. Retry after the data API is restored, or open Data status for the latest source health.";
   }
 
   return message || "Failed to load market data.";
