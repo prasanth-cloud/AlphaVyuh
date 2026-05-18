@@ -54,7 +54,7 @@ export const agentLanes: AgentLane[] = [
     scope: "Trader-facing workflows",
     autonomy: "Level 2",
     status: "active",
-    currentWork: "Keeps trader-facing flow minimal while backend/security agents harden launch surfaces.",
+    currentWork: "Keeps trader-facing flow minimal while backend/security agents harden release paths.",
     ownerFiles: "frontend/app/(app), frontend/lib/api.ts, feature routers",
     lastUpdate: "PR #132 merged",
   },

@@ -15,7 +15,7 @@ test.describe("Release readiness — public and auth boundary", () => {
   });
 
   test("access guide exposes feedback loop and limitations", async ({ page }) => {
-    const response = await page.goto("/beta");
+    const response = await page.goto("/access");
 
     expect(response?.ok()).toBeTruthy();
     await expect(page.getByRole("heading", { name: /Test the complete trading workflow/i })).toBeVisible();
@@ -24,6 +24,14 @@ test.describe("Release readiness — public and auth boundary", () => {
     await expect(page.locator("body")).toContainText(/Professional Access checklist/i);
     await expect(page.locator("body")).toContainText(/Current access limitations/i);
     await expect(page.locator("body")).toContainText(/No live\/sandbox broker order placement/i);
+  });
+
+  test("legacy beta route redirects to the professional access guide", async ({ page }) => {
+    const response = await page.goto("/beta");
+
+    expect(response?.ok()).toBeTruthy();
+    await expect(page).toHaveURL(/\/access$/);
+    await expect(page.getByRole("heading", { name: /Test the complete trading workflow/i })).toBeVisible();
   });
 
   test("baseline browser security headers are present", async ({ request }) => {

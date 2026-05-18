@@ -40,6 +40,9 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Made the manual Railway Backend Recovery workflow accept optional `RAILWAY_PROJECT_ID`, `RAILWAY_SERVICE`, and `RAILWAY_WORKSPACE` secrets so owner inputs do not need to be retyped on every run.
 - Improved the recovery script diagnostics so, when `RAILWAY_TOKEN` is present but the repo is not linked, it prints visible Railway projects and tells the operator which project/service values are missing.
 - Fixed the recovery script to run Railway status and fallback log commands from `backend/`, matching the directory where the project is linked and deployed.
+- Promoted the access guide to canonical `/access` and made legacy `/beta` redirect there so public navigation no longer points at beta-branded URLs.
+- Replaced the Supabase invite email's founder-beta wording with Professional Access account language.
+- Replaced backend live-source metadata's `beta` confidence/default license wording with account-scoped provider language.
 
 ## Validation
 
@@ -77,6 +80,9 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - Active-code posture sweep now finds no legacy beta wording outside the intentional Playwright forbidden-copy assertion.
   - `bash -n scripts/recover-railway-backend.sh` passed after recovery input improvements.
   - `bash -n scripts/recover-railway-backend.sh` passed after aligning Railway status/log checks with the backend working directory.
+  - `backend/.venv/bin/python -m pytest backend/tests/test_market_context.py` passed after replacing live-source beta metadata.
+  - `npm run typecheck` passed after adding canonical `/access` and redirecting `/beta`.
+  - Active customer-facing code/template sweep no longer finds legacy beta posture copy in `frontend/app`, `frontend/components`, `frontend/lib`, `backend/app`, or `supabase/templates`.
 
 ## Production Data Recovery Status
 
