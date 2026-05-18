@@ -57,7 +57,7 @@ def _enabled_founder_codes() -> set[str]:
 
 def _ensure_checkout_enabled() -> None:
     if not settings.payment_checkout_enabled:
-        raise HTTPException(403, "Payment checkout is not enabled for Professional Access")
+        raise HTTPException(403, "Payment checkout is disabled until Professional Access billing opens")
 
 
 def _validated_order_context(order: dict, *, expected_user_id: str) -> tuple[str, str, str]:

@@ -39,7 +39,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - `npm run test:e2e:release` passed: 6 tests.
 - Local browser smoke covered login, landing, access guide, onboarding, dashboard, scanner, watchlist, full chart, journal, broker settings, and data page with no console errors and no legacy beta posture copy found.
 - Follow-up focused validation passed:
-  - `backend/.venv/bin/python -m pytest backend/tests/test_broker_order_safety.py backend/tests/test_brokers_router.py backend/tests/test_security_hardening.py` passed: 18 tests.
+  - `backend/.venv/bin/python -m pytest backend/tests/test_payments.py backend/tests/test_broker_order_safety.py backend/tests/test_brokers_router.py backend/tests/test_security_hardening.py` passed: 35 tests.
   - `npm run lint` passed.
   - `npm run test:e2e:layout` passed: 16 tests.
 
