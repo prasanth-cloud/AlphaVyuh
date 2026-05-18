@@ -16,8 +16,10 @@ import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, s
 import { trackEvent } from '@/lib/analytics'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
 import { formatMarketDataSource } from '@/lib/data-copy'
+import { API_BASE_URL } from '@/lib/api-base'
+import { describeMarketDataError } from '@/lib/data-errors'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API = API_BASE_URL
 
 // ── Types ──────────────────────────────────────────────────
 interface ScanResult {
@@ -673,7 +675,7 @@ export default function ScannerPage() {
         confidence_available: (data.results || []).some((result: ScanResult) => result.setup_score != null),
       })
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Scan failed')
+      setError(describeMarketDataError(e))
     } finally { setLoading(false) }
   }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, sortBy, sortDesc])
 
@@ -1215,8 +1217,14 @@ export default function ScannerPage() {
 
         {/* Error */}
         {error && (
-          <div style={{ margin: '12px 16px', padding: '10px 14px', background: 'var(--loss-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--loss)' }}>
-            {error}
+          <div style={{ margin: '12px 16px', padding: '10px 14px', background: 'var(--loss-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--loss)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ flex: '1 1 320px' }}>{error}</span>
+            <button className="workspace-chip-button" onClick={() => runScan()}>
+              Retry scan
+            </button>
+            <a className="workspace-chip-button" href="/data" style={{ textDecoration: 'none' }}>
+              Data status
+            </a>
           </div>
         )}
 

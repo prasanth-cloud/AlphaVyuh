@@ -1,4 +1,5 @@
 import { createClient } from './supabase/client'
+import { API_BASE_URL } from './api-base'
 import {
   mockCandles,
   mockIndicators,
@@ -21,7 +22,7 @@ import {
 } from './mock-data'
 import { allowClientMockFallback } from './runtime-mode'
 
-const API = process.env.NEXT_PUBLIC_API_URL!;
+const API = API_BASE_URL;
 const forceLiveData = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === "true";
 export const liveQuotePollingEnabled =
   process.env.NEXT_PUBLIC_ENABLE_LIVE_QUOTES === "true";
