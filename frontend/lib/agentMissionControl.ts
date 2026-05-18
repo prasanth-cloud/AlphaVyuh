@@ -125,7 +125,7 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
     title: "Polish Professional Access recovery",
     agent: "Product + Frontend + QA",
     merged: "2026-05-18",
-    notes: "Public and app copy now presents AlphaVyuh as Professional Access instead of a beta project.",
+    notes: "Public and app copy now presents AlphaVyuh as Professional Access with clear EOD data and broker-import posture.",
     productImpact: "Trader-facing pages sound like a serious product while still being honest about EOD data and disabled execution.",
   },
   {
