@@ -16,6 +16,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 | QA Agent | Updated assertions and added a customer-facing legacy-posture route sweep. | Prevents future regressions into old launch-state language. | Playwright mock and release configs must be run with the correct auth mode. |
 | Backend Recovery Agent | Checked Railway CLI status and production API health. | Confirms data is still blocked at deployment, not frontend API normalization. | Railway CLI token remains expired; production backend still returns Railway fallback 404. |
 | Chart Data Agent | Rechecked production Supabase rows and fixed candle-window selection to return the latest EOD bars oldest-to-newest. | Full chart and watchlist charts will show current EOD context once Railway is restored instead of stale early-history windows. | Supabase had fresh 2026-05-18 rows; the bug was backend ordering/serialization, not missing market data. |
+| Release Hygiene Agent | Removed remaining active repo beta posture from issue templates and backend intraday errors. | Feedback intake and API errors now match the same Professional Access product posture as the app UI. | Historical docs can keep beta launch records, but active templates/errors should not reopen that language. |
 
 ## Changes
 
@@ -35,6 +36,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
 - Fixed the candle endpoint to fetch the latest available EOD window and return it oldest-to-newest for chart rendering.
 - Hardened candle serialization so missing indicator fields become `null` instead of leaking `NaN` into JSON responses.
 - Tightened `npm run check:production-api` so it now fails if the smoke-tested RELIANCE candles are stale versus the market summary date.
+- Replaced remaining active GitHub issue-template and backend error references to beta/founder posture with Professional Access wording.
 
 ## Validation
 
@@ -69,6 +71,7 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - Local `RELIANCE` daily candles with `limit=500` now return `2024-05-30` through `2026-05-18`; `limit=3000` returns all 1,301 available rows from `2021-05-03` through `2026-05-18`.
   - `npm run test:production-api-check` now covers Railway fallback, stale chart candles, and healthy current candles.
   - Local production API checker against the Supabase-backed backend passed with `RELIANCE candles 5 through 2026-05-18`.
+  - Active-code posture sweep now finds no legacy beta wording outside the intentional Playwright forbidden-copy assertion.
 
 ## Production Data Recovery Status
 
