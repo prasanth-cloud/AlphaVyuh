@@ -153,6 +153,9 @@ Make AlphaVyuh read like a professional trading workflow platform instead of a b
   - `npm run check:public-posture` without `PUBLIC_SITE_URL` or `LIVE_URL` skips safely for local runs.
   - `bash -n scripts/launch-readiness-check.sh` passed.
   - `node --check scripts/check-public-posture.mjs` passed.
+- Follow-up public posture CI validation:
+  - Added `npm run test:public-posture-check` with deterministic local coverage for clean copy, forbidden beta copy, missing Professional Access copy, and legacy `/beta` redirect behavior.
+  - Wired `npm run test:public-posture-check` into the Agent PR Gate so every PR protects the public Professional Access posture.
 
 ## Production Data Recovery Status
 

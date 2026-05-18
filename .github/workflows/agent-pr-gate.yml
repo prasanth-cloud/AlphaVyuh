@@ -76,6 +76,9 @@ jobs:
       - name: Production API checker tests
         run: npm run test:production-api-check
 
+      - name: Public posture checker tests
+        run: npm run test:public-posture-check
+
       - name: Release readiness browser smoke
         run: npm run test:e2e:release
 
