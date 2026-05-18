@@ -22,9 +22,10 @@ Remaining risks:
 
 Changed:
 - Added `npm run check:production-api:railway` so the canonical Railway backend smoke cannot be accidentally skipped.
+- Added `npm run prepare:railway-recovery-secrets` so the owner can safely validate and apply required Railway GitHub secrets without exposing values in logs.
 
 Why it improves the product:
-- Operators get a single explicit command for the production backend recovery gate.
+- Operators get explicit commands for both production backend verification and recovery-secret setup.
 
 Learned:
 - `daily_ohlcv` contains 2026-05-18 EOD data with 3,147/3,447 symbols, so the data store is not the failing layer.
@@ -75,6 +76,7 @@ Passing:
 - `npm run test:public-posture-check`
 - `npm run test:production-api-check`
 - `npm run test:data-recovery-check`
+- `npm run test:railway-secret-prep`
 - `PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture`
 - `npm run test:e2e:layout`
 - Local Browser smoke for `/`, `/login`, and `/access`
