@@ -43,125 +43,30 @@ The 10-step user journey in PRODUCT.md depends on fresh data. If data breaks, us
 
 ## Current task
 
-**SPRINT: Add breadth endpoints for dashboard**
+**SPRINT: Production EOD recovery evidence**
 
-The Feature agent reported (via `AGENTS/REQUESTS.md` — create if missing): dashboard calls `/api/v1/market/breadth/sectors` but it returns empty or doesn't exist.
+The breadth request is done. The current data issue is not missing raw EOD rows;
+it is production API hosting. `npm run check:data-recovery` currently proves:
+
+- Supabase EOD rows are present for the latest available session.
+- Vercel production env points at the Railway recovery API URL.
+- Production mock fallback is disabled.
+- Railway backend hosting still returns fallback `404 Application not found`.
 
 Deliverables:
 
-1. **`backend/app/routers/market.py`** — Add or extend:
+1. Keep EOD freshness verifiable through `npm run check:data-recovery`.
+2. Preserve chart smoke symbols for `RELIANCE`, `ITC`, and `AUBANK`.
+3. After Deploy restores Railway, verify dashboard/scanner/watchlist/full-chart
+   data through:
 
-```python
-@router.get('/breadth/sectors')
-async def sector_breadth():
-    """Returns sector-wise breadth for the latest trade date."""
-    sb = get_supabase_admin()
-    latest = sb.table('daily_ohlcv').select('trade_date').order('trade_date', desc=True).limit(1).execute()
-    if not latest.data:
-        return {'sectors': [], 'trade_date': None}
-    trade_date = latest.data[0]['trade_date']
-
-    # Query: for each sector, count stocks above EMA 20, avg pct_change
-    query = """
-    SELECT
-      su.sector,
-      COUNT(*) AS total,
-      SUM(CASE WHEN d.close > d.ema_20 THEN 1 ELSE 0 END) AS above_ema_20,
-      ROUND(AVG(d.pct_change)::numeric, 2) AS avg_pct_change
-    FROM daily_ohlcv d
-    JOIN stock_universe su ON su.symbol = d.symbol
-    WHERE d.trade_date = %s AND su.is_active = true AND su.sector IS NOT NULL
-    GROUP BY su.sector
-    ORDER BY (SUM(CASE WHEN d.close > d.ema_20 THEN 1 ELSE 0 END)::float / COUNT(*)::float) DESC
-    """
-    # Execute via RPC or raw SQL — use whatever pattern already exists in the codebase
-
-    sectors = [
-      {
-        'sector': row['sector'],
-        'total': row['total'],
-        'above_ema_20': row['above_ema_20'],
-        'breadth_pct': round(row['above_ema_20'] * 100.0 / row['total'], 1),
-        'avg_pct_change': float(row['avg_pct_change']),
-      }
-      for row in results
-    ]
-
-    return {'sectors': sectors, 'trade_date': trade_date}
-
-
-@router.get('/breadth/overview')
-async def market_breadth():
-    """Returns overall market breadth — advances, declines, 52W hi/lo, EMA %s."""
-    sb = get_supabase_admin()
-    latest = sb.table('daily_ohlcv').select('trade_date').order('trade_date', desc=True).limit(1).execute()
-    trade_date = latest.data[0]['trade_date']
-
-    # advances, declines, new 52w highs/lows
-    stats = sb.rpc('market_breadth_stats', {'p_date': trade_date}).execute()
-
-    # % above EMA 20, 50, 200
-    ema = sb.rpc('ema_breadth_stats', {'p_date': trade_date}).execute()
-
-    return {
-        'trade_date': trade_date,
-        'advances': stats.data['advances'],
-        'declines': stats.data['declines'],
-        'unchanged': stats.data['unchanged'],
-        'new_52w_highs': stats.data['new_52w_highs'],
-        'new_52w_lows': stats.data['new_52w_lows'],
-        'advance_decline_ratio': round(stats.data['advances'] / max(stats.data['declines'], 1), 2),
-        'pct_above_ema_20': ema.data['pct_above_ema_20'],
-        'pct_above_ema_50': ema.data['pct_above_ema_50'],
-        'pct_above_ema_200': ema.data['pct_above_ema_200'],
-        'phase': derive_phase(ema.data['pct_above_ema_200']),  # bullish/bearish/neutral
-    }
-```
-
-2. **SQL functions** (run via Supabase SQL editor — write to migration file first):
-
-```sql
-CREATE OR REPLACE FUNCTION market_breadth_stats(p_date date)
-RETURNS json AS $$
-DECLARE result json;
-BEGIN
-  SELECT json_build_object(
-    'advances',       SUM(CASE WHEN pct_change > 0 THEN 1 ELSE 0 END),
-    'declines',       SUM(CASE WHEN pct_change < 0 THEN 1 ELSE 0 END),
-    'unchanged',      SUM(CASE WHEN pct_change = 0 THEN 1 ELSE 0 END),
-    'new_52w_highs',  SUM(CASE WHEN is_new_52w_high THEN 1 ELSE 0 END),
-    'new_52w_lows',   SUM(CASE WHEN is_new_52w_low  THEN 1 ELSE 0 END)
-  ) INTO result
-  FROM daily_ohlcv
-  WHERE trade_date = p_date;
-  RETURN result;
-END; $$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION ema_breadth_stats(p_date date)
-RETURNS json AS $$
-DECLARE result json; total int;
-BEGIN
-  SELECT COUNT(*) INTO total FROM daily_ohlcv WHERE trade_date = p_date;
-  SELECT json_build_object(
-    'pct_above_ema_20',  ROUND(SUM(CASE WHEN close > ema_20  THEN 1.0 ELSE 0 END) * 100 / total, 1),
-    'pct_above_ema_50',  ROUND(SUM(CASE WHEN close > ema_50  THEN 1.0 ELSE 0 END) * 100 / total, 1),
-    'pct_above_ema_200', ROUND(SUM(CASE WHEN close > ema_200 THEN 1.0 ELSE 0 END) * 100 / total, 1)
-  ) INTO result
-  FROM daily_ohlcv
-  WHERE trade_date = p_date;
-  RETURN result;
-END; $$ LANGUAGE plpgsql;
-```
-
-3. **Test end-to-end** locally:
 ```bash
-curl -s http://localhost:8000/api/v1/market/breadth/sectors | head -30
-curl -s http://localhost:8000/api/v1/market/breadth/overview | head -20
+npm run check:data-recovery
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
-Both should return data, not empty arrays.
-
-4. **Update `AGENTS/REQUESTS.md`** to mark the breadth endpoint request as DONE.
+4. If raw Supabase coverage falls below the launch threshold, open a Data-agent
+   PR before frontend polish work continues.
 
 ## Sprints after current
 

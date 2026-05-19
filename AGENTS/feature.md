@@ -36,8 +36,7 @@ This rule overrides everything else. A page that ships with advisory copy is a P
 - `backend/app/routers/journal.py`
 - `backend/app/routers/broker.py`
 - `backend/app/routers/billing.py`
-- `backend/app/routers/ai_review.py`
-- `backend/app/services/ai_review.py` (the Claude integration for journal review)
+- `backend/app/routers/ai.py`
 - `backend/app/deps.py` (auth dependency)
 
 ## You do NOT touch
@@ -63,128 +62,19 @@ From `PRODUCT.md` "Visual identity":
 
 ## Current task
 
-**SPRINT 1: Fix auth propagation and visual consistency (4-6 hours)**
+**SPRINT: Professional Access workflow polish**
 
-Before building new features, fix what's broken. The QA agent's last run showed:
-- `/scanner` returns "Not authenticated"
-- `/watchlist` returns "Not authenticated"
-- `/journal` returns "Not authenticated"
-- Dashboard primary button text is invisible
-- Sector breadth shows "No sector data yet" even when data exists
+Before building new features, protect the core trader path:
 
-Fix in this order:
-
-### 1. Unified API fetch wrapper
-
-Rewrite `frontend/lib/api.ts` to route every call through a single `apiFetch()` that always attaches the auth header. Pattern:
-
-```ts
-import { createClient } from './supabase'
-
-export const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
-async function getToken(): Promise<string | null> {
-  try {
-    const sb = createClient()
-    const { data } = await sb.auth.getSession()
-    return data.session?.access_token ?? null
-  } catch {
-    return null
-  }
-}
-
-export async function apiFetch(path: string, options: RequestInit = {}) {
-  const token = await getToken()
-  return fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    },
-  })
-}
-
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await apiFetch(path)
-  if (!res.ok) throw new Error(`GET ${path}: ${res.status}`)
-  return res.json()
-}
-
-export async function apiPost<T>(path: string, body: any): Promise<T> {
-  const res = await apiFetch(path, { method: 'POST', body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`POST ${path}: ${res.status}`)
-  return res.json()
-}
-
-export async function apiPatch<T>(path: string, body: any): Promise<T> {
-  const res = await apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) })
-  if (!res.ok) throw new Error(`PATCH ${path}: ${res.status}`)
-  return res.json()
-}
-
-export async function apiDelete<T>(path: string): Promise<T> {
-  const res = await apiFetch(path, { method: 'DELETE' })
-  if (!res.ok) throw new Error(`DELETE ${path}: ${res.status}`)
-  return res.json()
-}
-
-export async function authHeaders() {
-  const token = await getToken()
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
-}
-```
-
-Migrate every existing function to use these helpers. Find direct `fetch(` calls:
-```bash
-grep -rn "fetch(\`\${" frontend/app/(app)/ --include="*.tsx"
-```
-Replace each with `apiFetch`.
-
-### 2. Fix Supabase client singleton
-
-In `frontend/lib/supabase.ts`, ensure singleton pattern using `@supabase/ssr`:
-
-```ts
-import { createBrowserClient } from '@supabase/ssr'
-
-let instance: ReturnType<typeof createBrowserClient> | null = null
-
-export function createClient() {
-  if (instance) return instance
-  instance = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  return instance
-}
-```
-
-If `@supabase/ssr` isn't installed: `npm install @supabase/ssr` in frontend/.
-
-### 3. Fix dashboard primary button contrast
-
-Find any button with `background: var(--accent)` where text is invisible. Ensure text color is `#0A0E13` (dark, reads against teal). The `<Button variant="primary">` primitive should already do this — verify the dashboard's "Start scanning" button uses the primitive, not inline styles.
-
-### 4. Fix sector breadth data fetch
-
-Dashboard shows "No sector data yet" but data exists. Check:
-- What endpoint does it call? (probably `/api/v1/market/breadth/sectors`)
-- Does the endpoint exist in backend/app/routers/?
-- What field name does it return? Match to frontend expectation.
-
-If endpoint doesn't exist, add it or write to `AGENTS/REQUESTS.md` for Data agent.
-
-### 5. Apply landing page voice to all app pages
-
-Every `(app)/*/page.tsx` must use:
-- `<EyebrowLabel>` before section headings (created by Design agent — import from `@/components/ui`)
-- `<DisplayHeading size="page">` for page titles (instead of inline `<h1 style={...}>`)
-- Sentence case everything — fix any "SCANNER" headings to "Scanner", etc.
-- Remove emojis from all preset chips, buttons, section titles
+1. Login -> dashboard -> scanner -> watchlist -> full chart -> journal should
+   stay fast and clear in mock and production-smoke modes.
+2. Any unavailable production data should use the shared market-data outage copy,
+   not generic "no data" language.
+3. Keep visible copy Professional Access, EOD market data, broker import, journal
+   capture, and execution disabled.
+4. Do not add new surfaces while Railway production recovery is unresolved unless
+   the work directly improves trust, clarity, or verification.
+5. Coordinate with QA for focused unit/e2e coverage before opening a PR.
 
 ## Sprints after current one (do NOT start until Current is done)
 
