@@ -53,6 +53,10 @@ const pages = [
 
 const staticFiles = [
   "frontend/lib/agentMissionControl.ts",
+  "PRODUCT.md",
+  "PROFESSIONAL_ACCESS_LAUNCH_CHECKLIST.md",
+  "AGENTS/PRIORITY.md",
+  "AGENTS/qa.md",
   "pitch/index.html",
 ];
 

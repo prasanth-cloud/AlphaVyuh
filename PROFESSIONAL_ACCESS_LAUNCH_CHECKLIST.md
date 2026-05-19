@@ -1,12 +1,12 @@
-# AlphaVyuh Private Beta Checklist
+# AlphaVyuh Professional Access Checklist
 
-Use this before inviting each new batch of beta users. Private beta is allowed; public launch waits until market-data licensing, broker flow, and payment operations are stable.
+Use this before inviting each new batch of approved Professional Access users. Full public paid launch waits until market-data licensing, broker execution, and payment operations are stable.
 
 ## Positioning
 
-- Landing page says private/founder beta, not full public launch.
+- Landing page says Professional Access, EOD market data, broker import, and journal capture.
 - No fake user counts, reviews, SLA, or scan-speed claims.
-- Market data copy clearly says EOD, delayed, fallback, or live beta as applicable.
+- Market data copy clearly says EOD, delayed, fallback, or live as applicable.
 - Terms and public policy pages include no-investment-advice and data-accuracy disclaimers.
 
 ## Data
@@ -28,7 +28,7 @@ Use this before inviting each new batch of beta users. Private beta is allowed; 
 
 ## Broker Beta
 
-- Zerodha connect page clearly says beta.
+- Zerodha connect page clearly says broker import and read-only sync unless execution is explicitly enabled.
 - Every live order path requires user verification before placing.
 - Token expiry and reconnect states are visible.
 - Broker failure falls back to simulated/manual journal flow without losing the setup context.
@@ -38,5 +38,5 @@ Use this before inviting each new batch of beta users. Private beta is allowed; 
 - Backend focused tests pass.
 - Frontend lint and production build pass.
 - Railway/Vercel logs are checked after deploy.
-- A feedback channel exists for each beta user.
-- Beta batch size stays at 10-25 users until the above remains stable for one full trading week.
+- A feedback channel exists for each approved user.
+- Access batch size stays at 10-25 users until the above remains stable for one full trading week.
