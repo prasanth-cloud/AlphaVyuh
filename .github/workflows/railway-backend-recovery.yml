@@ -45,6 +45,9 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli@latest
 
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
       - name: Validate Railway token
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -75,3 +78,20 @@ jobs:
           PLAYWRIGHT_QA_PASSWORD: ${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
           PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
         run: npm run recover:railway-backend
+
+      - name: Strict production data recovery preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ github.event.inputs.railway_project_id || secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT: ${{ github.event.inputs.railway_environment }}
+          RAILWAY_SERVICE: ${{ github.event.inputs.railway_service || secrets.RAILWAY_SERVICE }}
+          RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
+          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
+          PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+          PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REQUIRE_AUTHENTICATED_SMOKE: "1"
+        run: npm run check:data-recovery
