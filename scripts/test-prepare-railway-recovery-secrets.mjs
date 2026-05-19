@@ -42,6 +42,8 @@ async function runHelper(extraEnv = {}, args = []) {
       RAILWAY_SERVICE: "",
       RAILWAY_WORKSPACE: "",
       PRODUCTION_API_BEARER_TOKEN: "",
+      PLAYWRIGHT_QA_EMAIL: "",
+      PLAYWRIGHT_QA_PASSWORD: "",
       PRODUCTION_API_CHART_SYMBOLS: "",
       ...extraEnv,
     },
@@ -80,6 +82,9 @@ async function runHelper(extraEnv = {}, args = []) {
     RAILWAY_PROJECT_ID: "project-123",
     RAILWAY_SERVICE: "backend",
     RAILWAY_WORKSPACE: "workspace-123",
+    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+    PLAYWRIGHT_QA_EMAIL: "qa@example.com",
+    PLAYWRIGHT_QA_PASSWORD: "qa-password",
     PRODUCTION_API_CHART_SYMBOLS: "RELIANCE,ITC,AUBANK",
   }, ["--apply", "--run-workflow"]);
   assert.equal(result.code, 0, `apply should pass:\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
@@ -87,6 +92,9 @@ async function runHelper(extraEnv = {}, args = []) {
   assert.match(result.log, /RAILWAY_PROJECT_ID/);
   assert.match(result.log, /RAILWAY_SERVICE/);
   assert.match(result.log, /RAILWAY_WORKSPACE/);
+  assert.match(result.log, /PRODUCTION_API_BEARER_TOKEN/);
+  assert.match(result.log, /PLAYWRIGHT_QA_EMAIL/);
+  assert.match(result.log, /PLAYWRIGHT_QA_PASSWORD/);
   assert.match(result.log, /PRODUCTION_API_CHART_SYMBOLS/);
   assert.match(result.log, /workflow:Railway Backend Recovery/);
 }

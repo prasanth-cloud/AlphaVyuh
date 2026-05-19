@@ -19,7 +19,15 @@ const railwayCommand = process.env.ALPHAVYUH_RAILWAY_BIN || "railway";
 const vercelCommand = process.env.ALPHAVYUH_VERCEL_BIN || "vercel";
 
 const requiredGithubSecrets = ["RAILWAY_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE"];
-const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN", "PRODUCTION_API_CHART_SYMBOLS"];
+const recoverySmokeGithubSecrets = [
+  "PRODUCTION_API_BEARER_TOKEN",
+  "PLAYWRIGHT_QA_EMAIL",
+  "PLAYWRIGHT_QA_PASSWORD",
+];
+const optionalGithubSecrets = [
+  "RAILWAY_WORKSPACE",
+  "PRODUCTION_API_CHART_SYMBOLS",
+];
 const results = [];
 const resultOrder = [
   "Production API data smoke",
@@ -327,6 +335,7 @@ async function checkGithubSecrets() {
       .filter(Boolean),
   );
   const missingRequired = requiredGithubSecrets.filter((secret) => !available.has(secret));
+  const missingRecoverySmoke = recoverySmokeGithubSecrets.filter((secret) => !available.has(secret));
   const missingOptional = optionalGithubSecrets.filter((secret) => !available.has(secret));
 
   if (missingRequired.length > 0) {
@@ -339,10 +348,13 @@ async function checkGithubSecrets() {
     return false;
   }
 
+  const recoverySmokeDetail = missingRecoverySmoke.length > 0
+    ? ` Recovery smoke secrets not set: ${missingRecoverySmoke.join(", ")}.`
+    : " Recovery smoke secrets are present.";
   const optionalDetail = missingOptional.length > 0
     ? ` Optional secrets not set: ${missingOptional.join(", ")}.`
-    : " Optional scanner/workspace secrets are present.";
-  addResult("pass", "GitHub recovery secrets", `Required Railway recovery secrets are present.${optionalDetail}`);
+    : " Optional workspace/chart secrets are present.";
+  addResult("pass", "GitHub recovery secrets", `Required Railway recovery secrets are present.${recoverySmokeDetail}${optionalDetail}`);
   return true;
 }
 
