@@ -321,7 +321,8 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   const { code, stdout } = await runPreflight(apiUrl, fakeBin);
   assert.notEqual(code, 0, "preflight should fail until production API recovers");
   assert.match(stdout, /Required Railway recovery secrets are present/);
-  assert.match(stdout, /Optional secrets not set: RAILWAY_WORKSPACE, PRODUCTION_API_BEARER_TOKEN, PRODUCTION_API_CHART_SYMBOLS/);
+  assert.match(stdout, /Recovery smoke secrets not set: PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL, PLAYWRIGHT_QA_PASSWORD/);
+  assert.match(stdout, /Optional secrets not set: RAILWAY_WORKSPACE, PRODUCTION_API_CHART_SYMBOLS/);
   assert.match(stdout, /Latest run 2026-05-18T21:00:00Z is failure/);
   assert.match(stdout, /Recovery status: backend still needs recovery, but at least one deploy path appears ready/);
   assert.match(stdout, /npm run recover:railway-backend:login/);

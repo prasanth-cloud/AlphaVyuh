@@ -14,9 +14,14 @@ const requiredSecrets = [
   ["RAILWAY_SERVICE", process.env.RAILWAY_SERVICE],
 ];
 
+const recoverySmokeSecrets = [
+  ["PRODUCTION_API_BEARER_TOKEN", process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN],
+  ["PLAYWRIGHT_QA_EMAIL", process.env.PLAYWRIGHT_QA_EMAIL],
+  ["PLAYWRIGHT_QA_PASSWORD", process.env.PLAYWRIGHT_QA_PASSWORD],
+];
+
 const optionalSecrets = [
   ["RAILWAY_WORKSPACE", process.env.RAILWAY_WORKSPACE],
-  ["PRODUCTION_API_BEARER_TOKEN", process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN],
   ["PRODUCTION_API_CHART_SYMBOLS", process.env.PRODUCTION_API_CHART_SYMBOLS],
 ];
 
@@ -93,6 +98,9 @@ console.log("");
 for (const [name, value] of requiredSecrets) {
   console.log(`[required] ${name}: ${mask(value)}`);
 }
+for (const [name, value] of recoverySmokeSecrets) {
+  console.log(`[recovery evidence] ${name}: ${mask(value)}`);
+}
 for (const [name, value] of optionalSecrets) {
   console.log(`[optional] ${name}: ${mask(value)}`);
 }
@@ -121,7 +129,7 @@ if (!apply) {
   process.exit(0);
 }
 
-for (const [name, value] of [...requiredSecrets, ...optionalSecrets]) {
+for (const [name, value] of [...requiredSecrets, ...recoverySmokeSecrets, ...optionalSecrets]) {
   if (!String(value || "").trim()) continue;
   await setSecret(name, value);
   console.log(`Set ${name}.`);

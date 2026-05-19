@@ -55,6 +55,13 @@ jobs:
             exit 1
           fi
 
+      - name: Validate full recovery smoke credentials
+        env:
+          PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+          PLAYWRIGHT_QA_EMAIL: ${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+          PLAYWRIGHT_QA_PASSWORD: ${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
+        run: npm run check:production-smoke-env
+
       - name: Recover backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -64,5 +71,7 @@ jobs:
           RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
           PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
           PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+          PLAYWRIGHT_QA_EMAIL: ${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+          PLAYWRIGHT_QA_PASSWORD: ${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
           PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
         run: npm run recover:railway-backend
