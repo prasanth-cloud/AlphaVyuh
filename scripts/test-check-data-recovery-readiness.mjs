@@ -166,6 +166,7 @@ async function runPreflight(apiUrl, fakeBin, extraEnv = {}) {
       SUPABASE_SERVICE_ROLE_KEY: "test-service-role-key",
       ALLOW_LOCAL_API_CHECK: "1",
       ALPHAVYUH_BACKEND_DIR: process.cwd(),
+      PRODUCTION_API_CHART_SYMBOLS: "RELIANCE,ITC,AUBANK",
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -186,6 +187,8 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
   assert.equal(code, 0, `preflight should pass on healthy production API:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Production API data smoke/);
+  assert.match(stdout, /Chart smoke config/);
+  assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
   assert.match(stdout, /Recovery status: production data API is serving real EOD smoke data/);
@@ -206,6 +209,7 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
   assert.notEqual(code, 0, "preflight should fail when API is down and no recovery path is ready");
   assert.match(stdout, /Missing required secrets: RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_SERVICE/);
+  assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /No Railway Backend Recovery workflow runs found/);
   assert.match(stdout, /Unauthorized\. Please run railway login again/);
   assert.match(stdout, /Recovery status: backend is down and no deploy path is ready yet/);
@@ -226,8 +230,18 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   const { code, stdout } = await runPreflight(apiUrl, fakeBin);
   assert.notEqual(code, 0, "preflight should fail until production API recovers");
   assert.match(stdout, /Required Railway recovery secrets are present/);
+  assert.match(stdout, /Optional secrets not set: RAILWAY_WORKSPACE, PRODUCTION_API_BEARER_TOKEN, PRODUCTION_API_CHART_SYMBOLS/);
   assert.match(stdout, /Latest run 2026-05-18T21:00:00Z is failure/);
   assert.match(stdout, /Recovery status: backend still needs recovery, but at least one deploy path appears ready/);
+});
+
+await withServer(serveRailwayFallback, async (apiUrl) => {
+  const fakeBin = makeFakeBin({ secrets: requiredSecrets, railwayReady: true });
+  const { code, stdout } = await runPreflight(apiUrl, fakeBin, {
+    PRODUCTION_API_CHART_SYMBOLS: " , ",
+  });
+  assert.notEqual(code, 0, "preflight should fail when chart smoke symbols are explicitly empty");
+  assert.match(stdout, /No chart smoke symbols are configured/);
 });
 
 console.log("check-data-recovery-readiness tests passed.");

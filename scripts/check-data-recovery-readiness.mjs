@@ -12,9 +12,10 @@ const backendEnv = readEnvFile(path.join(backendDir, ".env"));
 const supabaseUrl = normalizeUrl(process.env.SUPABASE_URL || backendEnv.SUPABASE_URL || "");
 const supabaseServiceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || backendEnv.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 const productionApiBearerToken = String(process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN || "").trim();
+const productionApiChartSymbols = parseChartSymbols(process.env.PRODUCTION_API_CHART_SYMBOLS || "RELIANCE,ITC,AUBANK");
 
 const requiredGithubSecrets = ["RAILWAY_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE"];
-const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN"];
+const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN", "PRODUCTION_API_CHART_SYMBOLS"];
 const results = [];
 
 function normalizeUrl(raw) {
@@ -48,6 +49,13 @@ function readEnvFile(filePath) {
   } catch {
     return {};
   }
+}
+
+function parseChartSymbols(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((symbol) => symbol.trim().toUpperCase())
+    .filter(Boolean);
 }
 
 async function run(command, args, options = {}) {
@@ -224,6 +232,25 @@ async function checkGithubSecrets() {
   return true;
 }
 
+function checkChartSmokeConfig() {
+  if (productionApiChartSymbols.length === 0) {
+    addResult(
+      "fail",
+      "Chart smoke config",
+      "No chart smoke symbols are configured.",
+      "Set PRODUCTION_API_CHART_SYMBOLS=RELIANCE,ITC,AUBANK or equivalent active watchlist symbols.",
+    );
+    return false;
+  }
+
+  addResult(
+    "pass",
+    "Chart smoke config",
+    `Production chart smoke will verify: ${productionApiChartSymbols.join(", ")}.`,
+  );
+  return true;
+}
+
 async function checkRecoveryWorkflowRuns() {
   const { code, stdout, stderr } = await run("gh", [
     "run",
@@ -379,6 +406,7 @@ try {
     checkRecoveryWorkflowRuns(),
     checkLocalRailway(),
   ]);
+  checkChartSmokeConfig();
   checkAuthenticatedSmokeCoverage(productionApiOk);
 
   printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady });
