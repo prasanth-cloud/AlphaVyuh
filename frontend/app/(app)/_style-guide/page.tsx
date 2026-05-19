@@ -382,7 +382,7 @@ export default function StyleGuidePage() {
           {[
             ["Hero headlines", "e.g. 'Build sharp scans and move ideas straight into action.' — the user knows."],
             ["Editorial subtitles", "Multi-sentence copy explaining what a screen does."],
-            ["Uppercase workspace tags", "'SCANNER WORKSPACE', 'MARKET OVERVIEW' at body size."],
+            ["Uppercase section tags", "'SCANNER DESK', 'MARKET OVERVIEW' at body size."],
             ["border-radius > 8px on panels", "Currently 24px — looks cartoonish on tiling panels."],
             ["box-shadow on panels", "Use 1px border instead. Shadows = modals and dropdowns only."],
             ["Gradient backgrounds on panels", "Decorative noise. Hurts legibility of nested text."],

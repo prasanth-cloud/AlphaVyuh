@@ -34,6 +34,7 @@ run_step "Git tracked changes" git status --short
 
 run_step "Launch checker regression tests" npm run test:production-api-check
 run_step "Production smoke env regression tests" npm run test:production-smoke-env-check
+run_step "Signed-in copy posture regression tests" npm run test:signed-in-copy-posture-check
 run_step "Public posture checker regression tests" npm run test:public-posture-check
 run_step "Data recovery checker regression tests" npm run test:data-recovery-check
 run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
@@ -88,6 +89,8 @@ else
   echo "Skipping live URL check. Set LIVE_URL=https://www.alphavyuh.com to enable it."
   echo
 fi
+
+run_step "Signed-in copy posture check" npm run check:signed-in-copy-posture
 
 if [[ "${PRODUCTION_API_URL:-${NEXT_PUBLIC_API_URL:-}}" != "" ]]; then
   run_step "Production API data smoke" npm run check:production-api
