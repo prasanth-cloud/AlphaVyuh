@@ -7,6 +7,8 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import journal
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class _Result:
     def __init__(self, data=None):
@@ -116,7 +118,7 @@ def test_create_journal_entry_persists_structured_idea_context(monkeypatch):
 
 
 def test_journal_context_migration_adds_trade_and_workflow_context_columns():
-    sql = Path("supabase/migrations/039_journal_idea_context.sql").read_text()
+    sql = (REPO_ROOT / "supabase/migrations/039_journal_idea_context.sql").read_text()
 
     for column in [
         "source_page",
