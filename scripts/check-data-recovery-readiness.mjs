@@ -17,6 +17,16 @@ const productionApiChartSymbols = parseChartSymbols(process.env.PRODUCTION_API_C
 const requiredGithubSecrets = ["RAILWAY_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE"];
 const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN", "PRODUCTION_API_CHART_SYMBOLS"];
 const results = [];
+const resultOrder = [
+  "Production API data smoke",
+  "Supabase EOD data",
+  "Chart smoke config",
+  "Authenticated app smoke",
+  "GitHub recovery secrets",
+  "Railway recovery workflow",
+  "Local Railway CLI",
+  "Local Railway project link",
+];
 
 function normalizeUrl(raw) {
   return String(raw ?? "")
@@ -371,7 +381,14 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, rec
   console.log(`GitHub repo: ${repo}`);
   console.log("");
 
-  for (const result of results) {
+  const orderedResults = [...results].sort((left, right) => {
+    const leftIndex = resultOrder.indexOf(left.name);
+    const rightIndex = resultOrder.indexOf(right.name);
+    return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex) -
+      (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex);
+  });
+
+  for (const result of orderedResults) {
     const marker = result.status === "pass" ? "PASS" : result.status === "warn" ? "WARN" : "FAIL";
     console.log(`[${marker}] ${result.name}`);
     console.log(`  ${result.detail}`);
