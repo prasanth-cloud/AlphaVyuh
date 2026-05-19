@@ -33,6 +33,15 @@ describe("agent mission control data", () => {
     }
   });
 
+  it("surfaces the current recovery PRs and production smoke command", () => {
+    expect(shippedAgentPrs.map((pr) => pr.pr).slice(0, 3)).toEqual(["#175", "#174", "#173"]);
+    expect(shippedAgentPrs[0]?.productImpact).toMatch(/real data/i);
+
+    const serialized = JSON.stringify({ agentLanes, agentRequests });
+    expect(serialized).toMatch(/PR #175/);
+    expect(serialized).toMatch(/production smoke/i);
+  });
+
   it("tracks blockers and cross-agent requests without secret-shaped fields", () => {
     expect(agentBlockers.length).toBeGreaterThan(0);
     expect(agentRequests.length).toBeGreaterThan(0);
