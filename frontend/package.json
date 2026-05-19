@@ -14,6 +14,8 @@
     "e2e:backend": "playwright test --config=playwright.backend.config.ts",
     "e2e:perf": "playwright test --config=playwright.mock.config.ts tests/e2e/performance-smoke.spec.ts",
     "e2e:layout": "playwright test --config=playwright.mock.config.ts tests/e2e/layout-smoke.spec.ts",
+    "e2e:smoke": "playwright test --config=playwright.mock.config.ts tests/e2e/smoke-signed-in.spec.ts",
+    "e2e:prod:smoke": "PLAYWRIGHT_BASE_URL=https://www.alphavyuh.com PLAYWRIGHT_EXPECT_REAL_DATA=true playwright test --config=playwright.local.config.ts tests/e2e/smoke-signed-in.spec.ts",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui"
   },

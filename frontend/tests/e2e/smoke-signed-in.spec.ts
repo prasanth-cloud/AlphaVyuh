@@ -3,6 +3,8 @@ import { test, expect } from "@playwright/test";
 const EMAIL = process.env.PLAYWRIGHT_QA_EMAIL ?? "alphavyuh.qa.admin@proton.me";
 const PASSWORD = process.env.PLAYWRIGHT_QA_PASSWORD ?? "QaPass123x";
 const ACCESS_URL = process.env.PLAYWRIGHT_ACCESS_URL;
+const EXPECT_REAL_DATA = process.env.PLAYWRIGHT_EXPECT_REAL_DATA === "true";
+const SMOKE_SYMBOL = process.env.PLAYWRIGHT_SMOKE_SYMBOL ?? "RELIANCE";
 
 async function login(page: import("@playwright/test").Page) {
   await page.context().clearCookies();
@@ -19,21 +21,16 @@ async function login(page: import("@playwright/test").Page) {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Signed-in smoke flow", () => {
-  test("scanner, watchlist, charts, and journal load in a usable state", async ({ page }) => {
+  test("dashboard, scanner, watchlist, full chart, journal, settings, broker, and data load in a usable state", async ({ page }) => {
     await login(page);
 
-    const dashboardCta = page
-      .locator("div")
-      .filter({ hasText: /Next best action:/ })
-      .getByRole("button")
-      .last();
-    await expect(dashboardCta).toBeVisible();
-    const ctaStyle = await dashboardCta.evaluate((node) => {
-      const style = window.getComputedStyle(node);
-      return { color: style.color, backgroundImage: style.backgroundImage };
-    });
-    expect(ctaStyle.color).toBe("rgb(4, 18, 13)");
-    expect(ctaStyle.backgroundImage).toContain("linear-gradient");
+    await expect(page.getByText("Market pulse")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Open scanner/i })).toBeVisible();
+    if (EXPECT_REAL_DATA) {
+      await expect(page.locator("body")).not.toContainText(/Demo|mock fixtures|sample data/i);
+      await expect(page.locator("body")).toContainText(/EOD|Market|Trade date|coverage/i);
+    }
 
     await page.goto("/scanner");
     await expect(page).toHaveURL(/\/scanner/);
@@ -72,9 +69,14 @@ test.describe("Signed-in smoke flow", () => {
     await expect(symbolInput).toBeVisible({ timeout: 15000 });
 
     const rows = page.locator("tbody tr");
+    if ((await rows.count()) === 0) {
+      await symbolInput.fill(SMOKE_SYMBOL);
+      await page.getByRole("button", { name: /^Add$/i }).click();
+      await expect(page.getByText(/Added|Already/i)).toBeVisible({ timeout: 15000 });
+    }
     await expect(rows.first()).toBeVisible({ timeout: 15000 });
     const firstRowText = await rows.first().textContent();
-    const firstSymbol = firstRowText?.trim().match(/^[A-Z0-9&-]+/)?.[0] ?? "RELIANCE";
+    const firstSymbol = firstRowText?.trim().match(/^[A-Z0-9&-]+/)?.[0] ?? SMOKE_SYMBOL;
 
     await rows.first().click();
     await expect(page.getByRole("button", { name: /Open chart/i })).toBeVisible();
@@ -87,12 +89,28 @@ test.describe("Signed-in smoke flow", () => {
       if (secondSymbol) await expect(page.locator(`text=${secondSymbol}`).first()).toBeVisible({ timeout: 10000 });
     }
 
-    await page.goto(`/charts/${firstSymbol}`);
+    await page.goto(`/charts/${firstSymbol}?full=1`);
     await expect(page).toHaveURL(new RegExp(`/charts/${firstSymbol}`));
-    await expect(page.getByText("Trendline")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: /^Tools/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("body")).toContainText(/Daily|Volume|RSI|EMA|bars/i, { timeout: 15000 });
 
     await page.goto("/journal");
     await expect(page).toHaveURL(/\/journal/);
     await expect(page.getByText("Review", { exact: false }).first()).toBeVisible({ timeout: 15000 });
+
+    await page.goto("/settings");
+    await expect(page).toHaveURL(/\/settings/);
+    await expect(page.locator("body")).toContainText(/Professional Access|Billing|Profile/i, { timeout: 15000 });
+
+    await page.goto("/settings/broker");
+    await expect(page).toHaveURL(/\/settings\/broker/);
+    await expect(page.locator("body")).toContainText(/Broker import|read-only|Execution not enabled/i, { timeout: 15000 });
+
+    await page.goto("/data");
+    await expect(page).toHaveURL(/\/data/);
+    await expect(page.locator("body")).toContainText(/EOD|coverage|broker import|journal/i, { timeout: 15000 });
+    if (EXPECT_REAL_DATA) {
+      await expect(page.locator("body")).not.toContainText(/Demo|mock fixtures|sample data/i);
+    }
   });
 });
