@@ -159,8 +159,13 @@ export RAILWAY_SERVICE=...
 
 npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
-RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
+
+The GitHub workflow redeploys the backend, runs strict data recovery with
+authenticated API smoke, then runs signed-in production browser smoke against
+`https://www.alphavyuh.com`. Use the local `RUN_PRODUCTION_RECOVERY_SMOKE=1`
+launch gate below with `PRODUCTION_API_BEARER_TOKEN`, `PLAYWRIGHT_QA_EMAIL`,
+and `PLAYWRIGHT_QA_PASSWORD` when validating from an operator machine too.
 
 Local Railway CLI path:
 
