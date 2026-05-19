@@ -91,7 +91,7 @@ else
 fi
 
 if [[ "${RUN_PRODUCTION_RECOVERY_SMOKE:-}" == "1" ]]; then
-  run_step "Production data recovery preflight" npm run check:data-recovery
+  run_step "Production data recovery preflight" env REQUIRE_AUTHENTICATED_SMOKE=1 npm run check:data-recovery
   run_step "Production signed-in browser smoke" npm run test:e2e:prod:smoke
 else
   echo "Skipping production recovery smoke. Set RUN_PRODUCTION_RECOVERY_SMOKE=1 after Railway recovery to run data recovery and signed-in production browser smoke."

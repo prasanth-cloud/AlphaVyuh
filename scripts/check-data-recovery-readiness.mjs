@@ -12,6 +12,7 @@ const backendEnv = readEnvFile(path.join(backendDir, ".env"));
 const supabaseUrl = normalizeUrl(process.env.SUPABASE_URL || backendEnv.SUPABASE_URL || "");
 const supabaseServiceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || backendEnv.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 const productionApiBearerToken = String(process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN || "").trim();
+const requireAuthenticatedSmoke = process.env.REQUIRE_AUTHENTICATED_SMOKE === "1";
 const productionApiChartSymbols = parseChartSymbols(process.env.PRODUCTION_API_CHART_SYMBOLS || "RELIANCE,ITC,AUBANK");
 const ghCommand = process.env.ALPHAVYUH_GH_BIN || "gh";
 const railwayCommand = process.env.ALPHAVYUH_RAILWAY_BIN || "railway";
@@ -462,7 +463,7 @@ function checkAuthenticatedSmokeCoverage(productionApiOk) {
 
   if (!productionApiBearerToken) {
     addResult(
-      "warn",
+      requireAuthenticatedSmoke ? "fail" : "warn",
       "Authenticated app smoke",
       "Skipped scanner/watchlist authenticated API verification because PRODUCTION_API_BEARER_TOKEN was not available.",
       "Provide a short-lived production smoke token before declaring dashboard → scanner → watchlist → chart verification complete.",
@@ -478,7 +479,7 @@ function checkAuthenticatedSmokeCoverage(productionApiOk) {
   return true;
 }
 
-function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady }) {
+function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady, authenticatedSmokeOk }) {
   console.log(`AlphaVyuh production data recovery preflight`);
   console.log(`API URL: ${apiUrl}`);
   console.log(`GitHub repo: ${repo}`);
@@ -500,7 +501,12 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, rec
 
   console.log("");
   if (productionApiOk) {
-    console.log("Recovery status: production data API is serving real EOD smoke data.");
+    console.log("Public API recovery status: production data API is serving real EOD smoke data.");
+    if (authenticatedSmokeOk) {
+      console.log("Full app recovery status: authenticated scanner verification passed; run the signed-in browser smoke before launch.");
+    } else {
+      console.log("Full app recovery status: not complete until authenticated scanner/watchlist and signed-in browser smoke pass.");
+    }
     return;
   }
 
@@ -528,10 +534,10 @@ try {
     checkLocalRailway(),
   ]);
   checkChartSmokeConfig();
-  checkAuthenticatedSmokeCoverage(productionApiOk);
+  const authenticatedSmokeOk = checkAuthenticatedSmokeCoverage(productionApiOk);
 
-  printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady });
-  process.exit(productionApiOk ? 0 : 1);
+  printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady, authenticatedSmokeOk });
+  process.exit(productionApiOk && (!requireAuthenticatedSmoke || authenticatedSmokeOk) ? 0 : 1);
 } catch (error) {
   console.error(`Production data recovery preflight failed unexpectedly: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

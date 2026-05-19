@@ -230,7 +230,8 @@ await withServer(serveHealthyApi, async (apiUrl) => {
     "Authenticated app smoke",
     "GitHub recovery secrets",
   ]);
-  assert.match(stdout, /Recovery status: production data API is serving real EOD smoke data/);
+  assert.match(stdout, /Public API recovery status: production data API is serving real EOD smoke data/);
+  assert.match(stdout, /Full app recovery status: not complete until authenticated scanner\/watchlist and signed-in browser smoke pass/);
 });
 
 await withServer(serveHealthyApi, async (apiUrl) => {
@@ -249,6 +250,25 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   assert.equal(code, 0, `preflight should pass on healthy production API with authenticated smoke token:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Production API check included authenticated scanner verification/);
+  assert.match(stdout, /Full app recovery status: authenticated scanner verification passed; run the signed-in browser smoke before launch/);
+});
+
+await withServer(serveHealthyApi, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin, {
+    REQUIRE_AUTHENTICATED_SMOKE: "1",
+  });
+  assert.notEqual(code, 0, `strict preflight should fail without authenticated smoke token:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
+  assert.match(stdout, /Full app recovery status: not complete until authenticated scanner\/watchlist and signed-in browser smoke pass/);
 });
 
 await withServer(serveRailwayFallback, async (apiUrl) => {

@@ -11,7 +11,7 @@ npm run launch:check
 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 npm run check:data-recovery
 npm run check:production-api:railway
-# After Railway recovery:
+# After Railway recovery, with authenticated scanner smoke evidence:
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
@@ -126,7 +126,7 @@ Railway backend recovery:
 export RAILWAY_TOKEN=...
 export RAILWAY_PROJECT_ID=...
 export RAILWAY_SERVICE=...
-# Optional but recommended for complete recovery evidence:
+# Required for complete recovery evidence:
 # export PRODUCTION_API_BEARER_TOKEN=...
 # export PRODUCTION_API_CHART_SYMBOLS=RELIANCE,ITC,AUBANK
 npm run prepare:railway-recovery-secrets -- --apply --run-workflow
@@ -156,6 +156,9 @@ Go/no-go:
 - Keep visible data badges in the app.
 - No customer launch if the production backend is returning Railway fallback
   instead of the FastAPI health response.
+- Do not treat public API-only recovery as full recovery. Full recovery requires
+  authenticated scanner/watchlist API smoke and signed-in dashboard -> scanner
+  -> watchlist -> full-chart browser evidence.
 
 ## 3. Payment Readiness
 
@@ -265,7 +268,8 @@ Launch paid plans only when:
 
 - `npm run launch:check` passes.
 - `RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check`
-  passes after Railway recovery.
+  passes after Railway recovery with authenticated scanner/watchlist and
+  signed-in browser smoke evidence.
 - One complete manual QA pass is clean.
 - Razorpay live/test mode is intentionally selected and documented.
 - Data mode is intentionally selected and visible.
