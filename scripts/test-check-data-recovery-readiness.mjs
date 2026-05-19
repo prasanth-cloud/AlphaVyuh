@@ -154,6 +154,10 @@ process.exit(1);
   return dir;
 }
 
+function resultNames(stdout) {
+  return [...stdout.matchAll(/^\[(?:PASS|WARN|FAIL)] (.+)$/gm)].map((match) => match[1]);
+}
+
 async function runPreflight(apiUrl, fakeBin, extraEnv = {}) {
   const child = spawn(process.execPath, ["scripts/check-data-recovery-readiness.mjs"], {
     cwd: process.cwd(),
@@ -191,6 +195,14 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
+  assert.deepEqual(resultNames(stdout).slice(0, 6), [
+    "Production API data smoke",
+    "Supabase EOD data",
+    "Chart smoke config",
+    "Authenticated app smoke",
+    "GitHub recovery secrets",
+    "Railway recovery workflow",
+  ]);
   assert.match(stdout, /Recovery status: production data API is serving real EOD smoke data/);
 });
 
@@ -212,6 +224,14 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /No Railway Backend Recovery workflow runs found/);
   assert.match(stdout, /Unauthorized\. Please run railway login again/);
+  assert.deepEqual(resultNames(stdout), [
+    "Production API data smoke",
+    "Supabase EOD data",
+    "Chart smoke config",
+    "GitHub recovery secrets",
+    "Railway recovery workflow",
+    "Local Railway CLI",
+  ]);
   assert.match(stdout, /Recovery status: backend is down and no deploy path is ready yet/);
   assert.equal(stderr, "");
 });
