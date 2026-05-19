@@ -121,10 +121,13 @@ function serveSupabaseRest(request, response) {
   return true;
 }
 
-function makeFakeBin({ secrets = [], railwayReady = true, workflowRuns = [] }) {
+function makeFakeBin({ secrets = [], railwayReady = true, workflowRuns = [], vercelEnv = {} }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alphavyuh-recovery-bin-"));
   const secretOutput = secrets.map((secret) => `${secret}\t2026-05-18T00:00:00Z`).join("\n");
   const workflowOutput = JSON.stringify(workflowRuns);
+  const vercelEnvOutput = Object.entries(vercelEnv)
+    .map(([key, value]) => `${key}=${JSON.stringify(String(value))}`)
+    .join("\n");
   const gh = `#!/usr/bin/env bash
 if [[ "$1" == "secret" && "$2" == "list" ]]; then
   printf '%b' ${JSON.stringify(secretOutput)}
@@ -148,9 +151,20 @@ process.exit(1);
 process.stderr.write("Unauthorized. Please run railway login again.");
 process.exit(1);
 `;
+  const vercel = `#!/usr/bin/env node
+const fs = require("fs");
+const outPath = process.argv[4];
+if (process.argv[2] === "env" && process.argv[3] === "pull" && outPath) {
+  fs.writeFileSync(outPath, ${JSON.stringify(vercelEnvOutput)});
+  process.exit(0);
+}
+process.stderr.write("unexpected vercel args");
+process.exit(1);
+`;
 
   fs.writeFileSync(path.join(dir, "gh"), gh, { mode: 0o755 });
   fs.writeFileSync(path.join(dir, "railway"), railway, { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, "vercel"), vercel, { mode: 0o755 });
   return dir;
 }
 
@@ -187,27 +201,45 @@ async function runPreflight(apiUrl, fakeBin, extraEnv = {}) {
 const requiredSecrets = ["RAILWAY_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE"];
 
 await withServer(serveHealthyApi, async (apiUrl) => {
-  const fakeBin = makeFakeBin({ secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"], railwayReady: true });
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
   const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
   assert.equal(code, 0, `preflight should pass on healthy production API:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Production API data smoke/);
+  assert.match(stdout, /Vercel production env/);
+  assert.match(stdout, /Frontend points at the recovery API URL; data mode is live; mock fallback is false/);
   assert.match(stdout, /Chart smoke config/);
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
   assert.deepEqual(resultNames(stdout).slice(0, 6), [
     "Production API data smoke",
+    "Vercel production env",
     "Supabase EOD data",
     "Chart smoke config",
     "Authenticated app smoke",
     "GitHub recovery secrets",
-    "Railway recovery workflow",
   ]);
   assert.match(stdout, /Recovery status: production data API is serving real EOD smoke data/);
 });
 
 await withServer(serveHealthyApi, async (apiUrl) => {
-  const fakeBin = makeFakeBin({ secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"], railwayReady: true });
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
   const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin, {
     PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
   });
@@ -217,15 +249,25 @@ await withServer(serveHealthyApi, async (apiUrl) => {
 });
 
 await withServer(serveRailwayFallback, async (apiUrl) => {
-  const fakeBin = makeFakeBin({ secrets: [], railwayReady: false });
+  const fakeBin = makeFakeBin({
+    secrets: [],
+    railwayReady: false,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
   const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
   assert.notEqual(code, 0, "preflight should fail when API is down and no recovery path is ready");
   assert.match(stdout, /Missing required secrets: RAILWAY_TOKEN, RAILWAY_PROJECT_ID, RAILWAY_SERVICE/);
+  assert.match(stdout, /Frontend points at the recovery API URL; data mode is live; mock fallback is false/);
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /No Railway Backend Recovery workflow runs found/);
   assert.match(stdout, /Unauthorized\. Please run railway login again/);
   assert.deepEqual(resultNames(stdout), [
     "Production API data smoke",
+    "Vercel production env",
     "Supabase EOD data",
     "Chart smoke config",
     "GitHub recovery secrets",
@@ -240,6 +282,11 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   const fakeBin = makeFakeBin({
     secrets: requiredSecrets,
     railwayReady: false,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
     workflowRuns: [{
       status: "completed",
       conclusion: "failure",
@@ -256,12 +303,50 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
 });
 
 await withServer(serveRailwayFallback, async (apiUrl) => {
-  const fakeBin = makeFakeBin({ secrets: requiredSecrets, railwayReady: true });
+  const fakeBin = makeFakeBin({
+    secrets: requiredSecrets,
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
   const { code, stdout } = await runPreflight(apiUrl, fakeBin, {
     PRODUCTION_API_CHART_SYMBOLS: " , ",
   });
   assert.notEqual(code, 0, "preflight should fail when chart smoke symbols are explicitly empty");
   assert.match(stdout, /No chart smoke symbols are configured/);
+});
+
+await withServer(serveRailwayFallback, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: requiredSecrets,
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: "https://old-backend.example.com",
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout } = await runPreflight(apiUrl, fakeBin);
+  assert.notEqual(code, 0, "preflight should fail when Vercel production API URL targets a different backend");
+  assert.match(stdout, /NEXT_PUBLIC_API_URL does not match the recovery API URL/);
+});
+
+await withServer(serveRailwayFallback, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: requiredSecrets,
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "true",
+    },
+  });
+  const { code, stdout } = await runPreflight(apiUrl, fakeBin);
+  assert.notEqual(code, 0, "preflight should fail when production frontend mock fallback remains enabled");
+  assert.match(stdout, /NEXT_PUBLIC_ALLOW_MOCK_FALLBACK is true/);
 });
 
 console.log("check-data-recovery-readiness tests passed.");
