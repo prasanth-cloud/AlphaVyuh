@@ -61,11 +61,15 @@ Deliverables:
    data through:
 
 ```bash
+# Required for full app recovery evidence:
+# export PRODUCTION_API_BEARER_TOKEN=<short-lived production smoke token>
 npm run check:data-recovery
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
-4. If raw Supabase coverage falls below the launch threshold, open a Data-agent
+4. Treat a public API-only pass as partial recovery. Full data recovery needs
+   authenticated scanner/watchlist API smoke and signed-in browser evidence.
+5. If raw Supabase coverage falls below the launch threshold, open a Data-agent
    PR before frontend polish work continues.
 
 ## Sprints after current

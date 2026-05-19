@@ -55,6 +55,16 @@ npm run launch:check
 npm run test:e2e:perf
 ```
 
+After Railway recovery, run the strict production recovery gate with a valid
+production smoke token and signed-in QA credentials:
+
+```bash
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
+```
+
+Do not accept public API-only recovery as complete. The production smoke must
+cover dashboard, scanner, watchlist, full chart, journal, and data status.
+
 If Python is unavailable, use `python3 -m pytest backend/tests` and report the interpreter used.
 
 ## Core Professional Access Checks
