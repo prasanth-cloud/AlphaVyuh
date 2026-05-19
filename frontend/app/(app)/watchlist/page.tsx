@@ -64,6 +64,7 @@ import {
   type WatchlistChartRequest,
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
+import { describeMarketDataError } from "@/lib/data-errors";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -519,6 +520,7 @@ function ChartPanel({
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
+  const [chartErrorMessage, setChartErrorMessage] = useState("");
   const [tf, setTf] = useState<WatchlistChartTimeframe>("3M");
   const [chartRequest, setChartRequest] = useState<WatchlistChartRequest>(() => getWatchlistChartRequest("3M"));
   const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null; range?: string | null } | null>(null);
@@ -636,6 +638,7 @@ function ChartPanel({
   useEffect(() => {
     setChartLoading(true);
     setChartError(false);
+    setChartErrorMessage("");
     setCandles([]);
     setChartSource(null);
     setChartRangeNote(null);
@@ -665,7 +668,10 @@ function ChartPanel({
         setChartRangeNote(getCoverageAvailabilityMessage(d.coverage, request) ?? getRangeAvailabilityMessage(rows, request));
         if (d.latest?.close && !price) setPrice(String(d.latest.close));
       })
-      .catch(() => setChartError(true))
+      .catch((error) => {
+        setChartError(true);
+        setChartErrorMessage(describeMarketDataError(error));
+      })
       .finally(() => setChartLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, tf]);
@@ -865,7 +871,15 @@ function ChartPanel({
             <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
           </div>
         ) : chartError || candles.length === 0 ? (
-          <span className="caption">No chart data</span>
+          <div style={{ textAlign: "center", maxWidth: 360, padding: "0 16px" }}>
+            <div className="heading-card" style={{ fontSize: 13, marginBottom: 6 }}>Chart data unavailable</div>
+            <div className="caption" style={{ lineHeight: 1.55 }}>
+              {chartErrorMessage || "No chart data returned for this symbol and timeframe."}
+            </div>
+            <a className="workspace-chip-button" href="/data" style={{ marginTop: 10, display: "inline-flex", textDecoration: "none" }}>
+              Data status
+            </a>
+          </div>
         ) : (
           <MiniChart candles={candles} height={chartHeight} dark={theme !== "light"} chartType={chartType} indicators={chartWorkspace.indicators} />
         )}

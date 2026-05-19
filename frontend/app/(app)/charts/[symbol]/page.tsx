@@ -32,6 +32,7 @@ import {
   type WatchlistChartTimeframe,
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
+import { describeMarketDataError } from "@/lib/data-errors";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -610,7 +611,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         });
       })
       .catch(e => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Chart data failed");
+        if (!cancelled) setError(describeMarketDataError(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
