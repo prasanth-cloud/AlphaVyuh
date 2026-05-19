@@ -44,9 +44,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Queue, decomposition, PR integration",
     autonomy: "Coordinates",
     status: "active",
-    currentWork: "Runs Professional Access cleanup through issue -> agent roster -> PR -> validation loops; latest loop shipped PRs #183-#186.",
+    currentWork: "Runs Professional Access cleanup through issue -> agent roster -> PR -> validation loops; latest loop shipped PRs #183-#189.",
     ownerFiles: "GitHub issues, PR notes, docs/agent-runs",
-    lastUpdate: "PR #186 merged",
+    lastUpdate: "PR #189 merged",
   },
   {
     id: "feature",
@@ -76,7 +76,7 @@ export const agentLanes: AgentLane[] = [
     status: "watching",
     currentWork: "Protects Professional Access copy, data-recovery checks, checker self-tests, signed-in smoke, production recovery launch gate, auth, scanner, watchlist, chart, journal, layout, perf, and agent PR gates.",
     ownerFiles: "frontend/tests/e2e, backend/tests, QA reports",
-    lastUpdate: "PR #186 launch checker self-tests merged",
+    lastUpdate: "PR #189 production smoke credential gate merged",
   },
   {
     id: "security",
@@ -96,11 +96,38 @@ export const agentLanes: AgentLane[] = [
     status: "blocked",
     currentWork: "Vercel is serving the frontend, launch gates are stricter, but Railway backend recovery still needs owner-provided Railway credentials or a refreshed local login.",
     ownerFiles: "Vercel, GitHub Actions, deploy docs",
-    lastUpdate: "check:data-recovery still blocked at Railway",
+    lastUpdate: "PR #189 credential preflight merged; Railway still blocked",
   },
 ];
 
 export const shippedAgentPrs: ShippedAgentPr[] = [
+  {
+    pr: "#189",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/189",
+    title: "Require production smoke credentials",
+    agent: "QA + Release + Security",
+    merged: "2026-05-19",
+    notes: "Made the full production recovery smoke require explicit API token and QA login values, and replaced checked-in signed-in smoke defaults with mock-only credentials.",
+    productImpact: "Post-recovery evidence now needs deliberate production credentials instead of silently trying stale or real-looking test values.",
+  },
+  {
+    pr: "#188",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/188",
+    title: "Refresh agent recovery handoffs",
+    agent: "Manager + Release",
+    merged: "2026-05-19",
+    notes: "Updated active agent handoffs so recovery work requires strict data evidence and signed-in smoke rather than public API checks alone.",
+    productImpact: "Every lane now points at the same Railway recovery proof before launch can be called ready.",
+  },
+  {
+    pr: "#187",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/187",
+    title: "Refresh mission control latest gates",
+    agent: "Manager + QA",
+    merged: "2026-05-19",
+    notes: "Aligned the `/agents` operator view with the stricter Professional Access gates shipped through PR #186.",
+    productImpact: "Mission Control stayed useful as the live source of truth for cleanup, recovery, and blocker ownership.",
+  },
   {
     pr: "#186",
     href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/186",
@@ -113,11 +140,11 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
   {
     pr: "#185",
     href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/185",
-    title: "Simplify workspace copy",
+    title: "Simplify signed-in copy",
     agent: "Product Copy + QA",
     merged: "2026-05-19",
-    notes: "Replaced remaining visible workspace framing with account, desk, chart-review, and execution-planning language; expanded posture scanning to AppShell, watchlist, and full chart.",
-    productImpact: "Authenticated product surfaces now read more like a focused trading desk and less like a generic workspace.",
+    notes: "Replaced remaining broad app framing with account, desk, chart-review, and execution-planning language; expanded posture scanning to AppShell, watchlist, and full chart.",
+    productImpact: "Authenticated product surfaces now read more like a focused trading desk and less like a generic app shell.",
   },
   {
     pr: "#184",
@@ -234,7 +261,7 @@ export const shippedAgentPrs: ShippedAgentPr[] = [
     agent: "Chart + Frontend + QA",
     merged: "2026-05-12",
     notes: "Full Chart controls moved toward compact Tools and indicator dropdown patterns.",
-    productImpact: "The chart workspace is less cluttered and closer to the focused TradingView-style experience users expect.",
+    productImpact: "The chart surface is less cluttered and closer to the focused TradingView-style experience users expect.",
   },
 ];
 

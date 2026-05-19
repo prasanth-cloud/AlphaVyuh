@@ -34,12 +34,13 @@ describe("agent mission control data", () => {
   });
 
   it("surfaces the current recovery PRs and production smoke command", () => {
-    expect(shippedAgentPrs.map((pr) => pr.pr).slice(0, 4)).toEqual(["#186", "#185", "#184", "#183"]);
-    expect(shippedAgentPrs[0]?.productImpact).toMatch(/guard logic/i);
-    expect(shippedAgentPrs[3]?.productImpact).toMatch(/production recovered/i);
+    expect(shippedAgentPrs.map((pr) => pr.pr).slice(0, 4)).toEqual(["#189", "#188", "#187", "#186"]);
+    expect(shippedAgentPrs[0]?.productImpact).toMatch(/production credentials/i);
+    expect(shippedAgentPrs[1]?.productImpact).toMatch(/Railway recovery proof/i);
+    expect(shippedAgentPrs[3]?.productImpact).toMatch(/guard logic/i);
 
     const serialized = JSON.stringify({ agentLanes, agentRequests });
-    expect(serialized).toMatch(/PR #186/);
+    expect(serialized).toMatch(/PR #189/);
     expect(JSON.stringify(shippedAgentPrs)).toMatch(/RUN_PRODUCTION_RECOVERY_SMOKE=1/);
     expect(JSON.stringify(shippedAgentPrs)).toMatch(/full recovery evidence/i);
     expect(serialized).toMatch(/production smoke/i);
