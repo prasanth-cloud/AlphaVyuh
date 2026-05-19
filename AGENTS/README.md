@@ -1,104 +1,104 @@
-# AlphaVyuh Agents
+# AlphaVyuh Agent Operating System
 
-Five specialized agents build this product. Each owns a non-overlapping slice.
-They never edit each other's files. They communicate through handoff logs.
+AlphaVyuh is built by a manager-agent workflow: a Manager Agent breaks product
+work into focused slices, specialist agents own implementation and verification,
+and every meaningful change ships through a GitHub PR with evidence.
 
-## The five agents
+## Current Product Posture
 
-| Agent | Owns | Autonomy | Typical run |
-|-------|------|----------|-------------|
-| Design | tokens, primitives, app shell, landing page | Level 2 (commit + review) | Rarely — once per visual refresh |
-| Feature | pages, API client, user flows | Level 2 | Most sessions |
-| Data | ingest, indicators, cron, health | Level 3 (fully auto) | Weekly |
-| QA | clicks through app, writes BUGS.md | Level 3 | After every feature/design push |
-| Deploy | Vercel/Railway/DNS/env vars | Level 3 | When shipping to prod |
+- Positioning: Professional Access.
+- Market data: latest available EOD data.
+- Broker posture: broker import only; live broker order placement is not enabled.
+- Billing posture: access is approval-managed until payment operations are ready.
+- Production data state: Supabase EOD data is present, but the Railway backend
+  must be recovered before alphavyuh.com can show real app data.
 
-## How to start a session
+The current recovery command is:
 
 ```bash
-cd ~/alphavyuh
-claude --dangerously-skip-permissions
+npm run recover:railway-backend:login
 ```
 
-Then paste ONE of these session kickoffs:
+After Railway recovery:
 
-### Design agent
-```
-You are the DESIGN agent. Before anything else, read in order:
-1. AGENTS/design.md
-2. PRODUCT.md
-3. BUGS.md (filter for DESIGN-tagged bugs)
-
-Then check AGENTS/design.md "Current task" section and execute it.
-Update handoff log when done. Commit + push. Report back in the AGENTS/HANDOFF.log format.
+```bash
+npm run check:data-recovery
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
-### Feature agent
-```
-You are the FEATURE agent. Before anything else, read in order:
-1. AGENTS/feature.md
-2. PRODUCT.md
-3. BUGS.md (filter for FEATURE-tagged bugs and AUTH tag)
+## Agent Lanes
 
-Then check AGENTS/feature.md "Current task" section and execute it.
-Update handoff log when done. Commit + push. Report back in the AGENTS/HANDOFF.log format.
-```
+| Agent | Owns | Current focus |
+| --- | --- | --- |
+| Manager | Task breakdown, branch scope, PR integration, issue updates, Mission Control | Keep work moving through small PRs with evidence and explicit blockers. |
+| Product | Positioning, copy, user flow, trader workflow priorities | Keep AlphaVyuh minimal, professional, EOD-first, and non-advisory. |
+| Frontend | App routes, UI behavior, dashboard/scanner/watchlist/chart/journal/settings | Keep the trader workflow fast, uncluttered, and honest about data state. |
+| Backend/Data | EOD ingest, market APIs, indicators, data health, recovery checks | Keep raw EOD data fresh and make recovery evidence self-diagnosing. |
+| QA | Unit, backend, browser, posture, layout, perf, release checks | Verify full workflows, not just changed files. |
+| Security | Auth, RLS, secrets, broker/billing safety, public posture | Prevent secret leakage, unsafe execution, and misleading claims. |
+| Deploy | Vercel, Railway, GitHub secrets, domains, release gates | Restore Railway backend hosting and keep deploy evidence current. |
 
-### Data agent
-```
-You are the DATA agent. Before anything else, read in order:
-1. AGENTS/data.md
-2. PRODUCT.md
-3. BUGS.md (filter for DATA-tagged bugs)
+Use `/agents` in the app for the current operator view of agent lanes, shipped
+PRs, blockers, and next actions.
 
-Then check AGENTS/data.md "Current task" section and execute it.
-Update handoff log when done. Commit + push. Report back in the AGENTS/HANDOFF.log format.
-```
+## Operating Loop
 
-### QA agent
-```
-You are the QA agent. Your job is to TEST the product and LOG BUGS.
-You NEVER write product code. You edit only BUGS.md and AGENTS/qa.md.
+1. Start with the current blocker and the highest-impact unblocked product risk.
+2. Create or reuse a focused `codex/<short-task>` branch.
+3. Keep each slice small enough for one PR and one clear validation story.
+4. Update tests, docs, and agent-run evidence alongside behavior changes.
+5. Open a PR, wait for checks, merge only when green.
+6. Pull latest `main`, rerun the relevant smoke or recovery check.
+7. Update the tracking issue and Mission Control when the state changes.
 
-Read:
-1. AGENTS/qa.md
-2. PRODUCT.md (to know what SHOULD work)
+## Required Evidence
 
-Then run the user journey test from AGENTS/qa.md.
-For every bug, append to BUGS.md with the template.
-Commit BUGS.md + AGENTS/qa.md updates. Do NOT touch product code.
-```
+Every agent-run report should answer:
 
-### Deploy agent
-```
-You are the DEPLOY agent. You own everything outside the codebase.
+- What changed.
+- Why it improves the product.
+- What was learned.
+- Remaining risks.
 
-Read:
-1. AGENTS/deploy.md
-2. PRODUCT.md
+Use `docs/templates/agent-run-report.md` for new reports.
 
-Then execute the deploy checklist in AGENTS/deploy.md "Current task".
-Update handoff log when done.
-```
+For product or release changes, include the relevant commands from:
 
-## Handoff log format
-
-Append to `AGENTS/HANDOFF.log` at end of every session:
-
-```
-[2026-04-20 14:30] FEATURE agent completed
-  Task: Fix auth header propagation across all API calls
-  Files changed: lib/api.ts, 4 page files
-  Commit: c2af038
-  Status: ✓ Done. Scanner/Watchlist/Journal now authenticate.
-  Next: Feature agent should pick up AI journal review (Sprint 2 in feature.md)
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run test:e2e:mock
+npm run test:e2e:layout
+npm run test:e2e:perf
+npm run check:data-recovery
+PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture
 ```
 
-## Rules every agent follows
+Run the full production recovery gate only after Railway is recovered:
 
-1. **Read identity file first, every session.** No exceptions.
-2. **Never edit files outside your ownership.** If you need a change outside, write to `AGENTS/REQUESTS.md` instead.
-3. **Autonomy level 3 means: act, commit, push, report.** Don't ask for permission.
-4. **Autonomy level 2 means: act, commit locally, report, wait for user to merge/push.**
-5. **If you break the build, revert your commit.** Don't leave `main` broken.
-6. **End every session by updating `AGENTS/HANDOFF.log` and your own identity file's "Current task".**
+```bash
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
+```
+
+## Rules Every Agent Follows
+
+1. Preserve the Professional Access posture. Do not reintroduce tester-program
+   language into active product or agent source.
+2. Keep copy informational. AlphaVyuh does not give investment advice.
+3. Do not enable live broker order placement.
+4. Do not enable production checkout unless payment operations are explicitly
+   approved and verified.
+5. Do not print or commit secrets.
+6. If blocked by owner-controlled credentials, record the exact command or value
+   needed and keep working on unblocked verification or product polish.
+7. Keep unrelated local files and user changes untouched.
+
+## Active Files
+
+- `docs/agent-workflow.md` — process details.
+- `docs/agent-mission-control.md` — operator dashboard model.
+- `frontend/lib/agentMissionControl.ts` — in-app `/agents` status data.
+- `docs/agent-runs/` — per-slice agent reports.
+- `AGENTS/REQUESTS.md` — cross-agent requests.
+- `AGENTS/PRIORITY.md` — product priority guardrails.
