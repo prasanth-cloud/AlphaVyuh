@@ -22,9 +22,15 @@ npm run recover:railway-backend:login
 After Railway recovery:
 
 ```bash
+# Required for full app recovery evidence:
+# export PRODUCTION_API_BEARER_TOKEN=<short-lived production smoke token>
 npm run check:data-recovery
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
+
+Do not treat public API recovery as launch recovery. Full recovery requires the
+authenticated scanner/watchlist API smoke plus the signed-in production browser
+smoke for dashboard, scanner, watchlist, full chart, and journal.
 
 ## Agent Lanes
 
@@ -78,6 +84,7 @@ PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture
 Run the full production recovery gate only after Railway is recovered:
 
 ```bash
+# Requires PRODUCTION_API_BEARER_TOKEN and a valid production QA login.
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 

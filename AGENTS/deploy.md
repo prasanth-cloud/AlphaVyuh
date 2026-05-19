@@ -89,10 +89,14 @@ secrets and run the manual `Railway Backend Recovery` workflow.
 
 3. **Run post-recovery evidence**
 ```bash
+# Required for full app recovery evidence:
+# export PRODUCTION_API_BEARER_TOKEN=<short-lived production smoke token>
 npm run check:data-recovery
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
-Do not mark production data recovery complete until both commands pass.
+Do not mark production data recovery complete until both commands pass and the
+signed-in production browser smoke proves dashboard, scanner, watchlist, full
+chart, and journal with real EOD data.
 
 4. **Keep issue and Mission Control current**
 Update issue #137 and `/agents` when the blocker changes, when a recovery

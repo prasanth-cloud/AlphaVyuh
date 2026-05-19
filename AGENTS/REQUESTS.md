@@ -36,9 +36,15 @@ npm run recover:railway-backend:login
 After recovery:
 
 ```bash
+# Required for full app recovery evidence:
+# export PRODUCTION_API_BEARER_TOKEN=<short-lived production smoke token>
 npm run check:data-recovery
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
+
+Completion evidence must include authenticated scanner/watchlist API smoke and
+signed-in production browser smoke. A passing public `/health` or chart smoke is
+not enough to close this request.
 
 ## Done
 
