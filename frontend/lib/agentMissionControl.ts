@@ -44,9 +44,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Queue, decomposition, PR integration",
     autonomy: "Coordinates",
     status: "active",
-    currentWork: "Runs Professional Access cleanup through issue -> agent roster -> PR -> validation loops; latest loop shipped PRs #158-#160.",
+    currentWork: "Runs Professional Access cleanup through issue -> agent roster -> PR -> validation loops; latest loop shipped PRs #174-#175.",
     ownerFiles: "GitHub issues, PR notes, docs/agent-runs",
-    lastUpdate: "PR #160 merged",
+    lastUpdate: "PR #175 merged",
   },
   {
     id: "feature",
@@ -54,9 +54,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Trader-facing workflows",
     autonomy: "Level 2",
     status: "watching",
-    currentWork: "Keeps visible product copy on Professional Access language while data recovery work stays focused on Railway hosting.",
+    currentWork: "Keeps visible product copy and active planning docs on Professional Access language while data recovery work stays focused on Railway hosting.",
     ownerFiles: "frontend/app/(app), frontend/lib/api.ts, feature routers",
-    lastUpdate: "Public posture check passed",
+    lastUpdate: "PR #174 growth plan cleanup merged",
   },
   {
     id: "data",
@@ -74,9 +74,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Workflow regression and launch safety",
     autonomy: "Level 3",
     status: "watching",
-    currentWork: "Protects Professional Access copy, data-recovery checks, auth, scanner, watchlist, chart, journal, layout, perf, and agent PR gates.",
+    currentWork: "Protects Professional Access copy, data-recovery checks, signed-in smoke, auth, scanner, watchlist, chart, journal, layout, perf, and agent PR gates.",
     ownerFiles: "frontend/tests/e2e, backend/tests, QA reports",
-    lastUpdate: "PR #160 gate passed",
+    lastUpdate: "PR #175 production smoke entrypoint merged",
   },
   {
     id: "security",
@@ -86,7 +86,7 @@ export const agentLanes: AgentLane[] = [
     status: "watching",
     currentWork: "Keeps broker execution disabled, payment enablement gated, and recovery commands free of credential output.",
     ownerFiles: "supabase/migrations, backend/tests, security docs",
-    lastUpdate: "Recovery helper masks values",
+    lastUpdate: "No broker or billing enablement in PRs #174-#175",
   },
   {
     id: "deploy",
@@ -96,11 +96,38 @@ export const agentLanes: AgentLane[] = [
     status: "blocked",
     currentWork: "Vercel is serving the frontend, but Railway backend recovery needs owner-provided Railway credentials or a refreshed local login.",
     ownerFiles: "Vercel, GitHub Actions, deploy docs",
-    lastUpdate: "Issue #137 open",
+    lastUpdate: "check:data-recovery still blocked at Railway",
   },
 ];
 
 export const shippedAgentPrs: ShippedAgentPr[] = [
+  {
+    pr: "#175",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/175",
+    title: "Add production smoke entrypoint",
+    agent: "QA + Frontend + Release",
+    merged: "2026-05-19",
+    notes: "Added repeatable signed-in and production browser smoke commands for dashboard, scanner, watchlist, full chart, journal, settings, broker, and data status.",
+    productImpact: "After Railway recovery, operators can prove the full professional workflow shows real data with one command instead of a manual checklist.",
+  },
+  {
+    pr: "#174",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/174",
+    title: "Align growth plan with Professional Access",
+    agent: "Product + QA + Release",
+    merged: "2026-05-19",
+    notes: "Replaced the active old launch plan with a Professional Access growth plan and hardened data-recovery checker tests.",
+    productImpact: "Future agent work now inherits professional positioning and deterministic recovery checks instead of old tester-program framing.",
+  },
+  {
+    pr: "#173",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/173",
+    title: "Add Railway login recovery helper",
+    agent: "Backend Recovery + Release",
+    merged: "2026-05-19",
+    notes: "Added one command for owner Railway login, backend recovery, and recovery preflight verification.",
+    productImpact: "The remaining owner action is now a clear terminal command instead of a scattered multi-step recovery sequence.",
+  },
   {
     pr: "#160",
     href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/160",
@@ -169,14 +196,15 @@ export const agentRequests: AgentRequest[] = [
     from: "Data",
     to: "Deploy",
     status: "blocked",
-    request: "Recover the Railway backend so current Supabase EOD rows can reach dashboard, scanner, watchlist, and charts.",
+    request: "Recover the Railway backend so current Supabase EOD rows can reach dashboard, scanner, watchlist, full chart, and production smoke.",
   },
 ];
 
 export const nextAgentActions = [
+  "Run npm run recover:railway-backend:login after owner Railway activation is available.",
   "Run npm run check:data-recovery after Railway credentials are available.",
-  "Run the manual Railway Backend Recovery workflow or npm run recover:railway-backend after local railway login.",
-  "Browser-smoke dashboard, scanner, watchlist chart, full chart, journal, settings/broker, and data status after the API is restored.",
+  "Run npm run test:e2e:prod:smoke after the API is restored.",
+  "Use the manual Railway Backend Recovery workflow only after Railway GitHub secrets are configured.",
   "Turn saved journal lessons into weekly review clusters after production data visibility is stable.",
   "Keep broker execution hidden until read-only smoke and owner-approved order validation pass.",
   "Keep every future slice on the issue -> agent roster -> PR -> validation cadence.",
