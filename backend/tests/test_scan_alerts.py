@@ -9,6 +9,8 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import alerts
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 class _FakeResult:
     def __init__(self, data=None, count=None):
@@ -116,7 +118,7 @@ def test_recent_matches_route_is_not_shadowed_by_dynamic_alert_route():
 
 
 def test_scan_alerts_migration_defines_rls_and_unique_snapshot_constraint():
-    sql = Path("supabase/migrations/038_scan_alerts.sql").read_text()
+    sql = (REPO_ROOT / "supabase/migrations/038_scan_alerts.sql").read_text()
 
     assert "create table if not exists public.scan_alerts" in sql
     assert "create table if not exists public.scan_alert_matches" in sql
