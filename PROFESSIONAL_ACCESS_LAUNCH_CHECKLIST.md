@@ -14,8 +14,8 @@ Use this before inviting each new batch of approved Professional Access users. F
 - `/data` loads and shows latest freshness status.
 - Dashboard shows an EOD or fallback provenance badge.
 - Scanner returns results for Momentum, Breakout, Near 52W High, and 52W Highs.
-- Charts show EOD/live-beta provenance before trade planning.
-- Any Global Datafeeds/TrueData trial is kept behind beta wording until license terms allow customer display.
+- Charts show EOD, delayed, fallback, or licensed-live provenance before trade planning.
+- Any Global Datafeeds/TrueData trial remains internal until license terms allow customer display.
 
 ## Core Flow
 
@@ -26,7 +26,7 @@ Use this before inviting each new batch of approved Professional Access users. F
 - Chart planning and simulated/manual journal logging work without a broker.
 - Journal shows the trade source and allows review/notes.
 
-## Broker Beta
+## Broker Import & Execution Gate
 
 - Zerodha connect page clearly says broker import and read-only sync unless execution is explicitly enabled.
 - Every live order path requires user verification before placing.
