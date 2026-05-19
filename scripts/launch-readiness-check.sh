@@ -33,6 +33,7 @@ run_step() {
 run_step "Git tracked changes" git status --short
 
 run_step "Launch checker regression tests" npm run test:production-api-check
+run_step "Production smoke env regression tests" npm run test:production-smoke-env-check
 run_step "Public posture checker regression tests" npm run test:public-posture-check
 run_step "Data recovery checker regression tests" npm run test:data-recovery-check
 run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
@@ -96,6 +97,7 @@ else
 fi
 
 if [[ "${RUN_PRODUCTION_RECOVERY_SMOKE:-}" == "1" ]]; then
+  run_step "Production signed-in smoke env preflight" npm run check:production-smoke-env
   run_step "Production data recovery preflight" env REQUIRE_AUTHENTICATED_SMOKE=1 npm run check:data-recovery
   run_step "Production signed-in browser smoke" npm run test:e2e:prod:smoke
 else
