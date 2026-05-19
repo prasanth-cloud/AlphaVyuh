@@ -12,6 +12,7 @@ const pages: WorkflowPage[] = [
   { path: "/watchlist", name: "watchlist", marker: (page) => page.getByText("Decision desk") },
   { path: "/charts/AUBANK?full=1", name: "full chart", marker: (page) => page.getByTestId("chart-drawing-overlay") },
   { path: "/journal", name: "journal", marker: (page) => page.getByText(/Review/i).first() },
+  { path: "/upload", name: "upload", marker: (page) => page.getByRole("heading", { name: "Upload trade report" }) },
   { path: "/agents", name: "agents", marker: (page) => page.getByTestId("agent-mission-control") },
 ];
 
@@ -33,6 +34,7 @@ const launchRoutes = [
   "/watchlist",
   "/charts/AUBANK?full=1",
   "/journal",
+  "/upload",
   "/agents",
   "/settings",
   "/settings?tab=billing",
@@ -361,6 +363,7 @@ test.describe("Workflow layout smoke", () => {
       "/watchlist",
       "/charts/AUBANK?full=1",
       "/journal",
+      "/upload",
       "/settings",
       "/settings?tab=billing",
       "/settings/broker",
