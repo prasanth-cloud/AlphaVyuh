@@ -32,6 +32,11 @@ run_step() {
 
 run_step "Git tracked changes" git status --short
 
+run_step "Launch checker regression tests" npm run test:production-api-check
+run_step "Public posture checker regression tests" npm run test:public-posture-check
+run_step "Data recovery checker regression tests" npm run test:data-recovery-check
+run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
+
 run_step "Frontend lint" npm --prefix frontend run lint
 run_step "Frontend typecheck" npm --prefix frontend run typecheck
 run_step "Frontend unit tests" npm --prefix frontend run test
