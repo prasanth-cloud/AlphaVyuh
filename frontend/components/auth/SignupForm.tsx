@@ -109,7 +109,7 @@ export default function SignupForm() {
           <CardTitle>Check your email</CardTitle>
           <CardDescription>
             We sent a confirmation link to <strong style={{ color: "var(--text-primary)" }}>{form.email}</strong>.
-            Click it to activate your account and continue into your AlphaVyuh workspace.
+            Click it to activate your account and continue into your AlphaVyuh account.
           </CardDescription>
         </CardHeader>
         <CardContent>

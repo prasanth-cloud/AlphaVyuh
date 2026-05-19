@@ -93,7 +93,7 @@ These rules apply to EVERY surface — landing, app, emails, onboarding.
 |------|------|-------------------|
 | Dashboard | Market context + workflow launcher | No "do this" copy. No prescriptions. |
 | Scanner | User-controlled discovery engine | No preset called "Recommended". |
-| Watchlist | User-owned analysis + execution workspace | No "ratings" on stocks. |
+| Watchlist | User-owned analysis and execution planning | No "ratings" on stocks. |
 | Chart | Stock analysis + broker order entry initiated by user | No buy/sell signals overlay. |
 | Journal | Performance analysis based on user's own trades | OK to give feedback on past trades. |
 | Trade Report Upload | First-class import for users who trade elsewhere | No claims based on future positions. |

@@ -2361,7 +2361,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Trade plan</summary>
                     <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
-                      Plan levels live in the Watchlist Decision Desk. Full chart keeps the visual workspace clear.
+                      Plan levels live in the Watchlist Decision Desk. Full chart keeps the visual review clear.
                     </div>
                   </details>
                   <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
