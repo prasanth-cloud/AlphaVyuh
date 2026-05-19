@@ -20,6 +20,9 @@ on:
       railway_workspace:
         description: Railway workspace/team ID or slug. Optional when RAILWAY_WORKSPACE secret is set.
         required: false
+      production_api_chart_symbols:
+        description: Comma-separated chart symbols for recovery smoke. Optional when PRODUCTION_API_CHART_SYMBOLS secret is set.
+        required: false
 
 permissions:
   contents: read
@@ -61,4 +64,5 @@ jobs:
           RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
           PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
           PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+          PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
         run: npm run recover:railway-backend

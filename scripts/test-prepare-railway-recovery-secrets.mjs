@@ -42,6 +42,7 @@ async function runHelper(extraEnv = {}, args = []) {
       RAILWAY_SERVICE: "",
       RAILWAY_WORKSPACE: "",
       PRODUCTION_API_BEARER_TOKEN: "",
+      PRODUCTION_API_CHART_SYMBOLS: "",
       ...extraEnv,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -79,12 +80,14 @@ async function runHelper(extraEnv = {}, args = []) {
     RAILWAY_PROJECT_ID: "project-123",
     RAILWAY_SERVICE: "backend",
     RAILWAY_WORKSPACE: "workspace-123",
+    PRODUCTION_API_CHART_SYMBOLS: "RELIANCE,ITC,AUBANK",
   }, ["--apply", "--run-workflow"]);
   assert.equal(result.code, 0, `apply should pass:\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
   assert.match(result.log, /RAILWAY_TOKEN/);
   assert.match(result.log, /RAILWAY_PROJECT_ID/);
   assert.match(result.log, /RAILWAY_SERVICE/);
   assert.match(result.log, /RAILWAY_WORKSPACE/);
+  assert.match(result.log, /PRODUCTION_API_CHART_SYMBOLS/);
   assert.match(result.log, /workflow:Railway Backend Recovery/);
 }
 
