@@ -97,6 +97,9 @@ jobs:
       - name: Railway secret prep checker tests
         run: npm run test:railway-secret-prep
 
+      - name: Signed-in workflow browser smoke
+        run: npm run test:e2e:smoke
+
       - name: Release readiness browser smoke
         run: npm run test:e2e:release
 

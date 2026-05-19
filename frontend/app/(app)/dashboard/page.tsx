@@ -73,13 +73,13 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
   ];
 
   return (
-    <Card padding="md" style={{ marginBottom: 16 }}>
+    <Card padding="md" style={{ marginBottom: 16 }} data-testid="dashboard-market-pulse">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
           <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
           <div className="caption">One glance summary of the latest market snapshot.</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div data-testid="dashboard-data-trust" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {data.source_metadata?.coverage_pct != null && (
             <span className="workspace-pill" title={`${data.source_metadata.symbols_count ?? data.total} symbols included`}>
               NSE universe · <Num>{safeNumber(data.source_metadata.coverage_pct).toFixed(0)}%</Num>

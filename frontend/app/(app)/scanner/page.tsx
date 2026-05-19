@@ -1146,7 +1146,7 @@ export default function ScannerPage() {
                   />
                 )}
               </div>
-              <div className="workspace-toolbar-group scanner-results-toolbar">
+              <div className="workspace-toolbar-group scanner-results-toolbar" data-testid="scanner-data-trust">
                 {scanTrust && (
                   <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
                     {scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}

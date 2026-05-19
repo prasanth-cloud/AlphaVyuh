@@ -5,6 +5,8 @@ const ACCESS_URL = process.env.PLAYWRIGHT_ACCESS_URL;
 const EXPECT_REAL_DATA = process.env.PLAYWRIGHT_EXPECT_REAL_DATA === "true";
 const SMOKE_SYMBOL = process.env.PLAYWRIGHT_SMOKE_SYMBOL ?? "RELIANCE";
 const { email: EMAIL, password: PASSWORD } = qaCredentials({ requireExplicit: EXPECT_REAL_DATA });
+const REAL_DATA_FORBIDDEN_COPY = /Demo data|mock fixtures|sample data|AlphaVyuh mock fixtures/i;
+const REAL_DATA_CONTEXT_COPY = /Latest session|EOD|Market|Trade date|coverage|as of|Data status/i;
 
 async function login(page: import("@playwright/test").Page) {
   await page.context().clearCookies();
@@ -18,6 +20,18 @@ async function login(page: import("@playwright/test").Page) {
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 20000 });
 }
 
+async function expectRealDataContext(
+  page: import("@playwright/test").Page,
+  surface: string,
+  requiredCopy: RegExp = REAL_DATA_CONTEXT_COPY,
+) {
+  if (!EXPECT_REAL_DATA) return;
+
+  const body = page.locator("body");
+  await expect(body, `${surface} must not show demo/mock copy in real-data smoke`).not.toContainText(REAL_DATA_FORBIDDEN_COPY);
+  await expect(body, `${surface} must expose source, freshness, or coverage context`).toContainText(requiredCopy, { timeout: 15000 });
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("Signed-in smoke flow", () => {
@@ -25,12 +39,10 @@ test.describe("Signed-in smoke flow", () => {
     await login(page);
 
     await expect(page.getByText("Market pulse")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /Open scanner/i })).toBeVisible();
-    if (EXPECT_REAL_DATA) {
-      await expect(page.locator("body")).not.toContainText(/Demo|mock fixtures|sample data/i);
-      await expect(page.locator("body")).toContainText(/EOD|Market|Trade date|coverage/i);
-    }
+    await expectRealDataContext(page, "dashboard", /Latest session|EOD|Market|coverage|NSE universe/i);
 
     await page.goto("/scanner");
     await expect(page).toHaveURL(/\/scanner/);
@@ -40,6 +52,8 @@ test.describe("Signed-in smoke flow", () => {
     await expect
       .poll(async () => page.locator("table tbody tr").count(), { timeout: 25000, intervals: [500, 1000, 2000] })
       .toBeGreaterThan(0);
+    await expect(page.getByTestId("scanner-data-trust")).toBeVisible({ timeout: 15000 });
+    await expectRealDataContext(page, "scanner", /Latest session|Trade date|coverage|market data|Exchange|NSE/i);
 
     await page.goto("/watchlist");
     await expect(page).toHaveURL(/\/watchlist/);
@@ -81,6 +95,7 @@ test.describe("Signed-in smoke flow", () => {
     await rows.first().click();
     await expect(page.getByRole("button", { name: /Open chart/i })).toBeVisible();
     await expect(page.locator(`text=${firstSymbol}`).first()).toBeVisible();
+    await expectRealDataContext(page, "watchlist", /Latest session|Daily|as of|Data status|Market data/i);
 
     if (await rows.count() > 1) {
       const secondRowText = await rows.nth(1).textContent();
@@ -93,6 +108,7 @@ test.describe("Signed-in smoke flow", () => {
     await expect(page).toHaveURL(new RegExp(`/charts/${firstSymbol}`));
     await expect(page.getByRole("button", { name: /^Tools/i })).toBeVisible({ timeout: 15000 });
     await expect(page.locator("body")).toContainText(/Daily|Volume|RSI|EMA|bars/i, { timeout: 15000 });
+    await expectRealDataContext(page, "full chart", /Latest session|Daily|Volume|RSI|EMA|as of/i);
 
     await page.goto("/journal");
     await expect(page).toHaveURL(/\/journal/);
@@ -109,8 +125,6 @@ test.describe("Signed-in smoke flow", () => {
     await page.goto("/data");
     await expect(page).toHaveURL(/\/data/);
     await expect(page.locator("body")).toContainText(/EOD|coverage|broker import|journal/i, { timeout: 15000 });
-    if (EXPECT_REAL_DATA) {
-      await expect(page.locator("body")).not.toContainText(/Demo|mock fixtures|sample data/i);
-    }
+    await expectRealDataContext(page, "data status", /EOD|coverage|broker import|journal|Data status/i);
   });
 });
