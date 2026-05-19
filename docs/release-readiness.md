@@ -58,6 +58,10 @@ cd ../backend
 MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data import get_market_data_provider; print(get_market_data_provider().name)"
 ```
 
+`npm run launch:check` runs the deterministic checker tests for production API
+freshness, public posture copy, data recovery readiness, and Railway secret
+preparation before the heavier app/browser gates.
+
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
 
 Railway recovery gate:
