@@ -151,11 +151,15 @@ export RAILWAY_PROJECT_ID=...
 export RAILWAY_SERVICE=...
 # Optional:
 # export RAILWAY_WORKSPACE=...
+# Required for complete recovery evidence:
 # export PRODUCTION_API_BEARER_TOKEN=...
+# export PLAYWRIGHT_QA_EMAIL=...
+# export PLAYWRIGHT_QA_PASSWORD=...
 # export PRODUCTION_API_CHART_SYMBOLS=RELIANCE,ITC,AUBANK
 
 npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
 Local Railway CLI path:
@@ -164,6 +168,7 @@ Local Railway CLI path:
 railway login
 npm run recover:railway-backend
 npm run check:data-recovery
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
 If local Railway says the repo is not linked, run `railway link` from `backend/`,
@@ -175,10 +180,11 @@ Production data recovery is complete only when:
 - `npm run check:production-api:railway` passes.
 - Multi-symbol daily chart smoke passes for the configured
   `PRODUCTION_API_CHART_SYMBOLS` list, or the default `RELIANCE,ITC,AUBANK`.
-- Authenticated scanner/watchlist smoke is either verified with
-  `PRODUCTION_API_BEARER_TOKEN` or explicitly recorded as unverified.
-- Browser smoke confirms dashboard, scanner, watchlist chart, full chart, and
-  data page show real EOD production data.
+- Authenticated scanner/watchlist smoke is verified with
+  `PRODUCTION_API_BEARER_TOKEN`.
+- Signed-in browser smoke uses `PLAYWRIGHT_QA_EMAIL` and
+  `PLAYWRIGHT_QA_PASSWORD` to confirm dashboard, scanner, watchlist chart, full
+  chart, journal, and data page show real EOD production data.
 
 ### What is gated in production
 
