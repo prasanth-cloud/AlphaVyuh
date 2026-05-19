@@ -14,7 +14,7 @@ This file exists to prevent feature overload. Until the core Professional Access
 
 6. **Market breadth analytics** — sector rotation and EMA breadth as context, not advice.
 7. **Journal review memory** — observations from closed trades only.
-8. **Broker beta hardening** — user-initiated order entry after account-level verification.
+8. **Broker execution hardening** — user-initiated order entry after account-level verification.
 9. **Trade report upload** — CSV import first, screenshots/OCR later.
 
 ## Later — do not build during focus pass

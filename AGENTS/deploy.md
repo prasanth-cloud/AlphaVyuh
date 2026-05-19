@@ -46,61 +46,60 @@ This rule overrides everything else. A page that ships with advisory copy is a P
 
 ### GitHub repo secrets (for Actions)
 - `SUPABASE_URL` ✓ set
-- `SUPABASE_SERVICE_ROLE_KEY` — user action required (not yet added)
+- `SUPABASE_SERVICE_ROLE_KEY` ✓ set
+- `SUPABASE_ACCESS_TOKEN` ✓ set
+- `VERCEL_TOKEN` ✓ set
+- `RAILWAY_TOKEN` — missing; required for GitHub-based backend recovery
+- `RAILWAY_PROJECT_ID` — missing; required for GitHub-based backend recovery
+- `RAILWAY_SERVICE` — missing; required for GitHub-based backend recovery
+- `RAILWAY_WORKSPACE` — optional when the project can be linked without it
 
 ### Vercel project env vars (production)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_API_URL` (points to Railway backend URL)
+- `NEXT_PUBLIC_DATA_MODE=live`
+- `NEXT_PUBLIC_ALLOW_MOCK_FALLBACK=false`
 
 ### Railway service env vars (backend)
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `SUPABASE_JWT_SECRET`
-- `ANTHROPIC_API_KEY` (for AI journal review)
+- AI provider key when AI review is enabled
 - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`
 - `ZERODHA_API_KEY`, `ZERODHA_API_SECRET`
 
 ## Current task
 
-**SPRINT: Production readiness audit + alphavyuh.com preparation**
+**SPRINT: Railway backend recovery + production evidence**
 
-1. **Audit current Vercel deployment**
+1. **Verify current recovery state**
 ```bash
-# Via Vercel CLI or MCP
-vercel ls --prod
+npm run check:data-recovery
 ```
-List all failed production deploys in last 48h. For each failure, identify:
-- Was it a code bug? → write to AGENTS/REQUESTS.md
-- Was it an env var issue? → fix it and redeploy
+Expected blocker until recovery: Railway fallback `404 Application not found`
+while Vercel production env and Supabase EOD data pass.
 
-2. **Verify env vars match PRODUCT.md requirements**
+2. **Recover Railway using owner-approved credentials**
 ```bash
-vercel env ls production
+npm run recover:railway-backend:login
 ```
-Compare to the secrets inventory above. Flag missing.
+If local browserless login is not available, add the missing Railway GitHub
+secrets and run the manual `Railway Backend Recovery` workflow.
 
-3. **Verify alphavyuh.com DNS**
+3. **Run post-recovery evidence**
 ```bash
-dig alphavyuh.com
-dig www.alphavyuh.com
+npm run check:data-recovery
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
-Confirm both resolve to Vercel's IPs. If not, document fix in DEPLOY_RUNBOOK.md.
+Do not mark production data recovery complete until both commands pass.
 
-4. **Backend deployment status**
-Railway may or may not be deployed. Check:
-- Is there a Railway project for the backend?
-- Does `NEXT_PUBLIC_API_URL` in Vercel prod point to it?
-- Does it have all Railway env vars?
+4. **Keep issue and Mission Control current**
+Update issue #137 and `/agents` when the blocker changes, when a recovery
+workflow run appears, or when production browser smoke passes.
 
-5. **Write DEPLOY_RUNBOOK.md** at repo root covering:
-- Local setup steps for a new developer
-- How to deploy frontend (git push main → Vercel auto-deploys)
-- How to deploy backend (git push main → Railway auto-deploys, OR manual)
-- How to add a new env var (all 3 places — GitHub secrets, Vercel, Railway)
-- Rollback procedure (git revert + force push)
-- DNS management (where to change records)
-- SSL cert renewal (handled by Vercel, but document)
+5. **Rollback posture**
+Use normal PR revert or platform rollback. Do not force-push shared branches.
 
 ## Sprints after current
 
