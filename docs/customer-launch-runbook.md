@@ -138,6 +138,10 @@ npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
 ```
 
+The GitHub workflow is expected to finish with strict data recovery and the
+signed-in production browser smoke. If it passes, attach that workflow run to
+the launch evidence before inviting users.
+
 - Local recovery path:
 
 ```bash

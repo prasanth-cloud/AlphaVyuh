@@ -30,6 +30,10 @@ const stale = join(root, "stale.yml");
 
 writeFileSync(clean, `
 steps:
+  - name: Install frontend dependencies
+    run: npm --prefix frontend ci
+  - name: Install Playwright Chromium
+    run: npm --prefix frontend exec playwright install --with-deps chromium
   - name: Validate full recovery smoke credentials
     env:
       PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
@@ -50,16 +54,34 @@ steps:
       PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
       REQUIRE_AUTHENTICATED_SMOKE: "1"
     run: npm run check:data-recovery
+  - name: Strict signed-in production browser smoke
+    env:
+      PLAYWRIGHT_BASE_URL: \${{ github.event.inputs.live_url }}
+      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
+      PLAYWRIGHT_QA_EMAIL: \${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+      PLAYWRIGHT_QA_PASSWORD: \${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
+    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
 `);
 
 writeFileSync(stale, `
 steps:
+  - name: Install frontend dependencies
+    run: npm --prefix frontend ci
+  - name: Install Playwright Chromium
+    run: npm --prefix frontend exec playwright install --with-deps chromium
   - name: Recover backend
     run: npm run recover:railway-backend
   - name: Strict production data recovery preflight
     env:
       REQUIRE_AUTHENTICATED_SMOKE: "1"
     run: npm run check:data-recovery
+  - name: Strict signed-in production browser smoke
+    env:
+      PLAYWRIGHT_BASE_URL: \${{ github.event.inputs.live_url }}
+      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
+      PLAYWRIGHT_QA_EMAIL: \${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+      PLAYWRIGHT_QA_PASSWORD: \${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
+    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
 `);
 
 {
@@ -72,6 +94,36 @@ steps:
   const { code, stderr } = await run(stale);
   assert.notEqual(code, 0, "workflow check should fail when smoke credential validation is missing");
   assert.match(stderr, /Validate full recovery smoke credentials|PLAYWRIGHT_QA_EMAIL|check:production-smoke-env/);
+}
+
+{
+  const staleWithoutBrowserSmoke = join(root, "stale-without-browser-smoke.yml");
+  writeFileSync(staleWithoutBrowserSmoke, `
+steps:
+  - name: Install frontend dependencies
+    run: npm --prefix frontend ci
+  - name: Install Playwright Chromium
+    run: npm --prefix frontend exec playwright install --with-deps chromium
+  - name: Validate full recovery smoke credentials
+    env:
+      PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+      PLAYWRIGHT_QA_EMAIL: \${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+      PLAYWRIGHT_QA_PASSWORD: \${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
+    run: npm run check:production-smoke-env
+  - name: Recover backend
+    run: npm run recover:railway-backend
+  - name: Strict production data recovery preflight
+    env:
+      VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}
+      SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+      REQUIRE_AUTHENTICATED_SMOKE: "1"
+    run: npm run check:data-recovery
+`);
+  const { code, stderr } = await run(staleWithoutBrowserSmoke);
+  assert.notEqual(code, 0, "workflow check should fail when signed-in browser smoke is missing");
+  assert.match(stderr, /Strict signed-in production browser smoke|PLAYWRIGHT_EXPECT_REAL_DATA|smoke-signed-in\.spec\.ts/);
 }
 
 console.log("check-railway-recovery-workflow tests passed.");
