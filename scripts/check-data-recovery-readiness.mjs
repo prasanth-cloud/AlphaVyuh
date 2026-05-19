@@ -19,6 +19,7 @@ const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN
 const results = [];
 const resultOrder = [
   "Production API data smoke",
+  "Vercel production env",
   "Supabase EOD data",
   "Chart smoke config",
   "Authenticated app smoke",
@@ -106,6 +107,27 @@ function summarizeOutput(output) {
     .join(" ");
 }
 
+function parseEnvText(text) {
+  const values = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const index = line.indexOf("=");
+    if (index <= 0) continue;
+    const key = line.slice(0, index).trim();
+    let value = line.slice(index + 1).trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value;
+  }
+  return values;
+}
+
 async function checkProductionApi() {
   const { code, stdout, stderr } = await run(process.execPath, ["scripts/check-production-api.mjs"], {
     env: {
@@ -125,6 +147,84 @@ async function checkProductionApi() {
     "Recover/reattach the Railway backend, then rerun this preflight.",
   );
   return false;
+}
+
+async function checkVercelProductionEnv() {
+  if (process.env.SKIP_VERCEL_ENV_CHECK === "1") return null;
+
+  const envPath = path.join(
+    fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "alphavyuh-vercel-env-")),
+    ".env.production.local",
+  );
+
+  try {
+    const { code, stdout, stderr } = await run("vercel", ["env", "pull", envPath, "--environment=production"]);
+    if (code !== 0) {
+      addResult(
+        "warn",
+        "Vercel production env",
+        summarizeOutput(stderr || stdout) || "Could not inspect Vercel production environment variables.",
+        "Run `vercel env pull --environment=production` from a linked/authenticated checkout if frontend env drift is suspected.",
+      );
+      return null;
+    }
+
+    const values = parseEnvText(fs.readFileSync(envPath, "utf8"));
+    const frontendApiUrl = normalizeUrl(values.NEXT_PUBLIC_API_URL || "");
+    const dataMode = values.NEXT_PUBLIC_DATA_MODE || "unset";
+    const mockFallback = String(values.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK || "").toLowerCase();
+
+    if (!frontendApiUrl) {
+      addResult(
+        "fail",
+        "Vercel production env",
+        "NEXT_PUBLIC_API_URL is missing from the production frontend environment.",
+        "Set NEXT_PUBLIC_API_URL to the recovered backend API URL, then redeploy the frontend.",
+      );
+      return false;
+    }
+
+    if (frontendApiUrl !== apiUrl) {
+      addResult(
+        "fail",
+        "Vercel production env",
+        `NEXT_PUBLIC_API_URL does not match the recovery API URL. Frontend target is ${frontendApiUrl}; recovery target is ${apiUrl}.`,
+        "Update the Vercel production frontend env or rerun this preflight with the actual production API URL.",
+      );
+      return false;
+    }
+
+    if (mockFallback === "true") {
+      addResult(
+        "fail",
+        "Vercel production env",
+        `Frontend points at the recovery API URL, but NEXT_PUBLIC_ALLOW_MOCK_FALLBACK is ${values.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK}.`,
+        "Disable production mock fallback before declaring real data recovery complete.",
+      );
+      return false;
+    }
+
+    addResult(
+      "pass",
+      "Vercel production env",
+      `Frontend points at the recovery API URL; data mode is ${dataMode}; mock fallback is ${values.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK || "unset"}.`,
+    );
+    return true;
+  } catch (error) {
+    addResult(
+      "warn",
+      "Vercel production env",
+      error instanceof Error ? error.message : String(error),
+      "Inspect Vercel production env manually before treating this as frontend env drift.",
+    );
+    return null;
+  } finally {
+    try {
+      fs.rmSync(path.dirname(envPath), { recursive: true, force: true });
+    } catch {
+      // ignore temp cleanup failures
+    }
+  }
 }
 
 async function fetchSupabase(pathname, options = {}) {
@@ -416,8 +516,9 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, rec
 }
 
 try {
-  const [productionApiOk, supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady] = await Promise.all([
+  const [productionApiOk, , supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady] = await Promise.all([
     checkProductionApi(),
+    checkVercelProductionEnv(),
     checkSupabaseEodFreshness(),
     checkGithubSecrets(),
     checkRecoveryWorkflowRuns(),
