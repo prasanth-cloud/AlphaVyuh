@@ -13,6 +13,9 @@ const supabaseUrl = normalizeUrl(process.env.SUPABASE_URL || backendEnv.SUPABASE
 const supabaseServiceKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || backendEnv.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 const productionApiBearerToken = String(process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN || "").trim();
 const productionApiChartSymbols = parseChartSymbols(process.env.PRODUCTION_API_CHART_SYMBOLS || "RELIANCE,ITC,AUBANK");
+const ghCommand = process.env.ALPHAVYUH_GH_BIN || "gh";
+const railwayCommand = process.env.ALPHAVYUH_RAILWAY_BIN || "railway";
+const vercelCommand = process.env.ALPHAVYUH_VERCEL_BIN || "vercel";
 
 const requiredGithubSecrets = ["RAILWAY_TOKEN", "RAILWAY_PROJECT_ID", "RAILWAY_SERVICE"];
 const optionalGithubSecrets = ["RAILWAY_WORKSPACE", "PRODUCTION_API_BEARER_TOKEN", "PRODUCTION_API_CHART_SYMBOLS"];
@@ -158,7 +161,7 @@ async function checkVercelProductionEnv() {
   );
 
   try {
-    const { code, stdout, stderr } = await run("vercel", ["env", "pull", envPath, "--environment=production"]);
+    const { code, stdout, stderr } = await run(vercelCommand, ["env", "pull", envPath, "--environment=production"]);
     if (code !== 0) {
       addResult(
         "warn",
@@ -304,7 +307,7 @@ async function checkSupabaseEodFreshness() {
 }
 
 async function checkGithubSecrets() {
-  const { code, stdout, stderr } = await run("gh", ["secret", "list", "--repo", repo]);
+  const { code, stdout, stderr } = await run(ghCommand, ["secret", "list", "--repo", repo]);
 
   if (code !== 0) {
     addResult(
@@ -362,7 +365,7 @@ function checkChartSmokeConfig() {
 }
 
 async function checkRecoveryWorkflowRuns() {
-  const { code, stdout, stderr } = await run("gh", [
+  const { code, stdout, stderr } = await run(ghCommand, [
     "run",
     "list",
     "--repo",
@@ -428,7 +431,7 @@ async function checkRecoveryWorkflowRuns() {
 }
 
 async function checkLocalRailway() {
-  const whoami = await run("railway", ["whoami"], { cwd: backendDir });
+  const whoami = await run(railwayCommand, ["whoami"], { cwd: backendDir });
   if (whoami.code !== 0) {
     addResult(
       "warn",
@@ -439,7 +442,7 @@ async function checkLocalRailway() {
     return false;
   }
 
-  const status = await run("railway", ["status", "--json"], { cwd: backendDir });
+  const status = await run(railwayCommand, ["status", "--json"], { cwd: backendDir });
   if (status.code !== 0) {
     addResult(
       "warn",
