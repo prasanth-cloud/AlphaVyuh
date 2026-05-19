@@ -152,6 +152,7 @@ export RAILWAY_SERVICE=...
 # Optional:
 # export RAILWAY_WORKSPACE=...
 # export PRODUCTION_API_BEARER_TOKEN=...
+# export PRODUCTION_API_CHART_SYMBOLS=RELIANCE,ITC,AUBANK
 
 npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
@@ -172,6 +173,10 @@ Production data recovery is complete only when:
 
 - `npm run check:data-recovery` passes.
 - `npm run check:production-api:railway` passes.
+- Multi-symbol daily chart smoke passes for the configured
+  `PRODUCTION_API_CHART_SYMBOLS` list, or the default `RELIANCE,ITC,AUBANK`.
+- Authenticated scanner/watchlist smoke is either verified with
+  `PRODUCTION_API_BEARER_TOKEN` or explicitly recorded as unverified.
 - Browser smoke confirms dashboard, scanner, watchlist chart, full chart, and
   data page show real EOD production data.
 

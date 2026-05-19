@@ -17,6 +17,7 @@ const requiredSecrets = [
 const optionalSecrets = [
   ["RAILWAY_WORKSPACE", process.env.RAILWAY_WORKSPACE],
   ["PRODUCTION_API_BEARER_TOKEN", process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN],
+  ["PRODUCTION_API_CHART_SYMBOLS", process.env.PRODUCTION_API_CHART_SYMBOLS],
 ];
 
 function hasFlag(flag) {
@@ -74,6 +75,9 @@ async function dispatchWorkflow() {
     "-f",
     `railway_environment=${railwayEnvironment}`,
   ];
+  if (String(process.env.PRODUCTION_API_CHART_SYMBOLS || "").trim()) {
+    args.push("-f", `production_api_chart_symbols=${process.env.PRODUCTION_API_CHART_SYMBOLS}`);
+  }
   await run("gh", args);
 }
 

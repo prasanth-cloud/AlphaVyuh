@@ -68,6 +68,9 @@ Railway recovery gate:
 export RAILWAY_TOKEN=...
 export RAILWAY_PROJECT_ID=...
 export RAILWAY_SERVICE=...
+# Optional but recommended for complete recovery evidence:
+# export PRODUCTION_API_BEARER_TOKEN=...
+# export PRODUCTION_API_CHART_SYMBOLS=RELIANCE,ITC,AUBANK
 npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
 ```
@@ -75,6 +78,9 @@ npm run check:data-recovery
 - Or recover locally after `railway login` with `npm run recover:railway-backend`.
 - Do not claim production EOD data is restored until the production API smoke and
   authenticated browser smoke pass against `https://www.alphavyuh.com`.
+- The production API smoke must include enough current daily candles for every
+  configured chart smoke symbol. By default this is `RELIANCE,ITC,AUBANK`; set
+  `PRODUCTION_API_CHART_SYMBOLS` to add or replace launch-candidate symbols.
 
 Read-only broker account smoke, when real credentials are available:
 
@@ -123,7 +129,7 @@ symbol, side, quantity, order type, and sandbox/live mode.
 - Chart candles, quotes, scanner, watchlists, journal, alerts, and portfolio have visible non-empty states.
 - `npm run check:data-recovery` passes for the production API and raw Supabase EOD store.
 - `npm run check:production-api:railway` returns current market breadth and enough
-  current RELIANCE daily candles for watchlist/full-chart use.
+  current daily candles for the configured chart smoke symbols.
 
 ## UX Checklist
 
