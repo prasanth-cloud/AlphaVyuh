@@ -2450,7 +2450,7 @@ function WatchlistContent() {
           <div style={{ flex: 1, height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <EmptyState
               title="Click any stock to load its chart"
-              description="Use the watchlist as your analysis workspace. Select a symbol, then open the full chart for price, volume, and indicator context."
+              description="Use the watchlist as your analysis desk. Select a symbol, then open the full chart for price, volume, and indicator context."
             />
           </div>
         )}

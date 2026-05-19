@@ -99,6 +99,16 @@ await withServer(servePages({ "/access": `${pageCopy["/access"]} Broker Beta` })
   );
 });
 
+await withServer(servePages({ "/access": `${pageCopy["/access"]} Professional chart workspace` }), async (siteUrl) => {
+  const { code, stdout, stderr } = await runChecker(siteUrl);
+  assert.notEqual(code, 0, "public posture check should fail on old workspace positioning");
+  assert.match(
+    stderr,
+    /contains forbidden public posture copy/,
+    `stderr should explain workspace copy:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+});
+
 await withServer(servePages({ "/login": "Sign in to AlphaVyuh. Broker import only" }), async (siteUrl) => {
   const { code, stdout, stderr } = await runChecker(siteUrl);
   assert.notEqual(code, 0, "public posture check should fail on missing Professional Access copy");

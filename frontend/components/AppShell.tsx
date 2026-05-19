@@ -31,7 +31,7 @@ const COMMAND_RESULTS: CommandResult[] = [
   { command: 'dashboard', label: 'Open Dashboard', detail: 'Market pulse, review queue, next actions', href: '/dashboard' },
   { command: 'scanner', label: 'Run Scanner', detail: 'Find setups from the six swing presets', href: '/scanner' },
   { command: 'watchlist', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
-  { command: 'chart', label: 'Open Full Chart', detail: 'Professional chart workspace', href: '/charts/RELIANCE?full=1' },
+  { command: 'chart', label: 'Open Full Chart', detail: 'Focused chart review', href: '/charts/RELIANCE?full=1' },
   { command: 'journal', label: 'Review Journal', detail: 'Close the learning loop', href: '/journal?review=needs-review' },
   { command: 'agents', label: 'Agent Mission Control', detail: 'Operator view of agent work, blockers, and next actions', href: '/agents' },
   { command: 'broker', label: 'Broker Settings', detail: 'Read-only/import status and reconnect flow', href: '/settings/broker' },
