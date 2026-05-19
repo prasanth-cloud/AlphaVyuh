@@ -163,14 +163,19 @@ async function checkProductionApi() {
 
 async function checkVercelProductionEnv() {
   if (process.env.SKIP_VERCEL_ENV_CHECK === "1") return null;
+  const vercelArgs = ["env", "pull", "--environment=production"];
+  if (String(process.env.VERCEL_TOKEN || "").trim()) {
+    vercelArgs.push("--token", process.env.VERCEL_TOKEN);
+  }
 
   const envPath = path.join(
     fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "alphavyuh-vercel-env-")),
     ".env.production.local",
   );
+  vercelArgs.splice(2, 0, envPath);
 
   try {
-    const { code, stdout, stderr } = await run(vercelCommand, ["env", "pull", envPath, "--environment=production"]);
+    const { code, stdout, stderr } = await run(vercelCommand, vercelArgs);
     if (code !== 0) {
       addResult(
         "warn",

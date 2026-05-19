@@ -1,0 +1,77 @@
+#!/usr/bin/env node
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { strict as assert } from "node:assert";
+
+async function run(workflowPath) {
+  const child = spawn(process.execPath, ["scripts/check-railway-recovery-workflow.mjs"], {
+    cwd: process.cwd(),
+    env: {
+      PATH: process.env.PATH,
+      RAILWAY_RECOVERY_WORKFLOW_PATH: workflowPath,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const [code] = await once(child, "exit");
+  return { code, stdout, stderr };
+}
+
+const root = mkdtempSync(join(tmpdir(), "alphavyuh-railway-workflow-"));
+const clean = join(root, "clean.yml");
+const stale = join(root, "stale.yml");
+
+writeFileSync(clean, `
+steps:
+  - name: Validate full recovery smoke credentials
+    env:
+      PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+      PLAYWRIGHT_QA_EMAIL: \${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+      PLAYWRIGHT_QA_PASSWORD: \${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
+    run: npm run check:production-smoke-env
+  - name: Recover backend
+    env:
+      PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+      PLAYWRIGHT_QA_EMAIL: \${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+      PLAYWRIGHT_QA_PASSWORD: \${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
+    run: npm run recover:railway-backend
+  - name: Strict production data recovery preflight
+    env:
+      VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}
+      SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+      REQUIRE_AUTHENTICATED_SMOKE: "1"
+    run: npm run check:data-recovery
+`);
+
+writeFileSync(stale, `
+steps:
+  - name: Recover backend
+    run: npm run recover:railway-backend
+  - name: Strict production data recovery preflight
+    env:
+      REQUIRE_AUTHENTICATED_SMOKE: "1"
+    run: npm run check:data-recovery
+`);
+
+{
+  const { code, stdout, stderr } = await run(clean);
+  assert.equal(code, 0, `workflow check should pass on strict workflow:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /Railway recovery workflow ok/);
+}
+
+{
+  const { code, stderr } = await run(stale);
+  assert.notEqual(code, 0, "workflow check should fail when smoke credential validation is missing");
+  assert.match(stderr, /Validate full recovery smoke credentials|PLAYWRIGHT_QA_EMAIL|check:production-smoke-env/);
+}
+
+console.log("check-railway-recovery-workflow tests passed.");
