@@ -23,6 +23,10 @@ function normalizeApiBaseUrl(raw, fallback = "") {
 const rawApiUrl = process.env.PRODUCTION_API_URL || process.env.NEXT_PUBLIC_API_URL;
 const apiBase = normalizeApiBaseUrl(rawApiUrl);
 const authToken = String(process.env.PRODUCTION_API_BEARER_TOKEN || process.env.PRODUCTION_API_AUTH_TOKEN || "").trim();
+const chartSmokeSymbols = String(process.env.PRODUCTION_API_CHART_SYMBOLS || "RELIANCE,ITC,AUBANK")
+  .split(",")
+  .map((symbol) => symbol.trim().toUpperCase())
+  .filter(Boolean);
 
 if (!apiBase) {
   console.log("Skipping production API check: PRODUCTION_API_URL or NEXT_PUBLIC_API_URL is not set.");
@@ -130,26 +134,32 @@ try {
     `Market summary did not include real breadth counts: advances=${advances}, declines=${declines}.`,
   );
 
-  const candles = await fetchJson("/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500");
-  assert(Array.isArray(candles?.candles), "Candles response did not include a candles array.");
-  assert(candles.candles.length > 0, "Candles response was empty for RELIANCE.");
-  assert(
-    candles.candles.length >= 120,
-    `RELIANCE chart history was too shallow for watchlist/full-chart use: ${candles.candles.length} candles.`,
-  );
-  const latestCandleDate = candles.candles[candles.candles.length - 1]?.time || candles.coverage?.available_to;
-  assert(latestCandleDate, "Candles response did not include a latest candle date.");
-  const firstCandleDate = candles.candles[0]?.time || candles.coverage?.available_from;
-  assert(firstCandleDate, "Candles response did not include an earliest candle date.");
-  const parsedFirstCandleDate = parseIsoDate(firstCandleDate);
-  const parsedLatestCandleDate = parseIsoDate(latestCandleDate);
-  assert(parsedFirstCandleDate, `Earliest RELIANCE candle date was not ISO-like: ${firstCandleDate}`);
-  assert(parsedLatestCandleDate, `Latest RELIANCE candle date was not ISO-like: ${latestCandleDate}`);
-  assert(
-    daysBetween(parsedFirstCandleDate, parsedLatestCandleDate) >= 180,
-    `RELIANCE chart history spans only ${daysBetween(parsedFirstCandleDate, parsedLatestCandleDate)} days; expected at least 180 days.`,
-  );
-  assertFreshDate("Latest RELIANCE candle", latestCandleDate, summaryDate);
+  assert(chartSmokeSymbols.length > 0, "No chart smoke symbols configured.");
+  const chartSummaries = [];
+  for (const symbol of chartSmokeSymbols) {
+    const candles = await fetchJson(`/api/v1/charts/${encodeURIComponent(symbol)}/candles?timeframe=D&limit=500`);
+    assert(Array.isArray(candles?.candles), `${symbol} candles response did not include a candles array.`);
+    assert(candles.candles.length > 0, `${symbol} candles response was empty.`);
+    assert(
+      candles.candles.length >= 120,
+      `${symbol} chart history was too shallow for watchlist/full-chart use: ${candles.candles.length} candles.`,
+    );
+    const latestCandleDate = candles.candles[candles.candles.length - 1]?.time || candles.coverage?.available_to;
+    assert(latestCandleDate, `${symbol} candles response did not include a latest candle date.`);
+    const firstCandleDate = candles.candles[0]?.time || candles.coverage?.available_from;
+    assert(firstCandleDate, `${symbol} candles response did not include an earliest candle date.`);
+    const parsedFirstCandleDate = parseIsoDate(firstCandleDate);
+    const parsedLatestCandleDate = parseIsoDate(latestCandleDate);
+    assert(parsedFirstCandleDate, `Earliest ${symbol} candle date was not ISO-like: ${firstCandleDate}`);
+    assert(parsedLatestCandleDate, `Latest ${symbol} candle date was not ISO-like: ${latestCandleDate}`);
+    const spanDays = daysBetween(parsedFirstCandleDate, parsedLatestCandleDate);
+    assert(
+      spanDays >= 180,
+      `${symbol} chart history spans only ${spanDays} days; expected at least 180 days.`,
+    );
+    assertFreshDate(`Latest ${symbol} candle`, latestCandleDate, summaryDate);
+    chartSummaries.push(`${symbol} ${candles.candles.length} candles ${firstCandleDate}->${latestCandleDate}`);
+  }
 
   let scannerSummary = "scanner skipped (set PRODUCTION_API_BEARER_TOKEN to verify authenticated scanner data)";
   if (authToken) {
@@ -176,7 +186,7 @@ try {
 
   console.log(
     `Production API ok: summary ${summaryDate}, breadth ${advances}/${declines}, ` +
-    `RELIANCE candles ${candles.candles.length} from ${firstCandleDate} through ${latestCandleDate}, ${scannerSummary}.`,
+    `charts ${chartSummaries.join("; ")}, ${scannerSummary}.`,
   );
 } catch (error) {
   console.error(`Production API check failed: ${error instanceof Error ? error.message : String(error)}`);
