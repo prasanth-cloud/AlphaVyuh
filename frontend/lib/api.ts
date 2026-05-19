@@ -1123,7 +1123,15 @@ export async function getCandles(
       const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers: publicHeaders });
       if (!res.ok) {
         if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
-        throw new Error(`No data for ${sym}`);
+        const text = await res.text().catch(() => "");
+        let body: { detail?: unknown; message?: unknown; error?: unknown } = {};
+        try {
+          body = text ? JSON.parse(text) : {};
+        } catch {
+          body = {};
+        }
+        const detail = body.detail ?? body.message ?? body.error;
+        throw new Error(typeof detail === "string" && detail.trim() ? detail : `No data for ${sym}`);
       }
       return res.json();
     } catch (error) {

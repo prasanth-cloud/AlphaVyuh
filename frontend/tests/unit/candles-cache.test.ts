@@ -55,6 +55,18 @@ describe("candles client cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it("surfaces Railway fallback messages instead of generic no-data copy", async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ status: "error", code: 404, message: "Application not found" }),
+      { status: 404 },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCandles } = await import("@/lib/api");
+
+    await expect(getCandles("RELIANCE", { timeframe: "D", limit: 120 })).rejects.toThrow("Application not found");
+  });
+
   it("coalesces AI pattern requests and fails soft", async () => {
     const fetchMock = vi.fn(async () => new Response("temporary outage", { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
