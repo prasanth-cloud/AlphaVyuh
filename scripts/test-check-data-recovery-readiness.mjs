@@ -178,6 +178,9 @@ async function runPreflight(apiUrl, fakeBin, extraEnv = {}) {
     env: {
       ...process.env,
       PATH: `${fakeBin}${path.delimiter}${process.env.PATH}`,
+      ALPHAVYUH_GH_BIN: path.join(fakeBin, "gh"),
+      ALPHAVYUH_RAILWAY_BIN: path.join(fakeBin, "railway"),
+      ALPHAVYUH_VERCEL_BIN: path.join(fakeBin, "vercel"),
       GITHUB_REPOSITORY: "prasanth-cloud/AlphaVyuh",
       PRODUCTION_API_URL: apiUrl,
       SUPABASE_URL: apiUrl,
