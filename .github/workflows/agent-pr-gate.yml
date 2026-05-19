@@ -76,11 +76,26 @@ jobs:
       - name: Production API checker tests
         run: npm run test:production-api-check
 
+      - name: Production smoke env checker tests
+        run: npm run test:production-smoke-env-check
+
+      - name: Railway recovery workflow checker tests
+        run: npm run test:railway-recovery-workflow-check
+
+      - name: Recovery handoff credential checker tests
+        run: npm run test:recovery-handoff-credentials-check
+
+      - name: Signed-in copy posture checker tests
+        run: npm run test:signed-in-copy-posture-check
+
       - name: Public posture checker tests
         run: npm run test:public-posture-check
 
       - name: Data recovery readiness checker tests
         run: npm run test:data-recovery-check
+
+      - name: Railway secret prep checker tests
+        run: npm run test:railway-secret-prep
 
       - name: Release readiness browser smoke
         run: npm run test:e2e:release
