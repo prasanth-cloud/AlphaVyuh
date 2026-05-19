@@ -30,7 +30,8 @@ npm run launch:check
 npm run check:data-recovery
 npm run check:production-api:railway
 # After Railway recovery, run the full production recovery/browser smoke gate.
-# This requires PRODUCTION_API_BEARER_TOKEN plus PLAYWRIGHT_QA_EMAIL/PASSWORD.
+# This requires PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL,
+# and PLAYWRIGHT_QA_PASSWORD.
 # RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 # To skip local browser server smoke in constrained shells only:
 # SKIP_BROWSER_SMOKE=1 npm run launch:check
@@ -140,8 +141,9 @@ symbol, side, quantity, order type, and sandbox/live mode.
 - `npm run check:production-api:railway` returns current market breadth and enough
   current daily candles for the configured chart smoke symbols.
 - `RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check`
-  passes after Railway recovery with authenticated scanner/watchlist and
-  signed-in browser smoke evidence.
+  passes after Railway recovery with `PRODUCTION_API_BEARER_TOKEN`,
+  `PLAYWRIGHT_QA_EMAIL`, `PLAYWRIGHT_QA_PASSWORD`, authenticated
+  scanner/watchlist, and signed-in browser smoke evidence.
 
 ## UX Checklist
 

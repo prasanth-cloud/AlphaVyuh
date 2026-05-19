@@ -11,7 +11,10 @@ npm run launch:check
 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 npm run check:data-recovery
 npm run check:production-api:railway
-# After Railway recovery, with production smoke token and QA login:
+# After Railway recovery:
+# export PRODUCTION_API_BEARER_TOKEN=...
+# export PLAYWRIGHT_QA_EMAIL=...
+# export PLAYWRIGHT_QA_PASSWORD=...
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
@@ -270,8 +273,9 @@ Launch paid plans only when:
 
 - `npm run launch:check` passes.
 - `RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check`
-  passes after Railway recovery with authenticated scanner/watchlist and
-  signed-in browser smoke evidence.
+  passes after Railway recovery with `PRODUCTION_API_BEARER_TOKEN`,
+  `PLAYWRIGHT_QA_EMAIL`, `PLAYWRIGHT_QA_PASSWORD`, authenticated
+  scanner/watchlist, and signed-in browser smoke evidence.
 - One complete manual QA pass is clean.
 - Razorpay live/test mode is intentionally selected and documented.
 - Data mode is intentionally selected and visible.

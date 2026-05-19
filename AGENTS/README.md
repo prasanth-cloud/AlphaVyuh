@@ -86,7 +86,8 @@ PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture
 Run the full production recovery gate only after Railway is recovered:
 
 ```bash
-# Requires PRODUCTION_API_BEARER_TOKEN and a valid production QA login.
+# Requires PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL, and
+# PLAYWRIGHT_QA_PASSWORD.
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
