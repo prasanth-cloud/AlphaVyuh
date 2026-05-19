@@ -2,7 +2,7 @@ export type IntradayChartTimeframe = "5m" | "15m" | "30m" | "1h";
 export type EodChartTimeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "10Y";
 export type WatchlistChartTimeframe = IntradayChartTimeframe | EodChartTimeframe;
 
-export const INTRADAY_UNAVAILABLE_MESSAGE = "Intraday data is not available for Professional Access yet.";
+export const INTRADAY_UNAVAILABLE_MESSAGE = "Intraday data is not available on the EOD data plan yet.";
 
 export const CHART_TIMEFRAME_OPTIONS: Array<{
   label: WatchlistChartTimeframe;

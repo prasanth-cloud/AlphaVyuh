@@ -21,12 +21,12 @@ test.describe("Release readiness — public and auth boundary", () => {
     await expect(page.getByRole("heading", { name: /Operate your EOD trading workflow/i })).toBeVisible();
     await expect(page.locator("body")).toContainText(/support@alphavyuh\.com/i);
     await expect(page.locator("body")).toContainText(/Feedback and bug report paths/i);
-    await expect(page.locator("body")).toContainText(/Professional Access workflow/i);
+    await expect(page.locator("body")).toContainText(/Trading workflow/i);
     await expect(page.locator("body")).toContainText(/Data and execution policy/i);
     await expect(page.locator("body")).toContainText(/No live\/sandbox broker order placement/i);
   });
 
-  test("legacy beta route redirects to the professional access guide", async ({ page }) => {
+  test("legacy beta route redirects to the access guide", async ({ page }) => {
     const response = await page.goto("/beta");
 
     expect(response?.ok()).toBeTruthy();

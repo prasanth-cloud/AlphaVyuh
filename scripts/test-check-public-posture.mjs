@@ -5,9 +5,9 @@ import { once } from "node:events";
 import { strict as assert } from "node:assert";
 
 const pageCopy = {
-  "/": "Professional Access · EOD market data · Request access",
-  "/login": "Sign in to AlphaVyuh. Professional Access · Broker import only",
-  "/access": "Operate your EOD trading workflow. Data and execution policy. No live/sandbox broker order placement. Professional Access",
+  "/": "Account access · EOD market data · Request access",
+  "/login": "Sign in to AlphaVyuh. EOD market data · Broker import only",
+  "/access": "Operate your EOD trading workflow. Data and execution policy. No live/sandbox broker order placement. Account Access",
 };
 
 async function withServer(handler, test) {
@@ -101,7 +101,7 @@ await withServer(servePages({ "/access": `${pageCopy["/access"]} Broker Beta` })
 
 await withServer(servePages({ "/access": `${pageCopy["/access"]} Professional chart workspace` }), async (siteUrl) => {
   const { code, stdout, stderr } = await runChecker(siteUrl);
-  assert.notEqual(code, 0, "public posture check should fail on old workspace positioning");
+  assert.notEqual(code, 0, "public posture check should fail on old professional/workspace positioning");
   assert.match(
     stderr,
     /contains forbidden public posture copy/,
@@ -111,10 +111,10 @@ await withServer(servePages({ "/access": `${pageCopy["/access"]} Professional ch
 
 await withServer(servePages({ "/login": "Sign in to AlphaVyuh. Broker import only" }), async (siteUrl) => {
   const { code, stdout, stderr } = await runChecker(siteUrl);
-  assert.notEqual(code, 0, "public posture check should fail on missing Professional Access copy");
+  assert.notEqual(code, 0, "public posture check should fail on missing EOD data copy");
   assert.match(
     stderr,
-    /\/login did not include expected copy: \/Professional Access\/i/,
+    /\/login did not include expected copy: \/EOD market data\/i/,
     `stderr should explain missing required copy:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
   );
 });

@@ -27,9 +27,11 @@ async function run(files) {
 const root = mkdtempSync(join(tmpdir(), "alphavyuh-copy-posture-"));
 const clean = join(root, "clean.ts");
 const stale = join(root, "stale.ts");
+const professionalBranding = join(root, "professional.ts");
 
 writeFileSync(clean, 'export const copy = "Focused trading desk and chart review surface.";');
 writeFileSync(stale, 'export const copy = "Simplify workspace copy for the generic workspace.";');
+writeFileSync(professionalBranding, 'export const copy = "Professional Access account.";');
 
 {
   const { code, stdout, stderr } = await run([clean]);
@@ -41,6 +43,12 @@ writeFileSync(stale, 'export const copy = "Simplify workspace copy for the gener
   const { code, stderr } = await run([clean, stale]);
   assert.notEqual(code, 0, "signed-in posture check should fail on stale workspace copy");
   assert.match(stderr, /old workspace cleanup title|generic workspace positioning/);
+}
+
+{
+  const { code, stderr } = await run([clean, professionalBranding]);
+  assert.notEqual(code, 0, "signed-in posture check should fail on professional branding");
+  assert.match(stderr, /professional access branding|professional-as-brand positioning/);
 }
 
 console.log("check-signed-in-copy-posture tests passed.");

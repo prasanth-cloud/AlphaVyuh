@@ -13,6 +13,8 @@ const forbidden = [
   { pattern: /chart workspace/i, label: "chart workspace positioning" },
   { pattern: /workspace tags/i, label: "workspace tag guidance" },
   { pattern: /SCANNER WORKSPACE/i, label: "uppercase workspace tag example" },
+  { pattern: /Professional Access/i, label: "professional access branding" },
+  { pattern: /\bprofessional\b/i, label: "professional-as-brand positioning" },
 ];
 
 function filesToCheck() {
