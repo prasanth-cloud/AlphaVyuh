@@ -17,7 +17,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByRole("button", { name: /^Create account$/ }).click();
 
     await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
-    await expect(page.getByRole("heading", { name: /Set up your Professional Access desk/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Set up your trading desk/i })).toBeVisible();
 
     await page.getByLabel(/Intermediate/).check();
     await page.getByLabel(/Equity/).check();

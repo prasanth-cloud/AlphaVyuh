@@ -32,6 +32,7 @@ const forbidden = [
   /FOUNDER100/i,
   /founder plan/i,
   /founder code/i,
+  /\bprofessional\b/i,
   /Professional Access workspace/i,
   /free workspace/i,
   /Full chart workspace/i,
@@ -47,11 +48,11 @@ const forbidden = [
 const pages = [
   {
     path: "/",
-    mustInclude: [/Professional Access/i, /EOD market data/i, /Request access/i],
+    mustInclude: [/Account access/i, /EOD market data/i, /Request access/i],
   },
   {
     path: "/login",
-    mustInclude: [/Sign in to AlphaVyuh/i, /Professional Access/i, /Broker import only/i],
+    mustInclude: [/Sign in to AlphaVyuh/i, /EOD market data/i, /Broker import only/i],
   },
   {
     path: "/access",
@@ -60,7 +61,7 @@ const pages = [
   {
     path: "/beta",
     finalPath: "/access",
-    mustInclude: [/Operate your EOD trading workflow/i, /Professional Access/i],
+    mustInclude: [/Operate your EOD trading workflow/i, /Account Access/i],
   },
 ];
 
@@ -74,23 +75,9 @@ const staticFiles = [
   "frontend/components/AppShell.tsx",
   "frontend/app/(app)/watchlist/page.tsx",
   "frontend/app/(app)/charts/[symbol]/page.tsx",
-  "PRODUCT.md",
-  "PROFESSIONAL_ACCESS_LAUNCH_CHECKLIST.md",
-  "docs/release-readiness.md",
-  "docs/customer-launch-runbook.md",
-  "docs/agent-workflow.md",
-  "docs/agent-mission-control.md",
-  "AGENTS/README.md",
-  "AGENTS/REQUESTS.md",
-  "AGENTS/PRIORITY.md",
-  "AGENTS/qa.md",
-  "AGENTS/deploy.md",
-  "AGENTS/data.md",
-  "AGENTS/feature.md",
-  "AGENTS/design.md",
-  "pitch/index.html",
   "supabase/templates/magic-link.html",
   "supabase/templates/confirmation.html",
+  "supabase/templates/invite.html",
 ];
 
 function assert(condition, message) {
@@ -146,7 +133,7 @@ try {
     assertNoForbiddenCopy(file, readFileSync(file, "utf8"));
   }
 
-  console.log(`Public posture ok at ${baseUrl}: Professional Access copy present, legacy beta posture absent.`);
+  console.log(`Public posture ok at ${baseUrl}: account-access copy present, legacy beta/professional-brand posture absent.`);
 } catch (error) {
   console.error(`Public posture check failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

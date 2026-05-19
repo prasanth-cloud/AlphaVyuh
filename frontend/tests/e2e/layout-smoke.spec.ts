@@ -232,14 +232,14 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".reminder-strip-shell")).toHaveCount(0);
   });
 
-  test("login page uses the simplified Professional Access copy", async ({ page }) => {
+  test("login page uses simplified account-access copy", async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem("alphavyuh-theme", "light"));
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(page.getByText("Sign in to AlphaVyuh")).toBeVisible();
-    await expect(page.locator("body")).toContainText(/Professional Access/i);
     await expect(page.locator("body")).toContainText(/EOD market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
+    await expect(page.locator("body")).not.toContainText(/Professional Access/i);
     await expect(page.locator("body")).not.toContainText(/Launch Surface/i);
     await expect(page.locator("body")).not.toContainText(/Build a trading workflow/i);
   });
@@ -252,7 +252,7 @@ test.describe("Workflow layout smoke", () => {
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
     await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true })).toHaveAttribute("aria-disabled", "true");
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "5m", exact: true }).click({ force: true });
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available for Professional Access yet/i);
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/Intraday data is not available on the EOD data plan yet/i);
     await page.locator(".watchlist-chart-header").getByRole("button", { name: "1Y" }).click();
     await expect(page.locator(".watchlist-chart-header")).toContainText(/1Y · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/candles · Demo data · as of \d{4}-\d{2}-\d{2} · demo/i);
@@ -313,24 +313,25 @@ test.describe("Workflow layout smoke", () => {
     const posture = await page.getByTestId("billing-launch-posture").textContent();
     if (posture?.includes("Billing is not enabled for this account")) {
       await expect(page.getByRole("button", { name: "Checkout disabled" }).first()).toBeDisabled();
-      await expect(page.locator("body")).toContainText(/Professional Access/i);
+      await expect(page.locator("body")).toContainText(/Account Access/i);
       await expect(page.locator("body")).not.toContainText(/FOUNDER/i);
-      await expect(page.getByLabel("Professional Access code")).toHaveAttribute("placeholder", "ACCESS CODE");
+      await expect(page.getByLabel("Access code")).toHaveAttribute("placeholder", "ACCESS CODE");
     }
 
     expect(await layoutProblems(page)).toEqual([]);
   });
 
-  test("Professional Access labels and no-execution posture are visible", async ({ page }) => {
+  test("account access labels and no-execution posture are visible", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Professional Access/i);
+    await expect(page.locator("body")).toContainText(/Account access/i);
     await expect(page.locator("body")).toContainText(/EOD market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
     await expect(page.locator("body")).toContainText(/Checkout opens|No production Razorpay payment/i);
+    await expect(page.locator("body")).not.toContainText(/Professional Access/i);
 
     await page.goto("/access", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Professional Access workflow/i);
+    await expect(page.locator("body")).toContainText(/Trading workflow/i);
     await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Broker read-only|filled-trade import/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
@@ -339,7 +340,7 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).toContainText(/Data and execution policy/i);
 
     await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).toContainText(/Professional Access/i, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Account-managed access|Account access/i, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Execution not enabled yet/i);
 

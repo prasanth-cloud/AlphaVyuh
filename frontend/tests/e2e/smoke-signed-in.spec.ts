@@ -100,7 +100,7 @@ test.describe("Signed-in smoke flow", () => {
 
     await page.goto("/settings");
     await expect(page).toHaveURL(/\/settings/);
-    await expect(page.locator("body")).toContainText(/Professional Access|Billing|Profile/i, { timeout: 15000 });
+    await expect(page.locator("body")).toContainText(/Account Access|Billing|Profile/i, { timeout: 15000 });
 
     await page.goto("/settings/broker");
     await expect(page).toHaveURL(/\/settings\/broker/);

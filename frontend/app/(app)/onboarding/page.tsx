@@ -117,12 +117,12 @@ export default function OnboardingPage() {
           marginBottom: 16,
         }}>
           <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Onboarding</div>
-          <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Set up your Professional Access desk.</h1>
+          <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Set up your trading desk.</h1>
           <p style={{ maxWidth: 720, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
             AlphaVyuh starts with a structured workflow: scan the latest completed session, move ideas to a watchlist, plan on charts, then journal and review. Broker connections are read-only/import only.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Professional Access", "EOD market data", "Broker import only", "Execution not enabled yet"].map((label) => (
+            {["Account-managed access", "EOD market data", "Broker import only", "Execution not enabled yet"].map((label) => (
               <span key={label} className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "var(--text-secondary)" }}>
                 {label}
               </span>
@@ -192,7 +192,7 @@ export default function OnboardingPage() {
 
             <div className="grid gap-2 mb-5 sm:grid-cols-2">
               {[
-                ["Professional Access", "Access is managed while workflow reliability is monitored."],
+                ["Account access", "Access is managed while workflow reliability is monitored."],
                 ["Market data", "Scans and charts use the latest available market snapshot unless explicitly labeled demo."],
                 ["Broker import only", "Broker connections are for read-only smoke and filled-trade import."],
                 ["Execution not enabled yet", "Live and sandbox order placement are not enabled yet."],

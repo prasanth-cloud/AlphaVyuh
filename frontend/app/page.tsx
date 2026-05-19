@@ -300,15 +300,15 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
             <div className="lp-eyebrow">
-              <div className="lp-live-pill"><div className="lp-pulse"></div>Professional Access · EOD market data</div>
+              <div className="lp-live-pill"><div className="lp-pulse"></div>Account access · EOD market data</div>
             </div>
             <h1 className="lp-h1">
               <span className="lp-h1-s1">A focused workflow system for Indian equities.</span>
               <span className="lp-h1-s2"><span className="lp-h1-muted">A simpler desk for Indian equities.</span></span>
             </h1>
-            <p className="lp-sub">A professional workflow system for scanning markets, building watchlists, planning charts, and journaling trades.</p>
+            <p className="lp-sub">A structured workflow system for scanning markets, building watchlists, planning charts, and journaling trades.</p>
             <div className="lp-ctas">
-              <Link href="/signup" className="lp-btn-primary">Request Professional Access →</Link>
+              <Link href="/signup" className="lp-btn-primary">Request access →</Link>
               <a href="#features" className="lp-btn-secondary">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
                 See it in action
@@ -322,7 +322,7 @@ export default function LandingPage() {
                 <div className="lp-av" style={{background:"#2A3A38"}}>VR</div>
               </div>
               <div>
-                <div className="lp-proof-copy"><strong>Professional Access platform</strong> for serious Indian market workflows</div>
+                <div className="lp-proof-copy"><strong>Workflow platform</strong> for serious Indian market routines</div>
                 <div className="lp-stars">Scanner · Watchlist · Charts · Journal</div>
               </div>
             </div>
@@ -380,7 +380,7 @@ export default function LandingPage() {
       <section id="features" style={{padding:"100px 0"}}>
         <div className="lp-wrap">
           <span className="lp-sec-label">Platform</span>
-          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>The Professional Access focus</h2>
+          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>The AlphaVyuh focus</h2>
           <p className="lp-sec-sub" style={{marginBottom:"40px"}}>Four surfaces. One routine. No feature maze.</p>
           <div className="lp-tabs-wrap" id="lp-tabs-header">
             {["scanner","watchlist","charts","journal"].map((t,i) => (
@@ -446,7 +446,7 @@ export default function LandingPage() {
           <div className="lp-tab-panel" id="lp-tab-charts">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Charts</span>
-              <h3 className="lp-tp-h">Professional charts with RS line and pivot zones</h3>
+              <h3 className="lp-tp-h">Charting with RS line and pivot zones</h3>
               <p className="lp-tp-p">TradingView Lightweight Charts v4. Drawing tools, precomputed indicators, earnings overlays, and watchlist context on one screen.</p>
               <ul className="lp-feat-list">
                 {["Candlestick charts with overlay indicators","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker connections are read-only/import only"].map(f => (
@@ -557,7 +557,7 @@ export default function LandingPage() {
       <section id="pricing" style={{padding:"100px 0",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)"}}>
         <div className="lp-wrap" style={{textAlign:"center"}}>
           <span className="lp-sec-label">Pricing</span>
-          <h2 className="lp-sec-title">Professional Access plans.</h2>
+          <h2 className="lp-sec-title">Plans for serious traders.</h2>
           <p className="lp-sec-sub" style={{ margin: "0 auto 28px" }}>Pricing is shown for planning. Billing is enabled per approved account.</p>
           <div className="lp-ptoggle">
             <span className="lp-pt-label lp-pt-active" id="lp-ptm">Monthly</span>
@@ -639,11 +639,11 @@ export default function LandingPage() {
       <section style={{padding:"120px 0",textAlign:"center",position:"relative",overflow:"hidden"}}>
         <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 50%,rgba(214,223,232,.06) 0%,transparent 65%)",pointerEvents:"none"}}></div>
         <div style={{position:"relative",zIndex:1}}>
-          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Professional Access</div>
+          <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Account access</div>
           <h2 className="lp-sec-title" style={{fontSize:"clamp(2rem,4vw,3.2rem)",marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
           <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Run a scan, build a watchlist, plan on the chart, and close the loop in Journal.</p>
-          <Link href="/signup" className="lp-btn-cta-big">Request Professional Access →</Link>
-          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Professional Access · EOD market data · Broker import only · No investment advice</p>
+          <Link href="/signup" className="lp-btn-cta-big">Request access →</Link>
+          <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Account access · EOD market data · Broker import only · No investment advice</p>
         </div>
       </section>
 
@@ -656,7 +656,7 @@ export default function LandingPage() {
                 <div className="lp-logo-mark"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="16" cy="6" r="1.5" fill="currentColor"/></svg></div>
                 AlphaVyuh
               </div>
-              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s professional trading workflow system. Scan markets, plan charts, and journal decisions in one focused flow.</p>
+              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s trading workflow system. Scan markets, plan charts, and journal decisions in one focused flow.</p>
             </div>
             <div className="lp-fcol"><h5>Product</h5><ul><li><Link href="/products#scanner">Scanner</Link></li><li><Link href="/products">Charts</Link></li><li><Link href="/products#journal">Journal</Link></li><li><a href="#pricing">Pricing</a></li></ul></div>
             <div className="lp-fcol"><h5>Company</h5><ul><li><Link href="/products">About</Link></li><li><Link href="/access">Access guide</Link></li><li><Link href="/blog">Blog</Link></li><li><Link href="/contact">Contact</Link></li></ul></div>

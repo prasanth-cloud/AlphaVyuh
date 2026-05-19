@@ -8,11 +8,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             AlphaVyuh
           </h1>
           <p style={{ marginTop: 14, maxWidth: 420, fontSize: 15, lineHeight: 1.65, color: 'var(--text-secondary)' }}>
-            A Professional Access trading desk for EOD scanning, watchlist planning, chart review, and journal capture.
+            A focused trading desk for EOD scanning, watchlist planning, chart review, and journal capture.
           </p>
           <div style={{ marginTop: 26, display: 'grid', gap: 10, maxWidth: 380 }}>
             {[
-              'Professional Access',
+              'Account-managed access',
               'EOD market data with source and freshness',
               'Broker import only; execution not enabled yet',
               'Educational workflow tool, not investment advice',

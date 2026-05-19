@@ -5,7 +5,7 @@ export default function ProductsPage() {
     <MarketingInfoPage
       eyebrow="Products"
       title="One connected trading workflow."
-      intro="AlphaVyuh brings market discovery, watchlist management, chart planning, and post-trade review into a Professional Access workflow system for Indian market participants."
+      intro="AlphaVyuh brings market discovery, watchlist management, chart planning, and post-trade review into one workflow system for Indian market participants."
       sections={[
         { id: "scanner", title: "Scanner", body: "Build cleaner shortlists from market data, presets, and filters designed for daily NSE/BSE workflows." },
         { title: "Watchlist desk", body: "Move symbols from discovery into an active desk where chart context, notes, and priorities stay visible." },

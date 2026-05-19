@@ -328,7 +328,7 @@ function SettingsContent() {
     setApplyingAccess(true);
     try {
       const result = await applyAccessPlan(code);
-      showToast("Professional Access plan activated", true);
+      showToast("Access plan activated", true);
       trackEvent("professional_access_code_applied");
       setPlanStatus({ plan: result.plan, expires_at: result.expires_at, active: true });
       await loadBilling();
@@ -602,7 +602,7 @@ function SettingsContent() {
                   </div>
                   <div>
                     <div className="text-[13px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: "var(--accent)" }}>
-                      Professional Access
+                      Account Access
                     </div>
                     <div className="text-[14px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>
                       Serious traders can request access pricing and onboarding help.
@@ -617,7 +617,7 @@ function SettingsContent() {
                     value={accessCode}
                     onChange={(event) => setAccessCode(event.target.value.toUpperCase())}
                     placeholder="ACCESS CODE"
-                    aria-label="Professional Access code"
+                    aria-label="Access code"
                     className="rounded-[8px] px-3 py-2.5 text-[13px] font-mono outline-none"
                     style={{ background: "rgba(244,247,251,0.06)", border: "1px solid rgba(244,247,251,0.14)", color: "var(--app-text1)", width: 140 }}
                   />
@@ -661,7 +661,7 @@ function SettingsContent() {
                     Billing is not enabled for this account
                   </div>
                   <div className="leading-relaxed">
-                    Checkout remains unavailable until account billing is approved and configured. Professional Access can still be applied with an approved access code.
+                    Checkout remains unavailable until account billing is approved and configured. Account access can still be applied with an approved access code.
                   </div>
                 </div>
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)" }}>

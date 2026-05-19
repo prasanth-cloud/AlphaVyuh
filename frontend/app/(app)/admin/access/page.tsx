@@ -66,7 +66,7 @@ export default function AccessAdminPage() {
         background: "linear-gradient(180deg, rgba(13,22,26,0.94), rgba(10,14,18,0.96))",
         boxShadow: "var(--shadow-panel)",
       }}>
-        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Professional Access</div>
+        <div className="label" style={{ color: "var(--accent)", marginBottom: 10 }}>Account Access</div>
         <h1 style={{ fontSize: "clamp(28px, 4vw, 42px)", lineHeight: 1.02, letterSpacing: "-0.04em", marginBottom: 8 }}>Customer onboarding queue.</h1>
         <p style={{ maxWidth: 740, fontSize: 14, lineHeight: 1.7, color: "var(--text-secondary)" }}>
           Review access requests and issue invite codes before activating approved account access.
