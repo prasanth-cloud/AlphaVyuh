@@ -23,7 +23,7 @@ const workflowSteps = [
 const accessIncludes = [
   "EOD scanner presets for finding actionable names.",
   "Watchlists that keep symbol focus, chart context, notes, and review state together.",
-  "Full chart workspace with saved indicators, drawing tools, and data-source context.",
+  "Full chart with saved indicators, drawing tools, and data-source context.",
   "Broker import and journal capture for turning completed trades into review material.",
 ];
 
@@ -59,7 +59,7 @@ export default function AccessPage() {
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-[#b6c0ce]">
             AlphaVyuh connects scanner, watchlist, full chart, trade planning, journal capture,
-            and review so every decision keeps its market context. Workspace access is account-managed
+            and review so every decision keeps its market context. Access is account-managed
             while live broker order placement remains disabled.
           </p>
         </header>

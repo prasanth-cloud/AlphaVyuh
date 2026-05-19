@@ -29,6 +29,11 @@ const forbidden = [
   /FOUNDER100/i,
   /founder plan/i,
   /founder code/i,
+  /Professional Access workspace/i,
+  /free workspace/i,
+  /Full chart workspace/i,
+  /Workspace access/i,
+  /This workspace is not available/i,
 ];
 
 const pages = [
@@ -53,11 +58,18 @@ const pages = [
 
 const staticFiles = [
   "frontend/lib/agentMissionControl.ts",
+  "frontend/app/page.tsx",
+  "frontend/app/access/page.tsx",
+  "frontend/app/not-found.tsx",
+  "frontend/components/auth/LoginForm.tsx",
+  "frontend/components/auth/SignupForm.tsx",
   "PRODUCT.md",
   "PROFESSIONAL_ACCESS_LAUNCH_CHECKLIST.md",
   "AGENTS/PRIORITY.md",
   "AGENTS/qa.md",
   "pitch/index.html",
+  "supabase/templates/magic-link.html",
+  "supabase/templates/confirmation.html",
 ];
 
 function assert(condition, message) {

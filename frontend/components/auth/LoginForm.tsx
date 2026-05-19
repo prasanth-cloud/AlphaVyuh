@@ -95,7 +95,7 @@ export default function LoginForm() {
           Sign in to AlphaVyuh
         </div>
         <div style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.6 }}>
-          Continue to your Professional Access workspace.
+          Continue to your Professional Access account.
         </div>
         {nextPath !== "/dashboard" && (
           <div
