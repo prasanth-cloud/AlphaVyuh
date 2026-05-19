@@ -44,9 +44,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Queue, decomposition, PR integration",
     autonomy: "Coordinates",
     status: "active",
-    currentWork: "Runs Professional Access cleanup through issue -> agent roster -> PR -> validation loops; latest loop shipped PRs #174-#175.",
+    currentWork: "Runs Professional Access cleanup through issue -> agent roster -> PR -> validation loops; latest loop shipped PRs #176-#179.",
     ownerFiles: "GitHub issues, PR notes, docs/agent-runs",
-    lastUpdate: "PR #175 merged",
+    lastUpdate: "PR #179 merged",
   },
   {
     id: "feature",
@@ -54,9 +54,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Trader-facing workflows",
     autonomy: "Level 2",
     status: "watching",
-    currentWork: "Keeps visible product copy and active planning docs on Professional Access language while data recovery work stays focused on Railway hosting.",
+    currentWork: "Keeps visible product copy and active planning docs on Professional Access language while data recovery and outage copy stay focused on Railway hosting.",
     ownerFiles: "frontend/app/(app), frontend/lib/api.ts, feature routers",
-    lastUpdate: "PR #174 growth plan cleanup merged",
+    lastUpdate: "PR #178 recovery next-step copy merged",
   },
   {
     id: "data",
@@ -74,9 +74,9 @@ export const agentLanes: AgentLane[] = [
     scope: "Workflow regression and launch safety",
     autonomy: "Level 3",
     status: "watching",
-    currentWork: "Protects Professional Access copy, data-recovery checks, signed-in smoke, auth, scanner, watchlist, chart, journal, layout, perf, and agent PR gates.",
+    currentWork: "Protects Professional Access copy, data-recovery checks, signed-in smoke, production recovery launch gate, auth, scanner, watchlist, chart, journal, layout, perf, and agent PR gates.",
     ownerFiles: "frontend/tests/e2e, backend/tests, QA reports",
-    lastUpdate: "PR #175 production smoke entrypoint merged",
+    lastUpdate: "PR #179 launch recovery gate merged",
   },
   {
     id: "security",
@@ -86,7 +86,7 @@ export const agentLanes: AgentLane[] = [
     status: "watching",
     currentWork: "Keeps broker execution disabled, payment enablement gated, and recovery commands free of credential output.",
     ownerFiles: "supabase/migrations, backend/tests, security docs",
-    lastUpdate: "No broker or billing enablement in PRs #174-#175",
+    lastUpdate: "No broker or billing enablement in PRs #176-#179",
   },
   {
     id: "deploy",
@@ -101,6 +101,42 @@ export const agentLanes: AgentLane[] = [
 ];
 
 export const shippedAgentPrs: ShippedAgentPr[] = [
+  {
+    pr: "#179",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/179",
+    title: "Add production recovery launch gate",
+    agent: "Release + QA",
+    merged: "2026-05-19",
+    notes: "Added `RUN_PRODUCTION_RECOVERY_SMOKE=1` to the launch readiness command and documented the post-Railway recovery gate.",
+    productImpact: "After Railway recovery, one launch command can prove production data recovery and signed-in browser smoke before users see the platform.",
+  },
+  {
+    pr: "#178",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/178",
+    title: "Clarify Railway recovery next step",
+    agent: "Backend Recovery + Release",
+    merged: "2026-05-19",
+    notes: "Updated the recovery preflight to point directly at the local Railway login and backend recovery helper.",
+    productImpact: "The no-data recovery path now gives the owner the exact command needed instead of a generic login reminder.",
+  },
+  {
+    pr: "#177",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/177",
+    title: "Stabilize backend migration checks",
+    agent: "Backend + QA",
+    merged: "2026-05-19",
+    notes: "Fixed backend migration path resolution so focused backend tests can run reliably from CI and local shells.",
+    productImpact: "Release verification is less brittle, which keeps Professional Access cleanup moving without hiding backend regressions.",
+  },
+  {
+    pr: "#176",
+    href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/176",
+    title: "Refresh mission control recovery status",
+    agent: "Manager + QA",
+    merged: "2026-05-19",
+    notes: "Aligned the `/agents` operator view with the current recovery cycle and Railway blocker.",
+    productImpact: "The founder can see which agent lane owns recovery, QA, release, and blocker follow-up without reading chat history.",
+  },
   {
     pr: "#175",
     href: "https://github.com/prasanth-cloud/AlphaVyuh/pull/175",
