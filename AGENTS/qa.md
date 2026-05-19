@@ -59,6 +59,9 @@ After Railway recovery, run the strict production recovery gate with a valid
 production smoke token and signed-in QA credentials:
 
 ```bash
+# export PRODUCTION_API_BEARER_TOKEN=<short-lived production smoke token>
+# export PLAYWRIGHT_QA_EMAIL=<production QA login>
+# export PLAYWRIGHT_QA_PASSWORD=<production QA password>
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
