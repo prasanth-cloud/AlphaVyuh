@@ -20,6 +20,7 @@
     "check:production-api:railway": "PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app node scripts/check-production-api.mjs",
     "check:data-recovery": "node scripts/check-data-recovery-readiness.mjs",
     "prepare:railway-recovery-secrets": "node scripts/prepare-railway-recovery-secrets.mjs",
+    "recover:railway-backend:login": "bash scripts/login-and-recover-railway-backend.sh",
     "recover:railway-backend": "bash scripts/recover-railway-backend.sh",
     "launch:check": "bash scripts/launch-readiness-check.sh",
     "broker:smoke": "bash scripts/broker-readonly-smoke.sh",

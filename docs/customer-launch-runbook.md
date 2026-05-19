@@ -139,6 +139,15 @@ npm run recover:railway-backend
 npm run check:data-recovery
 ```
 
+- Single-command local recovery path:
+
+```bash
+npm run recover:railway-backend:login
+```
+
+This starts Railway browserless login when needed, waits for owner activation,
+then runs backend recovery and `npm run check:data-recovery`.
+
 Go/no-go:
 
 - Do not enable `NEXT_PUBLIC_FORCE_LIVE_DATA=true` for paid launch until provider credentials, legal terms, uptime, and failover behavior are tested.
