@@ -27,6 +27,7 @@ async function run(files) {
 const root = mkdtempSync(join(tmpdir(), "alphavyuh-recovery-handoff-"));
 const clean = join(root, "clean.md");
 const stale = join(root, "stale.md");
+const splitStale = join(root, "split-stale.md");
 const unrelated = join(root, "unrelated.md");
 
 writeFileSync(clean, [
@@ -39,6 +40,16 @@ writeFileSync(clean, [
 writeFileSync(stale, [
   "# Recovery",
   "# export PRODUCTION_API_BEARER_TOKEN=...",
+  "RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check",
+].join("\n"));
+writeFileSync(splitStale, [
+  "# Recovery",
+  "# export PRODUCTION_API_BEARER_TOKEN=...",
+  "# export PLAYWRIGHT_QA_EMAIL=...",
+  "# export PLAYWRIGHT_QA_PASSWORD=...",
+  "RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check",
+  "",
+  "## Later checklist",
   "RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check",
 ].join("\n"));
 writeFileSync(unrelated, "# No production gate here.");
@@ -54,6 +65,12 @@ writeFileSync(unrelated, "# No production gate here.");
   assert.notEqual(code, 0, "recovery handoff check should fail when QA credentials are missing");
   assert.match(stderr, /PLAYWRIGHT_QA_EMAIL/);
   assert.match(stderr, /PLAYWRIGHT_QA_PASSWORD/);
+}
+
+{
+  const { code, stderr } = await run([splitStale]);
+  assert.notEqual(code, 0, "recovery handoff check should fail when a later gate omits local credentials");
+  assert.match(stderr, /PLAYWRIGHT_QA_EMAIL|PLAYWRIGHT_QA_PASSWORD/);
 }
 
 console.log("check-recovery-handoff-credentials tests passed.");

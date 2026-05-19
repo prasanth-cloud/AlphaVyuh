@@ -167,6 +167,10 @@ Local Railway CLI path:
 ```bash
 railway login
 npm run recover:railway-backend
+# Required for complete recovery evidence:
+# export PRODUCTION_API_BEARER_TOKEN=...
+# export PLAYWRIGHT_QA_EMAIL=...
+# export PLAYWRIGHT_QA_PASSWORD=...
 npm run check:data-recovery
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
