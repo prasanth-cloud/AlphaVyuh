@@ -21,16 +21,16 @@ AlphaVyuh is the one-stop trading workflow platform for NSE swing traders. Trade
 
 Indian retail swing traders, specifically:
 - Active swing traders trading NSE/BSE equities
-- Using Zerodha or planning to connect Zerodha once the beta broker flow is stable
+- Using Zerodha or planning to connect Zerodha once broker import and read-only sync are stable
 - Following momentum, VCP, Stage 2, breakout methodologies (Minervini, Qullamaggie)
 - Serious about improving — journals their trades, reviews mistakes
 - Currently managing scanner, charts, watchlists, broker context, and journal notes across multiple tools
 
 Not for: day traders, F&O-only traders, US market traders (until Elite tier launches).
 
-## Private beta focus
+## Professional Access focus
 
-The private beta should feel simple: open the app, find useful market context, save symbols, inspect charts, and keep a journal. Avoid adding visible process layers unless they reduce clicks or confusion.
+Professional Access should feel simple: open the app, find useful market context, save symbols, inspect charts, and keep a journal. Avoid adding visible process layers unless they reduce clicks or confusion.
 
 Everything else is secondary until the core pages feel obvious and stable.
 
@@ -144,22 +144,22 @@ Plan gating enforced server-side in:
 
 ## Current product state (as of Apr 2026)
 
-**Working for private beta:**
+**Working for Professional Access:**
 - Dashboard loads market breadth and data provenance.
 - Scanner supports presets, saved screens, 52-week filters, and backend auth headers.
 - Watchlist, chart views, journal, and manual/simulated trade flow are usable.
-- Zerodha broker flow exists as beta and must be verified per account before execution.
+- Zerodha broker import exists and must be verified per account before execution is enabled.
 - Data health endpoint `/api/v1/data/health` and data freshness center exist.
-- Landing/public footer pages use beta-safe copy and avoid fake social proof.
+- Landing/public footer pages use Professional Access copy and avoid fake social proof.
 
-**Still beta-risky:**
+**Still launch-risky:**
 - Market data licensing for production realtime/delayed display is not finalized.
 - Broker order flow needs small-group verification before wider launch.
 - AI journal review memory needs hardening before paid public positioning.
-- Payment mode and pricing stay founder-beta until Razorpay and data costs are final.
+- Payment mode and pricing stay approval-managed until Razorpay and data costs are final.
 
 ## Launch target
 
 25 days from Apr 19, 2026 → **May 14, 2026**
 
-Private beta success = 10-25 serious traders onboarded manually, scanner/chart/watchlist/journal used across real routines, and every data/broker issue captured before public launch.
+Professional Access success = 10-25 serious traders onboarded manually, scanner/chart/watchlist/journal used across real routines, and every data/broker issue captured before public paid launch.

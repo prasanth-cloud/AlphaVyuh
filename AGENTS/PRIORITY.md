@@ -1,14 +1,14 @@
 # Priority queue
 
-This file exists to prevent feature overload. Until the core beta workflow is stable, agents should not add new product surfaces unless a P0 bug requires it.
+This file exists to prevent feature overload. Until the core Professional Access workflow is stable, agents should not add new product surfaces unless a P0 bug requires it.
 
-## Now — private beta
+## Now — Professional Access
 
 1. **Stabilize build and deployment** — production must build reliably before more product work.
 2. **Stabilize auth in app pages** — scanner, watchlist, charts, and journal must load without false "Not authenticated" states.
 3. **Simplify the app UI** — remove visible process layers, extra step trackers, and copy that explains the product too much.
 4. **Keep copy informational** — no advisory language, no buy/sell prompts, no "best opportunity" framing.
-5. **Verify with one real beta routine** — sign in, open dashboard, run scanner, save a symbol, open a chart, log or review a trade.
+5. **Verify with one real trader routine** — sign in, open dashboard, run scanner, save a symbol, open a chart, log or review a trade.
 
 ## Next — after the core path feels calm
 
