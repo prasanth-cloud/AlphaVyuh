@@ -145,7 +145,7 @@ export default function SignupForm() {
         <div style={{ marginBottom: 10, fontSize: 30, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
           Create your account
         </div>
-        <CardDescription>Create a free workspace for scanning, chart planning, and trade review.</CardDescription>
+        <CardDescription>Create an account for scanning, chart planning, and trade review.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

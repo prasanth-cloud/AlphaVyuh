@@ -13,9 +13,9 @@ export default function NotFound() {
         <div className="text-[11px] uppercase tracking-[0.18em]" style={{ color: "var(--app-text3)" }}>
           Route unavailable
         </div>
-        <h1 className="mt-3 text-[26px] font-semibold tracking-tight">This workspace is not available.</h1>
+        <h1 className="mt-3 text-[26px] font-semibold tracking-tight">This page is not available.</h1>
         <p className="mt-3 text-[14px] leading-6" style={{ color: "var(--app-text2)" }}>
-          The link may be stale, or this workspace may not be enabled for your current account.
+          The link may be stale, or this page may not be enabled for your current account.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Link

@@ -322,7 +322,7 @@ export default function LandingPage() {
                 <div className="lp-av" style={{background:"#2A3A38"}}>VR</div>
               </div>
               <div>
-                <div className="lp-proof-copy"><strong>Professional Access workspace</strong> for serious Indian market workflows</div>
+                <div className="lp-proof-copy"><strong>Professional Access platform</strong> for serious Indian market workflows</div>
                 <div className="lp-stars">Scanner · Watchlist · Charts · Journal</div>
               </div>
             </div>
@@ -537,7 +537,7 @@ export default function LandingPage() {
           <div className="lp-tgrid">
             {[
               {av:"SC",bg:"#2D3A2D",c:"var(--gain)",n:"Scanner to watchlist",r:"Discovery workflow",ret:"Less tab switching",q:"The product is designed so a scan result can become a focused watchlist candidate, then move straight into chart review without losing setup context."},
-              {av:"CH",bg:"#2A2D3E",c:"var(--info)",n:"Watchlist to chart",r:"Planning workflow",ret:"Context stays attached",q:"Chart markings, active levels, and notes live in the same workspace, so review does not split across disconnected tools."},
+              {av:"CH",bg:"#2A2D3E",c:"var(--info)",n:"Watchlist to chart",r:"Planning workflow",ret:"Context stays attached",q:"Chart markings, active levels, and notes stay attached to the same symbol, so review does not split across disconnected tools."},
               {av:"JR",bg:"#2A3A38",c:"var(--accent)",n:"Journal to review",r:"Learning workflow",ret:"Mistakes become visible",q:"Every closed trade can carry the setup, exit reason, mistakes, lessons, and review notes needed to improve the next decision."},
             ].map((t,i) => (
               <div key={t.n} className="lp-tcard lp-tilt" style={{transitionDelay:(i*0.1)+"s"}}>
@@ -656,7 +656,7 @@ export default function LandingPage() {
                 <div className="lp-logo-mark"><svg viewBox="0 0 18 18" fill="none" width="18" height="18"><path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="16" cy="6" r="1.5" fill="currentColor"/></svg></div>
                 AlphaVyuh
               </div>
-              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s professional trading workflow system. Scan markets, plan charts, and journal decisions in one workspace.</p>
+              <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s professional trading workflow system. Scan markets, plan charts, and journal decisions in one focused flow.</p>
             </div>
             <div className="lp-fcol"><h5>Product</h5><ul><li><Link href="/products#scanner">Scanner</Link></li><li><Link href="/products">Charts</Link></li><li><Link href="/products#journal">Journal</Link></li><li><a href="#pricing">Pricing</a></li></ul></div>
             <div className="lp-fcol"><h5>Company</h5><ul><li><Link href="/products">About</Link></li><li><Link href="/access">Access guide</Link></li><li><Link href="/blog">Blog</Link></li><li><Link href="/contact">Contact</Link></li></ul></div>
