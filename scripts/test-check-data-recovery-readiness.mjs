@@ -268,6 +268,7 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /No Railway Backend Recovery workflow runs found/);
   assert.match(stdout, /Unauthorized\. Please run railway login again/);
+  assert.match(stdout, /npm run recover:railway-backend:login/);
   assert.deepEqual(resultNames(stdout), [
     "Production API data smoke",
     "Vercel production env",
@@ -303,6 +304,7 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   assert.match(stdout, /Optional secrets not set: RAILWAY_WORKSPACE, PRODUCTION_API_BEARER_TOKEN, PRODUCTION_API_CHART_SYMBOLS/);
   assert.match(stdout, /Latest run 2026-05-18T21:00:00Z is failure/);
   assert.match(stdout, /Recovery status: backend still needs recovery, but at least one deploy path appears ready/);
+  assert.match(stdout, /npm run recover:railway-backend:login/);
 });
 
 await withServer(serveRailwayFallback, async (apiUrl) => {

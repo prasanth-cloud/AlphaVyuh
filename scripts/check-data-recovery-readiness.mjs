@@ -437,7 +437,7 @@ async function checkLocalRailway() {
       "warn",
       "Local Railway CLI",
       summarizeOutput(whoami.stderr || whoami.stdout) || "Railway CLI is not authenticated locally.",
-      "Run `railway login` if you want to recover from this machine instead of GitHub Actions.",
+      "Run `npm run recover:railway-backend:login` to refresh Railway auth, recover the backend, and rerun verification.",
     );
     return false;
   }
@@ -510,12 +510,12 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, rec
 
   if (githubRecoveryReady || recoveryWorkflowReady || localRailwayReady) {
     console.log("Recovery status: backend still needs recovery, but at least one deploy path appears ready.");
-    console.log("Run `npm run recover:railway-backend` locally or the manual Railway Backend Recovery GitHub workflow.");
+    console.log("Run `npm run recover:railway-backend:login` locally or the manual Railway Backend Recovery GitHub workflow.");
     return;
   }
 
   console.log("Recovery status: backend is down and no deploy path is ready yet.");
-  console.log("Add Railway GitHub secrets or refresh local `railway login`, then recover the backend.");
+  console.log("Add Railway GitHub secrets or run `npm run recover:railway-backend:login`, then recover the backend.");
 }
 
 try {
