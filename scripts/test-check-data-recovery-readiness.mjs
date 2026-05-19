@@ -36,6 +36,18 @@ function dailyCandles(startDate, count) {
   return candles;
 }
 
+function chartResponse(symbol, startDate = "2025-10-31", count = 200) {
+  const candles = dailyCandles(startDate, count);
+  return JSON.stringify({
+    candles,
+    coverage: {
+      available_from: startDate,
+      available_to: candles.at(-1)?.time,
+      symbol,
+    },
+  });
+}
+
 function serveHealthyApi(request, response) {
   response.setHeader("content-type", "application/json");
   if (serveSupabaseRest(request, response)) return;
@@ -48,10 +60,15 @@ function serveHealthyApi(request, response) {
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(JSON.stringify({
-      candles: dailyCandles("2025-10-31", 200),
-      coverage: { available_from: "2025-10-31", available_to: "2026-05-18" },
-    }));
+    response.end(chartResponse("RELIANCE"));
+    return;
+  }
+  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&limit=500") {
+    response.end(chartResponse("ITC"));
+    return;
+  }
+  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&limit=500") {
+    response.end(chartResponse("AUBANK"));
     return;
   }
   if (request.url === "/api/v1/scanner/run" && request.method === "POST") {

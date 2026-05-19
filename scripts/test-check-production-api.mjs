@@ -54,6 +54,18 @@ function dailyCandles(startDate, count) {
   return candles;
 }
 
+function chartResponse(symbol, startDate = "2025-10-31", count = 200) {
+  const candles = dailyCandles(startDate, count);
+  return JSON.stringify({
+    candles,
+    coverage: {
+      available_from: startDate,
+      available_to: candles.at(-1)?.time,
+      symbol,
+    },
+  });
+}
+
 await withServer((request, response) => {
   if (request.url === "/health") {
     response.writeHead(404, {
@@ -91,10 +103,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(JSON.stringify({
-      candles: dailyCandles("2022-09-17", 200),
-      coverage: { available_from: "2022-09-17", available_to: "2023-04-04" },
-    }));
+    response.end(chartResponse("RELIANCE", "2022-09-17", 200));
     return;
   }
 
@@ -121,10 +130,15 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(JSON.stringify({
-      candles: dailyCandles("2025-10-31", 200),
-      coverage: { available_to: "2026-05-18" },
-    }));
+    response.end(chartResponse("RELIANCE"));
+    return;
+  }
+  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&limit=500") {
+    response.end(chartResponse("ITC"));
+    return;
+  }
+  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&limit=500") {
+    response.end(chartResponse("AUBANK"));
     return;
   }
 
@@ -133,7 +147,7 @@ await withServer((request, response) => {
 }, async (apiUrl) => {
   const { code, stdout, stderr } = await runChecker(apiUrl);
   assert.equal(code, 0, `production API check should pass on current data:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
-  assert.match(stdout, /RELIANCE candles 200 from 2025-10-31 through 2026-05-18/);
+  assert.match(stdout, /charts RELIANCE 200 candles 2025-10-31->2026-05-18; ITC 200 candles 2025-10-31->2026-05-18; AUBANK 200 candles 2025-10-31->2026-05-18/);
   assert.match(stdout, /scanner skipped/);
 });
 
@@ -148,10 +162,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(JSON.stringify({
-      candles: dailyCandles("2026-01-01", 60),
-      coverage: { available_from: "2026-01-01", available_to: "2026-03-01" },
-    }));
+    response.end(chartResponse("RELIANCE", "2026-01-01", 60));
     return;
   }
 
@@ -178,10 +189,15 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(JSON.stringify({
-      candles: dailyCandles("2025-10-31", 200),
-      coverage: { available_from: "2025-10-31", available_to: "2026-05-18" },
-    }));
+    response.end(chartResponse("RELIANCE"));
+    return;
+  }
+  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&limit=500") {
+    response.end(chartResponse("ITC"));
+    return;
+  }
+  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&limit=500") {
+    response.end(chartResponse("AUBANK"));
     return;
   }
   if (request.url === "/api/v1/scanner/run" && request.method === "POST") {
