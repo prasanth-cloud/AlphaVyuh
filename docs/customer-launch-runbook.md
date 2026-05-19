@@ -11,6 +11,8 @@ npm run launch:check
 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 npm run check:data-recovery
 npm run check:production-api:railway
+# After Railway recovery:
+RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
 Manual browser pass:
@@ -262,6 +264,8 @@ Do not market performance claims. Market process quality: fewer missed reviews, 
 Launch paid plans only when:
 
 - `npm run launch:check` passes.
+- `RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check`
+  passes after Railway recovery.
 - One complete manual QA pass is clean.
 - Razorpay live/test mode is intentionally selected and documented.
 - Data mode is intentionally selected and visible.

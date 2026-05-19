@@ -29,6 +29,8 @@ Run these before release:
 npm run launch:check
 npm run check:data-recovery
 npm run check:production-api:railway
+# After Railway recovery, run the full production recovery/browser smoke gate:
+# RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 # To skip local browser server smoke in constrained shells only:
 # SKIP_BROWSER_SMOKE=1 npm run launch:check
 # To include read-only Kite/Upstox account smoke when tokens are available:
@@ -75,7 +77,7 @@ npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
 ```
 
-- Or recover locally after `railway login` with `npm run recover:railway-backend`.
+- Or recover locally with `npm run recover:railway-backend:login`.
 - Do not claim production EOD data is restored until the production API smoke and
   authenticated browser smoke pass against `https://www.alphavyuh.com`.
 - The production API smoke must include enough current daily candles for every
@@ -130,6 +132,8 @@ symbol, side, quantity, order type, and sandbox/live mode.
 - `npm run check:data-recovery` passes for the production API and raw Supabase EOD store.
 - `npm run check:production-api:railway` returns current market breadth and enough
   current daily candles for the configured chart smoke symbols.
+- `RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check`
+  passes after Railway recovery.
 
 ## UX Checklist
 
