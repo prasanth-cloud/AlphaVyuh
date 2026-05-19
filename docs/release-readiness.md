@@ -30,7 +30,7 @@ npm run launch:check
 npm run check:data-recovery
 npm run check:production-api:railway
 # After Railway recovery, run the full production recovery/browser smoke gate.
-# This also requires authenticated scanner smoke evidence.
+# This requires PRODUCTION_API_BEARER_TOKEN plus PLAYWRIGHT_QA_EMAIL/PASSWORD.
 # RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 # To skip local browser server smoke in constrained shells only:
 # SKIP_BROWSER_SMOKE=1 npm run launch:check
@@ -59,8 +59,8 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 ```
 
 `npm run launch:check` runs the deterministic checker tests for production API
-freshness, public posture copy, data recovery readiness, and Railway secret
-preparation before the heavier app/browser gates.
+freshness, production smoke credentials, public posture copy, data recovery
+readiness, and Railway secret preparation before the heavier app/browser gates.
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
 
@@ -75,8 +75,10 @@ Railway recovery gate:
 export RAILWAY_TOKEN=...
 export RAILWAY_PROJECT_ID=...
 export RAILWAY_SERVICE=...
-# Optional but recommended for complete recovery evidence:
+# Required for complete recovery evidence:
 # export PRODUCTION_API_BEARER_TOKEN=...
+# export PLAYWRIGHT_QA_EMAIL=...
+# export PLAYWRIGHT_QA_PASSWORD=...
 # export PRODUCTION_API_CHART_SYMBOLS=RELIANCE,ITC,AUBANK
 npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery

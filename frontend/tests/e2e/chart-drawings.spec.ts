@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { qaCredentials } from "./helpers/qaCredentials";
 
-const EMAIL = process.env.PLAYWRIGHT_QA_EMAIL ?? "alphavyuh.qa.admin@proton.me";
-const PASSWORD = process.env.PLAYWRIGHT_QA_PASSWORD ?? "QaPass123x";
 const ACCESS_URL = process.env.PLAYWRIGHT_ACCESS_URL;
+const { email: EMAIL, password: PASSWORD } = qaCredentials();
 
 async function login(page: import("@playwright/test").Page) {
   await page.context().clearCookies();

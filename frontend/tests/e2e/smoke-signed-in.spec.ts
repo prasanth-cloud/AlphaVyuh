@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { qaCredentials } from "./helpers/qaCredentials";
 
-const EMAIL = process.env.PLAYWRIGHT_QA_EMAIL ?? "alphavyuh.qa.admin@proton.me";
-const PASSWORD = process.env.PLAYWRIGHT_QA_PASSWORD ?? "QaPass123x";
 const ACCESS_URL = process.env.PLAYWRIGHT_ACCESS_URL;
 const EXPECT_REAL_DATA = process.env.PLAYWRIGHT_EXPECT_REAL_DATA === "true";
 const SMOKE_SYMBOL = process.env.PLAYWRIGHT_SMOKE_SYMBOL ?? "RELIANCE";
+const { email: EMAIL, password: PASSWORD } = qaCredentials({ requireExplicit: EXPECT_REAL_DATA });
 
 async function login(page: import("@playwright/test").Page) {
   await page.context().clearCookies();

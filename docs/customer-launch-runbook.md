@@ -11,7 +11,7 @@ npm run launch:check
 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 npm run check:data-recovery
 npm run check:production-api:railway
-# After Railway recovery, with authenticated scanner smoke evidence:
+# After Railway recovery, with production smoke token and QA login:
 RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
 ```
 
@@ -128,6 +128,8 @@ export RAILWAY_PROJECT_ID=...
 export RAILWAY_SERVICE=...
 # Required for complete recovery evidence:
 # export PRODUCTION_API_BEARER_TOKEN=...
+# export PLAYWRIGHT_QA_EMAIL=...
+# export PLAYWRIGHT_QA_PASSWORD=...
 # export PRODUCTION_API_CHART_SYMBOLS=RELIANCE,ITC,AUBANK
 npm run prepare:railway-recovery-secrets -- --apply --run-workflow
 npm run check:data-recovery
