@@ -2933,15 +2933,16 @@ export type PriceAlert = {
 export async function getPriceAlerts(): Promise<PriceAlert[]> {
   if (shouldUseMockFallback()) return mockPriceAlerts();
   return cachedClientRequest("price-alerts", 20_000, async () => {
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
-      if (!res.ok) return shouldUseMockFallback() ? mockPriceAlerts() : [];
-      const d = await res.json();
-      return d.alerts ?? [];
-    } catch {
-      return shouldUseMockFallback() ? mockPriceAlerts() : [];
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Price alerts are temporarily unavailable (${res.status}).`));
     }
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Price alerts are temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    if (!Array.isArray(data.alerts)) throw new Error("Price alerts are temporarily unavailable.");
+    return data.alerts;
   });
 }
 
@@ -2963,7 +2964,10 @@ export async function createPriceAlert(
 
 export async function deletePriceAlert(id: string): Promise<void> {
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/price-alerts/${id}`, { method: "DELETE", headers });
+  const res = await fetch(`${API}/api/v1/price-alerts/${id}`, { method: "DELETE", headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Price alerts are temporarily unavailable (${res.status}).`));
+  }
   invalidateClientCache(["price-alerts"]);
 }
 
