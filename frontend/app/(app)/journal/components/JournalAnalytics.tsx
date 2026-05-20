@@ -75,9 +75,21 @@ function DrawdownChart({ data }: { data: { date: string; drawdown: number; drawd
 
 interface JournalAnalyticsProps {
   analytics: JournalAnalyticsType | null;
+  analyticsError?: string | null;
 }
 
-export function JournalAnalytics({ analytics }: JournalAnalyticsProps) {
+export function JournalAnalytics({ analytics, analyticsError }: JournalAnalyticsProps) {
+  if (analyticsError) {
+    return (
+      <Card padding="lg" data-testid="journal-analytics-unavailable">
+        <div className="label" style={{ color: "var(--warn)", marginBottom: 8 }}>Analytics unavailable</div>
+        <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+          {analyticsError} Closed trades are not being counted as empty.
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <div>
       <Card padding="lg">

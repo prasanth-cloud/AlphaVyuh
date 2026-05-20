@@ -29,6 +29,7 @@ type CenterState = {
   broker: BrokerStatus | null;
   journalStats: JournalStats | null;
   aiPatterns: AiPatterns | null;
+  aiPatternsError: string;
   dataRuns: DataRun[];
   dataRunsError: string;
   closedTrades: number;
@@ -126,6 +127,7 @@ export default function DataFreshnessPage() {
     broker: null,
     journalStats: null,
     aiPatterns: null,
+    aiPatternsError: "",
     dataRuns: [],
     dataRunsError: "",
     closedTrades: 0,
@@ -163,7 +165,12 @@ export default function DataFreshnessPage() {
             { id: "journal", label: "Journal entries", href: "/journal" },
             "Journal entries are temporarily unavailable.",
           ),
-          getAiPatterns().catch(() => null),
+          getAiPatterns()
+            .then(patterns => ({ patterns, error: "" }))
+            .catch(error => ({
+              patterns: null,
+              error: error instanceof Error ? error.message : "Trade pattern review is temporarily unavailable.",
+            })),
         ]);
 
         const accountIssues = uniqueAccountIssues([brokerResult.issue, journalStatsResult.issue, journalResult.issue]);
@@ -178,7 +185,8 @@ export default function DataFreshnessPage() {
           apiReachable,
           broker,
           journalStats,
-          aiPatterns,
+          aiPatterns: aiPatterns.patterns,
+          aiPatternsError: aiPatterns.error,
           dataRuns: dataRunsResult.runs,
           dataRunsError: dataRunsResult.error,
           closedTrades: closed.length,
@@ -237,6 +245,14 @@ export default function DataFreshnessPage() {
         title: "Recheck refresh run history",
         detail: "Recent ingest activity cannot be confirmed right now; do not treat the run list as empty.",
         href: "/data",
+      });
+    }
+
+    if (state.aiPatternsError) {
+      next.push({
+        title: "Recheck trade review analytics",
+        detail: "Pattern readiness cannot be confirmed right now; closed trades are not being counted as insufficient.",
+        href: "/journal?tab=ai",
       });
     }
 
@@ -392,7 +408,7 @@ export default function DataFreshnessPage() {
               ["Kite app", liveMarket?.api_key_configured ? "Configured" : "Missing"],
               ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
               ["Open trades", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : fmtNumber(state.journalStats?.open_trades)],
-              ["AI pattern readiness", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
+              ["AI pattern readiness", state.accountIssues.some(issue => issue.id === "journal") || state.aiPatternsError ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
             ].map(([label, value]) => (
               <div key={label} style={{ padding: "11px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
                 <div className="label" style={{ marginBottom: 4 }}>{label}</div>

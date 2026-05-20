@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 import yfinance as yf
 from pydantic import BaseModel
 
@@ -83,15 +83,21 @@ def _clean_context(value: dict[str, Any] | None) -> dict[str, Any] | None:
 
 @router.get("/analytics")
 async def get_analytics(user_id: str = Depends(get_current_user_id)):
-    sb = get_admin_client()
-    result = (
-        sb.table("trade_journal")
-        .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days")
-        .eq("user_id", user_id)
-        .eq("status", "closed")
-        .order("exit_date", desc=False)
-        .execute()
-    )
+    try:
+        sb = get_admin_client()
+        result = (
+            sb.table("trade_journal")
+            .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days")
+            .eq("user_id", user_id)
+            .eq("status", "closed")
+            .order("exit_date", desc=False)
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Journal analytics are temporarily unavailable.",
+        )
     entries = result.data or []
 
     # ── Equity curve ─────────────────────────────────────────────────────────

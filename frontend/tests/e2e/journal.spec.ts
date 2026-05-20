@@ -105,6 +105,8 @@ async function mockJournalRoutes(
     brokerConnected = false,
     journalStatus = 200,
     statsStatus = 200,
+    analyticsStatus = 200,
+    patternsStatus = 200,
     brokerStatus = 200,
   }: {
     entries?: TradeFixture[];
@@ -113,6 +115,8 @@ async function mockJournalRoutes(
     brokerConnected?: boolean;
     journalStatus?: number;
     statsStatus?: number;
+    analyticsStatus?: number;
+    patternsStatus?: number;
     brokerStatus?: number;
   } = {}
 ) {
@@ -156,6 +160,13 @@ async function mockJournalRoutes(
     }
 
     if (method === "GET" && url.pathname.endsWith("/analytics")) {
+      if (analyticsStatus >= 400) {
+        return route.fulfill({
+          status: analyticsStatus,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Journal analytics are temporarily unavailable. Trade rows may still be current." }),
+        });
+      }
       return route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -222,20 +233,28 @@ async function mockJournalRoutes(
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        { symbol: "INFY", company_name: "Infosys Limited" },
-        { symbol: "INFOSYS", company_name: "Infosys Ltd ADR" },
-      ]),
+      body: JSON.stringify({
+        results: [
+          { symbol: "INFY", company_name: "Infosys Limited", sector: "IT", series: "EQ" },
+          { symbol: "INFOSYS", company_name: "Infosys Ltd ADR", sector: "IT", series: "EQ" },
+        ],
+      }),
     })
   );
 
   // AI patterns
   await page.route(`${API}/api/v1/ai/patterns`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(AI_PATTERNS),
-    })
+    patternsStatus >= 400
+      ? route.fulfill({
+          status: patternsStatus,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Trade pattern review is temporarily unavailable." }),
+        })
+      : route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(AI_PATTERNS),
+        })
   );
 
   // AI analyse
@@ -327,6 +346,26 @@ test.describe("Journal — account data unavailable states", () => {
     await expect(page.locator("body")).toContainText("Unavailable");
   });
 
+  test("journal analytics failure does not render a false empty analytics tab", async ({ page }) => {
+    await mockJournalRoutes(page, { analyticsStatus: 503 });
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await page.getByRole("button", { name: "Analytics" }).click();
+    await expect(page.getByTestId("journal-analytics-unavailable")).toContainText("Journal analytics are temporarily unavailable", { timeout: 15_000 });
+    await expect(page.getByText("Close some trades to see analytics here.")).not.toBeVisible();
+  });
+
+  test("AI pattern failure does not render a false insufficient-trades state", async ({ page }) => {
+    await mockJournalRoutes(page, { patternsStatus: 503 });
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await page.getByRole("button", { name: "Trade review" }).click();
+    await expect(page.getByTestId("journal-patterns-unavailable")).toContainText("Trade pattern review is temporarily unavailable", { timeout: 15_000 });
+    await expect(page.getByText("Close at least 3 trades to see pattern stats.")).not.toBeVisible();
+  });
+
   test("broker status failure is visible and hides broker import", async ({ page }) => {
     await mockJournalRoutes(page, { brokerConnected: true, brokerStatus: 503 });
     await page.goto("/journal");
@@ -348,7 +387,7 @@ test.describe("Journal — add trade", () => {
     if (page.url().includes("/login")) return;
 
     await page.getByRole("button", { name: "+ Log trade" }).click();
-    await expect(page.getByText("Log trade")).toBeVisible();
+    await expect(page.locator(".heading-card").filter({ hasText: /^Log trade$/ })).toBeVisible();
     await expect(page.getByPlaceholder("e.g. RELIANCE")).toBeVisible();
   });
 
@@ -400,8 +439,8 @@ test.describe("Journal — close trade", () => {
     if (page.url().includes("/login")) return;
 
     // The open trade row has a "Close" button
-    await page.getByRole("button", { name: "Close" }).first().click();
-    await expect(page.getByText("Close RELIANCE")).toBeVisible();
+    await page.locator("tbody tr", { hasText: "RELIANCE" }).getByRole("button", { name: "Close" }).click();
+    await expect(page.locator(".heading-card").filter({ hasText: /^Close RELIANCE$/ })).toBeVisible();
     await expect(page.getByPlaceholder("0.00")).toBeVisible();
   });
 
@@ -423,7 +462,7 @@ test.describe("Journal — close trade", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "Close" }).first().click();
+    await page.locator("tbody tr", { hasText: "RELIANCE" }).getByRole("button", { name: "Close" }).click();
     await page.getByPlaceholder("0.00").fill("3050");
     await page.getByRole("button", { name: "Close trade" }).click();
 
@@ -503,7 +542,7 @@ test.describe("Journal — tab navigation", () => {
     if (page.url().includes("/login")) return;
 
     await page.getByRole("button", { name: "Analytics" }).click();
-    await expect(page.getByText("Equity curve")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Equity curve" })).toBeVisible();
   });
 
   test("Trade review tab switch shows 'Pattern stats' heading", async ({
@@ -513,8 +552,8 @@ test.describe("Journal — tab navigation", () => {
     if (page.url().includes("/login")) return;
 
     await page.getByRole("button", { name: "Trade review" }).click();
-    await expect(page.getByText("Pattern stats")).toBeVisible();
-    await expect(page.getByText("Trade review")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pattern stats" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Trade review" })).toBeVisible();
   });
 
   test("Trade review tab triggers getAiPatterns call", async ({ page }) => {
@@ -532,7 +571,7 @@ test.describe("Journal — tab navigation", () => {
     if (page.url().includes("/login")) return;
 
     await page.getByRole("button", { name: "Trade review" }).click();
-    await expect(page.getByText("Pattern stats")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pattern stats" })).toBeVisible();
     await expect(patternsCalled).toBe(true);
   });
 });

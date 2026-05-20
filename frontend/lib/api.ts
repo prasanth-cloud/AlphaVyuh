@@ -1854,8 +1854,13 @@ export async function getJournalAnalytics(): Promise<JournalAnalytics> {
   return cachedClientRequest("journal:analytics", 30_000, async () => {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
-    if (!res.ok) return { equity_curve: [], setup_breakdown: [], monthly_pnl: [], drawdown_curve: [], max_drawdown: null, longest_dd_days: 0, recovery_factor: null, profit_factor: null };
-    return res.json();
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Journal analytics are temporarily unavailable (${res.status}).`));
+    }
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Journal analytics are temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    return data;
   });
 }
 
@@ -2740,14 +2745,15 @@ export async function getAiPatterns(): Promise<AiPatterns> {
     };
   }
   return cachedClientRequest("ai:patterns", 60_000, async () => {
-    try {
-      const headers = await authHeaders();
-      const res = await withTimeout(fetch(`${API}/api/v1/ai/patterns`, { headers }), 3000);
-      if (!res.ok) return { ready: false };
-      return res.json();
-    } catch {
-      return { ready: false };
+    const headers = await authHeaders();
+    const res = await withTimeout(fetch(`${API}/api/v1/ai/patterns`, { headers }), 3000);
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Trade pattern review is temporarily unavailable (${res.status}).`));
     }
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Trade pattern review is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    return data;
   });
 }
 

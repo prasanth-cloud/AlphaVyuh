@@ -131,15 +131,17 @@ describe("candles client cache", () => {
     await expect(getIndicators("RELIANCE", ["ema20"], "D")).rejects.toThrow("Chart indicators are temporarily unavailable.");
   });
 
-  it("coalesces AI pattern requests and fails soft", async () => {
+  it("coalesces AI pattern requests and rejects outages", async () => {
     const fetchMock = vi.fn(async () => new Response("temporary outage", { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const { getAiPatterns } = await import("@/lib/api");
-    const [first, second] = await Promise.all([getAiPatterns(), getAiPatterns()]);
+    const [first, second] = await Promise.allSettled([getAiPatterns(), getAiPatterns()]);
 
-    expect(first).toEqual({ ready: false });
-    expect(second).toEqual({ ready: false });
+    expect(first.status).toBe("rejected");
+    expect(second.status).toBe("rejected");
+    if (first.status === "rejected") expect(first.reason.message).toContain("Trade pattern review is temporarily unavailable");
+    if (second.status === "rejected") expect(second.reason.message).toContain("Trade pattern review is temporarily unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
