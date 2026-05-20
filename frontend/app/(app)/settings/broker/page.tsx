@@ -12,6 +12,7 @@ import {
   startBrokerConnect,
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
+import { accountDataErrorMessage } from "@/lib/account-data-status";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -64,14 +65,17 @@ function BrokerSettingsContent() {
   const [smokeBusy, setSmokeBusy] = useState(false);
   const [smokeSummary, setSmokeSummary] = useState("");
   const [error, setError] = useState("");
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [toast, setToast] = useState("");
 
   async function loadStatus() {
     setLoading(true);
     try {
       setState(await getBrokerStatus());
-    } catch {
+      setStatusError(null);
+    } catch (e: unknown) {
       setState(null);
+      setStatusError(accountDataErrorMessage(e, "Broker status is temporarily unavailable. Existing broker access is not being treated as disconnected."));
     } finally {
       setLoading(false);
     }
@@ -84,18 +88,23 @@ function BrokerSettingsContent() {
   useEffect(() => {
     if (searchParams.get("connected")) {
       loadStatus();
-      setToast("Broker connected. Account reads and filled-trade import are available. Live orders require Pro/Elite, backend enablement, and explicit confirmation.");
+      setToast("Broker connected. Account reads and filled-trade import are available. Place orders in your broker terminal; AlphaVyuh keeps the review workflow read-only.");
     }
   }, [searchParams]);
 
   const mode = useMemo(() => {
+    if (statusError) return "status-unavailable" as const;
     if (!state?.has_api_key) return "platform-unavailable" as const;
     if (state.token_expired) return "token-expired" as const;
     if (state.connected || state.status === "connected_read_only") return "read-only" as const;
     return "simulated" as const;
-  }, [state]);
+  }, [state, statusError]);
 
   async function handleConnect() {
+    if (statusError) {
+      setError("Broker status is unavailable. Retry status before starting a broker connection.");
+      return;
+    }
     if (!state?.plan_allows_broker) {
       setError("Broker integration requires Pro or Elite. Upgrade in Billing to connect Zerodha or Upstox.");
       return;
@@ -112,6 +121,10 @@ function BrokerSettingsContent() {
   }
 
   async function handleAdapterConnect(broker: "upstox") {
+    if (statusError) {
+      setError("Broker status is unavailable. Retry status before starting a broker connection.");
+      return;
+    }
     if (!state?.plan_allows_broker) {
       setError("Broker integration requires Pro or Elite. Upgrade in Billing to connect Zerodha or Upstox.");
       return;
@@ -128,6 +141,10 @@ function BrokerSettingsContent() {
   }
 
   async function handleImport() {
+    if (statusError) {
+      setError("Broker status is unavailable. Retry status before importing filled trades.");
+      return;
+    }
     setBusy("import");
     setError("");
     try {
@@ -166,12 +183,13 @@ function BrokerSettingsContent() {
   };
 
   const healthCards = [
-    { label: "Broker app", value: state?.has_api_key ? "Configured" : "Unavailable", icon: ServerCog },
-    { label: "Session", value: state?.connected ? "Read-only" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
-    { label: "Expiry", value: state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
+    { label: "Broker app", value: statusError ? "Unknown" : state?.has_api_key ? "Configured" : "Unavailable", icon: ServerCog },
+    { label: "Session", value: statusError ? "Unknown" : state?.connected ? "Read-only" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
+    { label: "Expiry", value: statusError ? "Unknown" : state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
   ];
-  const lastSyncedLabel = state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
+  const lastSyncedLabel = statusError ? "Unknown" : state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
   const activeBrokerLabel = state?.broker === "upstox" ? "Upstox" : "Zerodha";
+  const importBrokerLabel = statusError ? "broker" : state?.broker === "upstox" ? "Upstox" : "Zerodha";
 
   if (loading) {
     return (
@@ -194,16 +212,32 @@ function BrokerSettingsContent() {
           <EyebrowLabel>Broker integration</EyebrowLabel>
           <div className="app-page-title" style={{ marginTop: 4 }}>Broker connect hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time for account checks and filled-trade import. Tokens stay encrypted on the backend. Live and sandbox order placement are not enabled yet.
+            Connect one broker at a time for account checks and filled-trade import. Tokens stay encrypted on the backend. Broker execution stays in your broker terminal.
           </div>
         </div>
 
-        {!state?.plan_allows_broker && (
+        {statusError && (
+          <div
+            data-testid="broker-status-unavailable"
+            style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}
+          >
+            <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--warn)", marginBottom: 7 }}>Broker status unavailable</div>
+            <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>Broker account state could not be verified.</div>
+            <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
+              {statusError} Existing broker connection, plan, and import access are not being treated as disconnected or unavailable.
+            </div>
+            <button type="button" onClick={() => { setError(""); void loadStatus(); }} className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold inline-flex" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
+              Retry status
+            </button>
+          </div>
+        )}
+
+        {!statusError && !state?.plan_allows_broker && (
           <div style={{ ...cardStyle, padding: 16, marginBottom: 14, borderColor: "rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}>
             <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--warn)", marginBottom: 7 }}>Upgrade required</div>
             <div className="text-[14px] font-semibold" style={{ color: "var(--text-primary)", marginBottom: 6 }}>Broker integration is available on Pro and Elite.</div>
             <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 12 }}>
-              Free accounts can use scanner, watchlist, chart planning, and journaling. Broker OAuth and filled-trade import unlock after upgrade; execution is not enabled yet.
+              Free accounts can use scanner, watchlist, chart planning, and journaling. Broker OAuth and filled-trade import unlock after upgrade; execution stays in your broker terminal.
             </div>
             <Link href="/settings/billing" className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold inline-flex" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
               View Pro plan
@@ -227,15 +261,17 @@ function BrokerSettingsContent() {
               <div>
                 <div className="text-[12px] uppercase tracking-[0.12em]" style={{ color: "var(--text-tertiary)", marginBottom: 8 }}>Current mode</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                  <StatusDot tone={mode === "read-only" ? "live" : mode === "token-expired" ? "warning" : "simulated"} />
+                  <StatusDot tone={mode === "read-only" ? "live" : mode === "token-expired" || mode === "status-unavailable" ? "warning" : "simulated"} />
                   <div
-                    data-testid={mode === "read-only" ? "broker-status-connected" : "broker-status-simulated"}
+                    data-testid={mode === "read-only" ? "broker-status-connected" : mode === "status-unavailable" ? "broker-status-unavailable-inline" : "broker-status-simulated"}
                     className="text-[16px] font-semibold"
                     style={{ color: "var(--text-primary)" }}
                   >
                     {mode === "read-only"
                       ? `${activeBrokerLabel} connected`
-                    : mode === "token-expired"
+                      : mode === "status-unavailable"
+                        ? "Broker status unavailable"
+                      : mode === "token-expired"
                         ? "Token expired"
                         : mode === "platform-unavailable"
                           ? "Connect unavailable"
@@ -244,7 +280,9 @@ function BrokerSettingsContent() {
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {mode === "read-only"
-                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Live order routing stays gated by plan, backend enablement, and explicit confirmation."
+                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Order placement remains in your broker terminal."
+                    : mode === "status-unavailable"
+                      ? "Broker account state could not be confirmed. Recheck status before connecting, reconnecting, importing, or changing broker setup."
                       : mode === "token-expired"
                         ? "Your broker session expired. Reconnect through the broker security flow."
                       : mode === "platform-unavailable"
@@ -253,7 +291,7 @@ function BrokerSettingsContent() {
                 </div>
               </div>
               <Num style={{ fontSize: 11, color: "var(--text-tertiary)", padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
-                {state?.plan_allows_broker ? (state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : lastSyncedLabel) : "Upgrade required"}
+                {statusError ? "Status unavailable" : state?.plan_allows_broker ? (state?.connected_at ? `Connected ${new Date(state.connected_at).toLocaleDateString()}` : lastSyncedLabel) : "Upgrade required"}
               </Num>
             </div>
 
@@ -272,7 +310,7 @@ function BrokerSettingsContent() {
             <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
                 <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>Broker sync</div>
-                <div className="text-[13px]" style={{ color: "var(--text-primary)" }}>{state?.status_label ?? "Simulated fallback active"}</div>
+                <div className="text-[13px]" style={{ color: statusError ? "var(--warn)" : "var(--text-primary)" }}>{statusError ? "Broker status unavailable" : state?.status_label ?? "Simulated fallback active"}</div>
               </div>
               <Num style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                 Last sync: {lastSyncedLabel}
@@ -283,23 +321,23 @@ function BrokerSettingsContent() {
               <button
                 data-testid="connect-btn"
                 onClick={handleConnect}
-                disabled={busy === "connect" || !state?.has_api_key || !state?.plan_allows_broker}
+                disabled={busy === "connect" || Boolean(statusError) || !state?.has_api_key || !state?.plan_allows_broker}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "var(--bg-primary)" }}
               >
-                {busy === "connect" ? "Opening Kite..." : mode === "read-only" ? "Reconnect Zerodha" : mode === "platform-unavailable" ? "Connect unavailable" : "Connect Zerodha"}
+                {busy === "connect" ? "Opening Kite..." : mode === "read-only" ? "Reconnect Zerodha" : mode === "status-unavailable" ? "Status unavailable" : mode === "platform-unavailable" ? "Connect unavailable" : "Connect Zerodha"}
               </button>
               <button
                 onClick={handleImport}
-                disabled={busy === "import" || !state?.can_import || !state?.plan_allows_broker}
+                disabled={busy === "import" || Boolean(statusError) || !state?.can_import || !state?.plan_allows_broker}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
               >
-                {busy === "import" ? "Importing..." : `Import ${state?.broker === "upstox" ? "Upstox" : "Zerodha"} filled trades`}
+                {busy === "import" ? "Importing..." : `Import ${importBrokerLabel} filled trades`}
               </button>
               <button
                 onClick={handleSmoke}
-                disabled={smokeBusy || !state?.has_api_key}
+                disabled={smokeBusy || Boolean(statusError) || !state?.has_api_key}
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
               >
@@ -318,7 +356,7 @@ function BrokerSettingsContent() {
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
                 "Expired sessions fall back to journal capture mode instead of blocking chart/journal workflows.",
-                "Live and sandbox order submission are not enabled yet; filled broker trades can be imported into Journal.",
+                "Broker order submission stays outside AlphaVyuh; filled broker trades can be imported into Journal.",
                 "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
                 "Every imported trade or journal capture should still create a journal entry with source context.",
               ].map((line) => (
@@ -348,12 +386,12 @@ function BrokerSettingsContent() {
                   <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.55 }}><b>Scope:</b> {broker.scope}</div>
                 </div>
                 {active ? (
-                  <button onClick={handleConnect} disabled={busy === "connect" || !state?.has_api_key || !state?.plan_allows_broker} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
-                    {state?.connected ? "Reconnect" : "Connect"}
+                  <button onClick={handleConnect} disabled={busy === "connect" || Boolean(statusError) || !state?.has_api_key || !state?.plan_allows_broker} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg-primary)" }}>
+                    {statusError ? "Status unavailable" : state?.connected ? "Reconnect" : "Connect"}
                   </button>
                 ) : upstoxConnectable ? (
-                  <button onClick={() => handleAdapterConnect("upstox")} disabled={busy === "connect-upstox" || !state?.plan_allows_broker} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
-                    {busy === "connect-upstox" ? "Opening Upstox..." : "Connect OAuth"}
+                  <button onClick={() => handleAdapterConnect("upstox")} disabled={busy === "connect-upstox" || Boolean(statusError) || !state?.plan_allows_broker} className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
+                    {busy === "connect-upstox" ? "Opening Upstox..." : statusError ? "Status unavailable" : "Connect OAuth"}
                   </button>
                 ) : (
                   <button disabled className="w-full px-4 py-2.5 rounded-[10px] text-[13px] font-semibold opacity-50" style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}>
