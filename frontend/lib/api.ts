@@ -1155,7 +1155,10 @@ export async function getCandles(
         const detail = body.detail ?? body.message ?? body.error;
         throw new Error(typeof detail === "string" && detail.trim() ? detail : `No data for ${sym}`);
       }
-      return res.json();
+      const data = await res.json();
+      const unavailableMessage = unavailablePayloadMessage(data, "Chart candle data is temporarily unavailable.");
+      if (unavailableMessage) throw new Error(unavailableMessage);
+      return data;
     } catch (error) {
       if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
       throw error;
@@ -1182,7 +1185,10 @@ export async function getIndicators(
         if (shouldUseMockFallback()) return mockIndicators(sym);
         throw new Error("Indicator fetch failed");
       }
-      return res.json();
+      const data = await res.json();
+      const unavailableMessage = unavailablePayloadMessage(data, "Chart indicators are temporarily unavailable.");
+      if (unavailableMessage) throw new Error(unavailableMessage);
+      return data;
     } catch (error) {
       if (shouldUseMockFallback()) return mockIndicators(sym);
       throw error;
@@ -2799,7 +2805,10 @@ export async function getCandlesLive(
       if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
       throw new Error(`No live data for ${symbol}`);
     }
-    return res.json();
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Live chart data is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    return data;
   } catch (error) {
     if (shouldUseMockFallback()) return mockCandles(symbol, params?.timeframe, params?.limit);
     throw error;
