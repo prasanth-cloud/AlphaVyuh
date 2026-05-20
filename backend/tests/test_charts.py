@@ -113,6 +113,39 @@ class _AliasClient:
         raise AssertionError(table_name)
 
 
+class _SearchQuery:
+    def __init__(self, rows=None, *, fail=False):
+        self.rows = rows or []
+        self.fail = fail
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def ilike(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def execute(self):
+        if self.fail:
+            raise RuntimeError("symbol search index down")
+        return _Result(self.rows)
+
+
+class _SearchClient:
+    def __init__(self, *, rows=None, fail=False):
+        self.rows = rows or []
+        self.fail = fail
+
+    def table(self, table_name):
+        assert table_name == "stock_universe"
+        return _SearchQuery(self.rows, fail=self.fail)
+
+
 def _daily_row(day: str, close: float = 100.0):
     return {
         "trade_date": day,
@@ -163,6 +196,26 @@ def test_resolve_chart_symbol_uses_alias_mapping():
     assert symbol == "CARYSIL"
     assert meta["company_name"] == "Carysil Ltd"
     assert alias["alias_type"] == "rename"
+
+
+@pytest.mark.anyio
+async def test_search_symbols_raises_503_when_symbol_index_is_unavailable(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _SearchClient(fail=True))
+
+    with pytest.raises(HTTPException) as exc:
+        await charts.search_symbols("REL")
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Symbol search is temporarily unavailable."
+
+
+@pytest.mark.anyio
+async def test_search_symbols_keeps_empty_results_as_valid_empty_state(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _SearchClient(rows=[]))
+
+    response = await charts.search_symbols("ZZZ")
+
+    assert response == {"results": []}
 
 
 def test_normalize_eod_timeframe_rejects_intraday():

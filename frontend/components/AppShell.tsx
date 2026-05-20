@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import FeedbackWidget from '@/components/FeedbackWidget'
-import { clearAuthHeaderCache, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
+import { clearAuthHeaderCache, searchSymbols, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
+import type { SymbolSearchResult } from '@/lib/api'
 import { API_BASE_URL } from '@/lib/api-base'
 import { dataModePresentation, type ApiReachability } from '@/lib/data-mode'
 import { markAppTiming } from '@/lib/performance'
@@ -23,7 +24,7 @@ const IDLE_PREFETCH_ROUTES = [
   '/watchlist',
 ]
 
-type SymbolResult = { symbol: string; company_name: string; sector: string }
+type SymbolResult = SymbolSearchResult
 type CommandResult = { command: string; label: string; detail: string; href: string }
 type SearchResult = SymbolResult | CommandResult
 
@@ -400,6 +401,7 @@ function SymbolSearch() {
   const [results, setResults] = useState<SymbolResult[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const router = useRouter()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -423,20 +425,18 @@ function SymbolSearch() {
   }, [])
 
   async function search(q: string) {
-    if (!q) { setResults([]); setOpen(false); return }
+    if (!q) { setResults([]); setError(''); setOpen(false); return }
     setLoading(true)
     try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const sb = createClient()
-      const { data } = await sb
-        .from('stock_universe')
-        .select('symbol, company_name, sector')
-        .or(`symbol.ilike.${q}%,company_name.ilike.%${q}%`)
-        .eq('is_active', true)
-        .limit(7)
-      setResults(data || [])
+      const data = await searchSymbols(q)
+      setResults(data.slice(0, 7))
+      setError('')
       setOpen(true)
-    } catch { /* ignore */ }
+    } catch (error) {
+      setResults([])
+      setError(error instanceof Error ? error.message : 'Symbol search is temporarily unavailable.')
+      setOpen(true)
+    }
     finally { setLoading(false) }
   }
 
@@ -469,10 +469,10 @@ function SymbolSearch() {
     const symbols = [
         ...state.recentSymbols
           .filter(symbol => symbol.includes(query))
-          .map(symbol => ({ symbol, company_name: 'Recent workflow symbol', sector: 'Recent' })),
+          .map(symbol => ({ symbol, company_name: 'Recent workflow symbol', sector: 'Recent', series: 'EQ' })),
         ...state.shortlist
           .filter(item => item.symbol.includes(query))
-          .map(item => ({ symbol: item.symbol, company_name: item.companyName ?? 'Saved symbol', sector: item.lifecycle })),
+          .map(item => ({ symbol: item.symbol, company_name: item.companyName ?? 'Saved symbol', sector: item.lifecycle, series: 'EQ' })),
       ].filter((item, index, arr) => arr.findIndex(other => other.symbol === item.symbol) === index).slice(0, 5)
     return [...commands, ...symbols]
   }, [query, state.recentSymbols, state.shortlist])
@@ -526,8 +526,13 @@ function SymbolSearch() {
             </div>
           )}
           {!loading && displayResults.length === 0 && (
-            <div style={{ padding: 14, fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
-              No matches
+            <div data-testid={error ? 'global-symbol-search-unavailable' : undefined} style={{ padding: 14, fontSize: 12, color: error ? 'var(--warn)' : 'var(--text-tertiary)', textAlign: 'center' }}>
+              {error || 'No matches'}
+            </div>
+          )}
+          {!loading && error && displayResults.length > 0 && (
+            <div data-testid="global-symbol-search-unavailable" style={{ padding: 10, fontSize: 12, color: 'var(--warn)', lineHeight: 1.45, borderBottom: '1px solid var(--border-subtle)' }}>
+              {error}
             </div>
           )}
           {displayResults.map((r, i) => (

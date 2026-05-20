@@ -1288,14 +1288,17 @@ export async function getSectors(): Promise<string[]> {
 
 export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
   if (shouldUseMockFallback()) return mockSearchSymbols(q);
-  try {
-    const res = await fetch(`${API}/api/v1/charts/search?q=${encodeURIComponent(q)}`, { headers: publicHeaders });
-    if (!res.ok) return shouldUseMockFallback() ? mockSearchSymbols(q) : [];
-    const data = await res.json();
-    return data.results ?? [];
-  } catch {
-    return shouldUseMockFallback() ? mockSearchSymbols(q) : [];
+  const res = await fetch(`${API}/api/v1/charts/search?q=${encodeURIComponent(q)}`, { headers: publicHeaders });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Symbol search is temporarily unavailable (${res.status}).`));
   }
+  const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Symbol search is temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (data?.results == null || !Array.isArray(data.results)) {
+    throw new Error("Symbol search is temporarily unavailable.");
+  }
+  return data.results;
 }
 
 export async function getDrawings(symbol: string, timeframe = "D"): Promise<Drawing[]> {
