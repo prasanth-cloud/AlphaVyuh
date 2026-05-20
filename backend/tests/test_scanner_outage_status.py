@@ -54,6 +54,25 @@ class _ScreensClient:
         return _ScreensQuery(self.data)
 
 
+class _VcpRpcQuery:
+    def __init__(self, symbols):
+        self.symbols = symbols
+
+    def execute(self):
+        if "BROKEN" in self.symbols:
+            raise RuntimeError("vcp lookback down")
+        return _Result([
+            {"symbol": symbol, "history": [{"close": 100}, {"close": 102}]}
+            for symbol in self.symbols
+        ])
+
+
+class _VcpClient:
+    def rpc(self, function_name, params):
+        assert function_name == "get_vcp_lookback"
+        return _VcpRpcQuery(params["p_symbols"])
+
+
 def test_run_scanner_raises_503_when_admin_client_is_unavailable(monkeypatch):
     monkeypatch.setattr(scanner.scanner_limiter, "is_allowed", lambda user_id: True)
     monkeypatch.setattr(scanner, "get_admin_client", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
@@ -104,3 +123,20 @@ def test_list_screens_raises_503_when_saved_screen_query_fails(monkeypatch):
 
     assert exc.value.status_code == 503
     assert exc.value.detail == "Saved scanner screens are temporarily unavailable."
+
+
+def test_vcp_pass2_raises_503_when_any_lookback_chunk_fails(monkeypatch):
+    monkeypatch.setattr(scanner, "VCP_RPC_CHUNK", 1)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            scanner._run_vcp_pass2(
+                _VcpClient(),
+                [{"symbol": "RELIANCE"}, {"symbol": "BROKEN"}],
+                "2026-05-20",
+                scanner.ScanFilters(vcp_min_pivots=2),
+            )
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "VCP scanner lookback is temporarily unavailable."
