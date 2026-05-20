@@ -43,4 +43,15 @@ describe("scanner API", () => {
 
     await expect(runScanner({ series: ["EQ"] })).rejects.toThrow("Scanner query could not complete");
   });
+
+  it("surfaces scanner service errors from the backend", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Scanner data is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { runScanner } = await import("@/lib/api");
+
+    await expect(runScanner({ series: ["EQ"] })).rejects.toThrow("Scanner data is temporarily unavailable.");
+  });
 });
