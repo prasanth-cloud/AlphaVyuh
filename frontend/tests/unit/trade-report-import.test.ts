@@ -40,4 +40,73 @@ RELIANCE,2026-05-01,10
       "Missing symbol column",
     ]);
   });
+
+  it("pairs broker tradebook BUY and SELL executions into closed trades", () => {
+    const result = parseTradeReportCsv(`Trading Symbol,Trade Date,Transaction Type,Quantity,Price,Charges
+RELIANCE,2026-05-01,BUY,10,100,5
+RELIANCE,2026-05-02,BUY,10,110,5
+RELIANCE,2026-05-05,SELL,20,120,10
+INFY,2026-05-03,SELL,5,1500,4
+INFY,2026-05-04,BUY,5,1480,4
+TCS,2026-05-06,BUY,3,3800,3`);
+
+    expect(result.summary.broker).toBe("Zerodha / Kite style CSV");
+    expect(result.summary.totalRows).toBe(6);
+    expect(result.summary.parsedTrades).toBe(2);
+    expect(result.summary.rejectedRows).toBe(1);
+    expect(result.summary.totalPnl).toBe(372);
+    expect(result.trades.find((trade) => trade.symbol === "RELIANCE")).toMatchObject({
+      symbol: "RELIANCE",
+      tradeType: "long",
+      quantity: 20,
+      entryDate: "2026-05-01",
+      exitDate: "2026-05-05",
+      entryPrice: 105,
+      exitPrice: 120,
+      pnl: 280,
+      charges: 20,
+    });
+    expect(result.trades.find((trade) => trade.symbol === "INFY")).toMatchObject({
+      symbol: "INFY",
+      tradeType: "short",
+      quantity: 5,
+      entryDate: "2026-05-03",
+      exitDate: "2026-05-04",
+      entryPrice: 1500,
+      exitPrice: 1480,
+      pnl: 92,
+      charges: 8,
+    });
+    expect(result.rejected[0]).toMatchObject({ row: 7, reason: "Unmatched open execution row" });
+  });
+
+  it("handles partial exits from a broker tradebook", () => {
+    const result = parseTradeReportCsv(`symbol,date,side,quantity,price
+RELIANCE,2026-05-01,BUY,10,100
+RELIANCE,2026-05-03,SELL,4,110
+RELIANCE,2026-05-04,SELL,6,105`);
+
+    expect(result.summary.parsedTrades).toBe(2);
+    expect(result.summary.rejectedRows).toBe(0);
+    expect(result.summary.totalPnl).toBe(70);
+    expect(result.trades).toEqual([
+      expect.objectContaining({ symbol: "RELIANCE", tradeType: "long", quantity: 4, entryPrice: 100, exitPrice: 110, pnl: 40 }),
+      expect.objectContaining({ symbol: "RELIANCE", tradeType: "long", quantity: 6, entryPrice: 100, exitPrice: 105, pnl: 30 }),
+    ]);
+  });
+
+  it("rejects execution rows that cannot be paired into closed trades", () => {
+    const result = parseTradeReportCsv(`symbol,date,side,quantity,price
+RELIANCE,2026-05-01,BUY,10,100
+INFY,2026-05-02,SELL,5,1500
+TCS,,BUY,3,3800`);
+
+    expect(result.summary.parsedTrades).toBe(0);
+    expect(result.summary.rejectedRows).toBe(3);
+    expect(result.rejected.map((row) => row.reason)).toEqual([
+      "Missing execution date",
+      "Unmatched open execution row",
+      "Unmatched open execution row",
+    ]);
+  });
 });
