@@ -1198,8 +1198,14 @@ async def run_scanner(
 
 @router.get("/screens")
 async def list_screens(user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
-    r = client.table("saved_screens").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+    try:
+        client = get_admin_client()
+        r = client.table("saved_screens").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Saved scanner screens are temporarily unavailable.",
+        )
     return {"screens": r.data or []}
 
 

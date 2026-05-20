@@ -8,8 +8,10 @@ import {
   createAlert,
   createFeedbackReport,
   createWatchlist,
+  getScreens as getCachedScreens,
   getWatchlists as getCachedWatchlists,
   isMockMode,
+  type SavedScreen,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
@@ -76,7 +78,6 @@ type ScanTrust = {
   message?: string
 }
 
-interface SavedScreen { id: string; name: string; filters: Record<string, unknown>; created_at: string }
 interface Watchlist { id: string; name: string }
 
 // ── Presets (no emoji) ─────────────────────────────────────
@@ -489,6 +490,7 @@ export default function ScannerPage() {
   const [sortDesc, setSortDesc] = useState(true)
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
   const [savedScreens, setSavedScreens] = useState<SavedScreen[]>([])
+  const [savedScreensError, setSavedScreensError] = useState('')
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [showWlModal, setShowWlModal] = useState(false)
   const [showAlertModal, setShowAlertModal] = useState(false)
@@ -545,17 +547,21 @@ export default function ScannerPage() {
 
   async function loadSavedScreens() {
     if (isMockMode) {
+      setSavedScreensError('')
       setSavedScreens([
-        { id: 'mock-trend-template', name: 'Trend Template', filters: PRESETS[0].filters, created_at: '2026-04-24T09:15:00Z' },
-        { id: 'mock-vcp-breakout', name: 'VCP Breakout', filters: PRESETS[1].filters, created_at: '2026-04-24T09:20:00Z' },
+        { id: 'mock-trend-template', name: 'Trend Template', filters: PRESETS[0].filters, is_default: false, created_at: '2026-04-24T09:15:00Z' },
+        { id: 'mock-vcp-breakout', name: 'VCP Breakout', filters: PRESETS[1].filters, is_default: false, created_at: '2026-04-24T09:20:00Z' },
       ])
       return
     }
     try {
-      const headers = await getAuthHeaders()
-      const res = await fetch(`${API}/api/v1/scanner/screens`, { headers })
-      if (res.ok) { const d = await res.json(); setSavedScreens(d.screens || []) }
-    } catch { /* ignore */ }
+      setSavedScreensError('')
+      const screens = await getCachedScreens()
+      setSavedScreens(screens)
+    } catch (error) {
+      setSavedScreens([])
+      setSavedScreensError(error instanceof Error ? error.message : 'Saved scanner screens are temporarily unavailable.')
+    }
   }
 
   const buildPayload = useCallback((f: Filters, sb: string, sd: boolean) => {
@@ -742,7 +748,7 @@ export default function ScannerPage() {
     if (isMockMode) {
       setSavedScreens(prev => [
         ...prev,
-        { id: `mock-${Date.now()}`, name: newScreenName.trim(), filters, created_at: new Date().toISOString() },
+        { id: `mock-${Date.now()}`, name: newScreenName.trim(), filters, is_default: false, created_at: new Date().toISOString() },
       ])
       setNewScreenName(''); setShowSaveModal(false)
       showToast('Screen saved in mock mode')
@@ -988,6 +994,15 @@ export default function ScannerPage() {
                 <button onClick={() => deleteScreen(s.id, s.name)} style={{ color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
               </div>
             ))}
+          </div>
+        )}
+        {savedScreensError && (
+          <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+            <div className="label" style={{ marginBottom: 6, color: 'var(--warn)' }}>My screens unavailable</div>
+            <div className="caption" style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{savedScreensError}</div>
+            <button className="workspace-chip-button" onClick={loadSavedScreens}>
+              Retry
+            </button>
           </div>
         )}
 

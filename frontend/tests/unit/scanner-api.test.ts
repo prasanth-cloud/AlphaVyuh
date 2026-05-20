@@ -54,4 +54,37 @@ describe("scanner API", () => {
 
     await expect(runScanner({ series: ["EQ"] })).rejects.toThrow("Scanner data is temporarily unavailable.");
   });
+
+  it("keeps an empty saved scanner screen list as a valid response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ screens: [] }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getScreens } = await import("@/lib/api");
+
+    await expect(getScreens()).resolves.toEqual([]);
+  });
+
+  it("surfaces saved scanner screen service errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Saved scanner screens are temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getScreens } = await import("@/lib/api");
+
+    await expect(getScreens()).rejects.toThrow("Saved scanner screens are temporarily unavailable.");
+  });
+
+  it("rejects malformed saved scanner screen payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ screens: null }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getScreens } = await import("@/lib/api");
+
+    await expect(getScreens()).rejects.toThrow("Saved scanner screens are temporarily unavailable.");
+  });
 });
