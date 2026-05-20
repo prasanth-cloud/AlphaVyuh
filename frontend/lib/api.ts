@@ -470,11 +470,22 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
       const headers = await authHeaders();
       const qs = options?.lite ? "?lite=true" : "";
       const res = await fetch(`${API}/api/v1/watchlists${qs}`, { headers });
-      if (!res.ok) return shouldUseMockFallback() ? readMockWatchlists() : [];
+      if (!res.ok) {
+        if (shouldUseMockFallback()) return readMockWatchlists();
+        const body = await res.json().catch(() => ({}));
+        const detail =
+          typeof body.message === "string"
+            ? body.message
+            : typeof body.detail === "string"
+              ? body.detail
+              : `Watchlist data is temporarily unavailable (${res.status}).`;
+        throw new Error(detail);
+      }
       const data = await res.json();
       return data.watchlists ?? [];
-    } catch {
-      return shouldUseMockFallback() ? readMockWatchlists() : [];
+    } catch (error) {
+      if (shouldUseMockFallback()) return readMockWatchlists();
+      throw error instanceof Error ? error : new Error("Watchlist data is temporarily unavailable.");
     }
   });
 }

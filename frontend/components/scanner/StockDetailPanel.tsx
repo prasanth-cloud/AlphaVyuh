@@ -19,9 +19,14 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
 
   async function handleAddClick() {
-    const wls = await getWatchlists();
-    setWatchlists(wls.map(w => ({ id: w.id, name: w.name })));
-    setShowWlPicker(true);
+    try {
+      const wls = await getWatchlists();
+      setWatchlists(wls.map(w => ({ id: w.id, name: w.name })));
+      setShowWlPicker(true);
+    } catch (error) {
+      setAddMsg(error instanceof Error ? error.message : "Watchlist data is temporarily unavailable.");
+      setTimeout(() => setAddMsg(""), 3500);
+    }
   }
 
   async function handlePick(wlId: string) {
