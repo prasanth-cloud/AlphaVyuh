@@ -3163,7 +3163,10 @@ export async function getMarketOverview(): Promise<MarketOverview> {
     // Try new comprehensive endpoint first; fall back to legacy summary if not deployed yet
     const res = await withTimeout(fetch(`${API}/api/v1/market/overview`, { headers }), 2500).catch(() => null);
     if (res?.ok) {
-      const value = normalizeMarketOverview(await res.json());
+      const data = await res.json();
+      const unavailableMessage = unavailablePayloadMessage(data, "Market overview is temporarily unavailable.");
+      if (unavailableMessage) throw new Error(unavailableMessage);
+      const value = normalizeMarketOverview(data);
       marketOverviewCache = { value, expiresAt: Date.now() + 180_000 };
       return value;
     }
@@ -3177,6 +3180,8 @@ export async function getMarketOverview(): Promise<MarketOverview> {
     ]);
     if (!legacyRes.ok) throw new Error("Failed to fetch market overview");
     const s: MarketSummary = await legacyRes.json();
+    const unavailableMessage = unavailablePayloadMessage(s, "Market summary is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
 
     const total = s.total_stocks ?? (s.advances + s.declines + s.unchanged);
     const ema200 = s.above_ema200_pct ?? 0;
