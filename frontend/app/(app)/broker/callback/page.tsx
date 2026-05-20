@@ -4,6 +4,23 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { connectBrokerCallback, connectZerodha } from "@/lib/api";
 
+type SupportedBroker = "zerodha" | "upstox";
+
+const brokerLabels: Record<SupportedBroker, string> = {
+  zerodha: "Zerodha",
+  upstox: "Upstox",
+};
+
+function readBroker(rawBroker: string | null): SupportedBroker | null {
+  if (!rawBroker) return "zerodha";
+  if (rawBroker === "zerodha" || rawBroker === "upstox") return rawBroker;
+  return null;
+}
+
+function cleanCallbackMessage(value: string | null): string {
+  return (value ?? "").replace(/\s+/g, " ").trim().slice(0, 180);
+}
+
 function BrokerCallbackContent() {
   const router = useRouter();
   const params = useSearchParams();
@@ -11,7 +28,22 @@ function BrokerCallbackContent() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const broker = params.get("broker") === "upstox" ? "upstox" : "zerodha";
+    const broker = readBroker(params.get("broker"));
+    if (!broker) {
+      setStatus("error");
+      setMessage("Unsupported broker callback. Start broker connect again from Settings.");
+      return;
+    }
+
+    const brokerError = cleanCallbackMessage(params.get("error"));
+    if (brokerError) {
+      const description = cleanCallbackMessage(params.get("error_description"));
+      const suffix = description ? `: ${description}` : ` (${brokerError})`;
+      setStatus("error");
+      setMessage(`${brokerLabels[broker]} authorization was not completed${suffix}. Start broker connect again from Settings.`);
+      return;
+    }
+
     const requestToken = params.get("request_token") || params.get("code");
     const stateParam = params.get("state");
     if (!requestToken) {
@@ -33,7 +65,7 @@ function BrokerCallbackContent() {
       .then((result) => {
         setStatus("success");
         const name = "broker_user_name" in result && result.broker_user_name ? ` as ${result.broker_user_name}` : "";
-        setMessage(`${broker === "upstox" ? "Upstox" : "Zerodha"} connected${name}. Redirecting to settings...`);
+        setMessage(`${brokerLabels[broker]} connected${name}. Redirecting to settings...`);
         setTimeout(() => router.replace(`/settings/broker?connected=${broker}`), 2000);
       })
       .catch((e: Error) => {
@@ -50,30 +82,31 @@ function BrokerCallbackContent() {
           <>
             <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mx-auto mb-4"
               style={{ borderColor: "#f4f7fb", borderTopColor: "transparent" }} />
-            <p className="text-[14px]" style={{ color: "var(--app-text2)" }}>Connecting broker...</p>
+            <p className="text-[14px]" style={{ color: "var(--app-text2)" }} data-testid="broker-callback-loading">Connecting broker...</p>
           </>
         )}
         {status === "success" && (
-          <>
+          <div data-testid="broker-callback-success">
             <div className="w-14 h-14 rounded-full flex items-center justify-center text-[28px] mx-auto mb-4"
               style={{ background: "rgba(38,166,91,0.15)" }}>✓</div>
             <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Connected!</h2>
-            <p className="text-[13px]" style={{ color: "var(--app-text3)" }}>{message}</p>
-          </>
+            <p className="text-[13px]" style={{ color: "var(--app-text3)" }} data-testid="broker-callback-message">{message}</p>
+          </div>
         )}
         {status === "error" && (
-          <>
+          <div data-testid="broker-callback-error">
             <div className="w-14 h-14 rounded-full flex items-center justify-center text-[28px] mx-auto mb-4"
               style={{ background: "rgba(229,56,59,0.15)" }}>✗</div>
             <h2 className="text-[18px] font-bold mb-1" style={{ color: "var(--app-text1)" }}>Connection failed</h2>
-            <p className="text-[13px] mb-4" style={{ color: "var(--app-text3)" }}>{message}</p>
+            <p className="text-[13px] mb-4" style={{ color: "var(--app-text3)" }} data-testid="broker-callback-message">{message}</p>
             <button
               onClick={() => router.replace("/settings/broker")}
               className="px-4 py-2 rounded-[8px] text-[13px] font-semibold"
-              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}>
+              style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}
+              data-testid="broker-callback-back">
               Back to Settings
             </button>
-          </>
+          </div>
         )}
       </div>
     </div>
