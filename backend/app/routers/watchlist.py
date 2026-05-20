@@ -79,17 +79,19 @@ async def get_watchlists(
     lite: bool = Query(False, description="Return watchlist structure without OHLCV enrichment for fast shell loads."),
     user_id: str = Depends(get_current_user_id),
 ):
-    client = get_admin_client()
-
     # 1 – all watchlists
     try:
+        client = get_admin_client()
         wl_res = client.table("watchlists") \
             .select("id, name, sort_order, created_at") \
             .eq("user_id", user_id) \
             .order("sort_order") \
             .execute()
     except Exception:
-        return {"watchlists": [], "mode": "unavailable", "message": "Watchlist shell is temporarily unavailable."}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Watchlist shell is temporarily unavailable.",
+        )
     watchlists = wl_res.data or []
     if not watchlists:
         return {"watchlists": [], "source_metadata": eod_source_metadata(as_of=None, status="unknown"), "mode": "eod"}

@@ -39,6 +39,17 @@ describe("watchlist API", () => {
     await expect(getWatchlists({ force: true })).rejects.toThrow("Watchlist shell is temporarily unavailable.");
   });
 
+  it("surfaces watchlist service errors from the backend", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Watchlist shell is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getWatchlists } = await import("@/lib/api");
+
+    await expect(getWatchlists({ force: true })).rejects.toThrow("Watchlist shell is temporarily unavailable.");
+  });
+
   it("does not leak mock watchlists from production when stale mock flags are present", async () => {
     vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "true");
     vi.stubGlobal("fetch", vi.fn(async () => {
