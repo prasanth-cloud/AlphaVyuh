@@ -39,6 +39,41 @@ class _Result:
         self.data = data
 
 
+class _WorkspaceQuery:
+    def __init__(self, rows=None, *, fail=False):
+        self.rows = rows or []
+        self.fail = fail
+        self.filters = {}
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, key, value):
+        self.filters[key] = value
+        return self
+
+    def maybe_single(self):
+        return self
+
+    def execute(self):
+        if self.fail:
+            raise RuntimeError("chart workspace store down")
+        for row in self.rows:
+            if all(row.get(key) == value for key, value in self.filters.items()):
+                return _Result(row)
+        return _Result(None)
+
+
+class _WorkspaceClient:
+    def __init__(self, rows=None, *, fail=False):
+        self.rows = rows or []
+        self.fail = fail
+
+    def table(self, table_name):
+        assert table_name == "chart_workspaces"
+        return _WorkspaceQuery(self.rows, fail=self.fail)
+
+
 class _CandleQuery:
     def __init__(self, rows):
         self.rows = rows
@@ -178,6 +213,73 @@ async def test_get_layout_returns_default_when_no_saved_layout(monkeypatch):
         "indicators": [],
         "drawing_tools": [],
     }
+
+
+@pytest.mark.anyio
+async def test_get_workspace_keeps_missing_workspace_as_default_empty_state(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _WorkspaceClient(rows=[]))
+
+    workspace = await charts.get_workspace("reliance", timeframe="D", user_id="user-123")
+
+    assert workspace == {
+        "symbol": "RELIANCE",
+        "timeframe": "D",
+        "indicators": [],
+        "drawings": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_get_workspace_raises_503_when_workspace_query_fails(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _WorkspaceClient(fail=True))
+
+    with pytest.raises(HTTPException) as exc:
+        await charts.get_workspace("reliance", timeframe="D", user_id="user-123")
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Chart workspace is temporarily unavailable."
+
+
+@pytest.mark.anyio
+async def test_get_drawings_raises_503_when_workspace_query_fails(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _WorkspaceClient(fail=True))
+
+    with pytest.raises(HTTPException) as exc:
+        await charts.get_drawings("reliance", timeframe="D", user_id="user-123")
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Chart workspace is temporarily unavailable."
+
+
+@pytest.mark.anyio
+async def test_get_layout_raises_503_when_workspace_query_fails(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _WorkspaceClient(fail=True))
+
+    with pytest.raises(HTTPException) as exc:
+        await charts.get_layout("reliance", user_id="user-123")
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Chart workspace is temporarily unavailable."
+
+
+@pytest.mark.anyio
+async def test_create_drawing_raises_503_when_workspace_read_fails(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _WorkspaceClient(fail=True))
+
+    with pytest.raises(HTTPException) as exc:
+        await charts.create_drawing(
+            "reliance",
+            charts.DrawingCreate(
+                timeframe="D",
+                tool_type="horizontal",
+                points=[{"time": "2026-05-01", "price": 2800}, {"time": "2026-05-01", "price": 2800}],
+                style={"color": "#2dd4bf"},
+            ),
+            user_id="user-123",
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Chart workspace is temporarily unavailable."
 
 
 def test_fetch_candle_rows_paginates_five_year_history():

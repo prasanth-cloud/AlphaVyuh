@@ -106,4 +106,58 @@ describe("mock chart persistence", () => {
       drawings: [{ id: "rr-1", kind: "hline", price: 2840 }],
     });
   });
+
+  it("surfaces live chart drawing outages instead of returning an empty list", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Chart workspace is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getDrawings } = await import("@/lib/api");
+
+    await expect(getDrawings("RELIANCE", "D")).rejects.toThrow("Chart workspace is temporarily unavailable.");
+  });
+
+  it("surfaces live chart workspace outages when no local workspace cache exists", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Chart workspace is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getChartWorkspace } = await import("@/lib/api");
+
+    await expect(getChartWorkspace("RELIANCE", "D")).rejects.toThrow("Chart workspace is temporarily unavailable.");
+  });
+
+  it("rejects unavailable chart workspace payloads without caching false-empty drawings", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ status: "unavailable", drawings: [], detail: "Chart workspace is temporarily unavailable." }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getChartWorkspace } = await import("@/lib/api");
+
+    await expect(getChartWorkspace("RELIANCE", "D")).rejects.toThrow("Chart workspace is temporarily unavailable.");
+  });
 });

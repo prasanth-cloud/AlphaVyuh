@@ -9,10 +9,11 @@ type State = {
   indicators: ChartIndicator[];
   drawings: WorkspaceDrawing[];
   loading: boolean;
+  error: string | null;
 };
 
 export function useChartWorkspace(symbol: string, timeframe: string) {
-  const [state, setState] = useState<State>({ indicators: defaultIndicators, drawings: [], loading: true });
+  const [state, setState] = useState<State>({ indicators: defaultIndicators, drawings: [], loading: true, error: null });
   const loadedKeyRef = useRef("");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -20,7 +21,7 @@ export function useChartWorkspace(symbol: string, timeframe: string) {
 
   useEffect(() => {
     let cancelled = false;
-    setState((current) => ({ ...current, loading: true }));
+    setState((current) => ({ ...current, loading: true, error: null }));
     getChartWorkspace(symbol, timeframe)
       .then((workspace) => {
         if (cancelled) return;
@@ -29,10 +30,17 @@ export function useChartWorkspace(symbol: string, timeframe: string) {
           indicators: normalizeIndicators(workspace.indicators),
           drawings: Array.isArray(workspace.drawings) ? workspace.drawings as WorkspaceDrawing[] : [],
           loading: false,
+          error: null,
         });
       })
-      .catch(() => {
-        if (!cancelled) setState({ indicators: defaultIndicators, drawings: [], loading: false });
+      .catch((error) => {
+        if (!cancelled) {
+          setState((current) => ({
+            ...current,
+            loading: false,
+            error: error instanceof Error ? error.message : "Chart workspace is temporarily unavailable.",
+          }));
+        }
       });
     return () => {
       cancelled = true;
@@ -71,6 +79,7 @@ export function useChartWorkspace(symbol: string, timeframe: string) {
     indicators: state.indicators,
     drawings: state.drawings,
     loading: state.loading,
+    error: state.error,
     setIndicators,
     setDrawings,
   };

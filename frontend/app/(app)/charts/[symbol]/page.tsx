@@ -344,6 +344,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [activeDrawingTool, setActiveDrawingTool] = useState<DrawingTool | null>(null);
   const [, setDrawings] = useState<Drawing[]>([]);
   const [drawnLines, setDrawnLines] = useState<ChartDrawing[]>([]);
+  const [drawingsError, setDrawingsError] = useState<string | null>(null);
   const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<ChartDrawing[][]>([]);
   const [redoStack, setRedoStack] = useState<ChartDrawing[][]>([]);
@@ -351,6 +352,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const chartHandleRef = useRef<ChartHandle | null>(null);
   const dataRef = useRef<CandlesResponse | null>(null);
   const lastBaseChartKeyRef = useRef<string | null>(null);
+  const loadedDrawingsKeyRef = useRef<string | null>(null);
 
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
@@ -647,6 +649,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "10Y");
       }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
+    }).catch((error) => {
+      setLayoutMsg(error instanceof Error ? error.message : "Chart layout is temporarily unavailable.");
+      setTimeout(() => setLayoutMsg(""), 3000);
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
     getQuote(symbol).then(q => { if (q?.currency) setSymbolCurrency(q.currency); }).catch(() => {});
@@ -803,7 +808,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   // Load drawings — parse new price/time format, skip old pixel-ratio format
   useEffect(() => {
+    let cancelled = false;
+    const requestKey = `${symbol.toUpperCase()}:${timeframe}`;
+    setDrawingsError(null);
     getDrawings(symbol, timeframe).then(list => {
+      if (cancelled) return;
+      loadedDrawingsKeyRef.current = requestKey;
       setDrawings(list);
       const lines: ChartDrawing[] = list.flatMap(d => {
         const pts = d.points as { time?: string; price?: number; x?: number; y?: number }[];
@@ -840,7 +850,18 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setUndoStack([]);
       setRedoStack([]);
       setSelectedDrawingId(null);
+    }).catch((error) => {
+      if (cancelled) return;
+      if (loadedDrawingsKeyRef.current !== requestKey) {
+        setDrawings([]);
+        setDrawnLines([]);
+        setSelectedDrawingId(null);
+      }
+      setDrawingsError(error instanceof Error ? error.message : "Chart drawings are temporarily unavailable.");
     });
+    return () => {
+      cancelled = true;
+    };
   }, [symbol, timeframe]);
 
   function toggleIndicator(id: string) {
@@ -1730,7 +1751,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
-    selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
+    drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
   ].filter(Boolean) as string[];
 
@@ -2220,7 +2241,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <Save size={11} /> Preset
           </button>
           {layoutMsg && (
-            <span className="caption" style={{ color: "var(--gain)" }}>{layoutMsg}</span>
+            <span className="caption" style={{ color: layoutMsg.includes("unavailable") ? "var(--warn)" : "var(--gain)" }}>{layoutMsg}</span>
           )}
         </div>
       </div>
@@ -2954,6 +2975,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
                   Drawings · {drawnLines.length}
+                </div>
+              )}
+              {drawingsError && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(217,119,6,0.08)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.22)" }}>
+                  Drawings unavailable
                 </div>
               )}
               {selectedDrawing && (

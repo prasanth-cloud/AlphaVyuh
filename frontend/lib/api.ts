@@ -1303,14 +1303,16 @@ export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
 
 export async function getDrawings(symbol: string, timeframe = "D"): Promise<Drawing[]> {
   if (shouldUseMockFallback()) return readMockDrawingMap()[chartStoreKey(symbol, timeframe)] ?? [];
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings?timeframe=${timeframe}`, { headers });
-    if (!res.ok) return [];
-    return res.json();
-  } catch {
-    return [];
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings?timeframe=${timeframe}`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Chart drawings are temporarily unavailable (${res.status}).`));
   }
+  const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Chart drawings are temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (!Array.isArray(data)) throw new Error("Chart drawings are temporarily unavailable.");
+  return data;
 }
 
 export async function getChartWorkspace(symbol: string, timeframe = "D"): Promise<ChartWorkspace> {
@@ -1323,15 +1325,29 @@ export async function getChartWorkspace(symbol: string, timeframe = "D"): Promis
   try {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/charts/${normalized}/workspace?timeframe=${normalizedTimeframe}`, { headers });
-    if (!res.ok) return local ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
-    const remote: ChartWorkspace = await res.json();
+    if (!res.ok) {
+      if (local) return local;
+      throw new Error(await responseErrorMessage(res, `Chart workspace is temporarily unavailable (${res.status}).`));
+    }
+    const remote: ChartWorkspace & { status?: string; message?: string; detail?: string } = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(remote, "Chart workspace is temporarily unavailable.");
+    if (unavailableMessage) {
+      if (local) return local;
+      throw new Error(unavailableMessage);
+    }
+    if (!Array.isArray(remote.indicators) || !Array.isArray(remote.drawings)) {
+      if (local) return local;
+      throw new Error("Chart workspace is temporarily unavailable.");
+    }
     return cacheChartWorkspace(normalized, {
       timeframe: remote.timeframe || normalizedTimeframe,
-      indicators: remote.indicators ?? [],
-      drawings: remote.drawings ?? [],
+      indicators: remote.indicators,
+      drawings: remote.drawings,
     });
-  } catch {
-    return local ?? { symbol: normalized, timeframe: normalizedTimeframe, indicators: [], drawings: [] };
+  } catch (error) {
+    if (local) return local;
+    if (error instanceof Error) throw error;
+    throw new Error("Chart workspace is temporarily unavailable.");
   }
 }
 
@@ -1477,6 +1493,8 @@ export async function getChartLayout(symbol: string): Promise<ChartLayout> {
       const layout: ChartLayout = await res.json();
       layout.indicators = normalizeLayoutIndicators(layout.indicators);
       if (layout.indicators?.length || layout.drawing_tools?.length || layout.timeframe !== "D") return layout;
+    } else {
+      throw new Error(await responseErrorMessage(res, `Chart layout is temporarily unavailable (${res.status}).`));
     }
     const defaultRes = await fetch(`${API}/api/v1/charts/__DEFAULT__/layout`, { headers });
     if (defaultRes.ok) {
@@ -1485,8 +1503,9 @@ export async function getChartLayout(symbol: string): Promise<ChartLayout> {
       return { ...fallback, symbol, drawing_tools: [] };
     }
     return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
-  } catch {
-    return { symbol, timeframe: "D", indicators: [], drawing_tools: [] };
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error("Chart layout is temporarily unavailable.");
   }
 }
 
