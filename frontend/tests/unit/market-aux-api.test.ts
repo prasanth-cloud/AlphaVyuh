@@ -95,4 +95,37 @@ describe("market auxiliary API", () => {
     await expect(getMarketMovers()).rejects.toThrow("Market movers are temporarily unavailable.");
     await expect(getSectorBreadth()).rejects.toThrow("Sector breadth is temporarily unavailable.");
   });
+
+  it("keeps an empty sector list as a valid response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ sectors: [] }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getSectors } = await import("@/lib/api");
+
+    await expect(getSectors()).resolves.toEqual([]);
+  });
+
+  it("rejects sector list service errors instead of returning empty sectors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Sector list is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getSectors } = await import("@/lib/api");
+
+    await expect(getSectors()).rejects.toThrow("Sector list is temporarily unavailable.");
+  });
+
+  it("rejects malformed sector list payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ sectors: null }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getSectors } = await import("@/lib/api");
+
+    await expect(getSectors()).rejects.toThrow("Sector list is temporarily unavailable.");
+  });
 });
