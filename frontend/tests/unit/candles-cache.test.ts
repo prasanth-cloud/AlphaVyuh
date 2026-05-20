@@ -131,6 +131,18 @@ describe("candles client cache", () => {
     await expect(getIndicators("RELIANCE", ["ema20"], "D")).rejects.toThrow("Chart indicators are temporarily unavailable.");
   });
 
+  it("surfaces indicator outage details from failed responses", async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Indicator service is temporarily unavailable." }),
+      { status: 503 },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getIndicators } = await import("@/lib/api");
+
+    await expect(getIndicators("RELIANCE", ["ema20"], "D")).rejects.toThrow("Indicator service is temporarily unavailable.");
+  });
+
   it("coalesces AI pattern requests and rejects outages", async () => {
     const fetchMock = vi.fn(async () => new Response("temporary outage", { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);

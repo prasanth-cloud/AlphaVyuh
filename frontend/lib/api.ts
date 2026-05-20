@@ -1222,7 +1222,7 @@ export async function getIndicators(
       );
       if (!res.ok) {
         if (shouldUseMockFallback()) return mockIndicators(sym);
-        throw new Error("Indicator fetch failed");
+        throw new Error(await responseErrorMessage(res, `Chart indicators are temporarily unavailable (${res.status}).`));
       }
       const data = await res.json();
       const unavailableMessage = unavailablePayloadMessage(data, "Chart indicators are temporarily unavailable.");
