@@ -2194,8 +2194,11 @@ export async function listAlerts(): Promise<ScanAlert[]> {
   if (shouldUseMockFallback()) return readMockScanAlerts();
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts`, { headers });
-  if (!res.ok) throw new Error("Failed to load alerts");
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Scan alerts are temporarily unavailable (${res.status}).`));
   const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Scan alerts are temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (!Array.isArray(data.alerts)) throw new Error("Scan alerts are temporarily unavailable.");
   return data.alerts;
 }
 
@@ -2237,7 +2240,7 @@ export async function createAlert(body: {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-    throw new Error(typeof err.detail === "string" ? err.detail : "Failed to create alert");
+    throw new Error(typeof err.detail === "string" ? err.detail : `Scan alerts are temporarily unavailable (${res.status}).`);
   }
   const created = await res.json();
   invalidateClientCache(["scan-alerts"]);
@@ -2268,7 +2271,7 @@ export async function updateAlert(id: string, body: {
     headers,
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error("Failed to update alert");
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Scan alerts are temporarily unavailable (${res.status}).`));
   const updated = await res.json();
   invalidateClientCache(["scan-alerts"]);
   return updated;
@@ -2282,7 +2285,8 @@ export async function deleteAlert(id: string): Promise<void> {
     return;
   }
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/alerts/${id}`, { method: "DELETE", headers });
+  const res = await fetch(`${API}/api/v1/alerts/${id}`, { method: "DELETE", headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Scan alerts are temporarily unavailable (${res.status}).`));
   invalidateClientCache(["scan-alerts"]);
 }
 
@@ -2290,8 +2294,11 @@ export async function getAlertMatches(alertId: string): Promise<ScanAlertMatch[]
   if (shouldUseMockFallback()) return readMockScanAlertMatches().filter((match) => match.alert_id === alertId);
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts/${alertId}/matches`, { headers });
-  if (!res.ok) throw new Error("Failed to load matches");
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Scan alerts are temporarily unavailable (${res.status}).`));
   const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Scan alerts are temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (!Array.isArray(data.matches)) throw new Error("Scan alerts are temporarily unavailable.");
   return data.matches;
 }
 
@@ -2299,8 +2306,11 @@ export async function getRecentAlertMatches(): Promise<ScanAlertMatch[]> {
   if (shouldUseMockFallback()) return readMockScanAlertMatches();
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/alerts/recent/matches`, { headers });
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Scan alerts are temporarily unavailable (${res.status}).`));
   const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Scan alerts are temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (!Array.isArray(data.matches)) throw new Error("Scan alerts are temporarily unavailable.");
   return data.matches;
 }
 

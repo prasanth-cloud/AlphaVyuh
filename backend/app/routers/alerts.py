@@ -57,28 +57,40 @@ def _validate_sort(sort_by: str | None, sort_order: str | None) -> None:
         raise HTTPException(status_code=400, detail="sort_order must be asc or desc")
 
 
+def _scan_alerts_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Scan alerts are temporarily unavailable.",
+    )
+
+
 # ── CRUD endpoints ────────────────────────────────────────────────────────────
 
 @router.get("")
 async def list_alerts(user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
-    res = client.table("scan_alerts") \
-        .select("*") \
-        .eq("user_id", user_id) \
-        .order("created_at", desc=False) \
-        .execute()
+    try:
+        client = get_admin_client()
+        res = client.table("scan_alerts") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .order("created_at", desc=False) \
+            .execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
     return {"alerts": res.data or []}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_alert(body: CreateAlertRequest, user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
-
     # Enforce plan limits
-    plan  = _get_user_plan(user_id)
-    limit = FREE_ALERT_LIMIT if plan == "free" else PRO_ALERT_LIMIT
-    count_res = client.table("scan_alerts").select("id", count="exact") \
-        .eq("user_id", user_id).execute()
+    try:
+        client = get_admin_client()
+        plan  = _get_user_plan(user_id)
+        limit = FREE_ALERT_LIMIT if plan == "free" else PRO_ALERT_LIMIT
+        count_res = client.table("scan_alerts").select("id", count="exact") \
+            .eq("user_id", user_id).execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
     if (count_res.count or 0) >= limit:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -95,7 +107,12 @@ async def create_alert(body: CreateAlertRequest, user_id: str = Depends(get_curr
         "sort_order": body.sort_order,
         "is_active":  True,
     }
-    res = client.table("scan_alerts").insert(row).execute()
+    try:
+        res = client.table("scan_alerts").insert(row).execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
+    if not res.data:
+        raise _scan_alerts_unavailable()
     return res.data[0]
 
 
@@ -105,10 +122,13 @@ async def update_alert(
     body: UpdateAlertRequest,
     user_id: str = Depends(get_current_user_id),
 ):
-    client = get_admin_client()
     # Verify ownership
-    existing = client.table("scan_alerts").select("id") \
-        .eq("id", alert_id).eq("user_id", user_id).execute()
+    try:
+        client = get_admin_client()
+        existing = client.table("scan_alerts").select("id") \
+            .eq("id", alert_id).eq("user_id", user_id).execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Alert not found")
 
@@ -120,30 +140,44 @@ async def update_alert(
     if body.sort_order is not None: patch["sort_order"] = body.sort_order
     if body.is_active  is not None: patch["is_active"]  = body.is_active
 
-    res = client.table("scan_alerts").update(patch).eq("id", alert_id).execute()
+    try:
+        res = client.table("scan_alerts").update(patch).eq("id", alert_id).execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
+    if not res.data:
+        raise _scan_alerts_unavailable()
     return res.data[0]
 
 
 @router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_alert(alert_id: str, user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
-    existing = client.table("scan_alerts").select("id") \
-        .eq("id", alert_id).eq("user_id", user_id).execute()
+    try:
+        client = get_admin_client()
+        existing = client.table("scan_alerts").select("id") \
+            .eq("id", alert_id).eq("user_id", user_id).execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Alert not found")
-    client.table("scan_alerts").delete().eq("id", alert_id).execute()
+    try:
+        client.table("scan_alerts").delete().eq("id", alert_id).execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
 
 
 @router.get("/recent/matches")
 async def get_recent_matches(user_id: str = Depends(get_current_user_id)):
     """Return today's / most-recent matches across all alerts for this user."""
-    client = get_admin_client()
-    res = client.table("scan_alert_matches") \
-        .select("*, scan_alerts(name)") \
-        .eq("user_id", user_id) \
-        .order("run_date", desc=True) \
-        .limit(50) \
-        .execute()
+    try:
+        client = get_admin_client()
+        res = client.table("scan_alert_matches") \
+            .select("*, scan_alerts(name)") \
+            .eq("user_id", user_id) \
+            .order("run_date", desc=True) \
+            .limit(50) \
+            .execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
     return {"matches": res.data or []}
 
 
@@ -154,18 +188,24 @@ async def get_alert_matches(
     user_id: str = Depends(get_current_user_id),
 ):
     """Return the last N run results for an alert."""
-    client = get_admin_client()
-    existing = client.table("scan_alerts").select("id") \
-        .eq("id", alert_id).eq("user_id", user_id).execute()
+    try:
+        client = get_admin_client()
+        existing = client.table("scan_alerts").select("id") \
+            .eq("id", alert_id).eq("user_id", user_id).execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
     if not existing.data:
         raise HTTPException(status_code=404, detail="Alert not found")
 
-    res = client.table("scan_alert_matches") \
-        .select("*") \
-        .eq("alert_id", alert_id) \
-        .order("run_date", desc=True) \
-        .limit(max(1, min(limit, 30))) \
-        .execute()
+    try:
+        res = client.table("scan_alert_matches") \
+            .select("*") \
+            .eq("alert_id", alert_id) \
+            .order("run_date", desc=True) \
+            .limit(max(1, min(limit, 30))) \
+            .execute()
+    except Exception:
+        raise _scan_alerts_unavailable()
     return {"matches": res.data or []}
 
 
