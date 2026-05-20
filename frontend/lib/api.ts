@@ -1422,7 +1422,9 @@ export async function saveDrawing(
     headers,
     body: JSON.stringify(drawing),
   });
-  if (!res.ok) throw new Error("Save drawing failed");
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Chart drawing could not be saved (${res.status}).`));
+  }
   return res.json();
 }
 
@@ -1457,7 +1459,9 @@ export async function updateDrawing(
     headers,
     body: JSON.stringify(drawing),
   });
-  if (!res.ok) throw new Error("Update drawing failed");
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Chart drawing could not be updated (${res.status}).`));
+  }
   return res.json();
 }
 
@@ -1473,18 +1477,13 @@ export async function deleteDrawing(symbol: string, drawingId: string): Promise<
     writeMockDrawingMap(map);
     return;
   }
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
-      method: "DELETE",
-      headers,
-    });
-    if (!res.ok && res.status !== 404) {
-      console.warn("deleteDrawing failed:", res.status);
-    }
-  } catch (e) {
-    // Network error — drawing state is local, so silently skip
-    console.warn("deleteDrawing network error:", e);
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/charts/${symbol}/drawings/${drawingId}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(await responseErrorMessage(res, `Chart drawing could not be deleted (${res.status}).`));
   }
 }
 

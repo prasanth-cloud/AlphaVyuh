@@ -484,6 +484,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     });
   }, []);
 
+  const showDrawingPersistenceError = useCallback((error: unknown, fallback: string) => {
+    setLayoutMsg(error instanceof Error ? error.message : fallback);
+    setTimeout(() => setLayoutMsg(""), 5000);
+  }, []);
+
   const persistEditedDrawing = useCallback(async (drawing: ChartDrawing) => {
     try {
       const saved = await updateDrawing(symbol, drawing.id, {
@@ -495,10 +500,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setDrawings((prev) => prev.map((item) => item.id === drawing.id ? saved : item));
       setDrawnLines((prev) => prev.map((item) => item.id === drawing.id ? { ...item, id: saved.id } : item));
       setSelectedDrawingId(saved.id);
-    } catch {
-      // keep local edit even if persistence fails
+    } catch (error) {
+      showDrawingPersistenceError(error, "Chart drawing changes could not be saved.");
     }
-  }, [symbol, timeframe]);
+  }, [showDrawingPersistenceError, symbol, timeframe]);
 
   const getSnappedPrice = useCallback((time: string, price: number) => {
     if (!snapToPrice) return price;
@@ -1248,7 +1253,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setDrawnLines(prev => prev.map(item => item.id === line.id ? { ...item, id: saved.id } : item));
         setSelectedDrawingId(saved.id);
         setTextEditor(prev => prev?.drawingId === line.id ? { ...prev, drawingId: saved.id } : prev);
-      } catch { /* ignore */ }
+      } catch (error) {
+        showDrawingPersistenceError(error, "Chart drawing could not be saved.");
+      }
       return;
     }
 
@@ -1287,7 +1294,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setDrawings(prev => [...prev, saved]);
       setDrawnLines(prev => prev.map(item => item.id === line.id ? { ...item, id: saved.id } : item));
       setSelectedDrawingId(saved.id);
-    } catch { /* ignore */ }
+    } catch (error) {
+      showDrawingPersistenceError(error, "Chart drawing could not be saved.");
+    }
   }
 
   const handleDeleteSingleDrawing = useCallback(async (drawingId: string) => {
@@ -1296,8 +1305,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     updateDrawingsWithHistory((prev) => prev.filter(item => item.id !== drawingId));
     setSelectedDrawingId(prev => prev === drawingId ? null : prev);
     setDrawings(prev => prev.filter(item => item.id !== drawingId));
-    await deleteDrawing(symbol, drawingId).catch(() => {});
-  }, [drawnLines, symbol, updateDrawingsWithHistory]);
+    try {
+      await deleteDrawing(symbol, drawingId);
+    } catch (error) {
+      showDrawingPersistenceError(error, "Chart drawing could not be deleted.");
+    }
+  }, [drawnLines, showDrawingPersistenceError, symbol, updateDrawingsWithHistory]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -1369,8 +1382,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     updateDrawingsWithHistory((prev) => prev.filter(item => item.locked));
     setDrawings(prev => prev.filter(item => !currentIds.includes(item.id)));
     setSelectedDrawingId(null);
-    await Promise.all(currentIds.map(id => deleteDrawing(symbol, id).catch(() => {})));
-  }, [drawnLines, symbol, updateDrawingsWithHistory]);
+    const results = await Promise.allSettled(currentIds.map(id => deleteDrawing(symbol, id)));
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failure) {
+      showDrawingPersistenceError(failure.reason, "Some chart drawings could not be deleted.");
+    }
+  }, [drawnLines, showDrawingPersistenceError, symbol, updateDrawingsWithHistory]);
 
   const toggleDrawingLock = useCallback((drawingId: string) => {
     const drawing = drawnLines.find((item) => item.id === drawingId);
@@ -1474,10 +1491,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setDrawings(prev => [...prev, saved]);
       setDrawnLines(prev => prev.map(item => item.id === note.id ? { ...item, id: saved.id } : item));
       setSelectedDrawingId(saved.id);
-    } catch {
-      // local note remains available even if persistence is temporarily offline
+    } catch (error) {
+      showDrawingPersistenceError(error, "Chart drawing could not be saved.");
     }
-  }, [symbol, timeframe, updateDrawingsWithHistory]);
+  }, [showDrawingPersistenceError, symbol, timeframe, updateDrawingsWithHistory]);
 
   const commitTextEditor = useCallback(async () => {
     if (!textEditor?.drawingId) return;
@@ -2273,7 +2290,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <Save size={11} /> Preset
           </button>
           {layoutMsg && (
-            <span className="caption" style={{ color: layoutMsg.includes("unavailable") ? "var(--warn)" : "var(--gain)" }}>{layoutMsg}</span>
+            <span className="caption" style={{ color: /unavailable|could not|failed/i.test(layoutMsg) ? "var(--warn)" : "var(--gain)" }}>{layoutMsg}</span>
           )}
         </div>
       </div>

@@ -125,6 +125,70 @@ describe("mock chart persistence", () => {
     await expect(getDrawings("RELIANCE", "D")).rejects.toThrow("Chart workspace is temporarily unavailable.");
   });
 
+  it("surfaces live chart drawing save failures", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Chart drawing persistence is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { saveDrawing } = await import("@/lib/api");
+
+    await expect(saveDrawing("RELIANCE", {
+      timeframe: "D",
+      tool_type: "trendline",
+      points: [{ time: "2026-04-01", price: 1200 }, { time: "2026-04-12", price: 1320 }],
+      style: { color: "#f4f7fb" },
+    })).rejects.toThrow("Chart drawing persistence is temporarily unavailable.");
+  });
+
+  it("surfaces live chart drawing update failures", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Chart drawing persistence is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { updateDrawing } = await import("@/lib/api");
+
+    await expect(updateDrawing("RELIANCE", "drawing-1", {
+      timeframe: "D",
+      tool_type: "horizontal",
+      points: [{ time: "2026-04-12", price: 1320 }, { time: "2026-04-12", price: 1320 }],
+      style: { color: "#22c55e" },
+    })).rejects.toThrow("Chart drawing persistence is temporarily unavailable.");
+  });
+
+  it("surfaces live chart drawing delete failures", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Chart drawing persistence is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { deleteDrawing } = await import("@/lib/api");
+
+    await expect(deleteDrawing("RELIANCE", "drawing-1")).rejects.toThrow("Chart drawing persistence is temporarily unavailable.");
+  });
+
   it("surfaces live chart workspace outages when no local workspace cache exists", async () => {
     vi.resetModules();
     vi.unstubAllEnvs();
