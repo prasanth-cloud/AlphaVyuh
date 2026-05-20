@@ -23,9 +23,8 @@ the comparison symbol cannot load.
 - PASS `npm run test:production-smoke-env-check`
 - PASS `git diff --check`
 - PASS `npm --prefix frontend run e2e:mock`
-- INFO Browser plugin verification attempted after the visible frontend change.
-  The in-app browser list returned `[]`, so focused Playwright is the UI
-  evidence for this slice.
+- INFO First focused Playwright rerun after the selector fix briefly hit `ERR_CONNECTION_REFUSED` before the dev server restarted; a clean rerun passed all 3 chart-unavailable tests.
+- PASS Browser smoke on `http://localhost:3000/charts/AUBANK?full=1` with mock auth/data: chart drawing overlay visible, one Compare button visible, one Tools button visible, and AUBANK context present.
 
 ## Recovery Status
 
