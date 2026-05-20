@@ -3151,9 +3151,17 @@ const mockSharedScreens: SharedScreen[] = [
 export async function getSharedScreens(limit = 20): Promise<SharedScreen[]> {
   if (shouldUseMockFallback()) return mockSharedScreens.slice(0, limit);
   const res = await fetch(`${API}/api/v1/community/screens?limit=${limit}`, { headers: publicHeaders });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Community screens are temporarily unavailable (${res.status}).`));
+  }
   const data = await res.json();
-  return data.screens ?? [];
+  const unavailableMessage = unavailablePayloadMessage(data, "Community screens are temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  const screens = Array.isArray(data) ? data : data?.screens;
+  if (!Array.isArray(screens)) {
+    throw new Error("Community screens are temporarily unavailable.");
+  }
+  return screens;
 }
 
 export async function shareScreen(screenId: string, title: string, description?: string, tags?: string[]): Promise<SharedScreen> {
