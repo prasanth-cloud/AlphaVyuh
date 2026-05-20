@@ -72,6 +72,17 @@ describe("watchlist API", () => {
     await expect(removeFromWatchlist("watchlist-1", "RELIANCE")).rejects.toThrow("Watchlist item removal is temporarily unavailable.");
   });
 
+  it("surfaces item add failures instead of treating the symbol as added", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Watchlist add is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { addToWatchlist } = await import("@/lib/api");
+
+    await expect(addToWatchlist("watchlist-1", "RELIANCE")).rejects.toThrow("Watchlist add is temporarily unavailable.");
+  });
+
   it("surfaces reorder failures instead of treating the saved order as updated", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ detail: "Watchlist reorder is temporarily unavailable." }),

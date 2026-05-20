@@ -109,4 +109,52 @@ test.describe("Watchlist mutation failures", () => {
     await expect(page.locator("tr[data-symbol='RELIANCE']")).toBeVisible();
     expect(removeRequests).toBe(1);
   });
+
+  test("does not show starter symbols as added when backend add fails", async ({ page }) => {
+    const emptyPayload = {
+      watchlists: [
+        {
+          id: "watchlist-empty",
+          name: "Fresh queue",
+          sort_order: 0,
+          created_at: "2026-05-20T09:00:00Z",
+          items: [],
+        },
+      ],
+    };
+    let addRequests = 0;
+
+    await page.route("**/api/v1/watchlists**", (route) => {
+      const request = route.request();
+      if (request.method() === "POST" && request.url().includes("/items")) {
+        addRequests += 1;
+        return route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Watchlist add is temporarily unavailable." }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(emptyPayload),
+      });
+    });
+    await page.route("**/api/v1/journal**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ entries: [], total: 0, plan: "pro", history_months: null }) })
+    );
+    await page.route("**/api/v1/workflow/states**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ states: [] }) })
+    );
+
+    await page.goto("/watchlist");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByText("No stocks yet")).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Add starter queue" }).click();
+
+    await expect(page.getByTestId("watchlist-toast")).toContainText("Watchlist add is temporarily unavailable.", { timeout: 15_000 });
+    await expect(page.locator("tr[data-symbol='RELIANCE']")).toHaveCount(0);
+    expect(addRequests).toBeGreaterThan(0);
+  });
 });

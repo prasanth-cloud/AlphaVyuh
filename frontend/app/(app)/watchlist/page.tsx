@@ -1714,18 +1714,33 @@ function WatchlistContent() {
     try {
       const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
       const symbols = STARTER_SYMBOLS.filter((symbol) => !existing.has(symbol));
-      const newItems = await Promise.all(symbols.map(async (symbol, index): Promise<WatchlistItem> => {
-        await addToWatchlist(activeId, symbol).catch(() => {});
+      const newItems: WatchlistItem[] = [];
+      const failures: string[] = [];
+
+      for (const [index, symbol] of symbols.entries()) {
+        try {
+          await addToWatchlist(activeId, symbol);
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : `${symbol} could not be added.`);
+          continue;
+        }
         const quote = await getQuote(symbol).catch(() => null);
-        return quote
+        newItems.push(quote
           ? { symbol: quote.symbol, sort_order: index, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-          : { symbol, sort_order: index, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" }
-      }));
+          : { symbol, sort_order: index, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" });
+      }
+
       if (newItems.length) {
         setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
         setChartSymbol(newItems[0].symbol);
       }
-      setAddMsg(newItems.length ? "Starter list added" : "Already added");
+      if (failures.length) {
+        const message = newItems.length ? `Added ${newItems.length}; ${failures.length} failed: ${failures[0]}` : failures[0];
+        setAddMsg(message);
+        showToast(message);
+      } else {
+        setAddMsg(newItems.length ? "Starter list added" : "Already added");
+      }
     } catch (e: unknown) {
       setAddMsg(e instanceof Error ? e.message : "Error");
     } finally {
@@ -2022,7 +2037,7 @@ function WatchlistContent() {
           {activeWl && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               {addMsg && (
-                <span style={{ fontSize: 11, fontWeight: 500, color: addMsg === "Added" ? "var(--gain)" : "var(--loss)" }}>
+                <span style={{ fontSize: 11, fontWeight: 500, color: /failed|unavailable|error/i.test(addMsg) ? "var(--loss)" : "var(--gain)" }}>
                   {addMsg}
                 </span>
               )}
