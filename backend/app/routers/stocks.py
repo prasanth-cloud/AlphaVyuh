@@ -56,35 +56,10 @@ async def get_quote(symbol: str):
             .limit(1) \
             .execute()
     except Exception:
-        return {
-            "symbol": sym,
-            "company_name": sym,
-            "sector": None,
-            "series": None,
-            "market": "NSE",
-            "currency": "INR",
-            "trade_date": None,
-            "open": 0,
-            "high": 0,
-            "low": 0,
-            "close": 0,
-            "prev_close": 0,
-            "pct_change": None,
-            "volume": 0,
-            "avg_volume_20d": 0,
-            "volume_ratio": None,
-            "week_52_high": None,
-            "week_52_low": None,
-            "week_52_high_pct": None,
-            "week_52_low_pct": None,
-            "rsi_14": None,
-            "ema_20": None,
-            "ema_50": None,
-            "ema_200": None,
-            "atr_14": None,
-            "turnover": None,
-            "mode": "unavailable",
-        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Quote data is temporarily unavailable.",
+        )
 
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Symbol not found")

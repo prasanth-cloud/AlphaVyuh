@@ -821,9 +821,14 @@ export async function getQuote(symbol: string): Promise<ScanResult | null> {
       const headers = await authHeaders();
       const res = await fetch(`${API}/api/v1/stocks/${sym}/quote`, { headers });
       if (!res.ok) return shouldUseMockFallback() ? mockQuote(sym) : null;
-      return res.json();
-    } catch {
-      return shouldUseMockFallback() ? mockQuote(sym) : null;
+      const data = await res.json();
+      const unavailableMessage = unavailablePayloadMessage(data, "Quote data is temporarily unavailable.");
+      if (unavailableMessage) throw new Error(unavailableMessage);
+      return data;
+    } catch (error) {
+      if (shouldUseMockFallback()) return mockQuote(sym);
+      if (error instanceof Error && error.message.toLowerCase().includes("unavailable")) throw error;
+      return null;
     }
   });
 }
@@ -851,9 +856,14 @@ export async function getQuoteLive(symbol: string): Promise<LiveQuote | null> {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/stocks/${symbol}/quote-live`, { headers });
     if (!res.ok) return shouldUseMockFallback() ? mockLiveQuote(symbol) : null;
-    return res.json();
-  } catch {
-    return shouldUseMockFallback() ? mockLiveQuote(symbol) : null;
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Live quote data is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    return data;
+  } catch (error) {
+    if (shouldUseMockFallback()) return mockLiveQuote(symbol);
+    if (error instanceof Error && error.message.toLowerCase().includes("unavailable")) throw error;
+    return null;
   }
 }
 
