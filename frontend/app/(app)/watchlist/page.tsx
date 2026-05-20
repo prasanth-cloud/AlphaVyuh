@@ -1316,10 +1316,10 @@ function WatchlistContent() {
     } else if (matched.items?.[0]?.symbol) {
       setChartSymbol(matched.items[0].symbol);
     }
-    if (!requestedSymbol || matchedRequestedSymbol) {
+    if (planDraftParam !== "chart" && (!requestedSymbol || matchedRequestedSymbol)) {
       router.replace("/watchlist", { scroll: false });
     }
-  }, [symbolParam, watchlistIdParam, watchlists, router]);
+  }, [planDraftParam, symbolParam, watchlistIdParam, watchlists, router]);
 
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
@@ -1348,8 +1348,8 @@ function WatchlistContent() {
         })
         .catch(() => {});
     }
-    router.replace("/watchlist", { scroll: false });
-  }, [symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (planDraftParam !== "chart") router.replace("/watchlist", { scroll: false });
+  }, [planDraftParam, symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (typeof window === "undefined") return;

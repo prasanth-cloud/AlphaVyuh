@@ -122,6 +122,13 @@ export async function authHeaders(): Promise<HeadersInit> {
 // Public endpoints don't need auth — just JSON content-type
 const publicHeaders: HeadersInit = { "Content-Type": "application/json" };
 
+async function responseErrorMessage(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => ({}));
+  if (typeof body.message === "string" && body.message.trim()) return body.message;
+  if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+  return fallback;
+}
+
 export type ScanResult = {
   symbol: string;
   company_name: string;
@@ -472,14 +479,7 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
       const res = await fetch(`${API}/api/v1/watchlists${qs}`, { headers });
       if (!res.ok) {
         if (shouldUseMockFallback()) return readMockWatchlists();
-        const body = await res.json().catch(() => ({}));
-        const detail =
-          typeof body.message === "string"
-            ? body.message
-            : typeof body.detail === "string"
-              ? body.detail
-              : `Watchlist data is temporarily unavailable (${res.status}).`;
-        throw new Error(detail);
+        throw new Error(await responseErrorMessage(res, `Watchlist data is temporarily unavailable (${res.status}).`));
       }
       const data = await res.json();
       return data.watchlists ?? [];
@@ -1705,7 +1705,9 @@ export async function getJournalEntries(
   return cachedClientRequest(cacheKey, 20_000, async () => {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/journal?${qs}`, { headers });
-    if (!res.ok) return { entries: [], total: 0 };
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Journal entries are temporarily unavailable (${res.status}).`));
+    }
     return res.json();
   });
 }
@@ -1715,10 +1717,9 @@ export async function getJournalStats(): Promise<JournalStats> {
   return cachedClientRequest("journal:stats", 30_000, async () => {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/journal/stats`, { headers });
-    if (!res.ok) return {
-      total_trades: 0, open_trades: 0, total_pnl: 0, win_rate: 0,
-      avg_pnl: 0, avg_win: 0, avg_loss: 0, best_trade: 0, worst_trade: 0, avg_holding_days: 0,
-    };
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Journal stats are temporarily unavailable (${res.status}).`));
+    }
     return res.json();
   });
 }
@@ -2509,40 +2510,12 @@ export async function getBrokerStatus(): Promise<{
     });
   }
   return cachedClientRequest("broker:status", 20_000, async () => {
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`${API}/api/v1/broker/status`, { headers });
-      if (!res.ok) {
-        return {
-          connected: false,
-          broker: null,
-          mode: "simulated",
-          status: "not_connected",
-          plan: "free",
-          plan_allows_broker: false,
-          has_api_key: false,
-          has_token: false,
-          token_expired: false,
-          connected_at: null,
-          token_expires_at: null,
-        };
-      }
-      return res.json();
-    } catch {
-      return {
-        connected: false,
-        broker: null,
-          mode: "simulated",
-          status: "not_connected",
-          plan: "free",
-          plan_allows_broker: false,
-          has_api_key: false,
-        has_token: false,
-        token_expired: false,
-        connected_at: null,
-        token_expires_at: null,
-      };
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/broker/status`, { headers });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Broker status is temporarily unavailable (${res.status}).`));
     }
+    return res.json();
   });
 }
 
