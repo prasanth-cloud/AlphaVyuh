@@ -391,6 +391,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [tradePlan, setTradePlan] = useState<{ entry: string; stop: string; target: string }>({ entry: "", stop: "", target: "" });
   const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string; nextActions?: string[]; riskReward?: number | null } | null>(null);
   const [symbolPositions, setSymbolPositions] = useState<PortfolioPosition[]>([]);
+  const [symbolPositionsError, setSymbolPositionsError] = useState<string | null>(null);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [closeBusyId, setCloseBusyId] = useState<string | null>(null);
   const [manageBusyId, setManageBusyId] = useState<string | null>(null);
@@ -756,6 +757,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   const loadSymbolPositions = useCallback(async () => {
     setPositionsLoading(true);
+    setSymbolPositionsError(null);
     try {
       const portfolio = await getPortfolio();
       const relevant = (portfolio.positions || []).filter((position) => position.symbol === symbol);
@@ -774,8 +776,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         }
         return next;
       });
-    } catch {
-      setSymbolPositions([]);
+    } catch (error) {
+      setSymbolPositionsError(error instanceof Error ? error.message : "Portfolio is temporarily unavailable.");
     } finally {
       setPositionsLoading(false);
     }
@@ -1774,7 +1776,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
-    symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
+    symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
   ].filter(Boolean) as string[];
 
   async function reportChartDataIssue() {
@@ -2560,7 +2562,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 >
                   <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Open trades</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px]" style={{ color: "var(--app-text3)" }}>{symbolPositions.length}</span>
+                    <span className="text-[10px]" style={{ color: symbolPositionsError ? "var(--warn)" : "var(--app-text3)" }}>
+                      {symbolPositionsError ? "Unavailable" : symbolPositions.length}
+                    </span>
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showPositionsPanel ? "rotate(180deg)" : "rotate(0deg)" }}>
                       <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -2573,6 +2577,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       {[1, 2].map((i) => (
                         <div key={i} className="h-12 rounded-[10px] animate-pulse" style={{ background: "var(--app-surface3)" }} />
                       ))}
+                    </div>
+                  ) : symbolPositionsError ? (
+                    <div className="rounded-[10px] px-3 py-3 text-[11px] leading-5" style={{ background: "rgba(217,119,6,0.08)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.22)" }}>
+                      {symbolPositionsError} Open positions are not being treated as empty while account data is unavailable.
                     </div>
                   ) : symbolPositions.length === 0 ? (
                     <div className="rounded-[10px] px-3 py-3 text-[11px] leading-5" style={{ background: "var(--app-surface2)", color: "var(--app-text3)" }}>

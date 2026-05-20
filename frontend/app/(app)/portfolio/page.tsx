@@ -34,7 +34,7 @@ export default function PortfolioPage() {
   useEffect(() => {
     getPortfolio()
       .then(setData)
-      .catch(e => setError(e.message))
+      .catch(e => setError(e instanceof Error ? e.message : "Portfolio is temporarily unavailable."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -69,7 +69,17 @@ export default function PortfolioPage() {
         )}
 
         {!loading && error && (
-          <div className="rounded-[20px] p-8 text-center text-[13px]" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--loss)", boxShadow: "var(--shadow-panel)" }}>{error}</div>
+          <div
+            data-testid="portfolio-unavailable"
+            className="rounded-[20px] p-8 text-center text-[13px]"
+            style={{ background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.24)", color: "var(--warn)", boxShadow: "var(--shadow-panel)" }}
+          >
+            <div className="text-[14px] font-semibold mb-1" style={{ color: "var(--text-primary)" }}>Portfolio unavailable</div>
+            <div>{error}</div>
+            <div className="mt-2" style={{ color: "var(--text-secondary)" }}>
+              Open positions are not being treated as empty while account data is unavailable.
+            </div>
+          </div>
         )}
 
         {!loading && !error && data && (

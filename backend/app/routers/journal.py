@@ -17,6 +17,13 @@ def _get_user_plan(user_id: str) -> str:
     sb = get_admin_client()
     return get_effective_user_plan(sb, user_id)
 
+
+def _portfolio_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Portfolio is temporarily unavailable.",
+    )
+
 router = APIRouter(prefix="/api/v1/journal", tags=["journal"])
 
 
@@ -465,28 +472,34 @@ async def get_portfolio(user_id: str = Depends(get_current_user_id)):
     Returns all open positions with current price from daily_ohlcv,
     unrealised P&L, and sector breakdown.
     """
-    sb = get_admin_client()
-    result = (
-        sb.table("trade_journal")
-        .select("id,symbol,company_name,trade_type,entry_date,entry_price,quantity,stop_loss,target_price,setup_type")
-        .eq("user_id", user_id)
-        .eq("status", "open")
-        .order("entry_date", desc=False)
-        .execute()
-    )
+    try:
+        sb = get_admin_client()
+        result = (
+            sb.table("trade_journal")
+            .select("id,symbol,company_name,trade_type,entry_date,entry_price,quantity,stop_loss,target_price,setup_type")
+            .eq("user_id", user_id)
+            .eq("status", "open")
+            .order("entry_date", desc=False)
+            .execute()
+        )
+    except Exception:
+        raise _portfolio_unavailable()
     positions = result.data or []
     if not positions:
         return {"positions": [], "summary": {"total_invested": 0, "total_current": 0, "total_pnl": 0, "total_pnl_pct": 0}, "sectors": []}
 
     # Fetch fallback prices from the latest stored EOD row
     symbols = list({p["symbol"] for p in positions})
-    price_rows = (
-        sb.table("daily_ohlcv")
-        .select("symbol,close,pct_change")
-        .in_("symbol", symbols)
-        .order("trade_date", desc=True)
-        .execute()
-    )
+    try:
+        price_rows = (
+            sb.table("daily_ohlcv")
+            .select("symbol,close,pct_change")
+            .in_("symbol", symbols)
+            .order("trade_date", desc=True)
+            .execute()
+        )
+    except Exception:
+        raise _portfolio_unavailable()
     latest_prices: dict[str, dict] = {}
     for row in (price_rows.data or []):
         sym = row["symbol"]
@@ -494,13 +507,16 @@ async def get_portfolio(user_id: str = Depends(get_current_user_id)):
             latest_prices[sym] = {"close": float(row["close"]), "pct_change": row.get("pct_change"), "source": "daily_ohlcv"}
 
     # Prefer live Yahoo Finance quotes when available
-    market_rows = (
-        sb.table("stock_universe")
-        .select("symbol,market")
-        .in_("symbol", symbols)
-        .execute()
-    )
-    market_map: dict[str, str] = {r["symbol"]: (r.get("market") or "NSE") for r in (market_rows.data or [])}
+    try:
+        market_rows = (
+            sb.table("stock_universe")
+            .select("symbol,market")
+            .in_("symbol", symbols)
+            .execute()
+        )
+        market_map: dict[str, str] = {r["symbol"]: (r.get("market") or "NSE") for r in (market_rows.data or [])}
+    except Exception:
+        market_map = {}
 
     def _yf_symbol(sym: str, market: str) -> str:
         return sym if market in ("NASDAQ", "NYSE") else f"{sym}.NS"
@@ -521,12 +537,15 @@ async def get_portfolio(user_id: str = Depends(get_current_user_id)):
             continue
 
     # Fetch sector info
-    sector_rows = (
-        sb.table("stock_universe")
-        .select("symbol,sector")
-        .in_("symbol", symbols)
-        .execute()
-    )
+    try:
+        sector_rows = (
+            sb.table("stock_universe")
+            .select("symbol,sector")
+            .in_("symbol", symbols)
+            .execute()
+        )
+    except Exception:
+        raise _portfolio_unavailable()
     sectors_map: dict[str, str | None] = {r["symbol"]: r.get("sector") for r in (sector_rows.data or [])}
 
     enriched = []
