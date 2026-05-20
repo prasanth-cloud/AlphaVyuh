@@ -67,6 +67,70 @@ describe("candles client cache", () => {
     await expect(getCandles("RELIANCE", { timeframe: "D", limit: 120 })).rejects.toThrow("Application not found");
   });
 
+  it("rejects successful candle responses that carry unavailable mode", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          symbol: "RELIANCE",
+          timeframe: "D",
+          candles: [],
+          latest: null,
+          mode: "unavailable",
+          source_metadata: {
+            source_name: "Unavailable",
+            mode: "fallback",
+            as_of: null,
+          },
+        }),
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify(candlePayload), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCandles } = await import("@/lib/api");
+
+    await expect(getCandles("RELIANCE", { timeframe: "D", limit: 120 })).rejects.toThrow("Chart candle data is temporarily unavailable.");
+    await expect(getCandles("RELIANCE", { timeframe: "D", limit: 120 })).resolves.toEqual(candlePayload);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects successful live candle responses that carry unavailable status", async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        symbol: "RELIANCE",
+        timeframe: "D",
+        candles: [],
+        latest: null,
+        status: "unavailable",
+        message: "Live chart provider is temporarily unavailable.",
+      }),
+      { status: 200 },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getCandlesLive } = await import("@/lib/api");
+
+    await expect(getCandlesLive("RELIANCE", { timeframe: "D", limit: 120 })).rejects.toThrow("Live chart provider is temporarily unavailable.");
+  });
+
+  it("rejects successful indicator responses that carry unavailable status", async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({
+        symbol: "RELIANCE",
+        indicators: {},
+        status: "unavailable",
+        message: "Chart indicators are temporarily unavailable.",
+      }),
+      { status: 200 },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { getIndicators } = await import("@/lib/api");
+
+    await expect(getIndicators("RELIANCE", ["ema20"], "D")).rejects.toThrow("Chart indicators are temporarily unavailable.");
+  });
+
   it("coalesces AI pattern requests and fails soft", async () => {
     const fetchMock = vi.fn(async () => new Response("temporary outage", { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
