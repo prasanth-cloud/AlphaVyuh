@@ -1006,6 +1006,7 @@ input, textarea, select {
   .data-health-grid,
   .data-detail-grid,
   .data-metric-grid,
+  .data-runs-grid,
   .data-surface-grid {
     grid-template-columns: 1fr !important;
   }
@@ -1044,6 +1045,7 @@ input, textarea, select {
   .broker-health-grid,
   .broker-adapter-grid,
   .data-health-grid,
+  .data-runs-grid,
   .data-surface-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
