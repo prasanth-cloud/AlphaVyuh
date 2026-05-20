@@ -66,6 +66,7 @@ import {
 import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
+import { accountDataErrorMessage } from "@/lib/account-data-status";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -544,6 +545,7 @@ function ChartPanel({
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderMsg, setOrderMsg] = useState<{ ok: boolean; text: string; journalReady?: boolean } | null>(null);
   const [brokerStatus, setBrokerStatus] = useState<Awaited<ReturnType<typeof getBrokerStatus>> | null>(null);
+  const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
   const [liveConfirmed, setLiveConfirmed] = useState(false);
   const latestBar = candles[candles.length - 1] ?? null;
   const previousBar = candles[candles.length - 2] ?? null;
@@ -571,6 +573,7 @@ function ChartPanel({
     ...(planValid ? [] : [planNextAction || "Complete the Decision Desk before order capture"]),
     ...(planRiskReward != null && planRiskReward < 2 ? ["R:R below 2.0; review risk before submitting"] : []),
     ...(chartRangeNote ? [chartRangeNote] : []),
+    ...(brokerStatusError ? ["Broker status unavailable; order capture stays as a journal draft"] : []),
     ...(brokerStatus?.plan_allows_broker === false ? ["Broker integration requires Pro or Elite"] : []),
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
@@ -629,7 +632,15 @@ function ChartPanel({
   const chartHeight = showOrderTicket ? 300 : showChartDetails ? 380 : 440;
   useEffect(() => {
     if (!showOrderTicket) return;
-    getBrokerStatus().then(setBrokerStatus).catch(() => setBrokerStatus(null));
+    getBrokerStatus()
+      .then((status) => {
+        setBrokerStatus(status);
+        setBrokerStatusError(null);
+      })
+      .catch((error) => {
+        setBrokerStatus(null);
+        setBrokerStatusError(accountDataErrorMessage(error, "Broker status is temporarily unavailable. Existing broker access is not being treated as disconnected."));
+      });
   }, [showOrderTicket]);
   useEffect(() => {
     window.localStorage.setItem(WATCHLIST_CHART_TYPE_STORAGE_KEY, chartType);
@@ -931,12 +942,14 @@ function ChartPanel({
           )}
         </div>
 
-        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: brokerStatus?.connected ? "var(--gain)" : "var(--text-secondary)" }}>
-            {brokerStatus?.status_label ?? "Checking broker route..."}
+        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: brokerStatusError ? "rgba(217,119,6,0.08)" : "rgba(255,255,255,0.03)", border: brokerStatusError ? "1px solid rgba(217,119,6,0.22)" : "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <span data-testid="watchlist-order-broker-status" style={{ fontSize: 11, fontWeight: 700, color: brokerStatusError ? "var(--warn)" : brokerStatus?.connected ? "var(--gain)" : "var(--text-secondary)" }}>
+            {brokerStatusError ? "Broker status unavailable" : brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
-            {brokerStatus?.connected ? "Broker import available; order capture still records as a journal draft" : "Order capture records as a journal draft"}
+            {brokerStatusError
+              ? `${brokerStatusError} Order capture stays as a journal draft.`
+              : brokerStatus?.connected ? "Broker import available; order capture still records as a journal draft" : "Order capture records as a journal draft"}
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
