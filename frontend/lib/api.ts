@@ -474,13 +474,18 @@ export async function saveScreen(name: string, filters: Record<string, unknown>)
     headers,
     body: JSON.stringify({ name, filters }),
   });
-  if (!res.ok) throw new Error("Save failed");
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Saved scanner screen could not be saved."));
+  }
   return res.json();
 }
 
 export async function deleteScreen(id: string): Promise<void> {
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/scanner/screens/${id}`, { method: "DELETE", headers });
+  const res = await fetch(`${API}/api/v1/scanner/screens/${id}`, { method: "DELETE", headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Saved scanner screen could not be deleted."));
+  }
 }
 
 export async function getWatchlists(options?: { lite?: boolean; force?: boolean }): Promise<Watchlist[]> {

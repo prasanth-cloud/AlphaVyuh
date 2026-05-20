@@ -77,6 +77,28 @@ describe("scanner API", () => {
     await expect(getScreens()).rejects.toThrow("Saved scanner screens are temporarily unavailable.");
   });
 
+  it("surfaces saved scanner screen save failures", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Saved scanner screen could not be saved." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { saveScreen } = await import("@/lib/api");
+
+    await expect(saveScreen("Breakout", { filters: { price_min: 100 } })).rejects.toThrow("Saved scanner screen could not be saved.");
+  });
+
+  it("surfaces saved scanner screen delete failures", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Saved scanner screen could not be deleted." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { deleteScreen } = await import("@/lib/api");
+
+    await expect(deleteScreen("screen-1")).rejects.toThrow("Saved scanner screen could not be deleted.");
+  });
+
   it("rejects malformed saved scanner screen payloads", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ screens: null }),
