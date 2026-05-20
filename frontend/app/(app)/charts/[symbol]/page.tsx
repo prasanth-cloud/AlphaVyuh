@@ -33,6 +33,7 @@ import {
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
+import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -1595,19 +1596,26 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   function sendSelectedPositionToDesk() {
     if (!selectedPositionDrawing?.p3) return;
     const side = selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long";
+    const draft = buildChartPlanDraft({
+      symbol,
+      side,
+      entry: selectedPositionDrawing.p1.price,
+      stop: selectedPositionDrawing.p2.price,
+      target: selectedPositionDrawing.p3.price,
+      timeframe,
+      drawingId: selectedPositionDrawing.id,
+      setupLabel,
+      playbookScore,
+      readyChecks: playbookItems.filter((item) => item.status === "ready").map((item) => `${item.label}: ${item.detail}`),
+    });
+    if (!draft) {
+      setPlanHandoffConfirmOpen(false);
+      setPlanUpgradeToast("Draw a valid entry, stop, and target before sending the plan");
+      return;
+    }
     try {
-      window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify({
-        symbol,
-        side,
-        entry: Number(selectedPositionDrawing.p1.price.toFixed(2)),
-        stop: Number(selectedPositionDrawing.p2.price.toFixed(2)),
-        target: Number(selectedPositionDrawing.p3.price.toFixed(2)),
-        timeframe,
-        source: "full_chart_drawing",
-        drawingId: selectedPositionDrawing.id,
-        createdAt: new Date().toISOString(),
-      }));
-      trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true });
+      window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify(draft));
+      trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true, playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
       router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}&planDraft=chart`);
     } catch {
       router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}`);

@@ -497,6 +497,60 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("position drawing sends chart context into the watchlist Decision Desk", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/charts/AUBANK?full=1");
+    const overlay = page.getByTestId("chart-drawing-overlay");
+    await expect(overlay).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
+    await page.getByRole("button", { name: "Long position L", exact: true }).click();
+    await expect(page.getByText(/Long position armed/i)).toBeVisible({ timeout: 10_000 });
+
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.move(box.x + box.width * 0.34, box.y + box.height * 0.48);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.66);
+    await page.mouse.up();
+
+    await expect(page.getByRole("button", { name: /Send to desk/i })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: /Send to desk/i }).click();
+    await expect(page.getByText(/Confirm desk handoff/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/R:R/i)).toBeVisible();
+    await page.getByRole("button", { name: /^Send plan$/i }).click();
+
+    await expect(page).toHaveURL(/\/watchlist\?symbol=AUBANK&planDraft=chart/, { timeout: 15_000 });
+    await expect(page.getByText(/Chart plan context loaded into Decision Desk/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".workspace-pill").filter({ hasText: "Focus: AUBANK" }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByPlaceholder("Thesis")).toHaveValue(/Chart plan:/, { timeout: 15_000 });
+    await expect(page.getByPlaceholder("Invalidation rule")).toHaveValue(/drawn stop below/i);
+    await expect(page.getByPlaceholder("Notes, tags, review later context...")).toHaveValue(/Full chart long position drawing/i);
+
+    const workflow = await page.evaluate(() => {
+      const states = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return states.AUBANK;
+    });
+    expect(workflow).toMatchObject({
+      symbol: "AUBANK",
+      source: "chart",
+      lifecycle: "watch",
+      setup_type: "breakout",
+    });
+    expect(workflow.thesis).toContain("Chart plan:");
+    expect(workflow.invalidation_rule).toContain("drawn stop below");
+    expect(workflow.tags).toEqual(expect.arrayContaining(["chart-plan", "long"]));
+    expect(errors).toEqual([]);
+  });
+
   test("rectangle drawing can create a persisted zone note", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];

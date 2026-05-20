@@ -65,6 +65,7 @@ import {
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
+import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -1340,27 +1341,13 @@ function WatchlistContent() {
     const raw = window.localStorage.getItem(key);
     if (!raw) return;
     try {
-      const draft = JSON.parse(raw) as {
-        symbol?: string;
-        side?: "long" | "short";
-        entry?: number;
-        stop?: number;
-        target?: number;
-        timeframe?: string;
-      };
-      if (draft.symbol?.toUpperCase() !== chartSymbol) return;
-      const patch = {
-        symbol: chartSymbol,
-        watchlist_id: activeId,
-        source: "chart",
-        lifecycle: "watch" as WorkflowLifecycle,
-        setup_type: draft.side === "short" ? "reversal" : "breakout",
-        entry: Number.isFinite(draft.entry) ? draft.entry : null,
-        stop: Number.isFinite(draft.stop) ? draft.stop : null,
-        target: Number.isFinite(draft.target) ? draft.target : null,
-        timeframe: draft.timeframe ?? "D",
-        notes: "Imported from Full chart risk/reward drawing.",
-      };
+      const draft = parseChartPlanDraft(raw, chartSymbol);
+      if (!draft) {
+        window.localStorage.removeItem(key);
+        showToast("Could not load chart plan draft");
+        return;
+      }
+      const patch = buildWorkflowPatchFromChartDraft(draft, activeId);
       appliedChartDrafts.current.add(chartSymbol);
       window.localStorage.removeItem(key);
       setWorkflowBySymbol((prev) => ({
@@ -1371,8 +1358,8 @@ function WatchlistContent() {
         },
       }));
       void upsertWorkflowState(patch);
-      trackEvent("chart_plan_draft_applied", { symbol: chartSymbol, source: "full_chart_drawing" });
-      showToast("Chart levels loaded into Decision Desk");
+      trackEvent("chart_plan_draft_applied", { symbol: chartSymbol, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
+      showToast("Chart plan context loaded into Decision Desk");
     } catch {
       showToast("Could not load chart plan draft");
     }
