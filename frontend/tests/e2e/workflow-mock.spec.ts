@@ -73,6 +73,37 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(/Trade review|Import from Zerodha|Broker/i, { timeout: 15_000 });
   });
 
+  test("uploaded trade report can be handed off to journal review without duplicates", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/upload", { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /^Use sample report$/i }).click();
+    await expect(page.getByText("Journal-ready")).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId("trade-report-journal-import").click();
+    await expect(page.getByTestId("trade-report-journal-import-result")).toContainText(/Imported 4 trade/i, { timeout: 15_000 });
+
+    await page.getByTestId("trade-report-journal-import").click();
+    await expect(page.getByTestId("trade-report-journal-import-result")).toContainText(/already imported|skipped 4/i, { timeout: 15_000 });
+
+    await page.goto("/journal?review=needs-review", { waitUntil: "domcontentloaded" });
+    await expect(page.locator("tbody tr").filter({ hasText: "RELIANCE" })).toContainText("Broker import", { timeout: 15_000 });
+    await page.locator("tbody tr").filter({ hasText: "RELIANCE" }).first().click();
+    await expect(page.getByTestId("journal-original-idea")).toContainText(/Broker report|Imported from Generic broker CSV/i, { timeout: 10_000 });
+
+    const imported = await page.evaluate(() => {
+      const journal = JSON.parse(localStorage.getItem("alphavyuh-mock-journal-v1") || "[]");
+      return journal.filter((entry: { entry_reason?: string }) => entry.entry_reason?.includes("alphavyuh-report-import"));
+    });
+    expect(imported).toHaveLength(4);
+    expect(imported.every((entry: { status: string }) => entry.status === "closed")).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
   test("journal review lesson can be saved and survives reload", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
