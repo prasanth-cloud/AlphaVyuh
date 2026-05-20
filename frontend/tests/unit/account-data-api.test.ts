@@ -50,6 +50,43 @@ describe("account data API failures", () => {
     await expect(getJournalStats()).rejects.toThrow("Journal stats temporarily unavailable.");
   });
 
+  it("surfaces journal analytics failures instead of returning empty analytics", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Journal analytics are temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+
+    await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics are temporarily unavailable.");
+  });
+
+  it("surfaces AI pattern failures instead of returning insufficient-trade readiness", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Trade pattern review is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getAiPatterns } = await import("@/lib/api");
+
+    await expect(getAiPatterns()).rejects.toThrow("Trade pattern review is temporarily unavailable.");
+  });
+
+  it("rejects legacy unavailable AI pattern payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        ready: false,
+        status: "unavailable",
+        message: "Trade pattern review is temporarily unavailable.",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getAiPatterns } = await import("@/lib/api");
+
+    await expect(getAiPatterns()).rejects.toThrow("Trade pattern review is temporarily unavailable.");
+  });
+
   it("surfaces broker status failures instead of returning simulated disconnected state", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ detail: "Broker status temporarily unavailable." }),

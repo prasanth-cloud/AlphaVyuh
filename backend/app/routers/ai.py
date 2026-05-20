@@ -12,7 +12,7 @@ from collections import defaultdict
 from statistics import mean
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.middleware.auth import get_current_user_id
 from app.services.rate_limit import ai_limiter
@@ -307,14 +307,20 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
     Compute statistical patterns from closed trades.
     Returns win rates by day of week, direction, holding period bucket, and time-in-trade stats.
     """
-    sb = get_admin_client()
-    result = (
-        sb.table("trade_journal")
-        .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,holding_days,risk_reward,mistakes")
-        .eq("user_id", user_id)
-        .eq("status", "closed")
-        .execute()
-    )
+    try:
+        sb = get_admin_client()
+        result = (
+            sb.table("trade_journal")
+            .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,holding_days,risk_reward,mistakes")
+            .eq("user_id", user_id)
+            .eq("status", "closed")
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Trade pattern review is temporarily unavailable.",
+        )
     trades = result.data or []
 
     if len(trades) < MIN_TRADES:

@@ -34,6 +34,7 @@ export default function JournalPage() {
   const [autoAnalysisStarted] = useState(false);
   const [patterns, setPatterns] = useState<AiPatterns | null>(null);
   const [patternsLoading, setPatternsLoading] = useState(false);
+  const [patternsError, setPatternsError] = useState<string | null>(null);
   const [brokerConnected, setBrokerConnected] = useState(false);
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [brokerStatusLabel, setBrokerStatusLabel] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export default function JournalPage() {
   const [lessonLoading, setLessonLoading] = useState<string | null>(null);
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
   const [journalStatsError, setJournalStatsError] = useState<string | null>(null);
@@ -84,10 +86,19 @@ export default function JournalPage() {
       setEntries(entriesResult.value.entries);
       setJournalPlan(entriesResult.value.plan ?? null);
       setJournalLoadError(null);
-      getJournalAnalytics().then(setAnalytics).catch(() => {});
+      getJournalAnalytics()
+        .then((analytics) => {
+          setAnalytics(analytics);
+          setAnalyticsError(null);
+        })
+        .catch((error) => {
+          setAnalytics(null);
+          setAnalyticsError(accountDataErrorMessage(error, "Journal analytics are temporarily unavailable. Trade rows may still be current."));
+        });
     } else {
       setJournalLoadError(accountDataErrorMessage(entriesResult.reason, "Journal entries are temporarily unavailable. Your trades were not loaded."));
       setAnalytics(null);
+      setAnalyticsError(null);
     }
 
     if (statsResult.status === "fulfilled") {
@@ -140,7 +151,16 @@ export default function JournalPage() {
   useEffect(() => {
     if (tab !== "ai" || patterns !== null) return;
     setPatternsLoading(true);
-    getAiPatterns().then(setPatterns).catch(() => {}).finally(() => setPatternsLoading(false));
+    getAiPatterns()
+      .then((patterns) => {
+        setPatterns(patterns);
+        setPatternsError(null);
+      })
+      .catch((error) => {
+        setPatterns(null);
+        setPatternsError(accountDataErrorMessage(error, "Trade pattern review is temporarily unavailable."));
+      })
+      .finally(() => setPatternsLoading(false));
   }, [tab, patterns]);
 
   useEffect(() => {
@@ -439,13 +459,14 @@ export default function JournalPage() {
       </div>
 
       {/* ── Analytics tab ── */}
-      {tab === "analytics" && <JournalAnalyticsTab analytics={analytics} />}
+      {tab === "analytics" && <JournalAnalyticsTab analytics={analytics} analyticsError={analyticsError} />}
 
       {/* ── Trade review tab ── */}
       {tab === "ai" && (
         <JournalAiInsights
           patterns={patterns}
           patternsLoading={patternsLoading}
+          patternsError={patternsError}
           aiAnalysis={aiAnalysis}
           aiTradesCount={aiTradesCount}
           aiLoading={aiLoading}

@@ -6,6 +6,7 @@ import type { AiPatterns } from "./types";
 interface JournalAiInsightsProps {
   patterns: AiPatterns | null;
   patternsLoading: boolean;
+  patternsError?: string | null;
   aiAnalysis: string | null;
   aiTradesCount: number;
   aiLoading: boolean;
@@ -41,6 +42,7 @@ function renderReviewLine(line: string, key: number, bullet = false) {
 export function JournalAiInsights({
   patterns,
   patternsLoading,
+  patternsError,
   aiAnalysis,
   aiTradesCount,
   aiLoading,
@@ -104,6 +106,11 @@ export function JournalAiInsights({
         {patternsLoading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[1, 2, 3].map(i => <div key={i} style={{ height: 40, borderRadius: "var(--radius-md)", background: "var(--surface-3)" }} />)}
+          </div>
+        ) : patternsError ? (
+          <div data-testid="journal-patterns-unavailable" style={{ textAlign: "center", padding: "24px 0", fontSize: 12, color: "var(--warn)", lineHeight: 1.6 }}>
+            {patternsError}
+            <span style={{ display: "block", marginTop: 4 }}>Pattern stats are paused; closed trades are not being counted as insufficient.</span>
           </div>
         ) : !patterns?.ready ? (
           <div style={{ textAlign: "center", padding: "24px 0", fontSize: 12, color: "var(--text-tertiary)" }}>
