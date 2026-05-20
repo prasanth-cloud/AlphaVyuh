@@ -351,6 +351,22 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
     secrets: requiredSecrets,
     railwayReady: true,
     vercelEnv: {
+      NEXT_PUBLIC_API_URL: "same-origin",
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout } = await runPreflight(apiUrl, fakeBin);
+  assert.notEqual(code, 0, "preflight should still fail until the same-origin API smoke passes");
+  assert.match(stdout, /Frontend uses same-origin recovery API/);
+  assert.doesNotMatch(stdout, /NEXT_PUBLIC_API_URL does not match the recovery API URL/);
+});
+
+await withServer(serveRailwayFallback, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: requiredSecrets,
+    railwayReady: true,
+    vercelEnv: {
       NEXT_PUBLIC_API_URL: "https://old-backend.example.com",
       NEXT_PUBLIC_DATA_MODE: "live",
       NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",

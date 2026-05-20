@@ -188,6 +188,7 @@ async function checkVercelProductionEnv() {
 
     const values = parseEnvText(fs.readFileSync(envPath, "utf8"));
     const frontendApiUrl = normalizeUrl(values.NEXT_PUBLIC_API_URL || "");
+    const frontendUsesSameOriginApi = ["same-origin", "self", "."].includes(frontendApiUrl.toLowerCase());
     const dataMode = values.NEXT_PUBLIC_DATA_MODE || "unset";
     const mockFallback = String(values.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK || "").toLowerCase();
 
@@ -201,7 +202,7 @@ async function checkVercelProductionEnv() {
       return false;
     }
 
-    if (frontendApiUrl !== apiUrl) {
+    if (!frontendUsesSameOriginApi && frontendApiUrl !== apiUrl) {
       addResult(
         "fail",
         "Vercel production env",
@@ -224,7 +225,9 @@ async function checkVercelProductionEnv() {
     addResult(
       "pass",
       "Vercel production env",
-      `Frontend points at the recovery API URL; data mode is ${dataMode}; mock fallback is ${values.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK || "unset"}.`,
+      frontendUsesSameOriginApi
+        ? `Frontend uses same-origin recovery API; preflight target is ${apiUrl}; data mode is ${dataMode}; mock fallback is ${values.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK || "unset"}.`
+        : `Frontend points at the recovery API URL; data mode is ${dataMode}; mock fallback is ${values.NEXT_PUBLIC_ALLOW_MOCK_FALLBACK || "unset"}.`,
     );
     return true;
   } catch (error) {
