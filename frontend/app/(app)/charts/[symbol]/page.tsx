@@ -328,6 +328,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [compareInput, setCompareInput] = useState("");
   const [showCompareInput, setShowCompareInput] = useState(false);
   const [compareData, setCompareData] = useState<CandlesResponse | null>(null);
+  const [compareError, setCompareError] = useState<string | null>(null);
+  const [compareRetryNonce, setCompareRetryNonce] = useState(0);
 
   // Price alerts
   const [showAlertModal, setShowAlertModal] = useState(false);
@@ -542,15 +544,37 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   // Load compare symbol data
   useEffect(() => {
-    if (!compareSymbol) { setCompareData(null); return; }
+    if (!compareSymbol) {
+      setCompareData(null);
+      setCompareError(null);
+      return;
+    }
+    let cancelled = false;
+    const activeCompareSymbol = compareSymbol.trim().toUpperCase();
     const request = getWatchlistChartRequest(rangeLabel);
+    setCompareError(null);
     getCandles(compareSymbol, {
       limit: request.limit,
       timeframe: request.timeframe,
       from_date: request.from_date,
       to_date: request.to_date,
-    }).then(setCompareData).catch(() => setCompareData(null));
-  }, [compareSymbol, rangeLabel]);
+    })
+      .then((nextData) => {
+        if (cancelled) return;
+        setCompareData(nextData);
+        setCompareError(null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCompareData(null);
+        setCompareError(error instanceof Error && error.message.trim()
+          ? error.message
+          : `Compare data for ${activeCompareSymbol} is temporarily unavailable.`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [compareRetryNonce, compareSymbol, rangeLabel]);
 
   // Load chart data
   useEffect(() => {
@@ -1827,6 +1851,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     indicatorError ? "Indicators unavailable" : null,
+    compareError ? "Compare unavailable" : null,
     sourceQueueError ? "Watchlists unavailable" : null,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
@@ -2016,6 +2041,26 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <button
             type="button"
             onClick={() => loadSourceQueue(true)}
+            className="rounded-full px-3 py-1 text-[11px] font-semibold transition-colors"
+            style={{ border: "1px solid rgba(217,119,6,0.35)", color: "var(--warn)", background: "rgba(217,119,6,0.08)" }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {compareError && compareSymbol && (
+        <div
+          data-testid="chart-compare-unavailable"
+          className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-[11px] flex-shrink-0"
+          style={{ background: "rgba(217,119,6,0.08)", borderBottom: "1px solid rgba(217,119,6,0.2)", color: "var(--warn)" }}
+        >
+          <span>
+            <strong>Compare unavailable for {compareSymbol}.</strong> {compareError} The base chart, drawings, alerts, and order planning remain usable.
+          </span>
+          <button
+            type="button"
+            onClick={() => setCompareRetryNonce((current) => current + 1)}
             className="rounded-full px-3 py-1 text-[11px] font-semibold transition-colors"
             style={{ border: "1px solid rgba(217,119,6,0.35)", color: "var(--warn)", background: "rgba(217,119,6,0.08)" }}
           >
@@ -2256,6 +2301,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   onKeyDown={e => {
                     if (e.key === "Enter" && compareInput.trim()) {
                       setCompareSymbol(compareInput.trim());
+                      setCompareError(null);
                       setShowCompareInput(false);
                     }
                     if (e.key === "Escape") { setShowCompareInput(false); setCompareInput(""); }
@@ -2270,9 +2316,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               </div>
             ) : compareSymbol ? (
               <div className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-[4px] font-semibold"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)", color: "var(--app-teal)" }}>
-                vs {compareSymbol}
-                <button onClick={() => { setCompareSymbol(""); setCompareData(null); }} className="ml-0.5 hover:text-[#e5383b] transition-colors">×</button>
+                style={compareError
+                  ? { background: "rgba(217,119,6,0.10)", border: "1px solid rgba(217,119,6,0.24)", color: "var(--warn)" }
+                  : { background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)", color: "var(--app-teal)" }}>
+                {compareError ? `Compare unavailable · ${compareSymbol}` : `vs ${compareSymbol}`}
+                <button onClick={() => { setCompareSymbol(""); setCompareData(null); setCompareError(null); }} className="ml-0.5 hover:text-[#e5383b] transition-colors">×</button>
               </div>
             ) : (
               <button
@@ -3090,8 +3138,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               </div>
               {compareSymbol && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: "rgba(245,158,11,0.12)", color: "#fbbf24" }}>
-                  Compared with {compareSymbol}
+                  style={compareError
+                    ? { background: "rgba(217,119,6,0.12)", color: "var(--warn)" }
+                    : { background: "rgba(245,158,11,0.12)", color: "#fbbf24" }}>
+                  {compareError ? `Compare unavailable: ${compareSymbol}` : `Compared with ${compareSymbol}`}
                 </div>
               )}
               {activeToolMeta && (
