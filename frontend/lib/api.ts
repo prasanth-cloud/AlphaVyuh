@@ -3017,18 +3017,18 @@ export type PortfolioResponse = {
 export async function getPortfolio(): Promise<PortfolioResponse> {
   if (shouldUseMockFallback()) return mockPortfolio();
   return cachedClientRequest("portfolio", 20_000, async () => {
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`${API}/api/v1/journal/portfolio`, { headers });
-      if (!res.ok) {
-        if (shouldUseMockFallback()) return mockPortfolio();
-        throw new Error("Failed to load portfolio");
-      }
-      return res.json();
-    } catch (error) {
-      if (shouldUseMockFallback()) return mockPortfolio();
-      throw error;
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/journal/portfolio`, { headers });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Portfolio is temporarily unavailable (${res.status}).`));
     }
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Portfolio is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    if (!Array.isArray(data.positions) || !data.summary || !Array.isArray(data.sectors)) {
+      throw new Error("Portfolio is temporarily unavailable.");
+    }
+    return data;
   });
 }
 
