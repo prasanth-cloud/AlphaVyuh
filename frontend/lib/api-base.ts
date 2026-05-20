@@ -21,6 +21,8 @@ export function normalizeApiBaseUrl(raw?: string | null, fallback = DEFAULT_LOCA
     .replace(/\\+$/g, "")
     .replace(/\/+$/, "");
 
+  if (["same-origin", "self", "."].includes(cleaned.toLowerCase())) return "";
+
   return cleaned || fallback;
 }
 
