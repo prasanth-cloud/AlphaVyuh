@@ -787,6 +787,11 @@ function ChartPanel({
               {chartRangeNote ? ` · ${chartRangeNote}` : ""}
             </div>
           )}
+          {(chartWorkspace.error || chartWorkspace.saveError) && (
+            <div data-testid="watchlist-chart-workspace-status" className="caption" style={{ marginTop: 3, color: "var(--warn)" }}>
+              {chartWorkspace.saveError ?? chartWorkspace.error}
+            </div>
+          )}
         </div>
         <div className="watchlist-chart-controls">
           <button onClick={() => onStepSymbol("prev")} className="workspace-chip-button">

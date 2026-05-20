@@ -1382,7 +1382,11 @@ export async function getChartWorkspace(symbol: string, timeframe = "D"): Promis
   }
 }
 
-export async function saveChartWorkspace(symbol: string, workspace: Omit<ChartWorkspace, "symbol">): Promise<ChartWorkspace> {
+export async function saveChartWorkspace(
+  symbol: string,
+  workspace: Omit<ChartWorkspace, "symbol">,
+  options: { throwOnFailure?: boolean } = {},
+): Promise<ChartWorkspace> {
   const normalized = symbol.toUpperCase();
   const local = cacheChartWorkspace(normalized, workspace);
   if (shouldUseMockFallback()) {
@@ -1398,14 +1402,23 @@ export async function saveChartWorkspace(symbol: string, workspace: Omit<ChartWo
       headers,
       body: JSON.stringify({ ...workspace, timeframe: local.timeframe }),
     });
-    if (!res.ok) return local;
+    if (!res.ok) {
+      if (options.throwOnFailure) {
+        throw new Error(await responseErrorMessage(res, "Chart workspace changes were saved locally but could not sync."));
+      }
+      return local;
+    }
     const remote: ChartWorkspace = await res.json();
     return cacheChartWorkspace(normalized, {
       timeframe: remote.timeframe || local.timeframe,
       indicators: remote.indicators ?? local.indicators,
       drawings: remote.drawings ?? local.drawings,
     });
-  } catch {
+  } catch (error) {
+    if (options.throwOnFailure) {
+      if (error instanceof Error) throw error;
+      throw new Error("Chart workspace changes were saved locally but could not sync.");
+    }
     return local;
   }
 }

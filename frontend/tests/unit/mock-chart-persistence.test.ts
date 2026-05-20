@@ -107,6 +107,44 @@ describe("mock chart persistence", () => {
     });
   });
 
+  it("can reject live chart workspace save failures while keeping the local cache", async () => {
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+    installLocalStorage();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Chart workspace sync is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getChartWorkspace, saveChartWorkspace } = await import("@/lib/api");
+
+    await expect(saveChartWorkspace("reliance", {
+      timeframe: "D",
+      indicators: [{ type: "ema", params: { period: 20 } }],
+      drawings: [
+        {
+          id: "rr-1",
+          kind: "hline",
+          price: 2840,
+          color: "#2dd4bf",
+          width: 2,
+          label: "Entry",
+        },
+      ],
+    }, { throwOnFailure: true })).rejects.toThrow("Chart workspace sync is temporarily unavailable.");
+
+    await expect(getChartWorkspace("RELIANCE", "D")).resolves.toMatchObject({
+      symbol: "RELIANCE",
+      timeframe: "D",
+      indicators: [{ type: "ema", params: { period: 20 } }],
+      drawings: [{ id: "rr-1", kind: "hline", price: 2840 }],
+    });
+  });
+
   it("surfaces live chart drawing outages instead of returning an empty list", async () => {
     vi.resetModules();
     vi.unstubAllEnvs();
