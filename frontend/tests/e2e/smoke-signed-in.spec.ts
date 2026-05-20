@@ -5,6 +5,7 @@ const ACCESS_URL = process.env.PLAYWRIGHT_ACCESS_URL;
 const EXPECT_REAL_DATA = process.env.PLAYWRIGHT_EXPECT_REAL_DATA === "true";
 const SMOKE_SYMBOL = process.env.PLAYWRIGHT_SMOKE_SYMBOL ?? "RELIANCE";
 const { email: EMAIL, password: PASSWORD } = qaCredentials({ requireExplicit: EXPECT_REAL_DATA });
+const READ_ONLY_REAL_DATA_SMOKE = EXPECT_REAL_DATA;
 const REAL_DATA_FORBIDDEN_COPY = /Demo data|mock fixtures|sample data|AlphaVyuh mock fixtures/i;
 const REAL_DATA_CONTEXT_COPY = /Latest session|EOD|Market|Trade date|coverage|as of|Data status/i;
 
@@ -69,6 +70,9 @@ test.describe("Signed-in smoke flow", () => {
       .toBeTruthy();
 
     if (await page.getByText("No watchlists yet.").isVisible().catch(() => false)) {
+      if (READ_ONLY_REAL_DATA_SMOKE) {
+        throw new Error("Production signed-in smoke is read-only and requires a seeded QA watchlist.");
+      }
       await page.locator("aside button").first().click();
       await page.getByPlaceholder("List name…").fill("QA Primary");
       await page.getByRole("button", { name: "Add" }).click();
@@ -84,6 +88,9 @@ test.describe("Signed-in smoke flow", () => {
 
     const rows = page.locator("tbody tr");
     if ((await rows.count()) === 0) {
+      if (READ_ONLY_REAL_DATA_SMOKE) {
+        throw new Error("Production signed-in smoke is read-only and requires at least one seeded watchlist symbol.");
+      }
       await symbolInput.fill(SMOKE_SYMBOL);
       await page.getByRole("button", { name: /^Add$/i }).click();
       await expect(page.getByText(/Added|Already/i)).toBeVisible({ timeout: 15000 });
