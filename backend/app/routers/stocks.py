@@ -298,8 +298,14 @@ async def list_markets():
 @router.get("/market/sectors")
 async def list_sectors():
     """Returns distinct sector names that have at least 3 stocks."""
-    client = get_admin_client()
-    res = client.table("stock_universe").select("sector").not_.is_("sector", "null").eq("is_active", True).execute()
+    try:
+        client = get_admin_client()
+        res = client.table("stock_universe").select("sector").not_.is_("sector", "null").eq("is_active", True).execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sector list is temporarily unavailable.",
+        )
     from collections import Counter
     counts = Counter(r["sector"] for r in (res.data or []) if r.get("sector"))
     sectors = sorted(s for s, c in counts.items() if c >= 3)

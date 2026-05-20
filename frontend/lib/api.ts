@@ -1281,9 +1281,16 @@ export async function getSectorBreadth(): Promise<{ trade_date: string | null; s
 export async function getSectors(): Promise<string[]> {
   if (shouldUseMockFallback()) return mockSectorBreadth().sectors.map((s) => s.sector);
   const res = await fetch(`${API}/api/v1/market/sectors`, { headers: publicHeaders });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Sector list is temporarily unavailable (${res.status}).`));
+  }
   const data = await res.json();
-  return data.sectors ?? [];
+  const unavailableMessage = unavailablePayloadMessage(data, "Sector list is temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (!Array.isArray(data?.sectors)) {
+    throw new Error("Sector list is temporarily unavailable.");
+  }
+  return data.sectors;
 }
 
 export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
