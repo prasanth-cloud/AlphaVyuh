@@ -332,6 +332,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Price alerts
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
+  const [priceAlertsError, setPriceAlertsError] = useState<string | null>(null);
   const [alertCondition, setAlertCondition] = useState<"above" | "below">("above");
   const [alertPrice, setAlertPrice] = useState("");
   const [alertNote, setAlertNote] = useState("");
@@ -353,6 +354,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const dataRef = useRef<CandlesResponse | null>(null);
   const lastBaseChartKeyRef = useRef<string | null>(null);
   const loadedDrawingsKeyRef = useRef<string | null>(null);
+  const loadedPriceAlertsSymbolRef = useRef<string | null>(null);
 
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
@@ -666,7 +668,19 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setBrokerConnected(false);
         setBrokerStatusError(accountDataErrorMessage(error, "Broker status is temporarily unavailable. Existing broker access is not being treated as disconnected."));
       });
-    getPriceAlerts().then(alerts => setPriceAlerts(alerts.filter(a => a.symbol === symbol && a.is_active))).catch(() => {});
+    const requestSymbol = symbol.toUpperCase();
+    setPriceAlertsError(null);
+    getPriceAlerts()
+      .then(alerts => {
+        loadedPriceAlertsSymbolRef.current = requestSymbol;
+        setPriceAlerts(alerts.filter(a => a.symbol.toUpperCase() === requestSymbol && a.is_active));
+      })
+      .catch((error) => {
+        if (loadedPriceAlertsSymbolRef.current !== requestSymbol) {
+          setPriceAlerts([]);
+        }
+        setPriceAlertsError(error instanceof Error ? error.message : "Price alerts are temporarily unavailable.");
+      });
   }, [symbol]);
 
   useEffect(() => {
@@ -923,6 +937,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     try {
       const created = await createPriceAlert({ symbol, condition: alertCondition, target_price: price, note: alertNote || undefined });
       setPriceAlerts(prev => [created, ...prev]);
+      setPriceAlertsError(null);
       setAlertMsg("Alert set!");
       setAlertPrice("");
       setAlertNote("");
@@ -949,6 +964,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         note,
       });
       setPriceAlerts(prev => [created, ...prev]);
+      setPriceAlertsError(null);
       setQuickAlertMsg(`Alert set ${condition} ${fmtPrice(target, symbolCurrency)}`);
     } catch (e: unknown) {
       setQuickAlertMsg(e instanceof Error ? e.message : "Alert failed");
@@ -978,8 +994,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }
 
   async function handleDeleteAlert(id: string) {
-    await deletePriceAlert(id).catch(() => {});
-    setPriceAlerts(prev => prev.filter(a => a.id !== id));
+    try {
+      await deletePriceAlert(id);
+      setPriceAlerts(prev => prev.filter(a => a.id !== id));
+      setPriceAlertsError(null);
+    } catch (error) {
+      setAlertMsg(error instanceof Error ? error.message : "Price alerts are temporarily unavailable.");
+    }
   }
 
   async function handlePickWl(wlId: string) {
@@ -1752,6 +1773,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
+    priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
   ].filter(Boolean) as string[];
 
@@ -1841,6 +1863,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             </div>
 
             {/* Existing alerts */}
+            {priceAlertsError && (
+              <div className="mb-4 rounded-[7px] px-3 py-2 text-[12px] leading-relaxed"
+                style={{ background: "rgba(217,119,6,0.08)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.22)" }}>
+                {priceAlertsError}
+              </div>
+            )}
             {priceAlerts.length > 0 && (
               <div className="mb-4 space-y-1.5">
                 <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--app-text3)" }}>Active alerts</div>
@@ -2198,10 +2226,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <button
             onClick={() => { setShowAlertModal(m => !m); setAlertMsg(""); }}
             className="workspace-chip-button relative flex items-center gap-1"
-            style={priceAlerts.length > 0
+            style={priceAlertsError
+              ? { background: "rgba(217,119,6,0.08)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.22)" }
+              : priceAlerts.length > 0
               ? { background: "rgba(217,119,6,0.10)", color: "#d97706", border: "1px solid rgba(217,119,6,0.22)" }
               : undefined}
-            title="Price alerts"
+            title={priceAlertsError ?? "Price alerts"}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>

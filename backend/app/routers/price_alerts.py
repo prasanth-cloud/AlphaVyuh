@@ -39,18 +39,28 @@ def _get_user_plan(user_id: str) -> str:
     return get_effective_user_plan(sb, user_id)
 
 
+def _price_alerts_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Price alerts are temporarily unavailable.",
+    )
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("")
 async def list_price_alerts(user_id: str = Depends(get_current_user_id)):
-    sb = get_admin_client()
-    res = (
-        sb.table("price_alerts")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("created_at", desc=True)
-        .execute()
-    )
+    try:
+        sb = get_admin_client()
+        res = (
+            sb.table("price_alerts")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except Exception:
+        raise _price_alerts_unavailable()
     return {"alerts": res.data or []}
 
 
@@ -64,16 +74,19 @@ async def create_price_alert(
     if body.target_price <= 0:
         raise HTTPException(status_code=400, detail="target_price must be positive")
 
-    sb = get_admin_client()
-    plan  = _get_user_plan(user_id)
-    limit = FREE_LIMIT if plan == "free" else PRO_LIMIT
-    count = (
-        sb.table("price_alerts")
-        .select("id", count="exact")
-        .eq("user_id", user_id)
-        .eq("is_active", True)
-        .execute()
-    )
+    try:
+        sb = get_admin_client()
+        plan  = _get_user_plan(user_id)
+        limit = FREE_LIMIT if plan == "free" else PRO_LIMIT
+        count = (
+            sb.table("price_alerts")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .eq("is_active", True)
+            .execute()
+        )
+    except Exception:
+        raise _price_alerts_unavailable()
     if (count.count or 0) >= limit:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -88,7 +101,12 @@ async def create_price_alert(
         "note":         body.note,
         "is_active":    True,
     }
-    res = sb.table("price_alerts").insert(row).execute()
+    try:
+        res = sb.table("price_alerts").insert(row).execute()
+    except Exception:
+        raise _price_alerts_unavailable()
+    if not res.data:
+        raise _price_alerts_unavailable()
     return res.data[0]
 
 
@@ -97,8 +115,11 @@ async def delete_price_alert(
     alert_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    sb = get_admin_client()
-    sb.table("price_alerts").delete().eq("id", alert_id).eq("user_id", user_id).execute()
+    try:
+        sb = get_admin_client()
+        sb.table("price_alerts").delete().eq("id", alert_id).eq("user_id", user_id).execute()
+    except Exception:
+        raise _price_alerts_unavailable()
 
 
 # ── Background job (called from APScheduler every 5 minutes) ─────────────────
