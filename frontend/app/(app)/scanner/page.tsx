@@ -840,18 +840,36 @@ export default function ScannerPage() {
   async function createWatchlistFromResults() {
     if (!newWlName.trim()) return
     try {
+      setError('')
       const wl = await createWatchlist(newWlName.trim())
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
-      const symbols = toAdd.slice(0, 50).map((s) => s.symbol)
-      await Promise.all(symbols.map((symbol) => addSymbolToWatchlist(wl.id, symbol).catch(() => {})))
-      await bulkUpsertWorkflowStates(scannerWatchlistPatches(toAdd.slice(0, 50), wl.id, scanContextOptions()))
+      const rowsToAdd = toAdd.slice(0, 50)
+      const addedRows: ScanResult[] = []
+      const failures: string[] = []
+      for (const row of rowsToAdd) {
+        try {
+          await addSymbolToWatchlist(wl.id, row.symbol)
+          addedRows.push(row)
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : `${row.symbol} could not be added.`)
+        }
+      }
+      if (addedRows.length > 0) {
+        await bulkUpsertWorkflowStates(scannerWatchlistPatches(addedRows, wl.id, scanContextOptions()))
+      }
+      if (failures.length) {
+        throw new Error(`${failures.length}/${rowsToAdd.length} symbols could not be added to "${wl.name}". ${failures[0]}`)
+      }
+      const symbols = addedRows.map((row) => row.symbol)
       trackEvent('add_to_watchlist', { source: 'scanner_bulk_create', count: symbols.length, watchlist_id: wl.id })
       setShowWlModal(false); setNewWlName('')
       showToast(`"${wl.name}" created`)
       const focusParam = symbols[0] ? `&symbol=${encodeURIComponent(symbols[0])}` : ""
       router.push(`/watchlist?id=${wl.id}${focusParam}`)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Watchlist creation failed')
+      const message = e instanceof Error ? e.message : 'Watchlist creation failed'
+      setError(message)
+      showToast(message)
     }
   }
 
