@@ -505,7 +505,24 @@ test.describe("Mock workflow smoke", () => {
     });
     page.on("pageerror", (error) => errors.push(error.message));
 
-    await page.goto("/charts/AUBANK?full=1");
+    await page.addInitScript(() => {
+      const baseItem = {
+        symbol: "AUBANK",
+        sort_order: 0,
+        added_at: "2026-05-20T00:00:00.000Z",
+        company_name: "AU Small Finance Bank",
+        sector: "Banks",
+        pinned: false,
+        tags: [],
+        note: "",
+      };
+      localStorage.setItem("alphavyuh-mock-watchlists-v1", JSON.stringify([
+        { id: "desk-primary", name: "Primary queue", sort_order: 0, created_at: "2026-05-20T00:00:00.000Z", items: [baseItem] },
+        { id: "desk-secondary", name: "Rotation queue", sort_order: 1, created_at: "2026-05-20T00:00:00.000Z", items: [{ ...baseItem, note: "Source queue for chart handoff" }] },
+      ]));
+    });
+
+    await page.goto("/charts/AUBANK?from=watchlist&watchlistId=desk-secondary&watchlist=Rotation%20queue&full=1");
     const overlay = page.getByTestId("chart-drawing-overlay");
     await expect(overlay).toBeVisible({ timeout: 20_000 });
 
@@ -528,7 +545,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByText(/R:R/i)).toBeVisible();
     await page.getByRole("button", { name: /^Send plan$/i }).click();
 
-    await expect(page).toHaveURL(/\/watchlist\?symbol=AUBANK&planDraft=chart/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/watchlist\?symbol=AUBANK&id=desk-secondary&planDraft=chart/, { timeout: 15_000 });
     await expect(page.getByText(/Chart plan context loaded into Decision Desk/i)).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".workspace-pill").filter({ hasText: "Focus: AUBANK" }).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByPlaceholder("Thesis")).toHaveValue(/Chart plan:/, { timeout: 15_000 });
@@ -541,6 +558,7 @@ test.describe("Mock workflow smoke", () => {
     });
     expect(workflow).toMatchObject({
       symbol: "AUBANK",
+      watchlist_id: "desk-secondary",
       source: "chart",
       lifecycle: "watch",
       setup_type: "breakout",

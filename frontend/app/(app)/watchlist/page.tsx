@@ -1336,34 +1336,42 @@ function WatchlistContent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (planDraftParam !== "chart" || !chartSymbol || appliedChartDrafts.current.has(chartSymbol)) return;
-    const key = `alphavyuh-chart-plan-draft:${chartSymbol}`;
+    const draftSymbol = symbolParam?.toUpperCase() ?? chartSymbol;
+    if (planDraftParam !== "chart" || !draftSymbol) return;
+    if (watchlistIdParam && watchlists.length === 0) return;
+    const matchedRouteWatchlistId = watchlistIdParam && watchlists.some((watchlist) => watchlist.id === watchlistIdParam)
+      ? watchlistIdParam
+      : null;
+    const targetWatchlistId = matchedRouteWatchlistId ?? activeId;
+    const appliedKey = `${targetWatchlistId ?? "active"}:${draftSymbol}`;
+    if (appliedChartDrafts.current.has(appliedKey)) return;
+    const key = `alphavyuh-chart-plan-draft:${draftSymbol}`;
     const raw = window.localStorage.getItem(key);
     if (!raw) return;
     try {
-      const draft = parseChartPlanDraft(raw, chartSymbol);
+      const draft = parseChartPlanDraft(raw, draftSymbol);
       if (!draft) {
         window.localStorage.removeItem(key);
         showToast("Could not load chart plan draft");
         return;
       }
-      const patch = buildWorkflowPatchFromChartDraft(draft, activeId);
-      appliedChartDrafts.current.add(chartSymbol);
+      const patch = buildWorkflowPatchFromChartDraft(draft, targetWatchlistId);
+      appliedChartDrafts.current.add(appliedKey);
       window.localStorage.removeItem(key);
       setWorkflowBySymbol((prev) => ({
         ...prev,
-        [chartSymbol]: {
-          ...(prev[chartSymbol] ?? { symbol: chartSymbol, lifecycle: "idea" as WorkflowLifecycle }),
+        [draftSymbol]: {
+          ...(prev[draftSymbol] ?? { symbol: draftSymbol, lifecycle: "idea" as WorkflowLifecycle }),
           ...patch,
         },
       }));
       void upsertWorkflowState(patch);
-      trackEvent("chart_plan_draft_applied", { symbol: chartSymbol, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
+      trackEvent("chart_plan_draft_applied", { symbol: draftSymbol, watchlist_id: targetWatchlistId, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
       showToast("Chart plan context loaded into Decision Desk");
     } catch {
       showToast("Could not load chart plan draft");
     }
-  }, [activeId, chartSymbol, planDraftParam]);
+  }, [activeId, chartSymbol, planDraftParam, symbolParam, watchlistIdParam, watchlists]);
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
   const chartHref = useCallback((symbol: string, draw?: "trendline") => {
