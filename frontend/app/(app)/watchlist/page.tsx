@@ -1163,6 +1163,7 @@ function WatchlistContent() {
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
   const appliedChartDrafts = useRef<Set<string>>(new Set());
   const pendingRouteSymbolRef = useRef<string | null>(null);
+  const routeAutoAddAttempts = useRef<Set<string>>(new Set());
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -1358,6 +1359,12 @@ function WatchlistContent() {
       }
     }
     if (!found && activeId) {
+      const attemptKey = `${activeId}:${requestedSymbol}`;
+      if (routeAutoAddAttempts.current.has(attemptKey)) {
+        if (planDraftParam !== "chart") router.replace("/watchlist", { scroll: false });
+        return;
+      }
+      routeAutoAddAttempts.current.add(attemptKey);
       addToWatchlist(activeId, requestedSymbol)
         .then(() => getQuote(requestedSymbol))
         .then(quote => {
@@ -1368,7 +1375,12 @@ function WatchlistContent() {
           setChartSymbol(requestedSymbol);
           trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         })
-        .catch(() => {});
+        .catch((error) => {
+          setChartSymbol(requestedSymbol);
+          const detail = error instanceof Error ? error.message : "Watchlist add is temporarily unavailable.";
+          showToast(`${requestedSymbol} could not be added to the active watchlist. ${detail}`);
+          trackEvent("watchlist_symbol_focus_failed", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
+        });
     }
     if (planDraftParam !== "chart") router.replace("/watchlist", { scroll: false });
   }, [planDraftParam, symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
