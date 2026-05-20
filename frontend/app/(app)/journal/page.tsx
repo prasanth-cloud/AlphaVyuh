@@ -19,6 +19,7 @@ import { JournalAiInsights } from "./components/JournalAiInsights";
 import type { PanelMode, Tab } from "./components/types";
 import { useWorkflowState } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
+import { accountDataErrorMessage } from "@/lib/account-data-status";
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
@@ -36,6 +37,7 @@ export default function JournalPage() {
   const [brokerConnected, setBrokerConnected] = useState(false);
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [brokerStatusLabel, setBrokerStatusLabel] = useState<string | null>(null);
+  const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
   const [brokerCanImport, setBrokerCanImport] = useState(false);
   const [brokerLastSyncedAt, setBrokerLastSyncedAt] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -43,6 +45,8 @@ export default function JournalPage() {
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
+  const [journalStatsError, setJournalStatsError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"all" | "open" | "closed">("all");
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
@@ -69,14 +73,31 @@ export default function JournalPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const params = filterStatus === "all" ? {} : { status: filterStatus };
-      const [e, s] = await Promise.all([getJournalEntries(params), getJournalStats()]);
-      setEntries(e.entries);
-      setJournalPlan(e.plan ?? null);
-      setStats(s);
+    const params = filterStatus === "all" ? {} : { status: filterStatus };
+    const [entriesResult, statsResult] = await Promise.allSettled([
+      getJournalEntries(params),
+      getJournalStats(),
+    ]);
+
+    if (entriesResult.status === "fulfilled") {
+      setEntries(entriesResult.value.entries);
+      setJournalPlan(entriesResult.value.plan ?? null);
+      setJournalLoadError(null);
       getJournalAnalytics().then(setAnalytics).catch(() => {});
-    } catch { /* ignore */ } finally { setLoading(false); }
+    } else {
+      setJournalLoadError(accountDataErrorMessage(entriesResult.reason, "Journal entries are temporarily unavailable. Your trades were not loaded."));
+      setAnalytics(null);
+    }
+
+    if (statsResult.status === "fulfilled") {
+      setStats(statsResult.value);
+      setJournalStatsError(null);
+    } else {
+      setStats(null);
+      setJournalStatsError(accountDataErrorMessage(statsResult.reason, "Journal stats are temporarily unavailable. Trade rows may still be current."));
+    }
+
+    setLoading(false);
   }, [filterStatus]);
 
   useEffect(() => { load(); }, [load]);
@@ -103,7 +124,14 @@ export default function JournalPage() {
       setBrokerStatusLabel(s.status_label ?? null);
       setBrokerCanImport(Boolean(s.can_import));
       setBrokerLastSyncedAt(s.last_synced_at ?? null);
-    }).catch(() => {});
+      setBrokerStatusError(null);
+    }).catch((error) => {
+      setBrokerConnected(false);
+      setBrokerName(null);
+      setBrokerStatusLabel(null);
+      setBrokerCanImport(false);
+      setBrokerStatusError(accountDataErrorMessage(error, "Broker import status is temporarily unavailable. Reconnect or retry before importing."));
+    });
   }, []);
 
   useEffect(() => { refreshBrokerStatus(); }, [refreshBrokerStatus]);
@@ -147,7 +175,8 @@ export default function JournalPage() {
       })()
     : null;
 
-  const closedTrades = stats?.total_trades ?? 0;
+  const closedTradesFromRows = entries.filter(entry => entry.status === "closed").length;
+  const closedTrades = stats?.total_trades ?? (journalLoadError ? 0 : closedTradesFromRows);
   const reviewedTrades = entries.filter(entry => entry.status === "closed" && Boolean(entry.lessons?.trim())).length;
   const reviewReady = closedTrades >= 3;
   const visibleEntries = useMemo(() => (
@@ -286,6 +315,7 @@ export default function JournalPage() {
         brokerConnected={brokerConnected}
         brokerName={brokerName}
         brokerStatusLabel={brokerStatusLabel}
+        brokerUnavailableMessage={brokerStatusError}
         canImport={brokerCanImport}
         lastSyncedAt={brokerLastSyncedAt}
         importing={importing}
@@ -296,6 +326,31 @@ export default function JournalPage() {
         onAddTrade={openAddPanel}
       />
 
+      {(journalLoadError || journalStatsError || brokerStatusError) && (
+        <div
+          className="workspace-card"
+          data-testid="journal-account-data-status"
+          style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderColor: "rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}
+        >
+          <div style={{ minWidth: 240, flex: "1 1 520px" }}>
+            <EyebrowLabel>Account data status</EyebrowLabel>
+            <div className="mt-1 text-[13px] leading-relaxed" style={{ color: "var(--warn)" }}>
+              {journalLoadError ?? journalStatsError ?? brokerStatusError}
+            </div>
+            <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+              Existing journal entries, stats, and broker import state are not being treated as empty while services are unavailable.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { void load(); refreshBrokerStatus(); }}
+            className="workspace-chip-button"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div
         className="workspace-card"
         data-testid="journal-review-queue"
@@ -304,7 +359,9 @@ export default function JournalPage() {
         <div style={{ minWidth: 240, flex: "1 1 320px" }}>
           <EyebrowLabel>Review and improvement</EyebrowLabel>
           <div className="mt-1 text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
-            {journalQueue.needsReview > 0
+            {journalLoadError
+              ? "Journal entries are temporarily unavailable"
+              : journalQueue.needsReview > 0
               ? <><Num>{journalQueue.needsReview}</Num> closed {journalQueue.needsReview === 1 ? "trade needs" : "trades need"} review</>
               : "No closed trades waiting for review"}
           </div>
@@ -353,8 +410,8 @@ export default function JournalPage() {
 
       {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-        <StatCard label="Total P&L" value={stats ? fmtCcy(stats.total_pnl) : "—"} deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"} />
-        <StatCard label="Win rate" value={stats ? `${stats.win_rate}%` : "—"} deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"} />
+        <StatCard label="Total P&L" value={stats ? fmtCcy(stats.total_pnl) : journalStatsError ? "Unavailable" : "—"} deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"} />
+        <StatCard label="Win rate" value={stats ? `${stats.win_rate}%` : journalStatsError ? "Unavailable" : "—"} deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"} />
         <StatCard label="Closed trades" value={String(stats?.total_trades ?? "—")} />
         <StatCard label="Open trades" value={String(stats?.open_trades ?? "—")} />
       </div>
@@ -413,6 +470,8 @@ export default function JournalPage() {
             onDeleteEntry={handleDelete}
             onAddTrade={openAddPanel}
             journalPlan={journalPlan}
+            unavailableMessage={journalLoadError}
+            onRetry={load}
           />
           <TradePanel
             mode={panelMode}
