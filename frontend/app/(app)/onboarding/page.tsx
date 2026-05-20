@@ -88,14 +88,23 @@ export default function OnboardingPage() {
         updates.broker_type = form.broker;
       }
 
-      await updateMe(updates as Parameters<typeof updateMe>[0]);
       if (seedStarterQueue) {
-        const starter = await createWatchlist("Starter setup queue").catch(() => null);
-        if (starter?.id) {
-          await Promise.all(STARTER_SYMBOLS.map((symbol) => addToWatchlist(starter.id, symbol).catch(() => null)));
-          destination = `/watchlist?id=${encodeURIComponent(starter.id)}&symbol=${encodeURIComponent(STARTER_SYMBOLS[0])}`;
+        const starter = await createWatchlist("Starter setup queue");
+        const failures: string[] = [];
+        for (const symbol of STARTER_SYMBOLS) {
+          try {
+            await addToWatchlist(starter.id, symbol);
+          } catch (error) {
+            failures.push(error instanceof Error ? error.message : `${symbol} could not be added.`);
+          }
         }
+        if (failures.length) {
+          throw new Error(`Starter queue could not be completed. ${failures[0]}`);
+        }
+        destination = `/watchlist?id=${encodeURIComponent(starter.id)}&symbol=${encodeURIComponent(STARTER_SYMBOLS[0])}`;
       }
+
+      await updateMe(updates as Parameters<typeof updateMe>[0]);
       trackEvent("onboarding_completed", { broker: form.broker || "unknown", starter_queue: seedStarterQueue });
       window.location.replace(destination);
     } catch (e: unknown) {
