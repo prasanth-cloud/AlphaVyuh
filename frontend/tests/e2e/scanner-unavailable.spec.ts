@@ -128,4 +128,64 @@ test.describe("Scanner unavailable payloads", () => {
     await page.getByTestId("scanner-watchlists-outage").getByRole("button", { name: /^Retry$/ }).click();
     await expect.poll(() => watchlistRequests).toBeGreaterThan(1);
   });
+
+  test("keeps a saved screen visible when delete fails", async ({ page }) => {
+    let deleteRequests = 0;
+    await page.route("**/api/v1/scanner/screens", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          screens: [{
+            id: "screen-vcp",
+            name: "VCP Rotation",
+            filters: { price_min: 100, rsi_min: 55 },
+            is_default: false,
+            created_at: "2026-05-20T09:00:00Z",
+          }],
+        }),
+      })
+    );
+    await page.route("**/api/v1/scanner/screens/screen-vcp", (route) => {
+      deleteRequests += 1;
+      return route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Saved scanner screen could not be deleted." }),
+      });
+    });
+    await page.route("**/api/v1/watchlists**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ watchlists: [] }),
+      })
+    );
+    await page.route("**/api/v1/scanner/run", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          trade_date: "2026-05-20",
+          total_matches: 0,
+          total_pages: 1,
+          page: 1,
+          is_limited: false,
+          mode: "eod",
+          source: "Exchange market data",
+          results: [],
+        }),
+      })
+    );
+
+    await page.goto("/scanner");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByRole("button", { name: "VCP Rotation", exact: true })).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("scanner-screen-delete-screen-vcp").click();
+
+    await expect(page.getByTestId("scanner-toast")).toContainText("Saved scanner screen could not be deleted.");
+    await expect(page.getByRole("button", { name: "VCP Rotation", exact: true })).toBeVisible();
+    expect(deleteRequests).toBe(1);
+  });
 });

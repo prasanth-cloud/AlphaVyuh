@@ -8,9 +8,11 @@ import {
   createAlert,
   createFeedbackReport,
   createWatchlist,
+  deleteScreen as deleteSavedScreen,
   getScreens as getCachedScreens,
   getWatchlists as getCachedWatchlists,
   isMockMode,
+  saveScreen as saveSavedScreen,
   type SavedScreen,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
@@ -514,7 +516,7 @@ export default function ScannerPage() {
   useEffect(() => {
     loadWatchlists()
     loadSavedScreens()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -749,41 +751,43 @@ export default function ScannerPage() {
   }
 
   async function saveCurrentScreen() {
-    if (!newScreenName.trim()) return
+    const screenName = newScreenName.trim()
+    if (!screenName) return
     if (isMockMode) {
       setSavedScreens(prev => [
         ...prev,
-        { id: `mock-${Date.now()}`, name: newScreenName.trim(), filters, is_default: false, created_at: new Date().toISOString() },
+        { id: `mock-${Date.now()}`, name: screenName, filters, is_default: false, created_at: new Date().toISOString() },
       ])
       setNewScreenName(''); setShowSaveModal(false)
       showToast('Screen saved in mock mode')
       return
     }
     try {
-      const headers = await getAuthHeaders()
       const payload = buildPayload(filters, sortBy, sortDesc)
-      const res = await fetch(`${API}/api/v1/scanner/screens`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ name: newScreenName.trim(), filters: payload.filters }),
-      })
-      if (!res.ok) { const e = await res.json(); throw new Error((e as { detail?: string }).detail || 'Save failed') }
+      await saveSavedScreen(screenName, payload.filters)
       setNewScreenName(''); setShowSaveModal(false)
       await loadSavedScreens()
-      showToast(`"${newScreenName}" saved`)
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Save failed') }
+      showToast(`"${screenName}" saved`)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Saved scanner screen could not be saved.'
+      setError(message)
+      showToast(message)
+    }
   }
 
-  async function deleteScreen(id: string, name: string) {
+  async function handleDeleteScreen(id: string, name: string) {
     if (isMockMode) {
       setSavedScreens(prev => prev.filter(screen => screen.id !== id))
       showToast(`"${name}" deleted`)
       return
     }
-    const headers = await getAuthHeaders()
-    await fetch(`${API}/api/v1/scanner/screens/${id}`, { method: 'DELETE', headers })
-    await loadSavedScreens()
-    showToast(`"${name}" deleted`)
+    try {
+      await deleteSavedScreen(id)
+      await loadSavedScreens()
+      showToast(`"${name}" deleted`)
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'Saved scanner screen could not be deleted.')
+    }
   }
 
   function scanContextOptions() {
@@ -996,7 +1000,15 @@ export default function ScannerPage() {
                   color: 'var(--text-secondary)', cursor: 'pointer',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>{s.name}</button>
-                <button onClick={() => deleteScreen(s.id, s.name)} style={{ color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                <button
+                  onClick={() => handleDeleteScreen(s.id, s.name)}
+                  aria-label={`Delete saved screen ${s.name}`}
+                  title={`Delete saved screen ${s.name}`}
+                  data-testid={`scanner-screen-delete-${s.id}`}
+                  style={{ color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
@@ -1492,7 +1504,7 @@ export default function ScannerPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: 'fixed', top: 88, right: 28, zIndex: 999, padding: '10px 16px', background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-primary)', boxShadow: 'var(--shadow-dropdown)' }}>
+        <div data-testid="scanner-toast" style={{ position: 'fixed', top: 88, right: 28, zIndex: 999, padding: '10px 16px', background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-primary)', boxShadow: 'var(--shadow-dropdown)' }}>
           {toast}
         </div>
       )}
