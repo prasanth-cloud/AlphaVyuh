@@ -807,9 +807,14 @@ export async function getMarketSummary(): Promise<MarketSummary | null> {
   try {
     const res = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
     if (!res.ok) return shouldUseMockFallback() ? mockMarketSummary() : null;
-    return res.json();
-  } catch {
-    return shouldUseMockFallback() ? mockMarketSummary() : null;
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Market summary is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    return data;
+  } catch (error) {
+    if (shouldUseMockFallback()) return mockMarketSummary();
+    if (error instanceof Error && error.message.toLowerCase().includes("unavailable")) throw error;
+    return null;
   }
 }
 
