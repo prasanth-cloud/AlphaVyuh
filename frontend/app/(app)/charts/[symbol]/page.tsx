@@ -40,6 +40,14 @@ type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
 type StochPoint = { time: string; k: number; d: number | null };
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
+type SymbolReviewContext = {
+  closed: number;
+  reviewed: number;
+  winRate: number | null;
+  latestLesson: string | null;
+  lastSetup: string | null;
+  entries: JournalEntry[];
+};
 
 type ChartDrawing = {
   id: string;
@@ -408,14 +416,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [brokerConnected, setBrokerConnected] = useState(false);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
   const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
-  const [symbolReview, setSymbolReview] = useState<{
-    closed: number;
-    reviewed: number;
-    winRate: number | null;
-    latestLesson: string | null;
-    lastSetup: string | null;
-    entries: JournalEntry[];
-  }>({
+  const [symbolReview, setSymbolReview] = useState<SymbolReviewContext>({
     closed: 0,
     reviewed: 0,
     winRate: null,
@@ -423,6 +424,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     lastSetup: null,
     entries: [],
   });
+  const [symbolReviewError, setSymbolReviewError] = useState<string | null>(null);
 
   // Plan (for indicator gating)
   const [userPlan, setUserPlan] = useState<string>("free");
@@ -793,7 +795,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }, [loadSourceQueue]);
 
   useEffect(() => {
+    let cancelled = false;
+    setSymbolReviewError(null);
     getJournalEntries({ limit: 100, symbol }).then((journal) => {
+      if (cancelled) return;
       const closed = journal.entries.filter((entry) => entry.status === "closed");
       const reviewed = closed.filter((entry) => Boolean(entry.lessons?.trim()));
       const wins = closed.filter((entry) => (entry.pnl ?? 0) > 0).length;
@@ -805,9 +810,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         lastSetup: journal.entries[0]?.setup_type ?? null,
         entries: journal.entries,
       });
-    }).catch(() => {
+      setSymbolReviewError(null);
+    }).catch((error) => {
+      if (cancelled) return;
       setSymbolReview({ closed: 0, reviewed: 0, winRate: null, latestLesson: null, lastSetup: null, entries: [] });
+      setSymbolReviewError(accountDataErrorMessage(error, "Journal review context is temporarily unavailable."));
     });
+    return () => {
+      cancelled = true;
+    };
   }, [symbol]);
 
   const loadSymbolPositions = useCallback(async () => {
@@ -1852,6 +1863,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     indicatorError ? "Indicators unavailable" : null,
     compareError ? "Compare unavailable" : null,
+    symbolReviewError ? "Review unavailable" : null,
     sourceQueueError ? "Watchlists unavailable" : null,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
@@ -2617,7 +2629,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Review context</summary>
                     <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
-                      {symbolReview.closed > 0 ? `${symbolReview.closed} closed · ${symbolReview.reviewed} reviewed` : `No closed trades on ${symbol} yet.`}
+                      {symbolReviewError
+                        ? `Unavailable for ${symbol}. Closed trades are not being treated as empty while review context is unavailable.`
+                        : symbolReview.closed > 0 ? `${symbolReview.closed} closed · ${symbolReview.reviewed} reviewed` : `No closed trades on ${symbol} yet.`}
                     </div>
                   </details>
                   <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
@@ -2659,8 +2673,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 >
                   <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Review context</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px]" style={{ color: symbolReview.reviewed > 0 ? "#4ade80" : symbolReview.closed > 0 ? "#fbbf24" : "var(--app-text3)" }}>
-                      {symbolReview.reviewed > 0 ? "Reviewed" : symbolReview.closed > 0 ? "Needs review" : "No history"}
+                    <span className="text-[10px]" style={{ color: symbolReviewError ? "#fbbf24" : symbolReview.reviewed > 0 ? "#4ade80" : symbolReview.closed > 0 ? "#fbbf24" : "var(--app-text3)" }}>
+                      {symbolReviewError ? "Unavailable" : symbolReview.reviewed > 0 ? "Reviewed" : symbolReview.closed > 0 ? "Needs review" : "No history"}
                     </span>
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showReviewPanel ? "rotate(180deg)" : "rotate(0deg)" }}>
                       <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -2669,11 +2683,20 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </button>
                 {showReviewPanel && (
                   <div className="px-4 pb-4 space-y-2">
+                    {symbolReviewError && (
+                      <div
+                        data-testid="chart-review-context-unavailable"
+                        className="rounded-[8px] px-3 py-2 text-[10px] leading-4"
+                        style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.28)", color: "#fbbf24" }}
+                      >
+                        <strong>Review context unavailable for {symbol}.</strong> {symbolReviewError} Closed trades are not being treated as empty while review context is unavailable.
+                      </div>
+                    )}
                     <div className="grid grid-cols-3 gap-2">
                       {[
-                        { label: "Closed", value: String(symbolReview.closed) },
-                        { label: "Reviewed", value: String(symbolReview.reviewed) },
-                        { label: "Win rate", value: symbolReview.winRate != null ? `${symbolReview.winRate.toFixed(0)}%` : "—" },
+                        { label: "Closed", value: symbolReviewError ? "—" : String(symbolReview.closed) },
+                        { label: "Reviewed", value: symbolReviewError ? "—" : String(symbolReview.reviewed) },
+                        { label: "Win rate", value: !symbolReviewError && symbolReview.winRate != null ? `${symbolReview.winRate.toFixed(0)}%` : "—" },
                       ].map((item) => (
                         <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
                           <div className="text-[9px] uppercase tracking-[0.4px]" style={{ color: "var(--app-text3)" }}>{item.label}</div>
@@ -2682,7 +2705,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       ))}
                     </div>
                     <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
-                      {symbolReview.closed > 0
+                      {symbolReviewError
+                        ? `Journal review context for ${symbol} could not be loaded.`
+                        : symbolReview.closed > 0
                         ? `${symbolReview.reviewed < symbolReview.closed ? `${symbolReview.closed - symbolReview.reviewed} closed trade${symbolReview.closed - symbolReview.reviewed === 1 ? "" : "s"} on ${symbol} still need lesson coverage.` : `Review coverage exists for ${symbol}.`}`
                         : `No closed trades on ${symbol} yet.`}
                       {symbolReview.lastSetup ? ` Last setup: ${symbolReview.lastSetup}.` : ""}
