@@ -197,27 +197,38 @@ async def get_market_summary():
 @router.get("/market/movers")
 async def get_market_movers():
     """Top 5 gainers, top 5 losers, top 5 volume surges for the latest trading date."""
-    client = get_admin_client()
+    try:
+        client = get_admin_client()
 
-    latest_date = get_latest_complete_trade_date(client)
-    if not latest_date:
-        return {"trade_date": None, "gainers": [], "losers": [], "volume_surge": []}
+        latest_date = get_latest_complete_trade_date(client)
+        if not latest_date:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Market movers are temporarily unavailable.",
+            )
 
-    # Fetch all rows with needed columns, paginated
-    all_rows: list[dict] = []
-    offset = 0
-    while True:
-        chunk = client.table("daily_ohlcv") \
-            .select("symbol, close, prev_close, volume, avg_volume_20d, stock_universe!daily_ohlcv_symbol_fkey(company_name, series)") \
-            .eq("trade_date", latest_date) \
-            .range(offset, offset + 999) \
-            .execute()
-        if not chunk.data:
-            break
-        all_rows.extend(chunk.data)
-        if len(chunk.data) < 1000:
-            break
-        offset += 1000
+        # Fetch all rows with needed columns, paginated
+        all_rows: list[dict] = []
+        offset = 0
+        while True:
+            chunk = client.table("daily_ohlcv") \
+                .select("symbol, close, prev_close, volume, avg_volume_20d, stock_universe!daily_ohlcv_symbol_fkey(company_name, series)") \
+                .eq("trade_date", latest_date) \
+                .range(offset, offset + 999) \
+                .execute()
+            if not chunk.data:
+                break
+            all_rows.extend(chunk.data)
+            if len(chunk.data) < 1000:
+                break
+            offset += 1000
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Market movers are temporarily unavailable.",
+        )
 
     enriched = []
     for row in all_rows:
@@ -298,30 +309,41 @@ async def list_sectors():
 @router.get("/market/sector-breadth")
 async def get_sector_breadth():
     """Advance/decline ratio and above-EMA200 % broken down by sector."""
-    client = get_admin_client()
+    try:
+        client = get_admin_client()
 
-    latest_date = get_latest_complete_trade_date(client)
-    if not latest_date:
-        return {"sectors": []}
+        latest_date = get_latest_complete_trade_date(client)
+        if not latest_date:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Sector breadth is temporarily unavailable.",
+            )
 
-    # Pull all rows with sector (paginated)
-    all_rows: list[dict] = []
-    offset = 0
-    while True:
-        chunk = (
-            client.table("daily_ohlcv")
-            .select("close,prev_close,ema_200,stock_universe!daily_ohlcv_symbol_fkey!inner(sector)")
-            .eq("trade_date", latest_date)
-            .not_.is_("stock_universe.sector", "null")
-            .range(offset, offset + 999)
-            .execute()
+        # Pull all rows with sector (paginated)
+        all_rows: list[dict] = []
+        offset = 0
+        while True:
+            chunk = (
+                client.table("daily_ohlcv")
+                .select("close,prev_close,ema_200,stock_universe!daily_ohlcv_symbol_fkey!inner(sector)")
+                .eq("trade_date", latest_date)
+                .not_.is_("stock_universe.sector", "null")
+                .range(offset, offset + 999)
+                .execute()
+            )
+            if not chunk.data:
+                break
+            all_rows.extend(chunk.data)
+            if len(chunk.data) < 1000:
+                break
+            offset += 1000
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sector breadth is temporarily unavailable.",
         )
-        if not chunk.data:
-            break
-        all_rows.extend(chunk.data)
-        if len(chunk.data) < 1000:
-            break
-        offset += 1000
 
     # Aggregate per sector
     sectors: dict[str, dict] = {}

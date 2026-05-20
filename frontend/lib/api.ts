@@ -1232,7 +1232,7 @@ export type MarketMover = {
 };
 
 export type MarketMovers = {
-  trade_date: string;
+  trade_date: string | null;
   gainers: MarketMover[];
   losers: MarketMover[];
   volume_surge: MarketMover[];
@@ -1241,8 +1241,16 @@ export type MarketMovers = {
 export async function getMarketMovers(): Promise<MarketMovers | null> {
   if (shouldUseMockFallback()) return mockMarketMovers();
   const res = await fetch(`${API}/api/v1/market/movers`, { headers: publicHeaders });
-  if (!res.ok) return null;
-  return res.json();
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Market movers are temporarily unavailable (${res.status}).`));
+  }
+  const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Market movers are temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (data?.trade_date == null && Array.isArray(data?.gainers) && Array.isArray(data?.losers) && Array.isArray(data?.volume_surge)) {
+    throw new Error("Market movers are temporarily unavailable.");
+  }
+  return data;
 }
 
 export type SectorBreadthItem = {
@@ -1255,11 +1263,19 @@ export type SectorBreadthItem = {
   above_ema200_pct: number | null;
 };
 
-export async function getSectorBreadth(): Promise<{ trade_date: string; sectors: SectorBreadthItem[] } | null> {
+export async function getSectorBreadth(): Promise<{ trade_date: string | null; sectors: SectorBreadthItem[] } | null> {
   if (shouldUseMockFallback()) return mockSectorBreadth();
   const res = await fetch(`${API}/api/v1/market/sector-breadth`, { headers: publicHeaders });
-  if (!res.ok) return null;
-  return res.json();
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Sector breadth is temporarily unavailable (${res.status}).`));
+  }
+  const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Sector breadth is temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (data?.trade_date == null && Array.isArray(data?.sectors)) {
+    throw new Error("Sector breadth is temporarily unavailable.");
+  }
+  return data;
 }
 
 export async function getSectors(): Promise<string[]> {
@@ -2592,6 +2608,14 @@ export type DataHealth = {
   live_market?: LiveMarketStatus | null;
 };
 
+export type DataRun = {
+  run_id: string;
+  started_at: string | null;
+  duration_s: number | null;
+  event_count: number | null;
+  error_count: number | null;
+};
+
 let dataHealthCache: { value: DataHealth | null; expiresAt: number } | null = null;
 let dataHealthPromise: Promise<DataHealth | null> | null = null;
 
@@ -2649,6 +2673,31 @@ export async function getDataHealth(): Promise<DataHealth | null> {
   })();
 
   return dataHealthPromise;
+}
+
+export async function getDataRuns(limit = 10): Promise<DataRun[]> {
+  if (shouldUseMockFallback()) {
+    return [
+      {
+        run_id: "mock-refresh",
+        started_at: "2026-04-24T18:00:00Z",
+        duration_s: 42,
+        event_count: 3,
+        error_count: 0,
+      },
+    ];
+  }
+
+  return cachedClientRequest(`data-runs:${limit}`, 30_000, async () => {
+    const res = await fetch(`${API}/api/v1/data/runs?limit=${encodeURIComponent(String(limit))}`, { headers: await authHeaders() });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Data refresh run history is temporarily unavailable (${res.status}).`));
+    }
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Data refresh run history is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    return Array.isArray(data?.runs) ? data.runs : [];
+  });
 }
 
 export type AiPatterns = {
@@ -3198,15 +3247,15 @@ export async function getMarketOverview(): Promise<MarketOverview> {
 
     // Legacy fallback: compose from public endpoints so dashboard still renders
     // sector and EMA breadth if the authenticated overview endpoint is blocked.
-    const [legacyRes, sectorRes, moversRes] = await Promise.all([
-      fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders }),
-      getSectorBreadth().catch(() => null),
-      getMarketMovers().catch(() => null),
-    ]);
+    const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
     if (!legacyRes.ok) throw new Error("Failed to fetch market overview");
     const s: MarketSummary = await legacyRes.json();
     const unavailableMessage = unavailablePayloadMessage(s, "Market summary is temporarily unavailable.");
     if (unavailableMessage) throw new Error(unavailableMessage);
+    const [sectorRes, moversRes] = await Promise.all([
+      getSectorBreadth(),
+      getMarketMovers(),
+    ]);
 
     const total = s.total_stocks ?? (s.advances + s.declines + s.unchanged);
     const ema200 = s.above_ema200_pct ?? 0;

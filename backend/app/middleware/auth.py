@@ -1,10 +1,22 @@
+import base64
+import hashlib
+import hmac
+import json
+import time
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
 
 from app.services.supabase import get_admin_client, settings
 
 security = HTTPBearer()
+
+
+def _decode_base64url_json(segment: str) -> dict:
+    padded = segment + "=" * (-len(segment) % 4)
+    decoded = base64.urlsafe_b64decode(padded.encode("ascii"))
+    value = json.loads(decoded.decode("utf-8"))
+    return value if isinstance(value, dict) else {}
 
 
 def _user_id_from_local_jwt(token: str) -> str | None:
@@ -13,13 +25,27 @@ def _user_id_from_local_jwt(token: str) -> str | None:
         return None
 
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            audience="authenticated",
-        )
-    except JWTError:
+        header_segment, payload_segment, signature_segment = token.split(".", 2)
+        header = _decode_base64url_json(header_segment)
+        if header.get("alg") != "HS256":
+            return None
+
+        signed = f"{header_segment}.{payload_segment}".encode("ascii")
+        expected = hmac.new(settings.supabase_jwt_secret.encode("utf-8"), signed, hashlib.sha256).digest()
+        padded_signature = signature_segment + "=" * (-len(signature_segment) % 4)
+        provided = base64.urlsafe_b64decode(padded_signature.encode("ascii"))
+        if not hmac.compare_digest(expected, provided):
+            return None
+
+        payload = _decode_base64url_json(payload_segment)
+        audience = payload.get("aud")
+        if audience != "authenticated" and not (isinstance(audience, list) and "authenticated" in audience):
+            return None
+
+        expires_at = payload.get("exp")
+        if expires_at is not None and float(expires_at) <= time.time():
+            return None
+    except Exception:
         return None
 
     subject = payload.get("sub")

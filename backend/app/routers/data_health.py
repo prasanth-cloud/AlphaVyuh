@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.middleware.auth import get_current_user_id
 from app.brokers.kite import api as kite_api
 from app.services.kite_stream import kite_live_ticker
@@ -92,4 +92,7 @@ async def list_recent_runs(limit: int = 10, user_id: str = Depends(get_current_u
             .execute()
         return {"runs": res.data or []}
     except Exception:
-        return {"runs": [], "mode": "unavailable"}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Data refresh run history is temporarily unavailable.",
+        )

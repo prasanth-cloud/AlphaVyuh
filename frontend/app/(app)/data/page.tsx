@@ -6,10 +6,12 @@ import {
   getAiPatterns,
   getBrokerStatus,
   getDataHealth,
+  getDataRuns,
   getJournalEntries,
   getJournalStats,
   type AiPatterns,
   type DataHealth,
+  type DataRun,
   type JournalStats,
 } from "@/lib/api";
 import { Card, DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
@@ -27,6 +29,8 @@ type CenterState = {
   broker: BrokerStatus | null;
   journalStats: JournalStats | null;
   aiPatterns: AiPatterns | null;
+  dataRuns: DataRun[];
+  dataRunsError: string;
   closedTrades: number;
   reviewedTrades: number;
   accountIssues: AccountDataIssue[];
@@ -51,6 +55,19 @@ function fmtNumber(value: number | null | undefined) {
 function fmtDate(value: string | null | undefined) {
   if (!value) return "Not available";
   return value;
+}
+
+function fmtDateTime(value: string | null | undefined) {
+  if (!value) return "Not available";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDuration(value: number | null | undefined) {
+  if (value == null) return "Not available";
+  if (value < 60) return `${Math.round(value)}s`;
+  return `${Math.floor(value / 60)}m ${Math.round(value % 60)}s`;
 }
 
 function statusColor(status: "good" | "warn" | "bad") {
@@ -109,6 +126,8 @@ export default function DataFreshnessPage() {
     broker: null,
     journalStats: null,
     aiPatterns: null,
+    dataRuns: [],
+    dataRunsError: "",
     closedTrades: 0,
     reviewedTrades: 0,
     accountIssues: [],
@@ -120,9 +139,15 @@ export default function DataFreshnessPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [apiReachable, dataHealth, brokerResult, journalStatsResult, journalResult, aiPatterns] = await Promise.all([
+        const [apiReachable, dataHealth, dataRunsResult, brokerResult, journalStatsResult, journalResult, aiPatterns] = await Promise.all([
           checkApiReachability(),
           getDataHealth().catch(() => null),
+          getDataRuns(5)
+            .then(runs => ({ runs, error: "" }))
+            .catch(error => ({
+              runs: [],
+              error: error instanceof Error ? error.message : "Data refresh run history is temporarily unavailable.",
+            })),
           captureAccountData(
             getBrokerStatus(),
             { id: "broker", label: "Broker status", href: "/settings/broker" },
@@ -154,6 +179,8 @@ export default function DataFreshnessPage() {
           broker,
           journalStats,
           aiPatterns,
+          dataRuns: dataRunsResult.runs,
+          dataRunsError: dataRunsResult.error,
           closedTrades: closed.length,
           reviewedTrades: reviewed.length,
           accountIssues,
@@ -201,6 +228,14 @@ export default function DataFreshnessPage() {
       next.push({
         title: "Check account data services",
         detail: `${state.accountIssues.map(issue => issue.label).join(", ")} unavailable. Saved account data is not being counted as empty.`,
+        href: "/data",
+      });
+    }
+
+    if (state.dataRunsError) {
+      next.push({
+        title: "Recheck refresh run history",
+        detail: "Recent ingest activity cannot be confirmed right now; do not treat the run list as empty.",
         href: "/data",
       });
     }
@@ -388,6 +423,53 @@ export default function DataFreshnessPage() {
           </div>
         </Card>
       </div>
+
+      <Card padding="lg">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 14 }}>
+          <div>
+            <h2 className="heading-card" style={{ marginBottom: 6 }}>Recent refresh runs</h2>
+            <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)" }}>
+              Latest ingest activity from the backend run log.
+            </div>
+          </div>
+          {state.dataRunsError && (
+            <span className="workspace-pill" style={{ color: "var(--warn)" }}>History unavailable</span>
+          )}
+        </div>
+
+        {state.dataRunsError ? (
+          <div data-testid="data-runs-unavailable" style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--warn-subtle)", color: "var(--warn)", fontSize: 13, lineHeight: 1.6 }}>
+            {state.dataRunsError} Existing refresh history is not being counted as empty.
+          </div>
+        ) : state.dataRuns.length ? (
+          <div className="data-runs-grid" style={{ display: "grid", gridTemplateColumns: "1.3fr repeat(3, minmax(0, 0.7fr))", gap: 10 }}>
+            {state.dataRuns.map(run => (
+              <div key={run.run_id} style={{ display: "contents" }}>
+                <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                  <div className="label" style={{ marginBottom: 4 }}>Started</div>
+                  <Num style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmtDateTime(run.started_at)}</Num>
+                </div>
+                <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                  <div className="label" style={{ marginBottom: 4 }}>Duration</div>
+                  <Num style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmtDuration(run.duration_s)}</Num>
+                </div>
+                <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                  <div className="label" style={{ marginBottom: 4 }}>Events</div>
+                  <Num style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{fmtNumber(run.event_count)}</Num>
+                </div>
+                <div style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: run.error_count ? "var(--warn-subtle)" : "var(--surface-2)" }}>
+                  <div className="label" style={{ marginBottom: 4 }}>Errors</div>
+                  <Num style={{ fontSize: 13, fontWeight: 700, color: run.error_count ? "var(--warn)" : "var(--text-primary)" }}>{fmtNumber(run.error_count)}</Num>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", fontSize: 13, lineHeight: 1.6, color: "var(--text-secondary)" }}>
+            No refresh runs have been recorded yet.
+          </div>
+        )}
+      </Card>
 
       <Card padding="lg">
         <h2 className="heading-card" style={{ marginBottom: 14 }}>Product surface map</h2>
