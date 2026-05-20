@@ -116,7 +116,7 @@ describe("mock order flow", () => {
   });
 
   it("deduplicates mock broker imports and exposes sync state", async () => {
-    const { getBrokerStatus, getJournalEntries, importZerodhaTrades, runZerodhaReadOnlySmoke } = await import("@/lib/api");
+    const { getBrokerStatus, getJournalEntries, importBrokerTrades, importZerodhaTrades, runZerodhaReadOnlySmoke } = await import("@/lib/api");
 
     const before = await getBrokerStatus();
     expect(before.can_import).toBe(true);
@@ -124,15 +124,26 @@ describe("mock order flow", () => {
 
     const first = await importZerodhaTrades();
     const second = await importZerodhaTrades();
+    const upstoxFirst = await importBrokerTrades("upstox");
+    const upstoxSecond = await importBrokerTrades("upstox");
 
     expect(first).toMatchObject({ imported: 2, skipped: 0, total_filled_orders: 2 });
     expect(second).toMatchObject({ imported: 0, skipped: 2, total_filled_orders: 2 });
+    expect(upstoxFirst).toMatchObject({ imported: 2, skipped: 0, total_filled_orders: 2 });
+    expect(upstoxFirst.message).toContain("Upstox");
+    expect(upstoxSecond).toMatchObject({ imported: 0, skipped: 2, total_filled_orders: 2 });
 
     const journal = await getJournalEntries({ status: "open" });
-    const imported = journal.entries.filter((entry) =>
+    const zerodhaImported = journal.entries.filter((entry) =>
       entry.entry_reason?.includes("alphavyuh-broker-import:zerodha:order:")
     );
-    expect(imported).toHaveLength(2);
+    const upstoxImported = journal.entries.filter((entry) =>
+      entry.entry_reason?.includes("alphavyuh-broker-import:upstox:order:")
+    );
+    expect(zerodhaImported).toHaveLength(2);
+    expect(upstoxImported).toHaveLength(2);
+    expect(zerodhaImported.every((entry) => entry.entry_reason?.includes("Zerodha import"))).toBe(true);
+    expect(upstoxImported.every((entry) => entry.entry_reason?.includes("Upstox import"))).toBe(true);
 
     const after = await getBrokerStatus();
     expect(after.last_synced_at).toBeTruthy();

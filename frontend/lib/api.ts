@@ -1528,6 +1528,33 @@ export type UpdateJournalEntry = {
 const mockJournalKey = "alphavyuh-mock-journal-v1";
 const mockBrokerSyncKey = "alphavyuh-mock-broker-sync-v1";
 const brokerImportMarker = "alphavyuh-broker-import";
+type BrokerImportSource = "zerodha" | "upstox";
+
+const brokerImportProfiles: Record<BrokerImportSource, {
+  displayName: string;
+  orders: Array<{
+    orderId: string;
+    symbol: string;
+    side: "BUY" | "SELL";
+    quantity: number;
+    price: number;
+  }>;
+}> = {
+  zerodha: {
+    displayName: "Zerodha",
+    orders: [
+      { orderId: "MOCK-ZERODHA-1001", symbol: "RELIANCE", side: "BUY", quantity: 10, price: 1500 },
+      { orderId: "MOCK-ZERODHA-1002", symbol: "INFY", side: "BUY", quantity: 5, price: 1420 },
+    ],
+  },
+  upstox: {
+    displayName: "Upstox",
+    orders: [
+      { orderId: "MOCK-UPSTOX-2001", symbol: "RELIANCE", side: "BUY", quantity: 8, price: 1504 },
+      { orderId: "MOCK-UPSTOX-2002", symbol: "TCS", side: "BUY", quantity: 4, price: 3860 },
+    ],
+  },
+};
 
 function readLocalJournalEntries(): JournalEntry[] {
   if (typeof window === "undefined") return [];
@@ -1545,19 +1572,23 @@ function writeLocalJournalEntries(entries: JournalEntry[]) {
   window.localStorage.setItem(mockJournalKey, JSON.stringify(entries));
 }
 
-function readLocalBrokerSync(): { last_synced_at: string | null } {
-  if (typeof window === "undefined") return { last_synced_at: null };
+function readLocalBrokerSync(): { last_synced_at: string | null; last_synced_broker: BrokerImportSource | null } {
+  if (typeof window === "undefined") return { last_synced_at: null, last_synced_broker: null };
   try {
     const parsed = JSON.parse(window.localStorage.getItem(mockBrokerSyncKey) || "{}");
-    return { last_synced_at: typeof parsed.last_synced_at === "string" ? parsed.last_synced_at : null };
+    const broker = parsed.last_synced_broker;
+    return {
+      last_synced_at: typeof parsed.last_synced_at === "string" ? parsed.last_synced_at : null,
+      last_synced_broker: broker === "zerodha" || broker === "upstox" ? broker : null,
+    };
   } catch {
-    return { last_synced_at: null };
+    return { last_synced_at: null, last_synced_broker: null };
   }
 }
 
-function writeLocalBrokerSync(lastSyncedAt: string) {
+function writeLocalBrokerSync(lastSyncedAt: string, broker: BrokerImportSource) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(mockBrokerSyncKey, JSON.stringify({ last_synced_at: lastSyncedAt }));
+  window.localStorage.setItem(mockBrokerSyncKey, JSON.stringify({ last_synced_at: lastSyncedAt, last_synced_broker: broker }));
 }
 
 function createLocalJournalEntry(entry: CreateJournalEntry): JournalEntry {
@@ -2345,21 +2376,18 @@ export async function closePosition(
   return closed;
 }
 
-export async function importBrokerTrades(broker: "zerodha" | "upstox" = "zerodha"): Promise<{
+export async function importBrokerTrades(broker: BrokerImportSource = "zerodha"): Promise<{
   imported: number; skipped: number; total_filled_orders: number; message: string; last_synced_at?: string | null
 }> {
   if (shouldUseMockFallback()) {
     const now = new Date().toISOString();
     const local = readLocalJournalEntries();
-    const mockOrders = [
-      { orderId: "MOCK-ZERODHA-1001", symbol: "RELIANCE", side: "BUY", quantity: 10, price: 1500 },
-      { orderId: "MOCK-ZERODHA-1002", symbol: "INFY", side: "BUY", quantity: 5, price: 1420 },
-    ];
+    const profile = brokerImportProfiles[broker];
     let imported = 0;
     let skipped = 0;
     const next = [...local];
-    for (const order of mockOrders) {
-      const marker = `${brokerImportMarker}:zerodha:order:${order.orderId}`;
+    for (const order of profile.orders) {
+      const marker = `${brokerImportMarker}:${broker}:order:${order.orderId}`;
       if (next.some((entry) => entry.entry_reason?.includes(marker))) {
         skipped += 1;
         continue;
@@ -2370,19 +2398,19 @@ export async function importBrokerTrades(broker: "zerodha" | "upstox" = "zerodha
         entry_date: now.slice(0, 10),
         entry_price: order.price,
         quantity: order.quantity,
-        entry_reason: `Zerodha import - order #${order.orderId} [${marker}] [Zerodha - auto]`,
+        entry_reason: `${profile.displayName} import - order #${order.orderId} [${marker}] [${profile.displayName} - auto]`,
       }));
       imported += 1;
     }
     writeLocalJournalEntries(next);
-    writeLocalBrokerSync(now);
+    writeLocalBrokerSync(now, broker);
     invalidateClientCache(["journal:", "portfolio", "broker:status"]);
     return {
       imported,
       skipped,
-      total_filled_orders: mockOrders.length,
+      total_filled_orders: profile.orders.length,
       last_synced_at: now,
-      message: `Imported ${imported} new mock trade(s) from ${broker === "upstox" ? "Upstox" : "Zerodha"}.`,
+      message: `Imported ${imported} new mock trade(s) from ${profile.displayName}.`,
     };
   }
   const headers = await authHeaders();
