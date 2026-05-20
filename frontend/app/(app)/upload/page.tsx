@@ -17,6 +17,16 @@ function formatPercent(value: number | null | undefined): string {
   return `${value.toFixed(1)}%`
 }
 
+function formatRatio(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return `${value.toFixed(2)}×`
+}
+
+function formatDays(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return `${value.toFixed(1)} days`
+}
+
 function insight(result: TradeReportParseResult): string {
   const { summary } = result
   if (summary.parsedTrades === 0) return 'Upload a broker CSV with symbol and P&L columns to generate analytics.'
@@ -237,6 +247,27 @@ export default function UploadPage() {
                     <strong style={{ color: 'var(--text-primary)' }}>{row.month}</strong>
                     <span className="caption">{row.trades} trades</span>
                     <Num style={{ color: row.pnl >= 0 ? 'var(--gain)' : 'var(--loss)', textAlign: 'right' }}>{formatCurrency(row.pnl)}</Num>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card padding="lg">
+              <h2 className="heading-card" style={{ marginBottom: 12 }}>Trade quality</h2>
+              <div data-testid="trade-report-quality" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                {[
+                  ['Expectancy', formatCurrency(result.summary.expectancy)],
+                  ['Payoff ratio', formatRatio(result.summary.payoffRatio)],
+                  ['Avg win', formatCurrency(result.summary.averageWin)],
+                  ['Avg loss', formatCurrency(result.summary.averageLoss)],
+                  ['Avg hold', formatDays(result.summary.averageHoldingDays)],
+                  ['Best trade', result.summary.bestTrade ? `${result.summary.bestTrade.symbol} ${formatCurrency(result.summary.bestTrade.pnl)}` : '—'],
+                  ['Worst trade', result.summary.worstTrade ? `${result.summary.worstTrade.symbol} ${formatCurrency(result.summary.worstTrade.pnl)}` : '—'],
+                  ['Breakeven', String(result.summary.breakeven)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 10, background: 'var(--surface-2)' }}>
+                    <div className="label" style={{ marginBottom: 6 }}>{label}</div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 750, fontSize: 13 }}>{value}</div>
                   </div>
                 ))}
               </div>

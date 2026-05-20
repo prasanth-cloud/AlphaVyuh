@@ -1111,6 +1111,7 @@ function WatchlistContent() {
   const [watchlists, setWatchlists] = useState<Watchlist[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
   const [newWlName, setNewWlName] = useState("");
   const [showNewWl, setShowNewWl] = useState(false);
   const [toast, setToast] = useState("");
@@ -1232,27 +1233,43 @@ function WatchlistContent() {
     setTimeout(() => setToast(""), 3500);
   }
 
+  function watchlistUnavailableMessage(error: unknown): string {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    return "Watchlist data is temporarily unavailable. Check Data Status before editing lists.";
+  }
+
   async function loadWatchlists() {
     const requestedWatchlistId = searchParams.get("id");
     const requestedSymbol = searchParams.get("symbol")?.toUpperCase() ?? null;
     if (!requestedSymbol) pendingRouteSymbolRef.current = null;
-    const liteLists = await getWatchlists({ lite: true });
-    setWatchlists(liteLists);
-    if (liteLists.length > 0 && !activeId) {
-      setActiveId(liteLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : liteLists[0].id);
+    setWatchlistError(null);
+    try {
+      const liteLists = await getWatchlists({ lite: true });
+      setWatchlists(liteLists);
+      if (liteLists.length > 0 && !activeId) {
+        setActiveId(liteLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : liteLists[0].id);
+      }
+    } catch (error) {
+      setWatchlistError(watchlistUnavailableMessage(error));
+      setLoading(false);
+      if (requestedSymbol) setChartSymbol(requestedSymbol);
+      return;
     }
     if (requestedSymbol) setChartSymbol(requestedSymbol);
     setLoading(false);
 
     getWatchlists({ force: true })
       .then((enrichedLists) => {
+        setWatchlistError(null);
         setWatchlists(enrichedLists);
         if (enrichedLists.length > 0 && !activeId) {
           setActiveId(enrichedLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : enrichedLists[0].id);
         }
         if (requestedSymbol) setChartSymbol(requestedSymbol);
       })
-      .catch(() => {});
+      .catch((error) => {
+        setWatchlistError(watchlistUnavailableMessage(error));
+      });
   }
 
   useEffect(() => { loadWatchlists(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1913,6 +1930,14 @@ function WatchlistContent() {
               <div style={{ padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
                 {[1,2,3].map(i => <div key={i} style={{ height: 32, borderRadius: "var(--radius-sm)", background: "var(--surface-3)" }} />)}
               </div>
+            ) : watchlistError ? (
+              <div data-testid="watchlist-unavailable-sidebar" style={{ padding: "24px 16px", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
+                <div style={{ color: "var(--text-primary)", fontWeight: 700, marginBottom: 6 }}>Watchlist data unavailable</div>
+                <div>{watchlistError}</div>
+                <button className="workspace-chip-button" style={{ marginTop: 12 }} onClick={() => router.push("/data")}>
+                  Open Data Status
+                </button>
+              </div>
             ) : watchlists.length === 0 ? (
               <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.7 }}>
                 No watchlists yet.
@@ -2300,7 +2325,13 @@ function WatchlistContent() {
 
         {/* Stock rows */}
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-          {!activeWl ? (
+          {watchlistError ? (
+            <EmptyState
+              title="Watchlist data unavailable"
+              description={`${watchlistError} Your saved lists are not being treated as empty. Open Data Status before changing this queue.`}
+              action={{ label: "Open Data Status", onClick: () => router.push("/data") }}
+            />
+          ) : !activeWl ? (
             <EmptyState title="No watchlist selected" description="Create or select a watchlist from the sidebar, then use it as the bridge from scanner ideas to chart review." />
           ) : activeWl.items.length === 0 ? (
             <EmptyState

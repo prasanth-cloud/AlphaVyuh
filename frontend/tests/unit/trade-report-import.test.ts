@@ -12,6 +12,9 @@ describe("trade report import", () => {
     expect(result.summary.losses).toBe(1);
     expect(result.summary.winRate).toBe(75);
     expect(result.summary.profitFactor).toBeCloseTo(8.11, 2);
+    expect(result.summary.payoffRatio).toBeCloseTo(2.7, 2);
+    expect(result.summary.expectancy).toBe(497.5);
+    expect(result.summary.averageHoldingDays).toBe(4.8);
     expect(result.summary.bestTrade?.symbol).toBe("AUBANK");
     expect(result.summary.worstTrade?.symbol).toBe("TCS");
     expect(result.summary.symbolBreakdown[0]).toMatchObject({ symbol: "AUBANK", pnl: 1160 });
@@ -24,6 +27,7 @@ INFY,02/05/2026,03/05/2026,short,5,1500,1480`);
 
     expect(result.summary.parsedTrades).toBe(2);
     expect(result.summary.totalPnl).toBe(200);
+    expect(result.summary.averageHoldingDays).toBe(3);
     expect(result.trades[0]).toMatchObject({ symbol: "RELIANCE", pnl: 100, entryDate: "2026-05-01" });
     expect(result.trades[1]).toMatchObject({ symbol: "INFY", pnl: 100, tradeType: "short" });
   });
@@ -55,6 +59,7 @@ TCS,2026-05-06,BUY,3,3800,3`);
     expect(result.summary.parsedTrades).toBe(2);
     expect(result.summary.rejectedRows).toBe(1);
     expect(result.summary.totalPnl).toBe(372);
+    expect(result.summary.averageHoldingDays).toBe(2.5);
     expect(result.trades.find((trade) => trade.symbol === "RELIANCE")).toMatchObject({
       symbol: "RELIANCE",
       tradeType: "long",

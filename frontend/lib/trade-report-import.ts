@@ -31,9 +31,11 @@ export type TradeReportSummary = {
   breakeven: number;
   winRate: number;
   profitFactor: number | null;
+  payoffRatio: number | null;
   expectancy: number;
   averageWin: number;
   averageLoss: number;
+  averageHoldingDays: number | null;
   maxDrawdown: number;
   bestTrade: ImportedTrade | null;
   worstTrade: ImportedTrade | null;
@@ -421,6 +423,15 @@ function monthKey(trade: ImportedTrade): string {
   return (trade.exitDate ?? trade.entryDate ?? "Undated").slice(0, 7);
 }
 
+function holdingDays(trade: ImportedTrade): number | null {
+  if (!trade.entryDate || !trade.exitDate) return null;
+  const entry = new Date(`${trade.entryDate}T00:00:00Z`);
+  const exit = new Date(`${trade.exitDate}T00:00:00Z`);
+  if (Number.isNaN(entry.getTime()) || Number.isNaN(exit.getTime())) return null;
+  const days = (exit.getTime() - entry.getTime()) / 86_400_000;
+  return days >= 0 ? days : null;
+}
+
 function computeMaxDrawdown(trades: ImportedTrade[]): number {
   let peak = 0;
   let equity = 0;
@@ -443,6 +454,10 @@ function summarize(trades: ImportedTrade[], rejectedRows: number, totalRows: num
   const totalPnl = trades.reduce((sum, trade) => sum + trade.pnl, 0);
   const averageWin = wins.length ? grossProfit / wins.length : 0;
   const averageLoss = losses.length ? grossLoss / losses.length : 0;
+  const holdingPeriods = trades.map(holdingDays).filter((days): days is number => days != null);
+  const averageHoldingDays = holdingPeriods.length
+    ? holdingPeriods.reduce((sum, days) => sum + days, 0) / holdingPeriods.length
+    : null;
   const symbolMap = new Map<string, ImportedTrade[]>();
   const monthMap = new Map<string, ImportedTrade[]>();
 
@@ -485,9 +500,11 @@ function summarize(trades: ImportedTrade[], rejectedRows: number, totalRows: num
     breakeven,
     winRate: trades.length ? round((wins.length / trades.length) * 100, 1) : 0,
     profitFactor: grossLoss < 0 ? round(grossProfit / Math.abs(grossLoss), 2) : null,
+    payoffRatio: averageWin > 0 && averageLoss < 0 ? round(averageWin / Math.abs(averageLoss), 2) : null,
     expectancy: trades.length ? round(totalPnl / trades.length) : 0,
     averageWin: round(averageWin),
     averageLoss: round(averageLoss),
+    averageHoldingDays: averageHoldingDays == null ? null : round(averageHoldingDays, 1),
     maxDrawdown: computeMaxDrawdown(trades),
     bestTrade: trades.reduce<ImportedTrade | null>((best, trade) => !best || trade.pnl > best.pnl ? trade : best, null),
     worstTrade: trades.reduce<ImportedTrade | null>((worst, trade) => !worst || trade.pnl < worst.pnl ? trade : worst, null),
