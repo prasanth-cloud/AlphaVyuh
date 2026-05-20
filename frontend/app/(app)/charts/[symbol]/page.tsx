@@ -34,6 +34,7 @@ import {
 import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
+import { accountDataErrorMessage } from "@/lib/account-data-status";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -393,6 +394,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Broker status
   const [brokerConnected, setBrokerConnected] = useState(false);
   const [brokerStatus, setBrokerStatus] = useState<BrokerStatus | null>(null);
+  const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
   const [symbolReview, setSymbolReview] = useState<{
     closed: number;
     reviewed: number;
@@ -650,10 +652,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       .then(s => {
         setBrokerStatus(s);
         setBrokerConnected(Boolean(s.connected && !s.token_expired));
+        setBrokerStatusError(null);
       })
-      .catch(() => {
+      .catch((error) => {
         setBrokerStatus(null);
         setBrokerConnected(false);
+        setBrokerStatusError(accountDataErrorMessage(error, "Broker status is temporarily unavailable. Existing broker access is not being treated as disconnected."));
       });
     getPriceAlerts().then(alerts => setPriceAlerts(alerts.filter(a => a.symbol === symbol && a.is_active))).catch(() => {});
   }, [symbol]);
@@ -1698,7 +1702,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     { label: "From 52W high", value: pctFrom52H != null ? `${pctFrom52H.toFixed(1)}% below` : "Pending", tone: "var(--accent)" },
     {
       label: "Broker",
-      value: brokerConnected
+      value: brokerStatusError
+        ? "Status unavailable"
+        : brokerConnected
         ? `${brokerStatus?.broker ?? "Broker"} ready`
         : brokerStatus?.token_expired
           ? "Reconnect required"
@@ -1766,7 +1772,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <button onClick={reportChartDataIssue} className="workspace-chip-button">Report data</button>
           {!brokerConnected && (
             <Link href="/settings/broker" prefetch={false} className="workspace-chip-button">
-              {brokerStatus?.token_expired ? "Reconnect broker" : "Connect broker"}
+              {brokerStatusError ? "Check broker status" : brokerStatus?.token_expired ? "Reconnect broker" : "Connect broker"}
             </Link>
           )}
           {chartContextPills.map((item) => (
@@ -1875,7 +1881,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          Data is {dataAgeDays} days old. Scanner/chart context is using the latest market snapshot. Provider/live quote mode is not enabled yet.
+          Data is {dataAgeDays} days old. Scanner and chart context are using the latest available EOD market snapshot.
         </div>
       )}
 
@@ -2146,7 +2152,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             disabled
             className="workspace-chip-button flex items-center gap-1.5"
             style={{ opacity: 0.85 }}
-            title="Provider/live quote mode is not enabled yet; charts use EOD market data or demo data."
+            title="Charts use EOD market snapshots unless a provider source is shown."
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
             <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
@@ -2855,21 +2861,23 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               {!brokerConnected && (
                 <div className="p-4" style={{ borderTop: "1px solid var(--app-border)" }}>
                   <div className="text-[10px] uppercase tracking-[0.5px] mb-2 font-semibold" style={{ color: "var(--app-text3)" }}>Broker import</div>
-                  <div className="rounded-[8px] p-3 text-center" style={{ background: "rgba(0,229,196,0.08)", border: "1px solid rgba(0,229,196,0.2)" }}>
-                    <div className="text-[12px] font-semibold mb-0.5" style={{ color: "var(--app-teal)" }}>
-                      {brokerStatus?.token_expired ? "Reconnect your broker" : "Connect your broker"}
+                  <div className="rounded-[8px] p-3 text-center" style={{ background: brokerStatusError ? "rgba(217,119,6,0.08)" : "rgba(0,229,196,0.08)", border: brokerStatusError ? "1px solid rgba(217,119,6,0.28)" : "1px solid rgba(0,229,196,0.2)" }}>
+                    <div className="text-[12px] font-semibold mb-0.5" style={{ color: brokerStatusError ? "var(--warn)" : "var(--app-teal)" }}>
+                      {brokerStatusError ? "Broker status unavailable" : brokerStatus?.token_expired ? "Reconnect your broker" : "Connect your broker"}
                     </div>
                     <div className="text-[11px] mb-2.5" style={{ color: "var(--app-text2)" }}>
-                      {brokerStatus?.token_expired
+                      {brokerStatusError
+                        ? brokerStatusError
+                        : brokerStatus?.token_expired
                         ? "Your broker session expired. Reconnect to import filled trades."
                         : "Broker import supports filled-trade import, not chart order execution."}
                     </div>
                     <Link
                       href="/settings/broker"
                       className="inline-block text-[11px] font-semibold px-3 py-1.5 rounded-[6px] hover:opacity-85 transition-opacity"
-                      style={{ background: "var(--app-teal)", color: "#0D0F14" }}
+                      style={{ background: brokerStatusError ? "var(--warn)" : "var(--app-teal)", color: "#0D0F14" }}
                     >
-                      {brokerStatus?.token_expired ? "Reconnect Zerodha" : "Connect Zerodha"}
+                      {brokerStatusError ? "Open broker settings" : brokerStatus?.token_expired ? "Reconnect Zerodha" : "Connect Zerodha"}
                     </Link>
                   </div>
                 </div>
@@ -3045,7 +3053,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 disabled
                 className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
                 style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)", opacity: 0.85 }}
-                title="Provider/live quote mode is not enabled yet."
+                title="Charts use EOD market snapshots unless a provider source is shown."
               >
                 <Activity size={12} />
                 <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />

@@ -69,6 +69,27 @@ test.describe("Broker settings — not connected", () => {
   });
 });
 
+test.describe("Broker settings — status unavailable", () => {
+  test("does not render outage as upgrade required or disconnected", async ({ page }) => {
+    await page.route(`${API}/api/v1/broker/status`, (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Broker status is temporarily unavailable. Existing broker access is not being treated as disconnected." }),
+      })
+    );
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByTestId("broker-status-unavailable")).toContainText("Broker status unavailable", { timeout: 15_000 });
+    await expect(page.getByTestId("broker-status-unavailable")).toContainText("Existing broker access is not being treated as disconnected");
+    await expect(page.getByText("Upgrade required")).not.toBeVisible();
+    await expect(page.getByTestId("connect-btn")).toBeDisabled();
+    await expect(page.getByTestId("connect-btn")).toHaveText("Status unavailable");
+  });
+});
+
 // ── Connected state ───────────────────────────────────────────────────────────
 
 test.describe("Broker settings — connected", () => {
