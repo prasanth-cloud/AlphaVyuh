@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { Button, Card, Num } from '@/components/ui'
+import { countJournalReadyTrades, importTradeReportToJournal, type TradeReportJournalImportResult } from '@/lib/trade-report-journal'
 import { parseTradeReportCsv, sampleTradeReportCsv, type TradeReportParseResult } from '@/lib/trade-report-import'
 
 function formatCurrency(value: number | null | undefined): string {
@@ -34,13 +35,36 @@ function insight(result: TradeReportParseResult): string {
 export default function UploadPage() {
   const [csvText, setCsvText] = useState('')
   const [fileName, setFileName] = useState<string | null>(null)
+  const [journalImporting, setJournalImporting] = useState(false)
+  const [journalImportResult, setJournalImportResult] = useState<TradeReportJournalImportResult | null>(null)
   const result = useMemo(() => csvText.trim() ? parseTradeReportCsv(csvText) : null, [csvText])
+  const journalReadyCount = result ? countJournalReadyTrades(result) : 0
 
   async function loadFile(file: File | null) {
     if (!file) return
     const text = await file.text()
     setFileName(file.name)
     setCsvText(text)
+    setJournalImportResult(null)
+  }
+
+  async function importToJournal() {
+    if (!result || journalReadyCount === 0) return
+    setJournalImporting(true)
+    setJournalImportResult(null)
+    try {
+      setJournalImportResult(await importTradeReportToJournal(result))
+    } catch (error) {
+      setJournalImportResult({
+        imported: 0,
+        skipped: 0,
+        ineligible: result.trades.length - journalReadyCount,
+        total: result.trades.length,
+        message: error instanceof Error ? error.message : 'Journal import failed',
+      })
+    } finally {
+      setJournalImporting(false)
+    }
   }
 
   return (
@@ -50,7 +74,7 @@ export default function UploadPage() {
         <h1 className="heading-page">Upload trade report</h1>
         <p className="body-secondary" style={{ marginTop: 8, maxWidth: 760 }}>
           Import a broker CSV or paste an export from Zerodha, Upstox, Groww, or a spreadsheet.
-          AlphaVyuh normalizes completed trades locally and shows P&L, win rate, drawdown, symbol concentration, and rejected rows before anything is saved.
+          AlphaVyuh normalizes completed trades locally and shows P&L, win rate, drawdown, symbol concentration, and rejected rows before you choose what to save.
         </p>
       </div>
 
@@ -76,6 +100,7 @@ export default function UploadPage() {
               onChange={(event) => {
                 setFileName(null)
                 setCsvText(event.target.value)
+                setJournalImportResult(null)
               }}
               placeholder="Paste broker CSV here. Required: symbol and either P&L or entry/exit price with quantity."
               style={{
@@ -94,8 +119,8 @@ export default function UploadPage() {
               }}
             />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Button size="sm" variant="primary" onClick={() => setCsvText(sampleTradeReportCsv())}>Use sample report</Button>
-              <Button size="sm" variant="ghost" onClick={() => { setCsvText(''); setFileName(null); }}>Clear</Button>
+              <Button size="sm" variant="primary" onClick={() => { setCsvText(sampleTradeReportCsv()); setJournalImportResult(null); }}>Use sample report</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setCsvText(''); setFileName(null); setJournalImportResult(null); }}>Clear</Button>
             </div>
           </div>
         </Card>
@@ -113,6 +138,7 @@ export default function UploadPage() {
                     ['Broker format', result.summary.broker],
                     ['Rows parsed', `${result.summary.parsedTrades}/${result.summary.totalRows}`],
                     ['Rejected rows', String(result.summary.rejectedRows)],
+                    ['Journal-ready', String(journalReadyCount)],
                   ].map(([label, value]) => (
                     <div key={label} style={{ borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', padding: 12 }}>
                       <div className="label" style={{ marginBottom: 6 }}>{label}</div>
@@ -136,6 +162,31 @@ export default function UploadPage() {
                     </div>
                   </div>
                 )}
+                <div style={{ borderRadius: 12, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
+                  <div className="label" style={{ marginBottom: 6 }}>Journal handoff</div>
+                  <div className="caption" style={{ marginBottom: 10 }}>
+                    Rows with entry date, exit date, quantity, entry price, and exit price can be saved as closed journal trades with broker-report source labels.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => void importToJournal()}
+                      disabled={journalImporting || journalReadyCount === 0}
+                      data-testid="trade-report-journal-import"
+                    >
+                      {journalImporting ? 'Importing...' : `Import ${journalReadyCount} to journal`}
+                    </Button>
+                    <a href="/journal?review=needs-review" className="workspace-chip-button" style={{ textDecoration: 'none' }}>
+                      Open journal review
+                    </a>
+                  </div>
+                  {journalImportResult && (
+                    <div className="caption" data-testid="trade-report-journal-import-result" style={{ marginTop: 10 }}>
+                      {journalImportResult.message} Imported {journalImportResult.imported}, skipped {journalImportResult.skipped}, not journal-ready {journalImportResult.ineligible}.
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <div style={{ border: '1px dashed var(--border-subtle)', borderRadius: 14, padding: 24, textAlign: 'center' }}>
