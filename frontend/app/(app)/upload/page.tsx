@@ -30,6 +30,12 @@ function formatDays(value: number | null | undefined): string {
 function insight(result: TradeReportParseResult): string {
   const { summary } = result
   if (summary.parsedTrades === 0) return 'Upload a broker CSV with symbol and P&L columns to generate analytics.'
+  if ((summary.chargesToGrossProfitPct ?? 0) >= 15) {
+    return 'Transaction costs are taking a meaningful share of gross profit. Check whether sizing, churn, or product choice is diluting the edge.'
+  }
+  if ((summary.largestSymbolPnlSharePct ?? 0) >= 50) {
+    return `${summary.largestSymbol} is driving more than half of absolute P&L. Review whether this is deliberate specialization or accidental concentration.`
+  }
   if (summary.profitFactor != null && summary.profitFactor < 1) {
     return 'Losses are larger than wins in this report. Review worst symbols and holding periods before adding new risk.'
   }
@@ -264,6 +270,25 @@ export default function UploadPage() {
                   ['Best trade', result.summary.bestTrade ? `${result.summary.bestTrade.symbol} ${formatCurrency(result.summary.bestTrade.pnl)}` : '—'],
                   ['Worst trade', result.summary.worstTrade ? `${result.summary.worstTrade.symbol} ${formatCurrency(result.summary.worstTrade.pnl)}` : '—'],
                   ['Breakeven', String(result.summary.breakeven)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 10, background: 'var(--surface-2)' }}>
+                    <div className="label" style={{ marginBottom: 6 }}>{label}</div>
+                    <div style={{ color: 'var(--text-primary)', fontWeight: 750, fontSize: 13 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card padding="lg">
+              <h2 className="heading-card" style={{ marginBottom: 12 }}>Cost and concentration</h2>
+              <div data-testid="trade-report-risk-audit" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+                {[
+                  ['Reported charges', formatCurrency(result.summary.totalCharges)],
+                  ['Avg charge/trade', formatCurrency(result.summary.averageChargePerTrade)],
+                  ['Cost drag', formatPercent(result.summary.chargesToGrossProfitPct)],
+                  ['Top symbol', result.summary.largestSymbol ?? '—'],
+                  ['P&L share', formatPercent(result.summary.largestSymbolPnlSharePct)],
+                  ['Trade share', formatPercent(result.summary.largestSymbolTradeSharePct)],
                 ].map(([label, value]) => (
                   <div key={label} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 10, background: 'var(--surface-2)' }}>
                     <div className="label" style={{ marginBottom: 6 }}>{label}</div>

@@ -14,7 +14,13 @@ describe("trade report import", () => {
     expect(result.summary.profitFactor).toBeCloseTo(8.11, 2);
     expect(result.summary.payoffRatio).toBeCloseTo(2.7, 2);
     expect(result.summary.expectancy).toBe(497.5);
+    expect(result.summary.totalCharges).toBe(153);
+    expect(result.summary.averageChargePerTrade).toBe(38.25);
+    expect(result.summary.chargesToGrossProfitPct).toBe(6.7);
     expect(result.summary.averageHoldingDays).toBe(4.8);
+    expect(result.summary.largestSymbol).toBe("AUBANK");
+    expect(result.summary.largestSymbolPnlSharePct).toBe(45.5);
+    expect(result.summary.largestSymbolTradeSharePct).toBe(25);
     expect(result.summary.bestTrade?.symbol).toBe("AUBANK");
     expect(result.summary.worstTrade?.symbol).toBe("TCS");
     expect(result.summary.symbolBreakdown[0]).toMatchObject({ symbol: "AUBANK", pnl: 1160 });
@@ -59,6 +65,8 @@ TCS,2026-05-06,BUY,3,3800,3`);
     expect(result.summary.parsedTrades).toBe(2);
     expect(result.summary.rejectedRows).toBe(1);
     expect(result.summary.totalPnl).toBe(372);
+    expect(result.summary.totalCharges).toBe(28);
+    expect(result.summary.chargesToGrossProfitPct).toBe(7.5);
     expect(result.summary.averageHoldingDays).toBe(2.5);
     expect(result.trades.find((trade) => trade.symbol === "RELIANCE")).toMatchObject({
       symbol: "RELIANCE",
@@ -113,5 +121,19 @@ TCS,,BUY,3,3800`);
       "Unmatched open execution row",
       "Unmatched open execution row",
     ]);
+  });
+
+  it("surfaces concentration and cost drag for skewed reports", () => {
+    const result = parseTradeReportCsv(`symbol,entry_date,exit_date,trade_type,quantity,entry_price,exit_price,pnl,charges
+RELIANCE,2026-05-01,2026-05-02,long,10,100,110,100,35
+RELIANCE,2026-05-03,2026-05-04,long,10,100,112,120,40
+TCS,2026-05-05,2026-05-06,long,10,200,199,-10,5`);
+
+    expect(result.summary.totalCharges).toBe(80);
+    expect(result.summary.averageChargePerTrade).toBe(26.67);
+    expect(result.summary.chargesToGrossProfitPct).toBe(36.4);
+    expect(result.summary.largestSymbol).toBe("RELIANCE");
+    expect(result.summary.largestSymbolPnlSharePct).toBe(95.7);
+    expect(result.summary.largestSymbolTradeSharePct).toBe(66.7);
   });
 });
