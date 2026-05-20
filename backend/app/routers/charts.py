@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from app.middleware.auth import get_current_user_id
 from app.services import indicators as ta
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
-from app.services.market_context import eod_source_metadata, fallback_source_metadata, live_source_metadata
+from app.services.market_context import eod_source_metadata, live_source_metadata
 from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import client_rate_key, public_market_limiter
 from app.services.supabase import get_admin_client
@@ -549,27 +549,10 @@ async def get_candles(
         sb = get_admin_client()
         sym, meta, alias_meta = _resolve_chart_symbol(sb, requested_sym)
     except Exception:
-        metadata = fallback_source_metadata("Candle metadata is temporarily unavailable.")
-        return {
-            "symbol": requested_sym,
-            "requested_symbol": requested_sym,
-            "company_name": None,
-            "sector": None,
-            "timeframe": tf,
-            "candles": [],
-            "latest": None,
-            "mode": "unavailable",
-            "source_metadata": metadata,
-            "coverage": _chart_coverage_metadata(
-                [],
-                requested_from=from_date,
-                requested_to=to_date,
-                requested_limit=limit,
-                timeframe=tf,
-                source_name=metadata["source_name"],
-                as_of=metadata.get("as_of"),
-            ),
-        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Candle metadata is temporarily unavailable.",
+        )
 
     # For W/M we need more raw daily bars to aggregate into enough candles
     raw_limit = limit if tf == "D" else (limit * 7 if tf == "W" else limit * 31)
@@ -585,28 +568,10 @@ async def get_candles(
         else:
             rows = _fetch_candle_rows(sb, sym, from_date=str(fd), to_date=str(td2), limit=raw_limit, desc=True)
     except Exception:
-        metadata = fallback_source_metadata("Candle query is temporarily unavailable.", as_of=None)
-        return {
-            "symbol": sym,
-            "requested_symbol": requested_sym,
-            "company_name": meta.get("company_name"),
-            "sector": meta.get("sector"),
-            "timeframe": tf,
-            "candles": [],
-            "latest": None,
-            "mode": "unavailable",
-            "source_metadata": metadata,
-            "coverage": _chart_coverage_metadata(
-                [],
-                requested_from=fd,
-                requested_to=td2,
-                requested_limit=limit,
-                timeframe=tf,
-                source_name=metadata["source_name"],
-                as_of=metadata.get("as_of"),
-            ),
-            "adjusted": adjusted,
-        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Candle query is temporarily unavailable.",
+        )
 
     if not rows:
         raise HTTPException(status_code=404, detail=f"No candle data found for {sym}")
