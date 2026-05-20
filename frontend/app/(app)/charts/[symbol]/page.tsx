@@ -374,6 +374,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
+  const [fundamentalsLoading, setFundamentalsLoading] = useState(false);
+  const [fundamentalsError, setFundamentalsError] = useState<string | null>(null);
   const [showReviewPanel, setShowReviewPanel] = useState(false);
   const [showPositionsPanel, setShowPositionsPanel] = useState(true);
   const [showFundamentals, setShowFundamentals] = useState(false);
@@ -782,7 +784,20 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   useEffect(() => {
     if (!showFundamentals || fundamentals?.symbol === symbol) return;
     setFundamentals(null);
-    getFundamentals(symbol).then(f => setFundamentals(f));
+    setFundamentalsError(null);
+    setFundamentalsLoading(true);
+    getFundamentals(symbol)
+      .then((next) => {
+        if (next) {
+          setFundamentals(next);
+        } else {
+          setFundamentalsError("Fundamentals are temporarily unavailable. Chart and planning tools remain usable.");
+        }
+      })
+      .catch((error) => {
+        setFundamentalsError(error instanceof Error ? error.message : "Fundamentals are temporarily unavailable.");
+      })
+      .finally(() => setFundamentalsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showFundamentals, symbol]);
 
@@ -2823,11 +2838,19 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </button>
                 {showFundamentals && (
                   <div className="px-4 pb-4">
-                    {!fundamentals ? (
+                    {fundamentalsLoading ? (
                       <div className="space-y-1.5">
                         {[1,2,3,4,5].map(i => (
                           <div key={i} className="h-3 rounded animate-pulse" style={{ background: "var(--app-surface3)" }} />
                         ))}
+                      </div>
+                    ) : fundamentalsError ? (
+                      <div className="text-[11px] leading-relaxed" style={{ color: "var(--app-text3)" }}>
+                        {fundamentalsError}
+                      </div>
+                    ) : !fundamentals ? (
+                      <div className="text-[11px] leading-relaxed" style={{ color: "var(--app-text3)" }}>
+                        Fundamentals are temporarily unavailable. Chart and planning tools remain usable.
                       </div>
                     ) : (
                       <div className="space-y-1.5">
@@ -2850,7 +2873,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                           </div>
                         ))}
                         <div className="text-[9px] mt-1" style={{ color: "var(--app-text3)" }}>
-                          Source: {formatMarketDataSource("Yahoo Finance")}
+                          Source: {fundamentals.data_status === "stale" ? "Stale fundamentals cache" : formatMarketDataSource("Yahoo Finance")}
                         </div>
                       </div>
                     )}
