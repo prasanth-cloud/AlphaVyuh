@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
 from app.middleware.auth import get_current_user_id
@@ -16,12 +16,18 @@ class ShareScreenRequest(BaseModel):
 
 @router.get("/screens")
 async def list_shared_screens(limit: int = 50, featured: bool = False):
-    sb = get_admin_client()
-    query = sb.table("shared_screens").select("*").order("upvotes", desc=True).limit(limit)
-    if featured:
-        query = query.eq("is_featured", True)
-    res = query.execute()
-    return res.data or []
+    try:
+        sb = get_admin_client()
+        query = sb.table("shared_screens").select("*").order("upvotes", desc=True).limit(limit)
+        if featured:
+            query = query.eq("is_featured", True)
+        res = query.execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Community screens are temporarily unavailable.",
+        )
+    return {"screens": res.data or []}
 
 
 @router.post("/screens")
