@@ -17,6 +17,7 @@ import { checkApiReachability } from "@/lib/api-reachability";
 import { marketDataHealthPresentation } from "@/lib/data-health-copy";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import type { ApiReachability } from "@/lib/data-mode";
+import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from "@/lib/account-data-status";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
@@ -28,6 +29,7 @@ type CenterState = {
   aiPatterns: AiPatterns | null;
   closedTrades: number;
   reviewedTrades: number;
+  accountIssues: AccountDataIssue[];
 };
 
 const fallbackBroker: BrokerStatus = {
@@ -109,6 +111,7 @@ export default function DataFreshnessPage() {
     aiPatterns: null,
     closedTrades: 0,
     reviewedTrades: 0,
+    accountIssues: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -117,15 +120,31 @@ export default function DataFreshnessPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [apiReachable, dataHealth, broker, journalStats, journal, aiPatterns] = await Promise.all([
+        const [apiReachable, dataHealth, brokerResult, journalStatsResult, journalResult, aiPatterns] = await Promise.all([
           checkApiReachability(),
           getDataHealth().catch(() => null),
-          getBrokerStatus().catch(() => fallbackBroker),
-          getJournalStats().catch(() => null),
-          getJournalEntries({ limit: 250 }).catch(() => ({ entries: [], total: 0 })),
+          captureAccountData(
+            getBrokerStatus(),
+            { id: "broker", label: "Broker status", href: "/settings/broker" },
+            "Broker status is temporarily unavailable.",
+          ),
+          captureAccountData(
+            getJournalStats(),
+            { id: "journal", label: "Journal stats", href: "/journal" },
+            "Journal stats are temporarily unavailable.",
+          ),
+          captureAccountData(
+            getJournalEntries({ limit: 250 }),
+            { id: "journal", label: "Journal entries", href: "/journal" },
+            "Journal entries are temporarily unavailable.",
+          ),
           getAiPatterns().catch(() => null),
         ]);
 
+        const accountIssues = uniqueAccountIssues([brokerResult.issue, journalStatsResult.issue, journalResult.issue]);
+        const broker = brokerResult.data ?? fallbackBroker;
+        const journalStats = journalStatsResult.data;
+        const journal = journalResult.data ?? { entries: [], total: 0 };
         const closed = journal.entries.filter(entry => entry.status === "closed");
         const reviewed = closed.filter(entry => Boolean(entry.lessons?.trim()));
 
@@ -137,6 +156,7 @@ export default function DataFreshnessPage() {
           aiPatterns,
           closedTrades: closed.length,
           reviewedTrades: reviewed.length,
+          accountIssues,
         });
         setLoadedAt(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
       } catch (e) {
@@ -153,6 +173,8 @@ export default function DataFreshnessPage() {
     const next: { title: string; detail: string; href: string }[] = [];
     const health = state.dataHealth;
     const broker = state.broker ?? fallbackBroker;
+    const brokerIssue = state.accountIssues.find(issue => issue.id === "broker");
+    const journalIssue = state.accountIssues.find(issue => issue.id === "journal");
     const reviewCoverage = state.closedTrades ? Math.round((state.reviewedTrades / state.closedTrades) * 100) : 0;
 
     if (state.apiReachable === "down") {
@@ -175,7 +197,21 @@ export default function DataFreshnessPage() {
       });
     }
 
-    if (!broker.connected || broker.token_expired) {
+    if (state.accountIssues.length > 0) {
+      next.push({
+        title: "Check account data services",
+        detail: `${state.accountIssues.map(issue => issue.label).join(", ")} unavailable. Saved account data is not being counted as empty.`,
+        href: "/data",
+      });
+    }
+
+    if (brokerIssue) {
+      next.push({
+        title: "Recheck broker status service",
+        detail: "Broker import state cannot be confirmed right now; avoid treating this as disconnected.",
+        href: "/settings/broker",
+      });
+    } else if (!broker.connected || broker.token_expired) {
       next.push({
         title: broker.token_expired ? "Reconnect broker token" : "Use journal capture or connect a broker",
         detail: "Broker import is read-only. Order tickets remain journal capture drafts.",
@@ -183,7 +219,13 @@ export default function DataFreshnessPage() {
       });
     }
 
-    if (state.closedTrades < 3) {
+    if (journalIssue) {
+      next.push({
+        title: "Recheck journal service",
+        detail: "Closed-trade and review coverage metrics are paused until journal data responds.",
+        href: "/journal",
+      });
+    } else if (state.closedTrades < 3) {
       next.push({
         title: "Build AI review base",
         detail: "Close at least 3 trades before relying on journal-wide pattern analysis.",
@@ -249,6 +291,27 @@ export default function DataFreshnessPage() {
         </div>
       )}
 
+      {state.accountIssues.length > 0 && (
+        <Card padding="md" data-testid="data-account-data-status">
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 14, alignItems: "center" }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="label" style={{ color: "var(--warn)", marginBottom: 6 }}>Account data unavailable</div>
+              <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 10 }}>
+                Account workflow metrics are paused until these services respond. Existing broker, journal, and workflow data are not being counted as empty.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {state.accountIssues.map(issue => (
+                  <span key={issue.id} className="workspace-pill" title={issue.message}>{issue.label}</span>
+                ))}
+              </div>
+            </div>
+            <Link href="/dashboard" className="workspace-chip-button" style={{ textDecoration: "none" }}>
+              Dashboard
+            </Link>
+          </div>
+        </Card>
+      )}
+
       <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
@@ -264,9 +327,9 @@ export default function DataFreshnessPage() {
         />
         <HealthTile
           label="Broker channel"
-          value={broker.connected && !broker.token_expired ? "READY" : broker.token_expired ? "TOKEN EXPIRED" : "SIMULATED"}
-          detail={broker.connected ? `${broker.broker ?? "Broker"} connected read-only for import.` : "Order capture remains journal-only; broker import is optional."}
-          status={broker.connected && !broker.token_expired ? "good" : broker.token_expired ? "bad" : "warn"}
+          value={state.accountIssues.some(issue => issue.id === "broker") ? "UNAVAILABLE" : broker.connected && !broker.token_expired ? "READY" : broker.token_expired ? "TOKEN EXPIRED" : "SIMULATED"}
+          detail={state.accountIssues.some(issue => issue.id === "broker") ? "Broker import state cannot be confirmed right now." : broker.connected ? `${broker.broker ?? "Broker"} connected read-only for import.` : "Order capture remains journal-only; broker import is optional."}
+          status={state.accountIssues.some(issue => issue.id === "broker") || broker.token_expired ? "bad" : broker.connected ? "good" : "warn"}
         />
         <HealthTile
           label="Kite live feed"
@@ -293,8 +356,8 @@ export default function DataFreshnessPage() {
               ["Last ingest errors", fmtNumber(health?.last_run.errors)],
               ["Kite app", liveMarket?.api_key_configured ? "Configured" : "Missing"],
               ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
-              ["Open trades", fmtNumber(state.journalStats?.open_trades)],
-              ["AI pattern readiness", state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
+              ["Open trades", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : fmtNumber(state.journalStats?.open_trades)],
+              ["AI pattern readiness", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
             ].map(([label, value]) => (
               <div key={label} style={{ padding: "11px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
                 <div className="label" style={{ marginBottom: 4 }}>{label}</div>

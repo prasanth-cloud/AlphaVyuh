@@ -17,6 +17,7 @@ import {
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
+import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
 
 function safeNumber(value: unknown, fallback = 0): number {
   const numeric = typeof value === 'number' ? value : Number(value)
@@ -279,6 +280,7 @@ type WorkflowState = {
   reviewedTrades: number
   onboardingCompleted: boolean
   patterns: AiPatterns | null
+  accountIssues: AccountDataIssue[]
 }
 
 const DASHBOARD_SNAPSHOT_CACHE_KEY = 'alphavyuh-dashboard-snapshot-v1'
@@ -311,6 +313,33 @@ function writeDashboardSnapshotCache(data: MarketOverview, dataHealth: DataHealt
   }
 }
 
+function AccountDataStatusCard({ issues }: { issues: AccountDataIssue[] }) {
+  if (issues.length === 0) return null
+
+  return (
+    <Card padding="md" style={{ marginBottom: 16 }} data-testid="dashboard-account-data-status">
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'center' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="label" style={{ color: 'var(--warn)', marginBottom: 6 }}>Account data unavailable</div>
+          <div className="body-secondary" style={{ marginBottom: 10 }}>
+            Dashboard workflow counts are paused until account data services respond. Existing watchlists, journal entries, and broker state are not being treated as empty.
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {issues.map((issue) => (
+              <span key={issue.id} className="workspace-pill" title={issue.message}>
+                {issue.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => { window.location.href = '/data' }}>
+          Open Data Status
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
 function WorkflowChecklistCard({
   workflow,
   dismissed,
@@ -320,40 +349,47 @@ function WorkflowChecklistCard({
   dismissed: boolean
   onDismiss: () => void
 }) {
+  const watchlistIssue = workflow.accountIssues.find(issue => issue.id === 'watchlists')
+  const journalIssue = workflow.accountIssues.find(issue => issue.id === 'journal')
+  const brokerIssue = workflow.accountIssues.find(issue => issue.id === 'broker')
   const steps = [
     {
-      label: 'Create your first watchlist',
-      description: 'This becomes the bridge from scans to charts.',
-      completed: workflow.watchlists > 0,
+      label: watchlistIssue ? 'Watchlist data unavailable' : 'Create your first watchlist',
+      description: watchlistIssue ? 'Open Data Status before changing lists; saved watchlists are not being counted as empty.' : 'This becomes the bridge from scans to charts.',
+      completed: !watchlistIssue && workflow.watchlists > 0,
     },
     {
       label: 'Add at least one symbol',
-      description: 'Use the scanner or type a symbol directly into the watchlist desk.',
-      completed: workflow.trackedSymbols > 0,
+      description: watchlistIssue ? 'Symbol counts will resume after the watchlist service responds.' : 'Use the scanner or type a symbol directly into the watchlist desk.',
+      completed: !watchlistIssue && workflow.trackedSymbols > 0,
     },
     {
-      label: 'Connect your broker',
-      description: workflow.brokerConnected
+      label: brokerIssue ? 'Broker status unavailable' : 'Connect your broker',
+      description: brokerIssue
+        ? 'Broker import state cannot be confirmed right now.'
+        : workflow.brokerConnected
         ? `${workflow.brokerName ?? 'Broker'} connected for read-only import and journal sync.`
         : 'Optional; broker connections are read-only/import only.',
-      completed: workflow.brokerConnected,
+      completed: !brokerIssue && workflow.brokerConnected,
     },
     {
-      label: 'Log your first trade',
-      description: 'Once a trade exists, AlphaVyuh can start carrying context into the journal.',
-      completed: workflow.totalTrades > 0,
+      label: journalIssue ? 'Journal data unavailable' : 'Log your first trade',
+      description: journalIssue ? 'Journal counts are paused until the service responds.' : 'Once a trade exists, AlphaVyuh can start carrying context into the journal.',
+      completed: !journalIssue && workflow.totalTrades > 0,
     },
     {
       label: 'Close 3 trades for review',
-      description: 'That is enough history to unlock journal-wide coaching.',
-      completed: workflow.closedTrades >= 3,
+      description: journalIssue ? 'Review readiness cannot be computed while journal data is unavailable.' : 'That is enough history to unlock journal-wide coaching.',
+      completed: !journalIssue && workflow.closedTrades >= 3,
     },
   ]
 
   const completedCount = steps.filter(step => step.completed).length
   const allComplete = completedCount === steps.length
 
-  const nextAction = workflow.watchlists === 0
+  const nextAction = workflow.accountIssues.length > 0
+    ? { label: 'Open Data Status', href: '/data' }
+    : workflow.watchlists === 0
     ? { label: 'Create watchlist', href: '/watchlist' }
     : workflow.trackedSymbols === 0
       ? { label: 'Find symbols', href: '/scanner' }
@@ -365,7 +401,7 @@ function WorkflowChecklistCard({
             ? { label: 'Build review base', href: '/journal' }
             : { label: 'Open AI review', href: '/journal?tab=ai' }
 
-  if (dismissed || allComplete) return null
+  if ((dismissed || allComplete) && workflow.accountIssues.length === 0) return null
 
   return (
     <Card padding="md" style={{ marginBottom: 16 }}>
@@ -400,6 +436,24 @@ function ReviewPulseCard({
 }: {
   workflow: WorkflowState
 }) {
+  const journalIssue = workflow.accountIssues.find(issue => issue.id === 'journal')
+  if (journalIssue) {
+    return (
+      <Card padding="md">
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+          <h2 className="heading-card">Review pulse</h2>
+          <a href="/data" className="caption" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Data status</a>
+        </div>
+        <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
+          <div className="label" style={{ marginBottom: 4, color: 'var(--warn)' }}>Journal data unavailable</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Closed trade and review coverage are paused until journal data responds. Existing trades are not being counted as zero.
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
   const reviewCoverage = workflow.closedTrades > 0
     ? Math.round((workflow.reviewedTrades / workflow.closedTrades) * 100)
     : 0
@@ -500,6 +554,7 @@ export default function DashboardPage() {
     reviewedTrades: 0,
     onboardingCompleted: false,
     patterns: null,
+    accountIssues: [],
   })
   const load = useCallback(async () => {
     setError('')
@@ -550,15 +605,37 @@ export default function DashboardPage() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       Promise.all([
-        getWatchlists({ lite: true }).catch(() => []),
-        getJournalEntries({ limit: 75 }).catch(() => ({ entries: [], total: 0 })),
-        getJournalStats().catch(() => null),
-        getBrokerStatus().catch(() => ({
+        captureAccountData(
+          getWatchlists({ lite: true }),
+          { id: 'watchlists', label: 'Watchlists', href: '/watchlist' },
+          'Watchlist data is temporarily unavailable.',
+        ),
+        captureAccountData(
+          getJournalEntries({ limit: 75 }),
+          { id: 'journal', label: 'Journal entries', href: '/journal' },
+          'Journal entries are temporarily unavailable.',
+        ),
+        captureAccountData(
+          getJournalStats(),
+          { id: 'journal', label: 'Journal stats', href: '/journal' },
+          'Journal stats are temporarily unavailable.',
+        ),
+        captureAccountData(
+          getBrokerStatus(),
+          { id: 'broker', label: 'Broker status', href: '/settings/broker' },
+          'Broker status is temporarily unavailable.',
+        ),
+        getMe().catch(() => null),
+      ]).then(async ([watchlistsResult, journalResult, statsResult, brokerResult, me]) => {
+        const watchlists = watchlistsResult.data ?? []
+        const journal = journalResult.data ?? { entries: [], total: 0 }
+        const stats = statsResult.data
+        const broker = brokerResult.data ?? {
           connected: false,
           broker: null,
-          mode: 'simulated',
+          mode: 'unavailable',
           status: 'not_connected' as const,
-          status_label: 'Journal capture',
+          status_label: 'Broker status unavailable',
           has_api_key: false,
           has_token: false,
           token_expired: false,
@@ -568,9 +645,13 @@ export default function DashboardPage() {
           can_import: false,
           sync_status: 'idle' as const,
           last_synced_at: null,
-        })),
-        getMe().catch(() => null),
-      ]).then(async ([watchlists, journal, stats, broker, me]) => {
+        }
+        const accountIssues = uniqueAccountIssues([
+          watchlistsResult.issue,
+          journalResult.issue,
+          statsResult.issue,
+          brokerResult.issue,
+        ])
         const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
         const closedTradesInSample = journal.entries.filter(entry => entry.status === 'closed').length
         const closedTrades = Math.max(closedTradesInSample, stats?.total_trades ?? 0)
@@ -587,10 +668,11 @@ export default function DashboardPage() {
           reviewedTrades,
           onboardingCompleted: Boolean(me?.onboarding_completed),
           patterns: null,
+          accountIssues,
         }
         setWorkflow(nextWorkflow)
 
-        if (closedTrades >= 3) {
+        if (closedTrades >= 3 && !accountIssues.some(issue => issue.id === 'journal')) {
           getAiPatterns()
             .then((patterns) => {
               setWorkflow(current => ({ ...current, patterns: patterns as AiPatterns | null }))
@@ -599,7 +681,8 @@ export default function DashboardPage() {
             .catch(() => {})
         }
 
-        const allComplete = nextWorkflow.watchlists > 0
+        const allComplete = accountIssues.length === 0
+          && nextWorkflow.watchlists > 0
           && nextWorkflow.trackedSymbols > 0
           && nextWorkflow.brokerConnected
           && nextWorkflow.closedTrades >= 3
@@ -641,6 +724,8 @@ export default function DashboardPage() {
       {!loading && data && (
         <div>
           <MarketPulsePanel data={data} dataHealth={dataHealth} />
+
+          <AccountDataStatusCard issues={workflow.accountIssues} />
 
           <WorkflowChecklistCard
             workflow={workflow}

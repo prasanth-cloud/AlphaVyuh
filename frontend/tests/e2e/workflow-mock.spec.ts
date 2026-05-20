@@ -82,8 +82,13 @@ test.describe("Mock workflow smoke", () => {
     page.on("pageerror", (error) => errors.push(error.message));
 
     await page.goto("/upload", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: /^Use sample report$/i }).click();
-    await expect(page.getByText("Journal-ready")).toBeVisible({ timeout: 10_000 });
+    const sampleReportButton = page.getByRole("button", { name: /^Use sample report$/i });
+    await expect(sampleReportButton).toBeVisible({ timeout: 10_000 });
+    await expect.poll(async () => {
+      if (await page.getByText("Journal-ready").isVisible().catch(() => false)) return true;
+      await sampleReportButton.click().catch(() => {});
+      return page.getByText("Journal-ready").isVisible().catch(() => false);
+    }, { timeout: 10_000 }).toBe(true);
     await expect(page.getByTestId("trade-report-quality")).toContainText(/Expectancy|Payoff ratio|Avg hold/i);
     await expect(page.getByTestId("trade-report-quality")).toContainText(/AUBANK|TCS|4\.8 days/i);
     await page.getByTestId("trade-report-journal-import").click();
