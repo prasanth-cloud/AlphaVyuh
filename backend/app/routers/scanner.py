@@ -966,12 +966,16 @@ async def _run_vcp_pass2(
                 )
             )
 
-    chunk_results = await asyncio.gather(*[_fetch_chunk(c) for c in chunks], return_exceptions=True)
+    try:
+        chunk_results = await asyncio.gather(*[_fetch_chunk(c) for c in chunks])
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="VCP scanner lookback is temporarily unavailable.",
+        )
 
     by_symbol: dict[str, list[dict]] = {}
     for rpc_rows in chunk_results:
-        if isinstance(rpc_rows, BaseException):
-            continue  # one chunk failure → skip, not a full abort
         for row in rpc_rows:
             if row.get("symbol") and row.get("history"):
                 by_symbol[row["symbol"]] = row["history"]
