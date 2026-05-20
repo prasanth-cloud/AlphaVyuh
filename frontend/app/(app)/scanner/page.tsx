@@ -652,6 +652,9 @@ export default function ScannerPage() {
       })
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
       const data = await res.json()
+      if (data.mode === 'unavailable' || data.status === 'unavailable') {
+        throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
+      }
       setResults(data.results || [])
       setSelectedResults(new Set())
       setTotalMatches(data.total_matches || 0)

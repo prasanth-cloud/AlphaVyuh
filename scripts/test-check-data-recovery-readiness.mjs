@@ -128,17 +128,18 @@ function makeFakeBin({ secrets = [], railwayReady = true, workflowRuns = [], ver
   const vercelEnvOutput = Object.entries(vercelEnv)
     .map(([key, value]) => `${key}=${JSON.stringify(String(value))}`)
     .join("\n");
-  const gh = `#!/usr/bin/env bash
-if [[ "$1" == "secret" && "$2" == "list" ]]; then
-  printf '%b' ${JSON.stringify(secretOutput)}
-  exit 0
-fi
-if [[ "$1" == "run" && "$2" == "list" ]]; then
-  printf '%s' ${JSON.stringify(workflowOutput)}
-  exit 0
-fi
-echo "unexpected gh args: $*" >&2
-exit 1
+  const gh = `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args[0] === "secret" && args[1] === "list") {
+  process.stdout.write(${JSON.stringify(secretOutput)});
+  process.exit(0);
+}
+if (args[0] === "run" && args[1] === "list") {
+  process.stdout.write(${JSON.stringify(workflowOutput)});
+  process.exit(0);
+}
+process.stderr.write(\`unexpected gh args: \${args.join(" ")}\`);
+process.exit(1);
 `;
   const railway = railwayReady
     ? `#!/usr/bin/env node
