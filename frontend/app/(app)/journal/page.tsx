@@ -56,6 +56,7 @@ export default function JournalPage() {
 
   const [symbolQ, setSymbolQ] = useState("");
   const [symbolResults, setSymbolResults] = useState<SymbolSearchResult[]>([]);
+  const [symbolSearchError, setSymbolSearchError] = useState("");
   const [selectedSymbol, setSelectedSymbol] = useState("");
 
   const [addForm, setAddForm] = useState<Partial<CreateJournalEntry>>({
@@ -143,10 +144,16 @@ export default function JournalPage() {
   }, [tab, patterns]);
 
   useEffect(() => {
-    if (symbolQ.length < 1) { setSymbolResults([]); return; }
+    if (symbolQ.length < 1) { setSymbolResults([]); setSymbolSearchError(""); return; }
     const t = setTimeout(async () => {
-      const r = await searchSymbols(symbolQ);
-      setSymbolResults(r.slice(0, 6));
+      try {
+        const r = await searchSymbols(symbolQ);
+        setSymbolResults(r.slice(0, 6));
+        setSymbolSearchError("");
+      } catch (error) {
+        setSymbolResults([]);
+        setSymbolSearchError(error instanceof Error ? error.message : "Symbol search is temporarily unavailable.");
+      }
     }, 250);
     return () => clearTimeout(t);
   }, [symbolQ]);
@@ -483,8 +490,9 @@ export default function JournalPage() {
             symbolQ={symbolQ}
             onSymbolQChange={setSymbolQ}
             symbolResults={symbolResults}
+            symbolSearchError={symbolSearchError}
             selectedSymbol={selectedSymbol}
-            onSelectSymbol={s => { setSelectedSymbol(s); setSymbolResults([]); }}
+            onSelectSymbol={s => { setSelectedSymbol(s); setSymbolResults([]); setSymbolSearchError(""); }}
             tradeValue={tradeValue}
             riskRupees={riskRupees}
             rrRatio={rrRatio}

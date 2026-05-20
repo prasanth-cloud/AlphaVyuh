@@ -1123,6 +1123,7 @@ function WatchlistContent() {
   const [addMsg, setAddMsg] = useState("");
   const [adding, setAdding] = useState(false);
   const [searchResults, setSearchResults] = useState<SymbolSearchResult[]>([]);
+  const [symbolSearchError, setSymbolSearchError] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [listQuery, setListQuery] = useState("");
   const [deskFilter, setDeskFilter] = useState<"all" | "gainers" | "losers" | "momentum">("all");
@@ -1660,11 +1661,19 @@ function WatchlistContent() {
   const handleSearchInput = useCallback(async (q: string) => {
     setSymbolInput(q);
     if (q.length >= 1) {
-      const results = await searchSymbols(q).catch(() => []);
-      setSearchResults(results.slice(0, 6));
-      setShowDropdown(results.length > 0);
+      try {
+        const results = await searchSymbols(q);
+        setSearchResults(results.slice(0, 6));
+        setSymbolSearchError("");
+        setShowDropdown(true);
+      } catch (error) {
+        setSearchResults([]);
+        setSymbolSearchError(error instanceof Error ? error.message : "Symbol search is temporarily unavailable.");
+        setShowDropdown(true);
+      }
     } else {
       setSearchResults([]);
+      setSymbolSearchError("");
       setShowDropdown(false);
     }
   }, []);
@@ -1673,6 +1682,7 @@ function WatchlistContent() {
     setSymbolInput(symbol);
     setShowDropdown(false);
     setSearchResults([]);
+    setSymbolSearchError("");
     if (!activeId) return;
     setAdding(true);
     setAddMsg("");
@@ -2018,8 +2028,13 @@ function WatchlistContent() {
                   placeholder="Add symbol…"
                   style={{ fontSize: 12, borderRadius: "var(--radius-sm)", paddingLeft: 24, paddingRight: 8, paddingTop: 5, paddingBottom: 5, background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none", width: 130 }}
                 />
-                {showDropdown && searchResults.length > 0 && (
+                {showDropdown && (searchResults.length > 0 || symbolSearchError) && (
                   <div style={{ position: "absolute", top: "100%", left: 0, right: 0, borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-dropdown)", zIndex: 20, marginTop: 2, maxHeight: 200, overflowY: "auto", background: "var(--surface-float)", border: "1px solid var(--border-subtle)" }}>
+                    {symbolSearchError && (
+                      <div data-testid="watchlist-symbol-search-unavailable" style={{ padding: "8px 12px", fontSize: 12, color: "var(--warn)", lineHeight: 1.45 }}>
+                        {symbolSearchError}
+                      </div>
+                    )}
                     {searchResults.map(s => (
                       <div key={s.symbol} onMouseDown={() => handlePickSymbol(s.symbol)}
                         style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--border-subtle)" }}

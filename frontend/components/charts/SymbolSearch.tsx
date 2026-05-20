@@ -17,18 +17,24 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setQuery(value); }, [value]);
 
   const fetchResults = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); return; }
+    if (!q.trim()) { setResults([]); setError(""); return; }
     setLoading(true);
     try {
       const r = await searchSymbols(q);
       setResults(r);
+      setError("");
       setActiveIdx(-1);
+    } catch (error) {
+      setResults([]);
+      setActiveIdx(-1);
+      setError(error instanceof Error ? error.message : "Symbol search is temporarily unavailable.");
     } finally {
       setLoading(false);
     }
@@ -51,6 +57,7 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
     setQuery(sym);
     setOpen(false);
     setResults([]);
+    setError("");
     onChange(sym);
   }
 
@@ -112,9 +119,14 @@ export default function SymbolSearch({ value, onChange, placeholder = "Search sy
         />
       </div>
 
-      {open && results.length > 0 && (
+      {open && (results.length > 0 || error || loading) && (
         <div className="absolute top-full mt-2 left-0 w-[360px] rounded-[16px] shadow-2xl z-50 overflow-hidden"
           style={{ background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)" }}>
+          {error && (
+            <div data-testid="chart-symbol-search-unavailable" className="px-3 py-2 text-[11px]" style={{ color: "var(--warn)" }}>
+              {error}
+            </div>
+          )}
           {results.slice(0, 8).map((r, i) => (
             <button
               key={r.symbol}

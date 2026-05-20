@@ -762,24 +762,30 @@ async def get_indicators(
 async def search_symbols(
     q: str = Query(..., min_length=1),
 ):
-    sb = get_admin_client()
-    # Two queries: symbol prefix match first, then company name contains
-    sym_r = (
-        sb.table("stock_universe")
-        .select("symbol,company_name,sector,series")
-        .ilike("symbol", f"{q.upper()}%")
-        .order("symbol")
-        .limit(10)
-        .execute()
-    )
-    name_r = (
-        sb.table("stock_universe")
-        .select("symbol,company_name,sector,series")
-        .ilike("company_name", f"%{q}%")
-        .order("symbol")
-        .limit(10)
-        .execute()
-    )
+    try:
+        sb = get_admin_client()
+        # Two queries: symbol prefix match first, then company name contains
+        sym_r = (
+            sb.table("stock_universe")
+            .select("symbol,company_name,sector,series")
+            .ilike("symbol", f"{q.upper()}%")
+            .order("symbol")
+            .limit(10)
+            .execute()
+        )
+        name_r = (
+            sb.table("stock_universe")
+            .select("symbol,company_name,sector,series")
+            .ilike("company_name", f"%{q}%")
+            .order("symbol")
+            .limit(10)
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Symbol search is temporarily unavailable.",
+        )
 
     seen: set[str] = set()
     results = []

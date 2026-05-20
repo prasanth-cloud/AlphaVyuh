@@ -41,6 +41,7 @@ interface TradePanelProps {
   symbolQ: string;
   onSymbolQChange: (q: string) => void;
   symbolResults: SymbolSearchResult[];
+  symbolSearchError: string;
   selectedSymbol: string;
   onSelectSymbol: (symbol: string) => void;
   tradeValue: number | null;
@@ -74,6 +75,7 @@ export function TradePanel({
   symbolQ,
   onSymbolQChange,
   symbolResults,
+  symbolSearchError,
   selectedSymbol,
   onSelectSymbol,
   tradeValue,
@@ -125,8 +127,13 @@ export function TradePanel({
                 placeholder="e.g. RELIANCE"
                 style={inputStyle}
               />
-              {symbolResults.length > 0 && !selectedSymbol && (
+              {(symbolResults.length > 0 || symbolSearchError) && !selectedSymbol && (
                 <div style={{ position: "absolute", top: "100%", left: 0, right: 0, borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-modal)", zIndex: 20, overflow: "hidden", marginTop: 2, background: "var(--surface-float)", border: "1px solid var(--border-subtle)" }}>
+                  {symbolSearchError && (
+                    <div data-testid="journal-symbol-search-unavailable" style={{ padding: "8px 12px", fontSize: 12, lineHeight: 1.45, color: "var(--warn)" }}>
+                      {symbolSearchError}
+                    </div>
+                  )}
                   {symbolResults.map(r => (
                     <button key={r.symbol} onClick={() => { onSelectSymbol(r.symbol); onSymbolQChange(r.symbol); }}
                       style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 13, borderBottom: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
