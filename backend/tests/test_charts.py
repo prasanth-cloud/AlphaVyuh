@@ -251,6 +251,48 @@ async def test_get_candles_fetches_latest_window_and_returns_oldest_first(monkey
 
 
 @pytest.mark.anyio
+async def test_get_candles_raises_503_when_metadata_is_unavailable(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
+
+    with pytest.raises(HTTPException) as exc:
+        await charts.get_candles(
+            "AUBANK",
+            timeframe="D",
+            from_date="2026-01-01",
+            to_date="2026-05-03",
+            limit=3,
+            adjusted=False,
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Candle metadata is temporarily unavailable."
+
+
+@pytest.mark.anyio
+async def test_get_candles_raises_503_when_candle_query_is_unavailable(monkeypatch):
+    monkeypatch.setattr(charts, "get_admin_client", lambda: object())
+    monkeypatch.setattr(
+        charts,
+        "_resolve_chart_symbol",
+        lambda _client, symbol: (symbol, {"company_name": "Aubank", "sector": "Financial Services"}, None),
+    )
+    monkeypatch.setattr(charts, "_fetch_candle_rows", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("query down")))
+
+    with pytest.raises(HTTPException) as exc:
+        await charts.get_candles(
+            "AUBANK",
+            timeframe="D",
+            from_date="2026-01-01",
+            to_date="2026-05-03",
+            limit=3,
+            adjusted=False,
+        )
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "Candle query is temporarily unavailable."
+
+
+@pytest.mark.anyio
 async def test_get_candles_serializes_missing_indicator_values_as_null(monkeypatch):
     row = _daily_row("2026-05-03", 104)
     row["ema_20"] = float("nan")
