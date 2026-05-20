@@ -373,8 +373,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   // Watchlist
   const [wlMsg, setWlMsg] = useState("");
   const [showWlPicker, setShowWlPicker] = useState(false);
+  const [watchlistsLoading, setWatchlistsLoading] = useState(false);
+  const [watchlistsError, setWatchlistsError] = useState<string | null>(null);
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
   const [sourceQueue, setSourceQueue] = useState<Watchlist | null>(null);
+  const [sourceQueueError, setSourceQueueError] = useState<string | null>(null);
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
@@ -729,18 +732,28 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     };
   }, [liveMode, symbol]);
 
-  useEffect(() => {
+  const loadSourceQueue = useCallback(async (force = false) => {
     if (sourcePage !== "watchlist" || (!sourceWatchlistId && !sourceWatchlist)) {
       setSourceQueue(null);
+      setSourceQueueError(null);
       return;
     }
-    getWatchlists().then((lists) => {
+    try {
+      const lists = await getWatchlists({ force });
       const matched = sourceWatchlistId
         ? lists.find((watchlist) => watchlist.id === sourceWatchlistId)
         : lists.find((watchlist) => watchlist.name === sourceWatchlist);
       setSourceQueue(matched ?? null);
-    }).catch(() => setSourceQueue(null));
+      setSourceQueueError(null);
+    } catch (error) {
+      setSourceQueue(null);
+      setSourceQueueError(error instanceof Error ? error.message : "Watchlist data is temporarily unavailable.");
+    }
   }, [sourcePage, sourceWatchlist, sourceWatchlistId]);
+
+  useEffect(() => {
+    loadSourceQueue();
+  }, [loadSourceQueue]);
 
   useEffect(() => {
     getJournalEntries({ limit: 100, symbol }).then((journal) => {
@@ -927,13 +940,21 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     setTimeout(() => setLayoutMsg(""), 2500);
   }
 
-  async function handleAddWatchlist() {
+  async function handleAddWatchlist(force = false) {
+    setWatchlistsLoading(true);
+    setWatchlistsError(null);
+    setWlMsg("");
     try {
-      const wls = await getWatchlists();
+      const wls = await getWatchlists({ force });
       setWatchlists(wls.map(w => ({ id: w.id, name: w.name })));
       setShowWlPicker(true);
+      setWatchlistsError(null);
     } catch (error) {
-      setOrderToast({ message: error instanceof Error ? error.message : "Watchlist data is temporarily unavailable.", journalId: null, broker: "simulated" });
+      setWatchlists([]);
+      setShowWlPicker(true);
+      setWatchlistsError(error instanceof Error ? error.message : "Watchlist data is temporarily unavailable.");
+    } finally {
+      setWatchlistsLoading(false);
     }
   }
 
@@ -1792,6 +1813,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
+    sourceQueueError ? "Watchlists unavailable" : null,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
   ].filter(Boolean) as string[];
@@ -1965,6 +1987,26 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
           Data is {dataAgeDays} days old. Scanner and chart context are using the latest available EOD market snapshot.
+        </div>
+      )}
+
+      {sourceQueueError && sourcePage === "watchlist" && (
+        <div
+          data-testid="chart-source-watchlists-outage"
+          className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-[11px] flex-shrink-0"
+          style={{ background: "rgba(217,119,6,0.08)", borderBottom: "1px solid rgba(217,119,6,0.2)", color: "var(--warn)" }}
+        >
+          <span>
+            <strong>Watchlist queue unavailable.</strong> {sourceQueueError} Chart review, drawing, alerts, and order planning remain usable.
+          </span>
+          <button
+            type="button"
+            onClick={() => loadSourceQueue(true)}
+            className="rounded-full px-3 py-1 text-[11px] font-semibold transition-colors"
+            style={{ border: "1px solid rgba(217,119,6,0.35)", color: "var(--warn)", background: "rgba(217,119,6,0.08)" }}
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -2414,7 +2456,42 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   ) : showWlPicker ? (
                     <div className="rounded-[7px] overflow-hidden" style={{ border: "1px solid var(--app-border)" }}>
                       <div className="px-3 py-2 text-[11px]" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>Pick a watchlist</div>
-                      {watchlists.map(wl => (
+                      {watchlistsError ? (
+                        <div
+                          data-testid="chart-watchlists-outage"
+                          className="px-3 py-3 text-[12px] leading-relaxed"
+                          style={{ color: "var(--warn)", borderTop: "1px solid var(--app-border2)" }}
+                        >
+                          <div className="font-semibold mb-1">Watchlists unavailable</div>
+                          <div>{watchlistsError}</div>
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleAddWatchlist(true)}
+                              className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                              style={{ border: "1px solid rgba(217,119,6,0.35)", color: "var(--warn)" }}
+                            >
+                              Retry
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowWlPicker(false)}
+                              className="rounded-full px-3 py-1 text-[11px] font-semibold"
+                              style={{ border: "1px solid var(--app-border)", color: "var(--app-text3)" }}
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </div>
+                      ) : watchlistsLoading ? (
+                        <div className="px-3 py-3 text-[12px]" style={{ color: "var(--app-text3)", borderTop: "1px solid var(--app-border2)" }}>
+                          Loading watchlists...
+                        </div>
+                      ) : watchlists.length === 0 ? (
+                        <div className="px-3 py-3 text-[12px] leading-relaxed" style={{ color: "var(--app-text3)", borderTop: "1px solid var(--app-border2)" }}>
+                          No watchlists available. Create a list from the Watchlist desk.
+                        </div>
+                      ) : watchlists.map(wl => (
                         <button key={wl.id} onClick={() => handlePickWl(wl.id)}
                           className="w-full text-left px-3 py-2 text-[12px] transition-colors"
                           style={{ color: "var(--app-text1)", borderTop: "1px solid var(--app-border2)" }}
@@ -2432,12 +2509,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       </button>
                     </div>
                   ) : (
-                    <button onClick={handleAddWatchlist}
+                    <button onClick={() => handleAddWatchlist()}
+                      disabled={watchlistsLoading}
                       className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-[7px] text-[11px] transition-colors"
                       style={{ border: "1px solid var(--app-border)", color: "var(--app-text2)" }}
                       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--app-teal)"; (e.currentTarget as HTMLElement).style.color = "var(--app-teal)"; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--app-border)"; (e.currentTarget as HTMLElement).style.color = "var(--app-text2)"; }}>
-                      <BookmarkPlus size={12} /> Add to watchlist
+                      <BookmarkPlus size={12} /> {watchlistsLoading ? "Loading..." : "Add to watchlist"}
                     </button>
                   )}
                 </div>
