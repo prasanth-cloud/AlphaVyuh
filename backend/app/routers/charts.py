@@ -297,8 +297,8 @@ def _old_drawing_to_workspace(drawing_id: str, body: DrawingCreate | DrawingUpda
 
 
 def _get_workspace_row(symbol: str, timeframe: str, user_id: str) -> dict[str, Any]:
-    sb = get_admin_client()
     try:
+        sb = get_admin_client()
         r = (
             sb.table("chart_workspaces")
             .select("*")
@@ -310,11 +310,13 @@ def _get_workspace_row(symbol: str, timeframe: str, user_id: str) -> dict[str, A
         )
         return (r.data if r else None) or _default_workspace(symbol, timeframe)
     except Exception:
-        return _default_workspace(symbol, timeframe)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chart workspace is temporarily unavailable.",
+        )
 
 
 def _save_workspace_row(symbol: str, timeframe: str, indicators: list[Any], drawings: list[Any], user_id: str) -> dict[str, Any]:
-    sb = get_admin_client()
     payload = {
         "user_id": user_id,
         "symbol": symbol.upper(),
@@ -322,7 +324,14 @@ def _save_workspace_row(symbol: str, timeframe: str, indicators: list[Any], draw
         "indicators": indicators,
         "drawings": drawings,
     }
-    r = sb.table("chart_workspaces").upsert(payload, on_conflict="user_id,symbol,timeframe").execute()
+    try:
+        sb = get_admin_client()
+        r = sb.table("chart_workspaces").upsert(payload, on_conflict="user_id,symbol,timeframe").execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chart workspace is temporarily unavailable.",
+        )
     if not r.data:
         raise HTTPException(status_code=500, detail="Failed to save workspace")
     return r.data[0]
@@ -888,14 +897,20 @@ async def delete_drawing(
     drawing_id: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    sb = get_admin_client()
-    rows = (
-        sb.table("chart_workspaces")
-        .select("*")
-        .eq("user_id", user_id)
-        .eq("symbol", symbol.upper())
-        .execute()
-    )
+    try:
+        sb = get_admin_client()
+        rows = (
+            sb.table("chart_workspaces")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("symbol", symbol.upper())
+            .execute()
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chart workspace is temporarily unavailable.",
+        )
     changed = False
     for row in rows.data or []:
         drawings = row.get("drawings") or []
