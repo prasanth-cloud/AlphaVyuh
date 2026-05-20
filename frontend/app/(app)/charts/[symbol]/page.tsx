@@ -357,6 +357,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const loadedPriceAlertsSymbolRef = useRef<string | null>(null);
 
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
+  const [indicatorError, setIndicatorError] = useState<string | null>(null);
   const [rsiData, setRsiData] = useState<LinePoint[]>([]);
   const [macdData, setMacdData] = useState<MACDPoint[]>([]);
   const [stochData, setStochData] = useState<StochPoint[]>([]);
@@ -572,6 +573,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       lastBaseChartKeyRef.current = baseCacheKey;
       setLegendBar(null);
       setRangeNote(getCoverageAvailabilityMessage(freshCached.data.coverage, request) ?? getRangeAvailabilityMessage(freshCached.data.candles ?? [], request));
+      setIndicatorError(null);
       setIndicatorData(freshCached.indicatorData);
       setRsiData(freshCached.rsiData);
       setMacdData(freshCached.macdData);
@@ -593,6 +595,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setAtrData([]);
       setIndicatorData({});
     }
+    if (!allInds.length) setIndicatorError(null);
 
     const candlesParams = {
       limit: request.limit,
@@ -607,8 +610,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         })
       : getCandles(symbol, candlesParams);
     const indicatorsPromise = allInds.length
-      ? getIndicators(symbol, allInds, request.timeframe).catch(() => null)
-      : Promise.resolve(null);
+      ? getIndicators(symbol, allInds, request.timeframe)
+        .then((payload) => ({ payload, error: null as string | null }))
+        .catch((error) => ({
+          payload: null,
+          error: error instanceof Error && error.message.trim()
+            ? error.message
+            : "Chart indicators are temporarily unavailable.",
+        }))
+      : Promise.resolve({ payload: null, error: null as string | null });
 
     Promise.all([candlesPromise, indicatorsPromise])
       .then(([nextData, indicatorsResp]) => {
@@ -617,16 +627,19 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         lastBaseChartKeyRef.current = baseCacheKey;
         setLegendBar(null);
         setRangeNote(getCoverageAvailabilityMessage(nextData.coverage, request) ?? getRangeAvailabilityMessage(nextData.candles ?? [], request));
-        const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp, nextData.candles ?? []);
-        chartDataCache.set(cacheKey, {
-          data: nextData,
-          indicatorData: nextIndicatorData,
-          rsiData: nextRsi,
-          macdData: nextMacd,
-          stochData: nextStoch,
-          atrData: nextAtr,
-          loadedAt: Date.now(),
-        });
+        setIndicatorError(indicatorsResp.error);
+        const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp.payload, nextData.candles ?? []);
+        if (!indicatorsResp.error) {
+          chartDataCache.set(cacheKey, {
+            data: nextData,
+            indicatorData: nextIndicatorData,
+            rsiData: nextRsi,
+            macdData: nextMacd,
+            stochData: nextStoch,
+            atrData: nextAtr,
+            loadedAt: Date.now(),
+          });
+        }
       })
       .catch(e => {
         if (!cancelled) setError(describeMarketDataError(e));
@@ -1813,6 +1826,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
+    indicatorError ? "Indicators unavailable" : null,
     sourceQueueError ? "Watchlists unavailable" : null,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
@@ -3217,8 +3231,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               )}
               {activeIndicatorLabels.length > 0 && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  Indicators · {activeIndicatorLabels.join(" · ")}
+                  style={indicatorError
+                    ? { background: "rgba(217,119,6,0.12)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.24)" }
+                    : { background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {indicatorError ? "Indicators unavailable" : `Indicators · ${activeIndicatorLabels.join(" · ")}`}
                 </div>
               )}
             </div>
@@ -3259,6 +3275,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 style={{ background: "rgba(127,29,29,0.82)", color: "#fecaca", border: "1px solid rgba(248,113,113,0.22)", backdropFilter: "blur(10px)" }}
               >
                 Could not refresh; showing cached chart
+              </div>
+            )}
+            {indicatorError && data && (
+              <div
+                data-testid="chart-indicators-unavailable"
+                className="absolute top-[58px] right-3 z-20 rounded-[14px] px-3 py-2 text-[11px] font-semibold"
+                style={{ width: "min(360px, calc(100% - 24px))", background: "rgba(36,24,8,0.86)", color: "#fbbf24", border: "1px solid rgba(245,158,11,0.22)", backdropFilter: "blur(10px)" }}
+              >
+                {indicatorError} Candles, drawings, alerts, and order planning remain usable.
               </div>
             )}
             {/* Candle legend */}
