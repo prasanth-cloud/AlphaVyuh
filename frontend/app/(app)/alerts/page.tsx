@@ -28,10 +28,12 @@ export default function AlertsPage() {
   const [matches, setMatches] = useState<ScanAlertMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function loadAlerts() {
     setLoading(true);
     setMessage("");
+    setLoadError(null);
     try {
       const [activeAlerts, recentMatches] = await Promise.all([
         listAlerts(),
@@ -40,7 +42,7 @@ export default function AlertsPage() {
       setAlerts(activeAlerts);
       setMatches(recentMatches);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load alerts");
+      setLoadError(error instanceof Error ? error.message : "Scan alerts are temporarily unavailable.");
     } finally {
       setLoading(false);
     }
@@ -58,6 +60,7 @@ export default function AlertsPage() {
     try {
       const updated = await updateAlert(alert.id, { is_active: !alert.is_active });
       setAlerts((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setLoadError(null);
       setMessage(updated.is_active ? "EOD scan alert resumed" : "EOD scan alert paused");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not update alert");
@@ -69,6 +72,7 @@ export default function AlertsPage() {
       await deleteAlert(alert.id);
       setAlerts((current) => current.filter((item) => item.id !== alert.id));
       setMatches((current) => current.filter((match) => match.alert_id !== alert.id));
+      setLoadError(null);
       setMessage("EOD scan alert removed");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not delete alert");
@@ -99,12 +103,29 @@ export default function AlertsPage() {
         </div>
       )}
 
+      {loadError && (
+        <div
+          className="workspace-card"
+          data-testid="scan-alerts-unavailable"
+          style={{ borderColor: "rgba(217,119,6,0.24)", background: "rgba(217,119,6,0.08)" }}
+        >
+          <div className="label" style={{ color: "var(--warn)", marginBottom: 6 }}>Scan alerts unavailable</div>
+          <div className="workspace-card-copy" style={{ color: "var(--text-primary)" }}>
+            {loadError}
+          </div>
+        </div>
+      )}
+
       <div className="workspace-card" style={{ padding: 0, overflow: "hidden" }}>
         <div className="workspace-toolbar" style={{ minHeight: 58 }}>
           <div>
             <div className="workspace-card-title">Saved scan alerts</div>
             <div className="workspace-card-copy">
-              {loading ? "Loading EOD alert state..." : `${alerts.length} saved ${alerts.length === 1 ? "scan" : "scans"}`}
+              {loading
+                ? "Loading EOD alert state..."
+                : loadError
+                  ? "Saved scans could not be confirmed"
+                  : `${alerts.length} saved ${alerts.length === 1 ? "scan" : "scans"}`}
             </div>
           </div>
           <Link className="workspace-chip-button" href="/scanner">
@@ -112,7 +133,14 @@ export default function AlertsPage() {
           </Link>
         </div>
 
-        {alerts.length === 0 && !loading ? (
+        {loadError ? (
+          <div style={{ padding: 32 }}>
+            <EmptyState
+              title="Saved scan alerts unavailable"
+              description="Your saved scans are not being treated as empty while the alert service is unavailable."
+            />
+          </div>
+        ) : alerts.length === 0 && !loading ? (
           <div style={{ padding: 32 }}>
             <EmptyState
               title="No saved scan alerts yet"
@@ -177,12 +205,19 @@ export default function AlertsPage() {
           <div>
             <div className="workspace-card-title">Latest EOD digest</div>
             <div className="workspace-card-copy">
-              {latestRunDate ? `Most recent scan alert run: ${latestRunDate}` : "Waiting for latest EOD data."}
+              {loadError ? "Latest scan alert digest could not be confirmed." : latestRunDate ? `Most recent scan alert run: ${latestRunDate}` : "Waiting for latest EOD data."}
             </div>
           </div>
         </div>
 
-        {matches.length === 0 && !loading ? (
+        {loadError ? (
+          <div style={{ padding: 32 }}>
+            <EmptyState
+              title="EOD digest unavailable"
+              description="Recent scan matches are not being treated as empty while the alert service is unavailable."
+            />
+          </div>
+        ) : matches.length === 0 && !loading ? (
           <div style={{ padding: 32 }}>
             <EmptyState
               title="No EOD matches yet"

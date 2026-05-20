@@ -92,6 +92,26 @@ class _FakeClient:
         return _FakeTable(self, name)
 
 
+class _FailingTable(_FakeTable):
+    def execute(self):
+        raise RuntimeError("scan alerts store down")
+
+
+class _FailingClient(_FakeClient):
+    def table(self, name):
+        return _FailingTable(self, name)
+
+
+class _EmptyTable(_FakeTable):
+    def execute(self):
+        return _FakeResult([])
+
+
+class _EmptyClient(_FakeClient):
+    def table(self, name):
+        return _EmptyTable(self, name)
+
+
 def test_scan_alert_sort_validation_rejects_unknown_sort_key():
     with pytest.raises(HTTPException) as exc_info:
         alerts._validate_sort("unknown_column", "desc")
@@ -115,6 +135,59 @@ def test_recent_matches_route_is_not_shadowed_by_dynamic_alert_route():
     dynamic_index = paths.index("/api/v1/alerts/{alert_id}/matches")
 
     assert recent_index < dynamic_index
+
+
+@pytest.mark.anyio
+async def test_list_alerts_keeps_empty_alerts_as_valid_empty_state(monkeypatch):
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: _EmptyClient())
+
+    result = await alerts.list_alerts(user_id="user-1")
+
+    assert result == {"alerts": []}
+
+
+@pytest.mark.anyio
+async def test_list_alerts_raises_503_when_alert_store_fails(monkeypatch):
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: _FailingClient())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await alerts.list_alerts(user_id="user-1")
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Scan alerts are temporarily unavailable."
+
+
+@pytest.mark.anyio
+async def test_recent_matches_raises_503_when_match_store_fails(monkeypatch):
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: _FailingClient())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await alerts.get_recent_matches(user_id="user-1")
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Scan alerts are temporarily unavailable."
+
+
+@pytest.mark.anyio
+async def test_update_alert_preserves_missing_alert_404(monkeypatch):
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: _EmptyClient())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await alerts.update_alert("missing-alert", alerts.UpdateAlertRequest(is_active=False), user_id="user-1")
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "Alert not found"
+
+
+@pytest.mark.anyio
+async def test_delete_alert_raises_503_when_alert_store_fails(monkeypatch):
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: _FailingClient())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await alerts.delete_alert("alert-1", user_id="user-1")
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == "Scan alerts are temporarily unavailable."
 
 
 def test_scan_alerts_migration_defines_rls_and_unique_snapshot_constraint():

@@ -68,3 +68,73 @@ describe("mock scan alerts", () => {
     expect((await listAlerts()).some((alert) => alert.id === existing.id)).toBe(false);
   });
 });
+
+describe("live scan alerts API", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
+    vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "live");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "false");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps an empty live scan alert list as a valid empty state", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ alerts: [] }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { listAlerts } = await import("@/lib/api");
+
+    await expect(listAlerts()).resolves.toEqual([]);
+  });
+
+  it("surfaces live scan alert list outages instead of returning an empty list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Scan alerts are temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { listAlerts } = await import("@/lib/api");
+
+    await expect(listAlerts()).rejects.toThrow("Scan alerts are temporarily unavailable.");
+  });
+
+  it("surfaces recent match outages instead of returning an empty digest", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Scan alerts are temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getRecentAlertMatches } = await import("@/lib/api");
+
+    await expect(getRecentAlertMatches()).rejects.toThrow("Scan alerts are temporarily unavailable.");
+  });
+
+  it("rejects unavailable scan alert payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ status: "unavailable", alerts: [], message: "Scan alerts are temporarily unavailable." }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { listAlerts } = await import("@/lib/api");
+
+    await expect(listAlerts()).rejects.toThrow("Scan alerts are temporarily unavailable.");
+  });
+
+  it("keeps failed deletes visible to the caller", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Scan alerts are temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { deleteAlert } = await import("@/lib/api");
+
+    await expect(deleteAlert("alert-1")).rejects.toThrow("Scan alerts are temporarily unavailable.");
+  });
+});
