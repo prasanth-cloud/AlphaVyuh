@@ -131,10 +131,10 @@ async def get_market_summary():
                 break
             offset += 1000
     except Exception:
-        return {"trade_date": None, "advances": 0, "declines": 0, "unchanged": 0,
-                "advance_decline_ratio": None, "new_52w_highs": 0, "new_52w_lows": 0,
-                "above_ema20_pct": None, "above_ema50_pct": None, "above_ema200_pct": None,
-                "total_stocks": 0, "mode": "unavailable"}
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Market summary is temporarily unavailable.",
+        )
 
     advances = declines = unchanged = 0
     new_highs = new_lows = 0
