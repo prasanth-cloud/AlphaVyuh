@@ -4,6 +4,7 @@ import { allowMockAppAuth } from "@/lib/runtime-mode";
 
 const PUBLIC_PREFIXES = [
   "/favicon.ico",
+  "/health",
   "/login",
   "/signup",
   "/reset-password",
@@ -24,7 +25,7 @@ const PUBLIC_PREFIXES = [
   "/_next/",
 ];
 
-function isPublic(pathname: string): boolean {
+export function isPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
@@ -53,7 +54,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (isPublic(pathname)) return response;
+  if (isPublicPath(pathname)) return response;
   if (allowMockAppAuth()) return response;
 
   const supabase = createMiddlewareClient(request, response);
