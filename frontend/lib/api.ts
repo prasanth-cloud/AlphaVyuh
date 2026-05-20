@@ -546,7 +546,10 @@ export async function deleteWatchlist(watchlistId: string): Promise<void> {
     return;
   }
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
+  const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}`, { method: "DELETE", headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Watchlist delete is temporarily unavailable."));
+  }
   invalidateClientCache(["watchlists"]);
 }
 
@@ -573,7 +576,9 @@ export async function addToWatchlist(watchlistId: string, symbol: string): Promi
     body: JSON.stringify({ symbol }),
   });
   if (res.status === 409) throw new Error("Already in watchlist");
-  if (!res.ok) throw new Error("Add failed");
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Watchlist add is temporarily unavailable."));
+  }
   invalidateClientCache(["watchlists"]);
 }
 
@@ -589,10 +594,13 @@ export async function removeFromWatchlist(watchlistId: string, symbol: string): 
     return;
   }
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/${symbol}`, {
+  const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/${symbol}`, {
     method: "DELETE",
     headers,
   });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Watchlist item removal is temporarily unavailable."));
+  }
   invalidateClientCache(["watchlists"]);
 }
 
@@ -601,11 +609,14 @@ export async function reorderWatchlist(
   items: { symbol: string; sort_order: number }[]
 ): Promise<void> {
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/reorder`, {
+  const res = await fetch(`${API}/api/v1/watchlists/${watchlistId}/items/reorder`, {
     method: "PATCH",
     headers,
     body: JSON.stringify({ items }),
   });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Watchlist reorder is temporarily unavailable."));
+  }
   invalidateClientCache(["watchlists"]);
 }
 

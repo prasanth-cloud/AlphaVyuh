@@ -292,6 +292,9 @@ function SortableRow({
       <td style={{ padding: dense ? "5px 6px 5px 4px" : "7px 8px 7px 4px", textAlign: "right", width: 24 }} onClick={e => e.stopPropagation()}>
         <button
           onClick={() => onRemove(item.symbol)}
+          aria-label={`Remove ${item.symbol} from watchlist`}
+          title={`Remove ${item.symbol} from watchlist`}
+          data-testid={`watchlist-remove-${item.symbol}`}
           style={{ color: "var(--text-tertiary)", lineHeight: 0, opacity: 0 }}
           className="remove-btn"
           onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--loss)"}
@@ -1758,27 +1761,38 @@ function WatchlistContent() {
 
   async function handleRemove(symbol: string) {
     if (!activeId) return;
-    await removeFromWatchlist(activeId, symbol);
-    setWatchlists(prev =>
-      prev.map(w => w.id === activeId ? { ...w, items: w.items.filter(i => i.symbol !== symbol) } : w)
-    );
-    if (chartSymbol === symbol) setChartSymbol(null);
+    try {
+      await removeFromWatchlist(activeId, symbol);
+      setWatchlists(prev =>
+        prev.map(w => w.id === activeId ? { ...w, items: w.items.filter(i => i.symbol !== symbol) } : w)
+      );
+      if (chartSymbol === symbol) setChartSymbol(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Watchlist item removal is temporarily unavailable.");
+    }
   }
 
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id || !activeId) return;
+    const activeList = watchlists.find((watchlist) => watchlist.id === activeId);
+    if (!activeList) return;
+    const oldIdx = activeList.items.findIndex(i => i.symbol === active.id);
+    const newIdx = activeList.items.findIndex(i => i.symbol === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const reordered = arrayMove(activeList.items, oldIdx, newIdx).map((item, idx) => ({ ...item, sort_order: idx }));
     setWatchlists(prev =>
-      prev.map(w => {
-        if (w.id !== activeId) return w;
-        const oldIdx = w.items.findIndex(i => i.symbol === active.id);
-        const newIdx = w.items.findIndex(i => i.symbol === over.id);
-        const reordered = arrayMove(w.items, oldIdx, newIdx).map((item, idx) => ({ ...item, sort_order: idx }));
-        reorderWatchlist(activeId, reordered.map(i => ({ symbol: i.symbol, sort_order: i.sort_order })));
-        return { ...w, items: reordered };
-      })
+      prev.map(w => w.id === activeId ? { ...w, items: reordered } : w)
     );
-  }, [activeId]);
+    try {
+      await reorderWatchlist(activeId, reordered.map(i => ({ symbol: i.symbol, sort_order: i.sort_order })));
+    } catch (error) {
+      setWatchlists(prev =>
+        prev.map(w => w.id === activeId ? activeList : w)
+      );
+      showToast(error instanceof Error ? error.message : "Watchlist reorder is temporarily unavailable.");
+    }
+  }, [activeId, watchlists]);
 
   const selectedMetrics = selectedItem ? [
     {
@@ -1875,7 +1889,7 @@ function WatchlistContent() {
       <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
+        <div data-testid="watchlist-toast" style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
           {toast}
         </div>
       )}

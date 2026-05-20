@@ -50,6 +50,42 @@ describe("watchlist API", () => {
     await expect(getWatchlists({ force: true })).rejects.toThrow("Watchlist shell is temporarily unavailable.");
   });
 
+  it("surfaces watchlist delete failures instead of treating the queue as deleted", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Watchlist delete is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { deleteWatchlist } = await import("@/lib/api");
+
+    await expect(deleteWatchlist("watchlist-1")).rejects.toThrow("Watchlist delete is temporarily unavailable.");
+  });
+
+  it("surfaces item removal failures instead of treating the symbol as removed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Watchlist item removal is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { removeFromWatchlist } = await import("@/lib/api");
+
+    await expect(removeFromWatchlist("watchlist-1", "RELIANCE")).rejects.toThrow("Watchlist item removal is temporarily unavailable.");
+  });
+
+  it("surfaces reorder failures instead of treating the saved order as updated", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Watchlist reorder is temporarily unavailable." }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { reorderWatchlist } = await import("@/lib/api");
+
+    await expect(reorderWatchlist("watchlist-1", [
+      { symbol: "RELIANCE", sort_order: 0 },
+      { symbol: "ITC", sort_order: 1 },
+    ])).rejects.toThrow("Watchlist reorder is temporarily unavailable.");
+  });
+
   it("does not leak mock watchlists from production when stale mock flags are present", async () => {
     vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "true");
     vi.stubGlobal("fetch", vi.fn(async () => {
