@@ -18,6 +18,8 @@ interface TradeTableProps {
   onDeleteEntry: (id: string) => void;
   onAddTrade: () => void;
   journalPlan: string | null;
+  unavailableMessage?: string | null;
+  onRetry?: () => void;
 }
 
 export function TradeTable({
@@ -34,6 +36,8 @@ export function TradeTable({
   onDeleteEntry,
   onAddTrade,
   journalPlan,
+  unavailableMessage,
+  onRetry,
 }: TradeTableProps) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -101,6 +105,20 @@ export function TradeTable({
                   ))}
                 </tr>
               ))
+            ) : unavailableMessage ? (
+              <tr>
+                <td colSpan={9} style={{ padding: "48px 24px", textAlign: "center" }}>
+                  <div className="body-secondary" style={{ color: "var(--warn)", fontWeight: 700 }}>Journal data unavailable</div>
+                  <div className="caption" style={{ marginTop: 6, maxWidth: 520, marginInline: "auto", lineHeight: 1.6 }}>
+                    {unavailableMessage} Existing trades are not being treated as empty.
+                  </div>
+                  {onRetry && (
+                    <button onClick={onRetry} style={{ marginTop: 10, fontSize: 13, color: "var(--accent)", cursor: "pointer" }}>
+                      Retry journal
+                    </button>
+                  )}
+                </td>
+              </tr>
             ) : entries.length === 0 ? (
               <tr>
                 <td colSpan={9} style={{ padding: "48px 0", textAlign: "center" }}>

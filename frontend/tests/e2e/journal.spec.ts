@@ -103,19 +103,32 @@ async function mockJournalRoutes(
     stats = STATS,
     analytics = ANALYTICS,
     brokerConnected = false,
+    journalStatus = 200,
+    statsStatus = 200,
+    brokerStatus = 200,
   }: {
     entries?: TradeFixture[];
     stats?: typeof STATS;
     analytics?: typeof ANALYTICS;
     brokerConnected?: boolean;
+    journalStatus?: number;
+    statsStatus?: number;
+    brokerStatus?: number;
   } = {}
 ) {
   // Entries (with optional status filter)
-  await page.route(`${API}/api/v1/journal*`, (route) => {
+  await page.route(`${API}/api/v1/journal**`, (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
 
     if (method === "GET" && !url.pathname.includes("/stats") && !url.pathname.includes("/analytics") && !url.pathname.includes("/lessons")) {
+      if (journalStatus >= 400) {
+        return route.fulfill({
+          status: journalStatus,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Journal entries are temporarily unavailable. Your trades were not loaded." }),
+        });
+      }
       const statusFilter = url.searchParams.get("status");
       const filtered = statusFilter
         ? entries.filter((e) => e.status === statusFilter)
@@ -128,6 +141,13 @@ async function mockJournalRoutes(
     }
 
     if (method === "GET" && url.pathname.endsWith("/stats")) {
+      if (statsStatus >= 400) {
+        return route.fulfill({
+          status: statsStatus,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Journal stats are temporarily unavailable. Trade rows may still be current." }),
+        });
+      }
       return route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -180,15 +200,21 @@ async function mockJournalRoutes(
 
   // Broker status
   await page.route(`${API}/api/v1/broker/status`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        connected: brokerConnected,
-        broker: brokerConnected ? "zerodha" : null,
-        status: brokerConnected ? "connected" : "disconnected",
-      }),
-    })
+    brokerStatus >= 400
+      ? route.fulfill({
+          status: brokerStatus,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Broker import status is temporarily unavailable. Reconnect or retry before importing." }),
+        })
+      : route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            connected: brokerConnected,
+            broker: brokerConnected ? "zerodha" : null,
+            status: brokerConnected ? "connected" : "disconnected",
+          }),
+        })
   );
 
   // Symbol search
@@ -275,6 +301,40 @@ test.describe("Journal — trade table", () => {
     await page.getByRole("button", { name: "closed" }).click();
     await expect(page.locator("table tbody")).not.toContainText("RELIANCE");
     await expect(page.locator("table tbody")).toContainText("TCS");
+  });
+});
+
+test.describe("Journal — account data unavailable states", () => {
+  test("journal entry failure does not render a false empty journal", async ({ page }) => {
+    await mockJournalRoutes(page, { journalStatus: 503 });
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByTestId("journal-account-data-status")).toContainText("Journal entries are temporarily unavailable", { timeout: 15_000 });
+    await expect(page.locator("table tbody")).toContainText("Journal data unavailable");
+    await expect(page.getByText("No trades yet.")).not.toBeVisible();
+    await expect(page.getByRole("button", { name: "Log your first trade" })).not.toBeVisible();
+  });
+
+  test("journal stats failure keeps trade rows visible and marks stats unavailable", async ({ page }) => {
+    await mockJournalRoutes(page, { statsStatus: 503 });
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.locator("table tbody")).toContainText("RELIANCE", { timeout: 15_000 });
+    await expect(page.locator("table tbody")).toContainText("TCS");
+    await expect(page.getByTestId("journal-account-data-status")).toContainText("Journal stats are temporarily unavailable");
+    await expect(page.locator("body")).toContainText("Unavailable");
+  });
+
+  test("broker status failure is visible and hides broker import", async ({ page }) => {
+    await mockJournalRoutes(page, { brokerConnected: true, brokerStatus: 503 });
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByTestId("journal-account-data-status")).toContainText("Broker import status is temporarily unavailable", { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText("Broker status unavailable");
+    await expect(page.getByRole("button", { name: "Import from Zerodha" })).not.toBeVisible();
   });
 });
 
