@@ -1476,6 +1476,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     if (chartType !== "candles") params.set("type", chartType);
     return `/charts/${nextSymbol}${params.toString() ? `?${params.toString()}` : ""}`;
   }, [chartType, fullChartMode, sourcePage, sourceQueue?.id, sourceQueueName, sourceWatchlistId]);
+  const buildWatchlistReturnHref = useCallback((includePlanDraft = false) => {
+    const params = new URLSearchParams({ symbol });
+    const queueId = sourceQueue?.id ?? sourceWatchlistId;
+    if (queueId) params.set("id", queueId);
+    if (includePlanDraft) params.set("planDraft", "chart");
+    return `/watchlist?${params.toString()}`;
+  }, [sourceQueue?.id, sourceWatchlistId, symbol]);
   const stepQueueSymbol = useCallback((direction: "prev" | "next") => {
     if (!sourceQueueSymbols.length) return;
     const currentIndex = sourceQueueIndex >= 0 ? sourceQueueIndex : 0;
@@ -1616,9 +1623,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     try {
       window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify(draft));
       trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true, playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
-      router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}&planDraft=chart`);
+      router.push(buildWatchlistReturnHref(true));
     } catch {
-      router.push(`/watchlist?symbol=${encodeURIComponent(symbol)}`);
+      router.push(buildWatchlistReturnHref(false));
     }
   }
   const latestVolumeRatio = latest?.volume_ratio ?? null;
@@ -2161,7 +2168,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           </button>
 
           {fullChartMode ? (
-            <Link href={sourceQueue?.id ? `/watchlist?symbol=${symbol}` : "/watchlist"} prefetch={false} className="workspace-chip-button">
+            <Link href={buildWatchlistReturnHref(false)} prefetch={false} className="workspace-chip-button">
               Exit full
             </Link>
           ) : (
