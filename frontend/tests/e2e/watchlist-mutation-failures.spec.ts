@@ -157,4 +157,57 @@ test.describe("Watchlist mutation failures", () => {
     await expect(page.locator("tr[data-symbol='RELIANCE']")).toHaveCount(0);
     expect(addRequests).toBeGreaterThan(0);
   });
+
+  test("surfaces scanner handoff auto-add failures without adding the symbol", async ({ page }) => {
+    let addRequests = 0;
+
+    await page.route("**/api/v1/watchlists**", (route) => {
+      const request = route.request();
+      if (request.method() === "POST" && request.url().includes("/items")) {
+        addRequests += 1;
+        return route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Watchlist add is temporarily unavailable." }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(watchlistPayload),
+      });
+    });
+    await page.route("**/api/v1/journal**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ entries: [], total: 0, plan: "pro", history_months: null }) })
+    );
+    await page.route("**/api/v1/workflow/states**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ states: [] }) })
+    );
+    await page.route("**/api/v1/charts/**/candles**", (route) => {
+      const match = route.request().url().match(/\/charts\/([^/]+)\/candles/);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(candlePayload(match?.[1] ?? "AUBANK")),
+      });
+    });
+    await page.route("**/api/v1/charts/**/workspace**", (route) => {
+      const match = route.request().url().match(/\/charts\/([^/]+)\/workspace/);
+      const symbol = match?.[1] ?? "AUBANK";
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ symbol, timeframe: "D", indicators: [], drawings: [] }),
+      });
+    });
+
+    await page.goto("/watchlist?symbol=AUBANK");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.locator(".watchlist-chart-header")).toContainText("AUBANK", { timeout: 20_000 });
+    await expect(page.getByTestId("watchlist-toast")).toContainText("AUBANK could not be added to the active watchlist.", { timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-toast")).toContainText("Watchlist add is temporarily unavailable.");
+    await expect(page.locator("tr[data-symbol='AUBANK']")).toHaveCount(0);
+    expect(addRequests).toBe(1);
+  });
 });
