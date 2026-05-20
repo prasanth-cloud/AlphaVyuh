@@ -91,4 +91,28 @@ TCS,2026-05-02,2026-05-07,long,5,,,280`);
     expect(apiMocks.createJournalEntry).not.toHaveBeenCalled();
     expect(imported.message).toBe("All journal-ready rows were already imported.");
   });
+
+  it("imports paired broker tradebook executions as closed journal entries", async () => {
+    const result = parseTradeReportCsv(`Trading Symbol,Trade Date,Transaction Type,Quantity,Price
+RELIANCE,2026-05-01,BUY,10,100
+RELIANCE,2026-05-03,SELL,10,112`);
+
+    const imported = await importTradeReportToJournal(result);
+
+    expect(imported).toMatchObject({ imported: 1, skipped: 0, ineligible: 0, total: 1 });
+    expect(apiMocks.createJournalEntry).toHaveBeenCalledTimes(1);
+    expect(apiMocks.updateJournalEntry).toHaveBeenCalledTimes(1);
+    expect(apiMocks.createJournalEntry.mock.calls[0][0]).toMatchObject({
+      symbol: "RELIANCE",
+      trade_type: "long",
+      entry_date: "2026-05-01",
+      entry_price: 100,
+      quantity: 10,
+      source_context: "Zerodha / Kite style CSV upload",
+    });
+    expect(apiMocks.updateJournalEntry.mock.calls[0][1]).toMatchObject({
+      exit_date: "2026-05-03",
+      exit_price: 112,
+    });
+  });
 });
