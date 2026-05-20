@@ -1841,6 +1841,8 @@ export type Fundamentals = {
   symbol: string;
   market?: string;
   currency?: string;
+  data_status?: "available" | "stale" | "unavailable" | string;
+  message?: string;
   trailing_pe: number | null;
   forward_pe: number | null;
   price_to_book: number | null;
@@ -1889,7 +1891,15 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals | nu
     try {
       const res = await withTimeout(fetch(`${API}/api/v1/stocks/${sym}/fundamentals`), 2_500);
       if (!res.ok) return null;
-      return res.json();
+      const data = await res.json();
+      if (data?.data_status === "unavailable") {
+        throw new Error(
+          typeof data.message === "string" && data.message.trim()
+            ? data.message
+            : "Fundamentals are temporarily unavailable.",
+        );
+      }
+      return data;
     } catch {
       return null;
     }
