@@ -35,8 +35,14 @@ export type TradeReportSummary = {
   expectancy: number;
   averageWin: number;
   averageLoss: number;
+  totalCharges: number;
+  averageChargePerTrade: number;
+  chargesToGrossProfitPct: number | null;
   averageHoldingDays: number | null;
   maxDrawdown: number;
+  largestSymbol: string | null;
+  largestSymbolPnlSharePct: number | null;
+  largestSymbolTradeSharePct: number | null;
   bestTrade: ImportedTrade | null;
   worstTrade: ImportedTrade | null;
   symbolBreakdown: {
@@ -452,6 +458,7 @@ function summarize(trades: ImportedTrade[], rejectedRows: number, totalRows: num
   const grossProfit = wins.reduce((sum, trade) => sum + trade.pnl, 0);
   const grossLoss = losses.reduce((sum, trade) => sum + trade.pnl, 0);
   const totalPnl = trades.reduce((sum, trade) => sum + trade.pnl, 0);
+  const totalCharges = trades.reduce((sum, trade) => sum + (trade.charges ?? 0), 0);
   const averageWin = wins.length ? grossProfit / wins.length : 0;
   const averageLoss = losses.length ? grossLoss / losses.length : 0;
   const holdingPeriods = trades.map(holdingDays).filter((days): days is number => days != null);
@@ -478,6 +485,8 @@ function summarize(trades: ImportedTrade[], rejectedRows: number, totalRows: num
       };
     })
     .sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl));
+  const totalAbsoluteSymbolPnl = symbolBreakdown.reduce((sum, row) => sum + Math.abs(row.pnl), 0);
+  const largestSymbol = symbolBreakdown[0] ?? null;
 
   const monthlyPnl = [...monthMap.entries()]
     .map(([month, rows]) => ({
@@ -504,8 +513,14 @@ function summarize(trades: ImportedTrade[], rejectedRows: number, totalRows: num
     expectancy: trades.length ? round(totalPnl / trades.length) : 0,
     averageWin: round(averageWin),
     averageLoss: round(averageLoss),
+    totalCharges: round(totalCharges),
+    averageChargePerTrade: trades.length ? round(totalCharges / trades.length) : 0,
+    chargesToGrossProfitPct: grossProfit > 0 ? round((totalCharges / grossProfit) * 100, 1) : null,
     averageHoldingDays: averageHoldingDays == null ? null : round(averageHoldingDays, 1),
     maxDrawdown: computeMaxDrawdown(trades),
+    largestSymbol: largestSymbol?.symbol ?? null,
+    largestSymbolPnlSharePct: largestSymbol && totalAbsoluteSymbolPnl > 0 ? round((Math.abs(largestSymbol.pnl) / totalAbsoluteSymbolPnl) * 100, 1) : null,
+    largestSymbolTradeSharePct: largestSymbol && trades.length > 0 ? round((largestSymbol.trades / trades.length) * 100, 1) : null,
     bestTrade: trades.reduce<ImportedTrade | null>((best, trade) => !best || trade.pnl > best.pnl ? trade : best, null),
     worstTrade: trades.reduce<ImportedTrade | null>((worst, trade) => !worst || trade.pnl < worst.pnl ? trade : worst, null),
     symbolBreakdown,

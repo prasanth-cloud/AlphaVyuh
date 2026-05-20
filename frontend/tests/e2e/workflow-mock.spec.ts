@@ -91,6 +91,8 @@ test.describe("Mock workflow smoke", () => {
     }, { timeout: 10_000 }).toBe(true);
     await expect(page.getByTestId("trade-report-quality")).toContainText(/Expectancy|Payoff ratio|Avg hold/i);
     await expect(page.getByTestId("trade-report-quality")).toContainText(/AUBANK|TCS|4\.8 days/i);
+    await expect(page.getByTestId("trade-report-risk-audit")).toContainText(/Reported charges|Cost drag|Top symbol/i);
+    await expect(page.getByTestId("trade-report-risk-audit")).toContainText(/AUBANK|6\.7%|45\.5%/i);
     await page.getByTestId("trade-report-journal-import").click();
     await expect(page.getByTestId("trade-report-journal-import-result")).toContainText(/Imported 4 trade/i, { timeout: 15_000 });
 
