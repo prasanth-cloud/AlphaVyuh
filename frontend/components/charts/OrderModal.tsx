@@ -6,6 +6,7 @@ import { placeOrder, getBrokerStatus } from "@/lib/api";
 import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
 import { DataProvenanceBadge } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
+import { accountDataErrorMessage } from "@/lib/account-data-status";
 
 const SETUP_TYPES = [
   { value: "", label: "— Select setup —" },
@@ -41,6 +42,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const [error, setError]           = useState("");
   const [brokerName, setBrokerName] = useState<string | null>(null);
   const [brokerLive, setBrokerLive] = useState(false);
+  const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
   const [brokerTokenExpired, setBrokerTokenExpired] = useState(false);
   const [planAllowsBroker, setPlanAllowsBroker] = useState(true);
   const [liveOrderEnabled, setLiveOrderEnabled] = useState(false);
@@ -53,9 +55,15 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         setBrokerTokenExpired(Boolean(s.token_expired));
         setPlanAllowsBroker(s.plan_allows_broker !== false);
         setLiveOrderEnabled(Boolean(s.live_order_enabled));
+        setBrokerStatusError(null);
         if (s.broker) setBrokerName(s.broker);
       })
-      .catch(() => {});
+      .catch((error) => {
+        setBrokerLive(false);
+        setBrokerTokenExpired(false);
+        setLiveOrderEnabled(false);
+        setBrokerStatusError(accountDataErrorMessage(error, "Broker status is temporarily unavailable. Existing broker access is not being treated as disconnected."));
+      });
   }, []);
 
   useEffect(() => {
@@ -78,7 +86,9 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
   const rr     = risk && reward && risk > 0 ? (reward / risk).toFixed(2) : null;
   const invest = priceNum * qtyNum;
   const brokerLabel = brokerName ? brokerName.charAt(0).toUpperCase() + brokerName.slice(1) : "Broker";
-  const executionPath = brokerLive && brokerName
+  const executionPath = brokerStatusError
+    ? "Broker unknown · journal capture"
+    : brokerLive && brokerName
     ? liveOrderEnabled
       ? `${brokerLabel} explicit confirm`
       : `${brokerLabel} import-only`
@@ -151,6 +161,15 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
                 : "Broker integration requires Pro or Elite. Free accounts can still use chart planning and journaling."}
             </p>
           </div>
+
+          {brokerStatusError && (
+            <div data-testid="chart-order-broker-status-warning" className="rounded-[8px] border border-[#f2d7ad] bg-[#fff8ec] px-3 py-2.5">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-[#9a5f07] mb-1">Broker status unavailable</div>
+              <p className="text-[11px] leading-5 text-[#7b5a2b]">
+                {brokerStatusError} Existing broker access is not being treated as disconnected; this order ticket will save a journal draft only.
+              </p>
+            </div>
+          )}
 
           <div className="rounded-[8px] border border-[#e7e7e3] bg-[#fafaf8] px-3 py-2.5">
             <div className="text-[11px] font-bold uppercase tracking-wide text-[#777] mb-2">Order workflow</div>
