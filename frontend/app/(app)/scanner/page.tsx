@@ -489,6 +489,7 @@ export default function ScannerPage() {
   const [sortBy, setSortBy] = useState('volume_ratio')
   const [sortDesc, setSortDesc] = useState(true)
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
+  const [watchlistsError, setWatchlistsError] = useState('')
   const [savedScreens, setSavedScreens] = useState<SavedScreen[]>([])
   const [savedScreensError, setSavedScreensError] = useState('')
   const [showSaveModal, setShowSaveModal] = useState(false)
@@ -524,7 +525,11 @@ export default function ScannerPage() {
     try {
       const lists = await getCachedWatchlists()
       setWatchlists(lists.map(({ id, name }) => ({ id, name })))
-    } catch { /* ignore */ }
+      setWatchlistsError('')
+    } catch (error) {
+      setWatchlists([])
+      setWatchlistsError(error instanceof Error ? error.message : 'Watchlist data is temporarily unavailable.')
+    }
   }
 
   async function reportScannerDataIssue(symbol?: string) {
@@ -1001,6 +1006,15 @@ export default function ScannerPage() {
             <div className="label" style={{ marginBottom: 6, color: 'var(--warn)' }}>My screens unavailable</div>
             <div className="caption" style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{savedScreensError}</div>
             <button className="workspace-chip-button" onClick={loadSavedScreens}>
+              Retry
+            </button>
+          </div>
+        )}
+        {watchlistsError && (
+          <div data-testid="scanner-watchlists-outage" className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+            <div className="label" style={{ marginBottom: 6, color: 'var(--warn)' }}>Watchlists unavailable</div>
+            <div className="caption" style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{watchlistsError}</div>
+            <button className="workspace-chip-button" onClick={loadWatchlists}>
               Retry
             </button>
           </div>
