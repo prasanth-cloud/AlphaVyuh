@@ -483,7 +483,7 @@ export default function ScannerPage() {
   const [totalMatches, setTotalMatches] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState<25 | 50 | 150 | 200 | 0>(25)
+  const [pageSize, setPageSize] = useState<25 | 50 | 150 | 200>(25)
   const [tradeDate, setTradeDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -957,17 +957,16 @@ export default function ScannerPage() {
     { value: 25, label: '25' },
     { value: 50, label: '50' },
     { value: 150, label: '150' },
-    { value: 200, label: '200' },
-    { value: 0, label: 'All' },
-  ] satisfies Array<{ value: 25 | 50 | 150 | 200 | 0; label: string }>;
-  const visibleStart = totalMatches === 0 ? 0 : pageSize === 0 ? 1 : (currentPage - 1) * pageSize + 1;
-  const visibleEnd = totalMatches === 0 ? 0 : pageSize === 0 ? totalMatches : Math.min(totalMatches, visibleStart + results.length - 1);
+    { value: 200, label: '200 max' },
+  ] satisfies Array<{ value: 25 | 50 | 150 | 200; label: string }>;
+  const visibleStart = totalMatches === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const visibleEnd = totalMatches === 0 ? 0 : Math.min(totalMatches, visibleStart + results.length - 1);
   const paginationWindow = 2;
   const pageWindowStart = Math.max(1, currentPage - paginationWindow);
   const pageWindowEnd = Math.min(totalPages, currentPage + paginationWindow);
   const pageNumbers = Array.from(
-    { length: pageSize === 0 ? 1 : Math.max(0, pageWindowEnd - pageWindowStart + 1) },
-    (_, idx) => (pageSize === 0 ? 1 : pageWindowStart + idx),
+    { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
+    (_, idx) => pageWindowStart + idx,
   );
   return (
     <div className="workspace-page">
@@ -1238,7 +1237,7 @@ export default function ScannerPage() {
                 <select
                   value={String(pageSize)}
                   onChange={e => {
-                    const nextSize = Number(e.target.value) as 25 | 50 | 150 | 200 | 0
+                    const nextSize = Number(e.target.value) as 25 | 50 | 150 | 200
                     setPageSize(nextSize)
                     setCurrentPage(1)
                     if (hasRun) runScan(undefined, sortBy, sortDesc, 1, nextSize)
@@ -1246,7 +1245,9 @@ export default function ScannerPage() {
                   style={{ fontSize: 11, padding: '7px 10px', borderRadius: 999, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-secondary)' }}
                 >
                   {pageSizeOptions.map(option => (
-                    <option key={option.label} value={option.value}>{option.value === 0 ? 'All results' : `${option.label} / page`}</option>
+                    <option key={option.label} value={option.value}>
+                      {option.value === 200 ? '200 / page (scan cap)' : `${option.label} / page`}
+                    </option>
                   ))}
                 </select>
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
@@ -1462,7 +1463,7 @@ export default function ScannerPage() {
                 >
                   ← Prev
                 </button>
-                {pageSize !== 0 && pageNumbers[0] > 1 && (
+                {pageNumbers[0] > 1 && (
                   <>
                     <button
                       className={`workspace-chip-button${currentPage === 1 ? ' active' : ''}`}
@@ -1476,7 +1477,7 @@ export default function ScannerPage() {
                     {pageNumbers[0] > 2 && <span className="caption" style={{ padding: '0 2px' }}>…</span>}
                   </>
                 )}
-                {pageSize !== 0 && pageNumbers.map(pageNumber => (
+                {pageNumbers.map(pageNumber => (
                   <button
                     key={pageNumber}
                     className={`workspace-chip-button${currentPage === pageNumber ? ' active' : ''}`}
@@ -1488,7 +1489,7 @@ export default function ScannerPage() {
                     {pageNumber}
                   </button>
                 ))}
-                {pageSize !== 0 && pageNumbers[pageNumbers.length - 1] < totalPages && (
+                {pageNumbers[pageNumbers.length - 1] < totalPages && (
                   <>
                     {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && <span className="caption" style={{ padding: '0 2px' }}>…</span>}
                     <button
@@ -1504,13 +1505,13 @@ export default function ScannerPage() {
                 )}
                 <button
                   className="workspace-chip-button"
-                  disabled={pageSize === 0 || currentPage >= totalPages}
+                  disabled={currentPage >= totalPages}
                   onClick={() => {
                     const nextPage = Math.min(totalPages, currentPage + 1)
                     setCurrentPage(nextPage)
                     runScan(undefined, sortBy, sortDesc, nextPage, pageSize)
                   }}
-                  style={{ opacity: pageSize === 0 || currentPage >= totalPages ? 0.45 : 1 }}
+                  style={{ opacity: currentPage >= totalPages ? 0.45 : 1 }}
                 >
                   Next →
                 </button>
