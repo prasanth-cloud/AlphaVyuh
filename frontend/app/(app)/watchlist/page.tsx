@@ -1158,6 +1158,7 @@ function WatchlistContent() {
   const [showDeskControls, setShowDeskControls] = useState(false);
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
+  const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
   const [queuePage, setQueuePage] = useState(0);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
@@ -1299,9 +1300,15 @@ function WatchlistContent() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      getJournalEntries({ limit: 75 }).catch(() => ({ entries: [], total: 0 })).then((journal) => {
-        setJournalEntries(journal.entries);
-      });
+      getJournalEntries({ limit: 75 })
+        .then((journal) => {
+          setJournalLoadError(null);
+          setJournalEntries(journal.entries);
+        })
+        .catch((error) => {
+          setJournalEntries([]);
+          setJournalLoadError(error instanceof Error ? error.message : "Journal entries are temporarily unavailable.");
+        });
     }, 300);
     return () => window.clearTimeout(timer);
   }, []);
@@ -2161,6 +2168,11 @@ function WatchlistContent() {
                   </button>
                 </div>
               </div>
+              {journalLoadError && (
+                <div data-testid="watchlist-journal-status" className="caption" style={{ marginTop: 8, padding: "7px 9px", borderRadius: 10, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--warn)", lineHeight: 1.5 }}>
+                  Journal review context is unavailable. {journalLoadError} Watchlist queue, chart review, and planning remain usable.
+                </div>
+              )}
               {showSelectedMeta && (
                 <>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, marginTop: 10 }}>
@@ -2210,7 +2222,14 @@ function WatchlistContent() {
                       </div>
                     )}
                   </div>
-                  {selectedReviewState && (
+                  {journalLoadError ? (
+                    <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)" }}>
+                      <div className="label" style={{ marginBottom: 6, color: "var(--warn)" }}>Review context unavailable</div>
+                      <div className="caption" style={{ lineHeight: 1.65, color: "var(--warn)" }}>
+                        {journalLoadError} Review badges are paused until Journal recovers.
+                      </div>
+                    </div>
+                  ) : selectedReviewState && (
                     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                       <div className="label" style={{ marginBottom: 6 }}>Review context</div>
                       <div className="caption" style={{ lineHeight: 1.65 }}>
