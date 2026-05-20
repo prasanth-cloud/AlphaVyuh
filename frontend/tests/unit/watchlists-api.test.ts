@@ -31,7 +31,7 @@ describe("watchlist API", () => {
   it("surfaces unavailable watchlist responses instead of returning an empty list", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ mode: "unavailable", message: "Watchlist shell is temporarily unavailable." }),
-      { status: 503, headers: { "Content-Type": "application/json" } },
+      { status: 200, headers: { "Content-Type": "application/json" } },
     )));
 
     const { getWatchlists } = await import("@/lib/api");

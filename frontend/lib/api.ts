@@ -129,6 +129,15 @@ async function responseErrorMessage(res: Response, fallback: string): Promise<st
   return fallback;
 }
 
+function unavailablePayloadMessage(data: unknown, fallback: string): string | null {
+  if (!data || typeof data !== "object") return null;
+  const payload = data as { mode?: unknown; status?: unknown; message?: unknown; detail?: unknown };
+  if (payload.mode !== "unavailable" && payload.status !== "unavailable") return null;
+  if (typeof payload.message === "string" && payload.message.trim()) return payload.message;
+  if (typeof payload.detail === "string" && payload.detail.trim()) return payload.detail;
+  return fallback;
+}
+
 export type ScanResult = {
   symbol: string;
   company_name: string;
@@ -482,6 +491,8 @@ export async function getWatchlists(options?: { lite?: boolean; force?: boolean 
         throw new Error(await responseErrorMessage(res, `Watchlist data is temporarily unavailable (${res.status}).`));
       }
       const data = await res.json();
+      const unavailableMessage = unavailablePayloadMessage(data, "Watchlist data is temporarily unavailable.");
+      if (unavailableMessage) throw new Error(unavailableMessage);
       return data.watchlists ?? [];
     } catch (error) {
       if (shouldUseMockFallback()) return readMockWatchlists();
@@ -3362,8 +3373,11 @@ export async function runScanner(filters: Record<string, unknown>, sort_by = "vo
     headers,
     body: JSON.stringify({ filters, sort_by, sort_order }),
   });
-  if (!res.ok) throw new Error("Scanner failed");
-  return res.json();
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Scanner failed (${res.status}).`));
+  const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Scanner data is temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  return data;
 }
 
 // ─── Adapter-backed broker routes (/api/brokers/*) ───────────────────────────
