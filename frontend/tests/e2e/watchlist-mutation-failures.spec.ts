@@ -210,4 +210,47 @@ test.describe("Watchlist mutation failures", () => {
     await expect(page.locator("tr[data-symbol='AUBANK']")).toHaveCount(0);
     expect(addRequests).toBe(1);
   });
+
+  test("surfaces unavailable journal review context without blocking the watchlist", async ({ page }) => {
+    await page.route("**/api/v1/watchlists**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(watchlistPayload),
+      })
+    );
+    await page.route("**/api/v1/journal**", (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "Journal entries are temporarily unavailable." }),
+      })
+    );
+    await page.route("**/api/v1/workflow/states**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ states: [] }) })
+    );
+    await page.route("**/api/v1/charts/**/candles**", (route) => {
+      const match = route.request().url().match(/\/charts\/([^/]+)\/candles/);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(candlePayload(match?.[1] ?? "RELIANCE")),
+      });
+    });
+    await page.route("**/api/v1/charts/**/workspace**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ symbol: "RELIANCE", timeframe: "D", indicators: [], drawings: [] }) })
+    );
+
+    await page.goto("/watchlist");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator("tr[data-symbol='RELIANCE']")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("watchlist-journal-status")).toContainText("Journal review context is unavailable", { timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-journal-status")).toContainText("Watchlist queue, chart review, and planning remain usable.");
+
+    await page.getByRole("button", { name: "Details" }).click();
+    await expect(page.getByText("Review context unavailable")).toBeVisible();
+    await expect(page.getByText("Review badges are paused until Journal recovers.")).toBeVisible();
+  });
 });
