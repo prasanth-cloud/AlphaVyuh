@@ -455,8 +455,16 @@ export async function runScan(
 export async function getScreens(): Promise<SavedScreen[]> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/scanner/screens`, { headers });
-  if (!res.ok) return [];
-  return res.json();
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Saved scanner screens are temporarily unavailable (${res.status}).`));
+  }
+  const data = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(data, "Saved scanner screens are temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  if (!Array.isArray(data?.screens)) {
+    throw new Error("Saved scanner screens are temporarily unavailable.");
+  }
+  return data.screens;
 }
 
 export async function saveScreen(name: string, filters: Record<string, unknown>): Promise<SavedScreen> {
