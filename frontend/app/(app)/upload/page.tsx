@@ -51,16 +51,26 @@ function insight(result: TradeReportParseResult): string {
 export default function UploadPage() {
   const [csvText, setCsvText] = useState('')
   const [fileName, setFileName] = useState<string | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<TradeReportParseResult | null>(null)
   const [journalImporting, setJournalImporting] = useState(false)
   const [journalImportResult, setJournalImportResult] = useState<TradeReportJournalImportResult | null>(null)
-  const result = useMemo(() => csvText.trim() ? parseTradeReportCsv(csvText) : null, [csvText])
+  const parsedPreview = useMemo(() => csvText.trim() ? parseTradeReportCsv(csvText) : null, [csvText])
+  const result = analysisResult
   const journalReadyCount = result ? countJournalReadyTrades(result) : 0
+  const previewJournalReadyCount = parsedPreview ? countJournalReadyTrades(parsedPreview) : 0
 
   async function loadFile(file: File | null) {
     if (!file) return
     const text = await file.text()
     setFileName(file.name)
     setCsvText(text)
+    setAnalysisResult(null)
+    setJournalImportResult(null)
+  }
+
+  function analyseReport() {
+    if (!parsedPreview) return
+    setAnalysisResult(parsedPreview)
     setJournalImportResult(null)
   }
 
@@ -116,6 +126,7 @@ export default function UploadPage() {
               onChange={(event) => {
                 setFileName(null)
                 setCsvText(event.target.value)
+                setAnalysisResult(null)
                 setJournalImportResult(null)
               }}
               placeholder="Paste broker CSV here. Required: symbol and either P&L or entry/exit price with quantity."
@@ -135,8 +146,8 @@ export default function UploadPage() {
               }}
             />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Button size="sm" variant="primary" onClick={() => { setCsvText(sampleTradeReportCsv()); setJournalImportResult(null); }}>Use sample report</Button>
-              <Button size="sm" variant="ghost" onClick={() => { setCsvText(''); setFileName(null); setJournalImportResult(null); }}>Clear</Button>
+              <Button size="sm" variant="primary" onClick={() => { setCsvText(sampleTradeReportCsv()); setAnalysisResult(null); setJournalImportResult(null); }}>Use sample report</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setCsvText(''); setFileName(null); setAnalysisResult(null); setJournalImportResult(null); }}>Clear</Button>
             </div>
           </div>
         </Card>
@@ -147,14 +158,14 @@ export default function UploadPage() {
               <h2 className="heading-card" style={{ marginBottom: 4 }}>Import quality</h2>
               <div className="caption">Review the parse before converting rows into journal entries.</div>
             </div>
-            {result ? (
+            {parsedPreview ? (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
                   {[
-                    ['Broker format', result.summary.broker],
-                    ['Rows parsed', `${result.summary.parsedTrades}/${result.summary.totalRows}`],
-                    ['Rejected rows', String(result.summary.rejectedRows)],
-                    ['Journal-ready', String(journalReadyCount)],
+                    ['Broker format', parsedPreview.summary.broker],
+                    ['Rows parsed', `${parsedPreview.summary.parsedTrades}/${parsedPreview.summary.totalRows}`],
+                    ['Rejected rows', String(parsedPreview.summary.rejectedRows)],
+                    ['Journal-ready', String(previewJournalReadyCount)],
                   ].map(([label, value]) => (
                     <div key={label} style={{ borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', padding: 12 }}>
                       <div className="label" style={{ marginBottom: 6 }}>{label}</div>
@@ -163,14 +174,23 @@ export default function UploadPage() {
                   ))}
                 </div>
                 <div style={{ borderRadius: 12, padding: 12, background: 'rgba(91, 99, 245, 0.10)', border: '1px solid rgba(91, 99, 245, 0.22)' }}>
-                  <div className="label" style={{ marginBottom: 6 }}>Review prompt</div>
-                  <div className="body-secondary">{insight(result)}</div>
+                  <div className="label" style={{ marginBottom: 6 }}>{result ? 'Review prompt' : 'Ready to analyze'}</div>
+                  <div className="body-secondary">
+                    {result ? insight(result) : 'Preview looks loaded. Click Analyze report when you are ready to generate P&L, win rate, drawdown, concentration, and journal handoff analytics.'}
+                  </div>
+                  {!result && (
+                    <div style={{ marginTop: 10 }}>
+                      <Button size="sm" variant="primary" onClick={analyseReport} disabled={parsedPreview.summary.parsedTrades === 0}>
+                        Analyze report
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                {result.rejected.length > 0 && (
+                {parsedPreview.rejected.length > 0 && (
                   <div>
                     <div className="label" style={{ marginBottom: 8 }}>Rows needing cleanup</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {result.rejected.slice(0, 4).map((row) => (
+                      {parsedPreview.rejected.slice(0, 4).map((row) => (
                         <div key={row.row} className="caption" style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 8 }}>
                           Row {row.row}: {row.reason}
                         </div>
@@ -178,6 +198,7 @@ export default function UploadPage() {
                     </div>
                   </div>
                 )}
+                {result && (
                 <div style={{ borderRadius: 12, padding: 12, background: 'var(--surface-2)', border: '1px solid var(--border-subtle)' }}>
                   <div className="label" style={{ marginBottom: 6 }}>Journal handoff</div>
                   <div className="caption" style={{ marginBottom: 10 }}>
@@ -203,6 +224,7 @@ export default function UploadPage() {
                     </div>
                   )}
                 </div>
+                )}
               </>
             ) : (
               <div style={{ border: '1px dashed var(--border-subtle)', borderRadius: 14, padding: 24, textAlign: 'center' }}>
@@ -213,6 +235,22 @@ export default function UploadPage() {
           </div>
         </Card>
       </div>
+
+      {parsedPreview && !result && parsedPreview.summary.parsedTrades > 0 && (
+        <Card padding="lg">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h2 className="heading-card" style={{ marginBottom: 4 }}>Report preview ready</h2>
+              <div className="caption">
+                Parsed {parsedPreview.summary.parsedTrades} rows. Analysis will run only after you confirm.
+              </div>
+            </div>
+            <Button size="sm" variant="primary" onClick={analyseReport}>
+              Analyze report
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {result && result.summary.parsedTrades > 0 && (
         <>

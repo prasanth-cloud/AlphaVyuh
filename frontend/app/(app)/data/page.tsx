@@ -227,7 +227,7 @@ export default function DataFreshnessPage() {
     } else if (health.status !== "healthy") {
       next.push({
         title: health.status === "degraded" ? "Review latest ingest fallback" : "Refresh stale market data",
-        detail: "Scanner, charts, and dashboard may be using the latest complete market day instead of the newest ingest.",
+        detail: "Scanner, charts, and dashboard may be using the latest available session instead of the newest ingest.",
         href: "/scanner",
       });
     }
@@ -491,7 +491,7 @@ export default function DataFreshnessPage() {
         <h2 className="heading-card" style={{ marginBottom: 14 }}>Product surface map</h2>
         <div className="data-surface-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10 }}>
           {[
-            ["Scanner", "Uses the latest complete market day and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
+            ["Scanner", "Uses the latest available session and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
             ["Charts", "Shows source and freshness directly in the chart toolbar before planning.", "/charts/RELIANCE"],
             ["Dashboard", "Shows market pulse, sector participation, and freshness without mixing data sources.", "/dashboard"],
             ["Broker", "Broker import is read-only/import only; journal capture still records review context.", "/settings/broker"],

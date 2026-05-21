@@ -2,7 +2,7 @@ export function formatMarketDataSource(source?: string | null, fallback = "Marke
   const normalized = source?.trim();
   if (!normalized) return fallback;
   const lower = normalized.toLowerCase();
-  if (lower.includes("bhavcopy")) return "Exchange market data";
+  if (lower.includes("bhavcopy")) return "Market data";
   if (lower.includes("mock") || lower.includes("fixture")) return "Demo data";
   if (lower.includes("yahoo")) return "Provider market data";
   if (lower.includes("kite") || lower.includes("zerodha")) return "Broker market data";

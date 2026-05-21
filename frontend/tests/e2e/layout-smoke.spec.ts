@@ -185,19 +185,19 @@ test.describe("Workflow layout smoke", () => {
     expect(overlap).toBe(false);
   });
 
-  test("scanner can create an EOD scan alert and the alerts center shows the digest", async ({ page }) => {
+  test("scanner can create a scan alert and the alerts center shows the digest", async ({ page }) => {
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: /^Run scan$/i }).click();
-    await expect(page.getByRole("button", { name: /^Add EOD alert$/i })).toBeVisible({ timeout: 15_000 });
-    await page.getByRole("button", { name: /^Add EOD alert$/i }).click();
-    await expect(page.getByText("Create EOD scan alert")).toBeVisible();
-    await page.getByPlaceholder("Alert name…").fill("Launch QA EOD scan");
+    await expect(page.getByRole("button", { name: /^Add alert$/i })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: /^Add alert$/i }).click();
+    await expect(page.getByText("Create scan alert")).toBeVisible();
+    await page.getByPlaceholder("Alert name…").fill("Launch QA scan");
     await page.getByRole("button", { name: /^Create$/i }).click();
-    await expect(page.locator("body")).toContainText("EOD alert created", { timeout: 10_000 });
+    await expect(page.locator("body")).toContainText("Scan alert created", { timeout: 10_000 });
 
     await page.goto("/alerts", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("EOD scan matches")).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator("body")).toContainText("Launch QA EOD scan");
+    await expect(page.getByText("Scan matches")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).toContainText("Launch QA scan");
     await expect(page.locator("body")).toContainText(/stocks matched on \d{4}-\d{2}-\d{2}/);
     await expect(page.locator("body")).not.toContainText(/Manage price alerts from the same trading desk/i);
     await expect(page.locator("body")).not.toContainText(/\b(buy|sell|recommended|act now)\b/i);

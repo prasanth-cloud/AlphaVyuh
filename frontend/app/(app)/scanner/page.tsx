@@ -82,6 +82,42 @@ type ScanTrust = {
 
 interface Watchlist { id: string; name: string }
 
+type ScannerCacheSnapshot = {
+  results: ScanResult[]
+  totalMatches: number
+  totalPages: number
+  currentPage: number
+  tradeDate: string
+  isLimited: boolean
+  scanTrust: ScanTrust | null
+  savedAt: number
+}
+
+const SCANNER_CACHE_KEY = 'alphavyuh-scanner-last-results-v1'
+const SCANNER_CACHE_TTL_MS = 5 * 60 * 1000
+
+function readScannerSnapshot(): ScannerCacheSnapshot | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(SCANNER_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as ScannerCacheSnapshot
+    if (!parsed || !Array.isArray(parsed.results) || Date.now() - parsed.savedAt > SCANNER_CACHE_TTL_MS) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeScannerSnapshot(snapshot: Omit<ScannerCacheSnapshot, 'savedAt'>) {
+  if (typeof window === 'undefined') return
+  try {
+    window.sessionStorage.setItem(SCANNER_CACHE_KEY, JSON.stringify({ ...snapshot, savedAt: Date.now() }))
+  } catch {
+    // Scanner cache is only a local speed layer.
+  }
+}
+
 // ── Presets (no emoji) ─────────────────────────────────────
 const PRESETS = [
   {
@@ -504,7 +540,8 @@ export default function ScannerPage() {
   const [activeScreenName, setActiveScreenName] = useState<string | null>(null)
   const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
-  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [hasCachedResults, setHasCachedResults] = useState(false)
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
@@ -514,6 +551,18 @@ export default function ScannerPage() {
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
   useEffect(() => {
+    const cached = readScannerSnapshot()
+    if (cached) {
+      setResults(cached.results)
+      setTotalMatches(cached.totalMatches)
+      setTotalPages(cached.totalPages)
+      setCurrentPage(cached.currentPage)
+      setTradeDate(cached.tradeDate)
+      setIsLimited(cached.isLimited)
+      setScanTrust(cached.scanTrust)
+      setHasRun(true)
+      setHasCachedResults(true)
+    }
     loadWatchlists()
     loadSavedScreens()
   }, [])
@@ -629,23 +678,35 @@ export default function ScannerPage() {
   }, [])
 
   const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
-    setLoading(true); setError(''); setResults([]); setExpandedSymbol(null)
+    const hadResults = results.length > 0
+    setLoading(true); setError(''); if (!hadResults) setResults([]); setExpandedSymbol(null)
     try {
       if (isMockMode) {
         const data = mockRunScan()
-        setResults(data.results as unknown as ScanResult[])
-        setTotalMatches(data.total_matches || 0)
-        setTotalPages(data.total_pages || 1)
-        setCurrentPage(data.page || page)
-        setTradeDate(data.trade_date || '')
-        setIsLimited(data.is_limited || false)
-        setScanTrust({
+        const nextTrust = {
           mode: data.source_metadata?.mode ?? 'demo',
           source: formatMarketDataSource(data.source_metadata?.source_name, 'Demo data'),
           asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
           coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
           universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
           message: data.source_metadata?.license_notes,
+        } satisfies ScanTrust
+        setResults(data.results as unknown as ScanResult[])
+        setTotalMatches(data.total_matches || 0)
+        setTotalPages(data.total_pages || 1)
+        setCurrentPage(data.page || page)
+        setTradeDate(data.trade_date || '')
+        setIsLimited(data.is_limited || false)
+        setScanTrust(nextTrust)
+        setHasCachedResults(false)
+        writeScannerSnapshot({
+          results: data.results as unknown as ScanResult[],
+          totalMatches: data.total_matches || 0,
+          totalPages: data.total_pages || 1,
+          currentPage: data.page || page,
+          tradeDate: data.trade_date || '',
+          isLimited: data.is_limited || false,
+          scanTrust: nextTrust,
         })
         setHasRun(true)
         trackEvent('scanner_run', {
@@ -668,20 +729,32 @@ export default function ScannerPage() {
       if (data.mode === 'unavailable' || data.status === 'unavailable') {
         throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
       }
-      setResults(data.results || [])
+      const nextResults = data.results || []
+      const nextTrust = {
+        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
+        source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, 'Market data'),
+        asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
+        coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
+        universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
+        message: data.message ?? data.source_metadata?.license_notes,
+      } satisfies ScanTrust
+      setResults(nextResults)
       setSelectedResults(new Set())
       setTotalMatches(data.total_matches || 0)
       setTotalPages(data.total_pages || 1)
       setCurrentPage(data.page || page)
       setTradeDate(data.trade_date || '')
       setIsLimited(data.is_limited || false)
-      setScanTrust({
-        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
-        source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, 'Exchange market data'),
-        asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
-        coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
-        universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
-        message: data.message ?? data.source_metadata?.license_notes,
+      setScanTrust(nextTrust)
+      setHasCachedResults(false)
+      writeScannerSnapshot({
+        results: nextResults,
+        totalMatches: data.total_matches || 0,
+        totalPages: data.total_pages || 1,
+        currentPage: data.page || page,
+        tradeDate: data.trade_date || '',
+        isLimited: data.is_limited || false,
+        scanTrust: nextTrust,
       })
       setHasRun(true)
       trackEvent('scanner_run', {
@@ -693,7 +766,7 @@ export default function ScannerPage() {
     } catch (e: unknown) {
       setError(describeMarketDataError(e))
     } finally { setLoading(false) }
-  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, sortBy, sortDesc])
+  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, results.length, sortBy, sortDesc])
 
   const applyPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
@@ -716,7 +789,7 @@ export default function ScannerPage() {
   }
 
   function currentScanName() {
-    return activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom EOD scan' : 'Saved scan')
+    return activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom scan' : 'Saved scan')
   }
 
   function openAlertModal() {
@@ -737,14 +810,14 @@ export default function ScannerPage() {
         sort_order: payload.sort_order,
       })
       setShowAlertModal(false)
-      showToast(`EOD alert created for "${name}"`)
+      showToast(`Scan alert created for "${name}"`)
       trackEvent('scan_alert_created', {
         source: 'scanner',
         preset: activePresetMeta?.id ?? activePreset ?? 'custom',
         mode: scanTrust?.mode ?? 'unknown',
       })
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Could not create EOD alert')
+      showToast(e instanceof Error ? e.message : 'Could not create scan alert')
     } finally {
       setAlertSaving(false)
     }
@@ -1065,7 +1138,7 @@ export default function ScannerPage() {
               ['technical', 'Technicals', 'Price, trend, RS, volume'],
               ['fundamental', 'Fundamentals', 'Valuation, ROE, debt'],
             ] as const).map(([tab, label, detail]) => (
-              <button key={tab} onClick={() => { setFilterTab(tab); setFiltersOpen(true) }} style={{
+              <button key={tab} onClick={() => { setFilterTab(tab) }} style={{
                 textAlign: 'left',
                 padding: '8px 9px',
                 borderRadius: 'var(--radius-md)',
@@ -1086,7 +1159,7 @@ export default function ScannerPage() {
         <div style={{ flex: filtersOpen ? 1 : 0, overflowY: 'auto', display: filtersOpen ? 'block' : 'none' }}>
           {filterTab === 'technical' ? (
             <>
-              <Section title="Price and change" open>
+              <Section title="Price and change">
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
                 {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
               </Section>
@@ -1143,18 +1216,18 @@ export default function ScannerPage() {
             </>
           ) : (
             <>
-              <Section title="Market cap" open>
+              <Section title="Market cap">
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: -4, marginBottom: 6, lineHeight: 1.5 }}>
                   Large: 20000+  ·  Mid: 5000–20000  ·  Small: &lt;5000
                 </div>
               </Section>
-              <Section title="Valuation" open>
+              <Section title="Valuation">
                 {rangeRow('P/E ratio', 'pe_min', 'pe_max')}
                 {rangeRow('P/B ratio', 'pb_min', 'pb_max')}
                 {rangeRow('EPS (₹)', 'eps_min', 'eps_max')}
               </Section>
-              <Section title="Returns and efficiency" open>
+              <Section title="Returns and efficiency">
                 {numRow('ROE ≥ %', 'roe_min', 'e.g. 15')}
                 {numRow('ROCE ≥ %', 'roce_min', 'e.g. 15')}
               </Section>
@@ -1179,7 +1252,7 @@ export default function ScannerPage() {
             )}
             {results.length > 0 && (
               <Button variant="ghost" size="sm" onClick={openAlertModal} fullWidth>
-                Add EOD alert
+                Add alert
               </Button>
             )}
             <Button variant="ghost" size="sm" onClick={resetFilters} fullWidth>
@@ -1210,7 +1283,12 @@ export default function ScannerPage() {
               <div className="workspace-toolbar-group scanner-results-toolbar" data-testid="scanner-data-trust">
                 {scanTrust && (
                   <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
-                    {scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
+                    {hasCachedResults ? 'Cached results' : scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
+                  </span>
+                )}
+                {loading && results.length > 0 && (
+                  <span className="workspace-pill" style={{ color: 'var(--warn)' }}>
+                    Refreshing scan…
                   </span>
                 )}
                 {isLimited && (
@@ -1292,7 +1370,7 @@ export default function ScannerPage() {
         )}
 
         {/* Skeleton */}
-        {loading && (
+        {loading && results.length === 0 && (
           <div style={{ padding: '12px 16px' }}>
             {[...Array(8)].map((_, i) => (
               <div key={i} style={{ height: 36, background: 'var(--surface-1)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', marginBottom: 4, opacity: 0.3 + i * 0.07 }} />
@@ -1316,7 +1394,7 @@ export default function ScannerPage() {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
               title="No stocks matched"
-              description={tradeDate ? `No matches on latest complete market day ${tradeDate}. Widen RSI/volume filters, start from a preset, or report it if this looks like a data issue.` : 'No matches yet. Try a broader preset, or report it if this looks like a data issue.'}
+              description={tradeDate ? `No matches for ${tradeDate}. Widen RSI/volume filters, start from a preset, or report it if this looks like a data issue.` : 'No matches yet. Try a broader preset, or report it if this looks like a data issue.'}
               action={{ label: 'Reset filters', onClick: resetFilters }}
             />
             <button className="workspace-chip-button" style={{ marginTop: 12 }} onClick={() => reportScannerDataIssue()}>
@@ -1547,22 +1625,22 @@ export default function ScannerPage() {
         </div>
       )}
 
-      {/* EOD alert modal */}
+      {/* Scan alert modal */}
       {showAlertModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'var(--overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}
           onClick={() => setShowAlertModal(false)}>
           <div style={{ background: 'var(--surface-float)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: 24, width: 360, boxShadow: 'var(--shadow-modal)' }}
             onClick={e => e.stopPropagation()}>
-            <div className="heading-card" style={{ marginBottom: 6 }}>Create EOD scan alert</div>
+            <div className="heading-card" style={{ marginBottom: 6 }}>Create scan alert</div>
             <div className="caption" style={{ marginBottom: 16, lineHeight: 1.6 }}>
-              AlphaVyuh will check this scan after the latest complete market day is loaded. Matches appear in Alerts for review.
+              AlphaVyuh will check this scan when the next session data is available. Matches appear in Alerts for review.
             </div>
             <input autoFocus value={alertName} onChange={e => setAlertName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && createEodAlert()}
               placeholder="Alert name…"
               style={{ ...inputStyle, marginBottom: 12, padding: '8px 12px' }} />
             <div className="caption" style={{ marginBottom: 12 }}>
-              {scanTrust?.asOf || tradeDate ? `Latest EOD context: ${scanTrust?.asOf ?? tradeDate}` : 'Waiting for latest EOD context.'}
+              {scanTrust?.asOf || tradeDate ? `Data as of ${scanTrust?.asOf ?? tradeDate}` : 'Waiting for latest session context.'}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <Button variant="ghost" size="md" onClick={() => setShowAlertModal(false)} fullWidth>Cancel</Button>

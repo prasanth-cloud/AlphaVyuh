@@ -31,7 +31,7 @@ import {
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
 } from "@/lib/watchlist-chart-range";
-import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
+import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
@@ -1858,7 +1858,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     },
   ];
   const chartContextPills = [
-    sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : "Flow · Direct chart",
+    sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : sourcePage === "scanner" ? "Flow · Scanner chart" : "Flow · Direct chart",
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     indicatorError ? "Indicators unavailable" : null,
@@ -1897,9 +1897,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
         <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
           <div>
-            <EyebrowLabel>Planning</EyebrowLabel>
+            <EyebrowLabel>Chart review</EyebrowLabel>
             <div className="workspace-card-copy">
-              {symbol} chart · read structure, plan the trade, manage the position, and move straight into journal review.
+              {symbol} chart · inspect structure, levels, volume, indicators, and review context before deciding whether to plan a trade.
             </div>
             {sourcePage === "watchlist" && sourceWatchlist && (
               <div className="caption" style={{ marginTop: 8 }}>
@@ -1919,6 +1919,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <Link href="/scanner" prefetch={false} className="workspace-chip-button">Scanner</Link>
           <Link href="/watchlist" prefetch={false} className="workspace-chip-button">Watchlist</Link>
           <Link href="/journal" prefetch={false} className="workspace-chip-button">Journal</Link>
+          <Link href={buildWatchlistReturnHref(true)} prefetch={false} className="workspace-chip-button active">Plan trade</Link>
           <button onClick={reportChartDataIssue} className="workspace-chip-button">Report data</button>
           {!brokerConnected && (
             <Link href="/settings/broker" prefetch={false} className="workspace-chip-button">
@@ -2037,7 +2038,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          Data is {dataAgeDays} days old. Scanner and chart context are using the latest available EOD market snapshot.
+          Data is {dataAgeDays} days old. Scanner and chart context are using the latest available market snapshot.
         </div>
       )}
 
@@ -2351,7 +2352,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             disabled
             className="workspace-chip-button flex items-center gap-1.5"
             style={{ opacity: 0.85 }}
-            title="Charts use EOD market snapshots unless a provider source is shown."
+            title="Charts use the latest available market snapshot unless a provider source is shown."
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
             <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
@@ -2607,7 +2608,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       {playbookScore}
                     </div>
                   </div>
-                  <details open className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                  <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Setup checks</summary>
                     <div className="px-3 pb-3 space-y-1.5">
                       {playbookItems.map((item) => (
@@ -3190,7 +3191,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {formatMarketDataSource(data.source_metadata?.source_name ?? data.source, isMockMode ? "Demo data" : "Market data")} · as of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"} · {formatMarketDataMode(data.source_metadata?.mode ?? data.mode, isMockMode)}
+                  Data as of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}
                 </div>
               )}
               {drawnLines.length > 0 && (
@@ -3327,7 +3328,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 disabled
                 className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
                 style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)", opacity: 0.85 }}
-                title="Charts use EOD market snapshots unless a provider source is shown."
+                title="Charts use the latest available market snapshot unless a provider source is shown."
               >
                 <Activity size={12} />
                 <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />

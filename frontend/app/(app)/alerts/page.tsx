@@ -73,7 +73,7 @@ export default function AlertsPage() {
       setAlerts((current) => current.filter((item) => item.id !== alert.id));
       setMatches((current) => current.filter((match) => match.alert_id !== alert.id));
       setLoadError(null);
-      setMessage("EOD scan alert removed");
+      setMessage("Scan alert removed");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not delete alert");
     }
@@ -84,9 +84,9 @@ export default function AlertsPage() {
       <div className="workspace-hero" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
         <div>
           <div className="label" style={{ marginBottom: 8 }}>Alerts</div>
-          <h1 className="heading-card" style={{ fontSize: 24, marginBottom: 6 }}>EOD scan matches</h1>
+          <h1 className="heading-card" style={{ fontSize: 24, marginBottom: 6 }}>Scan matches</h1>
           <p className="workspace-card-copy" style={{ maxWidth: 760 }}>
-            Review saved scans after the latest complete market day is loaded. AlphaVyuh shows matched names for review; execution stays outside AlphaVyuh.
+            Review saved scans after the latest market session is loaded. AlphaVyuh shows matched names for review; execution stays outside AlphaVyuh.
           </p>
         </div>
         <div className="workspace-toolbar-group">
@@ -122,7 +122,7 @@ export default function AlertsPage() {
             <div className="workspace-card-title">Saved scan alerts</div>
             <div className="workspace-card-copy">
               {loading
-                ? "Loading EOD alert state..."
+                ? "Loading scan alert state..."
                 : loadError
                   ? "Saved scans could not be confirmed"
                   : `${alerts.length} saved ${alerts.length === 1 ? "scan" : "scans"}`}
@@ -144,7 +144,7 @@ export default function AlertsPage() {
           <div style={{ padding: 32 }}>
             <EmptyState
               title="No saved scan alerts yet"
-              description="Run a scanner preset, then add an EOD alert so the scan can be checked after the latest complete market day."
+              description="Run a scanner preset, then add a scan alert so it can be checked after the latest market session."
               action={{ label: "Open scanner", onClick: () => { window.location.href = "/scanner"; } }}
             />
           </div>

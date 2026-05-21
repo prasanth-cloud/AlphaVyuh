@@ -63,7 +63,7 @@ import {
   type WatchlistChartTimeframe,
   type WatchlistChartRequest,
 } from "@/lib/watchlist-chart-range";
-import { formatMarketDataMode, formatMarketDataSource } from "@/lib/data-copy";
+import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
@@ -574,10 +574,10 @@ function ChartPanel({
     ...(planRiskReward != null && planRiskReward < 2 ? ["R:R below 2.0; review risk before submitting"] : []),
     ...(chartRangeNote ? [chartRangeNote] : []),
     ...(brokerStatusError ? ["Broker status unavailable; order capture stays as a journal draft"] : []),
-    ...(brokerStatus?.plan_allows_broker === false ? ["Broker integration requires Pro or Elite"] : []),
+    ...(brokerStatus?.plan_allows_broker === false ? ["Broker import requires Pro or Elite"] : []),
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
-  const canRouteLiveOrder = Boolean(brokerStatus?.connected && brokerStatus?.live_order_enabled && brokerStatus?.plan_allows_broker);
+  const canRouteLiveOrder = false;
   useEffect(() => {
     const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
     setTheme(current);
@@ -794,7 +794,7 @@ function ChartPanel({
           </div>
           {chartSource && (
             <div className="caption" style={{ marginTop: 3 }}>
-              {chartSource.symbol ?? symbol} candles · {chartSource.source ?? (isMockMode ? "Demo data" : "Market data")} · as of {chartSource.asOf ?? "latest available"} · {formatMarketDataMode(chartSource.mode, isMockMode)}
+              Data as of {chartSource.asOf ?? "latest available"}
               {chartRangeNote ? ` · ${chartRangeNote}` : ""}
             </div>
           )}
@@ -1083,7 +1083,7 @@ function ChartPanel({
         {brokerStatus?.plan_allows_broker === false && (
           <div style={{ marginBottom: 8, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)" }}>
             <div className="caption" style={{ color: "var(--warn)", lineHeight: 1.5 }}>
-              Broker integration requires Pro or Elite. Journal capture remains available for planning.
+              Broker import requires Pro or Elite. Journal capture remains available for planning.
             </div>
             <button onClick={() => { window.location.href = "/settings/billing"; }} className="workspace-chip-button" style={{ marginTop: 8 }}>
               View Pro plan

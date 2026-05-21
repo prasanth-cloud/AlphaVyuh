@@ -89,6 +89,7 @@ test.describe("Mock workflow smoke", () => {
       await sampleReportButton.click().catch(() => {});
       return page.getByText("Journal-ready").isVisible().catch(() => false);
     }, { timeout: 10_000 }).toBe(true);
+    await page.getByRole("button", { name: /^Analyze report$/i }).first().click();
     await expect(page.getByTestId("trade-report-quality")).toContainText(/Expectancy|Payoff ratio|Avg hold/i);
     await expect(page.getByTestId("trade-report-quality")).toContainText(/AUBANK|TCS|4\.8 days/i);
     await expect(page.getByTestId("trade-report-risk-audit")).toContainText(/Reported charges|Cost drag|Top symbol/i);
