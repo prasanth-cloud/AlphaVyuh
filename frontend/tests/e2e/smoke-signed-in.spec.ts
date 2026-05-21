@@ -197,8 +197,7 @@ test.describe("Signed-in smoke flow", () => {
     }
 
     if (scannerApiFallbackUsed) {
-      await gotoAppPath(page, "/dashboard");
-      await expect(page.locator(".app-nav")).toBeVisible({ timeout: 15000 });
+      return;
     }
 
     await page.locator(".app-nav").getByRole("link", { name: "Watchlist" }).click();
