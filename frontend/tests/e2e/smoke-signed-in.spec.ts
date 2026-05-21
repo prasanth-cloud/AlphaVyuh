@@ -123,7 +123,7 @@ async function expectDashboardReady(page: import("@playwright/test").Page) {
     if (await marketPulse.isVisible().catch(() => false)) return;
     const retry = page.getByRole("button", { name: "Retry" });
     if (await retry.isVisible().catch(() => false)) {
-      await retry.click();
+      await retry.click({ force: true, timeout: 3000 }).catch(() => {});
     }
     await page.waitForTimeout(attempt * 1500);
   }
@@ -140,10 +140,12 @@ test.describe("Signed-in smoke flow", () => {
     await expectDashboardReady(page);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Open scanner/i })).toBeVisible();
+    const openScannerLink = page.getByRole("link", { name: /Open scanner/i });
+    await expect(openScannerLink).toBeVisible();
     await expectRealDataContext(page, "dashboard", /Latest session|EOD|Market|coverage|NSE universe/i);
 
-    await gotoAppPath(page, "/scanner");
+    await openScannerLink.click();
+    await expectPathname(page, "/scanner");
     const runScanButton = page.getByRole("button", { name: /Run scan/i });
     await expect(runScanButton).toBeVisible({ timeout: 30000 });
     const resetScanButton = page.getByRole("button", { name: /^Reset$/i });
