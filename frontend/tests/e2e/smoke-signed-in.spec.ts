@@ -193,7 +193,8 @@ test.describe("Signed-in smoke flow", () => {
       await expect(runScanButton).toBeVisible();
     }
 
-    await gotoAppPath(page, "/watchlist");
+    await page.locator(".app-nav").getByRole("link", { name: "Watchlist" }).click();
+    await expectPathname(page, "/watchlist");
     await expect
       .poll(
         async () => {
