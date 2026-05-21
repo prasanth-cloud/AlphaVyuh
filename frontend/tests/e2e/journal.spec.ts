@@ -1,7 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const OPEN_TRADE = {
@@ -60,15 +58,22 @@ const STATS = {
 
 const ANALYTICS = {
   equity_curve: [
+    { date: "2026-02-20", cumulative_pnl: 500 },
     { date: "2026-03-20", cumulative_pnl: 1500 },
   ],
   monthly_pnl: [{ month: "Mar 2026", pnl: 1500 }],
-  setup_breakdown: [],
-  drawdown_curve: [],
-  max_drawdown: 0,
-  longest_dd_days: 0,
-  recovery_factor: null,
-  profit_factor: null,
+  setup_breakdown: [
+    { setup: "Breakout", trades: 3, wins: 2, win_rate: 66.7, total_pnl: 1500, avg_pnl: 500 },
+  ],
+  drawdown_curve: [
+    { date: "2026-02-20", drawdown: 0, drawdown_pct: 0 },
+    { date: "2026-03-01", drawdown: -350, drawdown_pct: -2.1 },
+    { date: "2026-03-20", drawdown: 0, drawdown_pct: 0 },
+  ],
+  max_drawdown: -350,
+  longest_dd_days: 4,
+  recovery_factor: 4.29,
+  profit_factor: 2.1,
 };
 
 const AI_PATTERNS = {
@@ -120,8 +125,12 @@ async function mockJournalRoutes(
     brokerStatus?: number;
   } = {}
 ) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("alphavyuh-e2e-route-mocks", "true");
+  });
+
   // Entries (with optional status filter)
-  await page.route(`${API}/api/v1/journal**`, (route) => {
+  await page.route("**/api/v1/journal**", (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
 
@@ -210,7 +219,7 @@ async function mockJournalRoutes(
   });
 
   // Broker status
-  await page.route(`${API}/api/v1/broker/status`, (route) =>
+  await page.route("**/api/v1/broker/status", (route) =>
     brokerStatus >= 400
       ? route.fulfill({
           status: brokerStatus,
@@ -229,7 +238,7 @@ async function mockJournalRoutes(
   );
 
   // Symbol search
-  await page.route(`${API}/api/v1/charts/search*`, (route) =>
+  await page.route("**/api/v1/charts/search*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -243,7 +252,7 @@ async function mockJournalRoutes(
   );
 
   // AI patterns
-  await page.route(`${API}/api/v1/ai/patterns`, (route) =>
+  await page.route("**/api/v1/ai/patterns", (route) =>
     patternsStatus >= 400
       ? route.fulfill({
           status: patternsStatus,
@@ -258,7 +267,7 @@ async function mockJournalRoutes(
   );
 
   // AI analyse
-  await page.route(`${API}/api/v1/ai/analyse`, (route) =>
+  await page.route("**/api/v1/ai/analyse", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -270,7 +279,7 @@ async function mockJournalRoutes(
   );
 
   // Zerodha import
-  await page.route(`${API}/api/v1/broker/zerodha/import`, (route) =>
+  await page.route("**/api/v1/broker/zerodha/import", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -307,7 +316,7 @@ test.describe("Journal — trade table", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "open" }).click();
+    await page.getByRole("button", { name: "open", exact: true }).click();
     await expect(page.locator("table tbody")).toContainText("RELIANCE");
     await expect(page.locator("table tbody")).not.toContainText("TCS");
   });
@@ -395,7 +404,7 @@ test.describe("Journal — add trade", () => {
     page,
   }) => {
     let postCalled = false;
-    await page.route(`${API}/api/v1/journal`, async (route) => {
+    await page.route("**/api/v1/journal", async (route) => {
       if (route.request().method() === "POST") {
         postCalled = true;
         await route.fulfill({
@@ -445,28 +454,18 @@ test.describe("Journal — close trade", () => {
   });
 
   test("submitting the close form calls PATCH /journal/:id", async ({ page }) => {
-    let patchCalled = false;
-    await page.route(`${API}/api/v1/journal/trade-open-1`, async (route) => {
-      if (route.request().method() === "PATCH") {
-        patchCalled = true;
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ ...OPEN_TRADE, status: "closed", exit_price: 3050, pnl: 2500 }),
-        });
-      } else {
-        await route.continue();
-      }
-    });
-
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
     await page.locator("tbody tr", { hasText: "RELIANCE" }).getByRole("button", { name: "Close" }).click();
     await page.getByPlaceholder("0.00").fill("3050");
+    const patchRequest = page.waitForRequest((request) =>
+      request.method() === "PATCH" &&
+      request.url().includes("/api/v1/journal/trade-open-1")
+    );
     await page.getByRole("button", { name: "Close trade" }).click();
 
-    await expect(patchCalled).toBe(true);
+    await patchRequest;
   });
 });
 
@@ -508,16 +507,6 @@ test.describe("Journal — delete trade", () => {
   });
 
   test("clicking × on a row calls DELETE /journal/:id", async ({ page }) => {
-    let deleteCalled = false;
-    await page.route(`${API}/api/v1/journal/trade-closed-1`, async (route) => {
-      if (route.request().method() === "DELETE") {
-        deleteCalled = true;
-        await route.fulfill({ status: 204 });
-      } else {
-        await route.continue();
-      }
-    });
-
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
@@ -526,9 +515,13 @@ test.describe("Journal — delete trade", () => {
       .locator("table tbody tr")
       .filter({ hasText: "TCS" })
       .getByRole("button", { name: "×" });
+    const deleteRequest = page.waitForRequest((request) =>
+      request.method() === "DELETE" &&
+      request.url().includes("/api/v1/journal/trade-closed-1")
+    );
     await deleteBtn.click();
 
-    await expect(deleteCalled).toBe(true);
+    await deleteRequest;
   });
 });
 
@@ -545,6 +538,15 @@ test.describe("Journal — tab navigation", () => {
     await expect(page.getByRole("heading", { name: "Equity curve" })).toBeVisible();
   });
 
+  test("Analytics tab surfaces an edge dashboard and next review focus", async ({ page }) => {
+    await page.goto("/journal?tab=analytics");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Expectancy / trade", { timeout: 15_000 });
+    await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Next review focus");
+    await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Best setup");
+  });
+
   test("Trade review tab switch shows 'Pattern stats' heading", async ({
     page,
   }) => {
@@ -558,7 +560,7 @@ test.describe("Journal — tab navigation", () => {
 
   test("Trade review tab triggers getAiPatterns call", async ({ page }) => {
     let patternsCalled = false;
-    await page.route(`${API}/api/v1/ai/patterns`, async (route) => {
+    await page.route("**/api/v1/ai/patterns", async (route) => {
       patternsCalled = true;
       await route.fulfill({
         status: 200,
@@ -606,7 +608,7 @@ test.describe("Journal — broker sync import", () => {
   }) => {
     let importCalled = false;
     await mockJournalRoutes(page, { brokerConnected: true });
-    await page.route(`${API}/api/v1/broker/zerodha/import`, async (route) => {
+    await page.route("**/api/v1/broker/zerodha/import", async (route) => {
       importCalled = true;
       await route.fulfill({
         status: 200,

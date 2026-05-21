@@ -838,6 +838,18 @@ input, textarea, select {
   z-index: 1;
 }
 
+.journal-edge-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.journal-review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .app-content-full-chart {
   max-width: none;
   width: 100%;
@@ -1100,7 +1112,9 @@ input, textarea, select {
   .data-detail-grid,
   .data-metric-grid,
   .data-runs-grid,
-  .data-surface-grid {
+  .data-surface-grid,
+  .journal-edge-grid,
+  .journal-review-grid {
     grid-template-columns: 1fr !important;
   }
 
@@ -1139,14 +1153,16 @@ input, textarea, select {
   .broker-adapter-grid,
   .data-health-grid,
   .data-runs-grid,
-  .data-surface-grid {
+  .data-surface-grid,
+  .journal-edge-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .decision-desk-secondary-grid,
   .broker-settings-grid,
   .data-detail-grid,
-  .data-metric-grid {
+  .data-metric-grid,
+  .journal-review-grid {
     grid-template-columns: 1fr !important;
   }
 }

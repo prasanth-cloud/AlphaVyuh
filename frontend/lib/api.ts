@@ -77,7 +77,25 @@ function invalidateClientCache(prefixes: string[]) {
   }
 }
 
+function routeBackedE2eMocksEnabled(): boolean {
+  if (
+    typeof window === "undefined" ||
+    process.env.NODE_ENV === "production" ||
+    process.env.NEXT_PUBLIC_DATA_MODE !== "mock"
+  ) {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem("alphavyuh-e2e-route-mocks") === "true";
+  } catch {
+    return false;
+  }
+}
+
 function shouldUseMockFallback(): boolean {
+  if (routeBackedE2eMocksEnabled()) return false;
+
   return isMockMode;
 }
 
