@@ -17,30 +17,28 @@ async function login(page: import("@playwright/test").Page) {
   }
 
   if (EXPECT_REAL_DATA) {
-    let lastError = "";
-    for (let attempt = 1; attempt <= 5; attempt += 1) {
-      const response = await page.request.post("/api/auth/login", {
-        data: { email: EMAIL, password: PASSWORD },
+    if (API_BEARER_TOKEN) {
+      await page.route("**/api/v1/**", async (route) => {
+        await route.continue({
+          headers: {
+            ...route.request().headers(),
+            authorization: `Bearer ${API_BEARER_TOKEN}`,
+          },
+        });
       });
+    }
+
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const response = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD } });
       if (response.ok()) {
-        if (API_BEARER_TOKEN) {
-          await page.route("**/api/v1/**", async (route) => {
-            await route.continue({
-              headers: {
-                ...route.request().headers(),
-                authorization: `Bearer ${API_BEARER_TOKEN}`,
-              },
-            });
-          });
-        }
         await page.goto("/dashboard");
         await expect(page).toHaveURL(/\/dashboard/, { timeout: 20000 });
         return;
       }
-      lastError = `HTTP ${response.status()} ${(await response.text()).slice(0, 180)}`;
+      const body = await response.text();
+      if (response.status() === 403 && /Just a moment|challenge/i.test(body)) break;
       await page.waitForTimeout(attempt * 1000);
     }
-    throw new Error(`Production smoke login API did not accept QA credentials: ${lastError}`);
   }
 
   await page.goto("/login");
