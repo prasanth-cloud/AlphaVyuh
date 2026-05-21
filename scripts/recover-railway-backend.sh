@@ -15,6 +15,11 @@ if [[ -n "$RAILWAY_SERVICE" ]]; then
   service_args=(--service "$RAILWAY_SERVICE")
 fi
 
+project_args=()
+if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
+  project_args=(--project "$RAILWAY_PROJECT_ID")
+fi
+
 link_args=()
 if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
   link_args+=(--project "$RAILWAY_PROJECT_ID")
@@ -36,12 +41,18 @@ else
   echo "Service: linked Railway service"
 fi
 
+link_required=1
+if [[ -n "${RAILWAY_TOKEN:-}" && -n "$RAILWAY_PROJECT_ID" ]]; then
+  link_required=0
+  echo "Railway token and project ID detected; deploying with explicit project flags."
+fi
+
 if ! command -v railway >/dev/null 2>&1; then
   echo "Railway CLI is not installed. Install it, then rerun this script." >&2
   exit 1
 fi
 
-if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
+if [[ "$link_required" == "1" && -n "$RAILWAY_PROJECT_ID" ]]; then
   echo "Linking Railway project before recovery ..."
   (
     cd "$BACKEND_DIR"
@@ -49,24 +60,26 @@ if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
   )
 fi
 
-if ! (
-  cd "$BACKEND_DIR"
-  railway status --json
-) >/tmp/alphavyuh-railway-status.json 2>/tmp/alphavyuh-railway-status.err; then
-  cat /tmp/alphavyuh-railway-status.err >&2 || true
-  echo
-  echo "Railway is not ready for deployment from this machine." >&2
-  echo "Run 'railway login', then ensure this repo/backend is linked to the AlphaVyuh project." >&2
-  echo "If the project is not linked, run 'railway link' from $BACKEND_DIR." >&2
-  if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
-    echo >&2
-    echo "RAILWAY_TOKEN is present, but no linked Railway project/service was usable." >&2
-    echo "Known projects visible to this token:" >&2
-    railway list --json >&2 || railway list >&2 || true
-    echo >&2
-    echo "Set RAILWAY_PROJECT_ID and RAILWAY_SERVICE, or pass them to the GitHub workflow inputs." >&2
+if [[ "$link_required" == "1" ]]; then
+  if ! (
+    cd "$BACKEND_DIR"
+    railway status --json
+  ) >/tmp/alphavyuh-railway-status.json 2>/tmp/alphavyuh-railway-status.err; then
+    cat /tmp/alphavyuh-railway-status.err >&2 || true
+    echo
+    echo "Railway is not ready for deployment from this machine." >&2
+    echo "Run 'railway login', then ensure this repo/backend is linked to the AlphaVyuh project." >&2
+    echo "If the project is not linked, run 'railway link' from $BACKEND_DIR." >&2
+    if [[ -n "${RAILWAY_TOKEN:-}" ]]; then
+      echo >&2
+      echo "RAILWAY_TOKEN is present, but no linked Railway project/service was usable." >&2
+      echo "Known projects visible to this token:" >&2
+      railway list --json >&2 || railway list >&2 || true
+      echo >&2
+      echo "Set RAILWAY_PROJECT_ID and RAILWAY_SERVICE, or pass them to the GitHub workflow inputs." >&2
+    fi
+    exit 1
   fi
-  exit 1
 fi
 
 if [[ "$SKIP_RAILWAY_DEPLOY" != "1" ]]; then
@@ -76,6 +89,7 @@ if [[ "$SKIP_RAILWAY_DEPLOY" != "1" ]]; then
     railway up \
       --detach \
       --environment "$RAILWAY_ENVIRONMENT" \
+      ${project_args[@]+"${project_args[@]}"} \
       ${service_args[@]+"${service_args[@]}"} \
       --message "Recover AlphaVyuh backend $(git -C "$ROOT_DIR" rev-parse --short HEAD)"
   )
@@ -96,10 +110,14 @@ done
 
 if [[ "$health_ok" != "1" ]]; then
   echo "Backend health did not recover. Latest Railway logs:" >&2
-  (
-    cd "$BACKEND_DIR"
-    railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
-  )
+  if [[ "$link_required" == "1" ]]; then
+    (
+      cd "$BACKEND_DIR"
+      railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+    )
+  else
+    echo "Skipping Railway log fetch because this run used explicit project flags without a linked workspace." >&2
+  fi
   exit 1
 fi
 
