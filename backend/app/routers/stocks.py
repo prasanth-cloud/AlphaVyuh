@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 import yfinance as yf
 
 from app.services.market_dates import get_latest_complete_trade_date
+from app.services.market_breadth_snapshot import read_latest_market_breadth_snapshot
 from app.services.market_data import (
     MarketDataError,
     MarketIdentity,
@@ -20,6 +21,8 @@ router = APIRouter(prefix="/api/v1", tags=["stocks"])
 # ── Fundamentals cache (in-memory, 6-hour TTL) ────────────────────────────────
 _fund_cache: dict[str, tuple[float, dict]] = {}
 _FUND_TTL = 6 * 3600  # seconds
+_market_summary_cache: tuple[float, dict] | None = None
+_MARKET_SUMMARY_TTL = 5 * 60  # seconds
 
 
 def _lookup_market(sym: str) -> tuple[str, str]:
@@ -37,6 +40,25 @@ def _lookup_market(sym: str) -> tuple[str, str]:
 def _yf_ticker_symbol(sym: str, market: str) -> str:
     """Yahoo Finance uses .NS suffix for NSE stocks, bare symbol for US."""
     return yf_ticker_symbol(sym, market)
+
+
+def _market_summary_from_snapshot(snapshot: dict) -> dict:
+    total = snapshot.get("total_stocks") or snapshot.get("total") or snapshot.get("symbols_count") or 0
+    return {
+        "trade_date": snapshot.get("trade_date") or snapshot.get("as_of"),
+        "advances": snapshot.get("advances") or 0,
+        "declines": snapshot.get("declines") or 0,
+        "unchanged": snapshot.get("unchanged") or 0,
+        "advance_decline_ratio": snapshot.get("advance_decline_ratio"),
+        "new_52w_highs": snapshot.get("new_52w_highs") or 0,
+        "new_52w_lows": snapshot.get("new_52w_lows") or 0,
+        "above_ema20_pct": snapshot.get("above_ema20_pct"),
+        "above_ema50_pct": snapshot.get("above_ema50_pct"),
+        "above_ema200_pct": snapshot.get("above_ema200_pct"),
+        "total_stocks": total,
+        "cache_status": snapshot.get("cache_status") or "snapshot",
+        "source_metadata": snapshot.get("source_metadata") or snapshot.get("provider"),
+    }
 
 
 @router.get("/stocks/{symbol}/quote")
@@ -108,8 +130,27 @@ async def get_quote(symbol: str):
 
 @router.get("/market/summary")
 async def get_market_summary():
+    global _market_summary_cache
+
+    now = time.monotonic()
+    if _market_summary_cache and _market_summary_cache[0] > now:
+        cached = dict(_market_summary_cache[1])
+        cached["cache_status"] = "hit"
+        return cached
+
     try:
         client = get_admin_client()
+        snapshot = read_latest_market_breadth_snapshot(
+            client,
+            indices=[],
+            quote_source="latest_complete_session",
+            indices_live=False,
+        )
+        if snapshot:
+            summary = _market_summary_from_snapshot(snapshot)
+            _market_summary_cache = (now + _MARKET_SUMMARY_TTL, dict(summary))
+            return summary
+
         latest_date = get_latest_complete_trade_date(client)
         if not latest_date:
             return {"trade_date": None, "advances": 0, "declines": 0, "unchanged": 0,
@@ -179,7 +220,7 @@ async def get_market_summary():
     total = len(all_rows)
     ad_ratio = round(advances / declines, 2) if declines else None
 
-    return {
+    summary = {
         "trade_date": latest_date,
         "advances": advances,
         "declines": declines,
@@ -192,6 +233,8 @@ async def get_market_summary():
         "above_ema200_pct": round(above_ema200 / valid_ema200 * 100, 1) if valid_ema200 else None,
         "total_stocks": total,
     }
+    _market_summary_cache = (now + _MARKET_SUMMARY_TTL, dict(summary))
+    return summary
 
 
 @router.get("/market/movers")
