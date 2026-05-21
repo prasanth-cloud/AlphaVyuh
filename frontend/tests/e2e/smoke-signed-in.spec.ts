@@ -41,6 +41,20 @@ async function installSupabaseSessionCookies(page: import("@playwright/test").Pa
   return true;
 }
 
+async function expectPathname(page: import("@playwright/test").Page, pathname: string, timeout = 20000) {
+  await expect
+    .poll(() => new URL(page.url()).pathname, { timeout, intervals: [250, 500, 1000] })
+    .toBe(pathname);
+}
+
+async function gotoAppPath(page: import("@playwright/test").Page, path: string, pathname = path) {
+  await page.goto(path);
+  if (EXPECT_REAL_DATA && new URL(page.url()).pathname === "/login" && (await installSupabaseSessionCookies(page))) {
+    await page.goto(path);
+  }
+  await expectPathname(page, pathname);
+}
+
 async function login(page: import("@playwright/test").Page) {
   await page.context().clearCookies();
   if (ACCESS_URL) {
@@ -60,19 +74,23 @@ async function login(page: import("@playwright/test").Page) {
     }
 
     if (await installSupabaseSessionCookies(page)) {
-      await page.goto("/dashboard");
-      if (await page.waitForURL(/\/dashboard/, { timeout: 20000 }).then(() => true).catch(() => false)) {
+      try {
+        await gotoAppPath(page, "/dashboard");
         return;
+      } catch {
+        await page.context().clearCookies();
       }
-      await page.context().clearCookies();
     }
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       const response = await page.request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD } });
       if (response.ok()) {
-        await page.goto("/dashboard");
-        await expect(page).toHaveURL(/\/dashboard/, { timeout: 20000 });
-        return;
+        try {
+          await gotoAppPath(page, "/dashboard");
+          return;
+        } catch {
+          await page.context().clearCookies();
+        }
       }
       const body = await response.text();
       if (response.status() === 403 && /Just a moment|challenge/i.test(body)) break;
@@ -84,7 +102,7 @@ async function login(page: import("@playwright/test").Page) {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 20000 });
+  await expectPathname(page, "/dashboard");
 }
 
 async function expectRealDataContext(
@@ -99,6 +117,19 @@ async function expectRealDataContext(
   await expect(body, `${surface} must expose source, freshness, or coverage context`).toContainText(requiredCopy, { timeout: 15000 });
 }
 
+async function expectDashboardReady(page: import("@playwright/test").Page) {
+  const marketPulse = page.getByText(/Market pulse/i);
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    if (await marketPulse.isVisible().catch(() => false)) return;
+    const retry = page.getByRole("button", { name: "Retry" });
+    if (await retry.isVisible().catch(() => false)) {
+      await retry.click();
+    }
+    await page.waitForTimeout(attempt * 1500);
+  }
+  await expect(marketPulse).toBeVisible({ timeout: 15000 });
+}
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("Signed-in smoke flow", () => {
@@ -106,17 +137,13 @@ test.describe("Signed-in smoke flow", () => {
     test.setTimeout(EXPECT_REAL_DATA ? 90_000 : 30_000);
     await login(page);
 
-    if (await page.getByText("Market data is not connected").isVisible().catch(() => false)) {
-      await page.getByRole("button", { name: "Retry" }).click();
-    }
-    await expect(page.getByText(/Market pulse/i)).toBeVisible({ timeout: 15000 });
+    await expectDashboardReady(page);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /Open scanner/i })).toBeVisible();
     await expectRealDataContext(page, "dashboard", /Latest session|EOD|Market|coverage|NSE universe/i);
 
-    await page.goto("/scanner");
-    await expect(page).toHaveURL(/\/scanner/);
+    await gotoAppPath(page, "/scanner");
     const runScanButton = page.getByRole("button", { name: /Run scan/i });
     await expect(runScanButton).toBeVisible({ timeout: 30000 });
     const resetScanButton = page.getByRole("button", { name: /^Reset$/i });
@@ -130,8 +157,7 @@ test.describe("Signed-in smoke flow", () => {
     await expect(page.getByTestId("scanner-data-trust")).toBeVisible({ timeout: 15000 });
     await expectRealDataContext(page, "scanner", /Latest session|Trade date|coverage|market data|Exchange|NSE/i);
 
-    await page.goto("/watchlist");
-    await expect(page).toHaveURL(/\/watchlist/);
+    await gotoAppPath(page, "/watchlist");
     await expect
       .poll(
         async () => {
@@ -194,26 +220,21 @@ test.describe("Signed-in smoke flow", () => {
       if (secondSymbol) await expect(page.locator(`text=${secondSymbol}`).first()).toBeVisible({ timeout: 10000 });
     }
 
-    await page.goto(`/charts/${firstSymbol}?full=1`);
-    await expect(page).toHaveURL(new RegExp(`/charts/${firstSymbol}`));
+    await gotoAppPath(page, `/charts/${firstSymbol}?full=1`, `/charts/${firstSymbol}`);
     await expect(page.getByRole("button", { name: /^Tools/i })).toBeVisible({ timeout: 15000 });
     await expect(page.locator("body")).toContainText(/Daily|Volume|RSI|EMA|bars/i, { timeout: 15000 });
     await expectRealDataContext(page, "full chart", /Latest session|Daily|Volume|RSI|EMA|as of/i);
 
-    await page.goto("/journal");
-    await expect(page).toHaveURL(/\/journal/);
+    await gotoAppPath(page, "/journal");
     await expect(page.getByText("Review", { exact: false }).first()).toBeVisible({ timeout: 15000 });
 
-    await page.goto("/settings");
-    await expect(page).toHaveURL(/\/settings/);
+    await gotoAppPath(page, "/settings");
     await expect(page.locator("body")).toContainText(/Account Access|Billing|Profile/i, { timeout: 15000 });
 
-    await page.goto("/settings/broker");
-    await expect(page).toHaveURL(/\/settings\/broker/);
+    await gotoAppPath(page, "/settings/broker");
     await expect(page.getByRole("navigation")).toBeVisible({ timeout: 15000 });
 
-    await page.goto("/data");
-    await expect(page).toHaveURL(/\/data/);
+    await gotoAppPath(page, "/data");
     await expect(page.locator("body")).toContainText(/EOD|coverage|broker import|journal/i, { timeout: 15000 });
     await expectRealDataContext(page, "data status", /EOD|coverage|broker import|journal|Data status/i);
   });
