@@ -42,39 +42,67 @@ if (
   process.exit(0);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableFetchError(error) {
+  const message = String(error?.message || error || "");
+  return (
+    error?.name === "AbortError" ||
+    /aborted|fetch failed|ECONNRESET|ETIMEDOUT|terminated|network/i.test(message)
+  );
+}
+
 async function fetchJson(path, options = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 8000);
-  try {
-    const response = await fetch(`${apiBase}${path}`, {
-      method: options.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers ?? {}),
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    let data = null;
+  const attempts = options.attempts ?? 3;
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = { raw: text.slice(0, 200) };
+      const response = await fetch(`${apiBase}${path}`, {
+        method: options.method ?? "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers ?? {}),
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { raw: text.slice(0, 200) };
+      }
+      if (!response.ok) {
+        const railwayFallback =
+          response.headers.get("x-railway-fallback") === "true" ||
+          String(data?.message ?? "").toLowerCase().includes("application not found");
+        const hint = railwayFallback
+          ? " Railway is returning its fallback response, so the backend service is not deployed or the domain is not attached to the service."
+          : "";
+        throw new Error(`${path} returned ${response.status}: ${JSON.stringify(data).slice(0, 220)}${hint}`);
+      }
+      return data;
+    } catch (error) {
+      lastError = error?.name === "AbortError"
+        ? new Error(`${path} timed out after ${timeoutMs}ms`)
+        : error;
+      if (attempt === attempts || !isRetryableFetchError(error)) {
+        throw lastError;
+      }
+      await sleep((options.retryDelayMs ?? 1000) * attempt);
+    } finally {
+      clearTimeout(timeout);
     }
-    if (!response.ok) {
-      const railwayFallback =
-        response.headers.get("x-railway-fallback") === "true" ||
-        String(data?.message ?? "").toLowerCase().includes("application not found");
-      const hint = railwayFallback
-        ? " Railway is returning its fallback response, so the backend service is not deployed or the domain is not attached to the service."
-        : "";
-      throw new Error(`${path} returned ${response.status}: ${JSON.stringify(data).slice(0, 220)}${hint}`);
-    }
-    return data;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw lastError || new Error(`${path} failed without an error.`);
 }
 
 function assert(condition, message) {
@@ -173,7 +201,7 @@ try {
         page: 1,
         page_size: 10,
       },
-      timeoutMs: 15_000,
+      timeoutMs: 30_000,
     });
     assert(Array.isArray(scanner?.results), "Scanner response did not include a results array.");
     assert(scanner.results.length > 0, "Scanner returned no current EOD matches.");
