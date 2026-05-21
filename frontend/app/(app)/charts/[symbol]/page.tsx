@@ -2207,7 +2207,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)", minWidth: 190 }}>
                 <button
                   onClick={() => { setActiveDrawingTool(null); setShowDrawMenu(false); }}
-                  aria-label="Use select or move tool"
                   className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
                   style={{ color: !activeDrawingTool ? "#bac4d1" : "var(--app-text2)" }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
@@ -2225,7 +2224,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     <button
                       key={tool}
                       onClick={() => { setActiveDrawingTool(t => t === tool ? null : tool); setShowDrawMenu(false); }}
-                      aria-label={`Use ${meta.label}`}
                       className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
                       style={{ color: activeDrawingTool === tool ? "#bac4d1" : "var(--app-text2)" }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
@@ -2240,7 +2238,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 <div className="mx-2 my-1 h-px" style={{ background: "var(--app-border)" }} />
                 <button
                   onClick={() => { setShowAlertModal(true); setShowDrawMenu(false); }}
-                  aria-label="Create price alert"
                   className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
                   style={{ color: "var(--app-text2)" }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
@@ -2251,7 +2248,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </button>
                 <button
                   onClick={() => setSnapToPrice((current) => !current)}
-                  aria-label="Toggle magnet snap"
                   className="w-full text-left px-3 py-2 text-[12px] transition-colors flex items-center gap-2"
                   style={{ color: snapToPrice ? "#bac4d1" : "var(--app-text2)" }}
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}

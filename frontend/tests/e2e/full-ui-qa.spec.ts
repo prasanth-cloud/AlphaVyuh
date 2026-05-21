@@ -100,7 +100,7 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
     }
 
     await chartToolsButton.click();
-    await page.getByRole("button", { name: "Use Trendline", exact: true }).click();
+    await page.getByRole("button", { name: "Trendline T", exact: true }).click();
     await expect(chartToolsButton).toBeVisible();
     await expect(chartToolsButton).toContainText("Tools · Trendline");
 

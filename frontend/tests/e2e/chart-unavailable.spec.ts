@@ -77,7 +77,7 @@ test.describe("Chart unavailable payloads", () => {
     await expect(page.getByTestId("chart-drawing-overlay")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("chart-indicators-unavailable")).toContainText("Chart indicators are temporarily unavailable", { timeout: 15_000 });
     await expect(page.getByTestId("chart-indicators-unavailable")).toContainText("Candles, drawings, alerts, and order planning remain usable.");
-    await expect(page.getByRole("button", { name: "Tools ▾", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open chart drawing tools", exact: true })).toBeVisible();
   });
 
   test("surfaces compare symbol outages without hiding the base chart", async ({ page }) => {

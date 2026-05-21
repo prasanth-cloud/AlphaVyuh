@@ -46,7 +46,7 @@ test.describe("Full chart drawings", () => {
     await expect(page.locator("body")).not.toContainText("Vol ratio");
     await expect(page.getByRole("button", { name: /^Draw$/ })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
+    await page.getByRole("button", { name: "Open chart drawing tools", exact: true }).click();
     for (const tool of [
       "Trendline T",
       "Horizontal line H",
@@ -70,7 +70,7 @@ test.describe("Full chart drawings", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByText(/Trendline armed/)).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Tools ▾", exact: true }).click();
+    await page.getByRole("button", { name: "Open chart drawing tools", exact: true }).click();
     await page.getByRole("button", { name: "Trendline T", exact: true }).click();
     const overlay = page.getByTestId("chart-drawing-overlay");
     const box = await overlay.boundingBox();
