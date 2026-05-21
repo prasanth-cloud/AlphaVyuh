@@ -60,15 +60,22 @@ const STATS = {
 
 const ANALYTICS = {
   equity_curve: [
+    { date: "2026-02-20", cumulative_pnl: 500 },
     { date: "2026-03-20", cumulative_pnl: 1500 },
   ],
   monthly_pnl: [{ month: "Mar 2026", pnl: 1500 }],
-  setup_breakdown: [],
-  drawdown_curve: [],
-  max_drawdown: 0,
-  longest_dd_days: 0,
-  recovery_factor: null,
-  profit_factor: null,
+  setup_breakdown: [
+    { setup: "Breakout", trades: 3, wins: 2, win_rate: 66.7, total_pnl: 1500, avg_pnl: 500 },
+  ],
+  drawdown_curve: [
+    { date: "2026-02-20", drawdown: 0, drawdown_pct: 0 },
+    { date: "2026-03-01", drawdown: -350, drawdown_pct: -2.1 },
+    { date: "2026-03-20", drawdown: 0, drawdown_pct: 0 },
+  ],
+  max_drawdown: -350,
+  longest_dd_days: 4,
+  recovery_factor: 4.29,
+  profit_factor: 2.1,
 };
 
 const AI_PATTERNS = {
@@ -543,6 +550,15 @@ test.describe("Journal — tab navigation", () => {
 
     await page.getByRole("button", { name: "Analytics" }).click();
     await expect(page.getByRole("heading", { name: "Equity curve" })).toBeVisible();
+  });
+
+  test("Analytics tab surfaces an edge dashboard and next review focus", async ({ page }) => {
+    await page.goto("/journal?tab=analytics");
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Expectancy / trade", { timeout: 15_000 });
+    await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Next review focus");
+    await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Best setup");
   });
 
   test("Trade review tab switch shows 'Pattern stats' heading", async ({

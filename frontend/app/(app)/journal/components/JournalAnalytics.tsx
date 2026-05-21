@@ -3,6 +3,72 @@
 import { Card } from "@/components/ui";
 import type { JournalAnalytics as JournalAnalyticsType } from "./types";
 
+function formatCurrency(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}₹${Math.abs(value).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+}
+
+function formatRatio(value: number | null | undefined) {
+  return value == null || !Number.isFinite(value) ? "—" : value.toFixed(2);
+}
+
+function formatPct(value: number | null | undefined) {
+  return value == null || !Number.isFinite(value) ? "—" : `${value.toFixed(value % 1 === 0 ? 0 : 1)}%`;
+}
+
+function toneForSigned(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "var(--text-secondary)";
+  return value >= 0 ? "var(--gain)" : "var(--loss)";
+}
+
+function getLastEquityValue(analytics: JournalAnalyticsType | null) {
+  const curve = analytics?.equity_curve ?? [];
+  return curve.length > 0 ? curve[curve.length - 1].cumulative_pnl : null;
+}
+
+function buildReviewSummary(analytics: JournalAnalyticsType | null) {
+  const setupRows = analytics?.setup_breakdown ?? [];
+  const monthlyRows = analytics?.monthly_pnl ?? [];
+  const totalTrades = setupRows.reduce((sum, row) => sum + row.trades, 0);
+  const totalPnl = getLastEquityValue(analytics) ?? monthlyRows.reduce((sum, row) => sum + row.pnl, 0);
+  const expectancy = totalTrades > 0 ? totalPnl / totalTrades : null;
+  const positiveMonths = monthlyRows.filter((row) => row.pnl > 0).length;
+  const consistencyPct = monthlyRows.length > 0 ? (positiveMonths / monthlyRows.length) * 100 : null;
+  const bestSetup = setupRows.length > 0
+    ? [...setupRows].sort((a, b) => b.total_pnl - a.total_pnl)[0]
+    : null;
+  const weakestSetup = setupRows.length > 0
+    ? [...setupRows].sort((a, b) => a.total_pnl - b.total_pnl)[0]
+    : null;
+  const largestMonth = monthlyRows.length > 0
+    ? [...monthlyRows].sort((a, b) => Math.abs(b.pnl) - Math.abs(a.pnl))[0]
+    : null;
+  const drawdownAbs = analytics?.max_drawdown != null ? Math.abs(analytics.max_drawdown) : null;
+  const drawdownToProfit = totalPnl > 0 && drawdownAbs && drawdownAbs > 0 ? drawdownAbs / totalPnl : null;
+
+  const reviewFocus = (() => {
+    if (analytics?.profit_factor != null && analytics.profit_factor < 1.4) return "Improve loss control before adding size.";
+    if (drawdownToProfit != null && drawdownToProfit > 0.25) return "Review drawdown clusters and reduce repeat losses.";
+    if (expectancy != null && expectancy <= 0) return "Positive win rate is not enough; raise average R or cut losers faster.";
+    if (weakestSetup && weakestSetup.total_pnl < 0) return `Pause or tighten ${weakestSetup.setup} until it has cleaner evidence.`;
+    if (bestSetup) return `Lean into ${bestSetup.setup}, then document why it is working.`;
+    return "Close and review more trades to calibrate the edge.";
+  })();
+
+  return {
+    bestSetup,
+    consistencyPct,
+    drawdownToProfit,
+    expectancy,
+    largestMonth,
+    reviewFocus,
+    totalPnl,
+    totalTrades,
+    weakestSetup,
+  };
+}
+
 // ── SVG charts ────────────────────────────────────────────────────────────────
 
 function EquityCurve({ data }: { data: { date: string; cumulative_pnl: number }[] }) {
@@ -90,10 +156,99 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
     );
   }
 
+  const summary = buildReviewSummary(analytics);
+  const hasAnalytics = Boolean(
+    analytics?.setup_breakdown?.length ||
+    analytics?.equity_curve?.length ||
+    analytics?.monthly_pnl?.length ||
+    analytics?.drawdown_curve?.length,
+  );
+  const scoreCards = [
+    {
+      label: "Closed-trade P&L",
+      value: formatCurrency(summary.totalPnl),
+      detail: summary.totalTrades > 0 ? `${summary.totalTrades} setup-tagged trades` : "Waiting for closed trade history",
+      color: toneForSigned(summary.totalPnl),
+    },
+    {
+      label: "Expectancy / trade",
+      value: formatCurrency(summary.expectancy),
+      detail: "Average realised edge after closed trades",
+      color: toneForSigned(summary.expectancy),
+    },
+    {
+      label: "Profit factor",
+      value: formatRatio(analytics?.profit_factor),
+      detail: analytics?.profit_factor != null && analytics.profit_factor >= 2 ? "Strong realised payoff profile" : "Needs more proof before scaling",
+      color: analytics?.profit_factor != null && analytics.profit_factor >= 1.5 ? "var(--gain)" : "var(--warn)",
+    },
+    {
+      label: "Consistency",
+      value: formatPct(summary.consistencyPct),
+      detail: summary.consistencyPct != null ? "Positive months in current sample" : "Monthly sample unavailable",
+      color: summary.consistencyPct != null && summary.consistencyPct >= 60 ? "var(--gain)" : "var(--warn)",
+    },
+  ];
+
   return (
     <div>
       <Card padding="lg">
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {hasAnalytics && (
+            <section data-testid="journal-edge-dashboard" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                <div>
+                  <h2 className="heading-card" style={{ marginBottom: 4 }}>Edge dashboard</h2>
+                  <div className="caption">Fast read on realised edge, risk drag, and the next review priority.</div>
+                </div>
+                <div style={{ maxWidth: 420, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ marginBottom: 4, color: "var(--text-tertiary)" }}>Next review focus</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-primary)" }}>{summary.reviewFocus}</div>
+                </div>
+              </div>
+
+              <div className="journal-edge-grid">
+                {scoreCards.map((card) => (
+                  <div key={card.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>{card.label}</div>
+                    <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: card.color }}>{card.value}</div>
+                    <div className="caption" style={{ marginTop: 5 }}>{card.detail}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="journal-review-grid">
+                <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "rgba(45,181,116,0.08)", border: "1px solid rgba(45,181,116,0.18)" }}>
+                  <div className="label" style={{ color: "var(--gain)", marginBottom: 6 }}>Best setup</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{summary.bestSetup?.setup ?? "Not enough closed trades"}</div>
+                  <div className="caption" style={{ marginTop: 5 }}>
+                    {summary.bestSetup
+                      ? `${summary.bestSetup.trades} trades · ${formatPct(summary.bestSetup.win_rate)} win rate · ${formatCurrency(summary.bestSetup.total_pnl)}`
+                      : "Tag setups to find repeatable strengths."}
+                  </div>
+                </div>
+                <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.18)" }}>
+                  <div className="label" style={{ color: "var(--warn)", marginBottom: 6 }}>Risk drag</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
+                    {analytics?.max_drawdown != null ? formatCurrency(analytics.max_drawdown) : "Drawdown unavailable"}
+                  </div>
+                  <div className="caption" style={{ marginTop: 5 }}>
+                    {summary.drawdownToProfit != null
+                      ? `${formatPct(summary.drawdownToProfit * 100)} of closed-trade P&L was given back at max drawdown.`
+                      : "Needs more equity curve history."}
+                  </div>
+                </div>
+                <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>Largest month</div>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: toneForSigned(summary.largestMonth?.pnl) }}>
+                    {summary.largestMonth ? `${summary.largestMonth.month} · ${formatCurrency(summary.largestMonth.pnl)}` : "—"}
+                  </div>
+                  <div className="caption" style={{ marginTop: 5 }}>Use this month as the benchmark for setup quality and position sizing discipline.</div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Equity curve */}
           <div>
             <h2 className="heading-card" style={{ marginBottom: 4 }}>Equity curve</h2>
@@ -185,7 +340,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
             </div>
           )}
 
-          {!analytics?.setup_breakdown?.length && !analytics?.equity_curve?.length && (
+          {!hasAnalytics && (
             <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-tertiary)", fontSize: 13 }}>
               Close some trades to see analytics here.
             </div>
