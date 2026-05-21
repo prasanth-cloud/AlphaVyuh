@@ -144,7 +144,7 @@ test.describe("Signed-in smoke flow", () => {
     await expect(openScannerLink).toBeVisible();
     await expectRealDataContext(page, "dashboard", /Latest session|EOD|Market|coverage|NSE universe/i);
 
-    await openScannerLink.click();
+    await page.locator(".app-nav").getByRole("link", { name: "Scanner" }).click();
     await expectPathname(page, "/scanner");
     const runScanButton = page.getByRole("button", { name: /Run scan/i });
     await expect(runScanButton).toBeVisible({ timeout: 30000 });
