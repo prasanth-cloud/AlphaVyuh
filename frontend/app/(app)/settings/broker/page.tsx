@@ -253,6 +253,9 @@ function BrokerSettingsContent() {
           <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
             This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every imported trade or journal capture can still create a draft before review after close.
           </div>
+          <div className="text-[12px] mt-3" style={{ color: "var(--warn)", lineHeight: 1.65 }}>
+            Live and sandbox order submission are not enabled yet; broker connections stay read-only/import only while trade plans remain journal captures.
+          </div>
         </div>
 
         <div className="broker-settings-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.05fr) minmax(320px, 0.95fr)", gap: 14, alignItems: "start" }}>

@@ -1,16 +1,28 @@
 import React from 'react'
 
-export function DataTable({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+export function DataTable({
+  children,
+  className,
+  style,
+  tableStyle,
+}: {
+  children: React.ReactNode
+  className?: string
+  style?: React.CSSProperties
+  tableStyle?: React.CSSProperties
+}) {
   return (
-    <div style={{
+    <div className={className} style={{
       border: '1px solid var(--border-subtle)',
       borderRadius: 'var(--radius-lg)',
       overflowX: 'auto',
       overflowY: 'hidden',
       background: 'var(--surface-1)',
+      minWidth: 0,
+      maxWidth: '100%',
       ...style,
     }}>
-      <table style={{ width: '100%', minWidth: 'max-content', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', minWidth: 'max-content', borderCollapse: 'collapse', ...tableStyle }}>
         {children}
       </table>
     </div>

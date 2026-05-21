@@ -672,14 +672,15 @@ input, textarea, select {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: nowrap;
   min-width: 0;
+  max-width: 100%;
 }
 
 .scanner-row-action {
   min-height: 24px;
-  padding: 3px 8px;
+  padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.02);
@@ -708,11 +709,31 @@ input, textarea, select {
 
 .scanner-lifecycle-select,
 .scanner-more-select {
-  max-width: 76px;
+  max-width: 58px;
 }
 
 .scanner-watchlist-select {
   max-width: 86px;
+}
+
+.scanner-results-table table {
+  table-layout: fixed;
+}
+
+.scanner-results-table th,
+.scanner-results-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scanner-results-table td {
+  text-overflow: clip;
+}
+
+.scanner-results-table th:last-child,
+.scanner-results-table td:last-child {
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 .scanner-results-toolbar {
@@ -975,6 +996,78 @@ input, textarea, select {
 @media (max-width: 720px) {
   .app-content {
     padding: 16px;
+  }
+
+  .app-content-full-chart,
+  .app-shell-full-chart .workspace-page,
+  .app-shell-full-chart .workspace-card {
+    height: auto !important;
+    min-height: 100dvh !important;
+  }
+
+  .app-content-full-chart {
+    overflow: auto;
+    padding: 0;
+  }
+
+  .chart-command-bar {
+    align-items: flex-start;
+    gap: 8px;
+    max-height: 178px;
+    overflow-y: auto;
+    padding: 10px 12px !important;
+  }
+
+  .chart-command-bar > .workspace-toolbar-group {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .chart-command-bar .chart-symbol-search-input,
+  .chart-command-bar input[placeholder="Symbol…"] {
+    min-width: 180px;
+  }
+
+  .chart-workspace-body {
+    flex-direction: column;
+    min-height: calc(100dvh - 178px);
+    overflow: visible;
+  }
+
+  .chart-main-panel {
+    order: 1;
+    min-height: calc(100dvh - 178px);
+    overflow: visible !important;
+  }
+
+  .chart-canvas-panel {
+    min-height: 520px;
+  }
+
+  .chart-canvas-panel > .w-full.h-full {
+    min-height: 520px;
+  }
+
+  .chart-side-panel {
+    order: 2;
+    width: 100% !important;
+    max-height: none;
+    border-right: 0 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .chart-context-bar {
+    align-items: flex-start;
+    max-height: 112px;
+    overflow-y: auto;
+  }
+
+  .chart-context-bar > div {
+    min-width: 0;
   }
 
   .app-topbar-inner {
