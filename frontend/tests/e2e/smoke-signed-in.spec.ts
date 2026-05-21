@@ -5,10 +5,41 @@ const ACCESS_URL = process.env.PLAYWRIGHT_ACCESS_URL;
 const EXPECT_REAL_DATA = process.env.PLAYWRIGHT_EXPECT_REAL_DATA === "true";
 const SMOKE_SYMBOL = process.env.PLAYWRIGHT_SMOKE_SYMBOL ?? "RELIANCE";
 const API_BEARER_TOKEN = process.env.PRODUCTION_API_BEARER_TOKEN?.trim();
+const SUPABASE_AUTH_COOKIES = process.env.PLAYWRIGHT_SUPABASE_AUTH_COOKIES?.trim();
 const { email: EMAIL, password: PASSWORD } = qaCredentials({ requireExplicit: EXPECT_REAL_DATA });
 const READ_ONLY_REAL_DATA_SMOKE = EXPECT_REAL_DATA;
 const REAL_DATA_FORBIDDEN_COPY = /Demo data|mock fixtures|sample data|AlphaVyuh mock fixtures/i;
 const REAL_DATA_CONTEXT_COPY = /Latest session|EOD|Market|Trade date|coverage|as of|Data status/i;
+
+async function installSupabaseSessionCookies(page: import("@playwright/test").Page) {
+  if (!SUPABASE_AUTH_COOKIES) return false;
+
+  let cookies: Array<{ name: string; value: string }>;
+  try {
+    cookies = JSON.parse(SUPABASE_AUTH_COOKIES);
+  } catch {
+    throw new Error("PLAYWRIGHT_SUPABASE_AUTH_COOKIES must be a JSON array of Supabase auth cookies.");
+  }
+
+  if (!Array.isArray(cookies) || cookies.length === 0 || cookies.some((cookie) => !cookie?.name || !cookie?.value)) {
+    throw new Error("PLAYWRIGHT_SUPABASE_AUTH_COOKIES did not contain usable Supabase auth cookies.");
+  }
+
+  const baseUrl = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:3000";
+  const url = new URL(baseUrl);
+  await page.context().addCookies(
+    cookies.map((cookie) => ({
+      name: cookie.name,
+      value: cookie.value,
+      domain: url.hostname,
+      path: "/",
+      httpOnly: false,
+      secure: url.protocol === "https:",
+      sameSite: "Lax" as const,
+    }))
+  );
+  return true;
+}
 
 async function login(page: import("@playwright/test").Page) {
   await page.context().clearCookies();
@@ -26,6 +57,14 @@ async function login(page: import("@playwright/test").Page) {
           },
         });
       });
+    }
+
+    if (await installSupabaseSessionCookies(page)) {
+      await page.goto("/dashboard");
+      if (await page.waitForURL(/\/dashboard/, { timeout: 20000 }).then(() => true).catch(() => false)) {
+        return;
+      }
+      await page.context().clearCookies();
     }
 
     for (let attempt = 1; attempt <= 5; attempt += 1) {

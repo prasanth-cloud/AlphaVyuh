@@ -27,6 +27,18 @@ async function run(extraEnv = {}) {
   assert.match(stderr, /PRODUCTION_API_BEARER_TOKEN/);
   assert.match(stderr, /PLAYWRIGHT_QA_EMAIL/);
   assert.match(stderr, /PLAYWRIGHT_QA_PASSWORD/);
+  assert.match(stderr, /PLAYWRIGHT_SUPABASE_AUTH_COOKIES/);
+}
+
+{
+  const { code, stderr } = await run({
+    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+    PLAYWRIGHT_QA_EMAIL: "qa@example.com",
+    PLAYWRIGHT_QA_PASSWORD: "secret-password",
+    PLAYWRIGHT_SUPABASE_AUTH_COOKIES: "[]",
+  });
+  assert.notEqual(code, 0, "production smoke env check should fail with empty Supabase cookie payload");
+  assert.match(stderr, /invalid PLAYWRIGHT_SUPABASE_AUTH_COOKIES/);
 }
 
 {
@@ -34,6 +46,7 @@ async function run(extraEnv = {}) {
     PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
     PLAYWRIGHT_QA_EMAIL: "qa@example.com",
     PLAYWRIGHT_QA_PASSWORD: "secret-password",
+    PLAYWRIGHT_SUPABASE_AUTH_COOKIES: JSON.stringify([{ name: "sb-example-auth-token", value: "base64-example" }]),
   });
   assert.equal(code, 0, `production smoke env check should pass with all values:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Production signed-in smoke env ok/);
