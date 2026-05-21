@@ -149,6 +149,12 @@ test.describe("Signed-in smoke flow", () => {
     const resetScanButton = page.getByRole("button", { name: /^Reset$/i });
     if (await resetScanButton.isVisible().catch(() => false)) {
       await resetScanButton.click();
+      if (EXPECT_REAL_DATA) {
+        await expect(page.getByText("Choose a saved filter, then adjust the fields for your scan.")).toBeVisible({
+          timeout: 5000,
+        });
+        await expect(page.getByText("Scanner queue")).toBeVisible({ timeout: 5000 });
+      }
     }
     await runScanButton.click();
     await expect
