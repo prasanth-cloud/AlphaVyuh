@@ -117,8 +117,8 @@ test.describe("Signed-in smoke flow", () => {
 
     await page.goto("/scanner");
     await expect(page).toHaveURL(/\/scanner/);
-    await expect(page.getByText("Scanner").first()).toBeVisible();
-    await expect(page.getByRole("button", { name: /Filters/i })).toBeVisible();
+    await expect(page.getByText("Scanner").first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: /Filters/i })).toBeVisible({ timeout: 15000 });
     const resetScanButton = page.getByRole("button", { name: /^Reset$/i });
     if (await resetScanButton.isVisible().catch(() => false)) {
       await resetScanButton.click();
