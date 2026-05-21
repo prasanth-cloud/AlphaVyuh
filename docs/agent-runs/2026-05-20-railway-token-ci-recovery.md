@@ -6,6 +6,7 @@
 - The first `Railway Backend Recovery` workflow run reached the `Recover backend` step, then failed during `railway link` with an unauthorized Railway CLI response.
 - Local Railway recovery and the production Railway API health/data smoke are already passing.
 - Updated `scripts/recover-railway-backend.sh` so token-based CI deploys with explicit `railway up --project ... --service ... --environment ...` flags instead of requiring `railway link`.
+- Added a runtime QA smoke-account preparation step so each recovery workflow run mints a fresh signed-in browser password and authenticated API bearer token from Supabase instead of relying on stale repository smoke secrets.
 
 ## Verification
 
@@ -13,6 +14,11 @@
 - `RAILWAY_TOKEN=dummy RAILWAY_PROJECT_ID=411c9001-5e3c-47e4-8638-5224d6316b65 RAILWAY_SERVICE=AlphaVyuh SKIP_RAILWAY_DEPLOY=1 PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app npm run recover:railway-backend`
   - Production health returned `{"status":"ok","version":"0.3.1"}`.
   - Production API smoke passed with summary date `2026-05-20`, breadth data, and chart candles for `RELIANCE`, `ITC`, and `AUBANK`.
+- `node scripts/test-check-railway-recovery-workflow.mjs`
+- `node scripts/check-railway-recovery-workflow.mjs`
+- `GITHUB_ENV=<tempfile> node scripts/prepare-production-smoke-account.mjs`
+  - Seeded the QA smoke watchlist with `AUBANK`, `ITC`, and `RELIANCE`.
+  - Exported `PLAYWRIGHT_QA_EMAIL`, `PLAYWRIGHT_QA_PASSWORD`, and `PRODUCTION_API_BEARER_TOKEN` for later workflow steps.
 
 ## Next Step
 
