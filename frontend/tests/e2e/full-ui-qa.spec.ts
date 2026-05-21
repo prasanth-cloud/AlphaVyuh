@@ -81,8 +81,9 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
     await page.goto("/charts/RELIANCE");
     await expect(page.locator("summary", { hasText: /1D|1W|1M|3M|6M|1Y|3Y|5Y|10Y/ })).toBeVisible({ timeout: 15000 });
     const indicatorsButton = page.locator("button").filter({ hasText: /Indicators|EMA 20|EMA 50|RSI/ }).first();
+    const chartToolsButton = page.getByRole("button", { name: "Open chart drawing tools", exact: true });
     await expect(indicatorsButton).toBeVisible();
-    await expect(page.getByRole("button", { name: /Tools/ })).toBeVisible();
+    await expect(chartToolsButton).toBeVisible();
     await expectAnyCanvasHasPixels(page);
 
     const timeframeDropdown = page.locator(".chart-timeframe-dropdown").first();
@@ -98,9 +99,10 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
       await page.getByRole("button", { name: label, exact: true }).click();
     }
 
-    await page.getByRole("button", { name: /Tools/ }).click();
-    await page.getByRole("button", { name: /Trendline/ }).click();
-    await expect(page.getByRole("button", { name: /Tools · Trendline/ })).toBeVisible();
+    await chartToolsButton.click();
+    await page.getByRole("button", { name: "Use Trendline", exact: true }).click();
+    await expect(chartToolsButton).toBeVisible();
+    await expect(chartToolsButton).toContainText("Tools · Trendline");
 
     for (const path of ["/dashboard", "/scanner", "/watchlist", "/journal", "/alerts", "/settings"]) {
       await page.goto(path);
