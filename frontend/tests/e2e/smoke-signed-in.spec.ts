@@ -172,6 +172,7 @@ test.describe("Signed-in smoke flow", () => {
     await expectPathname(page, "/scanner");
     const runScanButton = page.getByRole("button", { name: /Run scan/i });
     const scannerUiReady = await runScanButton.isVisible({ timeout: 30000 }).catch(() => false);
+    let scannerApiFallbackUsed = false;
     if (scannerUiReady) {
       const resetScanButton = page.getByRole("button", { name: /^Reset$/i });
       if (await resetScanButton.isVisible().catch(() => false)) {
@@ -189,8 +190,15 @@ test.describe("Signed-in smoke flow", () => {
         .toBeGreaterThan(0);
       await expect(page.getByTestId("scanner-data-trust")).toBeVisible({ timeout: 15000 });
       await expectRealDataContext(page, "scanner", /Latest session|Trade date|coverage|market data|Exchange|NSE/i);
-    } else if (!(await verifyScannerApiFallback(page))) {
+    } else if (await verifyScannerApiFallback(page)) {
+      scannerApiFallbackUsed = true;
+    } else {
       await expect(runScanButton).toBeVisible();
+    }
+
+    if (scannerApiFallbackUsed) {
+      await gotoAppPath(page, "/dashboard");
+      await expectDashboardReady(page);
     }
 
     await page.locator(".app-nav").getByRole("link", { name: "Watchlist" }).click();
