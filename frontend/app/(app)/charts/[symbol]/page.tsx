@@ -2083,7 +2083,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       )}
 
       {/* ── Toolbar ──────────────────────────────────────────────────── */}
-      <div className="workspace-toolbar" style={{ flexShrink: 0 }}>
+      <div className="workspace-toolbar chart-command-bar" style={{ flexShrink: 0 }}>
         {/* Left: symbol search + name */}
         <div className="workspace-toolbar-group">
           <SymbolSearch
@@ -2413,7 +2413,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       </div>
 
       {/* ── Body: sidebar + chart area ────────────────────────────────── */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="chart-workspace-body flex flex-1 min-h-0 overflow-hidden">
 
         {/* Order modal */}
         {showOrder && displayClose != null && (
@@ -2481,7 +2481,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         )}
 
         {/* Sidebar */}
-        <aside className="w-[240px] flex-shrink-0 flex flex-col overflow-y-auto"
+        <aside className="chart-side-panel w-[240px] flex-shrink-0 flex flex-col overflow-y-auto"
           style={{ background: "linear-gradient(180deg, rgba(244,247,251,0.04), rgba(255,255,255,0.02)), var(--surface-1)", borderRight: "1px solid rgba(255,255,255,0.07)" }}>
           {loading && !data ? (
             <div className="p-4 space-y-3">
@@ -3152,9 +3152,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         </aside>
 
         {/* Chart area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "transparent" }}>
+        <div className="chart-main-panel flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "transparent" }}>
           <div
-            className="flex items-center justify-between gap-3 px-4 py-2.5 flex-shrink-0"
+            className="chart-context-bar flex items-center justify-between gap-3 px-4 py-2.5 flex-shrink-0"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
           >
             <div className="flex items-center gap-2 flex-wrap">
@@ -3336,7 +3336,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             </div>
           </div>
           {/* OHLCV legend / crosshair overlay */}
-          <div className="relative flex-1 min-h-0">
+          <div className="chart-canvas-panel relative flex-1 min-h-0">
             {loading && data && (
               <div
                 className="absolute top-3 left-1/2 -translate-x-1/2 z-30 rounded-full px-3 py-1.5 text-[11px] font-semibold pointer-events-none"

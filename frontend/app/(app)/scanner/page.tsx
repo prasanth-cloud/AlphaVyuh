@@ -1406,21 +1406,25 @@ export default function ScannerPage() {
         {/* Results table */}
         {!loading && results.length > 0 && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            <DataTable style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}>
+            <DataTable
+              className="scanner-results-table"
+              style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}
+              tableStyle={{ minWidth: 860, tableLayout: 'fixed' }}
+            >
               <DataTableHead>
                 <Th width={32}>
                   <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
                     onChange={e => setSelectedResults(e.target.checked ? new Set(results.map(r => r.symbol)) : new Set())} />
                 </Th>
-                <Th width={200}>Symbol</Th>
-                <Th align="right" width={110}>Price</Th>
-                <Th align="right" width={90}>Change</Th>
-                <Th align="right" width={70}>Vol ×</Th>
-                <Th align="right" width={60}>RSI</Th>
+                <Th width={166}>Symbol</Th>
+                <Th align="right" width={92}>Price</Th>
+                <Th align="right" width={74}>Change</Th>
+                <Th align="right" width={60}>Vol ×</Th>
+                <Th align="right" width={50}>RSI</Th>
                 <Th align="right" width={50}>RS</Th>
-                <Th align="right" width={90}>52W H%</Th>
-                <Th align="right" width={78}>Score</Th>
-                <Th width={170}>Action</Th>
+                <Th align="right" width={68}>52W H%</Th>
+                <Th align="right" width={66}>Score</Th>
+                <Th width={178}>Action</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {
