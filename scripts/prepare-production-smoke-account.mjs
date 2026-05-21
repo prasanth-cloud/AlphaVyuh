@@ -8,6 +8,8 @@ const supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABAS
 const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "").trim();
 const githubEnv = process.env.GITHUB_ENV;
+const SUPABASE_COOKIE_PREFIX = "base64-";
+const SUPABASE_COOKIE_CHUNK_SIZE = 3180;
 
 function required(name, value) {
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
@@ -21,6 +23,28 @@ function exportSecret(name, value) {
     process.stdout.write(`::add-mask::${value}\n`);
   }
   appendFileSync(githubEnv, `${name}<<${delimiter}\n${value}\n${delimiter}\n`);
+}
+
+function supabaseStorageKey(url) {
+  const hostname = new URL(url).hostname;
+  return `sb-${hostname.split(".")[0]}-auth-token`;
+}
+
+function supabaseAuthCookieChunks(url, session) {
+  const key = supabaseStorageKey(url);
+  const encoded = `${SUPABASE_COOKIE_PREFIX}${Buffer.from(JSON.stringify(session), "utf8").toString("base64url")}`;
+  if (encoded.length <= SUPABASE_COOKIE_CHUNK_SIZE) {
+    return [{ name: key, value: encoded }];
+  }
+
+  const chunks = [];
+  for (let offset = 0; offset < encoded.length; offset += SUPABASE_COOKIE_CHUNK_SIZE) {
+    chunks.push({
+      name: `${key}.${chunks.length}`,
+      value: encoded.slice(offset, offset + SUPABASE_COOKIE_CHUNK_SIZE),
+    });
+  }
+  return chunks;
 }
 
 async function main() {
@@ -114,6 +138,7 @@ async function main() {
   exportSecret("PLAYWRIGHT_QA_EMAIL", qaEmail);
   exportSecret("PLAYWRIGHT_QA_PASSWORD", password);
   exportSecret("PRODUCTION_API_BEARER_TOKEN", signedIn.data.session.access_token);
+  exportSecret("PLAYWRIGHT_SUPABASE_AUTH_COOKIES", JSON.stringify(supabaseAuthCookieChunks(supabaseUrl, signedIn.data.session)));
 
   console.log(
     JSON.stringify(
@@ -122,6 +147,7 @@ async function main() {
         email: qaEmail,
         watchlistId,
         seededSymbols: seeded.data?.map((row) => row.symbol).sort(),
+        exportedSupabaseAuthCookies: supabaseAuthCookieChunks(supabaseUrl, signedIn.data.session).map((cookie) => cookie.name),
         exportedToGithubEnv: Boolean(githubEnv),
       },
       null,
