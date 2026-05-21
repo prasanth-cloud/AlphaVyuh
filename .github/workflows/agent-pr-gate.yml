@@ -30,19 +30,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -96,6 +96,9 @@ jobs:
 
       - name: Railway secret prep checker tests
         run: npm run test:railway-secret-prep
+
+      - name: CI action runtime checker tests
+        run: npm run test:ci-action-runtime-check
 
       - name: Signed-in workflow browser smoke
         run: npm run test:e2e:smoke
