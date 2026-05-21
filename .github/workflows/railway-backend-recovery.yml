@@ -8,7 +8,7 @@ on:
         required: true
         default: https://alphavyuh-production.up.railway.app
       railway_project_id:
-        description: Railway project ID to link in CI. Optional when RAILWAY_PROJECT_ID secret is set.
+        description: Railway project ID to deploy in CI. Optional when RAILWAY_PROJECT_ID secret is set.
         required: false
       railway_environment:
         description: Railway environment
