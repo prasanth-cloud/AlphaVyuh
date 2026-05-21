@@ -60,6 +60,14 @@ jobs:
       - name: Install Playwright Chromium
         run: npm --prefix frontend exec playwright install --with-deps chromium
 
+      - name: Prepare production smoke account
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          PLAYWRIGHT_QA_EMAIL: ${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+        run: node scripts/prepare-production-smoke-account.mjs
+
       - name: Validate Railway token
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -71,10 +79,6 @@ jobs:
           fi
 
       - name: Validate full recovery smoke credentials
-        env:
-          PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
-          PLAYWRIGHT_QA_EMAIL: ${{ secrets.PLAYWRIGHT_QA_EMAIL }}
-          PLAYWRIGHT_QA_PASSWORD: ${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
         run: npm run check:production-smoke-env
 
       - name: Recover backend
@@ -85,9 +89,6 @@ jobs:
           RAILWAY_SERVICE: ${{ github.event.inputs.railway_service || secrets.RAILWAY_SERVICE }}
           RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
           PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
-          PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
-          PLAYWRIGHT_QA_EMAIL: ${{ secrets.PLAYWRIGHT_QA_EMAIL }}
-          PLAYWRIGHT_QA_PASSWORD: ${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
           PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
         run: npm run recover:railway-backend
 
@@ -101,7 +102,6 @@ jobs:
           RAILWAY_SERVICE: ${{ github.event.inputs.railway_service || secrets.RAILWAY_SERVICE }}
           RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
           PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
-          PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
           PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -112,7 +112,5 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.live_url }}
           PLAYWRIGHT_EXPECT_REAL_DATA: "true"
-          PLAYWRIGHT_QA_EMAIL: ${{ secrets.PLAYWRIGHT_QA_EMAIL }}
-          PLAYWRIGHT_QA_PASSWORD: ${{ secrets.PLAYWRIGHT_QA_PASSWORD }}
           PLAYWRIGHT_SMOKE_SYMBOL: RELIANCE
         run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts

@@ -8,6 +8,8 @@ const requiredSnippets = [
   "npm --prefix frontend ci",
   "Install Playwright Chromium",
   "npm --prefix frontend exec playwright install --with-deps chromium",
+  "Prepare production smoke account",
+  "node scripts/prepare-production-smoke-account.mjs",
   "Validate full recovery smoke credentials",
   "npm run check:production-smoke-env",
   "Recover backend",
@@ -19,11 +21,10 @@ const requiredSnippets = [
   'PLAYWRIGHT_EXPECT_REAL_DATA: "true"',
   "npm --prefix frontend exec -- playwright test",
   "frontend/tests/e2e/smoke-signed-in.spec.ts",
-  "PRODUCTION_API_BEARER_TOKEN",
   "PLAYWRIGHT_QA_EMAIL",
-  "PLAYWRIGHT_QA_PASSWORD",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "VERCEL_TOKEN",
 ];
 
@@ -39,10 +40,15 @@ try {
     assert(body.includes(snippet), `Railway recovery workflow is missing: ${snippet}`);
   }
 
+  const prepareAccountIndex = body.indexOf("Prepare production smoke account");
   const credentialIndex = body.indexOf("Validate full recovery smoke credentials");
   const recoverIndex = body.indexOf("Recover backend");
   const strictPreflightIndex = body.indexOf("Strict production data recovery preflight");
   const browserSmokeIndex = body.indexOf("Strict signed-in production browser smoke");
+  assert(
+    prepareAccountIndex < credentialIndex,
+    "Railway recovery workflow must prepare runtime smoke credentials before validating them.",
+  );
   assert(
     credentialIndex < recoverIndex,
     "Railway recovery workflow must validate full smoke credentials before deploying the backend.",
