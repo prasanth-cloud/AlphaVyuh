@@ -76,9 +76,8 @@ if [[ "$SKIP_RAILWAY_DEPLOY" != "1" ]]; then
     railway up \
       --detach \
       --environment "$RAILWAY_ENVIRONMENT" \
-      "${service_args[@]}" \
-      --message "Recover AlphaVyuh backend $(git -C "$ROOT_DIR" rev-parse --short HEAD)" \
-      .
+      ${service_args[@]+"${service_args[@]}"} \
+      --message "Recover AlphaVyuh backend $(git -C "$ROOT_DIR" rev-parse --short HEAD)"
   )
 else
   echo "Skipping Railway deploy because SKIP_RAILWAY_DEPLOY=1."
@@ -99,7 +98,7 @@ if [[ "$health_ok" != "1" ]]; then
   echo "Backend health did not recover. Latest Railway logs:" >&2
   (
     cd "$BACKEND_DIR"
-    railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" "${service_args[@]}" || true
+    railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
   )
   exit 1
 fi
