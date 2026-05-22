@@ -623,4 +623,23 @@ test.describe("Journal — broker sync import", () => {
     await page.getByRole("button", { name: "Import from Zerodha" }).click();
     await expect(importCalled).toBe(true);
   });
+
+  test("broker import failure uses stable recovery copy", async ({ page }) => {
+    await mockJournalRoutes(page, { brokerConnected: true });
+    await page.route("**/api/v1/broker/zerodha/import", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "access_token expired for user@example.com" }),
+      });
+    });
+
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await page.getByRole("button", { name: "Import from Zerodha" }).click();
+    await expect(page.getByTestId("journal-toast")).toContainText("Broker import could not run. Check Broker or Data Status, then try again.", { timeout: 15_000 });
+    await expect(page.getByTestId("journal-toast")).not.toContainText("access_token");
+    await expect(page.getByTestId("journal-toast")).not.toContainText("user@example.com");
+  });
 });
