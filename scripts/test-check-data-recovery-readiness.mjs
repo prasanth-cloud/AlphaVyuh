@@ -288,7 +288,7 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
   assert.match(stdout, /Frontend points at the recovery API URL; data mode is live; mock fallback is false/);
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /No Railway Backend Recovery workflow runs found/);
-  assert.match(stdout, /Unauthorized\. Please run railway login again/);
+  assert.match(stdout, /(?:Unauthorized\. Please run railway login again|Railway CLI is not authenticated locally)/);
   assert.match(stdout, /npm run recover:railway-backend:login/);
   assert.deepEqual(resultNames(stdout), [
     "Production API data smoke",

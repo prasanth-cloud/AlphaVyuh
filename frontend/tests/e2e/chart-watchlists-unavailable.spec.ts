@@ -76,7 +76,7 @@ test.describe("Chart watchlist unavailable state", () => {
 
     await page.getByRole("button", { name: /^Add to watchlist$/i }).click();
     await expect(page.getByTestId("chart-watchlists-outage")).toContainText("Watchlists unavailable", { timeout: 15_000 });
-    await expect(page.getByTestId("chart-watchlists-outage")).toContainText("Watchlist data is temporarily unavailable.");
+    await expect(page.getByTestId("chart-watchlists-outage")).toContainText("Open Watchlist or Data Status, then try again.");
 
     await page.getByTestId("chart-watchlists-outage").getByRole("button", { name: /^Retry$/ }).click();
     await expect.poll(() => watchlistRequests).toBeGreaterThan(2);
