@@ -121,6 +121,27 @@ const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: 
 const chartDataCache = new Map<string, ChartDataCacheEntry>();
 const CHART_CACHE_TTL_MS = 60_000;
 const CHART_TYPE_STORAGE_KEY = "alphavyuh-chart-type";
+const CHART_LAYOUT_UNAVAILABLE_MESSAGE = "Chart layout is temporarily unavailable. Charting, alerts, and order planning remain usable.";
+const CHART_LAYOUT_SAVE_FAILED_MESSAGE = "Chart layout could not be saved. Check Data Status, then try again.";
+const CHART_DRAWINGS_UNAVAILABLE_MESSAGE = "Chart drawings are temporarily unavailable. Candles, alerts, and order planning remain usable.";
+const CHART_DRAWING_SAVE_FAILED_MESSAGE = "Chart drawing changes could not be saved. Check Data Status, then try again.";
+const CHART_WATCHLISTS_UNAVAILABLE_MESSAGE = "Open Watchlist or Data Status, then try again.";
+const CHART_WATCHLIST_ADD_RECOVERY_MESSAGE = "Check Watchlist or Data Status, then try again.";
+const PRICE_ALERTS_UNAVAILABLE_MESSAGE = "Price alerts are temporarily unavailable. Charting and order planning remain usable.";
+const PRICE_ALERT_SAVE_FAILED_MESSAGE = "Price alert could not be saved. Check Alerts or Data Status, then try again.";
+const PRICE_ALERT_DELETE_FAILED_MESSAGE = "Price alert could not be deleted. Check Alerts or Data Status, then try again.";
+const PORTFOLIO_UNAVAILABLE_MESSAGE = "Portfolio positions are temporarily unavailable. Charting and alerts remain usable.";
+const FUNDAMENTALS_UNAVAILABLE_MESSAGE = "Fundamentals are temporarily unavailable. Chart and planning tools remain usable.";
+const POSITION_LEVEL_SAVE_FAILED_MESSAGE = "Position levels could not be saved. Check Journal or Data Status, then try again.";
+const POSITION_CLOSE_FAILED_MESSAGE = "Position could not be closed. Check Journal or Data Status, then try again.";
+const CHART_FEEDBACK_REPORT_FAILED_MESSAGE = "Could not report the data issue. Try again from Feedback or Data Status.";
+
+function chartWatchlistAddMessage(symbol: string, error?: unknown): string {
+  if (error instanceof Error && /already in watchlist/i.test(error.message)) {
+    return `${symbol.toUpperCase()} is already in this watchlist.`;
+  }
+  return `${symbol.toUpperCase()} could not be added. ${CHART_WATCHLIST_ADD_RECOVERY_MESSAGE}`;
+}
 
 function normalizeChartType(value: string | null | undefined): ChartDisplayType | null {
   return value === "bars" || value === "line" || value === "candles" ? value : null;
@@ -492,8 +513,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     });
   }, []);
 
-  const showDrawingPersistenceError = useCallback((error: unknown, fallback: string) => {
-    setLayoutMsg(error instanceof Error ? error.message : fallback);
+  const showDrawingPersistenceError = useCallback(() => {
+    setLayoutMsg(CHART_DRAWING_SAVE_FAILED_MESSAGE);
     setTimeout(() => setLayoutMsg(""), 5000);
   }, []);
 
@@ -508,8 +529,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setDrawings((prev) => prev.map((item) => item.id === drawing.id ? saved : item));
       setDrawnLines((prev) => prev.map((item) => item.id === drawing.id ? { ...item, id: saved.id } : item));
       setSelectedDrawingId(saved.id);
-    } catch (error) {
-      showDrawingPersistenceError(error, "Chart drawing changes could not be saved.");
+    } catch {
+      showDrawingPersistenceError();
     }
   }, [showDrawingPersistenceError, symbol, timeframe]);
 
@@ -566,11 +587,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setCompareData(nextData);
         setCompareError(null);
       })
-      .catch((error) => {
+      .catch((compareLoadError) => {
         if (cancelled) return;
         setCompareData(null);
-        setCompareError(error instanceof Error && error.message.trim()
-          ? error.message
+        setCompareError(compareLoadError instanceof Error && compareLoadError.message.trim()
+          ? compareLoadError.message
           : `Compare data for ${activeCompareSymbol} is temporarily unavailable.`);
       });
     return () => {
@@ -699,8 +720,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "10Y");
       }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
-    }).catch((error) => {
-      setLayoutMsg(error instanceof Error ? error.message : "Chart layout is temporarily unavailable.");
+    }).catch(() => {
+      setLayoutMsg(CHART_LAYOUT_UNAVAILABLE_MESSAGE);
       setTimeout(() => setLayoutMsg(""), 3000);
     });
     getPlanStatus().then(s => setUserPlan(s.plan)).catch(() => {});
@@ -723,11 +744,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         loadedPriceAlertsSymbolRef.current = requestSymbol;
         setPriceAlerts(alerts.filter(a => a.symbol.toUpperCase() === requestSymbol && a.is_active));
       })
-      .catch((error) => {
+      .catch(() => {
         if (loadedPriceAlertsSymbolRef.current !== requestSymbol) {
           setPriceAlerts([]);
         }
-        setPriceAlertsError(error instanceof Error ? error.message : "Price alerts are temporarily unavailable.");
+        setPriceAlertsError(PRICE_ALERTS_UNAVAILABLE_MESSAGE);
       });
   }, [symbol]);
 
@@ -784,9 +805,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         : lists.find((watchlist) => watchlist.name === sourceWatchlist);
       setSourceQueue(matched ?? null);
       setSourceQueueError(null);
-    } catch (error) {
+    } catch {
       setSourceQueue(null);
-      setSourceQueueError(error instanceof Error ? error.message : "Watchlist data is temporarily unavailable.");
+      setSourceQueueError(CHART_WATCHLISTS_UNAVAILABLE_MESSAGE);
     }
   }, [sourcePage, sourceWatchlist, sourceWatchlistId]);
 
@@ -842,8 +863,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         }
         return next;
       });
-    } catch (error) {
-      setSymbolPositionsError(error instanceof Error ? error.message : "Portfolio is temporarily unavailable.");
+    } catch {
+      setSymbolPositionsError(PORTFOLIO_UNAVAILABLE_MESSAGE);
     } finally {
       setPositionsLoading(false);
     }
@@ -878,11 +899,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         if (next) {
           setFundamentals(next);
         } else {
-          setFundamentalsError("Fundamentals are temporarily unavailable. Chart and planning tools remain usable.");
+          setFundamentalsError(FUNDAMENTALS_UNAVAILABLE_MESSAGE);
         }
       })
-      .catch((error) => {
-        setFundamentalsError(error instanceof Error ? error.message : "Fundamentals are temporarily unavailable.");
+      .catch(() => {
+        setFundamentalsError(FUNDAMENTALS_UNAVAILABLE_MESSAGE);
       })
       .finally(() => setFundamentalsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -932,14 +953,14 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setUndoStack([]);
       setRedoStack([]);
       setSelectedDrawingId(null);
-    }).catch((error) => {
+    }).catch(() => {
       if (cancelled) return;
       if (loadedDrawingsKeyRef.current !== requestKey) {
         setDrawings([]);
         setDrawnLines([]);
         setSelectedDrawingId(null);
       }
-      setDrawingsError(error instanceof Error ? error.message : "Chart drawings are temporarily unavailable.");
+      setDrawingsError(CHART_DRAWINGS_UNAVAILABLE_MESSAGE);
     });
     return () => {
       cancelled = true;
@@ -963,29 +984,39 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }, []);
 
   async function handleSaveLayout() {
-    await saveChartLayout(symbol, {
-      timeframe,
-      indicators: activeIndicators,
-      drawing_tools: drawnLines.map(item => ({
-        id: item.id,
-        tool: item.tool,
-        color: item.color,
-        locked: Boolean(item.locked),
-        hidden: Boolean(item.hidden),
-      })),
-    });
-    setLayoutMsg("Saved for this symbol");
-    setTimeout(() => setLayoutMsg(""), 2500);
+    try {
+      await saveChartLayout(symbol, {
+        timeframe,
+        indicators: activeIndicators,
+        drawing_tools: drawnLines.map(item => ({
+          id: item.id,
+          tool: item.tool,
+          color: item.color,
+          locked: Boolean(item.locked),
+          hidden: Boolean(item.hidden),
+        })),
+      });
+      setLayoutMsg("Saved for this symbol");
+      setTimeout(() => setLayoutMsg(""), 2500);
+    } catch {
+      setLayoutMsg(CHART_LAYOUT_SAVE_FAILED_MESSAGE);
+      setTimeout(() => setLayoutMsg(""), 5000);
+    }
   }
 
   async function handleSaveDefaultLayout() {
-    await saveDefaultChartLayout({
-      timeframe,
-      indicators: activeIndicators,
-      drawing_tools: [],
-    });
-    setLayoutMsg("Default preset saved");
-    setTimeout(() => setLayoutMsg(""), 2500);
+    try {
+      await saveDefaultChartLayout({
+        timeframe,
+        indicators: activeIndicators,
+        drawing_tools: [],
+      });
+      setLayoutMsg("Default preset saved");
+      setTimeout(() => setLayoutMsg(""), 2500);
+    } catch {
+      setLayoutMsg(CHART_LAYOUT_SAVE_FAILED_MESSAGE);
+      setTimeout(() => setLayoutMsg(""), 5000);
+    }
   }
 
   async function handleAddWatchlist(force = false) {
@@ -997,10 +1028,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setWatchlists(wls.map(w => ({ id: w.id, name: w.name })));
       setShowWlPicker(true);
       setWatchlistsError(null);
-    } catch (error) {
+    } catch {
       setWatchlists([]);
       setShowWlPicker(true);
-      setWatchlistsError(error instanceof Error ? error.message : "Watchlist data is temporarily unavailable.");
+      setWatchlistsError(CHART_WATCHLISTS_UNAVAILABLE_MESSAGE);
     } finally {
       setWatchlistsLoading(false);
     }
@@ -1018,8 +1049,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setAlertPrice("");
       setAlertNote("");
       setTimeout(() => { setAlertMsg(""); setShowAlertModal(false); }, 1500);
-    } catch (e: unknown) {
-      setAlertMsg(e instanceof Error ? e.message : "Failed");
+    } catch {
+      setAlertMsg(PRICE_ALERT_SAVE_FAILED_MESSAGE);
     }
     setAlertSaving(false);
   }
@@ -1042,8 +1073,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setPriceAlerts(prev => [created, ...prev]);
       setPriceAlertsError(null);
       setQuickAlertMsg(`Alert set ${condition} ${fmtPrice(target, symbolCurrency)}`);
-    } catch (e: unknown) {
-      setQuickAlertMsg(e instanceof Error ? e.message : "Alert failed");
+    } catch {
+      setQuickAlertMsg(PRICE_ALERT_SAVE_FAILED_MESSAGE);
     } finally {
       setAlertSaving(false);
       setTimeout(() => setQuickAlertMsg(""), 3000);
@@ -1074,8 +1105,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       await deletePriceAlert(id);
       setPriceAlerts(prev => prev.filter(a => a.id !== id));
       setPriceAlertsError(null);
-    } catch (error) {
-      setAlertMsg(error instanceof Error ? error.message : "Price alerts are temporarily unavailable.");
+    } catch {
+      setAlertMsg(PRICE_ALERT_DELETE_FAILED_MESSAGE);
     }
   }
 
@@ -1085,7 +1116,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       await addToWatchlist(wlId, symbol);
       setWlMsg("Added!");
     } catch (e: unknown) {
-      setWlMsg(e instanceof Error ? e.message : "Error");
+      setWlMsg(chartWatchlistAddMessage(symbol, e));
     }
     setTimeout(() => setWlMsg(""), 2500);
   }
@@ -1259,8 +1290,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         });
         setOrderToast({ message: "Position levels updated from chart drag.", journalId: positionId, broker: "simulated" });
         await loadSymbolPositions();
-      } catch (error: unknown) {
-        setOrderToast({ message: error instanceof Error ? error.message : "Failed to update levels", journalId: positionId, broker: "simulated" });
+      } catch {
+        setOrderToast({ message: POSITION_LEVEL_SAVE_FAILED_MESSAGE, journalId: positionId, broker: "simulated" });
       } finally {
         setManageBusyId(null);
         setTimeout(() => setOrderToast(null), 4000);
@@ -1322,8 +1353,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         setDrawnLines(prev => prev.map(item => item.id === line.id ? { ...item, id: saved.id } : item));
         setSelectedDrawingId(saved.id);
         setTextEditor(prev => prev?.drawingId === line.id ? { ...prev, drawingId: saved.id } : prev);
-      } catch (error) {
-        showDrawingPersistenceError(error, "Chart drawing could not be saved.");
+      } catch {
+        showDrawingPersistenceError();
       }
       return;
     }
@@ -1363,8 +1394,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setDrawings(prev => [...prev, saved]);
       setDrawnLines(prev => prev.map(item => item.id === line.id ? { ...item, id: saved.id } : item));
       setSelectedDrawingId(saved.id);
-    } catch (error) {
-      showDrawingPersistenceError(error, "Chart drawing could not be saved.");
+    } catch {
+      showDrawingPersistenceError();
     }
   }
 
@@ -1376,8 +1407,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     setDrawings(prev => prev.filter(item => item.id !== drawingId));
     try {
       await deleteDrawing(symbol, drawingId);
-    } catch (error) {
-      showDrawingPersistenceError(error, "Chart drawing could not be deleted.");
+    } catch {
+      showDrawingPersistenceError();
     }
   }, [drawnLines, showDrawingPersistenceError, symbol, updateDrawingsWithHistory]);
 
@@ -1454,7 +1485,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     const results = await Promise.allSettled(currentIds.map(id => deleteDrawing(symbol, id)));
     const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
     if (failure) {
-      showDrawingPersistenceError(failure.reason, "Some chart drawings could not be deleted.");
+      showDrawingPersistenceError();
     }
   }, [drawnLines, showDrawingPersistenceError, symbol, updateDrawingsWithHistory]);
 
@@ -1560,8 +1591,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       setDrawings(prev => [...prev, saved]);
       setDrawnLines(prev => prev.map(item => item.id === note.id ? { ...item, id: saved.id } : item));
       setSelectedDrawingId(saved.id);
-    } catch (error) {
-      showDrawingPersistenceError(error, "Chart drawing could not be saved.");
+    } catch {
+      showDrawingPersistenceError();
     }
   }, [showDrawingPersistenceError, symbol, timeframe, updateDrawingsWithHistory]);
 
@@ -1881,8 +1912,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         context: { timeframe, live_mode: liveMode, latest_time: data?.candles.at(-1)?.time },
       });
       setOrderToast({ message: "Data issue reported.", journalId: null, broker: "simulated" });
-    } catch (error) {
-      setOrderToast({ message: error instanceof Error ? error.message : "Could not report data issue.", journalId: null, broker: "simulated" });
+    } catch {
+      setOrderToast({ message: CHART_FEEDBACK_REPORT_FAILED_MESSAGE, journalId: null, broker: "simulated" });
     }
   }
 
@@ -2892,8 +2923,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                                     });
                                     setOrderToast({ message: "Position levels updated from chart.", journalId: position.id, broker: "simulated" });
                                     await loadSymbolPositions();
-                                  } catch (e: unknown) {
-                                    setOrderToast({ message: e instanceof Error ? e.message : "Failed to update levels", journalId: position.id, broker: "simulated" });
+                                  } catch {
+                                    setOrderToast({ message: POSITION_LEVEL_SAVE_FAILED_MESSAGE, journalId: position.id, broker: "simulated" });
                                   } finally {
                                     setManageBusyId(null);
                                     setTimeout(() => setOrderToast(null), 4000);
@@ -2918,8 +2949,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                                     const result = await closePosition(position.id, exitPrice, draft.reason || undefined);
                                     setOrderToast({ message: `${result.message} - journal updated and trade review generated.`, journalId: position.id, broker: "simulated" });
                                     await loadSymbolPositions();
-                                  } catch (e: unknown) {
-                                    setOrderToast({ message: e instanceof Error ? e.message : "Failed to close position", journalId: position.id, broker: "simulated" });
+                                  } catch {
+                                    setOrderToast({ message: POSITION_CLOSE_FAILED_MESSAGE, journalId: position.id, broker: "simulated" });
                                   } finally {
                                     setCloseBusyId(null);
                                     setTimeout(() => setOrderToast(null), 6000);
