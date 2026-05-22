@@ -105,7 +105,7 @@ test.describe("Watchlist mutation failures", () => {
     await expect(page.locator("tr[data-symbol='RELIANCE']")).toBeVisible({ timeout: 20_000 });
     await page.getByTestId("watchlist-remove-RELIANCE").click({ force: true });
 
-    await expect(page.getByTestId("watchlist-toast")).toContainText("Watchlist item removal is temporarily unavailable.");
+    await expect(page.getByTestId("watchlist-toast")).toContainText("RELIANCE could not be removed. Check Watchlist or Data Status, then try again.");
     await expect(page.locator("tr[data-symbol='RELIANCE']")).toBeVisible();
     expect(removeRequests).toBe(1);
   });
@@ -153,7 +153,7 @@ test.describe("Watchlist mutation failures", () => {
     await expect(page.getByText("No stocks yet")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Add starter queue" }).click();
 
-    await expect(page.getByTestId("watchlist-toast")).toContainText("Watchlist add is temporarily unavailable.", { timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-toast")).toContainText("Starter queue could not be completed. Check Watchlist or Data Status, then try again.", { timeout: 15_000 });
     await expect(page.locator("tr[data-symbol='RELIANCE']")).toHaveCount(0);
     expect(addRequests).toBeGreaterThan(0);
   });
@@ -206,7 +206,7 @@ test.describe("Watchlist mutation failures", () => {
 
     await expect(page.locator(".watchlist-chart-header")).toContainText("AUBANK", { timeout: 20_000 });
     await expect(page.getByTestId("watchlist-toast")).toContainText("AUBANK could not be added to the active watchlist.", { timeout: 15_000 });
-    await expect(page.getByTestId("watchlist-toast")).toContainText("Watchlist add is temporarily unavailable.");
+    await expect(page.getByTestId("watchlist-toast")).toContainText("Check Watchlist or Data Status, then try again.");
     await expect(page.locator("tr[data-symbol='AUBANK']")).toHaveCount(0);
     expect(addRequests).toBe(1);
   });
