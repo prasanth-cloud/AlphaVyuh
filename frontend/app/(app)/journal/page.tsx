@@ -21,6 +21,17 @@ import { useWorkflowState } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 
+const JOURNAL_RECOVERY_MESSAGE = "Check Journal or Data Status, then try again.";
+const JOURNAL_TRADE_SAVE_FAILED_MESSAGE = `Trade could not be saved. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_TRADE_CLOSE_FAILED_MESSAGE = `Trade could not be closed. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_TRADE_DELETE_FAILED_MESSAGE = `Trade could not be deleted. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_LESSON_FAILED_MESSAGE = `Trade lesson could not be generated. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_REVIEW_SAVE_FAILED_MESSAGE = `Review could not be saved. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_IMPORT_FAILED_MESSAGE = `Broker import could not run. Check Broker or Data Status, then try again.`;
+const JOURNAL_ANALYSIS_FAILED_MESSAGE = `Journal analysis could not run. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_SYMBOL_SEARCH_FAILED_MESSAGE = "Symbol search is temporarily unavailable. Check Data Status, then try again.";
+const JOURNAL_IMPORT_RESULT_FAILED_MESSAGE = `Broker import result was unavailable. Check Broker or Data Status, then refresh Journal.`;
+
 export default function JournalPage() {
   const searchParams = useSearchParams();
   const { completeReview } = useWorkflowState();
@@ -170,9 +181,9 @@ export default function JournalPage() {
         const r = await searchSymbols(symbolQ);
         setSymbolResults(r.slice(0, 6));
         setSymbolSearchError("");
-      } catch (error) {
+      } catch {
         setSymbolResults([]);
-        setSymbolSearchError(error instanceof Error ? error.message : "Symbol search is temporarily unavailable.");
+        setSymbolSearchError(JOURNAL_SYMBOL_SEARCH_FAILED_MESSAGE);
       }
     }, 250);
     return () => clearTimeout(t);
@@ -238,7 +249,7 @@ export default function JournalPage() {
       setAddForm({ trade_type: "long", entry_date: new Date().toISOString().split("T")[0] });
       setSelectedSymbol(""); setSymbolQ(""); setPanelMode(null);
       showToast("Trade logged"); load();
-    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Failed to save"); }
+    } catch { showToast(JOURNAL_TRADE_SAVE_FAILED_MESSAGE); }
     finally { setSaving(false); }
   };
 
@@ -251,7 +262,7 @@ export default function JournalPage() {
       await updateJournalEntry(selectedEntry.id, { ...closeForm, ...(closeSetupType ? { setup_type: closeSetupType } : {}) } as UpdateJournalEntry);
       setPanelMode(null); setSelectedEntry(null);
       showToast("Trade closed - review generated"); load();
-    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Failed to close"); }
+    } catch { showToast(JOURNAL_TRADE_CLOSE_FAILED_MESSAGE); }
     finally { setSaving(false); }
   };
 
@@ -264,7 +275,7 @@ export default function JournalPage() {
       completeReview(updated.symbol);
       trackEvent("journal_entry_reviewed", { source: getTradeFlowMeta(updated).sourceLabel, symbol: updated.symbol });
       showToast("Trade lesson generated");
-    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Trade lesson failed"); }
+    } catch { showToast(JOURNAL_LESSON_FAILED_MESSAGE); }
     finally { setLessonLoading(null); }
   };
 
@@ -282,7 +293,7 @@ export default function JournalPage() {
       completeReview(updated.symbol);
       trackEvent("journal_entry_reviewed", { source: getTradeFlowMeta(updated).sourceLabel, symbol: updated.symbol, method: "manual" });
       showToast("Review saved");
-    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Review save failed"); }
+    } catch { showToast(JOURNAL_REVIEW_SAVE_FAILED_MESSAGE); }
     finally { setReviewSaving(false); }
   };
 
@@ -291,19 +302,23 @@ export default function JournalPage() {
     try {
       const r = await importZerodhaTrades();
       trackEvent("journal_entry_created", { source: "broker_import", imported: r.imported, skipped: r.skipped });
-      showToast(r.message);
+      showToast(r.message || JOURNAL_IMPORT_RESULT_FAILED_MESSAGE);
       setBrokerLastSyncedAt(r.last_synced_at ?? new Date().toISOString());
       refreshBrokerStatus();
       if (r.imported > 0) load();
-    } catch (e: unknown) { showToast(e instanceof Error ? e.message : "Import failed"); }
+    } catch { showToast(JOURNAL_IMPORT_FAILED_MESSAGE); }
     finally { setImporting(false); }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this trade?")) return;
-    await deleteJournalEntry(id);
-    if (selectedEntry?.id === id) { setSelectedEntry(null); setPanelMode(null); }
-    showToast("Deleted"); load();
+    try {
+      await deleteJournalEntry(id);
+      if (selectedEntry?.id === id) { setSelectedEntry(null); setPanelMode(null); }
+      showToast("Deleted"); load();
+    } catch {
+      showToast(JOURNAL_TRADE_DELETE_FAILED_MESSAGE);
+    }
   };
 
   const openClosePanel = (e: JournalEntry) => {
@@ -324,7 +339,7 @@ export default function JournalPage() {
     try {
       const r = await analyseJournal();
       setAiAnalysis(r.analysis); setAiTradesCount(r.trades_analysed);
-    } catch (e: unknown) { setAiError(e instanceof Error ? e.message : "Analysis failed"); }
+    } catch { setAiError(JOURNAL_ANALYSIS_FAILED_MESSAGE); }
     finally { setAiLoading(false); }
   };
 
@@ -332,7 +347,7 @@ export default function JournalPage() {
     <div style={{ minHeight: "100%", background: "transparent", display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: "var(--radius-md)", background: "var(--surface-float)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
+        <div data-testid="journal-toast" style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: "var(--radius-md)", background: "var(--surface-float)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
           {toast}
         </div>
       )}
