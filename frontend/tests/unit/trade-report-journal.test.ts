@@ -115,4 +115,33 @@ RELIANCE,2026-05-03,SELL,10,112`);
       exit_price: 112,
     });
   });
+
+  it("returns stable copy when the existing journal lookup fails", async () => {
+    const result = parseTradeReportCsv(sampleTradeReportCsv());
+    apiMocks.getJournalEntries.mockRejectedValue(new Error("JWT expired for user@example.com"));
+
+    const imported = await importTradeReportToJournal(result);
+
+    expect(imported).toMatchObject({ imported: 0, skipped: 0, ineligible: 0, total: 4 });
+    expect(imported.message).toBe("Journal import could not start. No trades were saved. Check Data Status, then try the import again.");
+    expect(imported.message).not.toContain("JWT");
+    expect(imported.message).not.toContain("user@example.com");
+    expect(apiMocks.createJournalEntry).not.toHaveBeenCalled();
+  });
+
+  it("stops with stable copy when saving a journal row fails", async () => {
+    const result = parseTradeReportCsv(sampleTradeReportCsv());
+    apiMocks.createJournalEntry
+      .mockImplementationOnce(async (entry) => journalEntry(`created-${entry.symbol}`, entry.entry_reason))
+      .mockRejectedValueOnce(new Error("insert failed: access_token leaked"));
+
+    const imported = await importTradeReportToJournal(result);
+
+    expect(imported).toMatchObject({ imported: 1, skipped: 0, ineligible: 0, total: 4 });
+    expect(imported.message).toBe("Journal import stopped after 1 trade was saved. Check Data Status, then try the import again.");
+    expect(imported.message).not.toContain("insert failed");
+    expect(imported.message).not.toContain("access_token");
+    expect(apiMocks.createJournalEntry).toHaveBeenCalledTimes(2);
+    expect(apiMocks.updateJournalEntry).toHaveBeenCalledTimes(1);
+  });
 });
