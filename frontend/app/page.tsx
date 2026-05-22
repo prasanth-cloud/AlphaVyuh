@@ -447,7 +447,7 @@ export default function LandingPage() {
             <div className="lp-tp-text">
               <span className="lp-feat-label">Charts</span>
               <h3 className="lp-tp-h">Charting with RS line and pivot zones</h3>
-              <p className="lp-tp-p">TradingView Lightweight Charts v4. Drawing tools, precomputed indicators, earnings overlays, and watchlist context on one screen.</p>
+              <p className="lp-tp-p">TradingView Lightweight Charts v5. Drawing tools, precomputed indicators, earnings overlays, and watchlist context on one screen.</p>
               <ul className="lp-feat-list">
                 {["Candlestick charts with overlay indicators","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker connections are read-only/import only"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
