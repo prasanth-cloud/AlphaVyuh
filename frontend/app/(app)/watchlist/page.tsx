@@ -75,6 +75,33 @@ const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: 
 const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
 const WATCHLIST_PAGE_SIZE = 5;
 const WATCHLIST_CHART_TYPE_STORAGE_KEY = "alphavyuh-watchlist-chart-type";
+const WATCHLIST_DATA_UNAVAILABLE_MESSAGE = "Watchlist data is temporarily unavailable. Check Data Status before editing lists.";
+const WATCHLIST_RECOVERY_MESSAGE = "Check Watchlist or Data Status, then try again.";
+const WATCHLIST_LOCAL_META_MESSAGE = "Watchlist note was saved locally. Sync will retry when Watchlist is available.";
+const WATCHLIST_CREATE_FAILED_MESSAGE = `Watchlist could not be created. ${WATCHLIST_RECOVERY_MESSAGE}`;
+const WATCHLIST_DELETE_FAILED_MESSAGE = `Watchlist could not be deleted. ${WATCHLIST_RECOVERY_MESSAGE}`;
+const WATCHLIST_STARTER_FAILED_MESSAGE = `Starter queue could not be completed. ${WATCHLIST_RECOVERY_MESSAGE}`;
+const WATCHLIST_REORDER_FAILED_MESSAGE = `Watchlist order could not be saved. ${WATCHLIST_RECOVERY_MESSAGE}`;
+const SYMBOL_SEARCH_FAILED_MESSAGE = "Symbol search is temporarily unavailable. Check Data Status, then try again.";
+
+function watchlistAddFailedMessage(symbol: string): string {
+  return `${symbol.toUpperCase()} could not be added. ${WATCHLIST_RECOVERY_MESSAGE}`;
+}
+
+function watchlistAlreadyContainsMessage(symbol: string): string {
+  return `${symbol.toUpperCase()} is already in this watchlist.`;
+}
+
+function watchlistAddMessage(symbol: string, error?: unknown): string {
+  if (error instanceof Error && /already in watchlist/i.test(error.message)) {
+    return watchlistAlreadyContainsMessage(symbol);
+  }
+  return watchlistAddFailedMessage(symbol);
+}
+
+function watchlistRemoveFailedMessage(symbol: string): string {
+  return `${symbol.toUpperCase()} could not be removed. ${WATCHLIST_RECOVERY_MESSAGE}`;
+}
 
 function normalizeChartDisplayType(value: string | null | undefined): ChartDisplayType | null {
   return value === "bars" || value === "line" || value === "candles" ? value : null;
@@ -1239,7 +1266,7 @@ function WatchlistContent() {
         delete next[key];
         return next;
       });
-    } catch (error) {
+    } catch {
       setLocalMeta((prev) => ({
         ...prev,
         [itemMetaKey(activeId, symbol)]: {
@@ -1248,7 +1275,7 @@ function WatchlistContent() {
           note: updates.note ?? previous.note,
         },
       }));
-      showToast(error instanceof Error ? `${error.message}. Saved locally for now.` : "Saved locally for now.");
+      showToast(WATCHLIST_LOCAL_META_MESSAGE);
     }
   }
 
@@ -1257,9 +1284,8 @@ function WatchlistContent() {
     setTimeout(() => setToast(""), 3500);
   }
 
-  function watchlistUnavailableMessage(error: unknown): string {
-    if (error instanceof Error && error.message.trim()) return error.message;
-    return "Watchlist data is temporarily unavailable. Check Data Status before editing lists.";
+  function watchlistUnavailableMessage(): string {
+    return WATCHLIST_DATA_UNAVAILABLE_MESSAGE;
   }
 
   async function loadWatchlists() {
@@ -1273,8 +1299,8 @@ function WatchlistContent() {
       if (liteLists.length > 0 && !activeId) {
         setActiveId(liteLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : liteLists[0].id);
       }
-    } catch (error) {
-      setWatchlistError(watchlistUnavailableMessage(error));
+    } catch {
+      setWatchlistError(watchlistUnavailableMessage());
       setLoading(false);
       if (requestedSymbol) setChartSymbol(requestedSymbol);
       return;
@@ -1291,8 +1317,8 @@ function WatchlistContent() {
         }
         if (requestedSymbol) setChartSymbol(requestedSymbol);
       })
-      .catch((error) => {
-        setWatchlistError(watchlistUnavailableMessage(error));
+      .catch(() => {
+        setWatchlistError(watchlistUnavailableMessage());
       });
   }
 
@@ -1382,10 +1408,9 @@ function WatchlistContent() {
           setChartSymbol(requestedSymbol);
           trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         })
-        .catch((error) => {
+        .catch(() => {
           setChartSymbol(requestedSymbol);
-          const detail = error instanceof Error ? error.message : "Watchlist add is temporarily unavailable.";
-          showToast(`${requestedSymbol} could not be added to the active watchlist. ${detail}`);
+          showToast(`${requestedSymbol} could not be added to the active watchlist. ${WATCHLIST_RECOVERY_MESSAGE}`);
           trackEvent("watchlist_symbol_focus_failed", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         });
     }
@@ -1680,8 +1705,8 @@ function WatchlistContent() {
       setWatchlists(remaining);
       if (activeId === id) setActiveId(remaining[0]?.id ?? null);
       if (chartSymbol) setChartSymbol(null);
-    } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : "Delete failed");
+    } catch {
+      showToast(WATCHLIST_DELETE_FAILED_MESSAGE);
     }
   }
 
@@ -1693,8 +1718,8 @@ function WatchlistContent() {
       setActiveId(wl.id);
       setNewWlName("");
       setShowNewWl(false);
-    } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : "Failed to create watchlist");
+    } catch {
+      showToast(WATCHLIST_CREATE_FAILED_MESSAGE);
     }
   }
 
@@ -1706,9 +1731,9 @@ function WatchlistContent() {
         setSearchResults(results.slice(0, 6));
         setSymbolSearchError("");
         setShowDropdown(true);
-      } catch (error) {
+      } catch {
         setSearchResults([]);
-        setSymbolSearchError(error instanceof Error ? error.message : "Symbol search is temporarily unavailable.");
+        setSymbolSearchError(SYMBOL_SEARCH_FAILED_MESSAGE);
         setShowDropdown(true);
       }
     } else {
@@ -1737,7 +1762,7 @@ function WatchlistContent() {
       setSymbolInput("");
       setAddMsg("Added");
     } catch (e: unknown) {
-      setAddMsg(e instanceof Error ? e.message : "Error");
+      setAddMsg(watchlistAddMessage(symbol, e));
     } finally {
       setAdding(false);
       setTimeout(() => setAddMsg(""), 2500);
@@ -1752,13 +1777,13 @@ function WatchlistContent() {
       const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
       const symbols = STARTER_SYMBOLS.filter((symbol) => !existing.has(symbol));
       const newItems: WatchlistItem[] = [];
-      const failures: string[] = [];
+      let failureCount = 0;
 
       for (const [index, symbol] of symbols.entries()) {
         try {
           await addToWatchlist(activeId, symbol);
-        } catch (error) {
-          failures.push(error instanceof Error ? error.message : `${symbol} could not be added.`);
+        } catch {
+          failureCount += 1;
           continue;
         }
         const quote = await getQuote(symbol).catch(() => null);
@@ -1771,15 +1796,15 @@ function WatchlistContent() {
         setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
         setChartSymbol(newItems[0].symbol);
       }
-      if (failures.length) {
-        const message = newItems.length ? `Added ${newItems.length}; ${failures.length} failed: ${failures[0]}` : failures[0];
+      if (failureCount) {
+        const message = newItems.length ? `Added ${newItems.length}; ${failureCount} could not be added. ${WATCHLIST_RECOVERY_MESSAGE}` : WATCHLIST_STARTER_FAILED_MESSAGE;
         setAddMsg(message);
         showToast(message);
       } else {
         setAddMsg(newItems.length ? "Starter list added" : "Already added");
       }
-    } catch (e: unknown) {
-      setAddMsg(e instanceof Error ? e.message : "Error");
+    } catch {
+      setAddMsg(WATCHLIST_STARTER_FAILED_MESSAGE);
     } finally {
       setAdding(false);
       setTimeout(() => setAddMsg(""), 2500);
@@ -1804,7 +1829,7 @@ function WatchlistContent() {
       setSymbolInput("");
       setAddMsg("Added");
     } catch (e: unknown) {
-      setAddMsg(e instanceof Error ? e.message : "Error");
+      setAddMsg(watchlistAddMessage(sym, e));
     } finally {
       setAdding(false);
       setTimeout(() => setAddMsg(""), 2500);
@@ -1819,8 +1844,8 @@ function WatchlistContent() {
         prev.map(w => w.id === activeId ? { ...w, items: w.items.filter(i => i.symbol !== symbol) } : w)
       );
       if (chartSymbol === symbol) setChartSymbol(null);
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Watchlist item removal is temporarily unavailable.");
+    } catch {
+      showToast(watchlistRemoveFailedMessage(symbol));
     }
   }
 
@@ -1838,11 +1863,11 @@ function WatchlistContent() {
     );
     try {
       await reorderWatchlist(activeId, reordered.map(i => ({ symbol: i.symbol, sort_order: i.sort_order })));
-    } catch (error) {
+    } catch {
       setWatchlists(prev =>
         prev.map(w => w.id === activeId ? activeList : w)
       );
-      showToast(error instanceof Error ? error.message : "Watchlist reorder is temporarily unavailable.");
+      showToast(WATCHLIST_REORDER_FAILED_MESSAGE);
     }
   }, [activeId, watchlists]);
 
