@@ -265,7 +265,7 @@ test.describe("Signed-in smoke flow", () => {
     }
 
     await gotoAppPath(page, `/charts/${firstSymbol}?full=1`, `/charts/${firstSymbol}`);
-    await expect(page.getByRole("button", { name: /^Tools/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: "Open chart drawing tools", exact: true })).toBeVisible({ timeout: 15000 });
     await expect(page.locator("body")).toContainText(/Daily|Volume|RSI|EMA|bars/i, { timeout: 15000 });
     await expectRealDataContext(page, "full chart", /Latest session|Daily|Volume|RSI|EMA|as of/i);
 

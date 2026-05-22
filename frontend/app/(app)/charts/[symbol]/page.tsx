@@ -2193,6 +2193,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           <div ref={drawMenuRef} className="relative">
             <button
               onClick={() => setShowDrawMenu(s => !s)}
+              aria-label="Open chart drawing tools"
               className={`workspace-chip-button ${activeDrawingTool ? 'active' : ''} flex items-center gap-1`}
               style={activeDrawingTool
                 ? { background: "rgba(139,150,166,0.2)", color: "#bac4d1", border: "1px solid rgba(139,150,166,0.4)" }

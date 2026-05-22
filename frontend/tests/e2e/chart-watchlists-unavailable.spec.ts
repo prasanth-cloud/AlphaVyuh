@@ -72,7 +72,7 @@ test.describe("Chart watchlist unavailable state", () => {
     await expect(page.getByTestId("chart-drawing-overlay")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("chart-source-watchlists-outage")).toContainText("Watchlist queue unavailable", { timeout: 15_000 });
     await expect(page.getByTestId("chart-source-watchlists-outage")).toContainText("Chart review, drawing, alerts, and order planning remain usable.");
-    await expect(page.getByRole("button", { name: "Tools ▾", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open chart drawing tools", exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: /^Add to watchlist$/i }).click();
     await expect(page.getByTestId("chart-watchlists-outage")).toContainText("Watchlists unavailable", { timeout: 15_000 });
