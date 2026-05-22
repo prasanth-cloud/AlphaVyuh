@@ -12,6 +12,20 @@ export type TradeReportJournalImportResult = {
 
 const IMPORT_MARKER_PREFIX = "alphavyuh-report-import";
 
+function failedImportResult(result: TradeReportParseResult, imported: number, skipped: number, ineligible: number): TradeReportJournalImportResult {
+  const prefix = imported > 0
+    ? `Journal import stopped after ${imported} trade${imported === 1 ? "" : "s"} ${imported === 1 ? "was" : "were"} saved.`
+    : "Journal import could not start. No trades were saved.";
+
+  return {
+    imported,
+    skipped,
+    ineligible,
+    total: result.trades.length,
+    message: `${prefix} Check Data Status, then try the import again.`,
+  };
+}
+
 function markerForTrade(trade: ImportedTrade): string {
   return [
     IMPORT_MARKER_PREFIX,
@@ -59,7 +73,12 @@ export function countJournalReadyTrades(result: TradeReportParseResult): number 
 export async function importTradeReportToJournal(result: TradeReportParseResult): Promise<TradeReportJournalImportResult> {
   const readyTrades = result.trades.filter(isJournalReady);
   const ineligible = result.trades.length - readyTrades.length;
-  const existing = await getJournalEntries({ limit: 500 });
+  let existing: Awaited<ReturnType<typeof getJournalEntries>>;
+  try {
+    existing = await getJournalEntries({ limit: 500 });
+  } catch {
+    return failedImportResult(result, 0, 0, ineligible);
+  }
   const existingReasons = new Set(existing.entries.map((entry) => entry.entry_reason ?? ""));
   let imported = 0;
   let skipped = 0;
@@ -71,12 +90,16 @@ export async function importTradeReportToJournal(result: TradeReportParseResult)
       continue;
     }
 
-    const created = await createJournalEntry(createEntryPayload(trade, result.summary.broker, marker));
-    await updateJournalEntry(created.id, {
-      exit_date: trade.exitDate ?? undefined,
-      exit_price: trade.exitPrice ?? undefined,
-      exit_reason: `Closed trade imported from ${result.summary.broker} report. Verify setup quality, execution, and exit discipline in review.`,
-    });
+    try {
+      const created = await createJournalEntry(createEntryPayload(trade, result.summary.broker, marker));
+      await updateJournalEntry(created.id, {
+        exit_date: trade.exitDate ?? undefined,
+        exit_price: trade.exitPrice ?? undefined,
+        exit_reason: `Closed trade imported from ${result.summary.broker} report. Verify setup quality, execution, and exit discipline in review.`,
+      });
+    } catch {
+      return failedImportResult(result, imported, skipped, ineligible);
+    }
     existingReasons.add(marker);
     imported += 1;
   }

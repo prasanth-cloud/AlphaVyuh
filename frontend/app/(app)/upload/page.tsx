@@ -80,14 +80,6 @@ export default function UploadPage() {
     setJournalImportResult(null)
     try {
       setJournalImportResult(await importTradeReportToJournal(result))
-    } catch (error) {
-      setJournalImportResult({
-        imported: 0,
-        skipped: 0,
-        ineligible: result.trades.length - journalReadyCount,
-        total: result.trades.length,
-        message: error instanceof Error ? error.message : 'Journal import failed',
-      })
     } finally {
       setJournalImporting(false)
     }
