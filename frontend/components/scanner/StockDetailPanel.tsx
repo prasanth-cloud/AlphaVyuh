@@ -12,6 +12,12 @@ type Props = {
   onClose: () => void;
 };
 
+const WATCHLIST_LOAD_MESSAGE = "Watchlists unavailable. Open Data Status, then try again.";
+
+function watchlistAddMessage(symbol: string): string {
+  return `${symbol} could not be added. Check Watchlist or Data Status, then try again.`;
+}
+
 export default function StockDetailPanel({ stock, onClose }: Props) {
   const [adding, setAdding] = useState(false);
   const [addMsg, setAddMsg] = useState("");
@@ -23,8 +29,8 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
       const wls = await getWatchlists();
       setWatchlists(wls.map(w => ({ id: w.id, name: w.name })));
       setShowWlPicker(true);
-    } catch (error) {
-      setAddMsg(error instanceof Error ? error.message : "Watchlist data is temporarily unavailable.");
+    } catch {
+      setAddMsg(WATCHLIST_LOAD_MESSAGE);
       setTimeout(() => setAddMsg(""), 3500);
     }
   }
@@ -35,11 +41,11 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
     try {
       await addToWatchlist(wlId, stock.symbol);
       setAddMsg("Added!");
-    } catch (e: unknown) {
-      setAddMsg(e instanceof Error ? e.message : "Error");
+    } catch {
+      setAddMsg(watchlistAddMessage(stock.symbol));
     } finally {
       setAdding(false);
-      setTimeout(() => setAddMsg(""), 2000);
+      setTimeout(() => setAddMsg(""), 3500);
     }
   }
 
@@ -172,12 +178,18 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
         {showWlPicker ? (
           <div className="border border-[#e2e2df] rounded-[7px] overflow-hidden">
             <div className="px-3 py-2 bg-[#f7f7f5] text-[11px] text-[#888] font-medium">Pick a watchlist</div>
-            {watchlists.map(wl => (
-              <button key={wl.id} onClick={() => handlePick(wl.id)}
-                className="w-full text-left px-3 py-2 text-[12px] text-[#1c1c1a] hover:bg-[#f7f7f5] border-t border-[#f0f0ee]">
-                {wl.name}
-              </button>
-            ))}
+            {watchlists.length > 0 ? (
+              watchlists.map(wl => (
+                <button key={wl.id} onClick={() => handlePick(wl.id)}
+                  className="w-full text-left px-3 py-2 text-[12px] text-[#1c1c1a] hover:bg-[#f7f7f5] border-t border-[#f0f0ee]">
+                  {wl.name}
+                </button>
+              ))
+            ) : (
+              <div className="border-t border-[#f0f0ee] px-3 py-2 text-[12px] text-[#666]">
+                No watchlists available. Create one from the Watchlist page.
+              </div>
+            )}
             <button onClick={() => setShowWlPicker(false)}
               className="w-full text-left px-3 py-2 text-[12px] text-[#888] hover:bg-[#f7f7f5] border-t border-[#f0f0ee]">
               Cancel

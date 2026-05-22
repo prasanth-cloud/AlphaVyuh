@@ -77,7 +77,7 @@ function invalidateClientCache(prefixes: string[]) {
   }
 }
 
-function routeBackedE2eMocksEnabled(): boolean {
+export function routeBackedE2eMocksEnabled(): boolean {
   if (
     typeof window === "undefined" ||
     process.env.NODE_ENV === "production" ||
@@ -93,7 +93,7 @@ function routeBackedE2eMocksEnabled(): boolean {
   }
 }
 
-function shouldUseMockFallback(): boolean {
+export function shouldUseMockFallback(): boolean {
   if (routeBackedE2eMocksEnabled()) return false;
 
   return isMockMode;

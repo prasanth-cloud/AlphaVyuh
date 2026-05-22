@@ -11,8 +11,8 @@ import {
   deleteScreen as deleteSavedScreen,
   getScreens as getCachedScreens,
   getWatchlists as getCachedWatchlists,
-  isMockMode,
   saveScreen as saveSavedScreen,
+  shouldUseMockFallback as scannerUsesClientMockFallback,
   type SavedScreen,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
@@ -24,6 +24,20 @@ import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
 
 const API = API_BASE_URL
+
+const WATCHLISTS_UNAVAILABLE_MESSAGE = 'Open Data Status, then try again.'
+const WATCHLIST_ADD_FAILED_MESSAGE = 'Check Watchlist or Data Status, then try again.'
+const SCANNER_REPORT_FAILED_MESSAGE = 'Could not report the data issue. Try again from Feedback or Data Status.'
+const SCAN_ALERT_FAILED_MESSAGE = 'Could not create the scan alert. Check alerts or Data Status, then try again.'
+const SAVED_SCREEN_SAVE_FAILED_MESSAGE = 'Saved scanner screen could not be saved. Try again after checking Data Status.'
+const SAVED_SCREEN_DELETE_FAILED_MESSAGE = 'Saved scanner screen could not be deleted. Try again after checking Data Status.'
+const WATCHLIST_CREATION_FAILED_MESSAGE = 'Watchlist creation failed. Check Watchlist or Data Status, then try again.'
+
+function scannerWatchlistAddFailure(symbol?: string) {
+  return symbol
+    ? `${symbol} could not be added. ${WATCHLIST_ADD_FAILED_MESSAGE}`
+    : WATCHLIST_ADD_FAILED_MESSAGE
+}
 
 // ── Types ──────────────────────────────────────────────────
 interface ScanResult {
@@ -577,9 +591,9 @@ export default function ScannerPage() {
       const lists = await getCachedWatchlists()
       setWatchlists(lists.map(({ id, name }) => ({ id, name })))
       setWatchlistsError('')
-    } catch (error) {
+    } catch {
       setWatchlists([])
-      setWatchlistsError(error instanceof Error ? error.message : 'Watchlist data is temporarily unavailable.')
+      setWatchlistsError(WATCHLISTS_UNAVAILABLE_MESSAGE)
     }
   }
 
@@ -596,13 +610,13 @@ export default function ScannerPage() {
         context: { filters: buildPayload(filters, sortBy, sortDesc).filters, trade_date: tradeDate, total_matches: totalMatches },
       });
       showToast('Data issue reported')
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not report issue')
+    } catch {
+      showToast(SCANNER_REPORT_FAILED_MESSAGE)
     }
   }
 
   async function loadSavedScreens() {
-    if (isMockMode) {
+    if (scannerUsesClientMockFallback()) {
       setSavedScreensError('')
       setSavedScreens([
         { id: 'mock-trend-template', name: 'Trend Template', filters: PRESETS[0].filters, is_default: false, created_at: '2026-04-24T09:15:00Z' },
@@ -681,7 +695,7 @@ export default function ScannerPage() {
     const hadResults = results.length > 0
     setLoading(true); setError(''); if (!hadResults) setResults([]); setExpandedSymbol(null)
     try {
-      if (isMockMode) {
+      if (scannerUsesClientMockFallback()) {
         const data = mockRunScan()
         const nextTrust = {
           mode: data.source_metadata?.mode ?? 'demo',
@@ -816,8 +830,8 @@ export default function ScannerPage() {
         preset: activePresetMeta?.id ?? activePreset ?? 'custom',
         mode: scanTrust?.mode ?? 'unknown',
       })
-    } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Could not create scan alert')
+    } catch {
+      showToast(SCAN_ALERT_FAILED_MESSAGE)
     } finally {
       setAlertSaving(false)
     }
@@ -826,7 +840,7 @@ export default function ScannerPage() {
   async function saveCurrentScreen() {
     const screenName = newScreenName.trim()
     if (!screenName) return
-    if (isMockMode) {
+    if (scannerUsesClientMockFallback()) {
       setSavedScreens(prev => [
         ...prev,
         { id: `mock-${Date.now()}`, name: screenName, filters, is_default: false, created_at: new Date().toISOString() },
@@ -841,15 +855,15 @@ export default function ScannerPage() {
       setNewScreenName(''); setShowSaveModal(false)
       await loadSavedScreens()
       showToast(`"${screenName}" saved`)
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Saved scanner screen could not be saved.'
+    } catch {
+      const message = SAVED_SCREEN_SAVE_FAILED_MESSAGE
       setError(message)
       showToast(message)
     }
   }
 
   async function handleDeleteScreen(id: string, name: string) {
-    if (isMockMode) {
+    if (scannerUsesClientMockFallback()) {
       setSavedScreens(prev => prev.filter(screen => screen.id !== id))
       showToast(`"${name}" deleted`)
       return
@@ -858,8 +872,8 @@ export default function ScannerPage() {
       await deleteSavedScreen(id)
       await loadSavedScreens()
       showToast(`"${name}" deleted`)
-    } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Saved scanner screen could not be deleted.')
+    } catch {
+      showToast(SAVED_SCREEN_DELETE_FAILED_MESSAGE)
     }
   }
 
@@ -884,8 +898,8 @@ export default function ScannerPage() {
       setWorkflowMarks(prev => ({ ...prev, [symbol]: 'watch' }))
       trackEvent('add_to_watchlist', { source: 'scanner', symbol, watchlist_id: wlId })
       showToast(`${symbol} added`)
-    } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Add to watchlist failed')
+    } catch {
+      showToast(scannerWatchlistAddFailure(symbol))
     }
   }
 
@@ -918,20 +932,23 @@ export default function ScannerPage() {
       const toAdd = selectedResults.size > 0 ? results.filter(r => selectedResults.has(r.symbol)) : results
       const rowsToAdd = toAdd.slice(0, 50)
       const addedRows: ScanResult[] = []
-      const failures: string[] = []
+      let failureCount = 0
       for (const row of rowsToAdd) {
         try {
           await addSymbolToWatchlist(wl.id, row.symbol)
           addedRows.push(row)
-        } catch (error) {
-          failures.push(error instanceof Error ? error.message : `${row.symbol} could not be added.`)
+        } catch {
+          failureCount += 1
         }
       }
       if (addedRows.length > 0) {
         await bulkUpsertWorkflowStates(scannerWatchlistPatches(addedRows, wl.id, scanContextOptions()))
       }
-      if (failures.length) {
-        throw new Error(`${failures.length}/${rowsToAdd.length} symbols could not be added to "${wl.name}". ${failures[0]}`)
+      if (failureCount) {
+        const message = `${failureCount}/${rowsToAdd.length} symbols could not be added to "${wl.name}". ${WATCHLIST_ADD_FAILED_MESSAGE}`
+        setError(message)
+        showToast(message)
+        return
       }
       const symbols = addedRows.map((row) => row.symbol)
       trackEvent('add_to_watchlist', { source: 'scanner_bulk_create', count: symbols.length, watchlist_id: wl.id })
@@ -939,8 +956,8 @@ export default function ScannerPage() {
       showToast(`"${wl.name}" created`)
       const focusParam = symbols[0] ? `&symbol=${encodeURIComponent(symbols[0])}` : ""
       router.push(`/watchlist?id=${wl.id}${focusParam}`)
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Watchlist creation failed'
+    } catch {
+      const message = WATCHLIST_CREATION_FAILED_MESSAGE
       setError(message)
       showToast(message)
     }

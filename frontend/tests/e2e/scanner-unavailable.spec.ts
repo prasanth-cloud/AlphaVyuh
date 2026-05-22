@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Scanner unavailable payloads", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("alphavyuh-e2e-route-mocks", "true");
+    });
+  });
+
   test("does not render a service outage as a zero-result scan", async ({ page }) => {
     await page.route("**/api/v1/scanner/screens", (route) =>
       route.fulfill({
@@ -116,7 +122,7 @@ test.describe("Scanner unavailable payloads", () => {
     if (page.url().includes("/login")) return;
 
     await expect(page.getByText("Watchlists unavailable")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("Watchlist data is temporarily unavailable.")).toBeVisible();
+    await expect(page.getByText("Open Data Status, then try again.")).toBeVisible();
 
     await page.getByRole("button", { name: /^Run scan$/i }).click();
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 15_000 });
@@ -291,7 +297,7 @@ test.describe("Scanner unavailable payloads", () => {
     await page.getByPlaceholder("Watchlist name…").fill("Scanner queue");
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
-    await expect(page.getByTestId("scanner-toast")).toContainText('1/1 symbols could not be added to "Scanner queue". Watchlist add is temporarily unavailable.', { timeout: 15_000 });
+    await expect(page.getByTestId("scanner-toast")).toContainText('1/1 symbols could not be added to "Scanner queue". Check Watchlist or Data Status, then try again.', { timeout: 15_000 });
     await expect(page).toHaveURL(/\/scanner/);
     expect(itemAddRequests).toBe(1);
   });
