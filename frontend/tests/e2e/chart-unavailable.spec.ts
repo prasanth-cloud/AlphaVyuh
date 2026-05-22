@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Chart unavailable payloads", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("alphavyuh-e2e-route-mocks", "true");
+    });
+  });
+
   test("does not render a successful unavailable candle payload as an empty chart", async ({ page }) => {
     await page.route("**/api/v1/charts/RELIANCE/candles**", (route) =>
       route.fulfill({
