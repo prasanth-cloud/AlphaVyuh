@@ -255,3 +255,22 @@ test("portfolio positions show exposure and open the matching chart", async ({ p
     await expect(page.getByRole("button", { name: "Open chart drawing tools", exact: true })).toBeVisible({ timeout: 15000 });
   });
 });
+
+test("settings profile saves display name and Telegram alert id", async ({ page }) => {
+  await login(page);
+
+  await expectNoRuntimeErrors(page, async () => {
+    await page.goto("/settings", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Update your display name and connect Telegram for scan alert notifications.")).toBeVisible({ timeout: 15000 });
+
+    const displayNameInput = page.getByPlaceholder("Your name");
+    const telegramInput = page.getByPlaceholder("e.g. 123456789");
+    await displayNameInput.fill("QA Trader");
+    await telegramInput.fill("123456789");
+    await page.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(page.getByText("Profile updated")).toBeVisible({ timeout: 15000 });
+    await expect(displayNameInput).toHaveValue("QA Trader");
+    await expect(telegramInput).toHaveValue("123456789");
+  });
+});

@@ -27,7 +27,7 @@ remaining production evidence gap explicit.
 | Local/mock failure-path bundle | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/auth.spec.ts frontend/tests/e2e/broker-callback.spec.ts frontend/tests/e2e/broker-connect.spec.ts frontend/tests/e2e/chart-drawings.spec.ts frontend/tests/e2e/chart-unavailable.spec.ts frontend/tests/e2e/chart-watchlists-unavailable.spec.ts frontend/tests/e2e/dashboard-unavailable.spec.ts frontend/tests/e2e/fundamentals-unavailable.spec.ts frontend/tests/e2e/journal.spec.ts frontend/tests/e2e/onboarding-mutation-failures.spec.ts frontend/tests/e2e/portfolio-unavailable.spec.ts frontend/tests/e2e/scan-alerts-unavailable.spec.ts frontend/tests/e2e/scanner-unavailable.spec.ts frontend/tests/e2e/watchlist-broker-status-failures.spec.ts frontend/tests/e2e/watchlist-mutation-failures.spec.ts frontend/tests/e2e/watchlist-workspace-failures.spec.ts --workers=1` | 57 passed, 17 skipped. Earlier run exposed stale spec/config assumptions rather than new product regressions. |
 | Release readiness smoke | `NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=test-anon-key SUPABASE_URL=https://example.supabase.co SUPABASE_SERVICE_ROLE_KEY=test-service-role-key npm run test:e2e:release` | 7 passed. |
 | Backend live smoke | `PLAYWRIGHT_BACKEND_UVICORN=/tmp/alphavyuh-backend-ci-venv/bin/uvicorn npm run test:e2e:backend` | 4 passed after smoke accepted controlled `503` unavailable payloads for placeholder-Supabase DB-backed paths. |
-| Local/mock full UI QA | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/full-ui-qa.spec.ts --workers=1` | 5 passed after adding marker-level coverage for alerts, portfolio, options, community, upload, agents, data, settings, billing, and broker settings plus options payoff and portfolio-to-chart workflows. |
+| Local/mock full UI QA | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/full-ui-qa.spec.ts --workers=1` | 6 passed after adding marker-level coverage for alerts, portfolio, options, community, upload, agents, data, settings, billing, and broker settings plus options payoff, portfolio-to-chart, and settings profile-save workflows. |
 | Local/mock community outage | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/community-unavailable.spec.ts --workers=1` | 1 passed. Community API outages now show an unavailable state instead of an empty-community state. |
 | TypeScript | `npm --prefix frontend run typecheck` | Passed. |
 | Lint | `npm --prefix frontend run lint` and `npm --prefix frontend run lint -- app/(app)/onboarding/page.tsx` | Passed. |
@@ -76,6 +76,8 @@ remaining production evidence gap explicit.
     values, calculates payoff, and verifies P&L and Greeks output.
   - Added portfolio coverage that verifies exposure summary, an open position
     row, and the position-to-chart handoff for `DIXON`.
+  - Added settings profile coverage that edits display name and Telegram Chat ID
+    and verifies the save success state.
 - `frontend/app/(app)/community/page.tsx`
   - Replaced the bare error line with a visible community outage panel that says
     shared screens are not being treated as empty while the service is down.
