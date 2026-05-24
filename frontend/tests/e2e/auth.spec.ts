@@ -3,6 +3,8 @@ import { test, expect } from "@playwright/test";
 // ── Auth gate (unauthenticated) ───────────────────────────────────────────────
 
 test.describe("Auth gate — unauthenticated", () => {
+  test.skip(process.env.PLAYWRIGHT_MOCK_AUTH === "true", "Mock auth intentionally bypasses app-route redirects.");
+
   test.beforeEach(async ({ context }) => {
     if (!process.env.PLAYWRIGHT_ACCESS_URL) await context.clearCookies();
   });
@@ -109,14 +111,13 @@ test.describe("Open-redirect protection", () => {
   });
 });
 
-// ── /charts/* legacy redirect ─────────────────────────────────────────────────
+// ── /charts/* auth boundary ───────────────────────────────────────────────────
 
 test.describe("/charts redirect", () => {
-  test("/charts/RELIANCE redirects to /watchlist?symbol=RELIANCE", async ({ page }) => {
+  test("/charts/RELIANCE stays protected without using the old watchlist redirect", async ({ page }) => {
     await page.context().clearCookies();
-    // Middleware redirects /charts/* before auth gate, so unauthenticated is fine here
     await page.goto("/charts/RELIANCE", { waitUntil: "commit" });
-    // Should have been redirected to watchlist (then bounced to login since not authed)
-    expect(page.url()).toMatch(/\/watchlist|\/login/);
+    expect(page.url()).toMatch(process.env.PLAYWRIGHT_MOCK_AUTH === "true" ? /\/charts\/RELIANCE/ : /\/login/);
+    expect(page.url()).not.toContain("/watchlist");
   });
 });

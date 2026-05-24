@@ -4,6 +4,9 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 test.describe("Fundamentals unavailable state", () => {
   test("full chart shows unavailable copy instead of empty valuation rows", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("alphavyuh-e2e-route-mocks", "true");
+    });
     await page.route(`${API}/api/v1/charts/RELIANCE/candles**`, (route) =>
       route.fulfill({
         status: 200,

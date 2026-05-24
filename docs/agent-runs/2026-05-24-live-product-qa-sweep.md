@@ -23,11 +23,13 @@ remaining production evidence gap explicit.
 | Local/mock layout | `npm run test:e2e:layout` | 16 passed. |
 | Local/mock signed-in smoke | `npm run test:e2e:smoke` | 1 passed. |
 | Local/mock performance smoke | `npm run test:e2e:perf` | 2 passed. |
+| Local/mock failure-path focus | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/auth.spec.ts frontend/tests/e2e/broker-connect.spec.ts frontend/tests/e2e/dashboard-unavailable.spec.ts frontend/tests/e2e/fundamentals-unavailable.spec.ts --workers=1` | 20 passed, 7 skipped after refreshing mock-auth, read-only broker, and outage route-mock expectations. |
+| Local/mock failure-path bundle | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/auth.spec.ts frontend/tests/e2e/broker-callback.spec.ts frontend/tests/e2e/broker-connect.spec.ts frontend/tests/e2e/chart-drawings.spec.ts frontend/tests/e2e/chart-unavailable.spec.ts frontend/tests/e2e/chart-watchlists-unavailable.spec.ts frontend/tests/e2e/dashboard-unavailable.spec.ts frontend/tests/e2e/fundamentals-unavailable.spec.ts frontend/tests/e2e/journal.spec.ts frontend/tests/e2e/onboarding-mutation-failures.spec.ts frontend/tests/e2e/portfolio-unavailable.spec.ts frontend/tests/e2e/scan-alerts-unavailable.spec.ts frontend/tests/e2e/scanner-unavailable.spec.ts frontend/tests/e2e/watchlist-broker-status-failures.spec.ts frontend/tests/e2e/watchlist-mutation-failures.spec.ts frontend/tests/e2e/watchlist-workspace-failures.spec.ts --workers=1` | 57 passed, 17 skipped. Earlier run exposed stale spec/config assumptions rather than new product regressions. |
 | Release readiness smoke | `NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=test-anon-key SUPABASE_URL=https://example.supabase.co SUPABASE_SERVICE_ROLE_KEY=test-service-role-key npm run test:e2e:release` | 7 passed. |
 | Backend live smoke | `PLAYWRIGHT_BACKEND_UVICORN=/tmp/alphavyuh-backend-ci-venv/bin/uvicorn npm run test:e2e:backend` | 4 passed after smoke accepted controlled `503` unavailable payloads for placeholder-Supabase DB-backed paths. |
 | Local/mock full UI QA | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/full-ui-qa.spec.ts` | 2 passed. |
 | TypeScript | `npm --prefix frontend run typecheck` | Passed. |
-| Lint | `npm run lint` and `npm --prefix frontend run lint -- app/(app)/onboarding/page.tsx` | Passed. |
+| Lint | `npm --prefix frontend run lint` and `npm --prefix frontend run lint -- app/(app)/onboarding/page.tsx` | Passed. |
 | Frontend unit tests | `npm run test` | 43 files, 178 tests passed. |
 | Dependency audit | `npm --prefix frontend audit --audit-level=moderate` | Passed after lockfile update. |
 | Backend tests | `/tmp/alphavyuh-backend-ci-venv/bin/python -m pytest backend/tests` | 285 passed, 6 warnings. |
@@ -50,6 +52,21 @@ remaining production evidence gap explicit.
   - Kept HTTP smoke strict about crashes while accepting controlled
     `503 temporarily unavailable` payloads for DB-backed routes when the smoke
     server is intentionally using placeholder Supabase credentials.
+- `frontend/playwright.mock.config.ts`
+  - Propagated `PLAYWRIGHT_MOCK_AUTH=true` into the Playwright test process so
+    mock-auth skips and expectations match the mock server environment.
+- `frontend/tests/e2e/auth.spec.ts`
+  - Skipped unauthenticated app-route redirect assertions under mock auth and
+    replaced the stale `/charts/* -> /watchlist` legacy expectation with the
+    current protected chart-route boundary.
+- `frontend/tests/e2e/broker-connect.spec.ts`
+  - Reworked broker settings coverage around the current read-only import hub:
+    `/api/v1/broker/status`, Zerodha login URL generation, outage copy,
+    connected read-only status, and import controls.
+- `frontend/tests/e2e/dashboard-unavailable.spec.ts` and
+  `frontend/tests/e2e/fundamentals-unavailable.spec.ts`
+  - Enabled route-backed mocks so outage assertions exercise unavailable API
+    payloads instead of the client demo fallback.
 - `frontend/package-lock.json`
   - Updated transitive `qs` from `6.15.1` to `6.15.2` via `npm --prefix frontend
     audit fix --package-lock-only`, clearing a moderate advisory.

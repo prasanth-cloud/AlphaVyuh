@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+process.env.PLAYWRIGHT_MOCK_AUTH ??= "true";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,

@@ -4,7 +4,10 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 test.describe("Dashboard unavailable market data", () => {
   test("does not render an unavailable market overview as a healthy market pulse", async ({ page }) => {
-    await page.addInitScript(() => window.localStorage.clear());
+    await page.addInitScript(() => {
+      window.localStorage.clear();
+      window.localStorage.setItem("alphavyuh-e2e-route-mocks", "true");
+    });
     await page.route(`${API}/api/v1/market/overview`, (route) =>
       route.fulfill({
         status: 200,
