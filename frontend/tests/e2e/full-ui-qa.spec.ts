@@ -236,3 +236,22 @@ test("options strategy builder calculates payoff and Greeks from entered legs", 
     await expect(page.getByText("Set spot price, add legs, then click Calculate")).not.toBeVisible();
   });
 });
+
+test("portfolio positions show exposure and open the matching chart", async ({ page }) => {
+  await login(page);
+
+  await expectNoRuntimeErrors(page, async () => {
+    await page.goto("/portfolio", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Open positions and unrealised P&L in one operating view.")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("Sector breakdown")).toBeVisible();
+    await expect(page.getByText("Unrealised P&L", { exact: true })).toBeVisible();
+
+    const dixonRow = page.locator("tbody tr", { hasText: "DIXON" });
+    await expect(dixonRow).toBeVisible({ timeout: 15000 });
+    await expect(dixonRow).toContainText("LONG");
+    await dixonRow.click();
+
+    await expect(page).toHaveURL(/\/charts\/DIXON/);
+    await expect(page.getByRole("button", { name: "Open chart drawing tools", exact: true })).toBeVisible({ timeout: 15000 });
+  });
+});
