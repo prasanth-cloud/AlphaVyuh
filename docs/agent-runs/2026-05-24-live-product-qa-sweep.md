@@ -27,7 +27,7 @@ remaining production evidence gap explicit.
 | Local/mock failure-path bundle | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/auth.spec.ts frontend/tests/e2e/broker-callback.spec.ts frontend/tests/e2e/broker-connect.spec.ts frontend/tests/e2e/chart-drawings.spec.ts frontend/tests/e2e/chart-unavailable.spec.ts frontend/tests/e2e/chart-watchlists-unavailable.spec.ts frontend/tests/e2e/dashboard-unavailable.spec.ts frontend/tests/e2e/fundamentals-unavailable.spec.ts frontend/tests/e2e/journal.spec.ts frontend/tests/e2e/onboarding-mutation-failures.spec.ts frontend/tests/e2e/portfolio-unavailable.spec.ts frontend/tests/e2e/scan-alerts-unavailable.spec.ts frontend/tests/e2e/scanner-unavailable.spec.ts frontend/tests/e2e/watchlist-broker-status-failures.spec.ts frontend/tests/e2e/watchlist-mutation-failures.spec.ts frontend/tests/e2e/watchlist-workspace-failures.spec.ts --workers=1` | 57 passed, 17 skipped. Earlier run exposed stale spec/config assumptions rather than new product regressions. |
 | Release readiness smoke | `NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=test-anon-key SUPABASE_URL=https://example.supabase.co SUPABASE_SERVICE_ROLE_KEY=test-service-role-key npm run test:e2e:release` | 7 passed. |
 | Backend live smoke | `PLAYWRIGHT_BACKEND_UVICORN=/tmp/alphavyuh-backend-ci-venv/bin/uvicorn npm run test:e2e:backend` | 4 passed after smoke accepted controlled `503` unavailable payloads for placeholder-Supabase DB-backed paths. |
-| Local/mock full UI QA | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/full-ui-qa.spec.ts` | 2 passed. |
+| Local/mock full UI QA | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/full-ui-qa.spec.ts --workers=1` | 3 passed after adding marker-level coverage for alerts, portfolio, options, community, upload, agents, data, settings, billing, and broker settings. |
 | TypeScript | `npm --prefix frontend run typecheck` | Passed. |
 | Lint | `npm --prefix frontend run lint` and `npm --prefix frontend run lint -- app/(app)/onboarding/page.tsx` | Passed. |
 | Frontend unit tests | `npm run test` | 43 files, 178 tests passed. |
@@ -67,6 +67,10 @@ remaining production evidence gap explicit.
   `frontend/tests/e2e/fundamentals-unavailable.spec.ts`
   - Enabled route-backed mocks so outage assertions exercise unavailable API
     payloads instead of the client demo fallback.
+- `frontend/tests/e2e/full-ui-qa.spec.ts`
+  - Added secondary signed-in feature markers so the mock UI gate verifies more
+    than navigation for alerts, portfolio, options, community, upload, agents,
+    data status, settings, billing, and broker settings.
 - `frontend/package-lock.json`
   - Updated transitive `qs` from `6.15.1` to `6.15.2` via `npm --prefix frontend
     audit fix --package-lock-only`, clearing a moderate advisory.

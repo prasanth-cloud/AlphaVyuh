@@ -3,6 +3,12 @@ import { qaCredentials } from "./helpers/qaCredentials";
 
 const { email: EMAIL, password: PASSWORD } = qaCredentials();
 
+type SignedInRoute = {
+  path: string;
+  name: string;
+  marker: (page: Page) => Promise<void>;
+};
+
 async function login(page: Page) {
   await page.context().clearCookies();
   await page.goto("/login");
@@ -58,6 +64,79 @@ async function expectAnyCanvasHasPixels(page: Page) {
     .toBeTruthy();
 }
 
+const signedInRoutes: SignedInRoute[] = [
+  {
+    path: "/alerts",
+    name: "scan alerts",
+    marker: async (page) => {
+      await expect(page.getByRole("heading", { name: "Scan matches" })).toBeVisible({ timeout: 15000 });
+    },
+  },
+  {
+    path: "/portfolio",
+    name: "portfolio",
+    marker: async (page) => {
+      await expect(page.locator("body")).toContainText(/Portfolio|Open positions|Portfolio unavailable/i, { timeout: 15000 });
+    },
+  },
+  {
+    path: "/options",
+    name: "options strategy builder",
+    marker: async (page) => {
+      await expect(page.getByText("Options Strategy Builder")).toBeVisible({ timeout: 15000 });
+    },
+  },
+  {
+    path: "/community",
+    name: "community screens",
+    marker: async (page) => {
+      await expect(page.getByText("Community Screens")).toBeVisible({ timeout: 15000 });
+    },
+  },
+  {
+    path: "/upload",
+    name: "trade report upload",
+    marker: async (page) => {
+      await expect(page.getByRole("heading", { name: "Upload trade report" })).toBeVisible({ timeout: 15000 });
+    },
+  },
+  {
+    path: "/agents",
+    name: "agent mission control",
+    marker: async (page) => {
+      await expect(page.getByTestId("agent-mission-control")).toBeVisible({ timeout: 15000 });
+    },
+  },
+  {
+    path: "/data",
+    name: "data status",
+    marker: async (page) => {
+      await expect(page.getByRole("heading", { name: "Know what is fresh before you trade." })).toBeVisible({ timeout: 15000 });
+    },
+  },
+  {
+    path: "/settings",
+    name: "settings profile",
+    marker: async (page) => {
+      await expect(page.locator("body")).toContainText(/Profile|Account Access|Billing/i, { timeout: 15000 });
+    },
+  },
+  {
+    path: "/settings?tab=billing",
+    name: "settings billing",
+    marker: async (page) => {
+      await expect(page.getByTestId("billing-launch-posture")).toBeVisible({ timeout: 15000 });
+    },
+  },
+  {
+    path: "/settings/broker",
+    name: "broker settings",
+    marker: async (page) => {
+      await expect(page.locator("body")).toContainText(/Broker execution stays in your broker terminal|read-only broker import|Broker status unavailable/i, { timeout: 15000 });
+    },
+  },
+];
+
 test.describe.configure({ mode: "serial" });
 
 test.setTimeout(60000);
@@ -110,6 +189,19 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
       await page.goto(path);
       await expect(page.locator("body")).toBeVisible();
       await expect(page.getByRole("link", { name: /Demo data|Latest session|Provider data/ })).toBeVisible();
+    }
+  });
+});
+
+test("secondary signed-in feature pages render their product surfaces", async ({ page }) => {
+  await login(page);
+
+  await expectNoRuntimeErrors(page, async () => {
+    for (const route of signedInRoutes) {
+      const response = await page.goto(route.path, { waitUntil: "domcontentloaded" });
+      expect(response?.status(), `${route.name} should not resolve as a missing route`).not.toBe(404);
+      await route.marker(page);
+      await expect(page.locator("body"), `${route.name} should not show a generic crash`).not.toContainText(/Application error|Unhandled Runtime Error/i);
     }
   });
 });
