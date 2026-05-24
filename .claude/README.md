@@ -7,6 +7,8 @@ Shared Claude Code configuration for this repo. Checked in on purpose — every 
 - **`settings.json`** — pre-approved bash commands, status line, hook wiring. Editing `allow`/`deny` is a team decision; open a PR.
 - **`agents/`** — subagents you can invoke with `/agents <name>` or by saying *"use the <name> subagent"*:
   - `code-simplifier` — cleanup pass after a feature works
+  - `product-copy-auditor` — read-only audit of public/signed-in/operator copy posture
+  - `recovery-investigator` — read-only production recovery and release-blocker evidence pass
   - `verify-app` — full verification before declaring done
   - `reviewer` — skeptical code review before you open a PR
 - **`hooks/`** — shell scripts that fire on Claude Code lifecycle events:

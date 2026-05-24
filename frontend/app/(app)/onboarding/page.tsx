@@ -45,6 +45,7 @@ function Radio({
   return (
     <label
       className="flex items-center gap-3 p-3 rounded-[8px] border cursor-pointer transition-colors"
+      onClick={() => onSelect(name, value)}
       style={checked
         ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
         : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}

@@ -35,6 +35,9 @@ npm run check:production-api:railway
 # This requires PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL,
 # and PLAYWRIGHT_QA_PASSWORD.
 # RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
+# If the backend is already healthy, prefer the manual GitHub Actions workflow
+# "Production Signed-In Smoke" for signed-in production verification without
+# redeploying or recovering Railway.
 # To skip local browser server smoke in constrained shells only:
 # SKIP_BROWSER_SMOKE=1 npm run launch:check
 # To include read-only Kite/Upstox account smoke when tokens are available:
@@ -92,6 +95,9 @@ npm run check:data-recovery
 - Or recover locally with `npm run recover:railway-backend:login`.
 - Do not claim production EOD data is restored until the production API smoke and
   authenticated browser smoke pass against `https://www.alphavyuh.com`.
+- When Railway is already healthy, use the manual GitHub Actions workflow
+  `Production Signed-In Smoke` to run the authenticated API/data checks and
+  signed-in browser smoke without deploying or recovering the backend.
 - The production API smoke must include enough current daily candles for every
   configured chart smoke symbol. By default this is `RELIANCE,ITC,AUBANK`; set
   `PRODUCTION_API_CHART_SYMBOLS` to add or replace launch-candidate symbols.
