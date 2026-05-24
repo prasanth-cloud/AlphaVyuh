@@ -42,20 +42,29 @@ function Radio({
   checked: boolean;
   onSelect: (name: keyof FormState, value: string) => void;
 }) {
+  const id = `onboarding-${name}-${value}`;
+  const select = () => onSelect(name, value);
+
   return (
     <label
+      htmlFor={id}
       className="flex items-center gap-3 p-3 rounded-[8px] border cursor-pointer transition-colors"
-      onClick={() => onSelect(name, value)}
+      onMouseDown={select}
+      onKeyDown={(event) => {
+        if (event.key === " " || event.key === "Enter") select();
+      }}
       style={checked
         ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
         : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}
     >
       <input
+        id={id}
         type="radio"
         name={name}
         value={value}
         checked={checked}
-        onChange={() => onSelect(name, value)}
+        onChange={select}
+        onClick={select}
         className="accent-[var(--accent)]"
       />
       <span className="text-[14px]" style={{ color: "var(--text-primary)" }}>{label}</span>

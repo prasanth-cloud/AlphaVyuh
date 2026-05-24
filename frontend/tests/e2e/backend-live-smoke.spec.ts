@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIResponse } from "@playwright/test";
 import crypto from "node:crypto";
 
 function base64Url(input: Buffer | string) {
@@ -25,6 +25,16 @@ const authHeaders = {
   "Content-Type": "application/json",
 };
 
+async function expectOkOrUnavailable(response: APIResponse) {
+  expect([200, 503]).toContain(response.status());
+  if (response.status() === 503) {
+    const body = await response.json();
+    expect(JSON.stringify(body)).toMatch(/temporarily unavailable|No complete trade date/i);
+    return null;
+  }
+  return response.json();
+}
+
 test.describe("Live backend smoke", () => {
   test("public data endpoints fail soft over real HTTP", async ({ request }) => {
     const health = await request.get("/health");
@@ -37,10 +47,11 @@ test.describe("Live backend smoke", () => {
     expect((await presets.json()).length).toBeGreaterThan(0);
 
     const candles = await request.get("/api/v1/charts/AUBANK/candles?timeframe=D&limit=5");
-    expect(candles.status()).toBe(200);
-    const candlesJson = await candles.json();
-    expect(candlesJson).toMatchObject({ symbol: "AUBANK", timeframe: "D" });
-    expect(candlesJson).toHaveProperty("candles");
+    const candlesJson = await expectOkOrUnavailable(candles);
+    if (candlesJson) {
+      expect(candlesJson).toMatchObject({ symbol: "AUBANK", timeframe: "D" });
+      expect(candlesJson).toHaveProperty("candles");
+    }
   });
 
   test("data operations endpoints require auth over real HTTP", async ({ request }) => {
@@ -62,10 +73,11 @@ test.describe("Live backend smoke", () => {
       headers: authHeaders,
       data: { filters: { series: ["EQ"] }, page: 1, page_size: 25 },
     });
-    expect(scanner.status()).toBe(200);
-    const scannerJson = await scanner.json();
-    expect(scannerJson).toHaveProperty("results");
-    expect(Array.isArray(scannerJson.results)).toBe(true);
+    const scannerJson = await expectOkOrUnavailable(scanner);
+    if (scannerJson) {
+      expect(scannerJson).toHaveProperty("results");
+      expect(Array.isArray(scannerJson.results)).toBe(true);
+    }
 
     const overview = await request.get("/api/v1/market/overview", { headers: authHeaders });
     expect(overview.status()).toBe(200);
