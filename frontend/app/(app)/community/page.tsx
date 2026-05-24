@@ -89,7 +89,21 @@ export default function CommunityPage() {
             ))}
           </div>
         ) : error ? (
-          <div className="text-[13px] text-red-400 py-8">{error}</div>
+          <div
+            data-testid="community-screens-unavailable"
+            className="rounded-[16px] px-5 py-6 text-[13px]"
+            style={{
+              background: "var(--warn-subtle)",
+              border: "1px solid rgba(217,119,6,0.24)",
+              color: "var(--warn)",
+            }}
+          >
+            <div className="text-[14px] font-semibold mb-1" style={{ color: "var(--app-text1)" }}>Community screens unavailable</div>
+            <div>{error}</div>
+            <div className="mt-2" style={{ color: "var(--app-text3)" }}>
+              Shared screens are not being treated as empty while the community service is unavailable.
+            </div>
+          </div>
         ) : sorted.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: "var(--app-surface2)" }}>

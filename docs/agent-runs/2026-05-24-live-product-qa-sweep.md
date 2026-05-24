@@ -28,6 +28,7 @@ remaining production evidence gap explicit.
 | Release readiness smoke | `NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=test-anon-key SUPABASE_URL=https://example.supabase.co SUPABASE_SERVICE_ROLE_KEY=test-service-role-key npm run test:e2e:release` | 7 passed. |
 | Backend live smoke | `PLAYWRIGHT_BACKEND_UVICORN=/tmp/alphavyuh-backend-ci-venv/bin/uvicorn npm run test:e2e:backend` | 4 passed after smoke accepted controlled `503` unavailable payloads for placeholder-Supabase DB-backed paths. |
 | Local/mock full UI QA | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/full-ui-qa.spec.ts --workers=1` | 4 passed after adding marker-level coverage for alerts, portfolio, options, community, upload, agents, data, settings, billing, and broker settings plus an options payoff calculation workflow. |
+| Local/mock community outage | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/community-unavailable.spec.ts --workers=1` | 1 passed. Community API outages now show an unavailable state instead of an empty-community state. |
 | TypeScript | `npm --prefix frontend run typecheck` | Passed. |
 | Lint | `npm --prefix frontend run lint` and `npm --prefix frontend run lint -- app/(app)/onboarding/page.tsx` | Passed. |
 | Frontend unit tests | `npm run test` | 43 files, 178 tests passed. |
@@ -73,6 +74,11 @@ remaining production evidence gap explicit.
     data status, settings, billing, and broker settings.
   - Added options strategy builder coverage that fills spot, strike, and premium
     values, calculates payoff, and verifies P&L and Greeks output.
+- `frontend/app/(app)/community/page.tsx`
+  - Replaced the bare error line with a visible community outage panel that says
+    shared screens are not being treated as empty while the service is down.
+- `frontend/tests/e2e/community-unavailable.spec.ts`
+  - Added route-backed browser coverage for community screen service outages.
 - `frontend/package-lock.json`
   - Updated transitive `qs` from `6.15.1` to `6.15.2` via `npm --prefix frontend
     audit fix --package-lock-only`, clearing a moderate advisory.
