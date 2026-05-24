@@ -97,6 +97,13 @@ function assertNoForbiddenCopy(label, body) {
   }
 }
 
+function isCloudflareChallenge(response, body) {
+  return response.headers.get("cf-mitigated") === "challenge"
+    || /<title>Just a moment\.\.\.<\/title>/i.test(body)
+    || /Performing security verification/i.test(body)
+    || /challenges\.cloudflare\.com/i.test(body);
+}
+
 async function fetchPage(path) {
   const response = await fetch(`${baseUrl}${path}`, {
     redirect: "follow",
@@ -105,6 +112,13 @@ async function fetchPage(path) {
     },
   });
   const body = await response.text();
+  if (isCloudflareChallenge(response, body)) {
+    throw new Error(
+      `${path} was blocked by a Cloudflare browser challenge. `
+      + "Public users may still load the site in a real browser, but deterministic posture verification is blocked; "
+      + "run the Playwright/browser release smoke from an allowed QA environment or adjust Cloudflare rules for QA.",
+    );
+  }
   assert(response.ok, `${path} returned ${response.status}`);
   return { response, body };
 }

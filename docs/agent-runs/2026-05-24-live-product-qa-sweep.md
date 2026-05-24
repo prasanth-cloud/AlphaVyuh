@@ -14,7 +14,8 @@ remaining production evidence gap explicit.
 | --- | --- | --- |
 | Live public site | In-app browser opened `/` and `/login`; screenshots saved under `docs/screenshots/live-qa-2026-05-24/`. | Passed with no browser console errors observed. |
 | Live auth boundary | `PLAYWRIGHT_BASE_URL=https://www.alphavyuh.com npm --prefix frontend exec -- playwright test --config=playwright.local.config.ts tests/e2e/release-readiness.spec.ts --workers=1` | 7 passed. |
-| Live public posture | `PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture` | Passed. |
+| Live public posture | `PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture` | Previously passed. On the later 2026-05-24 rerun, deterministic HTTP verification was blocked by Cloudflare `cf-mitigated: challenge`; Chrome loaded `/` and `/login` normally. |
+| Live public/auth Playwright rerun | `PLAYWRIGHT_BASE_URL=https://www.alphavyuh.com npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/release-readiness.spec.ts --workers=1` | 5 passed, 2 failed because Cloudflare challenge responses replaced app responses during header/auth-boundary assertions. Treat as production automation blocked, not signed-in product verification. |
 | Production API data | `npm run check:production-api:railway` | Passed: summary date `2026-05-22`, breadth `1206/1117`, 500 daily candles each for RELIANCE, ITC, and AUBANK through `2026-05-22`. |
 | Production recovery preflight | `npm run check:data-recovery` | Public API recovery passed. Full signed-in recovery remains unproven without authenticated smoke credentials. |
 | Local/mock first-run flow | `npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/workflow-mock.spec.ts -g "signup first-run flow"` | Failed before fix, then passed after onboarding radio selection fix. |
@@ -40,6 +41,10 @@ remaining production evidence gap explicit.
 - `frontend/package-lock.json`
   - Updated transitive `qs` from `6.15.1` to `6.15.2` via `npm --prefix frontend
     audit fix --package-lock-only`, clearing a moderate advisory.
+- `scripts/check-public-posture.mjs`
+  - Added explicit Cloudflare challenge detection so a bot-mitigation page is
+    reported as a QA-environment blocker instead of a generic `403`.
+  - Covered with `scripts/test-check-public-posture.mjs`.
 
 ## Current Blocker
 
@@ -55,6 +60,12 @@ Until those are available, do not claim production dashboard, scanner,
 watchlist, chart, journal, upload, settings, broker, and data flows are fully
 verified. The available evidence proves public production and local/mock
 signed-in behavior, not authenticated production behavior.
+
+The current Cloudflare managed challenge can also block deterministic public
+HTTP/Playwright checks from this environment. Real Chrome access still rendered
+the landing and login pages, but production automation needs an allowed QA
+environment or Cloudflare rule adjustment before it can be treated as complete
+evidence.
 
 GitHub repository secrets for the signed-in smoke exist, and the latest
 `Railway Backend Recovery` workflow succeeded. A safer manual workflow,

@@ -129,4 +129,20 @@ await withServer(servePages({ betaLocation: "/" }), async (siteUrl) => {
   );
 });
 
+await withServer((request, response) => {
+  response.writeHead(403, {
+    "content-type": "text/html",
+    "cf-mitigated": "challenge",
+  });
+  response.end("<html><head><title>Just a moment...</title></head><body>Performing security verification</body></html>");
+}, async (siteUrl) => {
+  const { code, stdout, stderr } = await runChecker(siteUrl);
+  assert.notEqual(code, 0, "public posture check should fail clearly on Cloudflare challenges");
+  assert.match(
+    stderr,
+    /blocked by a Cloudflare browser challenge/,
+    `stderr should explain Cloudflare challenge:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+});
+
 console.log("check-public-posture tests passed.");
