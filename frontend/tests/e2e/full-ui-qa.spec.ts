@@ -205,3 +205,34 @@ test("secondary signed-in feature pages render their product surfaces", async ({
     }
   });
 });
+
+test("options strategy builder calculates payoff and Greeks from entered legs", async ({ page }) => {
+  await login(page);
+
+  await expectNoRuntimeErrors(page, async () => {
+    await page.goto("/options", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Options Strategy Builder")).toBeVisible({ timeout: 15000 });
+
+    const spotInput = page.getByPlaceholder("Spot price");
+    const strikeInput = page.getByPlaceholder("e.g. 24000").first();
+    const premiumInput = page.getByPlaceholder("e.g. 120").first();
+    await expect(spotInput).toBeVisible();
+    await spotInput.fill("24000");
+    await expect(spotInput).toHaveValue("24000");
+    await strikeInput.fill("24000");
+    await expect(strikeInput).toHaveValue("24000");
+    await premiumInput.fill("125");
+    await expect(premiumInput).toHaveValue("125");
+    const calculateButton = page.getByRole("button", { name: "Calculate Payoff" });
+    await expect(calculateButton).toBeEnabled();
+    await calculateButton.click();
+
+    await expect(page.getByText("Max Profit")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText("Max Loss")).toBeVisible();
+    await expect(page.getByText("Net Premium")).toBeVisible();
+    await expect(page.getByText(/Combined Greeks \(at current spot\)/i)).toBeVisible();
+    await expect(page.getByText("Delta", { exact: true })).toBeVisible();
+    await expect(page.getByText("Theta", { exact: true })).toBeVisible();
+    await expect(page.getByText("Set spot price, add legs, then click Calculate")).not.toBeVisible();
+  });
+});
