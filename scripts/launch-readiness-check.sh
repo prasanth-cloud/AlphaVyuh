@@ -34,6 +34,7 @@ run_step "Git tracked changes" git status --short
 
 run_step "Launch checker regression tests" npm run test:production-api-check
 run_step "Production smoke env regression tests" npm run test:production-smoke-env-check
+run_step "Production smoke workflow regression tests" npm run test:production-smoke-workflow-check
 run_step "Railway recovery workflow regression tests" npm run test:railway-recovery-workflow-check
 run_step "Recovery handoff credential regression tests" npm run test:recovery-handoff-credentials-check
 run_step "Signed-in copy posture regression tests" npm run test:signed-in-copy-posture-check
@@ -97,6 +98,7 @@ fi
 
 run_step "Signed-in copy posture check" npm run check:signed-in-copy-posture
 run_step "Recovery handoff credential check" npm run check:recovery-handoff-credentials
+run_step "Production smoke workflow check" npm run check:production-smoke-workflow
 run_step "Railway recovery workflow check" npm run check:railway-recovery-workflow
 
 if [[ "${PRODUCTION_API_URL:-${NEXT_PUBLIC_API_URL:-}}" != "" ]]; then
