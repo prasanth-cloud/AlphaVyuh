@@ -79,6 +79,9 @@ jobs:
       - name: Production smoke env checker tests
         run: npm run test:production-smoke-env-check
 
+      - name: Production smoke workflow checker tests
+        run: npm run test:production-smoke-workflow-check
+
       - name: Railway recovery workflow checker tests
         run: npm run test:railway-recovery-workflow-check
 
