@@ -90,6 +90,13 @@ export type MultiChartAnalysisMetric = {
 export type MultiChartAnalysisSummary = {
   playbookStatus: "ready" | "watch" | "missing";
   playbookDetail: string;
+  reviewScore: {
+    passed: number;
+    total: number;
+    label: string;
+    tone: "good" | "warn" | "muted";
+    blockers: string[];
+  };
   metrics: MultiChartAnalysisMetric[];
   checklist: string[];
 };
@@ -105,6 +112,20 @@ function formatRatio(value: number | null | undefined) {
 
 function metric(label: string, value: string, tone: MultiChartAnalysisMetric["tone"] = "muted"): MultiChartAnalysisMetric {
   return { label, value, tone };
+}
+
+function buildReviewScore(checks: { pass: boolean; blocker: string | null }[]): MultiChartAnalysisSummary["reviewScore"] {
+  const passed = checks.filter((check) => check.pass).length;
+  const total = checks.length;
+  const blockers = checks.map((check) => check.pass ? null : check.blocker).filter(Boolean) as string[];
+  const tone = passed >= 5 ? "good" : passed >= 3 ? "warn" : "muted";
+  return {
+    passed,
+    total,
+    label: `${passed}/${total} checks`,
+    tone,
+    blockers,
+  };
 }
 
 export function buildMultiChartAnalysisSummary(
@@ -128,24 +149,54 @@ export function buildMultiChartAnalysisSummary(
     ? "Pending"
     : `${movingAverageCount}/3 above`;
   const rsScore = scannerContext?.rs_score ?? null;
+  const volumeRatio = latest?.volume_ratio ?? scannerContext?.volume_ratio ?? null;
+  const rsi14 = latest?.rsi_14 ?? scannerContext?.rsi_14 ?? null;
+  const reviewScore = buildReviewScore([
+    {
+      pass: higherTimeframe.playbookStatus === "ready",
+      blocker: higherTimeframe.playbookStatus === "ready" ? null : `W/M ${higherTimeframe.playbookDetail.toLowerCase()}`,
+    },
+    {
+      pass: rsScore != null && rsScore >= 70,
+      blocker: rsScore == null ? "RS pending" : `RS ${Math.round(rsScore)}`,
+    },
+    {
+      pass: week52Distance != null && week52Distance <= 12,
+      blocker: week52Distance == null ? "52W pending" : `52W ${week52Distance.toFixed(1)}% away`,
+    },
+    {
+      pass: movingAverageCount === 3,
+      blocker: movingAverageCount === 3 ? null : `MA ${movingAverageLabel}`,
+    },
+    {
+      pass: volumeRatio != null && volumeRatio >= 1.5,
+      blocker: volumeRatio == null ? "Volume pending" : `Volume ${formatRatio(volumeRatio)}`,
+    },
+    {
+      pass: rsi14 != null && rsi14 >= 45 && rsi14 <= 75,
+      blocker: rsi14 == null ? "RSI pending" : `RSI ${rsi14.toFixed(1)}`,
+    },
+  ]);
 
   return {
     playbookStatus: higherTimeframe.playbookStatus,
     playbookDetail: higherTimeframe.playbookDetail,
+    reviewScore,
     metrics: [
       metric("W/M", higherTimeframe.playbookDetail, higherTimeframe.playbookStatus === "ready" ? "good" : higherTimeframe.playbookStatus === "watch" ? "warn" : "muted"),
       metric("RS", rsScore == null ? "Pending" : String(Math.round(rsScore)), rsScore == null ? "muted" : rsScore >= 70 ? "good" : "warn"),
       metric("52W", week52Distance == null ? "Pending" : `${week52Distance.toFixed(1)}% away`, week52Distance == null ? "muted" : week52Distance <= 12 ? "good" : "warn"),
       metric("MA", movingAverageLabel, movingAverageCount === 3 ? "good" : movingAverageCount > 0 ? "warn" : "muted"),
-      metric("Volume", formatRatio(latest?.volume_ratio ?? scannerContext?.volume_ratio), (latest?.volume_ratio ?? scannerContext?.volume_ratio ?? 0) >= 1.5 ? "good" : "muted"),
-      metric("RSI", latest?.rsi_14 == null ? "Pending" : latest.rsi_14.toFixed(1), latest?.rsi_14 == null ? "muted" : latest.rsi_14 >= 45 && latest.rsi_14 <= 75 ? "good" : "warn"),
+      metric("Volume", formatRatio(volumeRatio), (volumeRatio ?? 0) >= 1.5 ? "good" : "muted"),
+      metric("RSI", rsi14 == null ? "Pending" : rsi14.toFixed(1), rsi14 == null ? "muted" : rsi14 >= 45 && rsi14 <= 75 ? "good" : "warn"),
     ],
     checklist: [
+      `Review score: ${reviewScore.label}`,
       `Weekly/monthly: ${higherTimeframe.weekly.summary}; ${higherTimeframe.monthly.summary}`,
       `Moving averages: ${movingAverageLabel}`,
       week52Distance == null ? "52-week level: pending" : `52-week level: ${formatPct(-week52Distance)} from high`,
       rsScore == null ? "RS score: pending scanner context" : `RS score: ${Math.round(rsScore)}`,
-      latest?.volume_ratio == null && scannerContext?.volume_ratio == null ? "Volume: pending" : `Volume: ${formatRatio(latest?.volume_ratio ?? scannerContext?.volume_ratio)}`,
+      volumeRatio == null ? "Volume: pending" : `Volume: ${formatRatio(volumeRatio)}`,
     ],
   };
 }

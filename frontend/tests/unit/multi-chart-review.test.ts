@@ -126,6 +126,13 @@ describe("multi-chart review helpers", () => {
     expect(summary).toMatchObject({
       playbookStatus: "ready",
       playbookDetail: "Weekly/monthly aligned",
+      reviewScore: {
+        passed: 6,
+        total: 6,
+        label: "6/6 checks",
+        tone: "good",
+        blockers: [],
+      },
     });
     expect(summary?.metrics).toEqual(expect.arrayContaining([
       { label: "RS", value: "86", tone: "good" },
@@ -134,6 +141,7 @@ describe("multi-chart review helpers", () => {
     ]));
     expect(summary?.checklist.join(" ")).toContain("Weekly/monthly");
     expect(summary?.checklist.join(" ")).toContain("RS score: 86");
+    expect(summary?.checklist).toContain("Review score: 6/6 checks");
   });
 
   it("keeps RS pending when a board is opened without scanner context", () => {
@@ -142,6 +150,62 @@ describe("multi-chart review helpers", () => {
     expect(summary?.metrics).toEqual(expect.arrayContaining([
       { label: "RS", value: "Pending", tone: "muted" },
     ]));
+    expect(summary?.reviewScore).toMatchObject({
+      passed: 5,
+      total: 6,
+      label: "5/6 checks",
+      tone: "good",
+      blockers: ["RS pending"],
+    });
     expect(summary?.checklist).toContain("RS score: pending scanner context");
+  });
+
+  it("surfaces blockers when a candidate is not launch-grade", () => {
+    const candles = candlesFrom("2026-01-01", 20, (index) => 100 - index * 0.4).map((candle) => ({
+      ...candle,
+      ema_20: candle.close + 2,
+      ema_50: candle.close + 4,
+      ema_200: candle.close + 8,
+    }));
+    const last = candles.at(-1)!;
+    const summary = buildMultiChartAnalysisSummary(candleResponse({
+      candles,
+      latest: {
+        close: last.close,
+        pct_change: -1.2,
+        volume: last.volume,
+        volume_ratio: 0.8,
+        rsi_14: 38,
+        ema_20: last.ema_20 ?? null,
+        ema_50: last.ema_50 ?? null,
+        ema_200: last.ema_200 ?? null,
+        atr_14: 10,
+        week_52_high: last.close * 1.25,
+        week_52_low: last.close * 0.82,
+        open: last.open,
+        high: last.high,
+        low: last.low,
+        prev_close: last.close + 1,
+      },
+    }), {
+      source: "scanner",
+      rs_score: 42,
+      volume_ratio: 0.8,
+    });
+
+    expect(summary?.reviewScore).toMatchObject({
+      passed: 0,
+      total: 6,
+      label: "0/6 checks",
+      tone: "muted",
+    });
+    expect(summary?.reviewScore.blockers).toEqual(expect.arrayContaining([
+      "W/M need more history",
+      "RS 42",
+      expect.stringMatching(/^52W /),
+      "MA 0/3 above",
+      "Volume 0.80x",
+      "RSI 38.0",
+    ]));
   });
 });

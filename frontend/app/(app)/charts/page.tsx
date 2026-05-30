@@ -284,9 +284,14 @@ export default function ChartsIndexPage() {
                 >
                   <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 8 }}>
                     <div className="label">Analysis context</div>
-                    <span className="workspace-pill" style={{ color: analysisToneColor(analysis.playbookStatus === "ready" ? "good" : analysis.playbookStatus === "watch" ? "warn" : "muted") }}>
-                      {analysis.playbookDetail}
-                    </span>
+                    <div className="workspace-pill-row" style={{ gap: 6, justifyContent: "flex-end" }}>
+                      <span className="workspace-pill" style={{ color: analysisToneColor(analysis.reviewScore.tone) }}>
+                        {analysis.reviewScore.label}
+                      </span>
+                      <span className="workspace-pill" style={{ color: analysisToneColor(analysis.playbookStatus === "ready" ? "good" : analysis.playbookStatus === "watch" ? "warn" : "muted") }}>
+                        {analysis.playbookDetail}
+                      </span>
+                    </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
                     {analysis.metrics.map((item) => (
@@ -301,6 +306,11 @@ export default function ChartsIndexPage() {
                   <div className="caption" style={{ lineHeight: 1.55 }}>
                     {analysis.checklist.slice(0, 3).join(" · ")}
                   </div>
+                  {analysis.reviewScore.blockers.length > 0 && (
+                    <div className="caption" style={{ lineHeight: 1.55, color: "var(--warn)" }}>
+                      Needs: {analysis.reviewScore.blockers.slice(0, 3).join(" · ")}
+                    </div>
+                  )}
                 </div>
               )}
 
