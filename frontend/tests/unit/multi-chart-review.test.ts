@@ -98,6 +98,15 @@ describe("multi-chart review helpers", () => {
     ]);
   });
 
+  it("cleans up pasted TradingView watchlist symbols for board import", () => {
+    expect(normalizeMultiChartSymbols("NSE:RELIANCE\nNSE:INFY\nTCS, NSE:HDFCBANK, RELIANCE")).toEqual([
+      "RELIANCE",
+      "INFY",
+      "TCS",
+      "HDFCBANK",
+    ]);
+  });
+
   it("builds a chart review href with watchlist provenance", () => {
     expect(buildMultiChartReviewHref(["RELIANCE", "INFY"], {
       source: "watchlist",

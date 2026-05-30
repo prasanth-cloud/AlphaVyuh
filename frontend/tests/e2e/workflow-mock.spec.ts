@@ -134,6 +134,14 @@ test.describe("Mock workflow smoke", () => {
     expect(reviewState.notes).toContain("Original scan Trend Template");
     expect(reviewState.notes).toContain("All moving averages aligned with 52W proximity.");
 
+    await page.getByTestId("multi-chart-symbol-import").fill("NSE:ITC\nNSE:AUBANK\nreliance\nITC");
+    await page.getByTestId("multi-chart-open-imported").click();
+    await expect(page).toHaveURL(/symbols=ITC%2CAUBANK%2CRELIANCE/);
+    await expect(page).toHaveURL(/from=manual/);
+    await expect(page.getByTestId("multi-chart-card-ITC")).toContainText("ITC", { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-AUBANK")).toContainText("AUBANK", { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText("RELIANCE", { timeout: 15_000 });
+
     expect(errors).toEqual([]);
   });
 

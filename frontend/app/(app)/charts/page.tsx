@@ -73,6 +73,7 @@ export default function ChartsIndexPage() {
   const [decisionSaving, setDecisionSaving] = useState<string | null>(null);
   const [decisionMessage, setDecisionMessage] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const [symbolImportValue, setSymbolImportValue] = useState("");
   const activeRequest = useMemo(() => getWatchlistChartRequest(rangeLabel), [rangeLabel]);
 
   useEffect(() => {
@@ -139,6 +140,16 @@ export default function ChartsIndexPage() {
     } finally {
       window.setTimeout(() => setCopyMessage(""), 3000);
     }
+  }
+
+  function openImportedSymbols() {
+    const imported = normalizeMultiChartSymbols(symbolImportValue);
+    if (imported.length === 0) {
+      setCopyMessage("No valid NSE symbols found.");
+      window.setTimeout(() => setCopyMessage(""), 3000);
+      return;
+    }
+    router.push(buildMultiChartReviewHref(imported, { source: "manual", layout }));
   }
 
   const loadedCount = cards.filter((card) => card.data && !card.error).length;
@@ -230,6 +241,34 @@ export default function ChartsIndexPage() {
           ))}
           <button type="button" className="workspace-chip-button" onClick={copyTradingViewSymbols}>
             Copy TV symbols
+          </button>
+          <input
+            value={symbolImportValue}
+            onChange={(event) => setSymbolImportValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") openImportedSymbols();
+            }}
+            data-testid="multi-chart-symbol-import"
+            placeholder="NSE:RELIANCE, INFY"
+            style={{
+              width: 210,
+              height: 32,
+              padding: "0 10px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--border-subtle)",
+              background: "var(--surface-1)",
+              color: "var(--text-primary)",
+              fontSize: 12,
+              outline: "none",
+            }}
+          />
+          <button
+            type="button"
+            className="workspace-chip-button"
+            data-testid="multi-chart-open-imported"
+            onClick={openImportedSymbols}
+          >
+            Open symbols
           </button>
           {watchlistId && (
             <Link href={`/watchlist?id=${encodeURIComponent(watchlistId)}`} prefetch={false} className="workspace-chip-button">
