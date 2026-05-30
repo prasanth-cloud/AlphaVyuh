@@ -4,14 +4,27 @@ import { readFileSync } from "node:fs";
 const REQUIRED_SECTORAL_INDEX_LABELS = [
   "Nifty Auto Index",
   "Nifty Bank Index",
+  "Nifty Cement Index",
+  "Nifty Chemicals Index",
   "Nifty Financial Services Index",
+  "Nifty Financial Services 25/50 Index",
+  "Nifty Financial Services Ex-Bank Index",
   "Nifty FMCG Index",
   "Nifty Healthcare Index",
   "Nifty IT Index",
+  "Nifty Media Index",
   "Nifty Metal Index",
   "Nifty Pharma Index",
+  "Nifty Private Bank Index",
+  "Nifty PSU Bank Index",
   "Nifty Realty Index",
+  "Nifty REITs & Realty Index",
+  "Nifty Consumer Durables Index",
   "Nifty Oil and Gas Index",
+  "Nifty500 Healthcare Index",
+  "Nifty MidSmall Financial Services Index",
+  "Nifty MidSmall Healthcare Index",
+  "Nifty MidSmall IT & Telecom Index",
 ];
 
 function normalizeBaseUrl(raw) {

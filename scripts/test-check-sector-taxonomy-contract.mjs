@@ -28,13 +28,24 @@ function validMetadata(overrides = {}) {
     "Nifty Cement Index",
     "Nifty Chemicals Index",
     "Nifty Financial Services Index",
+    "Nifty Financial Services 25/50 Index",
+    "Nifty Financial Services Ex-Bank Index",
     "Nifty FMCG Index",
     "Nifty Healthcare Index",
     "Nifty IT Index",
+    "Nifty Media Index",
     "Nifty Metal Index",
     "Nifty Pharma Index",
+    "Nifty Private Bank Index",
+    "Nifty PSU Bank Index",
     "Nifty Realty Index",
+    "Nifty REITs & Realty Index",
+    "Nifty Consumer Durables Index",
     "Nifty Oil and Gas Index",
+    "Nifty500 Healthcare Index",
+    "Nifty MidSmall Financial Services Index",
+    "Nifty MidSmall Healthcare Index",
+    "Nifty MidSmall IT & Telecom Index",
   ];
 
   return {
@@ -234,6 +245,19 @@ await withServer(validMetadata(), async (url) => {
     stderr,
     /Missing NSE sectoral index reference label: Nifty IT Index/,
     `stderr should explain missing NSE label:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+}
+
+{
+  const payload = validMetadata({
+    sectoral_indices: validMetadata().metadata.sectoral_indices.filter((item) => item.label !== "Nifty MidSmall IT & Telecom Index"),
+  });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when a full-list NSE sectoral index label is missing");
+  assert.match(
+    stderr,
+    /Missing NSE sectoral index reference label: Nifty MidSmall IT & Telecom Index/,
+    `stderr should explain missing full-list NSE label:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
   );
 }
 
