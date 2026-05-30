@@ -209,7 +209,7 @@ def _chart_coverage_metadata(
     if not partial_reason and requested_days and covered_days is not None and requested_days >= 45 and covered_days < requested_days * 0.75:
         partial_reason = "returned_range_shorter_than_requested"
 
-    five_year_requested = bool(requested_days is not None and requested_days >= FIVE_YEAR_CHART_MIN_DAYS)
+    five_year_requested = bool(timeframe == "D" and requested_days is not None and requested_days >= FIVE_YEAR_CHART_MIN_DAYS)
     if five_year_requested:
         enough_span = covered_days is not None and covered_days >= FIVE_YEAR_CHART_MIN_DAYS
         enough_daily_candles = timeframe != "D" or len(candles) >= FIVE_YEAR_CHART_MIN_DAILY_CANDLES

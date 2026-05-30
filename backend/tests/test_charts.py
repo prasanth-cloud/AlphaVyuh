@@ -544,6 +544,35 @@ async def test_get_daily_candles_marks_five_year_contract(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_compressed_max_candles_do_not_satisfy_daily_five_year_contract(monkeypatch):
+    rows = []
+    current = charts._subtract_years(charts.date(2026, 5, 18), 6)
+    while current <= charts.date(2026, 5, 18):
+        if current.weekday() < 5:
+            rows.append(_daily_row(str(current), 100 + len(rows)))
+        current += charts.timedelta(days=1)
+
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _FakeCandleClient(rows))
+    monkeypatch.setattr(
+        charts,
+        "_resolve_chart_symbol",
+        lambda _client, symbol: (symbol, {"company_name": "Reliance", "sector": "Energy"}, None),
+    )
+
+    response = await charts.get_candles(
+        "RELIANCE",
+        timeframe="M",
+        from_date="1900-01-01",
+        to_date="2026-05-18",
+        limit=3000,
+        adjusted=False,
+    )
+
+    assert response["timeframe"] == "M"
+    assert response["coverage"]["five_year_contract"]["status"] == "not_requested"
+
+
+@pytest.mark.anyio
 async def test_live_candles_metadata_uses_latest_provider_bar(monkeypatch):
     class _Provider:
         name = "fake"
