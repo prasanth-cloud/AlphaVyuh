@@ -1,6 +1,9 @@
+import type { WorkflowLifecycle, WorkflowStatePatch } from "@/lib/api";
+
 export const MULTI_CHART_REVIEW_LIMIT = 4;
 
 export type MultiChartReviewSource = "scanner" | "watchlist" | "manual";
+export type MultiChartReviewDecision = Extract<WorkflowLifecycle, "ready" | "review_later" | "invalidated">;
 
 export type MultiChartReviewHrefOptions = {
   source?: MultiChartReviewSource;
@@ -52,4 +55,27 @@ export function buildMultiChartReviewHref(
   if (options.watchlistId) params.set("watchlistId", options.watchlistId);
   if (options.watchlistName) params.set("watchlist", options.watchlistName);
   return `/charts${params.toString() ? `?${params.toString()}` : ""}`;
+}
+
+export function buildMultiChartDecisionPatch(
+  symbol: string,
+  lifecycle: MultiChartReviewDecision,
+  options: {
+    source?: string | null;
+    watchlistId?: string | null;
+    existingTags?: string[] | null;
+  } = {},
+): WorkflowStatePatch {
+  const normalized = normalizeSymbol(symbol) ?? symbol.trim().toUpperCase();
+  const tags = new Set(options.existingTags ?? []);
+  tags.add(`multi-chart-${lifecycle.replace("_", "-")}`);
+  return {
+    symbol: normalized,
+    lifecycle,
+    source: options.source ?? "chart",
+    watchlist_id: options.watchlistId ?? null,
+    tags: [...tags],
+    ignored: lifecycle === "invalidated",
+    review_later: lifecycle === "review_later",
+  };
 }

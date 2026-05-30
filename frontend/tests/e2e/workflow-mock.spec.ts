@@ -79,6 +79,9 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(/Scanner review|Source:|As of|loaded/i, { timeout: 15_000 });
     await page.getByRole("button", { name: "5Y" }).click();
     await expect(page.getByRole("button", { name: "5Y" })).toHaveClass(/active/);
+    await page.getByTestId("multi-chart-card-RELIANCE").getByRole("button", { name: "Ready" }).click();
+    await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText(/Decision: ready/i);
+    await expect(page.locator("body")).toContainText(/RELIANCE marked Ready/i);
     await expect(page.getByRole("link", { name: "Full chart" }).first()).toHaveAttribute("href", /\/charts\/RELIANCE\?full=1&from=scanner/);
 
     expect(errors).toEqual([]);

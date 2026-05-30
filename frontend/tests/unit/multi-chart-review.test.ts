@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
   normalizeMultiChartSymbols,
   tradingViewNseSymbols,
@@ -32,5 +33,33 @@ describe("multi-chart review helpers", () => {
 
   it("formats TradingView-compatible NSE symbols", () => {
     expect(tradingViewNseSymbols(["RELIANCE", "NSE:INFY"])).toBe("NSE:RELIANCE,NSE:INFY");
+  });
+
+  it("builds board decision patches without losing existing tags", () => {
+    expect(buildMultiChartDecisionPatch("nse:reliance", "ready", {
+      source: "scanner",
+      existingTags: ["scan-vcp"],
+    })).toMatchObject({
+      symbol: "RELIANCE",
+      lifecycle: "ready",
+      source: "scanner",
+      watchlist_id: null,
+      ignored: false,
+      review_later: false,
+      tags: ["scan-vcp", "multi-chart-ready"],
+    });
+
+    expect(buildMultiChartDecisionPatch("INFY", "invalidated", {
+      source: "watchlist",
+      watchlistId: "wl-1",
+    })).toMatchObject({
+      symbol: "INFY",
+      lifecycle: "invalidated",
+      source: "watchlist",
+      watchlist_id: "wl-1",
+      ignored: true,
+      review_later: false,
+      tags: ["multi-chart-invalidated"],
+    });
   });
 });

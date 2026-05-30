@@ -4,7 +4,14 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getCandles, prefetchCandles, type CandlesResponse } from "@/lib/api";
+import {
+  getCandles,
+  getWorkflowStates,
+  prefetchCandles,
+  upsertWorkflowState,
+  type CandlesResponse,
+  type WorkflowState,
+} from "@/lib/api";
 import {
   formatChartCoverageRange,
   getWatchlistChartRequest,
@@ -12,7 +19,9 @@ import {
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import {
+  buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
+  type MultiChartReviewDecision,
   normalizeMultiChartSymbols,
   tradingViewNseSymbols,
 } from "@/lib/multi-chart-review";
@@ -45,6 +54,9 @@ export default function ChartsIndexPage() {
   const symbols = useMemo(() => normalizeMultiChartSymbols(searchParams.get("symbols")), [searchParams]);
   const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
   const [cards, setCards] = useState<ChartCardState[]>([]);
+  const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
+  const [decisionSaving, setDecisionSaving] = useState<string | null>(null);
+  const [decisionMessage, setDecisionMessage] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
 
   useEffect(() => {
@@ -87,6 +99,20 @@ export default function ChartsIndexPage() {
     };
   }, [rangeLabel, symbols]);
 
+  useEffect(() => {
+    if (symbols.length === 0) return;
+    let cancelled = false;
+    getWorkflowStates({ symbols, watchlistId: watchlistId ?? undefined })
+      .then((states) => {
+        if (cancelled) return;
+        setWorkflowBySymbol(Object.fromEntries(states.map((state) => [state.symbol, state])));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [symbols, watchlistId]);
+
   async function copyTradingViewSymbols() {
     const text = tradingViewNseSymbols(symbols);
     if (!text) return;
@@ -106,6 +132,28 @@ export default function ChartsIndexPage() {
     watchlistId,
     watchlistName,
   });
+  const decisionSource = source === "scanner" || source === "watchlist" ? source : "chart";
+
+  async function saveBoardDecision(symbol: string, lifecycle: MultiChartReviewDecision) {
+    const key = `${symbol}:${lifecycle}`;
+    setDecisionSaving(key);
+    setDecisionMessage("");
+    try {
+      const existing = workflowBySymbol[symbol];
+      const saved = await upsertWorkflowState(buildMultiChartDecisionPatch(symbol, lifecycle, {
+        source: existing?.source ?? decisionSource,
+        watchlistId: existing?.watchlist_id ?? watchlistId,
+        existingTags: existing?.tags,
+      }));
+      setWorkflowBySymbol((current) => ({ ...current, [saved.symbol]: saved }));
+      setDecisionMessage(`${symbol} marked ${lifecycle === "ready" ? "Ready" : lifecycle === "review_later" ? "Later" : "Invalidated"}.`);
+    } catch {
+      setDecisionMessage(`${symbol} decision could not be saved.`);
+    } finally {
+      setDecisionSaving(null);
+      window.setTimeout(() => setDecisionMessage(""), 3000);
+    }
+  }
 
   if (symbols.length === 0) {
     return null;
@@ -149,6 +197,7 @@ export default function ChartsIndexPage() {
           <Link href={boardHref} prefetch={false} className="workspace-chip-button">
             Share board
           </Link>
+          {decisionMessage && <span className="workspace-pill">{decisionMessage}</span>}
           {copyMessage && <span className="workspace-pill" style={{ color: copyMessage.includes("NSE:") ? "var(--text-primary)" : "var(--gain)" }}>{copyMessage}</span>}
         </div>
       </div>
@@ -166,6 +215,8 @@ export default function ChartsIndexPage() {
           const latest = card.data?.latest;
           const coverage = card.data ? formatChartCoverageRange(card.data.coverage, card.data.candles) : null;
           const sourceText = card.data?.source_metadata?.source_name ?? card.data?.source;
+          const workflow = workflowBySymbol[card.symbol];
+          const lifecycle = workflow?.lifecycle;
           return (
             <div
               key={card.symbol}
@@ -208,9 +259,25 @@ export default function ChartsIndexPage() {
                 {coverage && <span className="workspace-pill">{coverage}</span>}
                 {sourceText && <span className="workspace-pill">Source: {formatMarketDataSource(sourceText)}</span>}
                 {card.data?.coverage?.as_of && <span className="workspace-pill">As of {card.data.coverage.as_of}</span>}
+                {lifecycle && <span className="workspace-pill">Decision: {lifecycle.replace("_", " ")}</span>}
               </div>
 
               <div className="workspace-pill-row" style={{ marginTop: "auto", gap: 8 }}>
+                {([
+                  ["ready", "Ready"],
+                  ["review_later", "Later"],
+                  ["invalidated", "Invalidate"],
+                ] as const).map(([nextLifecycle, label]) => (
+                  <button
+                    key={nextLifecycle}
+                    type="button"
+                    className={`workspace-chip-button${lifecycle === nextLifecycle ? " active" : ""}`}
+                    disabled={decisionSaving === `${card.symbol}:${nextLifecycle}`}
+                    onClick={() => void saveBoardDecision(card.symbol, nextLifecycle)}
+                  >
+                    {decisionSaving === `${card.symbol}:${nextLifecycle}` ? "Saving..." : label}
+                  </button>
+                ))}
                 <Link
                   href={`/charts/${card.symbol}?full=1${source === "watchlist" ? `&from=watchlist${watchlistId ? `&watchlistId=${encodeURIComponent(watchlistId)}` : ""}${watchlistName ? `&watchlist=${encodeURIComponent(watchlistName)}` : ""}` : source === "scanner" ? "&from=scanner" : ""}`}
                   prefetch={false}
