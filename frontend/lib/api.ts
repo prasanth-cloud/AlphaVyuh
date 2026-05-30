@@ -2642,6 +2642,8 @@ export async function getBrokerStatus(): Promise<{
   can_import?: boolean;
   sync_status?: "idle" | "running" | "failed";
   last_synced_at?: string | null;
+  read_only_smoke_required?: boolean;
+  read_only_smoke_passed?: boolean;
   live_order_requires_confirmation?: boolean;
   live_order_enabled?: boolean;
 }> {
@@ -2665,6 +2667,8 @@ export async function getBrokerStatus(): Promise<{
         can_import: true,
         sync_status: "idle",
         last_synced_at: sync.last_synced_at,
+        read_only_smoke_required: true,
+        read_only_smoke_passed: false,
         live_order_requires_confirmation: true,
         live_order_enabled: false,
       };
