@@ -23,6 +23,13 @@ describe("multi-chart review helpers", () => {
     })).toBe("/charts?symbols=RELIANCE%2CINFY&from=watchlist&watchlistId=wl-1&watchlist=Rotation+queue");
   });
 
+  it("keeps board URLs limited to the first four visible queue symbols", () => {
+    expect(buildMultiChartReviewHref(["RELIANCE", "INFY", "TCS", "HDFCBANK", "ICICIBANK"], {
+      source: "watchlist",
+      watchlistName: "Filtered desk",
+    })).toBe("/charts?symbols=RELIANCE%2CINFY%2CTCS%2CHDFCBANK&from=watchlist&watchlist=Filtered+desk");
+  });
+
   it("formats TradingView-compatible NSE symbols", () => {
     expect(tradingViewNseSymbols(["RELIANCE", "NSE:INFY"])).toBe("NSE:RELIANCE,NSE:INFY");
   });

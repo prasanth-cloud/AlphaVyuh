@@ -1469,10 +1469,6 @@ function WatchlistContent() {
     if (activeWl?.name) params.set("watchlist", activeWl.name);
     return `/charts/${symbol}?${params.toString()}`;
   }, [activeWl?.id, activeWl?.name]);
-  const multiChartReviewHref = useMemo(() => buildMultiChartReviewHref(
-    activeWl?.items.map((item) => item.symbol) ?? [],
-    { source: "watchlist", watchlistId: activeWl?.id, watchlistName: activeWl?.name },
-  ), [activeWl?.id, activeWl?.items, activeWl?.name]);
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
     for (const item of activeWl?.items ?? []) {
@@ -1552,6 +1548,10 @@ function WatchlistContent() {
   const queuePageCount = Math.max(1, Math.ceil(visibleItems.length / WATCHLIST_PAGE_SIZE));
   const pageStart = Math.min(queuePage, queuePageCount - 1) * WATCHLIST_PAGE_SIZE;
   const pageItems = visibleItems.slice(pageStart, pageStart + WATCHLIST_PAGE_SIZE);
+  const multiChartReviewHref = useMemo(() => buildMultiChartReviewHref(
+    visibleItems.map((item) => item.symbol),
+    { source: "watchlist", watchlistId: activeWl?.id, watchlistName: activeWl?.name },
+  ), [activeWl?.id, activeWl?.name, visibleItems]);
   const pageSymbolsKey = pageItems.map(item => item.symbol).join(",");
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
