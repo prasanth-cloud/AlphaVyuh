@@ -9,7 +9,7 @@ import {
   normalizeMultiChartSymbols,
   tradingViewNseSymbols,
 } from "@/lib/multi-chart-review";
-import type { CandleBar, CandlesResponse } from "@/lib/api";
+import type { CandleBar, CandlesResponse, ScannerIdeaContext } from "@/lib/api";
 
 function candlesFrom(start: string, count: number, closeAt: (index: number) => number): CandleBar[] {
   const startDate = new Date(`${start}T00:00:00Z`);
@@ -57,6 +57,31 @@ function candleResponse(overrides: Partial<CandlesResponse> = {}): CandlesRespon
       low: last.low,
       prev_close: last.close - 1,
     },
+    ...overrides,
+  };
+}
+
+function scannerContext(overrides: Partial<ScannerIdeaContext> = {}): ScannerIdeaContext {
+  return {
+    source: "scanner",
+    preset_id: "trend-template",
+    preset_name: "Trend Template",
+    match_reasons: ["All moving averages aligned with 52W proximity."],
+    confidence_reasons: ["RS and volume confirmed."],
+    data_warnings: [],
+    setup_score: 86,
+    setup_grade: "A",
+    confidence_label: "High confidence",
+    rs_score: 86,
+    price_perf_6m_pct: 32.4,
+    week_52_high_pct: 5,
+    volume_ratio: 1.8,
+    rsi_14: 62.4,
+    scan_trade_date: "2026-05-07",
+    data_source: "NSE bhavcopy",
+    data_mode: "eod",
+    data_as_of: "2026-05-07",
+    captured_at: "2026-05-07T12:00:00.000Z",
     ...overrides,
   };
 }
@@ -116,6 +141,7 @@ describe("multi-chart review helpers", () => {
       analysis,
       alertDraft: buildMultiChartAlertDraft(candleResponse(), analysis),
       trust,
+      scannerContext: scannerContext(),
       rangeLabel: "5Y",
     })).toMatchObject({
       symbol: "RELIANCE",
@@ -126,7 +152,16 @@ describe("multi-chart review helpers", () => {
       review_later: false,
       tags: ["scan-vcp", "multi-chart-ready"],
       notes: expect.stringContaining("Manual note stays.\n[Multi-chart review] Ready · 5Y board · 6/6 checks · Weekly/monthly aligned"),
+      scanner_context: expect.objectContaining({
+        preset_name: "Trend Template",
+        rs_score: 86,
+      }),
     });
+    expect(buildMultiChartDecisionPatch("nse:reliance", "ready", {
+      analysis,
+      scannerContext: scannerContext(),
+      rangeLabel: "5Y",
+    }).notes).toContain("Original scan Trend Template · All moving averages aligned with 52W proximity.");
     expect(buildMultiChartDecisionPatch("nse:reliance", "ready", {
       analysis,
       alertDraft: buildMultiChartAlertDraft(candleResponse(), analysis),

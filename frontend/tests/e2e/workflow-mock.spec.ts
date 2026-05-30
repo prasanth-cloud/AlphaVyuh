@@ -72,6 +72,38 @@ test.describe("Mock workflow smoke", () => {
     });
     page.on("pageerror", (error) => errors.push(error.message));
 
+    await page.addInitScript(() => {
+      localStorage.setItem("alphavyuh-workflow-state-v1", JSON.stringify({
+        RELIANCE: {
+          symbol: "RELIANCE",
+          lifecycle: "idea",
+          source: "scanner",
+          notes: "Scanner: High confidence",
+          tags: ["setup-a"],
+          scanner_context: {
+            source: "scanner",
+            preset_id: "trend-template",
+            preset_name: "Trend Template",
+            match_reasons: ["All moving averages aligned with 52W proximity."],
+            confidence_reasons: ["RS and volume confirmed."],
+            data_warnings: ["Sector taxonomy pending NSE audit."],
+            setup_score: 86,
+            setup_grade: "A",
+            confidence_label: "High confidence",
+            rs_score: 86,
+            price_perf_6m_pct: 32.4,
+            week_52_high_pct: 5,
+            volume_ratio: 1.8,
+            rsi_14: 62.4,
+            scan_trade_date: "2026-05-07",
+            data_source: "NSE bhavcopy",
+            data_mode: "eod",
+            data_as_of: "2026-05-07",
+            captured_at: "2026-05-07T12:00:00.000Z",
+          },
+        },
+      }));
+    });
     await page.goto("/charts?symbols=RELIANCE,INFY,TCS,HDFCBANK&from=scanner", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("multi-chart-review-board")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText("RELIANCE", { timeout: 15_000 });
@@ -79,6 +111,9 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(/Scanner review|Source:|As of|loaded/i, { timeout: 15_000 });
     await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Analysis context|W\/M|52W|MA|Volume|RSI/i, { timeout: 15_000 });
     await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Weekly\/monthly|Moving averages/i);
+    await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText(/Original scan|Trend Template|RS|Volume/i);
+    await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText("All moving averages aligned with 52W proximity.");
+    await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText("Sector taxonomy pending NSE audit.");
     await page.getByRole("button", { name: "5Y" }).click();
     await expect(page.getByRole("button", { name: "5Y" })).toHaveClass(/active/);
     await page.getByRole("button", { name: "Max", exact: true }).click();
@@ -87,6 +122,13 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText(/Decision: ready/i);
     await expect(page.locator("body")).toContainText(/RELIANCE marked Ready/i);
     await expect(page.getByRole("link", { name: "Full chart" }).first()).toHaveAttribute("href", /\/charts\/RELIANCE\?full=1&from=scanner/);
+    const reviewState = await page.evaluate(() => {
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return workflow.RELIANCE;
+    });
+    expect(reviewState.scanner_context.preset_name).toBe("Trend Template");
+    expect(reviewState.notes).toContain("Original scan Trend Template");
+    expect(reviewState.notes).toContain("All moving averages aligned with 52W proximity.");
 
     expect(errors).toEqual([]);
   });

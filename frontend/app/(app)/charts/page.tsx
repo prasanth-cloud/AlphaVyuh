@@ -29,6 +29,7 @@ import {
 } from "@/lib/multi-chart-review";
 import { defaultIndicators } from "@/components/charts/indicators";
 import { EyebrowLabel, Num } from "@/components/ui";
+import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
 
@@ -164,6 +165,7 @@ export default function ChartsIndexPage() {
         analysis: context.analysis,
         trust: context.trust,
         alertDraft: context.alertDraft,
+        scannerContext: existing?.scanner_context,
         rangeLabel,
       }));
       setWorkflowBySymbol((current) => ({ ...current, [saved.symbol]: saved }));
@@ -239,6 +241,9 @@ export default function ChartsIndexPage() {
           const lifecycle = workflow?.lifecycle;
           const analysis = buildMultiChartAnalysisSummary(card.data, workflow?.scanner_context);
           const alertDraft = buildMultiChartAlertDraft(card.data, analysis);
+          const scannerContext = scannerReviewContextSummary(workflow?.scanner_context);
+          const scannerPills = scannerContext.pills.filter((pill) => pill !== scannerContext.sourceLabel);
+          const hasScannerContext = scannerContext.pills.length > 0 || scannerContext.metrics.length > 0 || scannerContext.primaryReason || scannerContext.warnings.length > 0;
           return (
             <div
               key={card.symbol}
@@ -334,6 +339,54 @@ export default function ChartsIndexPage() {
                   {analysis.reviewScore.blockers.length > 0 && (
                     <div className="caption" style={{ lineHeight: 1.55, color: "var(--warn)" }}>
                       Needs: {analysis.reviewScore.blockers.slice(0, 3).join(" · ")}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {hasScannerContext && (
+                <div
+                  data-testid={`multi-chart-scanner-context-${card.symbol}`}
+                  style={{
+                    display: "grid",
+                    gap: 7,
+                    padding: "9px 11px",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--border-subtle)",
+                    background: "var(--surface-1)",
+                  }}
+                >
+                  <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 8 }}>
+                    <div className="label">Original scan</div>
+                    {scannerContext.sourceLabel && <span className="workspace-pill">{scannerContext.sourceLabel}</span>}
+                  </div>
+                  {scannerPills.length > 0 && (
+                    <div className="workspace-pill-row" style={{ gap: 6 }}>
+                      {scannerPills.slice(0, 4).map((pill) => (
+                        <span key={pill} className="workspace-pill">{pill}</span>
+                      ))}
+                    </div>
+                  )}
+                  {scannerContext.metrics.length > 0 && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
+                      {scannerContext.metrics.slice(0, 6).map((item) => (
+                        <div key={item.label} style={{ minWidth: 0, padding: "6px 7px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
+                          <div className="caption" style={{ marginBottom: 2 }}>{item.label}</div>
+                          <Num style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                            {item.value}
+                          </Num>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {scannerContext.primaryReason && (
+                    <div className="caption" style={{ lineHeight: 1.5 }}>
+                      {scannerContext.primaryReason}
+                    </div>
+                  )}
+                  {scannerContext.warnings.length > 0 && (
+                    <div className="caption" style={{ lineHeight: 1.5, color: "var(--warn)" }}>
+                      Data warning: {scannerContext.warnings.slice(0, 2).join(" · ")}
                     </div>
                   )}
                 </div>

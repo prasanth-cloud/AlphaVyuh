@@ -1,5 +1,6 @@
 import type { CandlesResponse, ScannerIdeaContext, WorkflowLifecycle, WorkflowStatePatch } from "@/lib/api";
 import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
+import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 import {
   formatChartCoverageRange,
   formatChartGranularity,
@@ -76,6 +77,7 @@ export function buildMultiChartDecisionPatch(
     analysis?: MultiChartAnalysisSummary | null;
     trust?: MultiChartTrustContext | null;
     alertDraft?: MultiChartAlertDraft | null;
+    scannerContext?: ScannerIdeaContext | null;
     rangeLabel?: string | null;
   } = {},
 ): WorkflowStatePatch {
@@ -89,6 +91,7 @@ export function buildMultiChartDecisionPatch(
     source: options.source ?? "chart",
     watchlist_id: options.watchlistId ?? null,
     tags: [...tags],
+    ...(options.scannerContext ? { scanner_context: options.scannerContext } : {}),
     ...(notes == null ? {} : { notes }),
     ignored: lifecycle === "invalidated",
     review_later: lifecycle === "review_later",
@@ -157,6 +160,7 @@ export function buildMultiChartDecisionNote(
     analysis?: MultiChartAnalysisSummary | null;
     trust?: MultiChartTrustContext | null;
     alertDraft?: MultiChartAlertDraft | null;
+    scannerContext?: ScannerIdeaContext | null;
     rangeLabel?: string | null;
   } = {},
 ): string {
@@ -170,6 +174,13 @@ export function buildMultiChartDecisionNote(
     parts.push(options.analysis.playbookDetail);
     const blockers = options.analysis.reviewScore.blockers.slice(0, 3);
     if (blockers.length) parts.push(`Needs ${blockers.join(", ")}`);
+  }
+
+  if (options.scannerContext) {
+    const scannerSummary = scannerReviewContextSummary(options.scannerContext);
+    const preset = scannerSummary.pills[0] ?? null;
+    parts.push(`Original scan${preset ? ` ${preset}` : ""}`);
+    if (scannerSummary.primaryReason) parts.push(scannerSummary.primaryReason);
   }
 
   if (options.trust) {
