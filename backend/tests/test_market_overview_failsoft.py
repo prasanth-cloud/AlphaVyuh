@@ -102,3 +102,15 @@ def test_market_overview_uses_breadth_snapshot_before_recomputing(monkeypatch):
     assert overview["trade_date"] == "2026-05-04"
     assert overview["total"] == 1234
     assert overview["sector_breadth"][0]["sector"] == "Banks"
+
+
+def test_live_sector_index_contract_uses_official_labels():
+    labels = [label for _symbol, label in market_router.SECTOR_INDEXES]
+
+    assert "Nifty IT Index" in labels
+    assert "Nifty Healthcare Index" in labels
+    assert "Nifty Chemicals Index" in labels
+    assert "Nifty Consumer Durables Index" in labels
+    assert "Nifty Cement Index" in labels
+    assert "IT" not in labels
+    assert "Banks" not in labels

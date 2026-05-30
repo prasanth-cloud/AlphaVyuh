@@ -71,20 +71,54 @@ def test_sector_breadth_raises_503_when_latest_trade_date_is_unavailable(monkeyp
     assert exc.value.detail == "Sector breadth is temporarily unavailable."
 
 
-def test_sector_list_keeps_valid_empty_state(monkeypatch):
+def test_sector_list_returns_all_mapped_active_sectors_with_metadata(monkeypatch):
     monkeypatch.setattr(
         stocks,
         "get_admin_client",
         lambda: _SectorClient(
             data=[
-                {"sector": "Energy"},
-                {"sector": "Energy"},
-                {"sector": "Financial Services"},
+                {"symbol": "RELIANCE", "sector": "Energy"},
+                {"symbol": "ONGC", "sector": "Energy"},
+                {"symbol": "AUBANK", "sector": "Financial Services"},
+                {"symbol": "UNMAPPED", "sector": None},
             ],
         ),
     )
 
-    assert asyncio.run(stocks.list_sectors()) == {"sectors": []}
+    response = asyncio.run(stocks.list_sectors())
+
+    assert response["sectors"] == ["Energy", "Financial Services"]
+    assert response["metadata"]["active_count"] == 4
+    assert response["metadata"]["active_count_scope"] == "active_universe"
+    assert response["metadata"]["classified_count"] == 3
+    assert response["metadata"]["unmapped_count"] == 1
+    assert response["metadata"]["unmapped_symbols"] == ["UNMAPPED"]
+    assert response["metadata"]["display_filter"]["minimum_active_symbols"] == 1
+    assert response["metadata"]["display_filter"]["hidden_sector_count"] == 0
+    assert response["metadata"]["reference"]["relationship"] == "reference_only_not_equity_universe_source"
+
+
+def test_sector_audit_exposes_contract_without_filtering(monkeypatch):
+    monkeypatch.setattr(
+        stocks,
+        "get_admin_client",
+        lambda: _SectorClient(
+            data=[
+                {"symbol": "AUBANK", "sector": "Financial Services"},
+                {"symbol": "MICROCAP", "sector": "Tiny Sector"},
+                {"symbol": "UNKNOWN", "sector": ""},
+            ],
+        ),
+    )
+
+    response = asyncio.run(stocks.audit_sectors())
+
+    assert response["status"] == "ok"
+    assert response["metadata"]["contract_as_of"] == "2026-05-30"
+    assert response["metadata"]["source"] == "stock_universe.sector"
+    assert response["metadata"]["sector_count"] == 2
+    assert response["metadata"]["unmapped_count"] == 1
+    assert any(item["sector"] == "Tiny Sector" for item in response["metadata"]["sector_counts"])
 
 
 def test_sector_list_raises_503_when_stock_universe_query_fails(monkeypatch):

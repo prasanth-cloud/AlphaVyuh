@@ -107,6 +107,53 @@ describe("market auxiliary API", () => {
     await expect(getSectors()).resolves.toEqual([]);
   });
 
+  it("keeps sector metadata beside the backwards-compatible sector list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        sectors: ["Energy", "Tiny Sector"],
+        metadata: {
+          source: "stock_universe.sector",
+          contract_as_of: "2026-05-30",
+          active_count: 3,
+          active_count_scope: "active_universe",
+          classified_count: 2,
+          unmapped_count: 1,
+          unmapped_symbols: ["UNMAPPED"],
+          unmapped_symbols_truncated: false,
+          sector_count: 2,
+          sector_counts: [
+            { sector: "Energy", active_count: 1, aliases: [], hidden_by_filter: false },
+            { sector: "Tiny Sector", active_count: 1, aliases: [], hidden_by_filter: false },
+          ],
+          display_filter: {
+            minimum_active_symbols: 1,
+            hidden_sector_count: 0,
+            description: "All mapped sectors are shown.",
+          },
+          reference: {
+            name: "NSE sectoral indices",
+            url: "https://www.nseindia.com/static/products-services/indices-sectoral",
+            as_of: "2026-03-02",
+            relationship: "reference_only_not_equity_universe_source",
+          },
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getSectors, getSectorsWithMetadata } = await import("@/lib/api");
+
+    await expect(getSectors()).resolves.toEqual(["Energy", "Tiny Sector"]);
+    await expect(getSectorsWithMetadata()).resolves.toMatchObject({
+      sectors: ["Energy", "Tiny Sector"],
+      metadata: {
+        source: "stock_universe.sector",
+        contract_as_of: "2026-05-30",
+        unmapped_count: 1,
+      },
+    });
+  });
+
   it("rejects sector list service errors instead of returning empty sectors", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ detail: "Sector list is temporarily unavailable." }),

@@ -802,7 +802,13 @@ export default function DashboardPage() {
             <Card padding="lg">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
                 <h2 className="heading-card">Sector breadth</h2>
-                <span className="caption">Advancers · avg chg · above EMA20</span>
+                <span
+                  className="caption"
+                  title={data.sector_taxonomy?.universe_taxonomy?.relationship}
+                  style={{ maxWidth: 280, textAlign: 'right' }}
+                >
+                  {data.sector_taxonomy?.display_filter?.description ?? 'Advancers · avg chg · above EMA20'}
+                </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (

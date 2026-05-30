@@ -25,6 +25,7 @@ PUBLIC_ROUTES = {
     ("GET", "/api/v1/market/movers"),
     ("GET", "/api/v1/market/markets"),
     ("GET", "/api/v1/market/sectors"),
+    ("GET", "/api/v1/market/sectors/audit"),
     ("GET", "/api/v1/market/sector-breadth"),
     ("GET", "/api/v1/charts/{symbol}/candles"),
     ("GET", "/api/v1/charts/{symbol}/candles-live"),
