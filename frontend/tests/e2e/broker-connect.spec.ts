@@ -26,6 +26,7 @@ const baseBrokerStatus = {
   last_synced_at: null,
   read_only_smoke_required: true,
   read_only_smoke_passed: false,
+  read_only_smoke_fresh: false,
   read_only_smoke_checked_at: null,
   read_only_smoke_checks: {
     login_url: { ok: true },
@@ -175,6 +176,7 @@ test.describe("Broker settings — connected", () => {
       can_import: true,
       last_synced_at: "2026-05-30T09:05:00Z",
       read_only_smoke_passed: true,
+      read_only_smoke_fresh: true,
       read_only_smoke_checked_at: "2026-05-30T09:10:00Z",
       read_only_smoke_checks: {
         login_url: { ok: true },
@@ -212,6 +214,33 @@ test.describe("Broker settings — connected", () => {
     await expect(checklist).toContainText("Tradebook");
     await expect(checklist).toContainText("Passed · 3 rows");
   });
+
+  test("shows stale read-only smoke as a refresh-required gate", async ({ page }) => {
+    await mockBrokerStatus(page, {
+      connected: true,
+      mode: "read_only",
+      status: "connected_read_only",
+      status_label: "Zerodha read-only connected",
+      has_token: true,
+      read_only: true,
+      can_import: true,
+      read_only_smoke_passed: false,
+      read_only_smoke_fresh: false,
+      read_only_smoke_checked_at: "2026-05-29T08:00:00Z",
+      read_only_smoke_checks: {
+        login_url: { ok: true },
+        profile: { ok: true, user_id_present: true },
+        holdings: { ok: true, count: 2 },
+      },
+    });
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const gate = page.getByTestId("broker-read-only-smoke-gate");
+    await expect(gate).toContainText("Read-only smoke gate: Smoke stale");
+    await expect(gate).toContainText("older than the 24-hour launch gate");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Refresh required");
+  });
 });
 
 // ── OAuth callback redirect ───────────────────────────────────────────────────
@@ -227,6 +256,7 @@ test.describe("Broker callback — ?connected= param", () => {
       read_only: true,
       can_import: true,
       read_only_smoke_passed: true,
+      read_only_smoke_fresh: true,
     });
 
     await page.goto("/settings/broker?connected=zerodha");

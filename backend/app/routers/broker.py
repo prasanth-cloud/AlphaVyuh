@@ -504,6 +504,7 @@ def _status_payload(
     plan_allows_broker: bool = False,
     broker_user_name: str | None = None,
     read_only_smoke_passed: bool = False,
+    read_only_smoke_fresh: bool = False,
     read_only_smoke_checked_at: str | None = None,
     read_only_smoke_checks: dict[str, Any] | None = None,
 ) -> dict:
@@ -544,6 +545,7 @@ def _status_payload(
         "last_synced_at": last_synced_at,
         "read_only_smoke_required": True,
         "read_only_smoke_passed": read_only_smoke_passed,
+        "read_only_smoke_fresh": read_only_smoke_fresh,
         "read_only_smoke_checked_at": read_only_smoke_checked_at,
         "read_only_smoke_checks": read_only_smoke_checks or {},
         "live_order_requires_confirmation": True,
@@ -1004,6 +1006,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
         plan_allows_broker=plan_allows_broker,
         broker_user_name=broker_user_name,
         read_only_smoke_passed=bool(read_only_smoke["passed"]),
+        read_only_smoke_fresh=bool(read_only_smoke.get("fresh")),
         read_only_smoke_checked_at=read_only_smoke["checked_at"],
         read_only_smoke_checks=read_only_smoke["checks"],
     )

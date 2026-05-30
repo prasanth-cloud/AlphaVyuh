@@ -4,6 +4,8 @@ export type BrokerSafetyStatus = {
   token_expired?: boolean;
   read_only_smoke_required?: boolean;
   read_only_smoke_passed?: boolean;
+  read_only_smoke_fresh?: boolean;
+  read_only_smoke_checked_at?: string | null;
   live_order_enabled?: boolean;
 };
 
@@ -58,6 +60,14 @@ export function brokerOrderGatePresentation(
       value: "TOKEN EXPIRED",
       detail: "Reconnect broker access before importing trades. Order submission remains disabled.",
       status: "bad",
+    };
+  }
+
+  if (broker?.read_only_smoke_required && broker.read_only_smoke_checked_at && broker.read_only_smoke_fresh === false) {
+    return {
+      value: "SMOKE STALE",
+      detail: `${brokerLabel(broker.broker)} read-only smoke is older than the 24-hour launch gate; rerun read-only smoke before any future order route can be enabled.`,
+      status: "warn",
     };
   }
 

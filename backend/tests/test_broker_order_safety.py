@@ -477,6 +477,7 @@ def test_broker_status_returns_sanitized_read_only_smoke_checks(monkeypatch):
     result = asyncio.run(broker_router.broker_status(user_id="user-1"))
 
     assert result["read_only_smoke_passed"] is True
+    assert result["read_only_smoke_fresh"] is True
     assert result["read_only_smoke_checked_at"] == checked_at
     assert result["read_only_smoke_checks"]["profile"]["user_id_present"] is True
     assert result["read_only_smoke_checks"]["holdings"]["count"] == 2
@@ -534,6 +535,7 @@ def test_broker_status_marks_stale_read_only_smoke_unpassed(monkeypatch):
     result = asyncio.run(broker_router.broker_status(user_id="user-1"))
 
     assert result["read_only_smoke_passed"] is False
+    assert result["read_only_smoke_fresh"] is False
     assert result["read_only_smoke_checked_at"] == checked_at
     assert result["live_order_enabled"] is False
 

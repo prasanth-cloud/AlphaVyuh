@@ -185,21 +185,26 @@ function BrokerSettingsContent() {
 
   const readOnlySmokeRequired = state?.read_only_smoke_required !== false;
   const readOnlySmokePassed = state?.read_only_smoke_passed === true;
+  const readOnlySmokeStale = Boolean(state?.read_only_smoke_checked_at && state?.read_only_smoke_fresh === false);
   const liveOrderEnabled = state?.live_order_enabled === true;
   const smokeGateStatus = statusError
     ? "Unknown"
     : readOnlySmokeRequired
-      ? readOnlySmokePassed
-        ? "Smoke passed"
-        : "Smoke required"
+      ? readOnlySmokeStale
+        ? "Smoke stale"
+        : readOnlySmokePassed
+          ? "Smoke passed"
+          : "Smoke required"
       : "Not required";
   const smokeGateCopy = statusError
     ? "Broker safety state could not be confirmed. Order routes stay unavailable until status recovers."
     : liveOrderEnabled
       ? "Broker order routes report enabled. Keep broker confirmation on for every future order intent."
-      : readOnlySmokeRequired && !readOnlySmokePassed
-        ? "Read-only broker smoke must pass before any future sandbox or live order route can be enabled."
-        : "Read-only broker smoke has passed; order submission still stays disabled until owner approval.";
+      : readOnlySmokeStale
+        ? "Read-only broker smoke is older than the 24-hour launch gate. Rerun smoke before any future sandbox or live order route can be enabled."
+        : readOnlySmokeRequired && !readOnlySmokePassed
+          ? "Read-only broker smoke must pass before any future sandbox or live order route can be enabled."
+          : "Read-only broker smoke has passed; order submission still stays disabled until owner approval.";
   const smokeChecklist = useMemo(() => brokerReadOnlyChecklist(state), [state]);
   const smokeCheckedAt = state?.read_only_smoke_checked_at
     ? new Date(state.read_only_smoke_checked_at).toLocaleString()
@@ -364,7 +369,7 @@ function BrokerSettingsContent() {
                   </div>
                 </div>
                 <span className="workspace-pill" style={{ color: readOnlySmokePassed ? "var(--gain)" : "var(--warn)" }}>
-                  {readOnlySmokePassed ? "Read-only verified" : "Pending verification"}
+                  {readOnlySmokeStale ? "Refresh required" : readOnlySmokePassed ? "Read-only verified" : "Pending verification"}
                 </span>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>

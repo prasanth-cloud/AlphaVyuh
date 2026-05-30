@@ -38,6 +38,22 @@ describe("broker order gate presentation", () => {
     });
   });
 
+  it("calls out stale read-only smoke separately from never-run smoke", () => {
+    expect(brokerOrderGatePresentation({
+      broker: "zerodha",
+      connected: true,
+      read_only_smoke_required: true,
+      read_only_smoke_passed: false,
+      read_only_smoke_fresh: false,
+      read_only_smoke_checked_at: "2026-05-29T08:00:00Z",
+      live_order_enabled: false,
+    })).toEqual({
+      value: "SMOKE STALE",
+      detail: "Zerodha read-only smoke is older than the 24-hour launch gate; rerun read-only smoke before any future order route can be enabled.",
+      status: "warn",
+    });
+  });
+
   it("calls out owner-enabled execution as still gated", () => {
     expect(brokerOrderGatePresentation({
       broker: "zerodha",
