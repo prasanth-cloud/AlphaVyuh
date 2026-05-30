@@ -58,6 +58,7 @@ import {
   formatChartCoverageRange,
   formatChartGranularity,
   getCoverageAvailabilityMessage,
+  getFiveYearHistoryBadge,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
@@ -582,7 +583,14 @@ function ChartPanel({
   const [chartErrorMessage, setChartErrorMessage] = useState("");
   const [tf, setTf] = useState<WatchlistChartTimeframe>("3M");
   const [chartRequest, setChartRequest] = useState<WatchlistChartRequest>(() => getWatchlistChartRequest("3M"));
-  const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null; range?: string | null } | null>(null);
+  const [chartSource, setChartSource] = useState<{
+    mode?: string | null;
+    source?: string | null;
+    asOf?: string | null;
+    symbol?: string | null;
+    range?: string | null;
+    limitedHistoryBadge?: { label: string; title: string } | null;
+  } | null>(null);
   const [chartRangeNote, setChartRangeNote] = useState<string | null>(null);
   const [chartTimeframeMessage, setChartTimeframeMessage] = useState("");
   const [chartType, setChartType] = useState<ChartDisplayType>(() => readWatchlistChartType());
@@ -733,6 +741,7 @@ function ChartPanel({
           asOf: d.coverage?.as_of ?? d.source_metadata?.as_of ?? rows[rows.length - 1]?.time ?? null,
           symbol: responseSymbol,
           range: formatChartCoverageRange(d.coverage, rows),
+          limitedHistoryBadge: getFiveYearHistoryBadge(d.coverage, request),
         });
         setChartRangeNote(getCoverageAvailabilityMessage(d.coverage, request) ?? getRangeAvailabilityMessage(rows, request));
         if (d.latest?.close && !price) setPrice(String(d.latest.close));
@@ -848,6 +857,11 @@ function ChartPanel({
             {chartSource && (
               <span className="workspace-pill" title="Chart review coverage for the selected range">
                 Coverage: {chartSource.range}
+              </span>
+            )}
+            {chartSource?.limitedHistoryBadge && (
+              <span className="workspace-pill" title={chartSource.limitedHistoryBadge.title}>
+                {chartSource.limitedHistoryBadge.label}
               </span>
             )}
           </div>

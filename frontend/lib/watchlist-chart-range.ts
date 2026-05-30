@@ -98,6 +98,10 @@ type ChartCoverageLike = {
   partial?: boolean;
   partial_reason?: string | null;
   coverage_pct?: number | null;
+  five_year_contract?: {
+    years?: number | null;
+    status?: string | null;
+  } | null;
 };
 
 export function formatChartCoverageRange(
@@ -133,6 +137,22 @@ export function getCoverageAvailabilityMessage(
     return `Latest candle is ${coverage.available_to ?? "not current"} for ${request.label}${percent}.`;
   }
   return `Partial chart history for ${request.label}${percent}.`;
+}
+
+export function getFiveYearHistoryBadge(
+  coverage: ChartCoverageLike | null | undefined,
+  request: Pick<WatchlistChartRequest, "label">,
+) {
+  if (coverage?.five_year_contract?.status !== "partial") return null;
+  const years = coverage.five_year_contract.years ?? 5;
+  const percent = typeof coverage.coverage_pct === "number" && Number.isFinite(coverage.coverage_pct)
+    ? ` · ${coverage.coverage_pct.toFixed(0)}% coverage`
+    : "";
+  const label = `Limited ${years}Y history`;
+  return {
+    label,
+    title: getCoverageAvailabilityMessage(coverage, request) ?? `${label}${percent}.`,
+  };
 }
 
 export function getRangeAvailabilityMessage(

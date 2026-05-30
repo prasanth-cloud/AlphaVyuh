@@ -7,6 +7,7 @@ import {
   formatChartGranularity,
   formatCandleRange,
   getCoverageAvailabilityMessage,
+  getFiveYearHistoryBadge,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   isIntradayTimeframe,
@@ -82,5 +83,23 @@ describe("watchlist chart range mapping", () => {
 
     expect(formatChartCoverageRange(coverage, [])).toBe("2026-02-01 -> 2026-05-01 · 42 bars");
     expect(getCoverageAvailabilityMessage(coverage, { label: "1Y" })).toBe("History starts at 2026-02-01 for 1Y (24% coverage).");
+  });
+
+  it("labels partial 5Y contract coverage as limited history", () => {
+    const coverage = {
+      available_from: "2024-06-03",
+      available_to: "2026-05-07",
+      returned_candles: 480,
+      partial: true,
+      partial_reason: "five_year_contract_not_met",
+      coverage_pct: 39.2,
+      five_year_contract: { years: 5, status: "partial" },
+    };
+
+    expect(getFiveYearHistoryBadge(coverage, { label: "5Y" })).toEqual({
+      label: "Limited 5Y history",
+      title: "Partial chart history for 5Y (39% coverage).",
+    });
+    expect(getFiveYearHistoryBadge({ ...coverage, five_year_contract: { years: 5, status: "met" } }, { label: "5Y" })).toBeNull();
   });
 });

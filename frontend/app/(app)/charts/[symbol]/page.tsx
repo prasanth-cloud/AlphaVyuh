@@ -27,6 +27,7 @@ import {
   formatChartCoverageRange,
   formatChartGranularity,
   getCoverageAvailabilityMessage,
+  getFiveYearHistoryBadge,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
@@ -1757,6 +1758,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const changeAmt = displayClose != null && displayPrevClose ? displayClose - displayPrevClose : null;
   const changePct = displayPctChange;
   const positive = displayPositive;
+  const fiveYearHistoryBadge = data ? getFiveYearHistoryBadge(data.coverage, { label: rangeLabel }) : null;
 
   const w52pct = latest?.week_52_high && latest?.week_52_low
     ? (((displayClose ?? latest.close) - latest.week_52_low) / (latest.week_52_high - latest.week_52_low)) * 100
@@ -3483,6 +3485,15 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   style={{ background: "rgba(77,214,255,0.09)", color: "#93e5ff", border: "1px solid rgba(77,214,255,0.18)" }}
                 >
                   Measure: {selectedDrawingMeasurement.primary} · {selectedDrawingMeasurement.secondary}
+                </div>
+              )}
+              {fiveYearHistoryBadge && (
+                <div
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  title={fiveYearHistoryBadge.title}
+                  style={{ background: "rgba(217,119,6,0.12)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.24)" }}
+                >
+                  {fiveYearHistoryBadge.label}
                 </div>
               )}
               {data && (
