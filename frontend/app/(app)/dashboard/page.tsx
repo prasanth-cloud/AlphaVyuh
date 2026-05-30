@@ -18,6 +18,7 @@ import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
+import { sectorTaxonomyPresentation } from '@/lib/sector-taxonomy-copy'
 
 function safeNumber(value: unknown, fallback = 0): number {
   const numeric = typeof value === 'number' ? value : Number(value)
@@ -139,6 +140,33 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
       </div>
     </Card>
   )
+}
+
+function SectorTaxonomyBadge({ data }: { data: MarketOverview }) {
+  const taxonomy = sectorTaxonomyPresentation(data.sector_taxonomy);
+  const tone = taxonomy.status === 'good'
+    ? 'var(--gain)'
+    : taxonomy.status === 'warn'
+      ? 'var(--warn)'
+      : 'var(--loss)';
+
+  return (
+    <span
+      className="caption"
+      data-testid="dashboard-sector-taxonomy-badge"
+      title={taxonomy.detail}
+      style={{
+        maxWidth: 320,
+        textAlign: 'right',
+        color: tone,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {taxonomy.dashboardBadge}
+    </span>
+  );
 }
 
 function SectorBar({
@@ -802,13 +830,10 @@ export default function DashboardPage() {
             <Card padding="lg">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
                 <h2 className="heading-card">Sector breadth</h2>
-                <span
-                  className="caption"
-                  title={data.sector_taxonomy?.universe_taxonomy?.relationship}
-                  style={{ maxWidth: 280, textAlign: 'right' }}
-                >
-                  {data.sector_taxonomy?.display_filter?.description ?? 'Advancers · avg chg · above EMA20'}
-                </span>
+                <SectorTaxonomyBadge data={data} />
+              </div>
+              <div className="caption" style={{ marginTop: -10, marginBottom: 14 }}>
+                {data.sector_taxonomy?.display_filter?.description ?? 'Advancers · avg chg · above EMA20'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (

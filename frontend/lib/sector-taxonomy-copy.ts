@@ -11,6 +11,7 @@ export type SectorTaxonomyPresentation = {
   reference: string;
   unmapped: string;
   displayFilter: string;
+  dashboardBadge: string;
 };
 
 function fmtNumber(value: number | null | undefined) {
@@ -32,6 +33,7 @@ export function sectorTaxonomyPresentation(
       reference: "Not available",
       unmapped: "Not available",
       displayFilter: "Not available",
+      dashboardBadge: "Taxonomy unverified",
     };
   }
 
@@ -62,5 +64,8 @@ export function sectorTaxonomyPresentation(
       ? `${fmtNumber(unmappedCount)} (${metadata.unmapped_symbols.slice(0, 5).join(", ")}${metadata.unmapped_symbols_truncated ? ", ..." : ""})`
       : "0",
     displayFilter: metadata.display_filter.description,
+    dashboardBadge: issues.length
+      ? `Taxonomy needs audit: ${issues.join(", ")}`
+      : `Taxonomy source: ${source}`,
   };
 }

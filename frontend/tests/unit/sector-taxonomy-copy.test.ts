@@ -36,6 +36,7 @@ describe("sectorTaxonomyPresentation", () => {
       value: "UNVERIFIED",
       status: "bad",
       detail: "Sector audit is unavailable.",
+      dashboardBadge: "Taxonomy unverified",
     });
   });
 
@@ -46,6 +47,7 @@ describe("sectorTaxonomyPresentation", () => {
       source: "stock_universe.sector",
       contract: "2026-05-30",
       unmapped: "0",
+      dashboardBadge: "Taxonomy source: stock_universe.sector",
     });
   });
 
@@ -64,5 +66,6 @@ describe("sectorTaxonomyPresentation", () => {
     expect(presentation.detail).toContain("1 hidden sector");
     expect(presentation.detail).toContain("2 unmapped symbols");
     expect(presentation.unmapped).toBe("2 (ABC, XYZ)");
+    expect(presentation.dashboardBadge).toBe("Taxonomy needs audit: 1 hidden sector, 2 unmapped symbols");
   });
 });
