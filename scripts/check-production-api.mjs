@@ -27,6 +27,9 @@ const chartSmokeSymbols = String(process.env.PRODUCTION_API_CHART_SYMBOLS || "RE
   .split(",")
   .map((symbol) => symbol.trim().toUpperCase())
   .filter(Boolean);
+const fiveYearChartLimit = Number(process.env.PRODUCTION_API_5Y_CHART_LIMIT || 1300);
+const fiveYearMinCandles = Number(process.env.PRODUCTION_API_5Y_MIN_CANDLES || Math.floor(252 * 5 * 0.9));
+const fiveYearMinSpanDays = Number(process.env.PRODUCTION_API_5Y_MIN_SPAN_DAYS || (365 * 5 - 14));
 
 if (!apiBase) {
   console.log("Skipping production API check: PRODUCTION_API_URL or NEXT_PUBLIC_API_URL is not set.");
@@ -121,6 +124,14 @@ function daysBetween(start, end) {
   return Math.round((end.getTime() - start.getTime()) / 86_400_000);
 }
 
+function subtractYearsIso(value, years) {
+  const parsed = parseIsoDate(value);
+  assert(parsed, `Could not derive 5Y chart window from non-ISO date: ${value}`);
+  const next = new Date(parsed.getTime());
+  next.setUTCFullYear(next.getUTCFullYear() - years);
+  return next.toISOString().slice(0, 10);
+}
+
 function numberValue(...values) {
   for (const value of values) {
     const number = Number(value);
@@ -199,15 +210,18 @@ try {
   );
 
   assert(chartSmokeSymbols.length > 0, "No chart smoke symbols configured.");
+  assert(Number.isFinite(fiveYearChartLimit) && fiveYearChartLimit >= fiveYearMinCandles, `5Y chart limit ${fiveYearChartLimit} is below the minimum candle contract ${fiveYearMinCandles}.`);
+  const fiveYearStartDate = subtractYearsIso(summaryDate, 5);
   const chartSummaries = [];
   const latestPctChanges = [];
   for (const symbol of chartSmokeSymbols) {
-    const candles = await fetchJson(`/api/v1/charts/${encodeURIComponent(symbol)}/candles?timeframe=D&limit=500`);
+    const candlePath = `/api/v1/charts/${encodeURIComponent(symbol)}/candles?timeframe=D&from_date=${fiveYearStartDate}&to_date=${summaryDate}&limit=${fiveYearChartLimit}`;
+    const candles = await fetchJson(candlePath);
     assert(Array.isArray(candles?.candles), `${symbol} candles response did not include a candles array.`);
     assert(candles.candles.length > 0, `${symbol} candles response was empty.`);
     assert(
-      candles.candles.length >= 120,
-      `${symbol} chart history was too shallow for watchlist/full-chart use: ${candles.candles.length} candles.`,
+      candles.candles.length >= fiveYearMinCandles,
+      `${symbol} daily 5Y chart history was too shallow: ${candles.candles.length} candles, expected at least ${fiveYearMinCandles}.`,
     );
     const latestCandleDate = candles.candles[candles.candles.length - 1]?.time || candles.coverage?.available_to;
     assert(latestCandleDate, `${symbol} candles response did not include a latest candle date.`);
@@ -219,8 +233,13 @@ try {
     assert(parsedLatestCandleDate, `Latest ${symbol} candle date was not ISO-like: ${latestCandleDate}`);
     const spanDays = daysBetween(parsedFirstCandleDate, parsedLatestCandleDate);
     assert(
-      spanDays >= 180,
-      `${symbol} chart history spans only ${spanDays} days; expected at least 180 days.`,
+      spanDays >= fiveYearMinSpanDays,
+      `${symbol} daily chart history spans only ${spanDays} days; expected at least ${fiveYearMinSpanDays} days for the 5Y launch contract.`,
+    );
+    const contractStatus = candles.coverage?.five_year_contract?.status;
+    assert(
+      !contractStatus || contractStatus === "met",
+      `${symbol} daily 5Y chart contract status was ${contractStatus}.`,
     );
     assertFreshDate(`Latest ${symbol} candle`, latestCandleDate, summaryDate);
     const latest = candles.candles.at(-1);
@@ -236,7 +255,7 @@ try {
       assert(pctChange !== null, `${symbol} latest candle did not expose or allow pct_change calculation.`);
       latestPctChanges.push({ symbol, pctChange });
     }
-    chartSummaries.push(`${symbol} ${candles.candles.length} candles ${firstCandleDate}->${latestCandleDate}`);
+    chartSummaries.push(`${symbol} ${candles.candles.length} daily candles ${firstCandleDate}->${latestCandleDate}`);
   }
   assert(
     latestPctChanges.some((item) => Math.abs(item.pctChange) > 0.05),

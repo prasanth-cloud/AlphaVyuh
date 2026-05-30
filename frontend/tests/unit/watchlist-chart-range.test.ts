@@ -77,6 +77,7 @@ describe("watchlist chart range mapping", () => {
       partial: true,
       partial_reason: "history_starts_after_requested_window",
       coverage_pct: 24.4,
+      five_year_contract: { status: "partial" },
     };
 
     expect(formatChartCoverageRange(coverage, [])).toBe("2026-02-01 -> 2026-05-01 · 42 bars");

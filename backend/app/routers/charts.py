@@ -20,6 +20,10 @@ router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
 
 SUPPORTED_EOD_TIMEFRAMES = {"D", "W", "M"}
 INTRADAY_UNAVAILABLE_DETAIL = "Intraday candle data is not available for Professional Access yet."
+FIVE_YEAR_CHART_CONTRACT_YEARS = 5
+FIVE_YEAR_CHART_MIN_DAYS = 365 * FIVE_YEAR_CHART_CONTRACT_YEARS - 14
+FIVE_YEAR_CHART_MIN_DAILY_CANDLES = int(252 * FIVE_YEAR_CHART_CONTRACT_YEARS * 0.9)
+FIVE_YEAR_CHART_DEFAULT_LIMIT = 1300
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -144,6 +148,13 @@ def _normalize_eod_timeframe(timeframe: str) -> str:
     return tf
 
 
+def _subtract_years(value: date, years: int) -> date:
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        return value.replace(year=value.year - years, day=28)
+
+
 def _chart_coverage_metadata(
     candles: list[dict[str, Any]],
     *,
@@ -198,6 +209,16 @@ def _chart_coverage_metadata(
     if not partial_reason and requested_days and covered_days is not None and requested_days >= 45 and covered_days < requested_days * 0.75:
         partial_reason = "returned_range_shorter_than_requested"
 
+    five_year_requested = bool(requested_days is not None and requested_days >= FIVE_YEAR_CHART_MIN_DAYS)
+    if five_year_requested:
+        enough_span = covered_days is not None and covered_days >= FIVE_YEAR_CHART_MIN_DAYS
+        enough_daily_candles = timeframe != "D" or len(candles) >= FIVE_YEAR_CHART_MIN_DAILY_CANDLES
+        five_year_status = "met" if enough_span and enough_daily_candles else "partial"
+        if five_year_status == "partial" and partial_reason is None:
+            partial_reason = "five_year_contract_not_met"
+    else:
+        five_year_status = "not_requested"
+
     return {
         "requested_from": requested_from_s,
         "requested_to": requested_to_s,
@@ -211,6 +232,12 @@ def _chart_coverage_metadata(
         "coverage_pct": coverage_pct,
         "partial": partial_reason is not None,
         "partial_reason": partial_reason,
+        "five_year_contract": {
+            "years": FIVE_YEAR_CHART_CONTRACT_YEARS,
+            "minimum_calendar_days": FIVE_YEAR_CHART_MIN_DAYS,
+            "minimum_daily_candles": FIVE_YEAR_CHART_MIN_DAILY_CANDLES,
+            "status": five_year_status,
+        },
         "source_name": source_name,
         "as_of": as_of,
     }
@@ -549,7 +576,7 @@ async def get_candles(
     timeframe: str = Query("D"),
     from_date: str | None = Query(None),
     to_date: str | None = Query(None),
-    limit: int = Query(365, ge=1, le=3000),
+    limit: int = Query(FIVE_YEAR_CHART_DEFAULT_LIMIT, ge=1, le=3000),
     adjusted: bool = Query(False),
 ):
     requested_sym = symbol.upper()
@@ -568,8 +595,8 @@ async def get_candles(
     raw_limit = min(raw_limit, 3000)
 
     td = date.today()
-    fd = date.fromisoformat(from_date) if from_date else (td - timedelta(days=365 * 12))
     td2 = date.fromisoformat(to_date) if to_date else td
+    fd = date.fromisoformat(from_date) if from_date else _subtract_years(td2, FIVE_YEAR_CHART_CONTRACT_YEARS)
 
     try:
         if adjusted:

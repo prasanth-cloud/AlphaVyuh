@@ -57,8 +57,29 @@ function dailyCandles(startDate, count) {
   return candles;
 }
 
-function chartResponse(symbol, startDate = "2025-10-31", count = 200, options = {}) {
-  const candles = dailyCandles(startDate, count);
+function tradingDayCandles(startDate, endDate, options = {}) {
+  const candles = [];
+  const current = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+  let index = 0;
+  while (current <= end) {
+    const weekday = current.getUTCDay();
+    if (weekday !== 0 && weekday !== 6) {
+      const close = 101 + index;
+      const previousClose = index > 0 ? 100 + index : null;
+      candles.push({
+        time: current.toISOString().slice(0, 10),
+        open: 100 + index,
+        high: 102 + index,
+        low: 99 + index,
+        close,
+        volume: 1000 + index,
+        pct_change: previousClose ? Number((((close - previousClose) / previousClose) * 100).toFixed(2)) : 0,
+      });
+      index += 1;
+    }
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
   if (options.duplicateLatest && candles.length >= 2) {
     const previous = candles.at(-2);
     candles[candles.length - 1] = {
@@ -67,12 +88,23 @@ function chartResponse(symbol, startDate = "2025-10-31", count = 200, options = 
       pct_change: 0,
     };
   }
+  return candles;
+}
+
+function chartResponse(symbol, startDate = "2021-05-18", endDate = "2026-05-18", options = {}) {
+  const candles = tradingDayCandles(startDate, endDate, options);
   return JSON.stringify({
     candles,
     coverage: {
+      requested_from: "2021-05-18",
+      requested_to: "2026-05-18",
       available_from: startDate,
       available_to: candles.at(-1)?.time,
+      returned_candles: candles.length,
+      requested_limit: 1300,
+      timeframe: "D",
       symbol,
+      five_year_contract: { status: "met" },
     },
   });
 }
@@ -113,8 +145,8 @@ await withServer((request, response) => {
     response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
-  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(chartResponse("RELIANCE", "2022-09-17", 200));
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
+    response.end(chartResponse("RELIANCE", "2021-04-01", "2026-04-04"));
     return;
   }
 
@@ -125,7 +157,7 @@ await withServer((request, response) => {
   assert.notEqual(code, 0, "production API check should fail on stale chart candles");
   assert.match(
     stderr,
-    /Latest RELIANCE candle 2023-04-04 is stale versus market summary 2026-05-18/,
+    /Latest RELIANCE candle 2026-04-03 is stale versus market summary 2026-05-18/,
     `stderr should explain stale chart data, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
   );
 });
@@ -163,8 +195,8 @@ await withServer((request, response) => {
     response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
-  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(chartResponse("RELIANCE", "2025-10-31", 200, { duplicateLatest: true }));
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
+    response.end(chartResponse("RELIANCE", "2021-05-18", "2026-05-18", { duplicateLatest: true }));
     return;
   }
 
@@ -190,15 +222,15 @@ await withServer((request, response) => {
     response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
-  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("RELIANCE"));
     return;
   }
-  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("ITC"));
     return;
   }
-  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("AUBANK"));
     return;
   }
@@ -208,7 +240,7 @@ await withServer((request, response) => {
 }, async (apiUrl) => {
   const { code, stdout, stderr } = await runChecker(apiUrl);
   assert.equal(code, 0, `production API check should pass on current data:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
-  assert.match(stdout, /charts RELIANCE 200 candles 2025-10-31->2026-05-18; ITC 200 candles 2025-10-31->2026-05-18; AUBANK 200 candles 2025-10-31->2026-05-18/);
+  assert.match(stdout, /charts RELIANCE \d+ daily candles 2021-05-18->2026-05-18; ITC \d+ daily candles 2021-05-18->2026-05-18; AUBANK \d+ daily candles 2021-05-18->2026-05-18/);
   assert.match(stdout, /scanner skipped/);
 });
 
@@ -222,8 +254,17 @@ await withServer((request, response) => {
     response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
-  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
-    response.end(chartResponse("RELIANCE", "2026-01-01", 60));
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
+    const candles = dailyCandles("2026-01-01", 60);
+    response.end(JSON.stringify({
+      candles,
+      coverage: {
+        available_from: "2026-01-01",
+        available_to: candles.at(-1)?.time,
+        symbol: "RELIANCE",
+        five_year_contract: { status: "partial" },
+      },
+    }));
     return;
   }
 
@@ -234,7 +275,7 @@ await withServer((request, response) => {
   assert.notEqual(code, 0, "production API check should fail on shallow chart history");
   assert.match(
     stderr,
-    /RELIANCE chart history was too shallow for watchlist\/full-chart use: 60 candles/,
+    /RELIANCE daily 5Y chart history was too shallow: 60 candles, expected at least 1134/,
     `stderr should explain shallow chart history, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
   );
 });
@@ -249,15 +290,15 @@ await withServer((request, response) => {
     response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
-  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("RELIANCE"));
     return;
   }
-  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("ITC"));
     return;
   }
-  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("AUBANK"));
     return;
   }
