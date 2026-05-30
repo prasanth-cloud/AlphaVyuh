@@ -185,6 +185,20 @@ function computeSmaLine(candles: CandleBar[], period: number): LinePoint[] {
   return out;
 }
 
+function candleIndicatorLine(candles: CandleBar[], key: "ema_20" | "ema_50" | "ema_200"): LinePoint[] {
+  return candles.flatMap((candle) => {
+    const value = candle[key];
+    return typeof value === "number" && Number.isFinite(value)
+      ? [{ time: candle.time, value: Number(value.toFixed(4)) }]
+      : [];
+  });
+}
+
+function preferBroaderLine(endpointLine: LinePoint[] | undefined, candleLine: LinePoint[]): LinePoint[] | undefined {
+  if (candleLine.length > (endpointLine?.length ?? 0)) return candleLine;
+  return endpointLine ?? (candleLine.length ? candleLine : undefined);
+}
+
 function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
   return drawings.map((item) => ({
     ...item,
@@ -552,10 +566,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   const applyIndicatorPayload = useCallback((resp: Awaited<ReturnType<typeof getIndicators>> | null, candles: CandleBar[] = []) => {
     const ind = (resp?.indicators ?? {}) as Record<string, unknown[]>;
+    const ema20FromCandles = candleIndicatorLine(candles, "ema_20");
+    const ema50FromCandles = candleIndicatorLine(candles, "ema_50");
+    const ema200FromCandles = candleIndicatorLine(candles, "ema_200");
     const nextIndicatorData: IndicatorData = {
-      ema20:    ind.ema20    as LinePoint[] | undefined,
-      ema50:    ind.ema50    as LinePoint[] | undefined,
-      ema200:   ind.ema200   as LinePoint[] | undefined,
+      ema20:    preferBroaderLine(ind.ema20 as LinePoint[] | undefined, ema20FromCandles),
+      ema50:    preferBroaderLine(ind.ema50 as LinePoint[] | undefined, ema50FromCandles),
+      ema200:   preferBroaderLine(ind.ema200 as LinePoint[] | undefined, ema200FromCandles),
       sma50:    computeSmaLine(candles, 50),
       sma200:   computeSmaLine(candles, 200),
       vwap:     ind.vwap     as LinePoint[] | undefined,
