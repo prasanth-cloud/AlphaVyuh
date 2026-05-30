@@ -76,7 +76,7 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
         "sector_breadth": [],
         "sector_breadth_basis": "latest_complete_session",
         "sector_breadth_source": "daily_ohlcv",
-        "sector_taxonomy": build_sector_taxonomy_metadata([], active_count=0, hidden_min_active_symbols=3),
+        "sector_taxonomy": build_sector_taxonomy_metadata([], active_count=0, hidden_min_active_symbols=1),
         "top_sectors": [],
         "top_gainers": [],
         "top_losers": [],

@@ -50,6 +50,8 @@ def test_market_overview_fails_soft_when_admin_client_unavailable(monkeypatch):
     assert overview["total"] == 0
     assert overview["indices"][0]["symbol"] == "NIFTY"
     assert "Market summary" in overview["message"]
+    assert overview["sector_taxonomy"]["display_filter"]["minimum_active_symbols"] == 1
+    assert overview["sector_taxonomy"]["display_filter"]["hidden_sector_count"] == 0
 
 
 def test_market_overview_fails_soft_when_daily_rows_unavailable(monkeypatch):
@@ -64,6 +66,8 @@ def test_market_overview_fails_soft_when_daily_rows_unavailable(monkeypatch):
     assert overview["trade_date"] == "2026-05-04"
     assert overview["top_gainers"] == []
     assert overview["cache_status"] == "miss"
+    assert overview["sector_taxonomy"]["display_filter"]["minimum_active_symbols"] == 1
+    assert overview["sector_taxonomy"]["display_filter"]["hidden_sector_count"] == 0
 
 
 def test_market_overview_uses_breadth_snapshot_before_recomputing(monkeypatch):
