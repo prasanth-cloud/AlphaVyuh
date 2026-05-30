@@ -94,6 +94,8 @@ function tradingDayCandles(startDate, endDate, options = {}) {
 function chartResponse(symbol, startDate = "2021-05-18", endDate = "2026-05-18", options = {}) {
   const candles = tradingDayCandles(startDate, endDate, options);
   return JSON.stringify({
+    symbol,
+    timeframe: "D",
     candles,
     coverage: {
       requested_from: "2021-05-18",
@@ -104,7 +106,12 @@ function chartResponse(symbol, startDate = "2021-05-18", endDate = "2026-05-18",
       requested_limit: 1300,
       timeframe: "D",
       symbol,
-      five_year_contract: { status: "met" },
+      five_year_contract: {
+        years: 5,
+        minimum_calendar_days: 1811,
+        minimum_daily_candles: 1134,
+        status: "met",
+      },
     },
   });
 }
@@ -223,6 +230,65 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
+    const payload = JSON.parse(chartResponse("RELIANCE"));
+    delete payload.coverage.five_year_contract;
+    response.end(JSON.stringify(payload));
+    return;
+  }
+
+  response.writeHead(404);
+  response.end(JSON.stringify({ error: "unexpected path" }));
+}, async (apiUrl) => {
+  const { code, stdout, stderr } = await runChecker(apiUrl);
+  assert.notEqual(code, 0, "production API check should fail when 5Y contract metadata is missing");
+  assert.match(
+    stderr,
+    /RELIANCE coverage did not include five_year_contract metadata/,
+    `stderr should explain missing five-year contract metadata, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+});
+
+await withServer((request, response) => {
+  response.setHeader("content-type", "application/json");
+  if (request.url === "/health") {
+    response.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (request.url === "/api/v1/market/summary") {
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    return;
+  }
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
+    const payload = JSON.parse(chartResponse("RELIANCE"));
+    payload.timeframe = "W";
+    payload.coverage.timeframe = "W";
+    response.end(JSON.stringify(payload));
+    return;
+  }
+
+  response.writeHead(404);
+  response.end(JSON.stringify({ error: "unexpected path" }));
+}, async (apiUrl) => {
+  const { code, stdout, stderr } = await runChecker(apiUrl);
+  assert.notEqual(code, 0, "production API check should fail when 5Y smoke returns non-daily candles");
+  assert.match(
+    stderr,
+    /5Y chart smoke must use daily candles/,
+    `stderr should explain non-daily 5Y candles, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+});
+
+await withServer((request, response) => {
+  response.setHeader("content-type", "application/json");
+  if (request.url === "/health") {
+    response.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (request.url === "/api/v1/market/summary") {
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    return;
+  }
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("RELIANCE"));
     return;
   }
@@ -259,10 +325,20 @@ await withServer((request, response) => {
     response.end(JSON.stringify({
       candles,
       coverage: {
+        requested_from: "2021-05-18",
+        requested_to: "2026-05-18",
         available_from: "2026-01-01",
         available_to: candles.at(-1)?.time,
+        returned_candles: candles.length,
+        requested_limit: 1300,
+        timeframe: "D",
         symbol: "RELIANCE",
-        five_year_contract: { status: "partial" },
+        five_year_contract: {
+          years: 5,
+          minimum_calendar_days: 1811,
+          minimum_daily_candles: 1134,
+          status: "partial",
+        },
       },
     }));
     return;

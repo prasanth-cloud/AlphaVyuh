@@ -219,6 +219,23 @@ try {
     const candles = await fetchJson(candlePath);
     assert(Array.isArray(candles?.candles), `${symbol} candles response did not include a candles array.`);
     assert(candles.candles.length > 0, `${symbol} candles response was empty.`);
+    assert(candles.coverage && typeof candles.coverage === "object", `${symbol} candles response did not include coverage metadata.`);
+    assert(
+      candles.timeframe === "D" || candles.coverage.timeframe === "D",
+      `${symbol} 5Y chart smoke must use daily candles; response timeframe=${candles.timeframe}, coverage timeframe=${candles.coverage.timeframe}.`,
+    );
+    assert(
+      candles.coverage.requested_from === fiveYearStartDate,
+      `${symbol} coverage requested_from ${candles.coverage.requested_from} did not match requested 5Y start ${fiveYearStartDate}.`,
+    );
+    assert(
+      candles.coverage.requested_to === summaryDate,
+      `${symbol} coverage requested_to ${candles.coverage.requested_to} did not match market summary date ${summaryDate}.`,
+    );
+    assert(
+      Number(candles.coverage.requested_limit) >= fiveYearMinCandles,
+      `${symbol} coverage requested_limit ${candles.coverage.requested_limit} is below the 5Y minimum ${fiveYearMinCandles}.`,
+    );
     assert(
       candles.candles.length >= fiveYearMinCandles,
       `${symbol} daily 5Y chart history was too shallow: ${candles.candles.length} candles, expected at least ${fiveYearMinCandles}.`,
@@ -236,9 +253,20 @@ try {
       spanDays >= fiveYearMinSpanDays,
       `${symbol} daily chart history spans only ${spanDays} days; expected at least ${fiveYearMinSpanDays} days for the 5Y launch contract.`,
     );
-    const contractStatus = candles.coverage?.five_year_contract?.status;
+    const contract = candles.coverage.five_year_contract;
+    assert(contract && typeof contract === "object", `${symbol} coverage did not include five_year_contract metadata.`);
+    assert(Number(contract.years) === 5, `${symbol} five_year_contract years was ${contract.years}, expected 5.`);
     assert(
-      !contractStatus || contractStatus === "met",
+      Number(contract.minimum_calendar_days) >= fiveYearMinSpanDays,
+      `${symbol} five_year_contract minimum_calendar_days ${contract.minimum_calendar_days} is below configured minimum ${fiveYearMinSpanDays}.`,
+    );
+    assert(
+      Number(contract.minimum_daily_candles) >= fiveYearMinCandles,
+      `${symbol} five_year_contract minimum_daily_candles ${contract.minimum_daily_candles} is below configured minimum ${fiveYearMinCandles}.`,
+    );
+    const contractStatus = contract.status;
+    assert(
+      contractStatus === "met",
       `${symbol} daily 5Y chart contract status was ${contractStatus}.`,
     );
     assertFreshDate(`Latest ${symbol} candle`, latestCandleDate, summaryDate);
