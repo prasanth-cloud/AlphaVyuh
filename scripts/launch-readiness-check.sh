@@ -40,6 +40,7 @@ run_step "Signed-in copy posture regression tests" npm run test:signed-in-copy-p
 run_step "Public posture checker regression tests" npm run test:public-posture-check
 run_step "Data recovery checker regression tests" npm run test:data-recovery-check
 run_step "Setup review workflow contract regression tests" npm run test:setup-review-check
+run_step "Sector taxonomy checker regression tests" npm run test:sector-taxonomy-check
 run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
 
 run_step "Frontend lint" npm --prefix frontend run lint
@@ -100,8 +101,10 @@ run_step "Railway recovery workflow check" npm run check:railway-recovery-workfl
 
 if [[ "${PRODUCTION_API_URL:-${NEXT_PUBLIC_API_URL:-}}" != "" ]]; then
   run_step "Production API data smoke" npm run check:production-api
+  run_step "Production sector taxonomy smoke" npm run check:sector-taxonomy
 else
   echo "Skipping production API data smoke. Set PRODUCTION_API_URL or NEXT_PUBLIC_API_URL to enable it."
+  echo "Skipping production sector taxonomy smoke. Set PRODUCTION_API_URL, NEXT_PUBLIC_API_URL, SECTOR_AUDIT_URL, PUBLIC_SITE_URL, or LIVE_URL to enable it."
   echo
 fi
 

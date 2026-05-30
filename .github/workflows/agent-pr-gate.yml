@@ -97,6 +97,9 @@ jobs:
       - name: Setup review workflow contract tests
         run: npm run test:setup-review-check
 
+      - name: Sector taxonomy checker tests
+        run: npm run test:sector-taxonomy-check
+
       - name: Railway secret prep checker tests
         run: npm run test:railway-secret-prep
 
