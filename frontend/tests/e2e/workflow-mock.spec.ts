@@ -64,6 +64,26 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("multi-chart review board compares scanner candidates", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/charts?symbols=RELIANCE,INFY,TCS,HDFCBANK&from=scanner", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("multi-chart-review-board")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText("RELIANCE", { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-INFY")).toContainText("INFY", { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Scanner review|Source:|As of|loaded/i, { timeout: 15_000 });
+    await page.getByRole("button", { name: "5Y" }).click();
+    await expect(page.getByRole("button", { name: "5Y" })).toHaveClass(/active/);
+    await expect(page.getByRole("link", { name: "Full chart" }).first()).toHaveAttribute("href", /\/charts\/RELIANCE\?full=1&from=scanner/);
+
+    expect(errors).toEqual([]);
+  });
+
   test("journal explains review queue and trade source labels", async ({ page }) => {
     await page.goto("/journal", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });

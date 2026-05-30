@@ -22,6 +22,7 @@ import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataPr
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
+import { buildMultiChartReviewHref } from '@/lib/multi-chart-review'
 
 const API = API_BASE_URL
 
@@ -1360,6 +1361,9 @@ export default function ScannerPage() {
                   <>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')}>
                       Shortlist
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => router.push(buildMultiChartReviewHref(selectedSymbols(), { source: 'scanner' }))}>
+                      Review charts
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')}>
                       Review later

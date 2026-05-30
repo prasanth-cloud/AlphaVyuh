@@ -68,6 +68,7 @@ import { describeMarketDataError } from "@/lib/data-errors";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
+import { buildMultiChartReviewHref } from "@/lib/multi-chart-review";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -1468,6 +1469,10 @@ function WatchlistContent() {
     if (activeWl?.name) params.set("watchlist", activeWl.name);
     return `/charts/${symbol}?${params.toString()}`;
   }, [activeWl?.id, activeWl?.name]);
+  const multiChartReviewHref = useMemo(() => buildMultiChartReviewHref(
+    activeWl?.items.map((item) => item.symbol) ?? [],
+    { source: "watchlist", watchlistId: activeWl?.id, watchlistName: activeWl?.name },
+  ), [activeWl?.id, activeWl?.items, activeWl?.name]);
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
     for (const item of activeWl?.items ?? []) {
@@ -2146,6 +2151,15 @@ function WatchlistContent() {
                 style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
                 {adding ? "…" : "Add"}
               </button>
+              {activeWl.items.length > 1 && (
+                <button
+                  className="workspace-chip-button"
+                  onClick={() => router.push(multiChartReviewHref)}
+                  title="Open up to four queue symbols in a multi-chart review board"
+                >
+                  Review 4 charts
+                </button>
+              )}
             </div>
           )}
         </div>
