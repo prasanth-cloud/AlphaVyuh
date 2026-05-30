@@ -26,4 +26,9 @@ describe("chart feedback copy", () => {
     expect(source).toContain('candleIndicatorLine(candles, "ema_200")');
     expect(source).toContain("preferBroaderLine(ind.ema200 as LinePoint[] | undefined, ema200FromCandles)");
   });
+
+  it("opens full chart review on the five-year launch contract range", () => {
+    expect(source).toContain('const initialRangeLabel: WatchlistChartTimeframe = fullChartMode ? "5Y" : "1Y";');
+    expect(source).toContain('setRangeLabel(layout.timeframe === "D" ? initialRangeLabel : layout.timeframe === "W" ? "3Y" : "Max");');
+  });
 });

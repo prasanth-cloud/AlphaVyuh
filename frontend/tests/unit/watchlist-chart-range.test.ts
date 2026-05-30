@@ -104,6 +104,20 @@ describe("watchlist chart range mapping", () => {
     expect(getFiveYearHistoryBadge({ ...coverage, five_year_contract: { years: 5, status: "partial" } }, { label: "1Y" })).toBeNull();
   });
 
+  it("warns when a selected 5Y chart lacks contract metadata", () => {
+    expect(getFiveYearHistoryBadge({
+      available_from: "2021-05-07",
+      available_to: "2026-05-07",
+      returned_candles: 1288,
+      partial: false,
+      coverage_pct: 100,
+    }, { label: "5Y" })).toEqual({
+      label: "5Y contract unverified",
+      title: "Chart response did not include five_year_contract metadata; treat this 5Y view as unverified launch evidence.",
+      tone: "warn",
+    });
+  });
+
   it("labels met 5Y contract coverage as verified history", () => {
     const coverage = {
       available_from: "2021-05-07",

@@ -144,7 +144,15 @@ export function getFiveYearHistoryBadge(
   request: Pick<WatchlistChartRequest, "label">,
 ) {
   const contract = coverage?.five_year_contract;
-  if (request.label !== "5Y" || !contract || contract.status === "not_requested") return null;
+  if (request.label !== "5Y") return null;
+  if (!contract) {
+    return {
+      label: "5Y contract unverified",
+      title: "Chart response did not include five_year_contract metadata; treat this 5Y view as unverified launch evidence.",
+      tone: "warn" as const,
+    };
+  }
+  if (contract.status === "not_requested") return null;
   const years = contract.years ?? 5;
   const percent = typeof coverage.coverage_pct === "number" && Number.isFinite(coverage.coverage_pct)
     ? ` · ${coverage.coverage_pct.toFixed(0)}% coverage`
