@@ -98,6 +98,10 @@ def test_sector_list_returns_all_mapped_active_sectors_with_metadata(monkeypatch
     assert response["metadata"]["reference"]["relationship"] == "reference_only_not_equity_universe_source"
     assert response["metadata"]["reference_coverage"]["matched_sector_count"] == 2
     assert response["metadata"]["reference_coverage"]["unmatched_sector_count"] == 0
+    sector_counts = {item["sector"]: item for item in response["metadata"]["sector_counts"]}
+    assert sector_counts["Energy"]["aliases"] == ["Oil and Gas"]
+    assert sector_counts["Financial Services"]["aliases"] == ["Finance"]
+    assert response["metadata"]["alias_policy"]["source"] == "NSE sectoral index aliases"
 
 
 def test_sector_audit_exposes_contract_without_filtering(monkeypatch):
@@ -123,6 +127,8 @@ def test_sector_audit_exposes_contract_without_filtering(monkeypatch):
     assert any(item["sector"] == "Tiny Sector" for item in response["metadata"]["sector_counts"])
     assert response["metadata"]["reference_coverage"]["unmatched_sectors"] == ["Tiny Sector"]
     assert response["metadata"]["reference_coverage"]["unmatched_sector_count"] == 1
+    tiny_sector = next(item for item in response["metadata"]["sector_counts"] if item["sector"] == "Tiny Sector")
+    assert tiny_sector["aliases"] == []
 
 
 def test_sector_list_raises_503_when_stock_universe_query_fails(monkeypatch):

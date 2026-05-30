@@ -11,6 +11,7 @@ export type SectorTaxonomyPresentation = {
   reference: string;
   unmapped: string;
   displayFilter: string;
+  aliasPolicy: string;
   dashboardBadge: string;
 };
 
@@ -33,6 +34,7 @@ export function sectorTaxonomyPresentation(
       reference: "Not available",
       unmapped: "Not available",
       displayFilter: "Not available",
+      aliasPolicy: "Not available",
       dashboardBadge: "Taxonomy unverified",
     };
   }
@@ -68,6 +70,7 @@ export function sectorTaxonomyPresentation(
       ? `${fmtNumber(unmappedCount)} (${metadata.unmapped_symbols.slice(0, 5).join(", ")}${metadata.unmapped_symbols_truncated ? ", ..." : ""})`
       : "0",
     displayFilter: metadata.display_filter.description,
+    aliasPolicy: metadata.alias_policy?.description ?? "NSE alias policy not available.",
     dashboardBadge: issues.length
       ? `Taxonomy needs audit: ${issues.join(", ")}`
       : `Taxonomy source: ${source}`,

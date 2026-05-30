@@ -26,6 +26,10 @@ function metadata(overrides: Partial<SectorTaxonomyMetadata> = {}): SectorTaxono
       hidden_sector_count: 0,
       description: "All mapped sectors are shown.",
     },
+    alias_policy: {
+      source: "NSE sectoral index aliases",
+      description: "Sector-count aliases are derived only from NSE sectoral-index alias labels. An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet.",
+    },
     reference: {
       name: "NSE sectoral indices",
       url: "https://www.nseindia.com/static/products-services/indices-sectoral",
@@ -53,6 +57,7 @@ describe("sectorTaxonomyPresentation", () => {
       source: "stock_universe.sector",
       contract: "2026-05-30",
       unmapped: "0",
+      aliasPolicy: "Sector-count aliases are derived only from NSE sectoral-index alias labels. An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet.",
       dashboardBadge: "Taxonomy source: stock_universe.sector",
     });
   });

@@ -53,6 +53,10 @@ function validMetadata(overrides = {}) {
         source: "stock_universe.sector",
         relationship: "stock classification labels used for filters and analysis",
       },
+      alias_policy: {
+        source: "NSE sectoral index aliases",
+        description: "Sector-count aliases are derived only from NSE sectoral-index alias labels. An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet.",
+      },
       sectoral_indices: sectoralLabels.map((label) => ({ symbol: label.toUpperCase(), label, aliases: [] })),
       active_count: 3147,
       active_count_scope: "active_universe",
@@ -63,7 +67,7 @@ function validMetadata(overrides = {}) {
       sector_counts: sectors.map((sector, index) => ({
         sector,
         active_count: 300 - index,
-        aliases: [],
+        aliases: sector === "Financial Services" ? ["Finance"] : sector === "Energy" ? ["Oil and Gas"] : [],
         related_sectoral_indices: sector === "Energy" ? ["Nifty Oil and Gas Index"] : [],
         hidden_by_filter: false,
       })),
@@ -194,6 +198,32 @@ await withServer(validMetadata(), async (url) => {
     stderr,
     /must expose reference_coverage/,
     `stderr should explain missing reference coverage:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+}
+
+{
+  const payload = validMetadata({ alias_policy: undefined });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when alias policy is not exposed");
+  assert.match(
+    stderr,
+    /alias policy must identify NSE sectoral index aliases/i,
+    `stderr should explain missing alias policy:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+}
+
+{
+  const payload = validMetadata({
+    sector_counts: validMetadata().metadata.sector_counts.map((item) => (
+      item.sector === "Financial Services" ? { ...item, aliases: [] } : item
+    )),
+  });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when audited sector aliases are missing");
+  assert.match(
+    stderr,
+    /Financial Services must expose Finance/,
+    `stderr should explain missing sector alias:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
   );
 }
 

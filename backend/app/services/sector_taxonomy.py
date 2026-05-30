@@ -75,11 +75,16 @@ NSE_SECTORAL_INDEXES: list[dict[str, Any]] = [
 ]
 
 _RELATED_INDEXES_BY_SECTOR: dict[str, list[str]] = {}
+_ALIASES_BY_SECTOR: dict[str, list[str]] = {}
 for index in NSE_SECTORAL_INDEXES:
     for alias in index["aliases"]:
         _RELATED_INDEXES_BY_SECTOR.setdefault(alias, [])
         if index["label"] not in _RELATED_INDEXES_BY_SECTOR[alias]:
             _RELATED_INDEXES_BY_SECTOR[alias].append(index["label"])
+        _ALIASES_BY_SECTOR.setdefault(alias, [])
+        for related_alias in index["aliases"]:
+            if related_alias != alias and related_alias not in _ALIASES_BY_SECTOR[alias]:
+                _ALIASES_BY_SECTOR[alias].append(related_alias)
 
 
 def build_sector_taxonomy_metadata(
@@ -105,7 +110,7 @@ def build_sector_taxonomy_metadata(
         {
             "sector": sector,
             "active_count": count,
-            "aliases": [],
+            "aliases": _ALIASES_BY_SECTOR.get(sector, []),
             "related_sectoral_indices": _RELATED_INDEXES_BY_SECTOR.get(sector, []),
             "hidden_by_filter": count < hidden_min_active_symbols,
         }
@@ -135,6 +140,13 @@ def build_sector_taxonomy_metadata(
             "relationship": (
                 "stock classification labels used for filters, scanner rows, breadth, "
                 "watchlist, chart, and portfolio exposure"
+            ),
+        },
+        "alias_policy": {
+            "source": "NSE sectoral index aliases",
+            "description": (
+                "Sector-count aliases are derived only from NSE sectoral-index alias labels. "
+                "An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet."
             ),
         },
         "sectoral_indices": NSE_SECTORAL_INDEXES,

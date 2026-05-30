@@ -122,9 +122,13 @@ describe("market auxiliary API", () => {
           unmapped_symbols_truncated: false,
           sector_count: 2,
           sector_counts: [
-            { sector: "Energy", active_count: 1, aliases: [], hidden_by_filter: false },
+            { sector: "Energy", active_count: 1, aliases: ["Oil and Gas"], hidden_by_filter: false },
             { sector: "Tiny Sector", active_count: 1, aliases: [], hidden_by_filter: false },
           ],
+          alias_policy: {
+            source: "NSE sectoral index aliases",
+            description: "Sector-count aliases are derived only from NSE sectoral-index alias labels.",
+          },
           display_filter: {
             minimum_active_symbols: 1,
             hidden_sector_count: 0,
@@ -150,6 +154,9 @@ describe("market auxiliary API", () => {
         source: "stock_universe.sector",
         contract_as_of: "2026-05-30",
         unmapped_count: 1,
+        alias_policy: {
+          source: "NSE sectoral index aliases",
+        },
       },
     });
   });

@@ -248,6 +248,10 @@ function mockSectorTaxonomyMetadata(): SectorTaxonomyMetadata {
       source: "stock_universe.sector",
       relationship: "mock fixtures for workflow QA, not NSE taxonomy evidence",
     },
+    alias_policy: {
+      source: "NSE sectoral index aliases",
+      description: "Mock sector fixtures do not provide audited NSE aliases.",
+    },
     sectoral_indices: [],
   };
 }

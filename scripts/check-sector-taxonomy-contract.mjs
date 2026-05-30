@@ -131,6 +131,14 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
     metadata.universe_taxonomy?.source === "stock_universe.sector",
     "Universe taxonomy must identify stock_universe.sector as the AlphaVyuh sector source.",
   );
+  assert(
+    metadata.alias_policy?.source === "NSE sectoral index aliases",
+    `Sector alias policy must identify NSE sectoral index aliases; got ${metadata.alias_policy?.source}`,
+  );
+  assert(
+    typeof metadata.alias_policy?.description === "string" && metadata.alias_policy.description.includes("empty aliases list"),
+    "Sector alias policy must explain empty aliases lists.",
+  );
 
   assert(Number(metadata.active_count) >= minActiveCount, `Active universe count looked too low: ${metadata.active_count}`);
   assert(Number(metadata.sector_count) >= minSectorCount, `Sector count looked too low: ${metadata.sector_count}`);
@@ -172,9 +180,19 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
   for (const item of metadata.sector_counts) {
     assert(typeof item?.sector === "string" && item.sector.trim(), "Every sector count needs a sector label.");
     assert(Number.isFinite(Number(item.active_count)), `Sector ${item.sector} active_count was not numeric.`);
+    assert(Array.isArray(item.aliases), `Sector ${item.sector} must expose aliases.`);
     assert(item.hidden_by_filter === false, `Sector ${item.sector} should not be hidden in the audit contract.`);
     assert(Array.isArray(item.related_sectoral_indices), `Sector ${item.sector} must expose related_sectoral_indices.`);
   }
+  const sectorByName = new Map(metadata.sector_counts.map((item) => [item.sector, item]));
+  assert(
+    sectorByName.get("Financial Services")?.aliases?.includes("Finance"),
+    "Financial Services must expose Finance as an audited NSE sectoral-index alias.",
+  );
+  assert(
+    sectorByName.get("Energy")?.aliases?.includes("Oil and Gas"),
+    "Energy must expose Oil and Gas as an audited NSE sectoral-index alias.",
+  );
 
   assert(Array.isArray(metadata.sectoral_indices), "sectoral_indices must be an array.");
   const labels = new Set(metadata.sectoral_indices.map((item) => item?.label).filter(Boolean));

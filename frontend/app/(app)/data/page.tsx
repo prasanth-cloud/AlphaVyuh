@@ -440,6 +440,7 @@ export default function DataFreshnessPage() {
               ["Sector NSE reference", sectorTaxonomy.reference],
               ["Sector unmapped", sectorTaxonomy.unmapped],
               ["Sector display filter", sectorTaxonomy.displayFilter],
+              ["Sector alias policy", sectorTaxonomy.aliasPolicy],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
               ["Latest exchange file", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],
