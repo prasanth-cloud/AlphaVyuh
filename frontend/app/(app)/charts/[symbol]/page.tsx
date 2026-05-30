@@ -726,7 +726,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     getChartLayout(symbol).then(layout => {
       if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") {
         setTimeframe(layout.timeframe);
-        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "10Y");
+        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "Max");
       }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     }).catch(() => {

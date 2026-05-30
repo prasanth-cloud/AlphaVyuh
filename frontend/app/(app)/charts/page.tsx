@@ -38,7 +38,7 @@ type ChartCardState = {
   error: string | null;
 };
 
-const REVIEW_RANGES: WatchlistChartTimeframe[] = ["1Y", "3Y", "5Y"];
+const REVIEW_RANGES: WatchlistChartTimeframe[] = ["1Y", "3Y", "5Y", "Max"];
 
 function sourceLabel(source: string | null, watchlist: string | null) {
   if (source === "watchlist") return watchlist ? `Watchlist · ${watchlist}` : "Watchlist review";

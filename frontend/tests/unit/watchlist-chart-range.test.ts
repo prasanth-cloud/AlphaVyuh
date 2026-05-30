@@ -39,14 +39,14 @@ describe("watchlist chart range mapping", () => {
       limit: 170,
     });
     expect(getWatchlistChartRequest("5Y", NOW)).toMatchObject({
-      timeframe: "W",
+      timeframe: "D",
       from_date: "2021-05-07",
-      limit: 280,
+      limit: 1300,
     });
-    expect(getWatchlistChartRequest("10Y", NOW)).toMatchObject({
+    expect(getWatchlistChartRequest("Max", NOW)).toMatchObject({
       timeframe: "M",
-      from_date: "2016-05-07",
-      limit: 130,
+      from_date: "1900-01-01",
+      limit: 3000,
     });
     expect(formatChartGranularity("D")).toBe("Daily");
     expect(formatChartGranularity("W")).toBe("Weekly");

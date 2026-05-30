@@ -260,8 +260,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header")).toContainText(/Data as of \d{4}-\d{2}-\d{2}/i);
     await expect(page.locator(".watchlist-chart-header")).toContainText(/\d+ bars/i);
 
-    await page.locator(".watchlist-chart-header").getByRole("button", { name: "10Y", exact: true }).click();
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · Monthly · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
+    await page.locator(".watchlist-chart-header").getByRole("button", { name: "Max", exact: true }).click();
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/Max · Monthly · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
 
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
     await page.locator(".watchlist-chart-header").getByText(/SMA|Indicators/).first().click();
