@@ -72,17 +72,23 @@ export function buildMultiChartDecisionPatch(
     source?: string | null;
     watchlistId?: string | null;
     existingTags?: string[] | null;
+    existingNotes?: string | null;
+    analysis?: MultiChartAnalysisSummary | null;
+    trust?: MultiChartTrustContext | null;
+    rangeLabel?: string | null;
   } = {},
 ): WorkflowStatePatch {
   const normalized = normalizeSymbol(symbol) ?? symbol.trim().toUpperCase();
   const tags = new Set(options.existingTags ?? []);
   tags.add(`multi-chart-${lifecycle.replace("_", "-")}`);
+  const notes = buildMultiChartDecisionNote(lifecycle, options);
   return {
     symbol: normalized,
     lifecycle,
     source: options.source ?? "chart",
     watchlist_id: options.watchlistId ?? null,
     tags: [...tags],
+    ...(notes == null ? {} : { notes }),
     ignored: lifecycle === "invalidated",
     review_later: lifecycle === "review_later",
   };
@@ -117,6 +123,55 @@ export type MultiChartTrustContext = {
   contractLabel: string;
   contractTone: "good" | "warn" | "muted";
 };
+
+const BOARD_REVIEW_NOTE_PREFIX = "[Multi-chart review]";
+
+function decisionLabel(lifecycle: MultiChartReviewDecision): string {
+  if (lifecycle === "ready") return "Ready";
+  if (lifecycle === "review_later") return "Later";
+  return "Invalidated";
+}
+
+function mergeBoardReviewNote(existingNotes: string | null | undefined, nextNote: string): string {
+  const kept = (existingNotes ?? "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith(BOARD_REVIEW_NOTE_PREFIX));
+  return [...kept, nextNote].join("\n");
+}
+
+export function buildMultiChartDecisionNote(
+  lifecycle: MultiChartReviewDecision,
+  options: {
+    existingNotes?: string | null;
+    analysis?: MultiChartAnalysisSummary | null;
+    trust?: MultiChartTrustContext | null;
+    rangeLabel?: string | null;
+  } = {},
+): string {
+  const parts = [
+    `${BOARD_REVIEW_NOTE_PREFIX} ${decisionLabel(lifecycle)}`,
+    options.rangeLabel ? `${options.rangeLabel} board` : "review board",
+  ];
+
+  if (options.analysis) {
+    parts.push(options.analysis.reviewScore.label);
+    parts.push(options.analysis.playbookDetail);
+    const blockers = options.analysis.reviewScore.blockers.slice(0, 3);
+    if (blockers.length) parts.push(`Needs ${blockers.join(", ")}`);
+  }
+
+  if (options.trust) {
+    parts.push(options.trust.contractLabel);
+    parts.push(`Source ${formatMarketDataSourceLabel(options.trust.sourceLabel)}${options.trust.asOf ? ` as of ${options.trust.asOf}` : ""}`);
+  }
+
+  return mergeBoardReviewNote(options.existingNotes, `${parts.join(" · ")}.`);
+}
+
+function formatMarketDataSourceLabel(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
 
 function formatPct(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;

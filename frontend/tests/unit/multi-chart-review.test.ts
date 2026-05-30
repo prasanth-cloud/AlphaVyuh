@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMultiChartAnalysisSummary,
+  buildMultiChartDecisionNote,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
   buildMultiChartTrustContext,
@@ -88,10 +89,32 @@ describe("multi-chart review helpers", () => {
     expect(tradingViewNseSymbols(["RELIANCE", "NSE:INFY"])).toBe("NSE:RELIANCE,NSE:INFY");
   });
 
-  it("builds board decision patches without losing existing tags", () => {
+  it("builds board decision patches without losing existing tags or review rationale", () => {
+    const analysis = buildMultiChartAnalysisSummary(candleResponse(), {
+      source: "scanner",
+      rs_score: 86,
+      week_52_high_pct: 5,
+      volume_ratio: 1.8,
+    });
+    const trust = buildMultiChartTrustContext(candleResponse({
+      source_metadata: {
+        source_name: "NSE bhavcopy",
+        mode: "eod",
+        as_of: "2026-05-07",
+      },
+    }), {
+      label: "5Y",
+      timeframe: "D",
+      expectedMonths: 60,
+    });
+
     expect(buildMultiChartDecisionPatch("nse:reliance", "ready", {
       source: "scanner",
       existingTags: ["scan-vcp"],
+      existingNotes: "Manual note stays.",
+      analysis,
+      trust,
+      rangeLabel: "5Y",
     })).toMatchObject({
       symbol: "RELIANCE",
       lifecycle: "ready",
@@ -100,6 +123,7 @@ describe("multi-chart review helpers", () => {
       ignored: false,
       review_later: false,
       tags: ["scan-vcp", "multi-chart-ready"],
+      notes: expect.stringContaining("Manual note stays.\n[Multi-chart review] Ready · 5Y board · 6/6 checks · Weekly/monthly aligned"),
     });
 
     expect(buildMultiChartDecisionPatch("INFY", "invalidated", {
@@ -114,6 +138,37 @@ describe("multi-chart review helpers", () => {
       review_later: false,
       tags: ["multi-chart-invalidated"],
     });
+  });
+
+  it("replaces prior board-generated notes while preserving user notes", () => {
+    const note = buildMultiChartDecisionNote("review_later", {
+      existingNotes: "My thesis remains.\n[Multi-chart review] Ready · 5Y board · stale.",
+      analysis: buildMultiChartAnalysisSummary(candleResponse({
+        latest: {
+          close: 100,
+          pct_change: -0.4,
+          volume: 1000,
+          volume_ratio: 0.7,
+          rsi_14: 38,
+          ema_20: 105,
+          ema_50: 110,
+          ema_200: 120,
+          atr_14: 4,
+          week_52_high: 130,
+          week_52_low: 85,
+          open: 99,
+          high: 102,
+          low: 98,
+          prev_close: 101,
+        },
+      }), null),
+      rangeLabel: "3Y",
+    });
+
+    expect(note).toContain("My thesis remains.");
+    expect(note).toContain("[Multi-chart review] Later · 3Y board");
+    expect(note).toContain("Needs");
+    expect(note).not.toContain("stale");
   });
 
   it("summarizes launch-grade multi-chart analysis context", () => {

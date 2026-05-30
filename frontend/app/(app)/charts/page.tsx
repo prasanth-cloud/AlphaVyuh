@@ -141,7 +141,14 @@ export default function ChartsIndexPage() {
   });
   const decisionSource = source === "scanner" || source === "watchlist" ? source : "chart";
 
-  async function saveBoardDecision(symbol: string, lifecycle: MultiChartReviewDecision) {
+  async function saveBoardDecision(
+    symbol: string,
+    lifecycle: MultiChartReviewDecision,
+    context: {
+      analysis?: ReturnType<typeof buildMultiChartAnalysisSummary>;
+      trust?: ReturnType<typeof buildMultiChartTrustContext>;
+    } = {},
+  ) {
     const key = `${symbol}:${lifecycle}`;
     setDecisionSaving(key);
     setDecisionMessage("");
@@ -151,6 +158,10 @@ export default function ChartsIndexPage() {
         source: existing?.source ?? decisionSource,
         watchlistId: existing?.watchlist_id ?? watchlistId,
         existingTags: existing?.tags,
+        existingNotes: existing?.notes,
+        analysis: context.analysis,
+        trust: context.trust,
+        rangeLabel,
       }));
       setWorkflowBySymbol((current) => ({ ...current, [saved.symbol]: saved }));
       setDecisionMessage(`${symbol} marked ${lifecycle === "ready" ? "Ready" : lifecycle === "review_later" ? "Later" : "Invalidated"}.`);
@@ -335,7 +346,7 @@ export default function ChartsIndexPage() {
                     type="button"
                     className={`workspace-chip-button${lifecycle === nextLifecycle ? " active" : ""}`}
                     disabled={decisionSaving === `${card.symbol}:${nextLifecycle}`}
-                    onClick={() => void saveBoardDecision(card.symbol, nextLifecycle)}
+                    onClick={() => void saveBoardDecision(card.symbol, nextLifecycle, { analysis, trust })}
                   >
                     {decisionSaving === `${card.symbol}:${nextLifecycle}` ? "Saving..." : label}
                   </button>
