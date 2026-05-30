@@ -67,6 +67,7 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -373,6 +374,7 @@ function DecisionDesk({
       ? (Math.abs(draft.target - draft.entry) / Math.abs(draft.entry - draft.stop)).toFixed(2)
       : null;
   const riskRewardValue = riskReward ? Number(riskReward) : null;
+  const scannerContext = scannerReviewContextSummary(draft.scanner_context);
   const planNudges = [
     ...requiredFields
       .filter((field) => !field.complete)
@@ -471,23 +473,20 @@ function DecisionDesk({
         >
           <div className="label" style={{ marginBottom: 5 }}>Original scan</div>
           <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-            {draft.scanner_context.preset_name && (
-              <span className="workspace-pill">{draft.scanner_context.preset_name}</span>
-            )}
-            {(draft.scanner_context.setup_grade || draft.scanner_context.setup_score != null) && (
-              <span className="workspace-pill">
-                {[draft.scanner_context.setup_grade, draft.scanner_context.setup_score].filter((value) => value != null && value !== "").join(" ")}
-              </span>
-            )}
-            {draft.scanner_context.data_as_of && (
-              <span className="workspace-pill">As of {draft.scanner_context.data_as_of}</span>
-            )}
+            {scannerContext.pills.map((pill) => (
+              <span key={pill} className="workspace-pill">{pill}</span>
+            ))}
           </div>
-          {draft.scanner_context.match_reasons?.[0] && (
+          {scannerContext.primaryReason && (
             <div className="caption" style={{ marginTop: 6, lineHeight: 1.55 }}>
-              {draft.scanner_context.match_reasons[0]}
+              {scannerContext.primaryReason}
             </div>
           )}
+          {scannerContext.warnings.map((warning) => (
+            <div key={warning} className="caption" style={{ marginTop: 4, color: "var(--warn)", lineHeight: 1.5 }}>
+              {warning}
+            </div>
+          ))}
         </div>
       )}
       <div className="decision-desk-primary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
@@ -818,6 +817,11 @@ function ChartPanel({
               {chartSource?.source ?? (isMockMode ? "Demo data" : "Market data")}
             </span>
             <span className="caption">{chartRequest.label} · {formatChartGranularity(chartRequest.timeframe)} · {chartSource?.range ?? formatCandleRange(candles)}</span>
+            {chartSource && (
+              <span className="workspace-pill" title="Chart review coverage for the selected range">
+                Coverage: {chartSource.range}
+              </span>
+            )}
           </div>
           {chartSource && (
             <div className="caption" style={{ marginTop: 3 }}>

@@ -316,6 +316,8 @@ test.describe("Mock workflow smoke", () => {
     await page.getByRole("button", { name: /^Open chart$/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/charts/${symbol}`), { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
+    await expect(page.getByTestId("chart-scanner-context")).toContainText(/Original scan|Trend Template/i, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Source:|Coverage:/i, { timeout: 15_000 });
     await page.goto(watchlistUrl);
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
 

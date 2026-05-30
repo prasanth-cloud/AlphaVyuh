@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
+  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist, WorkflowState,
 } from "@/lib/api";
 import {
   getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
@@ -15,7 +15,7 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators,
+  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators, getWorkflowStates,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -35,6 +35,7 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -410,6 +411,8 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
   const [sourceQueue, setSourceQueue] = useState<Watchlist | null>(null);
   const [sourceQueueError, setSourceQueueError] = useState<string | null>(null);
+  const [workflowState, setWorkflowState] = useState<WorkflowState | null>(null);
+  const [workflowStateError, setWorkflowStateError] = useState<string | null>(null);
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
@@ -814,6 +817,24 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   useEffect(() => {
     loadSourceQueue();
   }, [loadSourceQueue]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setWorkflowStateError(null);
+    getWorkflowStates({ symbols: [symbol], watchlistId: sourceWatchlistId ?? undefined })
+      .then((states) => {
+        if (cancelled) return;
+        setWorkflowState(states.find((state) => state.symbol === symbol) ?? null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setWorkflowState(null);
+        setWorkflowStateError(accountDataErrorMessage(error, "Setup review context is temporarily unavailable."));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceWatchlistId, symbol]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1888,13 +1909,20 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       tone: brokerConnected ? "var(--gain)" : "var(--warn)",
     },
   ];
+  const scannerContext = scannerReviewContextSummary(workflowState?.scanner_context);
+  const chartSourceLabel = data
+    ? formatMarketDataSource(data.source_metadata?.source_name ?? data.coverage?.source_name ?? data.source, isMockMode ? "Demo data" : "Market data")
+    : null;
+  const chartCoverageLabel = data ? formatChartCoverageRange(data.coverage, data.candles) : null;
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : sourcePage === "scanner" ? "Flow · Scanner chart" : "Flow · Direct chart",
+    scannerContext.pills[0] ? `Original scan · ${scannerContext.pills[0]}` : null,
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     indicatorError ? "Indicators unavailable" : null,
     compareError ? "Compare unavailable" : null,
     symbolReviewError ? "Review unavailable" : null,
+    workflowStateError ? "Setup context unavailable" : null,
     sourceQueueError ? "Watchlists unavailable" : null,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
@@ -1935,6 +1963,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             {sourcePage === "watchlist" && sourceWatchlist && (
               <div className="caption" style={{ marginTop: 8 }}>
                 Opened from <Num style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</Num>.
+              </div>
+            )}
+            {scannerContext.pills.length > 0 && (
+              <div data-testid="chart-scanner-context" className="workspace-pill-row" style={{ marginTop: 8, gap: 6 }}>
+                {scannerContext.pills.map((pill) => (
+                  <span key={pill} className="workspace-pill">{pill}</span>
+                ))}
               </div>
             )}
           </div>
@@ -2716,6 +2751,27 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </button>
                 {showReviewPanel && (
                   <div className="px-4 pb-4 space-y-2">
+                    {scannerContext.pills.length > 0 && (
+                      <div
+                        data-testid="chart-review-scanner-context"
+                        className="rounded-[8px] px-3 py-2 text-[10px] leading-4"
+                        style={{ background: "rgba(77,214,255,0.08)", border: "1px solid rgba(77,214,255,0.18)", color: "var(--app-text2)" }}
+                      >
+                        <div className="text-[9px] uppercase tracking-[0.4px] font-semibold" style={{ color: "var(--app-text3)", marginBottom: 4 }}>
+                          Original scan
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scannerContext.pills.map((pill) => (
+                            <span key={pill} className="rounded-full px-2 py-0.5" style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)" }}>
+                              {pill}
+                            </span>
+                          ))}
+                        </div>
+                        {scannerContext.primaryReason && (
+                          <div style={{ marginTop: 6 }}>{scannerContext.primaryReason}</div>
+                        )}
+                      </div>
+                    )}
                     {symbolReviewError && (
                       <div
                         data-testid="chart-review-context-unavailable"
@@ -3217,13 +3273,22 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {rangeLabel} · {formatChartGranularity(timeframe)} · {formatChartCoverageRange(data.coverage, data.candles)}
+                  Coverage: {rangeLabel} · {formatChartGranularity(timeframe)} · {chartCoverageLabel}
                 </div>
               )}
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  Data as of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}
+                  Source: {chartSourceLabel} · As of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}
+                </div>
+              )}
+              {scannerContext.pills[0] && (
+                <div
+                  data-testid="chart-scanner-context"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(77,214,255,0.1)", color: "#93e5ff", border: "1px solid rgba(77,214,255,0.18)" }}
+                >
+                  Original scan: {scannerContext.pills[0]}
                 </div>
               )}
               {drawnLines.length > 0 && (
