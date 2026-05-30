@@ -37,12 +37,12 @@ class _Query:
     def order(self, *_args, **_kwargs):
         return self
 
+    def limit(self, *_args, **_kwargs):
+        return self
+
     def range(self, offset, end):
         self.offset = offset
         self.end = end
-        return self
-
-    def limit(self, *_args, **_kwargs):
         return self
 
     def maybe_single(self):
@@ -54,7 +54,7 @@ class _Query:
             return _Result(count=self.count)
         if self.table_name == "ingest_runs" and self.single:
             return _Result(self.rows[0] if self.rows else None)
-        return _Result(self.rows[self.offset:self.end + 1])
+        return _Result(self.rows[self.offset:self.end + 1], count=len(self.rows))
 
 
 class _Client:
@@ -97,6 +97,35 @@ def _breadth_row(index, trade_date="2026-05-11", pct_change=1.0):
             "company_name": f"Symbol {index}",
             "series": "EQ",
             "sector": "Technology",
+            "market": "NSE",
+            "is_active": True,
+        },
+    }
+
+
+def _daily_row(symbol, sector, close, prev_close):
+    return {
+        "symbol": symbol,
+        "close": close,
+        "prev_close": prev_close,
+        "open": prev_close,
+        "high": close,
+        "low": prev_close,
+        "volume": 1000,
+        "avg_volume_20d": 1000,
+        "week_52_high": close * 1.1,
+        "week_52_low": close * 0.8,
+        "rsi_14": 55,
+        "ema_20": close - 1,
+        "ema_50": close - 2,
+        "ema_200": close - 3,
+        "atr_14": 2,
+        "pct_change": None,
+        "stock_universe": {
+            "symbol": symbol,
+            "company_name": symbol,
+            "series": "EQ",
+            "sector": sector,
             "market": "NSE",
             "is_active": True,
         },
@@ -161,3 +190,24 @@ def test_read_latest_market_breadth_snapshot_skips_implausibly_flat_snapshot():
 
     assert snapshot["trade_date"] == "2026-05-08"
     assert snapshot["advances"] == 1200
+
+
+def test_breadth_snapshot_does_not_hide_small_sector_taxonomy():
+    rows = [
+        _daily_row("AAA", "Tiny Sector", 102, 100),
+        _daily_row("BBB", "Tiny Sector", 101, 100),
+        _daily_row("CCC", "Financial Services", 99, 100),
+        _daily_row("DDD", "Financial Services", 98, 100),
+        _daily_row("EEE", "Financial Services", 103, 100),
+    ]
+
+    snapshot = build_market_breadth_snapshot(_Client(rows), "2026-05-11")
+
+    sector_names = {item["sector"] for item in snapshot["sector_breadth"]}
+    assert "Tiny Sector" in sector_names
+    taxonomy = snapshot["sector_taxonomy"]
+    assert taxonomy["display_filter"]["minimum_active_symbols"] == 1
+    assert taxonomy["display_filter"]["hidden_sector_count"] == 0
+    tiny = next(item for item in taxonomy["sector_counts"] if item["sector"] == "Tiny Sector")
+    assert tiny["active_count"] == 2
+    assert tiny["hidden_by_filter"] is False

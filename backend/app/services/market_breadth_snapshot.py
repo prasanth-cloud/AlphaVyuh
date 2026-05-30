@@ -228,8 +228,6 @@ def build_market_breadth_snapshot(
 
     sector_breadth: list[dict] = []
     for sector, data in sector_map.items():
-        if data["total"] < 3:
-            continue
         advance_breadth = round(data["advances"] / data["total"] * 100, 1)
         above_sector_ema20_pct = (
             round(data["above_ema20"] / data["ema20_valid"] * 100, 1)
@@ -251,7 +249,7 @@ def build_market_breadth_snapshot(
         [{"symbol": row["symbol"], "sector": row.get("sector")} for row in enriched],
         active_count=len(enriched),
         active_count_scope="latest_complete_breadth_rows",
-        hidden_min_active_symbols=3,
+        hidden_min_active_symbols=1,
     )
 
     with_pct = [row for row in enriched if row["pct_change"] is not None]
