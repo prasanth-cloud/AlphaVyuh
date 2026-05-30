@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brokerOrderGatePresentation } from "@/lib/broker-safety";
+import { brokerOrderGatePresentation, brokerReadOnlyChecklist } from "@/lib/broker-safety";
 
 describe("broker order gate presentation", () => {
   it("fails closed when broker status is unavailable", () => {
@@ -49,5 +49,35 @@ describe("broker order gate presentation", () => {
       value: "OWNER ENABLED",
       status: "warn",
     });
+  });
+
+  it("builds a sanitized read-only smoke checklist", () => {
+    const checklist = brokerReadOnlyChecklist({
+      connected: true,
+      read_only_smoke_checks: {
+        profile: { ok: true, user_id_present: true },
+        holdings: { ok: true, count: 3 },
+        orderbook: { ok: false, count: 0, error: "TokenException" },
+      },
+    });
+
+    expect(checklist.find((item) => item.id === "profile")).toMatchObject({
+      value: "Passed",
+      tone: "good",
+    });
+    expect(checklist.find((item) => item.id === "holdings")).toMatchObject({
+      value: "Passed · 3 rows",
+      tone: "good",
+    });
+    expect(checklist.find((item) => item.id === "orderbook")).toMatchObject({
+      value: "Needs attention · 0 rows",
+      tone: "warn",
+    });
+    expect(checklist.find((item) => item.id === "tradebook")).toMatchObject({
+      value: "Pending",
+      tone: "pending",
+    });
+    expect(JSON.stringify(checklist)).not.toContain("access-token");
+    expect(JSON.stringify(checklist)).not.toContain("stored-token");
   });
 });

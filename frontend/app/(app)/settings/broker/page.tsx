@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { brokerReadOnlyChecklist } from "@/lib/broker-safety";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -199,6 +200,10 @@ function BrokerSettingsContent() {
       : readOnlySmokeRequired && !readOnlySmokePassed
         ? "Read-only broker smoke must pass before any future sandbox or live order route can be enabled."
         : "Read-only broker smoke has passed; order submission still stays disabled until owner approval.";
+  const smokeChecklist = useMemo(() => brokerReadOnlyChecklist(state), [state]);
+  const smokeCheckedAt = state?.read_only_smoke_checked_at
+    ? new Date(state.read_only_smoke_checked_at).toLocaleString()
+    : null;
 
   const healthCards = [
     { label: "Broker app", value: statusError ? "Unknown" : state?.has_api_key ? "Configured" : "Unavailable", icon: ServerCog },
@@ -344,6 +349,36 @@ function BrokerSettingsContent() {
               </div>
               <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
                 {smokeGateCopy} Live and sandbox orders are {liveOrderEnabled ? "still confirmation-gated" : "disabled"}.
+              </div>
+            </div>
+
+            <div
+              data-testid="broker-read-only-checklist"
+              style={{ marginBottom: 14, padding: "12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>Read-only readiness checklist</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                    {smokeCheckedAt ? `Last checked ${smokeCheckedAt}` : "Run smoke to verify profile, holdings, positions, orderbook, and trade import reads."}
+                  </div>
+                </div>
+                <span className="workspace-pill" style={{ color: readOnlySmokePassed ? "var(--gain)" : "var(--warn)" }}>
+                  {readOnlySmokePassed ? "Read-only verified" : "Pending verification"}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                {smokeChecklist.map((item) => (
+                  <div key={item.id} style={{ padding: "9px 10px", borderRadius: "var(--radius-sm)", background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                      <div className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>{item.label}</div>
+                      <span className="text-[11px] font-semibold" style={{ color: item.tone === "good" ? "var(--gain)" : item.tone === "warn" ? "var(--warn)" : "var(--text-tertiary)" }}>
+                        {item.value}
+                      </span>
+                    </div>
+                    <div className="text-[11px]" style={{ color: "var(--text-secondary)", lineHeight: 1.45 }}>{item.detail}</div>
+                  </div>
+                ))}
               </div>
             </div>
 

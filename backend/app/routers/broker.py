@@ -330,6 +330,20 @@ def _smoke_metadata_passed(metadata: dict | None, broker: str) -> bool:
     return smoke.get("broker") == broker and smoke.get("passed") is True
 
 
+def _smoke_metadata_status(metadata: dict | None, broker: str) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {"passed": False, "checked_at": None, "checks": {}}
+    smoke = metadata.get("read_only_smoke")
+    if not isinstance(smoke, dict) or smoke.get("broker") != broker:
+        return {"passed": False, "checked_at": None, "checks": {}}
+    checks = smoke.get("checks") if isinstance(smoke.get("checks"), dict) else {}
+    return {
+        "passed": smoke.get("passed") is True,
+        "checked_at": smoke.get("checked_at") if isinstance(smoke.get("checked_at"), str) else None,
+        "checks": checks,
+    }
+
+
 def _broker_read_only_smoke_passed(sb, user_id: str, broker: str) -> bool:
     try:
         row = (
@@ -456,6 +470,8 @@ def _status_payload(
     plan_allows_broker: bool = False,
     broker_user_name: str | None = None,
     read_only_smoke_passed: bool = False,
+    read_only_smoke_checked_at: str | None = None,
+    read_only_smoke_checks: dict[str, Any] | None = None,
 ) -> dict:
     connected = bool(plan_allows_broker and broker and key and token and not token_expired)
     if connected:
@@ -494,6 +510,8 @@ def _status_payload(
         "last_synced_at": last_synced_at,
         "read_only_smoke_required": True,
         "read_only_smoke_passed": read_only_smoke_passed,
+        "read_only_smoke_checked_at": read_only_smoke_checked_at,
+        "read_only_smoke_checks": read_only_smoke_checks or {},
         "live_order_requires_confirmation": True,
         "live_order_enabled": bool(
             settings.broker_live_orders_enabled and plan_allows_broker and read_only_smoke_passed
@@ -908,7 +926,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
     expires_at = _get_stored_credential(user_id, bt, "expires_at") or u.data.get("broker_token_expires_at")
     broker_user_name = None
     metadata_last_synced_at = None
-    read_only_smoke_passed = False
+    read_only_smoke = {"passed": False, "checked_at": None, "checks": {}}
     try:
         connection = (
             sb.table("broker_connections")
@@ -924,7 +942,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
             metadata_last_synced_at = connection["last_synced_at"]
         if connection.get("token_expires_at") and not expires_at:
             expires_at = connection["token_expires_at"]
-        read_only_smoke_passed = _smoke_metadata_passed(connection.get("metadata"), bt)
+        read_only_smoke = _smoke_metadata_status(connection.get("metadata"), bt)
     except Exception:
         logger.debug("Broker connection metadata unavailable for status.", exc_info=True)
 
@@ -951,7 +969,9 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
         plan=plan,
         plan_allows_broker=plan_allows_broker,
         broker_user_name=broker_user_name,
-        read_only_smoke_passed=read_only_smoke_passed,
+        read_only_smoke_passed=bool(read_only_smoke["passed"]),
+        read_only_smoke_checked_at=read_only_smoke["checked_at"],
+        read_only_smoke_checks=read_only_smoke["checks"],
     )
 
 

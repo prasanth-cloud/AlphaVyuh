@@ -2644,6 +2644,14 @@ export async function getBrokerStatus(): Promise<{
   last_synced_at?: string | null;
   read_only_smoke_required?: boolean;
   read_only_smoke_passed?: boolean;
+  read_only_smoke_checked_at?: string | null;
+  read_only_smoke_checks?: Record<string, {
+    ok?: boolean;
+    count?: number;
+    error?: string;
+    note?: string;
+    user_id_present?: boolean;
+  }>;
   live_order_requires_confirmation?: boolean;
   live_order_enabled?: boolean;
 }> {
@@ -2669,6 +2677,8 @@ export async function getBrokerStatus(): Promise<{
         last_synced_at: sync.last_synced_at,
         read_only_smoke_required: true,
         read_only_smoke_passed: false,
+        read_only_smoke_checked_at: null,
+        read_only_smoke_checks: {},
         live_order_requires_confirmation: true,
         live_order_enabled: false,
       };

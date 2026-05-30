@@ -26,6 +26,15 @@ const baseBrokerStatus = {
   last_synced_at: null,
   read_only_smoke_required: true,
   read_only_smoke_passed: false,
+  read_only_smoke_checked_at: null,
+  read_only_smoke_checks: {
+    login_url: { ok: true },
+    profile: { ok: false },
+    holdings: { ok: false, count: 0 },
+    positions: { ok: false, count: 0 },
+    orderbook: { ok: false, count: 0 },
+    tradebook: { ok: false, count: 0 },
+  },
   live_order_requires_confirmation: true,
   live_order_enabled: false,
 };
@@ -90,6 +99,11 @@ test.describe("Broker settings — not connected", () => {
     await expect(gate).toContainText("Read-only smoke gate: Smoke required");
     await expect(gate).toContainText("before any future sandbox or live order route can be enabled");
     await expect(gate).toContainText("Live and sandbox orders are disabled");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Read-only readiness checklist");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("OAuth start");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Passed");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Orderbook");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Needs attention");
   });
 
   test("Connect button calls start endpoint and redirects", async ({ page }) => {
@@ -161,6 +175,15 @@ test.describe("Broker settings — connected", () => {
       can_import: true,
       last_synced_at: "2026-05-30T09:05:00Z",
       read_only_smoke_passed: true,
+      read_only_smoke_checked_at: "2026-05-30T09:10:00Z",
+      read_only_smoke_checks: {
+        login_url: { ok: true },
+        profile: { ok: true, user_id_present: true },
+        holdings: { ok: true, count: 2 },
+        positions: { ok: true, count: 1 },
+        orderbook: { ok: true, count: 4 },
+        tradebook: { ok: true, count: 3 },
+      },
     });
   });
 
@@ -182,6 +205,12 @@ test.describe("Broker settings — connected", () => {
     await expect(gate).toContainText("Read-only smoke gate: Smoke passed");
     await expect(gate).toContainText("order submission still stays disabled until owner approval");
     await expect(gate).toContainText("Live and sandbox orders are disabled");
+    const checklist = page.getByTestId("broker-read-only-checklist");
+    await expect(checklist).toContainText("Read-only verified");
+    await expect(checklist).toContainText("Holdings");
+    await expect(checklist).toContainText("Passed · 2 rows");
+    await expect(checklist).toContainText("Tradebook");
+    await expect(checklist).toContainText("Passed · 3 rows");
   });
 });
 

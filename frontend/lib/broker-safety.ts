@@ -7,6 +7,19 @@ export type BrokerSafetyStatus = {
   live_order_enabled?: boolean;
 };
 
+export type BrokerReadOnlySmokeCheck = {
+  ok?: boolean;
+  count?: number;
+  error?: string;
+  note?: string;
+  user_id_present?: boolean;
+};
+
+export type BrokerReadOnlySmokeState = BrokerSafetyStatus & {
+  read_only_smoke_checked_at?: string | null;
+  read_only_smoke_checks?: Record<string, BrokerReadOnlySmokeCheck> | null;
+};
+
 export type BrokerOrderGatePresentation = {
   value: string;
   detail: string;
@@ -69,4 +82,34 @@ export function brokerOrderGatePresentation(
     detail: "Broker import can be read-only; buy/sell remains order intent and journal capture until owner-approved execution work lands.",
     status: broker?.connected ? "good" : "warn",
   };
+}
+
+const READ_ONLY_CHECKS: Array<{ id: string; label: string; detail: string }> = [
+  { id: "login_url", label: "OAuth start", detail: "Broker app can generate a login URL." },
+  { id: "profile", label: "Profile", detail: "Account identity can be read without exposing tokens." },
+  { id: "holdings", label: "Holdings", detail: "Long-term positions can be imported read-only." },
+  { id: "positions", label: "Positions", detail: "Open position state can be read safely." },
+  { id: "orderbook", label: "Orderbook", detail: "Filled/pending orders can be inspected read-only." },
+  { id: "tradebook", label: "Tradebook", detail: "Filled order trades can be imported into Journal." },
+];
+
+export function brokerReadOnlyChecklist(broker: BrokerReadOnlySmokeState | null | undefined) {
+  const checks = broker?.read_only_smoke_checks ?? {};
+  return READ_ONLY_CHECKS.map((item) => {
+    const check = checks[item.id];
+    const ok = check?.ok === true;
+    const value = !check ? "Pending" : ok ? "Passed" : "Needs attention";
+    const suffix = check?.count != null ? ` · ${check.count.toLocaleString("en-IN")} rows` : "";
+    const detail = check?.error
+      ? `${item.detail} Last error: ${check.error}.`
+      : check?.note
+        ? `${item.detail} ${check.note}`
+        : item.detail;
+    return {
+      ...item,
+      value: `${value}${suffix}`,
+      tone: !check ? "pending" as const : ok ? "good" as const : "warn" as const,
+      detail,
+    };
+  });
 }

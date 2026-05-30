@@ -431,6 +431,36 @@ def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
     assert "token" not in str(metadata).lower()
 
 
+def test_broker_status_returns_sanitized_read_only_smoke_checks(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_connection_metadata["zerodha"] = {
+        "read_only_smoke": {
+            "broker": "zerodha",
+            "passed": True,
+            "checked_at": "2026-05-30T09:30:00+00:00",
+            "checks": {
+                "profile": {"ok": True, "user_id_present": True},
+                "holdings": {"ok": True, "count": 2},
+                "orderbook": {"ok": True, "count": 5},
+            },
+        }
+    }
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "_broker_env_value", lambda *_args: "kite-key")
+    monkeypatch.setattr(broker_router, "_get_stored_credential", lambda _user_id, _broker, key: (
+        (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat() if key == "expires_at" else "stored-token"
+    ))
+
+    result = asyncio.run(broker_router.broker_status(user_id="user-1"))
+
+    assert result["read_only_smoke_passed"] is True
+    assert result["read_only_smoke_checked_at"] == "2026-05-30T09:30:00+00:00"
+    assert result["read_only_smoke_checks"]["profile"]["user_id_present"] is True
+    assert result["read_only_smoke_checks"]["holdings"]["count"] == 2
+    assert "stored-token" not in str(result)
+
+
 def test_broker_json_callback_rejects_invalid_oauth_state_before_exchange(monkeypatch):
     class _Adapter:
         async def exchange_code(self, _code):
