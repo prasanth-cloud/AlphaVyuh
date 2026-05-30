@@ -15,7 +15,7 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators, getWorkflowStates,
+  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators, getWorkflowStates, upsertWorkflowState,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -414,6 +414,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [sourceQueueError, setSourceQueueError] = useState<string | null>(null);
   const [workflowState, setWorkflowState] = useState<WorkflowState | null>(null);
   const [workflowStateError, setWorkflowStateError] = useState<string | null>(null);
+  const [reviewNoteDraft, setReviewNoteDraft] = useState("");
+  const [reviewNoteDirty, setReviewNoteDirty] = useState(false);
+  const [reviewNoteSaving, setReviewNoteSaving] = useState(false);
+  const [reviewNoteMessage, setReviewNoteMessage] = useState("");
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
@@ -836,6 +840,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       cancelled = true;
     };
   }, [sourceWatchlistId, symbol]);
+
+  useEffect(() => {
+    setReviewNoteDraft("");
+    setReviewNoteDirty(false);
+    setReviewNoteMessage("");
+  }, [symbol]);
+
+  useEffect(() => {
+    if (reviewNoteDirty) return;
+    setReviewNoteDraft(workflowState?.notes ?? "");
+  }, [reviewNoteDirty, workflowState?.notes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1954,6 +1969,33 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     }
   }
 
+  async function saveReviewNote() {
+    const note = reviewNoteDraft.trim();
+    setReviewNoteSaving(true);
+    setReviewNoteMessage("Saving review note...");
+    try {
+      const saved = await upsertWorkflowState({
+        symbol,
+        lifecycle: workflowState?.lifecycle ?? "watch",
+        source: workflowState?.source ?? sourcePage ?? "chart",
+        watchlist_id: workflowState?.watchlist_id ?? sourceWatchlistId ?? null,
+        notes: note || null,
+        scanner_context: workflowState?.scanner_context ?? null,
+        setup_quality: workflowState?.setup_quality ?? null,
+        tags: workflowState?.tags ?? [],
+      });
+      setWorkflowState(saved);
+      setReviewNoteDirty(false);
+      setReviewNoteMessage(note ? "Review note saved." : "Review note cleared.");
+      trackEvent("chart_review_note_saved", { symbol, source: saved.source ?? "chart", has_note: Boolean(note) });
+    } catch {
+      setReviewNoteMessage("Review note could not be saved. Try again before leaving the chart.");
+    } finally {
+      setReviewNoteSaving(false);
+      window.setTimeout(() => setReviewNoteMessage(""), 3500);
+    }
+  }
+
   return (
     <div
       className="workspace-page"
@@ -2839,6 +2881,42 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                         <strong>Review context unavailable for {symbol}.</strong> {symbolReviewError} Closed trades are not being treated as empty while review context is unavailable.
                       </div>
                     )}
+                    <div
+                      data-testid="chart-review-note"
+                      className="rounded-[10px] px-3 py-3 space-y-2"
+                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[9px] uppercase tracking-[0.4px] font-semibold" style={{ color: "var(--app-text3)" }}>Review note</div>
+                          <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text3)" }}>Saved with this setup before any order intent.</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void saveReviewNote()}
+                          disabled={reviewNoteSaving || (!reviewNoteDirty && reviewNoteDraft.trim() === (workflowState?.notes ?? "").trim())}
+                          className="rounded-[8px] px-3 py-1.5 text-[10px] font-bold disabled:opacity-50"
+                          style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                        >
+                          {reviewNoteSaving ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                      <textarea
+                        value={reviewNoteDraft}
+                        onChange={(event) => {
+                          setReviewNoteDraft(event.target.value);
+                          setReviewNoteDirty(true);
+                        }}
+                        placeholder="Write the chart read: trigger, invalidation, volume clue, or why this setup should be skipped."
+                        className="w-full min-h-[72px] rounded-[8px] px-2.5 py-2 text-[11px] leading-5 outline-none resize-none"
+                        style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                      />
+                      {reviewNoteMessage && (
+                        <div className="text-[10px]" style={{ color: reviewNoteMessage.includes("could not") ? "#f87171" : "#4ade80" }}>
+                          {reviewNoteMessage}
+                        </div>
+                      )}
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { label: "Closed", value: symbolReviewError ? "—" : String(symbolReview.closed) },

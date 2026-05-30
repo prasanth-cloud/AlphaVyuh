@@ -318,6 +318,17 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
     await expect(page.getByTestId("chart-scanner-context")).toContainText(/Original scan|Trend Template/i, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Source:|Coverage:/i, { timeout: 15_000 });
+    await page.getByRole("button", { name: /Review context/i }).click();
+    await page.getByPlaceholder(/Write the chart read/i).fill("Chart review: wait for weekly confirmation before moving to Ready.");
+    await page.getByTestId("chart-review-note").getByRole("button", { name: /^Save$/ }).click();
+    await expect(page.getByTestId("chart-review-note")).toContainText("Review note saved.", { timeout: 10_000 });
+
+    const chartReviewState = await page.evaluate((activeSymbol) => {
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return workflow[activeSymbol];
+    }, symbol);
+    expect(chartReviewState.notes).toContain("weekly confirmation");
+
     await page.goto(watchlistUrl);
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
 
