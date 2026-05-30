@@ -19,6 +19,7 @@ import {
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import {
+  buildMultiChartAnalysisSummary,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
   type MultiChartReviewDecision,
@@ -43,6 +44,12 @@ function sourceLabel(source: string | null, watchlist: string | null) {
   if (source === "watchlist") return watchlist ? `Watchlist · ${watchlist}` : "Watchlist review";
   if (source === "scanner") return "Scanner review";
   return "Manual review";
+}
+
+function analysisToneColor(tone: "good" | "warn" | "muted") {
+  if (tone === "good") return "var(--gain)";
+  if (tone === "warn") return "var(--warn)";
+  return "var(--text-secondary)";
 }
 
 export default function ChartsIndexPage() {
@@ -217,6 +224,7 @@ export default function ChartsIndexPage() {
           const sourceText = card.data?.source_metadata?.source_name ?? card.data?.source;
           const workflow = workflowBySymbol[card.symbol];
           const lifecycle = workflow?.lifecycle;
+          const analysis = buildMultiChartAnalysisSummary(card.data, workflow?.scanner_context);
           return (
             <div
               key={card.symbol}
@@ -261,6 +269,40 @@ export default function ChartsIndexPage() {
                 {card.data?.coverage?.as_of && <span className="workspace-pill">As of {card.data.coverage.as_of}</span>}
                 {lifecycle && <span className="workspace-pill">Decision: {lifecycle.replace("_", " ")}</span>}
               </div>
+
+              {analysis && (
+                <div
+                  data-testid={`multi-chart-analysis-${card.symbol}`}
+                  style={{
+                    display: "grid",
+                    gap: 8,
+                    padding: "10px 12px",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--border-subtle)",
+                    background: "var(--surface-2)",
+                  }}
+                >
+                  <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 8 }}>
+                    <div className="label">Analysis context</div>
+                    <span className="workspace-pill" style={{ color: analysisToneColor(analysis.playbookStatus === "ready" ? "good" : analysis.playbookStatus === "watch" ? "warn" : "muted") }}>
+                      {analysis.playbookDetail}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
+                    {analysis.metrics.map((item) => (
+                      <div key={item.label} style={{ minWidth: 0, padding: "7px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)", background: "var(--surface-1)" }}>
+                        <div className="caption" style={{ marginBottom: 2 }}>{item.label}</div>
+                        <Num style={{ fontSize: 12, fontWeight: 800, color: analysisToneColor(item.tone), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                          {item.value}
+                        </Num>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="caption" style={{ lineHeight: 1.55 }}>
+                    {analysis.checklist.slice(0, 3).join(" · ")}
+                  </div>
+                </div>
+              )}
 
               <div className="workspace-pill-row" style={{ marginTop: "auto", gap: 8 }}>
                 {([

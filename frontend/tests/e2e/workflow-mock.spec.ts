@@ -77,6 +77,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText("RELIANCE", { timeout: 15_000 });
     await expect(page.getByTestId("multi-chart-card-INFY")).toContainText("INFY", { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Scanner review|Source:|As of|loaded/i, { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Analysis context|W\/M|52W|MA|Volume|RSI/i, { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Weekly\/monthly|Moving averages/i);
     await page.getByRole("button", { name: "5Y" }).click();
     await expect(page.getByRole("button", { name: "5Y" })).toHaveClass(/active/);
     await page.getByTestId("multi-chart-card-RELIANCE").getByRole("button", { name: "Ready" }).click();

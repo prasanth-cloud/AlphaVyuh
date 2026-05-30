@@ -1,4 +1,5 @@
-import type { WorkflowLifecycle, WorkflowStatePatch } from "@/lib/api";
+import type { CandlesResponse, ScannerIdeaContext, WorkflowLifecycle, WorkflowStatePatch } from "@/lib/api";
+import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
 
 export const MULTI_CHART_REVIEW_LIMIT = 4;
 
@@ -77,5 +78,74 @@ export function buildMultiChartDecisionPatch(
     tags: [...tags],
     ignored: lifecycle === "invalidated",
     review_later: lifecycle === "review_later",
+  };
+}
+
+export type MultiChartAnalysisMetric = {
+  label: string;
+  value: string;
+  tone: "good" | "warn" | "muted";
+};
+
+export type MultiChartAnalysisSummary = {
+  playbookStatus: "ready" | "watch" | "missing";
+  playbookDetail: string;
+  metrics: MultiChartAnalysisMetric[];
+  checklist: string[];
+};
+
+function formatPct(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatRatio(value: number | null | undefined) {
+  if (value == null) return "Pending";
+  return `${value.toFixed(2)}x`;
+}
+
+function metric(label: string, value: string, tone: MultiChartAnalysisMetric["tone"] = "muted"): MultiChartAnalysisMetric {
+  return { label, value, tone };
+}
+
+export function buildMultiChartAnalysisSummary(
+  data: CandlesResponse | null | undefined,
+  scannerContext?: ScannerIdeaContext | null,
+): MultiChartAnalysisSummary | null {
+  if (!data || data.candles.length === 0) return null;
+
+  const latest = data.latest;
+  const higherTimeframe = buildHigherTimeframeReview(data.candles);
+  const close = latest?.close ?? data.candles.at(-1)?.close ?? null;
+  const ema20 = latest?.ema_20 ?? data.candles.at(-1)?.ema_20 ?? null;
+  const ema50 = latest?.ema_50 ?? data.candles.at(-1)?.ema_50 ?? null;
+  const ema200 = latest?.ema_200 ?? data.candles.at(-1)?.ema_200 ?? null;
+  const week52High = latest?.week_52_high ?? null;
+  const week52Distance = close != null && week52High
+    ? ((week52High - close) / close) * 100
+    : scannerContext?.week_52_high_pct ?? null;
+  const movingAverageCount = [ema20, ema50, ema200].filter((ema) => close != null && ema != null && close >= ema).length;
+  const movingAverageLabel = close == null || [ema20, ema50, ema200].every((ema) => ema == null)
+    ? "Pending"
+    : `${movingAverageCount}/3 above`;
+  const rsScore = scannerContext?.rs_score ?? null;
+
+  return {
+    playbookStatus: higherTimeframe.playbookStatus,
+    playbookDetail: higherTimeframe.playbookDetail,
+    metrics: [
+      metric("W/M", higherTimeframe.playbookDetail, higherTimeframe.playbookStatus === "ready" ? "good" : higherTimeframe.playbookStatus === "watch" ? "warn" : "muted"),
+      metric("RS", rsScore == null ? "Pending" : String(Math.round(rsScore)), rsScore == null ? "muted" : rsScore >= 70 ? "good" : "warn"),
+      metric("52W", week52Distance == null ? "Pending" : `${week52Distance.toFixed(1)}% away`, week52Distance == null ? "muted" : week52Distance <= 12 ? "good" : "warn"),
+      metric("MA", movingAverageLabel, movingAverageCount === 3 ? "good" : movingAverageCount > 0 ? "warn" : "muted"),
+      metric("Volume", formatRatio(latest?.volume_ratio ?? scannerContext?.volume_ratio), (latest?.volume_ratio ?? scannerContext?.volume_ratio ?? 0) >= 1.5 ? "good" : "muted"),
+      metric("RSI", latest?.rsi_14 == null ? "Pending" : latest.rsi_14.toFixed(1), latest?.rsi_14 == null ? "muted" : latest.rsi_14 >= 45 && latest.rsi_14 <= 75 ? "good" : "warn"),
+    ],
+    checklist: [
+      `Weekly/monthly: ${higherTimeframe.weekly.summary}; ${higherTimeframe.monthly.summary}`,
+      `Moving averages: ${movingAverageLabel}`,
+      week52Distance == null ? "52-week level: pending" : `52-week level: ${formatPct(-week52Distance)} from high`,
+      rsScore == null ? "RS score: pending scanner context" : `RS score: ${Math.round(rsScore)}`,
+      latest?.volume_ratio == null && scannerContext?.volume_ratio == null ? "Volume: pending" : `Volume: ${formatRatio(latest?.volume_ratio ?? scannerContext?.volume_ratio)}`,
+    ],
   };
 }
