@@ -182,10 +182,29 @@ function BrokerSettingsContent() {
     borderRadius: "var(--radius-lg)",
   };
 
+  const readOnlySmokeRequired = state?.read_only_smoke_required !== false;
+  const readOnlySmokePassed = state?.read_only_smoke_passed === true;
+  const liveOrderEnabled = state?.live_order_enabled === true;
+  const smokeGateStatus = statusError
+    ? "Unknown"
+    : readOnlySmokeRequired
+      ? readOnlySmokePassed
+        ? "Smoke passed"
+        : "Smoke required"
+      : "Not required";
+  const smokeGateCopy = statusError
+    ? "Broker safety state could not be confirmed. Order routes stay unavailable until status recovers."
+    : liveOrderEnabled
+      ? "Broker order routes report enabled. Keep broker confirmation on for every future order intent."
+      : readOnlySmokeRequired && !readOnlySmokePassed
+        ? "Read-only broker smoke must pass before any future sandbox or live order route can be enabled."
+        : "Read-only broker smoke has passed; order submission still stays disabled until owner approval.";
+
   const healthCards = [
     { label: "Broker app", value: statusError ? "Unknown" : state?.has_api_key ? "Configured" : "Unavailable", icon: ServerCog },
     { label: "Session", value: statusError ? "Unknown" : state?.connected ? "Read-only" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
     { label: "Expiry", value: statusError ? "Unknown" : state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
+    { label: "Order gate", value: smokeGateStatus, icon: ShieldCheck },
   ];
   const lastSyncedLabel = statusError ? "Unknown" : state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
   const activeBrokerLabel = state?.broker === "upstox" ? "Upstox" : "Zerodha";
@@ -298,7 +317,7 @@ function BrokerSettingsContent() {
               </Num>
             </div>
 
-            <div className="broker-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div className="broker-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
               {healthCards.map(({ label, value, icon: Icon }) => (
                 <div key={label} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-tertiary)", marginBottom: 5 }}>
@@ -308,6 +327,24 @@ function BrokerSettingsContent() {
                   <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>{value}</div>
                 </div>
               ))}
+            </div>
+
+            <div
+              data-testid="broker-read-only-smoke-gate"
+              style={{
+                marginBottom: 14,
+                padding: "10px 12px",
+                borderRadius: "var(--radius-md)",
+                background: readOnlySmokePassed ? "rgba(18,185,129,0.08)" : "rgba(217,119,6,0.08)",
+                border: `1px solid ${readOnlySmokePassed ? "rgba(18,185,129,0.28)" : "rgba(217,119,6,0.28)"}`,
+              }}
+            >
+              <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: readOnlySmokePassed ? "var(--gain)" : "var(--warn)", marginBottom: 4 }}>
+                Read-only smoke gate: {smokeGateStatus}
+              </div>
+              <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                {smokeGateCopy} Live and sandbox orders are {liveOrderEnabled ? "still confirmation-gated" : "disabled"}.
+              </div>
             </div>
 
             <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
