@@ -589,7 +589,7 @@ function ChartPanel({
     asOf?: string | null;
     symbol?: string | null;
     range?: string | null;
-    limitedHistoryBadge?: { label: string; title: string } | null;
+    limitedHistoryBadge?: { label: string; title: string; tone: "good" | "warn" } | null;
   } | null>(null);
   const [chartRangeNote, setChartRangeNote] = useState<string | null>(null);
   const [chartTimeframeMessage, setChartTimeframeMessage] = useState("");
@@ -860,7 +860,11 @@ function ChartPanel({
               </span>
             )}
             {chartSource?.limitedHistoryBadge && (
-              <span className="workspace-pill" title={chartSource.limitedHistoryBadge.title}>
+              <span
+                className="workspace-pill"
+                title={chartSource.limitedHistoryBadge.title}
+                style={{ color: chartSource.limitedHistoryBadge.tone === "good" ? "var(--gain)" : "var(--warn)" }}
+              >
                 {chartSource.limitedHistoryBadge.label}
               </span>
             )}

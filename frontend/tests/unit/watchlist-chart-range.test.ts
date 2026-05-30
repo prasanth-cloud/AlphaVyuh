@@ -99,7 +99,26 @@ describe("watchlist chart range mapping", () => {
     expect(getFiveYearHistoryBadge(coverage, { label: "5Y" })).toEqual({
       label: "Limited 5Y history",
       title: "Partial chart history for 5Y (39% coverage).",
+      tone: "warn",
     });
-    expect(getFiveYearHistoryBadge({ ...coverage, five_year_contract: { years: 5, status: "met" } }, { label: "5Y" })).toBeNull();
+    expect(getFiveYearHistoryBadge({ ...coverage, five_year_contract: { years: 5, status: "partial" } }, { label: "1Y" })).toBeNull();
+  });
+
+  it("labels met 5Y contract coverage as verified history", () => {
+    const coverage = {
+      available_from: "2021-05-07",
+      available_to: "2026-05-07",
+      returned_candles: 1288,
+      partial: false,
+      partial_reason: null,
+      coverage_pct: 100,
+      five_year_contract: { years: 5, status: "met" },
+    };
+
+    expect(getFiveYearHistoryBadge(coverage, { label: "5Y" })).toEqual({
+      label: "5Y history verified",
+      title: "Daily 5Y chart contract met: 2021-05-07 -> 2026-05-07 · 1288 bars.",
+      tone: "good",
+    });
   });
 });

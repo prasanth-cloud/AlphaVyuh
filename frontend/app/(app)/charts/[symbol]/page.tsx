@@ -3491,7 +3491,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 <div
                   className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   title={fiveYearHistoryBadge.title}
-                  style={{ background: "rgba(217,119,6,0.12)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.24)" }}
+                  style={fiveYearHistoryBadge.tone === "good"
+                    ? { background: "rgba(38,166,91,0.12)", color: "var(--gain)", border: "1px solid rgba(38,166,91,0.24)" }
+                    : { background: "rgba(217,119,6,0.12)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.24)" }}
                 >
                   {fiveYearHistoryBadge.label}
                 </div>

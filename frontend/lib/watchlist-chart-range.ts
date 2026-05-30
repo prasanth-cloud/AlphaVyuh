@@ -143,16 +143,28 @@ export function getFiveYearHistoryBadge(
   coverage: ChartCoverageLike | null | undefined,
   request: Pick<WatchlistChartRequest, "label">,
 ) {
-  if (coverage?.five_year_contract?.status !== "partial") return null;
-  const years = coverage.five_year_contract.years ?? 5;
+  const contract = coverage?.five_year_contract;
+  if (request.label !== "5Y" || !contract || contract.status === "not_requested") return null;
+  const years = contract.years ?? 5;
   const percent = typeof coverage.coverage_pct === "number" && Number.isFinite(coverage.coverage_pct)
     ? ` · ${coverage.coverage_pct.toFixed(0)}% coverage`
     : "";
-  const label = `Limited ${years}Y history`;
-  return {
-    label,
-    title: getCoverageAvailabilityMessage(coverage, request) ?? `${label}${percent}.`,
-  };
+  if (contract.status === "met") {
+    return {
+      label: `${years}Y history verified`,
+      title: `Daily ${years}Y chart contract met: ${formatChartCoverageRange(coverage, [])}.`,
+      tone: "good" as const,
+    };
+  }
+  if (contract.status === "partial") {
+    const label = `Limited ${years}Y history`;
+    return {
+      label,
+      title: getCoverageAvailabilityMessage(coverage, request) ?? `${label}${percent}.`,
+      tone: "warn" as const,
+    };
+  }
+  return null;
 }
 
 export function getRangeAvailabilityMessage(
