@@ -13,7 +13,6 @@ import {
   type WorkflowState,
 } from "@/lib/api";
 import {
-  formatChartCoverageRange,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
 } from "@/lib/watchlist-chart-range";
@@ -22,6 +21,7 @@ import {
   buildMultiChartAnalysisSummary,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
+  buildMultiChartTrustContext,
   type MultiChartReviewDecision,
   normalizeMultiChartSymbols,
   tradingViewNseSymbols,
@@ -59,12 +59,13 @@ export default function ChartsIndexPage() {
   const watchlistId = searchParams.get("watchlistId");
   const watchlistName = searchParams.get("watchlist");
   const symbols = useMemo(() => normalizeMultiChartSymbols(searchParams.get("symbols")), [searchParams]);
-  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
+  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("5Y");
   const [cards, setCards] = useState<ChartCardState[]>([]);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [decisionSaving, setDecisionSaving] = useState<string | null>(null);
   const [decisionMessage, setDecisionMessage] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
+  const activeRequest = useMemo(() => getWatchlistChartRequest(rangeLabel), [rangeLabel]);
 
   useEffect(() => {
     if (symbols.length === 0) {
@@ -75,12 +76,11 @@ export default function ChartsIndexPage() {
   useEffect(() => {
     if (symbols.length === 0) return;
     let cancelled = false;
-    const request = getWatchlistChartRequest(rangeLabel);
     const params = {
-      limit: request.limit,
-      timeframe: request.timeframe,
-      from_date: request.from_date,
-      to_date: request.to_date,
+      limit: activeRequest.limit,
+      timeframe: activeRequest.timeframe,
+      from_date: activeRequest.from_date,
+      to_date: activeRequest.to_date,
     };
 
     setCards(symbols.map((symbol) => ({ symbol, data: null, loading: true, error: null })));
@@ -104,7 +104,7 @@ export default function ChartsIndexPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [rangeLabel, symbols]);
+  }, [activeRequest, symbols]);
 
   useEffect(() => {
     if (symbols.length === 0) return;
@@ -220,8 +220,7 @@ export default function ChartsIndexPage() {
       >
         {cards.map((card) => {
           const latest = card.data?.latest;
-          const coverage = card.data ? formatChartCoverageRange(card.data.coverage, card.data.candles) : null;
-          const sourceText = card.data?.source_metadata?.source_name ?? card.data?.source;
+          const trust = buildMultiChartTrustContext(card.data, activeRequest);
           const workflow = workflowBySymbol[card.symbol];
           const lifecycle = workflow?.lifecycle;
           const analysis = buildMultiChartAnalysisSummary(card.data, workflow?.scanner_context);
@@ -264,11 +263,22 @@ export default function ChartsIndexPage() {
               </div>
 
               <div className="workspace-pill-row" style={{ gap: 6 }}>
-                {coverage && <span className="workspace-pill">{coverage}</span>}
-                {sourceText && <span className="workspace-pill">Source: {formatMarketDataSource(sourceText)}</span>}
-                {card.data?.coverage?.as_of && <span className="workspace-pill">As of {card.data.coverage.as_of}</span>}
+                {trust && <span className="workspace-pill">{trust.coverageLabel}</span>}
+                {trust && <span className="workspace-pill">Source: {formatMarketDataSource(trust.sourceLabel)}</span>}
+                {trust && <span className="workspace-pill">{trust.granularityLabel}</span>}
+                {trust?.asOf && <span className="workspace-pill">As of {trust.asOf}</span>}
+                {trust && <span className="workspace-pill" style={{ color: analysisToneColor(trust.contractTone) }}>{trust.contractLabel}</span>}
                 {lifecycle && <span className="workspace-pill">Decision: {lifecycle.replace("_", " ")}</span>}
               </div>
+              {trust?.availabilityMessage && (
+                <div
+                  className="caption"
+                  data-testid={`multi-chart-history-warning-${card.symbol}`}
+                  style={{ color: "var(--warn)", lineHeight: 1.5 }}
+                >
+                  {trust.availabilityMessage}
+                </div>
+              )}
 
               {analysis && (
                 <div

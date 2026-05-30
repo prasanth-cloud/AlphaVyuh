@@ -1,5 +1,12 @@
 import type { CandlesResponse, ScannerIdeaContext, WorkflowLifecycle, WorkflowStatePatch } from "@/lib/api";
 import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
+import {
+  formatChartCoverageRange,
+  formatChartGranularity,
+  getCoverageAvailabilityMessage,
+  getRangeAvailabilityMessage,
+  type WatchlistChartRequest,
+} from "@/lib/watchlist-chart-range";
 
 export const MULTI_CHART_REVIEW_LIMIT = 4;
 
@@ -101,6 +108,16 @@ export type MultiChartAnalysisSummary = {
   checklist: string[];
 };
 
+export type MultiChartTrustContext = {
+  sourceLabel: string;
+  asOf: string | null;
+  coverageLabel: string;
+  granularityLabel: string;
+  availabilityMessage: string | null;
+  contractLabel: string;
+  contractTone: "good" | "warn" | "muted";
+};
+
 function formatPct(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
@@ -112,6 +129,36 @@ function formatRatio(value: number | null | undefined) {
 
 function metric(label: string, value: string, tone: MultiChartAnalysisMetric["tone"] = "muted"): MultiChartAnalysisMetric {
   return { label, value, tone };
+}
+
+export function buildMultiChartTrustContext(
+  data: CandlesResponse | null | undefined,
+  request: Pick<WatchlistChartRequest, "label" | "timeframe" | "expectedMonths">,
+): MultiChartTrustContext | null {
+  if (!data) return null;
+
+  const availabilityMessage =
+    getCoverageAvailabilityMessage(data.coverage, request) ??
+    (data.coverage ? null : getRangeAvailabilityMessage(data.candles, request));
+  const sourceLabel = data.source_metadata?.source_name ?? data.coverage?.source_name ?? data.source ?? "Market data";
+  const asOf = data.coverage?.as_of ?? data.source_metadata?.as_of ?? data.coverage?.available_to ?? data.candles.at(-1)?.time ?? null;
+  const isFiveYearDaily = request.label === "5Y" && request.timeframe === "D";
+  const contractTone = isFiveYearDaily
+    ? availabilityMessage ? "warn" : "good"
+    : "muted";
+  const contractLabel = isFiveYearDaily
+    ? availabilityMessage ? "5Y daily history limited" : "5Y daily contract ready"
+    : "5Y launch contract not selected";
+
+  return {
+    sourceLabel,
+    asOf,
+    coverageLabel: formatChartCoverageRange(data.coverage, data.candles),
+    granularityLabel: `${formatChartGranularity(request.timeframe)} candles`,
+    availabilityMessage,
+    contractLabel,
+    contractTone,
+  };
 }
 
 function buildReviewScore(checks: { pass: boolean; blocker: string | null }[]): MultiChartAnalysisSummary["reviewScore"] {

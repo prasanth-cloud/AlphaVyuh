@@ -3,6 +3,7 @@ import {
   buildMultiChartAnalysisSummary,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
+  buildMultiChartTrustContext,
   normalizeMultiChartSymbols,
   tradingViewNseSymbols,
 } from "@/lib/multi-chart-review";
@@ -142,6 +143,87 @@ describe("multi-chart review helpers", () => {
     expect(summary?.checklist.join(" ")).toContain("Weekly/monthly");
     expect(summary?.checklist.join(" ")).toContain("RS score: 86");
     expect(summary?.checklist).toContain("Review score: 6/6 checks");
+  });
+
+  it("marks five-year daily review history as launch-contract evidence", () => {
+    const summary = buildMultiChartTrustContext(candleResponse({
+      source: "nse-bhavcopy",
+      source_metadata: {
+        source_name: "NSE bhavcopy",
+        mode: "eod",
+        as_of: "2026-05-07",
+      },
+      coverage: {
+        requested_from: "2021-05-07",
+        requested_to: "2026-05-07",
+        available_from: "2021-05-07",
+        available_to: "2026-05-07",
+        returned_candles: 1234,
+        requested_limit: 1300,
+        timeframe: "D",
+        coverage_pct: 100,
+        partial: false,
+        source_name: "NSE bhavcopy",
+        as_of: "2026-05-07",
+      },
+    }), {
+      label: "5Y",
+      timeframe: "D",
+      expectedMonths: 60,
+    });
+
+    expect(summary).toMatchObject({
+      sourceLabel: "NSE bhavcopy",
+      asOf: "2026-05-07",
+      coverageLabel: "2021-05-07 -> 2026-05-07 · 1234 bars",
+      granularityLabel: "Daily candles",
+      availabilityMessage: null,
+      contractLabel: "5Y daily contract ready",
+      contractTone: "good",
+    });
+  });
+
+  it("warns when the review board has short five-year history", () => {
+    const summary = buildMultiChartTrustContext(candleResponse({
+      candles: candlesFrom("2025-01-01", 120, (index) => 100 + index * 0.2),
+      coverage: {
+        requested_from: "2021-05-07",
+        requested_to: "2026-05-07",
+        available_from: "2025-01-01",
+        available_to: "2025-06-01",
+        returned_candles: 120,
+        requested_limit: 1300,
+        timeframe: "D",
+        coverage_pct: 12,
+        partial: true,
+        partial_reason: "history_starts_after_requested_window",
+        source_name: "NSE bhavcopy",
+        as_of: "2025-06-01",
+      },
+    }), {
+      label: "5Y",
+      timeframe: "D",
+      expectedMonths: 60,
+    });
+
+    expect(summary).toMatchObject({
+      availabilityMessage: "History starts at 2025-01-01 for 5Y (12% coverage).",
+      contractLabel: "5Y daily history limited",
+      contractTone: "warn",
+    });
+  });
+
+  it("does not treat shorter review ranges as five-year launch proof", () => {
+    const summary = buildMultiChartTrustContext(candleResponse(), {
+      label: "1Y",
+      timeframe: "D",
+      expectedMonths: 12,
+    });
+
+    expect(summary).toMatchObject({
+      contractLabel: "5Y launch contract not selected",
+      contractTone: "muted",
+    });
   });
 
   it("keeps RS pending when a board is opened without scanner context", () => {
