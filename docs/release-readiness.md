@@ -27,6 +27,7 @@ Run these before release:
 
 ```bash
 npm run launch:check
+npm run test:setup-review-check
 npm run check:data-recovery
 npm run check:production-api:railway
 # After Railway recovery, run the full production recovery/browser smoke gate.
@@ -61,7 +62,8 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 
 `npm run launch:check` runs the deterministic checker tests for production API
 freshness, production smoke credentials, public posture copy, data recovery
-readiness, and Railway secret preparation before the heavier app/browser gates.
+readiness, scanner-to-chart setup review contracts, and Railway secret
+preparation before the heavier app/browser gates.
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
 
@@ -91,6 +93,16 @@ npm run check:data-recovery
 - The production API smoke must include enough current daily candles for every
   configured chart smoke symbol. By default this is `RELIANCE,ITC,AUBANK`; set
   `PRODUCTION_API_CHART_SYMBOLS` to add or replace launch-candidate symbols.
+
+Scanner to chart setup review contract:
+
+```bash
+npm run test:setup-review-check
+```
+
+This gate verifies scanner context preservation, setup-review labels, higher
+timeframe chart context, multi-chart review decisions, watchlist chart range
+controls, and the mock scanner-candidate multi-chart browser flow.
 
 Read-only broker account smoke, when real credentials are available:
 

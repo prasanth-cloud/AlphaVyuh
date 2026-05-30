@@ -700,6 +700,11 @@ export type ScannerIdeaContext = {
   setup_score?: number | null;
   setup_grade?: string | null;
   confidence_label?: string | null;
+  rs_score?: number | null;
+  price_perf_6m_pct?: number | null;
+  week_52_high_pct?: number | null;
+  volume_ratio?: number | null;
+  rsi_14?: number | null;
   scan_trade_date?: string | null;
   data_source?: string | null;
   data_mode?: string | null;

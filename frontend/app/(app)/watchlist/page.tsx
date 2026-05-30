@@ -67,6 +67,8 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
+import { buildMultiChartReviewHref } from "@/lib/multi-chart-review";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -373,6 +375,7 @@ function DecisionDesk({
       ? (Math.abs(draft.target - draft.entry) / Math.abs(draft.entry - draft.stop)).toFixed(2)
       : null;
   const riskRewardValue = riskReward ? Number(riskReward) : null;
+  const scannerContext = scannerReviewContextSummary(draft.scanner_context);
   const planNudges = [
     ...requiredFields
       .filter((field) => !field.complete)
@@ -471,23 +474,20 @@ function DecisionDesk({
         >
           <div className="label" style={{ marginBottom: 5 }}>Original scan</div>
           <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-            {draft.scanner_context.preset_name && (
-              <span className="workspace-pill">{draft.scanner_context.preset_name}</span>
-            )}
-            {(draft.scanner_context.setup_grade || draft.scanner_context.setup_score != null) && (
-              <span className="workspace-pill">
-                {[draft.scanner_context.setup_grade, draft.scanner_context.setup_score].filter((value) => value != null && value !== "").join(" ")}
-              </span>
-            )}
-            {draft.scanner_context.data_as_of && (
-              <span className="workspace-pill">As of {draft.scanner_context.data_as_of}</span>
-            )}
+            {scannerContext.pills.map((pill) => (
+              <span key={pill} className="workspace-pill">{pill}</span>
+            ))}
           </div>
-          {draft.scanner_context.match_reasons?.[0] && (
+          {scannerContext.primaryReason && (
             <div className="caption" style={{ marginTop: 6, lineHeight: 1.55 }}>
-              {draft.scanner_context.match_reasons[0]}
+              {scannerContext.primaryReason}
             </div>
           )}
+          {scannerContext.warnings.map((warning) => (
+            <div key={warning} className="caption" style={{ marginTop: 4, color: "var(--warn)", lineHeight: 1.5 }}>
+              {warning}
+            </div>
+          ))}
         </div>
       )}
       <div className="decision-desk-primary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
@@ -818,6 +818,11 @@ function ChartPanel({
               {chartSource?.source ?? (isMockMode ? "Demo data" : "Market data")}
             </span>
             <span className="caption">{chartRequest.label} · {formatChartGranularity(chartRequest.timeframe)} · {chartSource?.range ?? formatCandleRange(candles)}</span>
+            {chartSource && (
+              <span className="workspace-pill" title="Chart review coverage for the selected range">
+                Coverage: {chartSource.range}
+              </span>
+            )}
           </div>
           {chartSource && (
             <div className="caption" style={{ marginTop: 3 }}>
@@ -1543,6 +1548,10 @@ function WatchlistContent() {
   const queuePageCount = Math.max(1, Math.ceil(visibleItems.length / WATCHLIST_PAGE_SIZE));
   const pageStart = Math.min(queuePage, queuePageCount - 1) * WATCHLIST_PAGE_SIZE;
   const pageItems = visibleItems.slice(pageStart, pageStart + WATCHLIST_PAGE_SIZE);
+  const multiChartReviewHref = useMemo(() => buildMultiChartReviewHref(
+    visibleItems.map((item) => item.symbol),
+    { source: "watchlist", watchlistId: activeWl?.id, watchlistName: activeWl?.name },
+  ), [activeWl?.id, activeWl?.name, visibleItems]);
   const pageSymbolsKey = pageItems.map(item => item.symbol).join(",");
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
@@ -2142,6 +2151,15 @@ function WatchlistContent() {
                 style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
                 {adding ? "…" : "Add"}
               </button>
+              {activeWl.items.length > 1 && (
+                <button
+                  className="workspace-chip-button"
+                  onClick={() => router.push(multiChartReviewHref)}
+                  title="Open up to four queue symbols in a multi-chart review board"
+                >
+                  Review 4 charts
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
+  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist, WorkflowLifecycle, WorkflowState,
 } from "@/lib/api";
 import {
   getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
@@ -15,7 +15,7 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators,
+  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators, getWorkflowStates, upsertWorkflowState,
 } from "@/lib/api";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
@@ -35,6 +35,8 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
+import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -410,6 +412,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
   const [sourceQueue, setSourceQueue] = useState<Watchlist | null>(null);
   const [sourceQueueError, setSourceQueueError] = useState<string | null>(null);
+  const [workflowState, setWorkflowState] = useState<WorkflowState | null>(null);
+  const [workflowStateError, setWorkflowStateError] = useState<string | null>(null);
+  const [reviewNoteDraft, setReviewNoteDraft] = useState("");
+  const [reviewNoteDirty, setReviewNoteDirty] = useState(false);
+  const [reviewNoteSaving, setReviewNoteSaving] = useState(false);
+  const [reviewDecisionSaving, setReviewDecisionSaving] = useState<WorkflowLifecycle | null>(null);
+  const [reviewNoteMessage, setReviewNoteMessage] = useState("");
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
@@ -717,7 +726,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     getChartLayout(symbol).then(layout => {
       if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") {
         setTimeframe(layout.timeframe);
-        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "10Y");
+        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "Max");
       }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     }).catch(() => {
@@ -814,6 +823,35 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   useEffect(() => {
     loadSourceQueue();
   }, [loadSourceQueue]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setWorkflowStateError(null);
+    getWorkflowStates({ symbols: [symbol], watchlistId: sourceWatchlistId ?? undefined })
+      .then((states) => {
+        if (cancelled) return;
+        setWorkflowState(states.find((state) => state.symbol === symbol) ?? null);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setWorkflowState(null);
+        setWorkflowStateError(accountDataErrorMessage(error, "Setup review context is temporarily unavailable."));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceWatchlistId, symbol]);
+
+  useEffect(() => {
+    setReviewNoteDraft("");
+    setReviewNoteDirty(false);
+    setReviewNoteMessage("");
+  }, [symbol]);
+
+  useEffect(() => {
+    if (reviewNoteDirty) return;
+    setReviewNoteDraft(workflowState?.notes ?? "");
+  }, [reviewNoteDirty, workflowState?.notes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1814,6 +1852,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }
   const latestVolumeRatio = latest?.volume_ratio ?? null;
   const recentCandles = data?.candles?.slice(-40) ?? [];
+  const higherTimeframeReview = buildHigherTimeframeReview(data?.candles ?? []);
   const recentHigh = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : null;
   const recentLow = recentCandles.length ? Math.min(...recentCandles.map((c) => c.low)) : null;
   const ema20Latest = indicatorData.ema20?.at(-1)?.value ?? data?.candles?.at(-1)?.ema_20 ?? null;
@@ -1842,6 +1881,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       label: "Trend",
       status: structureReady ? "ready" : latest?.close != null && ema20Latest != null ? "watch" : "missing",
       detail: structureReady ? "Price above EMA stack" : ema20Latest != null ? "EMA stack not aligned" : "Add EMA 20/50",
+    },
+    {
+      key: "higher-timeframe",
+      label: "HTF",
+      status: higherTimeframeReview.playbookStatus,
+      detail: higherTimeframeReview.playbookDetail,
     },
     {
       key: "level",
@@ -1888,13 +1933,21 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       tone: brokerConnected ? "var(--gain)" : "var(--warn)",
     },
   ];
+  const scannerContext = scannerReviewContextSummary(workflowState?.scanner_context);
+  const chartSourceLabel = data
+    ? formatMarketDataSource(data.source_metadata?.source_name ?? data.coverage?.source_name ?? data.source, isMockMode ? "Demo data" : "Market data")
+    : null;
+  const chartCoverageLabel = data ? formatChartCoverageRange(data.coverage, data.candles) : null;
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : sourcePage === "scanner" ? "Flow · Scanner chart" : "Flow · Direct chart",
+    scannerContext.pills[0] ? `Original scan · ${scannerContext.pills[0]}` : null,
+    `HTF · ${higherTimeframeReview.alignment}`,
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     indicatorError ? "Indicators unavailable" : null,
     compareError ? "Compare unavailable" : null,
     symbolReviewError ? "Review unavailable" : null,
+    workflowStateError ? "Setup context unavailable" : null,
     sourceQueueError ? "Watchlists unavailable" : null,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
@@ -1917,6 +1970,70 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     }
   }
 
+  async function saveReviewNote() {
+    const note = reviewNoteDraft.trim();
+    setReviewNoteSaving(true);
+    setReviewNoteMessage("Saving review note...");
+    try {
+      const saved = await upsertWorkflowState({
+        symbol,
+        lifecycle: workflowState?.lifecycle ?? "watch",
+        source: workflowState?.source ?? sourcePage ?? "chart",
+        watchlist_id: workflowState?.watchlist_id ?? sourceWatchlistId ?? null,
+        notes: note || null,
+        scanner_context: workflowState?.scanner_context ?? null,
+        setup_quality: workflowState?.setup_quality ?? null,
+        tags: workflowState?.tags ?? [],
+      });
+      setWorkflowState(saved);
+      setReviewNoteDirty(false);
+      setReviewNoteMessage(note ? "Review note saved." : "Review note cleared.");
+      trackEvent("chart_review_note_saved", { symbol, source: saved.source ?? "chart", has_note: Boolean(note) });
+    } catch {
+      setReviewNoteMessage("Review note could not be saved. Try again before leaving the chart.");
+    } finally {
+      setReviewNoteSaving(false);
+      window.setTimeout(() => setReviewNoteMessage(""), 3500);
+    }
+  }
+
+  async function saveReviewDecision(nextLifecycle: Extract<WorkflowLifecycle, "ready" | "review_later" | "invalidated">) {
+    const note = reviewNoteDraft.trim();
+    setReviewDecisionSaving(nextLifecycle);
+    setReviewNoteMessage("Saving review decision...");
+    try {
+      const nextTags = new Set(workflowState?.tags ?? []);
+      nextTags.add(`chart-${nextLifecycle.replace("_", "-")}`);
+      const saved = await upsertWorkflowState({
+        symbol,
+        lifecycle: nextLifecycle,
+        source: workflowState?.source ?? sourcePage ?? "chart",
+        watchlist_id: workflowState?.watchlist_id ?? sourceWatchlistId ?? null,
+        notes: note || workflowState?.notes || null,
+        scanner_context: workflowState?.scanner_context ?? null,
+        setup_quality: workflowState?.setup_quality ?? null,
+        tags: [...nextTags],
+        ignored: nextLifecycle === "invalidated",
+        review_later: nextLifecycle === "review_later",
+      });
+      setWorkflowState(saved);
+      setReviewNoteDirty(false);
+      setReviewNoteMessage(
+        nextLifecycle === "ready"
+          ? "Marked Ready from chart review."
+          : nextLifecycle === "review_later"
+            ? "Marked for later review."
+            : "Marked invalidated from chart review."
+      );
+      trackEvent("chart_review_decision_saved", { symbol, lifecycle: nextLifecycle, source: saved.source ?? "chart" });
+    } catch {
+      setReviewNoteMessage("Review decision could not be saved. Try again before leaving the chart.");
+    } finally {
+      setReviewDecisionSaving(null);
+      window.setTimeout(() => setReviewNoteMessage(""), 3500);
+    }
+  }
+
   return (
     <div
       className="workspace-page"
@@ -1935,6 +2052,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             {sourcePage === "watchlist" && sourceWatchlist && (
               <div className="caption" style={{ marginTop: 8 }}>
                 Opened from <Num style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</Num>.
+              </div>
+            )}
+            {scannerContext.pills.length > 0 && (
+              <div data-testid="chart-scanner-context" className="workspace-pill-row" style={{ marginTop: 8, gap: 6 }}>
+                {scannerContext.pills.map((pill) => (
+                  <span key={pill} className="workspace-pill">{pill}</span>
+                ))}
               </div>
             )}
           </div>
@@ -2653,6 +2777,36 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       ))}
                     </div>
                   </details>
+                  <details
+                    data-testid="chart-higher-timeframe-review"
+                    className="rounded-[10px]"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                    open={higherTimeframeReview.alignment !== "aligned"}
+                  >
+                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Higher timeframe</summary>
+                    <div className="px-3 pb-3 space-y-2">
+                      {[higherTimeframeReview.weekly, higherTimeframeReview.monthly].map((item) => {
+                        const tone = item.status === "uptrend" || item.status === "constructive"
+                          ? "#4ade80"
+                          : item.status === "limited"
+                            ? "var(--app-text3)"
+                            : item.status === "downtrend"
+                              ? "#f87171"
+                              : "#fbbf24";
+                        return (
+                          <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-semibold" style={{ color: "var(--app-text2)" }}>{item.label}</span>
+                              <span className="text-[10px] font-bold tabular-nums" style={{ color: tone }}>{item.changePct != null ? `${item.changePct >= 0 ? "+" : ""}${item.changePct.toFixed(1)}%` : "Limited"}</span>
+                            </div>
+                            <div className="mt-1 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                              {item.summary}. {item.detail}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
                   <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Trade plan</summary>
                     <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
@@ -2716,6 +2870,46 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </button>
                 {showReviewPanel && (
                   <div className="px-4 pb-4 space-y-2">
+                    {scannerContext.pills.length > 0 && (
+                      <div
+                        data-testid="chart-review-scanner-context"
+                        className="rounded-[8px] px-3 py-2 text-[10px] leading-4"
+                        style={{ background: "rgba(77,214,255,0.08)", border: "1px solid rgba(77,214,255,0.18)", color: "var(--app-text2)" }}
+                      >
+                        <div className="text-[9px] uppercase tracking-[0.4px] font-semibold" style={{ color: "var(--app-text3)", marginBottom: 4 }}>
+                          Original scan
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scannerContext.pills.map((pill) => (
+                            <span key={pill} className="rounded-full px-2 py-0.5" style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)" }}>
+                              {pill}
+                            </span>
+                          ))}
+                        </div>
+                        {scannerContext.primaryReason && (
+                          <div style={{ marginTop: 6 }}>{scannerContext.primaryReason}</div>
+                        )}
+                        {scannerContext.metrics.length > 0 && (
+                          <div className="grid grid-cols-2 gap-1.5 mt-2">
+                            {scannerContext.metrics.map((metric) => (
+                              <div key={metric.label} className="rounded-[7px] px-2 py-1.5" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div className="text-[8px] uppercase tracking-[0.35px]" style={{ color: "var(--app-text3)" }}>{metric.label}</div>
+                                <div className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--app-text1)" }}>{metric.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {scannerContext.warnings.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {scannerContext.warnings.slice(0, 2).map((warning) => (
+                              <div key={warning} className="text-[9px] leading-4" style={{ color: "#fbbf24" }}>
+                                {warning}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {symbolReviewError && (
                       <div
                         data-testid="chart-review-context-unavailable"
@@ -2725,6 +2919,68 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                         <strong>Review context unavailable for {symbol}.</strong> {symbolReviewError} Closed trades are not being treated as empty while review context is unavailable.
                       </div>
                     )}
+                    <div
+                      data-testid="chart-review-note"
+                      className="rounded-[10px] px-3 py-3 space-y-2"
+                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[9px] uppercase tracking-[0.4px] font-semibold" style={{ color: "var(--app-text3)" }}>Review note</div>
+                          <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text3)" }}>Saved with this setup before any order intent.</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void saveReviewNote()}
+                          disabled={reviewNoteSaving || (!reviewNoteDirty && reviewNoteDraft.trim() === (workflowState?.notes ?? "").trim())}
+                          className="rounded-[8px] px-3 py-1.5 text-[10px] font-bold disabled:opacity-50"
+                          style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                        >
+                          {reviewNoteSaving ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                      <textarea
+                        value={reviewNoteDraft}
+                        onChange={(event) => {
+                          setReviewNoteDraft(event.target.value);
+                          setReviewNoteDirty(true);
+                        }}
+                        placeholder="Write the chart read: trigger, invalidation, volume clue, or why this setup should be skipped."
+                        className="w-full min-h-[72px] rounded-[8px] px-2.5 py-2 text-[11px] leading-5 outline-none resize-none"
+                        style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                      />
+                      <div data-testid="chart-review-decisions" className="grid grid-cols-3 gap-1.5">
+                        {([
+                          ["ready", "Ready"],
+                          ["review_later", "Review later"],
+                          ["invalidated", "Invalidate"],
+                        ] as const).map(([nextLifecycle, label]) => {
+                          const active = workflowState?.lifecycle === nextLifecycle;
+                          const busy = reviewDecisionSaving === nextLifecycle;
+                          return (
+                            <button
+                              key={nextLifecycle}
+                              type="button"
+                              onClick={() => void saveReviewDecision(nextLifecycle)}
+                              disabled={reviewNoteSaving || reviewDecisionSaving != null}
+                              className="rounded-[8px] px-2 py-1.5 text-[10px] font-bold disabled:opacity-50"
+                              style={{
+                                background: active ? "rgba(77,214,255,0.14)" : "var(--app-surface3)",
+                                border: active ? "1px solid rgba(77,214,255,0.32)" : "1px solid var(--app-border)",
+                                color: active ? "var(--accent)" : "var(--app-text2)",
+                              }}
+                            >
+                              {busy ? "Saving..." : label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {reviewNoteMessage && (
+                        <div className="text-[10px]" style={{ color: reviewNoteMessage.includes("could not") ? "#f87171" : "#4ade80" }}>
+                          {reviewNoteMessage}
+                        </div>
+                      )}
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { label: "Closed", value: symbolReviewError ? "—" : String(symbolReview.closed) },
@@ -3217,13 +3473,22 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  {rangeLabel} · {formatChartGranularity(timeframe)} · {formatChartCoverageRange(data.coverage, data.candles)}
+                  Coverage: {rangeLabel} · {formatChartGranularity(timeframe)} · {chartCoverageLabel}
                 </div>
               )}
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  Data as of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}
+                  Source: {chartSourceLabel} · As of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}
+                </div>
+              )}
+              {scannerContext.pills[0] && (
+                <div
+                  data-testid="chart-scanner-context"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(77,214,255,0.1)", color: "#93e5ff", border: "1px solid rgba(77,214,255,0.18)" }}
+                >
+                  Original scan: {scannerContext.pills[0]}
                 </div>
               )}
               {drawnLines.length > 0 && (
