@@ -22,6 +22,7 @@ import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataPr
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
+import { buildMultiChartReviewHref } from '@/lib/multi-chart-review'
 
 const API = API_BASE_URL
 
@@ -920,6 +921,14 @@ export default function ScannerPage() {
     showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
   }
 
+  async function openScannerChart(result: ScanResult) {
+    await bulkUpsertWorkflowStates([
+      scannerWorkflowPatch(result.symbol, 'shortlist', undefined, result, scanContextOptions()),
+    ])
+    trackEvent('scanner_chart_review_opened', { symbol: result.symbol, preset: activePreset ?? 'custom' })
+    router.push(`/charts/${result.symbol}?from=scanner&full=1`)
+  }
+
   function selectedSymbols() {
     return selectedScannerSymbols(results, selectedResults)
   }
@@ -1300,7 +1309,7 @@ export default function ScannerPage() {
               <div className="workspace-toolbar-group scanner-results-toolbar" data-testid="scanner-data-trust">
                 {scanTrust && (
                   <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
-                    {hasCachedResults ? 'Cached results' : scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
+                    {hasCachedResults ? 'Cached results · ' : ''}Source: {scanTrust.source}{scanTrust.coveragePct != null ? ` · Coverage: ${scanTrust.coveragePct}%` : ''}
                   </span>
                 )}
                 {loading && results.length > 0 && (
@@ -1352,6 +1361,9 @@ export default function ScannerPage() {
                   <>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')}>
                       Shortlist
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => router.push(buildMultiChartReviewHref(selectedSymbols(), { source: 'scanner' }))}>
+                      Review charts
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')}>
                       Review later
@@ -1453,11 +1465,11 @@ export default function ScannerPage() {
                     <Fragment key={r.symbol}>
                       <Tr
                         onClick={() => setExpandedSymbol(expanded ? null : r.symbol)}
-                        onDoubleClick={() => router.push(`/charts/${r.symbol}`)}
+                        onDoubleClick={() => void openScannerChart(r)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
-                            router.push(`/charts/${r.symbol}`)
+                            void openScannerChart(r)
                           }
                           if (e.key === ' ') {
                             e.preventDefault()
@@ -1527,7 +1539,7 @@ export default function ScannerPage() {
                             watchlists={watchlists}
                             onMark={markWorkflow}
                             onAddToWatchlist={addToWatchlist}
-                            onOpenChart={sym => router.push(`/charts/${sym}`)}
+                            onOpenChart={() => void openScannerChart(r)}
                             onReport={reportScannerDataIssue}
                           />
                         </Td>
@@ -1537,7 +1549,7 @@ export default function ScannerPage() {
                           r={r}
                           watchlists={watchlists}
                           onAddToWatchlist={addToWatchlist}
-                          onOpenChart={sym => router.push(`/charts/${sym}`)}
+                          onOpenChart={() => void openScannerChart(r)}
                         />
                       )}
                     </Fragment>

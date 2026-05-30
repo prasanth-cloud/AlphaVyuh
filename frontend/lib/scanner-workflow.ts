@@ -10,6 +10,11 @@ type ScannerResultContext = {
   setup_score?: number | null;
   setup_grade?: string | null;
   confidence_label?: string | null;
+  rs_score?: number | null;
+  price_perf_6m_pct?: number | null;
+  week_52_high_pct?: number | null;
+  volume_ratio?: number | null;
+  rsi_14?: number | null;
 };
 
 type ScannerContextOptions = {
@@ -35,6 +40,11 @@ export function scannerIdeaContext(
     setup_score: result.setup_score ?? null,
     setup_grade: result.setup_grade ?? null,
     confidence_label: result.confidence_label ?? null,
+    rs_score: result.rs_score ?? null,
+    price_perf_6m_pct: result.price_perf_6m_pct ?? null,
+    week_52_high_pct: result.week_52_high_pct ?? null,
+    volume_ratio: result.volume_ratio ?? null,
+    rsi_14: result.rsi_14 ?? null,
     scan_trade_date: options.tradeDate ?? null,
     data_source: options.dataSource ?? null,
     data_mode: options.dataMode ?? null,

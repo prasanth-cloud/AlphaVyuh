@@ -97,6 +97,9 @@ jobs:
       - name: Market-data entitlement contract tests
         run: npm run test:market-data-entitlement-check
 
+      - name: Setup review workflow contract tests
+        run: npm run test:setup-review-check
+
       - name: Railway secret prep checker tests
         run: npm run test:railway-secret-prep
 

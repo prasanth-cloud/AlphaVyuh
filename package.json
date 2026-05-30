@@ -21,6 +21,7 @@
     "test:public-posture-check": "node scripts/test-check-public-posture.mjs",
     "test:data-recovery-check": "node scripts/test-check-data-recovery-readiness.mjs",
     "test:market-data-entitlement-check": "node scripts/test-check-market-data-entitlement.mjs",
+    "test:setup-review-check": "bash scripts/test-setup-review-contract.sh",
     "test:railway-secret-prep": "node scripts/test-prepare-railway-recovery-secrets.mjs",
     "test:ci-action-runtime-check": "node scripts/test-check-ci-action-runtime.mjs",
     "check:public-posture": "node scripts/check-public-posture.mjs",

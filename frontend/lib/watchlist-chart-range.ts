@@ -1,5 +1,5 @@
 export type IntradayChartTimeframe = "5m" | "15m" | "30m" | "1h";
-export type EodChartTimeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "10Y";
+export type EodChartTimeframe = "1D" | "1W" | "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "Max";
 export type WatchlistChartTimeframe = IntradayChartTimeframe | EodChartTimeframe;
 
 export const INTRADAY_UNAVAILABLE_MESSAGE = "Intraday data is not available on the EOD data plan yet.";
@@ -22,7 +22,7 @@ export const CHART_TIMEFRAME_OPTIONS: Array<{
   { label: "1Y", group: "Historical" },
   { label: "3Y", group: "Historical" },
   { label: "5Y", group: "Historical" },
-  { label: "10Y", group: "Historical" },
+  { label: "Max", group: "Historical" },
 ];
 
 export type WatchlistChartRequest = {
@@ -34,7 +34,7 @@ export type WatchlistChartRequest = {
   expectedMonths: number;
 };
 
-const REQUESTS: Record<EodChartTimeframe, { timeframe: "D" | "W" | "M"; days?: number; months?: number; limit: number; expectedMonths: number }> = {
+const REQUESTS: Record<EodChartTimeframe, { timeframe: "D" | "W" | "M"; days?: number; months?: number; fromDate?: string; limit: number; expectedMonths: number }> = {
   "1D": { timeframe: "D", days: 7, limit: 10, expectedMonths: 0.25 },
   "1W": { timeframe: "D", days: 14, limit: 15, expectedMonths: 0.5 },
   "1M": { timeframe: "D", months: 1, limit: 35, expectedMonths: 1 },
@@ -42,8 +42,8 @@ const REQUESTS: Record<EodChartTimeframe, { timeframe: "D" | "W" | "M"; days?: n
   "6M": { timeframe: "D", months: 6, limit: 150, expectedMonths: 6 },
   "1Y": { timeframe: "D", months: 12, limit: 270, expectedMonths: 12 },
   "3Y": { timeframe: "W", months: 36, limit: 170, expectedMonths: 36 },
-  "5Y": { timeframe: "W", months: 60, limit: 280, expectedMonths: 60 },
-  "10Y": { timeframe: "M", months: 120, limit: 130, expectedMonths: 120 },
+  "5Y": { timeframe: "D", months: 60, limit: 1300, expectedMonths: 60 },
+  "Max": { timeframe: "M", fromDate: "1900-01-01", limit: 3000, expectedMonths: 0 },
 };
 
 export function isIntradayTimeframe(label: string): label is IntradayChartTimeframe {
@@ -69,7 +69,7 @@ export function getWatchlistChartRequest(label: string, now = new Date()): Watch
   return {
     label: normalized,
     timeframe: config.timeframe,
-    from_date: isoDate(from),
+    from_date: config.fromDate ?? isoDate(from),
     to_date: isoDate(to),
     limit: config.limit,
     expectedMonths: config.expectedMonths,

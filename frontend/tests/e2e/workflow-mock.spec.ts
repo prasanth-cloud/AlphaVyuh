@@ -64,6 +64,87 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("multi-chart review board compares scanner candidates", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.addInitScript(() => {
+      localStorage.setItem("alphavyuh-workflow-state-v1", JSON.stringify({
+        RELIANCE: {
+          symbol: "RELIANCE",
+          lifecycle: "idea",
+          source: "scanner",
+          notes: "Scanner: High confidence",
+          tags: ["setup-a"],
+          scanner_context: {
+            source: "scanner",
+            preset_id: "trend-template",
+            preset_name: "Trend Template",
+            match_reasons: ["All moving averages aligned with 52W proximity."],
+            confidence_reasons: ["RS and volume confirmed."],
+            data_warnings: ["Sector taxonomy pending NSE audit."],
+            setup_score: 86,
+            setup_grade: "A",
+            confidence_label: "High confidence",
+            rs_score: 86,
+            price_perf_6m_pct: 32.4,
+            week_52_high_pct: 5,
+            volume_ratio: 1.8,
+            rsi_14: 62.4,
+            scan_trade_date: "2026-05-07",
+            data_source: "NSE bhavcopy",
+            data_mode: "eod",
+            data_as_of: "2026-05-07",
+            captured_at: "2026-05-07T12:00:00.000Z",
+          },
+        },
+      }));
+    });
+    await page.goto("/charts?symbols=RELIANCE,INFY,TCS,HDFCBANK&from=scanner", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("multi-chart-review-board")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText("RELIANCE", { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-INFY")).toContainText("INFY", { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Scanner review|Source:|As of|loaded/i, { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Analysis context|W\/M|52W|MA|Volume|RSI/i, { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Weekly\/monthly|Moving averages/i);
+    await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText(/Original scan|Trend Template|RS|Volume/i);
+    await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText("All moving averages aligned with 52W proximity.");
+    await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText("Sector taxonomy pending NSE audit.");
+    await page.getByRole("button", { name: "5Y" }).click();
+    await expect(page.getByRole("button", { name: "5Y" })).toHaveClass(/active/);
+    await page.getByRole("button", { name: "Max", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Max", exact: true })).toHaveClass(/active/);
+    await expect(page.getByTestId("multi-chart-layout-4-up")).toHaveClass(/active/);
+    await page.getByTestId("multi-chart-layout-2-up").click();
+    await expect(page.getByTestId("multi-chart-layout-2-up")).toHaveClass(/active/);
+    await expect(page.getByRole("link", { name: "Share board" })).toHaveAttribute("href", /layout=2-up/);
+    await page.getByTestId("multi-chart-card-RELIANCE").getByRole("button", { name: "Ready" }).click();
+    await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText(/Decision: ready/i);
+    await expect(page.locator("body")).toContainText(/RELIANCE marked Ready/i);
+    await expect(page.getByRole("link", { name: "Full chart" }).first()).toHaveAttribute("href", /\/charts\/RELIANCE\?full=1&from=scanner/);
+    const reviewState = await page.evaluate(() => {
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return workflow.RELIANCE;
+    });
+    expect(reviewState.scanner_context.preset_name).toBe("Trend Template");
+    expect(reviewState.notes).toContain("Original scan Trend Template");
+    expect(reviewState.notes).toContain("All moving averages aligned with 52W proximity.");
+
+    await page.getByTestId("multi-chart-symbol-import").fill("NSE:ITC\nNSE:AUBANK\nreliance\nITC");
+    await page.getByTestId("multi-chart-open-imported").click();
+    await expect(page).toHaveURL(/symbols=ITC%2CAUBANK%2CRELIANCE/);
+    await expect(page).toHaveURL(/from=manual/);
+    await expect(page.getByTestId("multi-chart-card-ITC")).toContainText("ITC", { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-AUBANK")).toContainText("AUBANK", { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText("RELIANCE", { timeout: 15_000 });
+
+    expect(errors).toEqual([]);
+  });
+
   test("journal explains review queue and trade source labels", async ({ page }) => {
     await page.goto("/journal", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
@@ -316,11 +397,33 @@ test.describe("Mock workflow smoke", () => {
     await page.getByRole("button", { name: /^Open chart$/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/charts/${symbol}`), { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
+    await expect(page.getByTestId("chart-scanner-context")).toContainText(/Original scan|Trend Template/i, { timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Source:|Coverage:/i, { timeout: 15_000 });
+    await page.getByRole("button", { name: /Review context/i }).click();
+    await page.getByPlaceholder(/Write the chart read/i).fill("Chart review: wait for weekly confirmation before moving to Ready.");
+    await page.getByTestId("chart-review-note").getByRole("button", { name: /^Save$/ }).click();
+    await expect(page.getByTestId("chart-review-note")).toContainText("Review note saved.", { timeout: 10_000 });
+    await page.getByTestId("chart-review-decisions").getByRole("button", { name: /^Ready$/ }).click();
+    await expect(page.getByTestId("chart-review-note")).toContainText("Marked Ready from chart review.", { timeout: 10_000 });
+
+    const chartReviewState = await page.evaluate((activeSymbol) => {
+      const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
+      return workflow[activeSymbol];
+    }, symbol);
+    expect(chartReviewState.notes).toContain("weekly confirmation");
+    expect(chartReviewState).toMatchObject({
+      lifecycle: "ready",
+      review_later: false,
+      ignored: false,
+    });
+    expect(chartReviewState.tags).toEqual(expect.arrayContaining(["chart-ready"]));
+
     await page.goto(watchlistUrl);
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
 
     await page.getByRole("button", { name: /^Order$/ }).click();
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
+    await expect(page.getByPlaceholder("Why this setup belongs in the queue right now…")).toHaveValue(/weekly confirmation/i);
     await page.getByPlaceholder("Entry").fill("1500");
     await page.getByPlaceholder("Stop").fill("1440");
     await page.getByPlaceholder("Target").fill("1650");
@@ -352,6 +455,7 @@ test.describe("Mock workflow smoke", () => {
     expect(state.journal).toMatchObject({ symbol, quantity: 3, status: "open" });
     expect(state.journal.entry_reason).toContain("Scanner:");
     expect(state.journal.entry_reason).toContain("Matched:");
+    expect(state.journal.entry_reason).toContain("Chart review: wait for weekly confirmation");
     expect(state.journal.entry_reason).toContain("Thesis: Launch QA setup");
     expect(state.journal.entry_reason).toContain("Invalidation: Exit if");
     expect(state.journal).toMatchObject({
