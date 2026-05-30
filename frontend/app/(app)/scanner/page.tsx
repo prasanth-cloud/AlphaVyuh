@@ -10,10 +10,12 @@ import {
   createWatchlist,
   deleteScreen as deleteSavedScreen,
   getScreens as getCachedScreens,
+  getSectorsWithMetadata,
   getWatchlists as getCachedWatchlists,
   saveScreen as saveSavedScreen,
   shouldUseMockFallback as scannerUsesClientMockFallback,
   type SavedScreen,
+  type SectorTaxonomyMetadata,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
@@ -30,6 +32,7 @@ import {
   type ScannerRunHistoryEntry,
 } from '@/lib/scanner-run-history'
 import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
+import { sectorTaxonomyPresentation } from '@/lib/sector-taxonomy-copy'
 
 const API = API_BASE_URL
 
@@ -598,6 +601,9 @@ export default function ScannerPage() {
   const [workflowMarks, setWorkflowMarks] = useState<Record<string, WorkflowMark>>({})
   const [scanTrust, setScanTrust] = useState<ScanTrust | null>(null)
   const [runHistory, setRunHistory] = useState<ScannerRunHistoryEntry[]>([])
+  const [sectorTaxonomyMetadata, setSectorTaxonomyMetadata] = useState<SectorTaxonomyMetadata | null>(null)
+  const [sectorTaxonomyError, setSectorTaxonomyError] = useState('')
+  const [sectorTaxonomyLoading, setSectorTaxonomyLoading] = useState(true)
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -617,6 +623,7 @@ export default function ScannerPage() {
     setRunHistory(readScannerRunHistory())
     loadWatchlists()
     loadSavedScreens()
+    loadSectorTaxonomy()
   }, [])
 
   function showToast(msg: string) {
@@ -764,6 +771,20 @@ export default function ScannerPage() {
   function clearRecentRuns() {
     clearScannerRunHistory()
     setRunHistory([])
+  }
+
+  async function loadSectorTaxonomy() {
+    try {
+      setSectorTaxonomyLoading(true)
+      setSectorTaxonomyError('')
+      const response = await getSectorsWithMetadata()
+      setSectorTaxonomyMetadata(response.metadata ?? null)
+    } catch (error) {
+      setSectorTaxonomyMetadata(null)
+      setSectorTaxonomyError(error instanceof Error ? error.message : 'Sector taxonomy metadata is temporarily unavailable.')
+    } finally {
+      setSectorTaxonomyLoading(false)
+    }
   }
 
   const buildPayload = useCallback((f: Filters, sb: string, sd: boolean) => {
@@ -1266,6 +1287,13 @@ export default function ScannerPage() {
     { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => pageWindowStart + idx,
   );
+  const sectorTaxonomy = sectorTaxonomyPresentation(sectorTaxonomyMetadata, sectorTaxonomyError);
+  const sectorTaxonomyColor = sectorTaxonomy.status === 'good'
+    ? 'var(--gain)'
+    : sectorTaxonomy.status === 'warn'
+      ? 'var(--warn)'
+      : 'var(--loss)';
+  const industryTaxonomyAudited = sectorTaxonomyMetadata?.audit_scope?.industry_taxonomy?.status === 'audited';
   return (
     <div className="workspace-page">
       <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
@@ -1421,6 +1449,42 @@ export default function ScannerPage() {
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1.35 }}>{detail}</div>
               </button>
             ))}
+          </div>
+          <div
+            data-testid="scanner-sector-taxonomy"
+            style={{
+              marginTop: 10,
+              padding: '9px 10px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              background: 'rgba(255,255,255,0.025)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+              <div className="label" style={{ color: sectorTaxonomyColor }}>Sector taxonomy</div>
+              <span className="workspace-pill" style={{ color: sectorTaxonomyColor }}>
+                {sectorTaxonomyLoading ? 'Checking' : sectorTaxonomy.value}
+              </span>
+            </div>
+            <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+              {sectorTaxonomyLoading ? 'Checking sector source, contract date, and NSE reference coverage.' : sectorTaxonomy.detail}
+            </div>
+            {!sectorTaxonomyLoading && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
+                <span className="workspace-pill" title="AlphaVyuh sector source">
+                  Source: {sectorTaxonomy.source}
+                </span>
+                <span className="workspace-pill" title="Sector contract date">
+                  As of: {sectorTaxonomy.contract}
+                </span>
+                <span className="workspace-pill" title={sectorTaxonomy.displayFilter}>
+                  Display: {sectorTaxonomy.displayFilter}
+                </span>
+                <span className="workspace-pill" title={sectorTaxonomy.industryScope}>
+                  {industryTaxonomyAudited ? 'Industry audited' : 'Industry audit pending'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
