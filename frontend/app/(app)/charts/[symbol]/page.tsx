@@ -2809,6 +2809,25 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                         {scannerContext.primaryReason && (
                           <div style={{ marginTop: 6 }}>{scannerContext.primaryReason}</div>
                         )}
+                        {scannerContext.metrics.length > 0 && (
+                          <div className="grid grid-cols-2 gap-1.5 mt-2">
+                            {scannerContext.metrics.map((metric) => (
+                              <div key={metric.label} className="rounded-[7px] px-2 py-1.5" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                <div className="text-[8px] uppercase tracking-[0.35px]" style={{ color: "var(--app-text3)" }}>{metric.label}</div>
+                                <div className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--app-text1)" }}>{metric.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {scannerContext.warnings.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {scannerContext.warnings.slice(0, 2).map((warning) => (
+                              <div key={warning} className="text-[9px] leading-4" style={{ color: "#fbbf24" }}>
+                                {warning}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {symbolReviewError && (
