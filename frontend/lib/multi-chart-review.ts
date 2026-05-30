@@ -75,6 +75,7 @@ export function buildMultiChartDecisionPatch(
     existingNotes?: string | null;
     analysis?: MultiChartAnalysisSummary | null;
     trust?: MultiChartTrustContext | null;
+    alertDraft?: MultiChartAlertDraft | null;
     rangeLabel?: string | null;
   } = {},
 ): WorkflowStatePatch {
@@ -124,6 +125,15 @@ export type MultiChartTrustContext = {
   contractTone: "good" | "warn" | "muted";
 };
 
+export type MultiChartAlertDraft = {
+  triggerLabel: string;
+  triggerPrice: number;
+  invalidationLabel: string;
+  invalidationPrice: number;
+  detail: string;
+  tone: "good" | "warn" | "muted";
+};
+
 const BOARD_REVIEW_NOTE_PREFIX = "[Multi-chart review]";
 
 function decisionLabel(lifecycle: MultiChartReviewDecision): string {
@@ -146,6 +156,7 @@ export function buildMultiChartDecisionNote(
     existingNotes?: string | null;
     analysis?: MultiChartAnalysisSummary | null;
     trust?: MultiChartTrustContext | null;
+    alertDraft?: MultiChartAlertDraft | null;
     rangeLabel?: string | null;
   } = {},
 ): string {
@@ -166,6 +177,11 @@ export function buildMultiChartDecisionNote(
     parts.push(`Source ${formatMarketDataSourceLabel(options.trust.sourceLabel)}${options.trust.asOf ? ` as of ${options.trust.asOf}` : ""}`);
   }
 
+  if (options.alertDraft) {
+    parts.push(`Alert ${options.alertDraft.triggerLabel} ${formatPrice(options.alertDraft.triggerPrice)}`);
+    parts.push(`Invalidation ${formatPrice(options.alertDraft.invalidationPrice)}`);
+  }
+
   return mergeBoardReviewNote(options.existingNotes, `${parts.join(" · ")}.`);
 }
 
@@ -175,6 +191,10 @@ function formatMarketDataSourceLabel(value: string): string {
 
 function formatPct(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatPrice(value: number) {
+  return `Rs ${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 function formatRatio(value: number | null | undefined) {
@@ -213,6 +233,43 @@ export function buildMultiChartTrustContext(
     availabilityMessage,
     contractLabel,
     contractTone,
+  };
+}
+
+export function buildMultiChartAlertDraft(
+  data: CandlesResponse | null | undefined,
+  analysis?: MultiChartAnalysisSummary | null,
+): MultiChartAlertDraft | null {
+  const latest = data?.latest;
+  const close = latest?.close ?? data?.candles.at(-1)?.close ?? null;
+  if (!close) return null;
+
+  const week52High = latest?.week_52_high ?? null;
+  const atr = latest?.atr_14 ?? null;
+  const ema50 = latest?.ema_50 ?? data?.candles.at(-1)?.ema_50 ?? null;
+  const week52Distance = week52High ? ((week52High - close) / close) * 100 : null;
+  const nearBreakout = week52High != null && week52High >= close && (week52Distance ?? 100) <= 12;
+  const triggerPrice = nearBreakout
+    ? week52High * 1.002
+    : atr
+      ? close + atr * 0.5
+      : close * 1.02;
+  const invalidationPrice = ema50 && ema50 < close
+    ? ema50
+    : atr
+      ? close - atr * 1.5
+      : close * 0.95;
+  const triggerLabel = nearBreakout ? "52W breakout" : "follow-through";
+  const invalidationLabel = ema50 && ema50 < close ? "50 EMA" : "ATR support";
+  const tone = analysis?.reviewScore.tone ?? (nearBreakout ? "good" : "muted");
+
+  return {
+    triggerLabel,
+    triggerPrice,
+    invalidationLabel,
+    invalidationPrice,
+    detail: `${triggerLabel} alert above ${formatPrice(triggerPrice)}; review if price loses ${invalidationLabel} near ${formatPrice(invalidationPrice)}.`,
+    tone,
   };
 }
 

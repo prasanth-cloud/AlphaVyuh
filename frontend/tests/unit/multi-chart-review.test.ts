@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildMultiChartAnalysisSummary,
+  buildMultiChartAlertDraft,
   buildMultiChartDecisionNote,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
@@ -113,6 +114,7 @@ describe("multi-chart review helpers", () => {
       existingTags: ["scan-vcp"],
       existingNotes: "Manual note stays.",
       analysis,
+      alertDraft: buildMultiChartAlertDraft(candleResponse(), analysis),
       trust,
       rangeLabel: "5Y",
     })).toMatchObject({
@@ -125,6 +127,11 @@ describe("multi-chart review helpers", () => {
       tags: ["scan-vcp", "multi-chart-ready"],
       notes: expect.stringContaining("Manual note stays.\n[Multi-chart review] Ready · 5Y board · 6/6 checks · Weekly/monthly aligned"),
     });
+    expect(buildMultiChartDecisionPatch("nse:reliance", "ready", {
+      analysis,
+      alertDraft: buildMultiChartAlertDraft(candleResponse(), analysis),
+      rangeLabel: "5Y",
+    }).notes).toContain("Alert 52W breakout");
 
     expect(buildMultiChartDecisionPatch("INFY", "invalidated", {
       source: "watchlist",
@@ -198,6 +205,47 @@ describe("multi-chart review helpers", () => {
     expect(summary?.checklist.join(" ")).toContain("Weekly/monthly");
     expect(summary?.checklist.join(" ")).toContain("RS score: 86");
     expect(summary?.checklist).toContain("Review score: 6/6 checks");
+  });
+
+  it("drafts alert levels from nearby 52-week breakout and invalidation context", () => {
+    const data = candleResponse();
+    const analysis = buildMultiChartAnalysisSummary(data, {
+      source: "scanner",
+      rs_score: 86,
+      week_52_high_pct: 5,
+      volume_ratio: 1.8,
+    });
+    const draft = buildMultiChartAlertDraft(data, analysis);
+
+    expect(draft).toMatchObject({
+      triggerLabel: "52W breakout",
+      invalidationLabel: "50 EMA",
+      tone: "good",
+    });
+    expect(draft?.triggerPrice).toBeGreaterThan(data.latest!.week_52_high!);
+    expect(draft?.invalidationPrice).toBe(data.latest!.ema_50);
+    expect(draft?.detail).toContain("52W breakout alert");
+  });
+
+  it("falls back to follow-through alerts when 52-week context is unavailable", () => {
+    const data = candleResponse({
+      latest: {
+        ...candleResponse().latest!,
+        close: 120,
+        week_52_high: null,
+        ema_50: null,
+        atr_14: 6,
+      },
+    });
+    const draft = buildMultiChartAlertDraft(data, null);
+
+    expect(draft).toMatchObject({
+      triggerLabel: "follow-through",
+      invalidationLabel: "ATR support",
+      triggerPrice: 123,
+      invalidationPrice: 111,
+      tone: "muted",
+    });
   });
 
   it("marks five-year daily review history as launch-contract evidence", () => {

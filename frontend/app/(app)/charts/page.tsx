@@ -19,6 +19,7 @@ import {
 import { formatMarketDataSource } from "@/lib/data-copy";
 import {
   buildMultiChartAnalysisSummary,
+  buildMultiChartAlertDraft,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
   buildMultiChartTrustContext,
@@ -146,6 +147,7 @@ export default function ChartsIndexPage() {
     lifecycle: MultiChartReviewDecision,
     context: {
       analysis?: ReturnType<typeof buildMultiChartAnalysisSummary>;
+      alertDraft?: ReturnType<typeof buildMultiChartAlertDraft>;
       trust?: ReturnType<typeof buildMultiChartTrustContext>;
     } = {},
   ) {
@@ -161,6 +163,7 @@ export default function ChartsIndexPage() {
         existingNotes: existing?.notes,
         analysis: context.analysis,
         trust: context.trust,
+        alertDraft: context.alertDraft,
         rangeLabel,
       }));
       setWorkflowBySymbol((current) => ({ ...current, [saved.symbol]: saved }));
@@ -235,6 +238,7 @@ export default function ChartsIndexPage() {
           const workflow = workflowBySymbol[card.symbol];
           const lifecycle = workflow?.lifecycle;
           const analysis = buildMultiChartAnalysisSummary(card.data, workflow?.scanner_context);
+          const alertDraft = buildMultiChartAlertDraft(card.data, analysis);
           return (
             <div
               key={card.symbol}
@@ -335,6 +339,42 @@ export default function ChartsIndexPage() {
                 </div>
               )}
 
+              {alertDraft && (
+                <div
+                  data-testid={`multi-chart-alert-draft-${card.symbol}`}
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    padding: "9px 11px",
+                    borderRadius: "var(--radius-md)",
+                    border: "1px solid var(--border-subtle)",
+                    background: "var(--surface-1)",
+                  }}
+                >
+                  <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 8 }}>
+                    <div className="label">Alert draft</div>
+                    <span className="workspace-pill" style={{ color: analysisToneColor(alertDraft.tone) }}>
+                      {alertDraft.triggerLabel}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
+                    <div>
+                      <div className="caption">Trigger</div>
+                      <Num style={{ fontSize: 12, fontWeight: 800, color: "var(--text-primary)" }}>
+                        ₹{alertDraft.triggerPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                      </Num>
+                    </div>
+                    <div>
+                      <div className="caption">Invalidation</div>
+                      <Num style={{ fontSize: 12, fontWeight: 800, color: "var(--warn)" }}>
+                        ₹{alertDraft.invalidationPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                      </Num>
+                    </div>
+                  </div>
+                  <div className="caption" style={{ lineHeight: 1.5 }}>{alertDraft.detail}</div>
+                </div>
+              )}
+
               <div className="workspace-pill-row" style={{ marginTop: "auto", gap: 8 }}>
                 {([
                   ["ready", "Ready"],
@@ -346,7 +386,7 @@ export default function ChartsIndexPage() {
                     type="button"
                     className={`workspace-chip-button${lifecycle === nextLifecycle ? " active" : ""}`}
                     disabled={decisionSaving === `${card.symbol}:${nextLifecycle}`}
-                    onClick={() => void saveBoardDecision(card.symbol, nextLifecycle, { analysis, trust })}
+                    onClick={() => void saveBoardDecision(card.symbol, nextLifecycle, { analysis, alertDraft, trust })}
                   >
                     {decisionSaving === `${card.symbol}:${nextLifecycle}` ? "Saving..." : label}
                   </button>
