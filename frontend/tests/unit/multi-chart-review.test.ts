@@ -6,6 +6,8 @@ import {
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
   buildMultiChartTrustContext,
+  getMultiChartGridTemplateColumns,
+  normalizeMultiChartLayout,
   normalizeMultiChartSymbols,
   tradingViewNseSymbols,
 } from "@/lib/multi-chart-review";
@@ -101,7 +103,8 @@ describe("multi-chart review helpers", () => {
       source: "watchlist",
       watchlistId: "wl-1",
       watchlistName: "Rotation queue",
-    })).toBe("/charts?symbols=RELIANCE%2CINFY&from=watchlist&watchlistId=wl-1&watchlist=Rotation+queue");
+      layout: "2-up",
+    })).toBe("/charts?symbols=RELIANCE%2CINFY&from=watchlist&watchlistId=wl-1&watchlist=Rotation+queue&layout=2-up");
   });
 
   it("keeps board URLs limited to the first four visible queue symbols", () => {
@@ -113,6 +116,14 @@ describe("multi-chart review helpers", () => {
 
   it("formats TradingView-compatible NSE symbols", () => {
     expect(tradingViewNseSymbols(["RELIANCE", "NSE:INFY"])).toBe("NSE:RELIANCE,NSE:INFY");
+  });
+
+  it("normalizes multi-chart review layout and grid density", () => {
+    expect(normalizeMultiChartLayout("2-up")).toBe("2-up");
+    expect(normalizeMultiChartLayout("4-up")).toBe("4-up");
+    expect(normalizeMultiChartLayout("dense")).toBe("4-up");
+    expect(getMultiChartGridTemplateColumns("2-up")).toContain("420px");
+    expect(getMultiChartGridTemplateColumns("4-up")).toContain("280px");
   });
 
   it("builds board decision patches without losing existing tags or review rationale", () => {

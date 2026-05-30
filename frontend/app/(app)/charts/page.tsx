@@ -23,6 +23,9 @@ import {
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
   buildMultiChartTrustContext,
+  getMultiChartGridTemplateColumns,
+  normalizeMultiChartLayout,
+  type MultiChartReviewLayout,
   type MultiChartReviewDecision,
   normalizeMultiChartSymbols,
   tradingViewNseSymbols,
@@ -41,6 +44,7 @@ type ChartCardState = {
 };
 
 const REVIEW_RANGES: WatchlistChartTimeframe[] = ["1Y", "3Y", "5Y", "Max"];
+const REVIEW_LAYOUTS: MultiChartReviewLayout[] = ["2-up", "4-up"];
 
 function sourceLabel(source: string | null, watchlist: string | null) {
   if (source === "watchlist") return watchlist ? `Watchlist · ${watchlist}` : "Watchlist review";
@@ -61,7 +65,9 @@ export default function ChartsIndexPage() {
   const watchlistId = searchParams.get("watchlistId");
   const watchlistName = searchParams.get("watchlist");
   const symbols = useMemo(() => normalizeMultiChartSymbols(searchParams.get("symbols")), [searchParams]);
+  const initialLayout = useMemo(() => normalizeMultiChartLayout(searchParams.get("layout")), [searchParams]);
   const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("5Y");
+  const [layout, setLayout] = useState<MultiChartReviewLayout>(initialLayout);
   const [cards, setCards] = useState<ChartCardState[]>([]);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [decisionSaving, setDecisionSaving] = useState<string | null>(null);
@@ -140,6 +146,7 @@ export default function ChartsIndexPage() {
     source: source === "scanner" || source === "watchlist" ? source : "manual",
     watchlistId,
     watchlistName,
+    layout,
   });
   const decisionSource = source === "scanner" || source === "watchlist" ? source : "chart";
 
@@ -209,6 +216,18 @@ export default function ChartsIndexPage() {
               {range}
             </button>
           ))}
+          {REVIEW_LAYOUTS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setLayout(option)}
+              className={`workspace-chip-button${layout === option ? " active" : ""}`}
+              data-testid={`multi-chart-layout-${option}`}
+              title={option === "2-up" ? "Use a wider two-chart review layout" : "Use a denser four-chart review layout"}
+            >
+              {option}
+            </button>
+          ))}
           <button type="button" className="workspace-chip-button" onClick={copyTradingViewSymbols}>
             Copy TV symbols
           </button>
@@ -229,7 +248,7 @@ export default function ChartsIndexPage() {
         data-testid="multi-chart-review-board"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gridTemplateColumns: getMultiChartGridTemplateColumns(layout),
           gap: 14,
           alignItems: "stretch",
         }}

@@ -13,11 +13,13 @@ export const MULTI_CHART_REVIEW_LIMIT = 4;
 
 export type MultiChartReviewSource = "scanner" | "watchlist" | "manual";
 export type MultiChartReviewDecision = Extract<WorkflowLifecycle, "ready" | "review_later" | "invalidated">;
+export type MultiChartReviewLayout = "2-up" | "4-up";
 
 export type MultiChartReviewHrefOptions = {
   source?: MultiChartReviewSource;
   watchlistId?: string | null;
   watchlistName?: string | null;
+  layout?: MultiChartReviewLayout | null;
 };
 
 function normalizeSymbol(value: string): string | null {
@@ -53,6 +55,16 @@ export function tradingViewNseSymbols(input: string[] | string | null | undefine
   return normalizeMultiChartSymbols(input).map((symbol) => `NSE:${symbol}`).join(",");
 }
 
+export function normalizeMultiChartLayout(input: string | null | undefined): MultiChartReviewLayout {
+  return input === "2-up" ? "2-up" : "4-up";
+}
+
+export function getMultiChartGridTemplateColumns(layout: MultiChartReviewLayout): string {
+  return layout === "2-up"
+    ? "repeat(auto-fit, minmax(420px, 1fr))"
+    : "repeat(auto-fit, minmax(280px, 1fr))";
+}
+
 export function buildMultiChartReviewHref(
   input: string[] | string | null | undefined,
   options: MultiChartReviewHrefOptions = {},
@@ -63,6 +75,7 @@ export function buildMultiChartReviewHref(
   if (options.source) params.set("from", options.source);
   if (options.watchlistId) params.set("watchlistId", options.watchlistId);
   if (options.watchlistName) params.set("watchlist", options.watchlistName);
+  if (options.layout) params.set("layout", options.layout);
   return `/charts${params.toString() ? `?${params.toString()}` : ""}`;
 }
 
