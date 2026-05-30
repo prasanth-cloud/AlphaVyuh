@@ -76,6 +76,7 @@ describe("sectorTaxonomyPresentation", () => {
       source: "stock_universe.sector",
       contract: "2026-05-30",
       unmapped: "0",
+      referenceCoverage: "All mapped sectors have an NSE sectoral-index reference.",
       auditStatus: "Unverified: AlphaVyuh currently derives sector labels from stock_universe.sector. Treat sector counts as provisional until NSE industry classification parity is audited.",
       aliasPolicy: "Sector-count aliases are derived only from NSE sectoral-index alias labels. An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet.",
       industryScope: "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts; treat industry parity as unverified until a separate industry taxonomy audit lands.",
@@ -107,7 +108,21 @@ describe("sectorTaxonomyPresentation", () => {
     expect(presentation.detail).toContain("sector taxonomy unverified");
     expect(presentation.detail).toContain("industry taxonomy unaudited");
     expect(presentation.unmapped).toBe("2 (ABC, XYZ)");
+    expect(presentation.referenceCoverage).toBe("1 without NSE sectoral-index reference (Miscellaneous)");
     expect(presentation.dashboardBadge).toBe("Taxonomy needs audit: sector taxonomy unverified, 1 hidden sector, 2 unmapped symbols, 1 sector without NSE sectoral-index reference, industry taxonomy unaudited");
+  });
+
+  it("lists the sector labels missing NSE sectoral-index references", () => {
+    const presentation = sectorTaxonomyPresentation(metadata({
+      reference_coverage: {
+        matched_sector_count: 15,
+        unmatched_sector_count: 6,
+        unmatched_sectors: ["Consumer Services", "Diversified", "Telecom", "Utilities", "Textiles", "Miscellaneous"],
+        description: "Some AlphaVyuh sector labels do not map to an NSE sectoral-index reference.",
+      },
+    }));
+
+    expect(presentation.referenceCoverage).toBe("6 without NSE sectoral-index reference (Consumer Services, Diversified, Telecom, Utilities, Textiles, ...)");
   });
 
   it("keeps the sector contract unverified until the taxonomy status is audited", () => {

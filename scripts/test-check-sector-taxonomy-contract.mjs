@@ -333,3 +333,21 @@ await withServer(validMetadata(), async (url) => {
     `stderr should explain reference coverage drift:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
   );
 }
+
+{
+  const payload = validMetadata({
+    reference_coverage: {
+      matched_sector_count: 10,
+      unmatched_sector_count: 2,
+      unmatched_sectors: ["Banking"],
+      description: "List count is stale.",
+    },
+  });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when unmatched sector names do not match the count");
+  assert.match(
+    stderr,
+    /unmatched_sectors length must match unmatched_sector_count/,
+    `stderr should explain unmatched sector list drift:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+}

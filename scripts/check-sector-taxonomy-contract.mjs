@@ -217,6 +217,10 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
     "reference_coverage must expose unmatched_sectors.",
   );
   assert(
+    metadata.reference_coverage.unmatched_sectors.length === Number(metadata.reference_coverage.unmatched_sector_count),
+    "reference_coverage.unmatched_sectors length must match unmatched_sector_count.",
+  );
+  assert(
     Number(metadata.reference_coverage.matched_sector_count) +
       Number(metadata.reference_coverage.unmatched_sector_count) ===
       Number(metadata.sector_count),

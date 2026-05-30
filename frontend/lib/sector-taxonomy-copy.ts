@@ -11,6 +11,7 @@ export type SectorTaxonomyPresentation = {
   reference: string;
   unmapped: string;
   displayFilter: string;
+  referenceCoverage: string;
   auditStatus: string;
   aliasPolicy: string;
   industryScope: string;
@@ -36,6 +37,7 @@ export function sectorTaxonomyPresentation(
       reference: "Not available",
       unmapped: "Not available",
       displayFilter: "Not available",
+      referenceCoverage: "Not available",
       auditStatus: "Unverified",
       aliasPolicy: "Not available",
       industryScope: "Not available",
@@ -46,6 +48,8 @@ export function sectorTaxonomyPresentation(
   const hiddenCount = metadata.display_filter.hidden_sector_count;
   const unmappedCount = metadata.unmapped_count;
   const unmatchedReferenceCount = metadata.reference_coverage?.unmatched_sector_count ?? 0;
+  const unmatchedReferenceSectors = metadata.reference_coverage?.unmatched_sectors ?? [];
+  const unmatchedReferencePreview = unmatchedReferenceSectors.slice(0, 5).join(", ");
   const taxonomyStatus = metadata.taxonomy_status ?? "unverified";
   const industryStatus = metadata.audit_scope?.industry_taxonomy?.status ?? "not_available";
   const issues = [
@@ -66,6 +70,9 @@ export function sectorTaxonomyPresentation(
   const detail = issues.length
     ? `Source ${source}, contract ${contract}; ${issues.join(" and ")} need audit before sector counts are treated as final.`
     : `Source ${source}, contract ${contract}; all mapped active sectors are shown.`;
+  const referenceCoverage = unmatchedReferenceCount > 0
+    ? `${fmtNumber(unmatchedReferenceCount)} without NSE sectoral-index reference (${unmatchedReferencePreview}${unmatchedReferenceSectors.length > 5 || unmatchedReferenceCount > unmatchedReferenceSectors.length ? ", ..." : ""})`
+    : "All mapped sectors have an NSE sectoral-index reference.";
 
   return {
     value: `${fmtNumber(metadata.sector_count)} SECTORS`,
@@ -78,6 +85,7 @@ export function sectorTaxonomyPresentation(
       ? `${fmtNumber(unmappedCount)} (${metadata.unmapped_symbols.slice(0, 5).join(", ")}${metadata.unmapped_symbols_truncated ? ", ..." : ""})`
       : "0",
     displayFilter: metadata.display_filter.description,
+    referenceCoverage,
     auditStatus: taxonomyStatus === "audited"
       ? "Audited"
       : `Unverified${metadata.taxonomy_status_reason ? `: ${metadata.taxonomy_status_reason}` : ""}`,

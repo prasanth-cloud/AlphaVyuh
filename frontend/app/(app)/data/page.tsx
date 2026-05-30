@@ -446,6 +446,7 @@ export default function DataFreshnessPage() {
               ["Sector audit status", sectorTaxonomy.auditStatus],
               ["Sector contract", sectorTaxonomy.contract],
               ["Sector NSE reference", sectorTaxonomy.reference],
+              ["Sector reference gaps", sectorTaxonomy.referenceCoverage],
               ["Sector unmapped", sectorTaxonomy.unmapped],
               ["Sector display filter", sectorTaxonomy.displayFilter],
               ["Sector alias policy", sectorTaxonomy.aliasPolicy],
