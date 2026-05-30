@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { brokerOrderGatePresentation, brokerReadOnlyChecklist } from "@/lib/broker-safety";
+import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerOrderGatePresentation, brokerReadOnlyChecklist } from "@/lib/broker-safety";
 
 describe("broker order gate presentation", () => {
   it("fails closed when broker status is unavailable", () => {
@@ -95,5 +95,16 @@ describe("broker order gate presentation", () => {
     });
     expect(JSON.stringify(checklist)).not.toContain("access-token");
     expect(JSON.stringify(checklist)).not.toContain("stored-token");
+  });
+
+  it("documents the owner approval record required before order tests", () => {
+    expect(BROKER_EXECUTION_APPROVAL_ITEMS).toEqual([
+      "Owner approval timestamp",
+      "Broker and account owner",
+      "Mode: sandbox or live",
+      "Symbol, side, quantity, and order type",
+      "Risk plan and confirmation source",
+      "Fresh same-broker read-only smoke evidence",
+    ]);
   });
 });

@@ -13,7 +13,7 @@ import {
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
-import { brokerReadOnlyChecklist } from "@/lib/broker-safety";
+import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist } from "@/lib/broker-safety";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -446,6 +446,23 @@ function BrokerSettingsContent() {
                   {line}
                 </div>
               ))}
+            </div>
+            <div
+              data-testid="broker-execution-approval-record"
+              style={{ marginTop: 14, padding: "12px", borderRadius: "var(--radius-md)", border: "1px solid rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}
+            >
+              <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--warn)", marginBottom: 6 }}>Required before any future sandbox/live order test</div>
+              <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 10 }}>
+                Read-only smoke is evidence, not approval. A broker order test cannot run unless this owner-confirmed record exists.
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {BROKER_EXECUTION_APPROVAL_ITEMS.map((item) => (
+                  <div key={item} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    <CheckCircle2 size={12} style={{ display: "inline", marginRight: 7, color: "var(--warn)" }} />
+                    {item}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

@@ -103,6 +103,15 @@ const READ_ONLY_CHECKS: Array<{ id: string; label: string; detail: string }> = [
   { id: "tradebook", label: "Tradebook", detail: "Filled order trades can be imported into Journal." },
 ];
 
+export const BROKER_EXECUTION_APPROVAL_ITEMS = [
+  "Owner approval timestamp",
+  "Broker and account owner",
+  "Mode: sandbox or live",
+  "Symbol, side, quantity, and order type",
+  "Risk plan and confirmation source",
+  "Fresh same-broker read-only smoke evidence",
+] as const;
+
 export function brokerReadOnlyChecklist(broker: BrokerReadOnlySmokeState | null | undefined) {
   const checks = broker?.read_only_smoke_checks ?? {};
   return READ_ONLY_CHECKS.map((item) => {

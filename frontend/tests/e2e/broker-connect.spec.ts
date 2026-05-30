@@ -105,6 +105,9 @@ test.describe("Broker settings — not connected", () => {
     await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Passed");
     await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Orderbook");
     await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Needs attention");
+    await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Required before any future sandbox/live order test");
+    await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Read-only smoke is evidence, not approval");
+    await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Fresh same-broker read-only smoke evidence");
   });
 
   test("Connect button calls start endpoint and redirects", async ({ page }) => {
