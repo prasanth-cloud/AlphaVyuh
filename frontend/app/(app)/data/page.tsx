@@ -9,10 +9,12 @@ import {
   getDataRuns,
   getJournalEntries,
   getJournalStats,
+  getSectorsWithMetadata,
   type AiPatterns,
   type DataHealth,
   type DataRun,
   type JournalStats,
+  type SectorTaxonomyMetadata,
 } from "@/lib/api";
 import { Card, DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { checkApiReachability } from "@/lib/api-reachability";
@@ -20,6 +22,7 @@ import { marketDataHealthPresentation } from "@/lib/data-health-copy";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import type { ApiReachability } from "@/lib/data-mode";
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from "@/lib/account-data-status";
+import { sectorTaxonomyPresentation } from "@/lib/sector-taxonomy-copy";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
@@ -30,6 +33,8 @@ type CenterState = {
   journalStats: JournalStats | null;
   aiPatterns: AiPatterns | null;
   aiPatternsError: string;
+  sectorTaxonomy: SectorTaxonomyMetadata | null;
+  sectorTaxonomyError: string;
   dataRuns: DataRun[];
   dataRunsError: string;
   closedTrades: number;
@@ -128,6 +133,8 @@ export default function DataFreshnessPage() {
     journalStats: null,
     aiPatterns: null,
     aiPatternsError: "",
+    sectorTaxonomy: null,
+    sectorTaxonomyError: "",
     dataRuns: [],
     dataRunsError: "",
     closedTrades: 0,
@@ -141,7 +148,7 @@ export default function DataFreshnessPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [apiReachable, dataHealth, dataRunsResult, brokerResult, journalStatsResult, journalResult, aiPatterns] = await Promise.all([
+        const [apiReachable, dataHealth, dataRunsResult, brokerResult, journalStatsResult, journalResult, aiPatterns, sectorsResult] = await Promise.all([
           checkApiReachability(),
           getDataHealth().catch(() => null),
           getDataRuns(5)
@@ -171,6 +178,12 @@ export default function DataFreshnessPage() {
               patterns: null,
               error: error instanceof Error ? error.message : "Trade pattern review is temporarily unavailable.",
             })),
+          getSectorsWithMetadata()
+            .then(response => ({ metadata: response.metadata ?? null, error: "" }))
+            .catch(error => ({
+              metadata: null,
+              error: error instanceof Error ? error.message : "Sector taxonomy metadata is temporarily unavailable.",
+            })),
         ]);
 
         const accountIssues = uniqueAccountIssues([brokerResult.issue, journalStatsResult.issue, journalResult.issue]);
@@ -187,6 +200,8 @@ export default function DataFreshnessPage() {
           journalStats,
           aiPatterns: aiPatterns.patterns,
           aiPatternsError: aiPatterns.error,
+          sectorTaxonomy: sectorsResult.metadata,
+          sectorTaxonomyError: sectorsResult.error,
           dataRuns: dataRunsResult.runs,
           dataRunsError: dataRunsResult.error,
           closedTrades: closed.length,
@@ -256,6 +271,20 @@ export default function DataFreshnessPage() {
       });
     }
 
+    if (state.sectorTaxonomyError || !state.sectorTaxonomy) {
+      next.push({
+        title: "Recheck sector taxonomy metadata",
+        detail: "Sector filters and counts are treated as unverified until the audit source, contract date, and unmapped symbols load.",
+        href: "/data",
+      });
+    } else if (state.sectorTaxonomy.unmapped_count > 0 || state.sectorTaxonomy.display_filter.hidden_sector_count > 0) {
+      next.push({
+        title: "Audit sector taxonomy gaps",
+        detail: `${state.sectorTaxonomy.unmapped_count.toLocaleString("en-IN")} unmapped symbols and ${state.sectorTaxonomy.display_filter.hidden_sector_count.toLocaleString("en-IN")} hidden sectors need review before launch.`,
+        href: "/scanner",
+      });
+    }
+
     if (brokerIssue) {
       next.push({
         title: "Recheck broker status service",
@@ -295,6 +324,7 @@ export default function DataFreshnessPage() {
 
   const health = state.dataHealth;
   const marketHealth = marketDataHealthPresentation(health, state.apiReachable);
+  const sectorTaxonomy = sectorTaxonomyPresentation(state.sectorTaxonomy, state.sectorTaxonomyError);
   const broker = state.broker ?? fallbackBroker;
   const coveragePct = health?.symbols_on_latest_date != null && health.universe_active
     ? Math.round((health.symbols_on_latest_date / health.universe_active) * 100)
@@ -363,7 +393,7 @@ export default function DataFreshnessPage() {
         </Card>
       )}
 
-      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
           value={marketHealth.value}
@@ -375,6 +405,12 @@ export default function DataFreshnessPage() {
           value={coveragePct != null ? `${coveragePct}%` : "NOT AVAILABLE"}
           detail={`${fmtNumber(health?.symbols_on_latest_date)} symbols on latest date out of ${fmtNumber(health?.universe_active)} active.`}
           status={coveragePct == null ? "bad" : coveragePct >= 95 ? "good" : coveragePct >= 80 ? "warn" : "bad"}
+        />
+        <HealthTile
+          label="Sector taxonomy"
+          value={sectorTaxonomy.value}
+          detail={sectorTaxonomy.detail}
+          status={sectorTaxonomy.status}
         />
         <HealthTile
           label="Broker channel"
@@ -399,6 +435,11 @@ export default function DataFreshnessPage() {
               ["Last successful refresh", fmtDate(health?.last_successful_eod_date ?? health?.latest_trade_date)],
               ["Source", formatMarketDataSource(health?.provider?.source_name, "Market data")],
               ["Fallback active", health?.fallback_active ? "Yes" : "No"],
+              ["Sector source", sectorTaxonomy.source],
+              ["Sector contract", sectorTaxonomy.contract],
+              ["Sector NSE reference", sectorTaxonomy.reference],
+              ["Sector unmapped", sectorTaxonomy.unmapped],
+              ["Sector display filter", sectorTaxonomy.displayFilter],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
               ["Latest exchange file", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],

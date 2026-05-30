@@ -1371,7 +1371,10 @@ export async function getSectorBreadth(): Promise<{ trade_date: string | null; s
 }
 
 export async function getSectorsWithMetadata(): Promise<SectorListResponse> {
-  if (shouldUseMockFallback()) return { sectors: mockSectorBreadth().sectors.map((s) => s.sector) };
+  if (shouldUseMockFallback()) {
+    const breadth = mockSectorBreadth();
+    return { sectors: breadth.sectors.map((s) => s.sector), metadata: breadth.metadata };
+  }
   const res = await fetch(`${API}/api/v1/market/sectors`, { headers: publicHeaders });
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, `Sector list is temporarily unavailable (${res.status}).`));

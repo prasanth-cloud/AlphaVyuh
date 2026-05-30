@@ -16,6 +16,7 @@ import type {
   ScanResponse,
   ScanResult,
   SectorBreadthItem,
+  SectorTaxonomyMetadata,
   SymbolSearchResult,
   Watchlist,
 } from "./api";
@@ -206,7 +207,46 @@ export function mockMarketMovers(): MarketMovers {
   };
 }
 
-export function mockSectorBreadth(): { trade_date: string; sectors: SectorBreadthItem[] } {
+function mockSectorTaxonomyMetadata(): SectorTaxonomyMetadata {
+  const sectors = Array.from(new Set(MOCK_STOCKS.map(stock => stock.sector).filter((sector): sector is string => Boolean(sector)))).sort();
+  return {
+    source: "stock_universe.sector",
+    contract_as_of: "2026-05-30",
+    active_count: MOCK_STOCKS.length,
+    active_count_scope: "mock_active_universe",
+    classified_count: MOCK_STOCKS.length,
+    unmapped_count: 0,
+    unmapped_symbols: [],
+    unmapped_symbols_truncated: false,
+    sector_count: sectors.length,
+    sector_counts: sectors.map(sector => ({
+      sector,
+      active_count: MOCK_STOCKS.filter(stock => stock.sector === sector).length,
+      aliases: [],
+      related_sectoral_indices: [],
+      hidden_by_filter: false,
+    })),
+    display_filter: {
+      minimum_active_symbols: 1,
+      hidden_sector_count: 0,
+      description: "All mapped sectors are shown.",
+    },
+    reference: {
+      name: "NSE sectoral indices",
+      url: "https://www.nseindia.com/static/products-services/indices-sectoral",
+      as_of: "2026-03-02",
+      relationship: "reference_only_not_equity_universe_source",
+    },
+    universe_taxonomy: {
+      name: "AlphaVyuh equity universe sectors",
+      source: "stock_universe.sector",
+      relationship: "mock fixtures for workflow QA, not NSE taxonomy evidence",
+    },
+    sectoral_indices: [],
+  };
+}
+
+export function mockSectorBreadth(): { trade_date: string; sectors: SectorBreadthItem[]; metadata: SectorTaxonomyMetadata } {
   return {
     trade_date: TRADE_DATE,
     sectors: [
@@ -214,6 +254,7 @@ export function mockSectorBreadth(): { trade_date: string; sectors: SectorBreadt
       { sector: "Banks", total: 96, advances: 51, declines: 41, unchanged: 4, ad_ratio: 1.24, above_ema200_pct: 59 },
       { sector: "Chemicals", total: 142, advances: 88, declines: 47, unchanged: 7, ad_ratio: 1.87, above_ema200_pct: 64 },
     ],
+    metadata: mockSectorTaxonomyMetadata(),
   };
 }
 
