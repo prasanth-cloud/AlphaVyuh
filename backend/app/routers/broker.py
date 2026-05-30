@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["orders"])
 
 BROKER_IMPORT_MARKER = "alphavyuh-broker-import"
+BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS = 24
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -321,13 +322,30 @@ def _record_broker_order(
         logger.debug("Broker order log unavailable; migration may not be applied yet.", exc_info=True)
 
 
+def _smoke_checked_at_is_fresh(checked_at: Any) -> bool:
+    if not isinstance(checked_at, str) or not checked_at.strip():
+        return False
+    try:
+        parsed = datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return False
+    age_seconds = (datetime.now(timezone.utc) - parsed).total_seconds()
+    return 0 <= age_seconds <= BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS * 60 * 60
+
+
 def _smoke_metadata_passed(metadata: dict | None, broker: str) -> bool:
     if not isinstance(metadata, dict):
         return False
     smoke = metadata.get("read_only_smoke")
     if not isinstance(smoke, dict):
         return False
-    return smoke.get("broker") == broker and smoke.get("passed") is True
+    return (
+        smoke.get("broker") == broker
+        and smoke.get("passed") is True
+        and _smoke_checked_at_is_fresh(smoke.get("checked_at"))
+    )
 
 
 def _smoke_metadata_status(metadata: dict | None, broker: str) -> dict[str, Any]:
@@ -335,12 +353,14 @@ def _smoke_metadata_status(metadata: dict | None, broker: str) -> dict[str, Any]
         return {"passed": False, "checked_at": None, "checks": {}}
     smoke = metadata.get("read_only_smoke")
     if not isinstance(smoke, dict) or smoke.get("broker") != broker:
-        return {"passed": False, "checked_at": None, "checks": {}}
+        return {"passed": False, "checked_at": None, "checks": {}, "fresh": False}
     checks = smoke.get("checks") if isinstance(smoke.get("checks"), dict) else {}
+    fresh = _smoke_checked_at_is_fresh(smoke.get("checked_at"))
     return {
-        "passed": smoke.get("passed") is True,
+        "passed": smoke.get("passed") is True and fresh,
         "checked_at": smoke.get("checked_at") if isinstance(smoke.get("checked_at"), str) else None,
         "checks": checks,
+        "fresh": fresh,
     }
 
 
@@ -514,7 +534,7 @@ def _status_payload(
         "read_only_smoke_checks": read_only_smoke_checks or {},
         "live_order_requires_confirmation": True,
         "live_order_enabled": bool(
-            settings.broker_live_orders_enabled and plan_allows_broker and read_only_smoke_passed
+            settings.broker_live_orders_enabled and connected and read_only_smoke_passed
         ),
     }
 

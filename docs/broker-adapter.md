@@ -169,8 +169,9 @@ server-side `/api/v1/orders` route enforces this even if
    Access tokens, request tokens, API secrets, raw account payloads, and order
    payloads must never be stored there.
 3. Before any real Zerodha/Upstox `place_order` adapter call, the backend checks
-   that metadata contains `{ broker: <same broker>, passed: true }`. Missing,
-   failed, stale-shape, or different-broker metadata blocks with `409` before
+   that metadata contains `{ broker: <same broker>, passed: true }` with a
+   parseable `checked_at` timestamp no older than 24 hours. Missing, failed,
+   stale, stale-shape, or different-broker metadata blocks with `409` before
    the adapter is called.
 
 This gate does not enable live or sandbox orders by itself. Owner approval is

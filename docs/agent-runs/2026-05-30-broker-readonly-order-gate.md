@@ -14,10 +14,14 @@ broker mutation.
   names, booleans, counts, and non-secret error/status fields only.
 - Exposed `read_only_smoke_required` and `read_only_smoke_passed` through broker
   status so clients can explain why live submission remains disabled.
+- Tightened the backend gate so a passed smoke record only counts when it has a
+  parseable `checked_at` timestamp no older than 24 hours, and broker status
+  does not report order routes enabled unless an active broker session is also
+  present.
 - Documented that read-only smoke metadata is a prerequisite, not approval to
   enable live or sandbox orders.
 - Added regression tests proving live-confirmed broker order submission blocks
-  with `409` until matching same-broker smoke metadata has passed.
+  with `409` until fresh matching same-broker smoke metadata has passed.
 
 ## Validation
 
