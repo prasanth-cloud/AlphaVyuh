@@ -96,6 +96,8 @@ def test_sector_list_returns_all_mapped_active_sectors_with_metadata(monkeypatch
     assert response["metadata"]["display_filter"]["minimum_active_symbols"] == 1
     assert response["metadata"]["display_filter"]["hidden_sector_count"] == 0
     assert response["metadata"]["reference"]["relationship"] == "reference_only_not_equity_universe_source"
+    assert response["metadata"]["reference_coverage"]["matched_sector_count"] == 2
+    assert response["metadata"]["reference_coverage"]["unmatched_sector_count"] == 0
 
 
 def test_sector_audit_exposes_contract_without_filtering(monkeypatch):
@@ -119,6 +121,8 @@ def test_sector_audit_exposes_contract_without_filtering(monkeypatch):
     assert response["metadata"]["sector_count"] == 2
     assert response["metadata"]["unmapped_count"] == 1
     assert any(item["sector"] == "Tiny Sector" for item in response["metadata"]["sector_counts"])
+    assert response["metadata"]["reference_coverage"]["unmatched_sectors"] == ["Tiny Sector"]
+    assert response["metadata"]["reference_coverage"]["unmatched_sector_count"] == 1
 
 
 def test_sector_list_raises_503_when_stock_universe_query_fails(monkeypatch):

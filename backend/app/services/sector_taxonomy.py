@@ -114,6 +114,11 @@ def build_sector_taxonomy_metadata(
     hidden_count = sum(1 for item in sector_counts if item["hidden_by_filter"])
     classified_count = sum(count_by_sector.values())
     total_active = active_count if active_count is not None else classified_count + len(unmapped_symbols)
+    sectors_without_reference = [
+        item["sector"]
+        for item in sector_counts
+        if not item["related_sectoral_indices"]
+    ]
 
     return {
         "source": SECTOR_TAXONOMY_SOURCE,
@@ -141,6 +146,16 @@ def build_sector_taxonomy_metadata(
         "unmapped_symbols_truncated": len(unmapped_symbols) > unmapped_symbol_limit,
         "sector_counts": sector_counts,
         "sector_count": len(sector_counts),
+        "reference_coverage": {
+            "matched_sector_count": len(sector_counts) - len(sectors_without_reference),
+            "unmatched_sector_count": len(sectors_without_reference),
+            "unmatched_sectors": sectors_without_reference,
+            "description": (
+                "Every AlphaVyuh sector has at least one related NSE sectoral-index reference."
+                if not sectors_without_reference
+                else "Some AlphaVyuh sector labels do not map to an NSE sectoral-index reference."
+            ),
+        },
         "display_filter": {
             "minimum_active_symbols": hidden_min_active_symbols,
             "hidden_sector_count": hidden_count,

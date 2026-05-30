@@ -150,6 +150,25 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
     metadata.sector_counts.length === Number(metadata.sector_count),
     `sector_count ${metadata.sector_count} did not match sector_counts length ${metadata.sector_counts.length}.`,
   );
+  assert(metadata.reference_coverage && typeof metadata.reference_coverage === "object", "Sector metadata must expose reference_coverage.");
+  assert(
+    Number.isFinite(Number(metadata.reference_coverage.matched_sector_count)),
+    `reference_coverage.matched_sector_count was not numeric: ${metadata.reference_coverage.matched_sector_count}`,
+  );
+  assert(
+    Number.isFinite(Number(metadata.reference_coverage.unmatched_sector_count)),
+    `reference_coverage.unmatched_sector_count was not numeric: ${metadata.reference_coverage.unmatched_sector_count}`,
+  );
+  assert(
+    Array.isArray(metadata.reference_coverage.unmatched_sectors),
+    "reference_coverage must expose unmatched_sectors.",
+  );
+  assert(
+    Number(metadata.reference_coverage.matched_sector_count) +
+      Number(metadata.reference_coverage.unmatched_sector_count) ===
+      Number(metadata.sector_count),
+    "reference_coverage counts must add up to sector_count.",
+  );
   for (const item of metadata.sector_counts) {
     assert(typeof item?.sector === "string" && item.sector.trim(), "Every sector count needs a sector label.");
     assert(Number.isFinite(Number(item.active_count)), `Sector ${item.sector} active_count was not numeric.`);
@@ -167,6 +186,7 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
     activeCount: Number(metadata.active_count),
     sectorCount: Number(metadata.sector_count),
     unmappedCount: Number(metadata.unmapped_count),
+    unmatchedReferenceCount: Number(metadata.reference_coverage.unmatched_sector_count),
     contractAsOf: metadata.contract_as_of,
     referenceAsOf: metadata.reference.as_of,
   };
@@ -186,7 +206,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const summary = validateSectorTaxonomyContract(payload);
     console.log(
       `Sector taxonomy ok: ${summary.sectorCount} sectors, ${summary.activeCount} active symbols, ` +
-        `${summary.unmappedCount} unmapped, contract ${summary.contractAsOf}, NSE reference ${summary.referenceAsOf}.`,
+        `${summary.unmappedCount} unmapped, ${summary.unmatchedReferenceCount} without NSE sectoral-index reference, ` +
+        `contract ${summary.contractAsOf}, NSE reference ${summary.referenceAsOf}.`,
     );
   } catch (error) {
     console.error(`Sector taxonomy check failed: ${error instanceof Error ? error.message : String(error)}`);

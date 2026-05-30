@@ -1327,6 +1327,12 @@ export type SectorTaxonomyMetadata = {
     related_sectoral_indices?: string[];
     hidden_by_filter: boolean;
   }[];
+  reference_coverage?: {
+    matched_sector_count: number;
+    unmatched_sector_count: number;
+    unmatched_sectors: string[];
+    description: string;
+  };
   display_filter: {
     minimum_active_symbols: number;
     hidden_sector_count: number;

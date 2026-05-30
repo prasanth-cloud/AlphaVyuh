@@ -226,6 +226,12 @@ function mockSectorTaxonomyMetadata(): SectorTaxonomyMetadata {
       related_sectoral_indices: [],
       hidden_by_filter: false,
     })),
+    reference_coverage: {
+      matched_sector_count: 0,
+      unmatched_sector_count: sectors.length,
+      unmatched_sectors: sectors,
+      description: "Mock sector labels are not NSE sectoral-index audit evidence.",
+    },
     display_filter: {
       minimum_active_symbols: 1,
       hidden_sector_count: 0,

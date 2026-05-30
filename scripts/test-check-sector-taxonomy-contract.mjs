@@ -68,6 +68,12 @@ function validMetadata(overrides = {}) {
         hidden_by_filter: false,
       })),
       sector_count: sectors.length,
+      reference_coverage: {
+        matched_sector_count: 1,
+        unmatched_sector_count: sectors.length - 1,
+        unmatched_sectors: sectors.filter((sector) => sector !== "Energy"),
+        description: "Some AlphaVyuh sector labels do not map to an NSE sectoral-index reference.",
+      },
       display_filter: {
         minimum_active_symbols: 1,
         hidden_sector_count: 0,
@@ -130,7 +136,7 @@ const validFixture = writeFixture(validMetadata());
 {
   const { code, stdout, stderr } = await runChecker({}, ["--fixture", validFixture]);
   assert.equal(code, 0, `fixture check should pass:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
-  assert.match(stdout, /Sector taxonomy ok: 12 sectors, 3147 active symbols, 2 unmapped/);
+  assert.match(stdout, /Sector taxonomy ok: 12 sectors, 3147 active symbols, 2 unmapped, 11 without NSE sectoral-index reference/);
 }
 
 await withServer(validMetadata(), async (url) => {
@@ -177,5 +183,34 @@ await withServer(validMetadata(), async (url) => {
     stderr,
     /must expose unmapped_symbols/,
     `stderr should explain missing unmapped symbols:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+}
+
+{
+  const payload = validMetadata({ reference_coverage: undefined });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when reference coverage is not exposed");
+  assert.match(
+    stderr,
+    /must expose reference_coverage/,
+    `stderr should explain missing reference coverage:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+}
+
+{
+  const payload = validMetadata({
+    reference_coverage: {
+      matched_sector_count: 1,
+      unmatched_sector_count: 2,
+      unmatched_sectors: ["Banking", "Cement"],
+      description: "Counts do not add up.",
+    },
+  });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when reference coverage counts drift");
+  assert.match(
+    stderr,
+    /reference_coverage counts must add up to sector_count/,
+    `stderr should explain reference coverage drift:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
   );
 }

@@ -39,9 +39,13 @@ export function sectorTaxonomyPresentation(
 
   const hiddenCount = metadata.display_filter.hidden_sector_count;
   const unmappedCount = metadata.unmapped_count;
+  const unmatchedReferenceCount = metadata.reference_coverage?.unmatched_sector_count ?? 0;
   const issues = [
     hiddenCount > 0 ? `${fmtNumber(hiddenCount)} hidden sector${hiddenCount === 1 ? "" : "s"}` : "",
     unmappedCount > 0 ? `${fmtNumber(unmappedCount)} unmapped symbol${unmappedCount === 1 ? "" : "s"}` : "",
+    unmatchedReferenceCount > 0
+      ? `${fmtNumber(unmatchedReferenceCount)} sector${unmatchedReferenceCount === 1 ? "" : "s"} without NSE sectoral-index reference`
+      : "",
   ].filter(Boolean);
   const status: SectorTaxonomyStatus = issues.length ? "warn" : "good";
   const source = metadata.source || "Not available";
