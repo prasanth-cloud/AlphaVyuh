@@ -342,6 +342,7 @@ test.describe("Mock workflow smoke", () => {
 
     await page.getByRole("button", { name: /^Order$/ }).click();
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
+    await expect(page.getByPlaceholder("Why this setup belongs in the queue right now…")).toHaveValue(/weekly confirmation/i);
     await page.getByPlaceholder("Entry").fill("1500");
     await page.getByPlaceholder("Stop").fill("1440");
     await page.getByPlaceholder("Target").fill("1650");
@@ -373,6 +374,7 @@ test.describe("Mock workflow smoke", () => {
     expect(state.journal).toMatchObject({ symbol, quantity: 3, status: "open" });
     expect(state.journal.entry_reason).toContain("Scanner:");
     expect(state.journal.entry_reason).toContain("Matched:");
+    expect(state.journal.entry_reason).toContain("Chart review: wait for weekly confirmation");
     expect(state.journal.entry_reason).toContain("Thesis: Launch QA setup");
     expect(state.journal.entry_reason).toContain("Invalidation: Exit if");
     expect(state.journal).toMatchObject({
