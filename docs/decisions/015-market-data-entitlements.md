@@ -22,6 +22,15 @@ The current product direction is:
 
 Public competitor research did not reveal ChartsMaze's exact data vendor or broker execution implementation. Their visible product strength is workflow packaging: scanner, analytics, watchlists, chart review, journal, multi-chart, and pricing. AlphaVyuh should compete by making data trust visible instead of copying unknown internals.
 
+## Public Research Findings - 2026-05-30
+
+- **ChartsMaze:** Public pages show scanner templates, market analytics, sector/industry analytics, market breadth, watchlists, journal, and a premium plan at INR 499 + GST monthly, INR 2499 + GST semi-annually, and INR 3299 + GST annually. Their user guide describes exporting screened symbols to TradingView and importing/merging watchlists for TradingView review. It does **not** publicly identify an exchange data vendor, broker API provider, redistribution license, or direct broker order-routing implementation. Treat ChartsMaze as workflow/product inspiration, not as entitlement evidence.
+- **TradingView Advanced Charts:** TradingView's library page separates hosted widgets, which include TradingView-hosted data, from libraries, which AlphaVyuh would self-host and connect to AlphaVyuh's own datafeed. The same page says Trading Platform is the product with direct trading functionality, while Advanced Charts is a charting library. Therefore, TradingView licensing can improve chart UX, but it does not buy NSE/BSE data rights, five-year candle coverage, or broker execution.
+- **TradingView Broker Integration:** TradingView's broker manual separates data integration from trading integration. Trading requests go from the user's browser to the broker server, while market-data integration can be a separate server-to-server path and must pass strict data-quality requirements. AlphaVyuh should keep broker OAuth/read-only import, chart rendering, and platform market-data redistribution as separate gates.
+- **Zerodha/Kite:** Zerodha's public support page says the free Personal API plan has no historical or realtime data, while the Connect plan includes realtime WebSocket data and historical candles at INR 500 per app per month for retail users. Zerodha also says Kite cannot directly connect third-party charting apps like TradingView; TradingView and ChartIQ libraries are used inside Kite. This supports AlphaVyuh's read-only broker posture: Kite data can be user-scoped broker/account data, not a default platform redistribution feed.
+- **DhanHQ:** Dhan's public support page lists the Data API subscription at INR 499 plus taxes per month, recurring every 30 days. Treat this as candidate user/provider data only after terms, coverage, corporate-action behavior, rate limits, and redistribution rights are reviewed.
+- **TrueData and GlobalDatafeeds:** Both publicly position themselves as authorised Indian market-data vendors with realtime and historical API coverage. GlobalDatafeeds states API pricing is tailored and asks commercial users to sign exchange agreements and pay required exchange fees. TrueData states redistribution/public display requires compliant permissions, and its pricing page says API subscriptions should be handled through the API path/ticket rather than the non-API product dropdown. Treat both as owner-gated vendor quote paths, not pre-approved launch sources.
+
 ## Decision
 
 AlphaVyuh will treat market data as a launch contract with explicit source, entitlement, and verification metadata.
@@ -79,6 +88,7 @@ Until a paid/vendor contract is approved, AlphaVyuh must launch as an EOD-first 
 
 - No live orders in this ADR.
 - No claim that TradingView provides AlphaVyuh's market data.
+- No claim that broker historical candles, quotes, or orderbook data can be reused as AlphaVyuh's platform-wide chart feed without broker, exchange, and vendor approval.
 - No launch claim of realtime charts.
 - No implementation of TradingView Advanced Charts until #42 has owner-approved licensing confirmation.
 - No dependency on ChartsMaze's undisclosed internals.
@@ -95,8 +105,20 @@ Until a paid/vendor contract is approved, AlphaVyuh must launch as an EOD-first 
 ## References
 
 - TradingView Advanced Charts FAQ: https://www.tradingview.com/charting-library-docs/latest/getting_started/Frequently-Asked-Questions/
+- TradingView free charting libraries FAQ: https://www.tradingview.com/free-charting-libraries/
+- TradingView broker integration overview: https://www.tradingview.com/broker-api-docs/integration-overview/
 - TradingView Advanced Charts quick start: https://www.tradingview.com/charting-library-docs/latest/getting_started/quick-start
+- ChartsMaze user guide: https://chartsmaze.com/blogs/user-guide/
+- ChartsMaze pricing page: https://chartsmaze.com/buy-premium-plan
 - Zerodha Kite Connect product page: https://zerodha.com/products/api/
+- Zerodha Kite API charges: https://support.zerodha.com/category/trading-and-markets/kite-web-and-mobile/kite-api/articles/what-are-the-charges-for-kite-apis
+- Zerodha third-party charting apps support note: https://support.zerodha.com/category/trading-and-markets/charts-and-orders/charts/articles/third-party-charting-libraries
+- Zerodha Trade From Charts announcement: https://zerodha.com/z-connect/featured/introducing-trade-from-charts-tfc-at-zerodha
 - Zerodha support on historical/live data pricing: https://support.zerodha.com/category/trading-and-markets/general-kite/kite-api/articles/historical-data-and-live-market-data-payment-plan
 - DhanHQ Data API subscription support page: https://dhan.co/support/platforms/dhanhq-api/how-does-the-dhanhq-data-api-subscription-work/
+- TrueData market data API: https://www.truedata.in/products/marketdataapi
+- TrueData market data API compliance/pricing overview: https://www.truedata.in/market-data-apis
+- TrueData pricing page: https://www.truedata.in/information/pricing
+- GlobalDatafeeds API pricing page: https://globaldatafeeds.in/global-datafeeds-apis/global-datafeeds-apis/pricing-sales/api-pricing/
+- GlobalDatafeeds who-can-purchase note: https://globaldatafeeds.in/global-datafeeds-apis/global-datafeeds-apis/pricing-sales/who-can-purchase/
 - AlphaVyuh ADR 009: `docs/decisions/009-chart-library.md`

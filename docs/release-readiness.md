@@ -103,6 +103,10 @@ npm run test:market-data-entitlement-check
 This secret-free gate verifies that the launch contract still states
 EOD-first posture, TradingView-as-charting-only, user-scoped broker data,
 owner-gated realtime/vendor selection, and linked sector/5Y/broker gates.
+It also verifies that public competitor/provider research stays explicit:
+ChartsMaze is workflow evidence only, TradingView libraries do not include
+AlphaVyuh's market-data rights, broker data cannot be reused as redistributed
+platform candles, and TrueData/GlobalDatafeeds remain quote/contract-gated.
 
 Read-only broker account smoke, when real credentials are available:
 
