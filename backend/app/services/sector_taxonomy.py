@@ -149,6 +149,26 @@ def build_sector_taxonomy_metadata(
                 "An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet."
             ),
         },
+        "audit_scope": {
+            "sector_labels": {
+                "source": SECTOR_TAXONOMY_SOURCE,
+                "status": "contracted",
+                "description": "AlphaVyuh sector counts are grouped from active stock_universe.sector labels.",
+            },
+            "sectoral_index_reference": {
+                "source": "NSE sectoral indices",
+                "status": "reference_only",
+                "description": "NSE sectoral-index labels are used only as a public reference and alias source.",
+            },
+            "industry_taxonomy": {
+                "source": "NSE industry classification",
+                "status": "not_audited",
+                "description": (
+                    "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts; "
+                    "treat industry parity as unverified until a separate industry taxonomy audit lands."
+                ),
+            },
+        },
         "sectoral_indices": NSE_SECTORAL_INDEXES,
         "active_count": total_active,
         "active_count_scope": active_count_scope,

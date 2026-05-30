@@ -139,6 +139,29 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
     typeof metadata.alias_policy?.description === "string" && metadata.alias_policy.description.includes("empty aliases list"),
     "Sector alias policy must explain empty aliases lists.",
   );
+  assert(metadata.audit_scope && typeof metadata.audit_scope === "object", "Sector metadata must expose audit_scope.");
+  assert(
+    metadata.audit_scope?.sector_labels?.source === "stock_universe.sector",
+    `Sector audit scope must identify stock_universe.sector labels; got ${metadata.audit_scope?.sector_labels?.source}`,
+  );
+  assert(
+    metadata.audit_scope?.sectoral_index_reference?.status === "reference_only",
+    `Sectoral index audit scope must be reference_only; got ${metadata.audit_scope?.sectoral_index_reference?.status}`,
+  );
+  assert(
+    metadata.audit_scope?.industry_taxonomy?.source === "NSE industry classification",
+    `Industry taxonomy scope must identify NSE industry classification; got ${metadata.audit_scope?.industry_taxonomy?.source}`,
+  );
+  assert(
+    ["not_audited", "audited"].includes(metadata.audit_scope?.industry_taxonomy?.status),
+    `Industry taxonomy status must be explicit; got ${metadata.audit_scope?.industry_taxonomy?.status}`,
+  );
+  assert(
+    typeof metadata.audit_scope?.industry_taxonomy?.description === "string" &&
+      /industry/i.test(metadata.audit_scope.industry_taxonomy.description) &&
+      /audit/i.test(metadata.audit_scope.industry_taxonomy.description),
+    "Industry taxonomy scope must explain the industry audit status.",
+  );
 
   assert(Number(metadata.active_count) >= minActiveCount, `Active universe count looked too low: ${metadata.active_count}`);
   assert(Number(metadata.sector_count) >= minSectorCount, `Sector count looked too low: ${metadata.sector_count}`);
@@ -207,6 +230,7 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
     unmatchedReferenceCount: Number(metadata.reference_coverage.unmatched_sector_count),
     contractAsOf: metadata.contract_as_of,
     referenceAsOf: metadata.reference.as_of,
+    industryTaxonomyStatus: metadata.audit_scope.industry_taxonomy.status,
   };
 }
 
@@ -225,7 +249,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(
       `Sector taxonomy ok: ${summary.sectorCount} sectors, ${summary.activeCount} active symbols, ` +
         `${summary.unmappedCount} unmapped, ${summary.unmatchedReferenceCount} without NSE sectoral-index reference, ` +
-        `contract ${summary.contractAsOf}, NSE reference ${summary.referenceAsOf}.`,
+        `industry taxonomy ${summary.industryTaxonomyStatus}, contract ${summary.contractAsOf}, NSE reference ${summary.referenceAsOf}.`,
     );
   } catch (error) {
     console.error(`Sector taxonomy check failed: ${error instanceof Error ? error.message : String(error)}`);

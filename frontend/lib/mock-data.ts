@@ -252,6 +252,23 @@ function mockSectorTaxonomyMetadata(): SectorTaxonomyMetadata {
       source: "NSE sectoral index aliases",
       description: "Mock sector fixtures do not provide audited NSE aliases.",
     },
+    audit_scope: {
+      sector_labels: {
+        source: "stock_universe.sector",
+        status: "contracted",
+        description: "Mock sector labels exercise UI flow only.",
+      },
+      sectoral_index_reference: {
+        source: "NSE sectoral indices",
+        status: "reference_only",
+        description: "Mock sector labels are not NSE sectoral-index audit evidence.",
+      },
+      industry_taxonomy: {
+        source: "NSE industry classification",
+        status: "not_audited",
+        description: "Mock fixtures do not audit NSE industry-level classification.",
+      },
+    },
     sectoral_indices: [],
   };
 }

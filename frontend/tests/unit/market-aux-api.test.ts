@@ -129,6 +129,23 @@ describe("market auxiliary API", () => {
             source: "NSE sectoral index aliases",
             description: "Sector-count aliases are derived only from NSE sectoral-index alias labels.",
           },
+          audit_scope: {
+            sector_labels: {
+              source: "stock_universe.sector",
+              status: "contracted",
+              description: "AlphaVyuh sector counts are grouped from active stock_universe.sector labels.",
+            },
+            sectoral_index_reference: {
+              source: "NSE sectoral indices",
+              status: "reference_only",
+              description: "NSE sectoral-index labels are used only as a public reference and alias source.",
+            },
+            industry_taxonomy: {
+              source: "NSE industry classification",
+              status: "not_audited",
+              description: "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts.",
+            },
+          },
           display_filter: {
             minimum_active_symbols: 1,
             hidden_sector_count: 0,
@@ -156,6 +173,11 @@ describe("market auxiliary API", () => {
         unmapped_count: 1,
         alias_policy: {
           source: "NSE sectoral index aliases",
+        },
+        audit_scope: {
+          industry_taxonomy: {
+            status: "not_audited",
+          },
         },
       },
     });

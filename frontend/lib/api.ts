@@ -1331,6 +1331,23 @@ export type SectorTaxonomyMetadata = {
     source: string;
     description: string;
   };
+  audit_scope?: {
+    sector_labels?: {
+      source: string;
+      status: string;
+      description: string;
+    };
+    sectoral_index_reference?: {
+      source: string;
+      status: string;
+      description: string;
+    };
+    industry_taxonomy?: {
+      source: string;
+      status: string;
+      description: string;
+    };
+  };
   reference_coverage?: {
     matched_sector_count: number;
     unmatched_sector_count: number;

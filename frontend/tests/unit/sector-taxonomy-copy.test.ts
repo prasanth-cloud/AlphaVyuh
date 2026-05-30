@@ -30,6 +30,23 @@ function metadata(overrides: Partial<SectorTaxonomyMetadata> = {}): SectorTaxono
       source: "NSE sectoral index aliases",
       description: "Sector-count aliases are derived only from NSE sectoral-index alias labels. An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet.",
     },
+    audit_scope: {
+      sector_labels: {
+        source: "stock_universe.sector",
+        status: "contracted",
+        description: "AlphaVyuh sector counts are grouped from active stock_universe.sector labels.",
+      },
+      sectoral_index_reference: {
+        source: "NSE sectoral indices",
+        status: "reference_only",
+        description: "NSE sectoral-index labels are used only as a public reference and alias source.",
+      },
+      industry_taxonomy: {
+        source: "NSE industry classification",
+        status: "not_audited",
+        description: "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts; treat industry parity as unverified until a separate industry taxonomy audit lands.",
+      },
+    },
     reference: {
       name: "NSE sectoral indices",
       url: "https://www.nseindia.com/static/products-services/indices-sectoral",
@@ -50,15 +67,16 @@ describe("sectorTaxonomyPresentation", () => {
     });
   });
 
-  it("marks clean mapped sectors as verified for the current contract", () => {
+  it("warns when industry taxonomy is still outside the current audit", () => {
     expect(sectorTaxonomyPresentation(metadata())).toMatchObject({
       value: "21 SECTORS",
-      status: "good",
+      status: "warn",
       source: "stock_universe.sector",
       contract: "2026-05-30",
       unmapped: "0",
       aliasPolicy: "Sector-count aliases are derived only from NSE sectoral-index alias labels. An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet.",
-      dashboardBadge: "Taxonomy source: stock_universe.sector",
+      industryScope: "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts; treat industry parity as unverified until a separate industry taxonomy audit lands.",
+      dashboardBadge: "Taxonomy needs audit: industry taxonomy unaudited",
     });
   });
 
@@ -83,7 +101,24 @@ describe("sectorTaxonomyPresentation", () => {
     expect(presentation.detail).toContain("1 hidden sector");
     expect(presentation.detail).toContain("2 unmapped symbols");
     expect(presentation.detail).toContain("1 sector without NSE sectoral-index reference");
+    expect(presentation.detail).toContain("industry taxonomy unaudited");
     expect(presentation.unmapped).toBe("2 (ABC, XYZ)");
-    expect(presentation.dashboardBadge).toBe("Taxonomy needs audit: 1 hidden sector, 2 unmapped symbols, 1 sector without NSE sectoral-index reference");
+    expect(presentation.dashboardBadge).toBe("Taxonomy needs audit: 1 hidden sector, 2 unmapped symbols, 1 sector without NSE sectoral-index reference, industry taxonomy unaudited");
+  });
+
+  it("can mark the current sector contract clean once industry taxonomy is audited", () => {
+    expect(sectorTaxonomyPresentation(metadata({
+      audit_scope: {
+        ...metadata().audit_scope,
+        industry_taxonomy: {
+          source: "NSE industry classification",
+          status: "audited",
+          description: "NSE industry-level classification has been audited against AlphaVyuh sector counts.",
+        },
+      },
+    }))).toMatchObject({
+      status: "good",
+      dashboardBadge: "Taxonomy source: stock_universe.sector",
+    });
   });
 });

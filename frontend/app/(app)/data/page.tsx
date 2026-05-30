@@ -277,10 +277,17 @@ export default function DataFreshnessPage() {
         detail: "Sector filters and counts are treated as unverified until the audit source, contract date, and unmapped symbols load.",
         href: "/data",
       });
-    } else if (state.sectorTaxonomy.unmapped_count > 0 || state.sectorTaxonomy.display_filter.hidden_sector_count > 0) {
+    } else if (
+      state.sectorTaxonomy.unmapped_count > 0 ||
+      state.sectorTaxonomy.display_filter.hidden_sector_count > 0 ||
+      state.sectorTaxonomy.audit_scope?.industry_taxonomy?.status !== "audited"
+    ) {
+      const industryCopy = state.sectorTaxonomy.audit_scope?.industry_taxonomy?.status !== "audited"
+        ? " NSE industry taxonomy is not audited yet."
+        : "";
       next.push({
         title: "Audit sector taxonomy gaps",
-        detail: `${state.sectorTaxonomy.unmapped_count.toLocaleString("en-IN")} unmapped symbols and ${state.sectorTaxonomy.display_filter.hidden_sector_count.toLocaleString("en-IN")} hidden sectors need review before launch.`,
+        detail: `${state.sectorTaxonomy.unmapped_count.toLocaleString("en-IN")} unmapped symbols and ${state.sectorTaxonomy.display_filter.hidden_sector_count.toLocaleString("en-IN")} hidden sectors need review before launch.${industryCopy}`,
         href: "/scanner",
       });
     }
@@ -441,6 +448,7 @@ export default function DataFreshnessPage() {
               ["Sector unmapped", sectorTaxonomy.unmapped],
               ["Sector display filter", sectorTaxonomy.displayFilter],
               ["Sector alias policy", sectorTaxonomy.aliasPolicy],
+              ["Sector industry scope", sectorTaxonomy.industryScope],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
               ["Latest exchange file", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],
