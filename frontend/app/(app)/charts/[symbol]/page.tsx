@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist, WorkflowState,
+  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist, WorkflowLifecycle, WorkflowState,
 } from "@/lib/api";
 import {
   getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
@@ -417,6 +417,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [reviewNoteDraft, setReviewNoteDraft] = useState("");
   const [reviewNoteDirty, setReviewNoteDirty] = useState(false);
   const [reviewNoteSaving, setReviewNoteSaving] = useState(false);
+  const [reviewDecisionSaving, setReviewDecisionSaving] = useState<WorkflowLifecycle | null>(null);
   const [reviewNoteMessage, setReviewNoteMessage] = useState("");
 
   // Fundamentals & Technicals accordions
@@ -1996,6 +1997,43 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     }
   }
 
+  async function saveReviewDecision(nextLifecycle: Extract<WorkflowLifecycle, "ready" | "review_later" | "invalidated">) {
+    const note = reviewNoteDraft.trim();
+    setReviewDecisionSaving(nextLifecycle);
+    setReviewNoteMessage("Saving review decision...");
+    try {
+      const nextTags = new Set(workflowState?.tags ?? []);
+      nextTags.add(`chart-${nextLifecycle.replace("_", "-")}`);
+      const saved = await upsertWorkflowState({
+        symbol,
+        lifecycle: nextLifecycle,
+        source: workflowState?.source ?? sourcePage ?? "chart",
+        watchlist_id: workflowState?.watchlist_id ?? sourceWatchlistId ?? null,
+        notes: note || workflowState?.notes || null,
+        scanner_context: workflowState?.scanner_context ?? null,
+        setup_quality: workflowState?.setup_quality ?? null,
+        tags: [...nextTags],
+        ignored: nextLifecycle === "invalidated",
+        review_later: nextLifecycle === "review_later",
+      });
+      setWorkflowState(saved);
+      setReviewNoteDirty(false);
+      setReviewNoteMessage(
+        nextLifecycle === "ready"
+          ? "Marked Ready from chart review."
+          : nextLifecycle === "review_later"
+            ? "Marked for later review."
+            : "Marked invalidated from chart review."
+      );
+      trackEvent("chart_review_decision_saved", { symbol, lifecycle: nextLifecycle, source: saved.source ?? "chart" });
+    } catch {
+      setReviewNoteMessage("Review decision could not be saved. Try again before leaving the chart.");
+    } finally {
+      setReviewDecisionSaving(null);
+      window.setTimeout(() => setReviewNoteMessage(""), 3500);
+    }
+  }
+
   return (
     <div
       className="workspace-page"
@@ -2911,6 +2949,32 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                         className="w-full min-h-[72px] rounded-[8px] px-2.5 py-2 text-[11px] leading-5 outline-none resize-none"
                         style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
                       />
+                      <div data-testid="chart-review-decisions" className="grid grid-cols-3 gap-1.5">
+                        {([
+                          ["ready", "Ready"],
+                          ["review_later", "Review later"],
+                          ["invalidated", "Invalidate"],
+                        ] as const).map(([nextLifecycle, label]) => {
+                          const active = workflowState?.lifecycle === nextLifecycle;
+                          const busy = reviewDecisionSaving === nextLifecycle;
+                          return (
+                            <button
+                              key={nextLifecycle}
+                              type="button"
+                              onClick={() => void saveReviewDecision(nextLifecycle)}
+                              disabled={reviewNoteSaving || reviewDecisionSaving != null}
+                              className="rounded-[8px] px-2 py-1.5 text-[10px] font-bold disabled:opacity-50"
+                              style={{
+                                background: active ? "rgba(77,214,255,0.14)" : "var(--app-surface3)",
+                                border: active ? "1px solid rgba(77,214,255,0.32)" : "1px solid var(--app-border)",
+                                color: active ? "var(--accent)" : "var(--app-text2)",
+                              }}
+                            >
+                              {busy ? "Saving..." : label}
+                            </button>
+                          );
+                        })}
+                      </div>
                       {reviewNoteMessage && (
                         <div className="text-[10px]" style={{ color: reviewNoteMessage.includes("could not") ? "#f87171" : "#4ade80" }}>
                           {reviewNoteMessage}
