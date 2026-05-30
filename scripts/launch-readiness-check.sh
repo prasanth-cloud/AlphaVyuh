@@ -39,6 +39,7 @@ run_step "Recovery handoff credential regression tests" npm run test:recovery-ha
 run_step "Signed-in copy posture regression tests" npm run test:signed-in-copy-posture-check
 run_step "Public posture checker regression tests" npm run test:public-posture-check
 run_step "Data recovery checker regression tests" npm run test:data-recovery-check
+run_step "Market-data entitlement contract regression tests" npm run test:market-data-entitlement-check
 run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
 
 run_step "Frontend lint" npm --prefix frontend run lint
