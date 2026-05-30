@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 
 const adrPath = "docs/decisions/015-market-data-entitlements.md";
 const releasePath = "docs/release-readiness.md";
+const decisionRecordPath = "docs/market-data-provider-decision-record.md";
 
 const adr = readFileSync(adrPath, "utf8");
 const release = readFileSync(releasePath, "utf8");
+const decisionRecord = readFileSync(decisionRecordPath, "utf8");
 
 function requireMatch(name, source, pattern) {
   assert.match(source, pattern, `${name} was missing from the market-data entitlement contract.`);
@@ -33,11 +35,21 @@ requireMatch("TradingView owner approval gate", adr, /#42 records TradingView li
 requireMatch("linked sector gate", adr, /#285 sector taxonomy endpoint/i);
 requireMatch("linked 5Y gate", adr, /#286 five-year daily candle smoke/i);
 requireMatch("linked broker gate", adr, /#287 broker read-only smoke/i);
+requireMatch("provider decision record linked", adr, /docs\/market-data-provider-decision-record\.md/i);
 
 requireMatch("release docs EOD release posture", release, /Professional Access release[\s\S]*official\/free EOD bhavcopy/i);
 requireMatch("release docs licensed data owner gate", release, /Licensed production data[\s\S]*TrueData\/GlobalDatafeeds/i);
 requireMatch("release docs TradingView not launch source", release, /Legal\/data vendor decision is recorded/i);
 requireMatch("release docs public research guard", release, /public competitor\/provider research stays explicit/i);
 requireMatch("release docs broker data reuse guard", release, /broker data cannot be reused as redistributed\s+platform candles/i);
+requireMatch("release docs provider decision record", release, /market-data-provider-decision-record\.md/i);
+
+requireMatch("decision record owner-gated status", decisionRecord, /\*\*Status:\*\*\s*Owner-gated/i);
+requireMatch("decision record blocks realtime source", decisionRecord, /Realtime or delayed platform feed[\s\S]*Blocked until owner signs vendor\/exchange terms/i);
+requireMatch("decision record requires redistribution rights", decisionRecord, /Redistribution rights[\s\S]*authenticated SaaS users/i);
+requireMatch("decision record requires five-year depth", decisionRecord, /Historical depth[\s\S]*Five years daily OHLCV/i);
+requireMatch("decision record separates broker data", decisionRecord, /Broker account data[\s\S]*user-scoped and read-only/i);
+requireMatch("decision record blocks ChartsMaze inference", decisionRecord, /Infer their hidden data vendor, broker routing, or licensing model/i);
+requireMatch("decision record provider PR packet", decisionRecord, /Every PR that changes `MARKET_DATA_PROVIDER`/i);
 
 console.log("Market-data entitlement contract check passed.");

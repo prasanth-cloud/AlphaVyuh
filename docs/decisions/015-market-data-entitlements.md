@@ -99,8 +99,25 @@ Until a paid/vendor contract is approved, AlphaVyuh must launch as an EOD-first 
 - #286 five-year daily candle smoke fails for missing coverage on core established NSE EQ symbols.
 - #287 broker read-only smoke appears in settings/data-health and blocks order enablement.
 - #42 records TradingView licensing approval or remains blocked.
-- #294 records the chosen market-data provider plan before any public realtime/live-data claim.
+- #294 records the chosen market-data provider plan in `docs/market-data-provider-decision-record.md` before any public realtime/live-data claim.
 - Mission Control lists any owner-gated secrets, contracts, or production smoke credentials that prevent launch verification.
+
+## Provider Decision Record
+
+The executable owner checklist lives in `docs/market-data-provider-decision-record.md`.
+Any PR that changes `MARKET_DATA_PROVIDER`, public data copy, chart provider
+behavior, or realtime/live claims must complete that record with:
+
+- provider name and approved plan,
+- permitted use case and explicitly blocked use cases,
+- redistribution terms for authenticated SaaS usage,
+- exchange fees, renewal terms, and cancellation rules,
+- five-year historical coverage and corporate-action adjustment policy,
+- rate limits, SLA, freshness behavior, and outage support,
+- production smoke evidence and rollback path.
+
+Until that record is complete, the platform remains EOD-first and owner-gated for
+realtime, delayed, or redistributed vendor data.
 
 ## References
 
