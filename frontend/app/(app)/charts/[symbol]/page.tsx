@@ -36,6 +36,7 @@ import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
+import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
 
 type LinePoint = { time: string; value: number };
 type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
@@ -1835,6 +1836,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }
   const latestVolumeRatio = latest?.volume_ratio ?? null;
   const recentCandles = data?.candles?.slice(-40) ?? [];
+  const higherTimeframeReview = buildHigherTimeframeReview(data?.candles ?? []);
   const recentHigh = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : null;
   const recentLow = recentCandles.length ? Math.min(...recentCandles.map((c) => c.low)) : null;
   const ema20Latest = indicatorData.ema20?.at(-1)?.value ?? data?.candles?.at(-1)?.ema_20 ?? null;
@@ -1863,6 +1865,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       label: "Trend",
       status: structureReady ? "ready" : latest?.close != null && ema20Latest != null ? "watch" : "missing",
       detail: structureReady ? "Price above EMA stack" : ema20Latest != null ? "EMA stack not aligned" : "Add EMA 20/50",
+    },
+    {
+      key: "higher-timeframe",
+      label: "HTF",
+      status: higherTimeframeReview.playbookStatus,
+      detail: higherTimeframeReview.playbookDetail,
     },
     {
       key: "level",
@@ -1917,6 +1925,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : sourcePage === "scanner" ? "Flow · Scanner chart" : "Flow · Direct chart",
     scannerContext.pills[0] ? `Original scan · ${scannerContext.pills[0]}` : null,
+    `HTF · ${higherTimeframeReview.alignment}`,
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     indicatorError ? "Indicators unavailable" : null,
@@ -2686,6 +2695,36 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                           </span>
                         </div>
                       ))}
+                    </div>
+                  </details>
+                  <details
+                    data-testid="chart-higher-timeframe-review"
+                    className="rounded-[10px]"
+                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+                    open={higherTimeframeReview.alignment !== "aligned"}
+                  >
+                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Higher timeframe</summary>
+                    <div className="px-3 pb-3 space-y-2">
+                      {[higherTimeframeReview.weekly, higherTimeframeReview.monthly].map((item) => {
+                        const tone = item.status === "uptrend" || item.status === "constructive"
+                          ? "#4ade80"
+                          : item.status === "limited"
+                            ? "var(--app-text3)"
+                            : item.status === "downtrend"
+                              ? "#f87171"
+                              : "#fbbf24";
+                        return (
+                          <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[10px] font-semibold" style={{ color: "var(--app-text2)" }}>{item.label}</span>
+                              <span className="text-[10px] font-bold tabular-nums" style={{ color: tone }}>{item.changePct != null ? `${item.changePct >= 0 ? "+" : ""}${item.changePct.toFixed(1)}%` : "Limited"}</span>
+                            </div>
+                            <div className="mt-1 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                              {item.summary}. {item.detail}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </details>
                   <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
