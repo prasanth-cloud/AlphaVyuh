@@ -18,10 +18,14 @@ broker mutation.
   parseable `checked_at` timestamp no older than 24 hours, and broker status
   does not report order routes enabled unless an active broker session is also
   present.
+- Preserved existing broker connection metadata during reconnect/import status
+  upserts so a safe filled-trade import cannot accidentally erase a fresh
+  read-only smoke result.
 - Documented that read-only smoke metadata is a prerequisite, not approval to
   enable live or sandbox orders.
 - Added regression tests proving live-confirmed broker order submission blocks
-  with `409` until fresh matching same-broker smoke metadata has passed.
+  with `409` until fresh matching same-broker smoke metadata has passed, and
+  proving Zerodha import preserves the read-only smoke record.
 
 ## Validation
 
@@ -30,6 +34,7 @@ broker mutation.
 - `npm run typecheck` passed.
 - `pytest backend/tests/test_broker_order_safety.py backend/tests/test_brokers_router.py` passed.
 - `pytest backend/tests` passed: 287 tests.
+- `npm run test:broker-readonly-check` passed.
 - `git diff --check` passed.
 
 ## Safety

@@ -397,6 +397,21 @@ def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
     assert "alphavyuh-broker-import:zerodha:order:kite-order-1" in client.journal_inserts[0]["entry_reason"]
 
 
+def test_zerodha_import_preserves_read_only_smoke_metadata(monkeypatch):
+    client = _FakeSupabase()
+    existing_metadata = _fresh_read_only_smoke("zerodha")
+    client.broker_connection_metadata["zerodha"] = existing_metadata
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda **_kwargs: [])
+
+    result = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert client.broker_connection_upserts
+    assert client.broker_connection_upserts[-1]["metadata"] == existing_metadata
+
+
 def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)

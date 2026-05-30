@@ -255,6 +255,20 @@ def _upsert_broker_connection(
     metadata: dict | None = None,
 ) -> None:
     try:
+        safe_metadata = metadata
+        if safe_metadata is None:
+            try:
+                existing = (
+                    sb.table("broker_connections")
+                    .select("metadata")
+                    .eq("user_id", user_id)
+                    .eq("broker", broker)
+                    .maybe_single()
+                    .execute()
+                ).data or {}
+                safe_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
+            except Exception:
+                safe_metadata = {}
         payload = {
             "user_id": user_id,
             "broker": broker,
@@ -264,7 +278,7 @@ def _upsert_broker_connection(
             "is_active": True,
             "connection_status": connection_status,
             "scopes": scopes or ["profile", "holdings", "positions", "orders", "trades"],
-            "metadata": metadata or {},
+            "metadata": safe_metadata,
         }
         if last_synced_at:
             payload["last_synced_at"] = last_synced_at
