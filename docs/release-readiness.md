@@ -30,6 +30,7 @@ npm run launch:check
 npm run test:setup-review-check
 npm run check:data-recovery
 npm run check:production-api:railway
+npm run check:five-year-charts:railway
 # After Railway recovery, run the full production recovery/browser smoke gate.
 # This requires PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL,
 # and PLAYWRIGHT_QA_PASSWORD.
@@ -62,8 +63,10 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 
 `npm run launch:check` runs the deterministic checker tests for production API
 freshness, production smoke credentials, public posture copy, data recovery
-readiness, scanner-to-chart setup review contracts, and Railway secret
-preparation before the heavier app/browser gates.
+readiness, scanner-to-chart setup review contracts, Railway secret preparation,
+and 5Y chart contract regression coverage before the heavier app/browser gates.
+The 5Y gate runs through `npm run test:five-year-chart-check`, an explicit alias
+for the production API checker tests that enforce daily candle depth and span.
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
 
@@ -152,6 +155,10 @@ symbol, side, quantity, order type, and sandbox/live mode.
 - `npm run check:data-recovery` passes for the production API and raw Supabase EOD store.
 - `npm run check:production-api:railway` returns current market breadth and enough
   current daily candles for the configured chart smoke symbols.
+- `npm run check:five-year-charts:railway` returns at least the configured
+  minimum daily candle count and five-year span for every configured chart smoke
+  symbol. Defaults: `RELIANCE,ITC,AUBANK`, 1300 requested daily candles, at least
+  90% of five trading years, and at least `365 * 5 - 14` calendar days of span.
 - `RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check`
   passes after Railway recovery with `PRODUCTION_API_BEARER_TOKEN`,
   `PLAYWRIGHT_QA_EMAIL`, `PLAYWRIGHT_QA_PASSWORD`, authenticated

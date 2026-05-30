@@ -76,6 +76,9 @@ jobs:
       - name: Production API checker tests
         run: npm run test:production-api-check
 
+      - name: Five-year chart contract tests
+        run: npm run test:five-year-chart-check
+
       - name: Production smoke env checker tests
         run: npm run test:production-smoke-env-check
 
