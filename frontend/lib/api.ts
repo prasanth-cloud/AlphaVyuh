@@ -2488,7 +2488,7 @@ export async function connectBrokerCallback(
 // ── Orders / Broker ───────────────────────────────────────────────────────────
 
 export type ZerodhaReadOnlySmoke = {
-  broker: "zerodha";
+  broker: "zerodha" | "upstox";
   connected_read_only: boolean;
   token_expired: boolean;
   checks: Record<string, { ok: boolean; count?: number; error?: string; note?: string; user_id_present?: boolean }>;
@@ -2599,10 +2599,10 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
 
 export const importZerodhaTrades = () => importBrokerTrades("zerodha");
 
-export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
+export async function runBrokerReadOnlySmoke(broker: "zerodha" | "upstox" = "zerodha"): Promise<ZerodhaReadOnlySmoke> {
   if (shouldUseMockFallback()) {
     return {
-      broker: "zerodha",
+      broker,
       connected_read_only: false,
       token_expired: false,
       checks: {
@@ -2616,13 +2616,18 @@ export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
     };
   }
   const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/broker/zerodha/read-only-smoke`, { headers });
+  const path = broker === "zerodha"
+    ? "/api/v1/broker/zerodha/read-only-smoke"
+    : `/api/brokers/${broker}/read-only-smoke`;
+  const res = await fetch(`${API}${path}`, { headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? "Read-only broker smoke failed");
   }
   return res.json();
 }
+
+export const runZerodhaReadOnlySmoke = () => runBrokerReadOnlySmoke("zerodha");
 
 export async function getBrokerStatus(): Promise<{
   connected: boolean;

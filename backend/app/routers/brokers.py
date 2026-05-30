@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -131,21 +132,25 @@ def _upsert_broker_connection(
     broker_user_id: str | None,
     broker_user_name: str | None,
     token_expires_at: str | None,
+    last_synced_at: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     try:
-        get_admin_client().table("broker_connections").upsert(
-            {
-                "user_id": user_id,
-                "broker": broker,
-                "broker_user_id": broker_user_id,
-                "broker_user_name": broker_user_name,
-                "token_expires_at": token_expires_at,
-                "is_active": True,
-                "connection_status": "connected_read_only",
-                "scopes": ["profile", "holdings", "positions", "orders", "trades"],
-            },
-            on_conflict="user_id,broker",
-        ).execute()
+        payload = {
+            "user_id": user_id,
+            "broker": broker,
+            "broker_user_id": broker_user_id,
+            "broker_user_name": broker_user_name,
+            "token_expires_at": token_expires_at,
+            "is_active": True,
+            "connection_status": "connected_read_only",
+            "scopes": ["profile", "holdings", "positions", "orders", "trades"],
+        }
+        if last_synced_at:
+            payload["last_synced_at"] = last_synced_at
+        if metadata is not None:
+            payload["metadata"] = metadata
+        get_admin_client().table("broker_connections").upsert(payload, on_conflict="user_id,broker").execute()
     except Exception:
         logger.debug("Broker connection metadata unavailable; migration may not be applied yet.", exc_info=True)
 
@@ -279,6 +284,130 @@ async def get_broker_holdings(
         _raise_for_broker_error(exc)
 
     return [h.model_dump() for h in holdings]
+
+
+def _smoke_metadata(*, broker: BrokerId, passed: bool, checked_at: str, checks: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "read_only_smoke": {
+            "broker": broker,
+            "passed": passed,
+            "checked_at": checked_at,
+            "checks": checks,
+        }
+    }
+
+
+def _smoke_error(exc: Exception) -> str:
+    if isinstance(exc, BrokerError):
+        return exc.kind
+    if isinstance(exc, HTTPException):
+        return str(exc.detail)
+    return exc.__class__.__name__
+
+
+@router.get("/{broker}/read-only-smoke")
+async def broker_read_only_smoke(
+    broker: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Run adapter-backed read-only account checks and return sanitized counts only.
+    This endpoint never places, modifies, or cancels broker orders.
+    """
+    _require_broker_plan(user_id)
+    broker_id = _validate_broker(broker)
+    adapter = get_adapter(broker_id)
+    checks: dict[str, dict[str, Any]] = {
+        "login_url": {"ok": False},
+        "profile": {"ok": False},
+        "positions": {"ok": False, "count": 0},
+        "holdings": {"ok": False, "count": 0},
+        "orderbook": {"ok": False, "count": 0},
+        "tradebook": {"ok": False, "count": 0},
+    }
+
+    try:
+        adapter.get_auth_url(create_broker_oauth_state(user_id, broker_id))
+        checks["login_url"] = {"ok": True}
+    except Exception as exc:
+        checks["login_url"] = {"ok": False, "error": _smoke_error(exc)}
+
+    try:
+        creds = _load_creds(user_id, broker_id)
+    except HTTPException as exc:
+        checked_at = datetime.now(timezone.utc).isoformat()
+        _upsert_broker_connection(
+            user_id=user_id,
+            broker=broker_id,
+            broker_user_id=None,
+            broker_user_name=None,
+            token_expires_at=None,
+            last_synced_at=checked_at,
+            metadata=_smoke_metadata(broker=broker_id, passed=False, checked_at=checked_at, checks=checks),
+        )
+        return {
+            "broker": broker_id,
+            "connected_read_only": False,
+            "token_expired": exc.status_code == status.HTTP_401_UNAUTHORIZED,
+            "checks": checks,
+        }
+
+    broker_user_id: str | None = None
+    broker_user_name: str | None = None
+    try:
+        profile = await adapter.get_profile(creds)
+        broker_user_id = profile.user_id
+        broker_user_name = profile.display_name
+        checks["profile"] = {"ok": True, "user_id_present": bool(profile.user_id)}
+    except BrokerError as exc:
+        checks["profile"] = {"ok": False, "error": _smoke_error(exc)}
+
+    try:
+        positions = await adapter.get_positions(creds)
+        checks["positions"] = {"ok": True, "count": len(positions)}
+    except BrokerError as exc:
+        checks["positions"] = {"ok": False, "count": 0, "error": _smoke_error(exc)}
+
+    try:
+        holdings = await adapter.get_holdings(creds)
+        checks["holdings"] = {"ok": True, "count": len(holdings)}
+    except BrokerError as exc:
+        checks["holdings"] = {"ok": False, "count": 0, "error": _smoke_error(exc)}
+
+    orders = []
+    try:
+        orders = await adapter.list_orders(creds)
+        checks["orderbook"] = {"ok": True, "count": len(orders)}
+    except BrokerError as exc:
+        checks["orderbook"] = {"ok": False, "count": 0, "error": _smoke_error(exc)}
+
+    completed = next((order for order in orders if order.status == "COMPLETE"), None)
+    if completed is None:
+        checks["tradebook"] = {"ok": True, "count": 0, "note": "No completed order available for tradebook probe."}
+    else:
+        try:
+            order = await adapter.get_order(creds, completed.broker_order_id)
+            checks["tradebook"] = {"ok": True, "count": len(order.fills)}
+        except BrokerError as exc:
+            checks["tradebook"] = {"ok": False, "count": 0, "error": _smoke_error(exc)}
+
+    passed = all(bool(check.get("ok")) for check in checks.values())
+    checked_at = datetime.now(timezone.utc).isoformat()
+    _upsert_broker_connection(
+        user_id=user_id,
+        broker=broker_id,
+        broker_user_id=broker_user_id,
+        broker_user_name=broker_user_name,
+        token_expires_at=creds.expires_at.isoformat(),
+        last_synced_at=checked_at,
+        metadata=_smoke_metadata(broker=broker_id, passed=passed, checked_at=checked_at, checks=checks),
+    )
+    return {
+        "broker": broker_id,
+        "connected_read_only": passed,
+        "token_expired": False,
+        "checks": checks,
+    }
 
 
 @router.delete("/{broker}/disconnect")

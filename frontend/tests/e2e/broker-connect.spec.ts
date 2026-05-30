@@ -241,6 +241,56 @@ test.describe("Broker settings — connected", () => {
     await expect(gate).toContainText("older than the 24-hour launch gate");
     await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Refresh required");
   });
+
+  test("runs the active broker read-only smoke endpoint", async ({ page }) => {
+    let upstoxSmokeRequests = 0;
+    let zerodhaSmokeRequests = 0;
+    await mockBrokerStatus(page, {
+      broker: "upstox",
+      connected: true,
+      mode: "read_only",
+      status: "connected_read_only",
+      status_label: "Upstox read-only connected",
+      has_token: true,
+      read_only: true,
+      can_import: true,
+      read_only_smoke_passed: false,
+      read_only_smoke_fresh: false,
+      read_only_smoke_checked_at: null,
+    });
+    await page.route("**/api/brokers/upstox/read-only-smoke", (route) => {
+      upstoxSmokeRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          broker: "upstox",
+          connected_read_only: true,
+          token_expired: false,
+          checks: {
+            login_url: { ok: true },
+            profile: { ok: true, user_id_present: true },
+            holdings: { ok: true, count: 1 },
+            positions: { ok: true, count: 0 },
+            orderbook: { ok: true, count: 0 },
+            tradebook: { ok: true, count: 0 },
+          },
+        }),
+      });
+    });
+    await page.route("**/api/v1/broker/zerodha/read-only-smoke", (route) => {
+      zerodhaSmokeRequests += 1;
+      return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "Wrong broker smoke endpoint" }) });
+    });
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    await page.getByRole("button", { name: "Run Upstox read-only smoke" }).click();
+    await expect.poll(() => upstoxSmokeRequests).toBe(1);
+    await expect.poll(() => zerodhaSmokeRequests).toBe(0);
+    await expect(page.getByText("6/6 Upstox read-only checks passed")).toBeVisible();
+  });
 });
 
 // ── OAuth callback redirect ───────────────────────────────────────────────────

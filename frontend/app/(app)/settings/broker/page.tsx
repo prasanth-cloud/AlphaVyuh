@@ -8,7 +8,7 @@ import {
   getBrokerStatus,
   getZerodhaLoginUrl,
   importBrokerTrades,
-  runZerodhaReadOnlySmoke,
+  runBrokerReadOnlySmoke,
   startBrokerConnect,
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
@@ -165,11 +165,13 @@ function BrokerSettingsContent() {
     setError("");
     setSmokeSummary("");
     try {
-      const result = await runZerodhaReadOnlySmoke();
+      const broker = state?.broker === "upstox" ? "upstox" : "zerodha";
+      const result = await runBrokerReadOnlySmoke(broker);
       const checks = Object.entries(result.checks);
       const passed = checks.filter(([, check]) => check.ok).length;
       const failed = checks.length - passed;
-      setSmokeSummary(`${passed}/${checks.length} read-only checks passed${failed ? `; ${failed} need attention` : ""}. No order route was called.`);
+      setSmokeSummary(`${passed}/${checks.length} ${activeBrokerLabel} read-only checks passed${failed ? `; ${failed} need attention` : ""}. No order route was called.`);
+      await loadStatus();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Read-only broker smoke failed");
     } finally {
@@ -421,7 +423,7 @@ function BrokerSettingsContent() {
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
               >
-                {smokeBusy ? "Checking..." : "Run read-only smoke"}
+                {smokeBusy ? "Checking..." : `Run ${activeBrokerLabel} read-only smoke`}
               </button>
             </div>
           </div>
