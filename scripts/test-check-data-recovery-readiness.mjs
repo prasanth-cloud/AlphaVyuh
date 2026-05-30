@@ -36,7 +36,7 @@ function dailyCandles(startDate, count) {
   return candles;
 }
 
-function chartResponse(symbol, startDate = "2025-10-31", count = 200) {
+function chartResponse(symbol, startDate = "2021-05-18", count = 1827) {
   const candles = dailyCandles(startDate, count);
   return JSON.stringify({
     candles,
@@ -44,6 +44,7 @@ function chartResponse(symbol, startDate = "2025-10-31", count = 200) {
       available_from: startDate,
       available_to: candles.at(-1)?.time,
       symbol,
+      five_year_contract: { status: "met" },
     },
   });
 }
@@ -59,15 +60,15 @@ function serveHealthyApi(request, response) {
     response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
-  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("RELIANCE"));
     return;
   }
-  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("ITC"));
     return;
   }
-  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("AUBANK"));
     return;
   }
