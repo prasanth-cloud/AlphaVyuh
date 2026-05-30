@@ -1480,6 +1480,9 @@ export default function ScannerPage() {
                 <span className="workspace-pill" title={sectorTaxonomy.displayFilter}>
                   Display: {sectorTaxonomy.displayFilter}
                 </span>
+                <span className="workspace-pill" title={sectorTaxonomy.auditStatus}>
+                  Audit: {sectorTaxonomy.auditStatus.startsWith('Audited') ? 'Audited' : 'Unverified'}
+                </span>
                 <span className="workspace-pill" title={sectorTaxonomy.industryScope}>
                   {industryTaxonomyAudited ? 'Industry audited' : 'Industry audit pending'}
                 </span>

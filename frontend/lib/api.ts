@@ -1312,6 +1312,8 @@ export type SectorBreadthItem = {
 
 export type SectorTaxonomyMetadata = {
   source: string;
+  taxonomy_status?: "unverified" | "audited" | string;
+  taxonomy_status_reason?: string;
   contract_as_of: string;
   active_count: number;
   active_count_scope: string;

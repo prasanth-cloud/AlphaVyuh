@@ -127,6 +127,11 @@ def build_sector_taxonomy_metadata(
 
     return {
         "source": SECTOR_TAXONOMY_SOURCE,
+        "taxonomy_status": "unverified",
+        "taxonomy_status_reason": (
+            "AlphaVyuh currently derives sector labels from stock_universe.sector. "
+            "Treat sector counts as provisional until NSE industry classification parity is audited."
+        ),
         "contract_as_of": SECTOR_TAXONOMY_CONTRACT_AS_OF,
         "reference": {
             "name": "NSE sectoral indices",
@@ -152,8 +157,11 @@ def build_sector_taxonomy_metadata(
         "audit_scope": {
             "sector_labels": {
                 "source": SECTOR_TAXONOMY_SOURCE,
-                "status": "contracted",
-                "description": "AlphaVyuh sector counts are grouped from active stock_universe.sector labels.",
+                "status": "not_audited",
+                "description": (
+                    "AlphaVyuh sector counts are grouped from active stock_universe.sector labels; "
+                    "the labels are not yet audited against NSE industry classification."
+                ),
             },
             "sectoral_index_reference": {
                 "source": "NSE sectoral indices",

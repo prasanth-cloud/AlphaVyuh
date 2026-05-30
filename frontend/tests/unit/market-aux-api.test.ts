@@ -113,6 +113,8 @@ describe("market auxiliary API", () => {
         sectors: ["Energy", "Tiny Sector"],
         metadata: {
           source: "stock_universe.sector",
+          taxonomy_status: "unverified",
+          taxonomy_status_reason: "AlphaVyuh currently derives sector labels from stock_universe.sector. Treat sector counts as provisional until NSE industry classification parity is audited.",
           contract_as_of: "2026-05-30",
           active_count: 3,
           active_count_scope: "active_universe",
@@ -132,8 +134,8 @@ describe("market auxiliary API", () => {
           audit_scope: {
             sector_labels: {
               source: "stock_universe.sector",
-              status: "contracted",
-              description: "AlphaVyuh sector counts are grouped from active stock_universe.sector labels.",
+              status: "not_audited",
+              description: "AlphaVyuh sector counts are grouped from active stock_universe.sector labels; the labels are not yet audited against NSE industry classification.",
             },
             sectoral_index_reference: {
               source: "NSE sectoral indices",

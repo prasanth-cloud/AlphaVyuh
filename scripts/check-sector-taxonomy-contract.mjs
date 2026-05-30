@@ -112,6 +112,28 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
   assert(metadata && typeof metadata === "object", "Sector audit response did not include metadata.");
   assert(metadata.source === "stock_universe.sector", `Unexpected sector taxonomy source: ${metadata.source}`);
   assert(
+    ["unverified", "audited"].includes(metadata.taxonomy_status),
+    `Sector taxonomy status must be explicit; got ${metadata.taxonomy_status}`,
+  );
+  assert(
+    metadata.taxonomy_status !== "audited" ||
+      metadata.audit_scope?.sector_labels?.status === "audited",
+    "Sector taxonomy cannot be marked audited until sector labels are audited.",
+  );
+  assert(
+    metadata.taxonomy_status !== "audited" ||
+      metadata.audit_scope?.industry_taxonomy?.status === "audited",
+    "Sector taxonomy cannot be marked audited until NSE industry taxonomy is audited.",
+  );
+  assert(
+    metadata.taxonomy_status === "audited" ||
+      (typeof metadata.taxonomy_status_reason === "string" &&
+        /stock_universe\.sector/i.test(metadata.taxonomy_status_reason) &&
+        /NSE industry/i.test(metadata.taxonomy_status_reason) &&
+        /provisional|unverified/i.test(metadata.taxonomy_status_reason)),
+    "Unverified sector taxonomy must explain stock_universe.sector source and pending NSE industry audit.",
+  );
+  assert(
     /^\d{4}-\d{2}-\d{2}$/.test(String(metadata.contract_as_of ?? "")),
     `Sector taxonomy contract_as_of was not an ISO date: ${metadata.contract_as_of}`,
   );
@@ -230,6 +252,7 @@ export function validateSectorTaxonomyContract(payload, options = {}) {
     unmatchedReferenceCount: Number(metadata.reference_coverage.unmatched_sector_count),
     contractAsOf: metadata.contract_as_of,
     referenceAsOf: metadata.reference.as_of,
+    taxonomyStatus: metadata.taxonomy_status,
     industryTaxonomyStatus: metadata.audit_scope.industry_taxonomy.status,
   };
 }
@@ -249,7 +272,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(
       `Sector taxonomy ok: ${summary.sectorCount} sectors, ${summary.activeCount} active symbols, ` +
         `${summary.unmappedCount} unmapped, ${summary.unmatchedReferenceCount} without NSE sectoral-index reference, ` +
-        `industry taxonomy ${summary.industryTaxonomyStatus}, contract ${summary.contractAsOf}, NSE reference ${summary.referenceAsOf}.`,
+        `taxonomy ${summary.taxonomyStatus}, industry taxonomy ${summary.industryTaxonomyStatus}, ` +
+        `contract ${summary.contractAsOf}, NSE reference ${summary.referenceAsOf}.`,
     );
   } catch (error) {
     console.error(`Sector taxonomy check failed: ${error instanceof Error ? error.message : String(error)}`);

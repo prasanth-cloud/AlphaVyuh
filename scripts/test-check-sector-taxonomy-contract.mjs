@@ -41,6 +41,8 @@ function validMetadata(overrides = {}) {
     status: "ok",
     metadata: {
       source: "stock_universe.sector",
+      taxonomy_status: "unverified",
+      taxonomy_status_reason: "AlphaVyuh currently derives sector labels from stock_universe.sector. Treat sector counts as provisional until NSE industry classification parity is audited.",
       contract_as_of: "2026-05-30",
       reference: {
         name: "NSE sectoral indices",
@@ -60,8 +62,8 @@ function validMetadata(overrides = {}) {
       audit_scope: {
         sector_labels: {
           source: "stock_universe.sector",
-          status: "contracted",
-          description: "AlphaVyuh sector counts are grouped from active stock_universe.sector labels.",
+          status: "not_audited",
+          description: "AlphaVyuh sector counts are grouped from active stock_universe.sector labels; the labels are not yet audited against NSE industry classification.",
         },
         sectoral_index_reference: {
           source: "NSE sectoral indices",
@@ -158,7 +160,45 @@ const validFixture = writeFixture(validMetadata());
   const { code, stdout, stderr } = await runChecker({}, ["--fixture", validFixture]);
   assert.equal(code, 0, `fixture check should pass:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Sector taxonomy ok: 12 sectors, 3147 active symbols, 2 unmapped, 11 without NSE sectoral-index reference/);
+  assert.match(stdout, /taxonomy unverified/);
   assert.match(stdout, /industry taxonomy not_audited/);
+}
+
+{
+  const payload = validMetadata({ taxonomy_status: undefined });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when taxonomy status is missing");
+  assert.match(
+    stderr,
+    /Sector taxonomy status must be explicit/,
+    `stderr should explain missing taxonomy status:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+}
+
+{
+  const payload = validMetadata({
+    taxonomy_status: "audited",
+    audit_scope: {
+      ...validMetadata().metadata.audit_scope,
+      sector_labels: {
+        source: "stock_universe.sector",
+        status: "audited",
+        description: "AlphaVyuh sector labels have been audited against NSE industry classification.",
+      },
+      industry_taxonomy: {
+        source: "NSE industry classification",
+        status: "not_audited",
+        description: "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts.",
+      },
+    },
+  });
+  const { code, stdout, stderr } = await runChecker({}, ["--fixture", writeFixture(payload)]);
+  assert.notEqual(code, 0, "checker should fail when audited status outruns industry audit");
+  assert.match(
+    stderr,
+    /cannot be marked audited until NSE industry taxonomy is audited/,
+    `stderr should explain audited status drift:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
 }
 
 await withServer(validMetadata(), async (url) => {

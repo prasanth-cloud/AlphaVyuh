@@ -443,6 +443,7 @@ export default function DataFreshnessPage() {
               ["Source", formatMarketDataSource(health?.provider?.source_name, "Market data")],
               ["Fallback active", health?.fallback_active ? "Yes" : "No"],
               ["Sector source", sectorTaxonomy.source],
+              ["Sector audit status", sectorTaxonomy.auditStatus],
               ["Sector contract", sectorTaxonomy.contract],
               ["Sector NSE reference", sectorTaxonomy.reference],
               ["Sector unmapped", sectorTaxonomy.unmapped],

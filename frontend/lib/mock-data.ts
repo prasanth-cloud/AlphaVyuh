@@ -211,6 +211,8 @@ function mockSectorTaxonomyMetadata(): SectorTaxonomyMetadata {
   const sectors = Array.from(new Set(MOCK_STOCKS.map(stock => stock.sector).filter((sector): sector is string => Boolean(sector)))).sort();
   return {
     source: "stock_universe.sector",
+    taxonomy_status: "unverified",
+    taxonomy_status_reason: "Mock sector fixtures are workflow QA data, not audited NSE taxonomy evidence.",
     contract_as_of: "2026-05-30",
     active_count: MOCK_STOCKS.length,
     active_count_scope: "mock_active_universe",
@@ -255,8 +257,8 @@ function mockSectorTaxonomyMetadata(): SectorTaxonomyMetadata {
     audit_scope: {
       sector_labels: {
         source: "stock_universe.sector",
-        status: "contracted",
-        description: "Mock sector labels exercise UI flow only.",
+        status: "not_audited",
+        description: "Mock sector labels exercise UI flow only; they are not audited NSE taxonomy evidence.",
       },
       sectoral_index_reference: {
         source: "NSE sectoral indices",

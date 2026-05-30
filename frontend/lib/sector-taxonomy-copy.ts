@@ -11,6 +11,7 @@ export type SectorTaxonomyPresentation = {
   reference: string;
   unmapped: string;
   displayFilter: string;
+  auditStatus: string;
   aliasPolicy: string;
   industryScope: string;
   dashboardBadge: string;
@@ -35,6 +36,7 @@ export function sectorTaxonomyPresentation(
       reference: "Not available",
       unmapped: "Not available",
       displayFilter: "Not available",
+      auditStatus: "Unverified",
       aliasPolicy: "Not available",
       industryScope: "Not available",
       dashboardBadge: "Taxonomy unverified",
@@ -44,8 +46,10 @@ export function sectorTaxonomyPresentation(
   const hiddenCount = metadata.display_filter.hidden_sector_count;
   const unmappedCount = metadata.unmapped_count;
   const unmatchedReferenceCount = metadata.reference_coverage?.unmatched_sector_count ?? 0;
+  const taxonomyStatus = metadata.taxonomy_status ?? "unverified";
   const industryStatus = metadata.audit_scope?.industry_taxonomy?.status ?? "not_available";
   const issues = [
+    taxonomyStatus !== "audited" ? "sector taxonomy unverified" : "",
     hiddenCount > 0 ? `${fmtNumber(hiddenCount)} hidden sector${hiddenCount === 1 ? "" : "s"}` : "",
     unmappedCount > 0 ? `${fmtNumber(unmappedCount)} unmapped symbol${unmappedCount === 1 ? "" : "s"}` : "",
     unmatchedReferenceCount > 0
@@ -74,6 +78,9 @@ export function sectorTaxonomyPresentation(
       ? `${fmtNumber(unmappedCount)} (${metadata.unmapped_symbols.slice(0, 5).join(", ")}${metadata.unmapped_symbols_truncated ? ", ..." : ""})`
       : "0",
     displayFilter: metadata.display_filter.description,
+    auditStatus: taxonomyStatus === "audited"
+      ? "Audited"
+      : `Unverified${metadata.taxonomy_status_reason ? `: ${metadata.taxonomy_status_reason}` : ""}`,
     aliasPolicy: metadata.alias_policy?.description ?? "NSE alias policy not available.",
     industryScope: metadata.audit_scope?.industry_taxonomy?.description ?? "NSE industry taxonomy scope is not available.",
     dashboardBadge: issues.length
