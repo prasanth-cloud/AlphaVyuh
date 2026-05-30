@@ -98,7 +98,7 @@ describe("watchlist chart range mapping", () => {
 
     expect(getFiveYearHistoryBadge(coverage, { label: "5Y" })).toEqual({
       label: "Limited 5Y history",
-      title: "Partial chart history for 5Y (39% coverage).",
+      title: "IPO, rename, or short-history symbol; 2024-06-03 -> 2026-05-07 · 480 bars · 39% coverage.",
       tone: "warn",
     });
     expect(getFiveYearHistoryBadge({ ...coverage, five_year_contract: { years: 5, status: "partial" } }, { label: "1Y" })).toBeNull();

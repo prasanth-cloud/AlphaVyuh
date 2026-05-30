@@ -158,9 +158,12 @@ export function getFiveYearHistoryBadge(
   }
   if (contract.status === "partial") {
     const label = `Limited ${years}Y history`;
+    const reason = coverage?.partial_reason === "five_year_contract_not_met"
+      ? `IPO, rename, or short-history symbol; ${formatChartCoverageRange(coverage, [])}${percent}.`
+      : null;
     return {
       label,
-      title: getCoverageAvailabilityMessage(coverage, request) ?? `${label}${percent}.`,
+      title: reason ?? getCoverageAvailabilityMessage(coverage, request) ?? `${label}${percent}.`,
       tone: "warn" as const,
     };
   }
