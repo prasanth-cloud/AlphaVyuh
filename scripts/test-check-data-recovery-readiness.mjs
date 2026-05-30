@@ -38,13 +38,26 @@ function dailyCandles(startDate, count) {
 
 function chartResponse(symbol, startDate = "2021-05-18", count = 1827) {
   const candles = dailyCandles(startDate, count);
+  const endDate = candles.at(-1)?.time;
   return JSON.stringify({
+    symbol,
+    timeframe: "D",
     candles,
     coverage: {
       available_from: startDate,
-      available_to: candles.at(-1)?.time,
+      available_to: endDate,
+      requested_from: startDate,
+      requested_to: endDate,
+      requested_limit: 1300,
+      returned_candles: candles.length,
+      timeframe: "D",
       symbol,
-      five_year_contract: { status: "met" },
+      five_year_contract: {
+        years: 5,
+        minimum_calendar_days: 1811,
+        minimum_daily_candles: 1200,
+        status: "met",
+      },
     },
   });
 }
