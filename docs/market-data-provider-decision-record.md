@@ -48,6 +48,18 @@ Complete these fields in the PR that changes the launch source.
 | TradingView Advanced Charts | Licensing discussion and UI prototype only after #42 approval | Treat as a data provider or broker execution product |
 | ChartsMaze public behavior | Product workflow inspiration and competitor positioning | Infer their hidden data vendor, broker routing, or licensing model |
 
+## Public Competitor And Platform Notes
+
+These notes are public-source guardrails for founder decisions. They are not
+vendor approval.
+
+| Source | Public evidence | AlphaVyuh implication |
+| --- | --- | --- |
+| ChartsMaze | The public premium page lists Monthly at INR 499 + GST, Semi Annual at INR 2499 + GST, and Annual at INR 3299 + GST. Public pages show scanner, market breadth, sector indices, watchlist, journal, and multi-chart workflow, but do not disclose a market-data vendor, broker routing partner, or TradingView licensing terms. | Compete on workflow and visible trust metadata. Do not infer their hidden data source or reuse their pricing as proof that market data, broker routing, or chart licensing is solved. |
+| TradingView Advanced Charts | TradingView docs say Advanced Charts / Trading Platform do not contain market data, and the app must connect its own or third-party data source through a Datafeed API or UDF service. | TradingView can improve chart UX only after #42 approval. It does not satisfy AlphaVyuh's NSE data rights, five-year history, sector taxonomy, or broker order contract. |
+| Zerodha Kite Connect | Zerodha's product page lists a Connect tier at INR 500/month with realtime WebSocket streaming and historical candle data; Zerodha support also says Kite cannot directly connect third-party charting apps such as TradingView, only charting libraries inside Kite. | Kite is useful for user-authorized read-only broker/account features. It is not approved as AlphaVyuh's redistributed platform candle feed without written broker/exchange terms. |
+| Upstox | Upstox documents historical candle APIs and intraday candle APIs for user/API integrations. | Treat as user-scoped broker/API data until rate limits, redistribution rights, history depth, and data consistency are approved. |
+
 ## Evidence Packet For A Provider PR
 
 Every PR that changes `MARKET_DATA_PROVIDER`, public data copy, chart provider
@@ -66,3 +78,12 @@ behavior, or live/realtime claims must include:
 - TradingView Advanced Charts remains blocked on #42 licensing confirmation.
 - Broker data remains read-only/import-only and cannot become a platform candle feed without written broker/exchange approval.
 - Production launch claims remain EOD-first until the provider decision fields above are complete.
+
+## Public References
+
+- ChartsMaze premium page: https://chartsmaze.com/buy-premium-plan
+- TradingView Datafeed API docs: https://www.tradingview.com/charting-library-docs/latest/connecting_data/datafeed-api/
+- TradingView connecting data docs: https://www.tradingview.com/charting-library-docs/latest/connecting_data/
+- Zerodha Kite Connect product page: https://zerodha.com/products/api/
+- Zerodha third-party charting support note: https://support.zerodha.com/category/trading-and-markets/charts-and-orders/charts/articles/third-party-charting-libraries
+- Upstox Historical Candle Data V3: https://upstox.com/developer/api-documentation/v3/get-historical-candle-data

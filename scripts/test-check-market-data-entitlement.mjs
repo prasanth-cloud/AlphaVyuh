@@ -50,6 +50,11 @@ requireMatch("decision record requires redistribution rights", decisionRecord, /
 requireMatch("decision record requires five-year depth", decisionRecord, /Historical depth[\s\S]*Five years daily OHLCV/i);
 requireMatch("decision record separates broker data", decisionRecord, /Broker account data[\s\S]*user-scoped and read-only/i);
 requireMatch("decision record blocks ChartsMaze inference", decisionRecord, /Infer their hidden data vendor, broker routing, or licensing model/i);
+requireMatch("decision record public notes section", decisionRecord, /Public Competitor And Platform Notes/i);
+requireMatch("decision record ChartsMaze pricing evidence", decisionRecord, /Monthly at INR 499 \+ GST[\s\S]*Annual at INR 3299 \+ GST/i);
+requireMatch("decision record TradingView datafeed evidence", decisionRecord, /do not contain market data[\s\S]*Datafeed API/i);
+requireMatch("decision record Kite Connect evidence", decisionRecord, /INR 500\/month[\s\S]*historical candle data/i);
+requireMatch("decision record Upstox boundary", decisionRecord, /Upstox[\s\S]*historical candle APIs[\s\S]*user-scoped broker\/API data/i);
 requireMatch("decision record provider PR packet", decisionRecord, /Every PR that changes `MARKET_DATA_PROVIDER`/i);
 
 console.log("Market-data entitlement contract check passed.");
