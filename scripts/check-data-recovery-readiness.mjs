@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -83,27 +82,40 @@ function parseChartSymbols(raw) {
 }
 
 async function run(command, args, options = {}) {
-  const child = spawn(command, args, {
-    cwd: options.cwd || rootDir,
-    env: {
-      ...process.env,
-      ...(options.env || {}),
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
   let stdout = "";
   let stderr = "";
+
+  let child;
+  try {
+    child = spawn(command, args, {
+      cwd: options.cwd || rootDir,
+      env: {
+        ...process.env,
+        ...(options.env || {}),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    return { code: 127, stdout, stderr: error instanceof Error ? error.message : String(error) };
+  }
+
   child.stdout.on("data", (chunk) => { stdout += chunk; });
   child.stderr.on("data", (chunk) => { stderr += chunk; });
-  child.on("error", (error) => {
-    stderr += error.message;
+
+  const code = await new Promise((resolve) => {
+    let settled = false;
+    const finish = (exitCode) => {
+      if (settled) return;
+      settled = true;
+      resolve(exitCode ?? 0);
+    };
+    child.on("error", (error) => {
+      stderr += `${stderr ? "\n" : ""}${error.message}`;
+      finish(127);
+    });
+    child.on("close", finish);
   });
 
-  const [code] = await Promise.race([
-    once(child, "exit"),
-    once(child, "error").then(() => [127]),
-  ]);
   return { code, stdout, stderr };
 }
 

@@ -195,7 +195,7 @@ function serveApiWithDegradedSupplemental(request, response) {
   serveHealthyApi(request, response);
 }
 
-function makeFakeBin({ secrets = [], railwayReady = true, workflowRuns = [], vercelEnv = {} }) {
+function makeFakeBin({ secrets = [], railwayReady = true, installRailway = true, workflowRuns = [], vercelEnv = {} }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alphavyuh-recovery-bin-"));
   const secretOutput = secrets.map((secret) => `${secret}\t2026-05-18T00:00:00Z`).join("\n");
   const workflowOutput = JSON.stringify(workflowRuns);
@@ -238,7 +238,9 @@ process.exit(1);
 `;
 
   fs.writeFileSync(path.join(dir, "gh"), gh, { mode: 0o755 });
-  fs.writeFileSync(path.join(dir, "railway"), railway, { mode: 0o755 });
+  if (installRailway) {
+    fs.writeFileSync(path.join(dir, "railway"), railway, { mode: 0o755 });
+  }
   fs.writeFileSync(path.join(dir, "vercel"), vercel, { mode: 0o755 });
   return dir;
 }
@@ -348,6 +350,27 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Production API check included authenticated scanner verification/);
   assert.match(stdout, /Full app recovery status: authenticated scanner verification passed; run the signed-in browser smoke before launch/);
+});
+
+await withServer(serveHealthyApi, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    installRailway: false,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin, {
+    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+    REQUIRE_AUTHENTICATED_SMOKE: "1",
+  });
+  assert.equal(code, 0, `strict preflight should not fail a recovered API because local Railway CLI is absent:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /\[WARN] Local Railway CLI/);
+  assert.match(stdout, /spawn .*railway ENOENT/);
+  assert.match(stdout, /Production API check included authenticated scanner verification/);
+  assert.equal(stderr, "");
 });
 
 await withServer(serveHealthyApi, async (apiUrl) => {

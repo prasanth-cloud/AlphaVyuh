@@ -211,10 +211,38 @@ else
   echo "Production API smoke will skip authenticated scanner verification. Set PRODUCTION_API_BEARER_TOKEN to verify scanner data."
 fi
 
-(
-  cd "$ROOT_DIR"
-  PRODUCTION_API_URL="$PRODUCTION_API_URL" \
-    PRODUCTION_API_BEARER_TOKEN="${PRODUCTION_API_BEARER_TOKEN:-}" \
-    PRODUCTION_API_AUTH_TOKEN="${PRODUCTION_API_AUTH_TOKEN:-}" \
-    npm run check:production-api
-)
+echo "Waiting for production API contract smoke to pass ..."
+production_smoke_ok=0
+for attempt in {1..30}; do
+  if (
+    cd "$ROOT_DIR"
+    PRODUCTION_API_URL="$PRODUCTION_API_URL" \
+      PRODUCTION_API_BEARER_TOKEN="${PRODUCTION_API_BEARER_TOKEN:-}" \
+      PRODUCTION_API_AUTH_TOKEN="${PRODUCTION_API_AUTH_TOKEN:-}" \
+      npm run check:production-api
+  ); then
+    production_smoke_ok=1
+    break
+  fi
+
+  echo "Production API contract smoke not ready yet ($attempt/30)."
+  sleep 10
+done
+
+if [[ "$production_smoke_ok" != "1" ]]; then
+  echo "Production API contract smoke did not pass after Railway deploy. Latest Railway logs:" >&2
+  if [[ "$link_required" == "1" ]]; then
+    (
+      cd "$BACKEND_DIR"
+      railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+    )
+  elif [[ "$linked_for_recovery" == "1" ]]; then
+    (
+      cd "$BACKEND_DIR"
+      railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+    )
+  else
+    echo "Skipping Railway log fetch because this run used explicit project flags without a linked workspace." >&2
+  fi
+  exit 1
+fi
