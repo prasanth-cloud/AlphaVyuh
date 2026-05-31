@@ -365,6 +365,12 @@ async def test_get_candles_returns_chart_coverage_metadata(monkeypatch):
         "coverage_pct": 0.3,
         "partial": True,
         "partial_reason": "history_starts_after_requested_window",
+        "five_year_contract": {
+            "years": 5,
+            "minimum_calendar_days": 1811,
+            "minimum_daily_candles": 1134,
+            "status": "not_requested",
+        },
         "source_name": "NSE bhavcopy",
         "as_of": "2026-01-02",
     }
@@ -505,6 +511,65 @@ async def test_get_weekly_candles_coverage_uses_aggregated_dates(monkeypatch):
     assert response["coverage"]["available_from"] == response["candles"][0]["time"]
     assert response["coverage"]["available_to"] == response["candles"][-1]["time"]
     assert response["coverage"]["returned_candles"] == len(response["candles"])
+
+
+@pytest.mark.anyio
+async def test_get_daily_candles_marks_five_year_contract(monkeypatch):
+    rows = []
+    current = charts._subtract_years(charts.date(2026, 5, 18), 5)
+    while current <= charts.date(2026, 5, 18):
+        if current.weekday() < 5:
+            rows.append(_daily_row(str(current), 100 + len(rows)))
+        current += charts.timedelta(days=1)
+
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _FakeCandleClient(rows))
+    monkeypatch.setattr(
+        charts,
+        "_resolve_chart_symbol",
+        lambda _client, symbol: (symbol, {"company_name": "Reliance", "sector": "Energy"}, None),
+    )
+
+    response = await charts.get_candles(
+        "RELIANCE",
+        timeframe="D",
+        from_date="2021-05-18",
+        to_date="2026-05-18",
+        limit=1300,
+        adjusted=False,
+    )
+
+    assert len(response["candles"]) >= charts.FIVE_YEAR_CHART_MIN_DAILY_CANDLES
+    assert response["coverage"]["five_year_contract"]["status"] == "met"
+    assert response["coverage"]["partial"] is False
+
+
+@pytest.mark.anyio
+async def test_compressed_max_candles_do_not_satisfy_daily_five_year_contract(monkeypatch):
+    rows = []
+    current = charts._subtract_years(charts.date(2026, 5, 18), 6)
+    while current <= charts.date(2026, 5, 18):
+        if current.weekday() < 5:
+            rows.append(_daily_row(str(current), 100 + len(rows)))
+        current += charts.timedelta(days=1)
+
+    monkeypatch.setattr(charts, "get_admin_client", lambda: _FakeCandleClient(rows))
+    monkeypatch.setattr(
+        charts,
+        "_resolve_chart_symbol",
+        lambda _client, symbol: (symbol, {"company_name": "Reliance", "sector": "Energy"}, None),
+    )
+
+    response = await charts.get_candles(
+        "RELIANCE",
+        timeframe="M",
+        from_date="1900-01-01",
+        to_date="2026-05-18",
+        limit=3000,
+        adjusted=False,
+    )
+
+    assert response["timeframe"] == "M"
+    assert response["coverage"]["five_year_contract"]["status"] == "not_requested"
 
 
 @pytest.mark.anyio

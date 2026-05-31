@@ -33,6 +33,7 @@ const resultOrder = [
   "Production API data smoke",
   "Vercel production env",
   "Supabase EOD data",
+  "Supplemental refresh data",
   "Chart smoke config",
   "Authenticated app smoke",
   "GitHub recovery secrets",
@@ -323,6 +324,57 @@ async function checkSupabaseEodFreshness() {
   }
 }
 
+async function checkSupplementalRefreshData() {
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+
+  try {
+    const latest = await fetchSupabase("ingest_runs?select=run_id,started_at,meta&order=started_at.desc&limit=1");
+    const row = latest.data?.[0];
+    const supplemental = row?.meta?.supplemental_data;
+    if (!row || !supplemental) {
+      addResult(
+        "warn",
+        "Supplemental refresh data",
+        "Latest ingest run does not include supplemental data trust metadata.",
+        "Run the current Daily NSE refresh before treating RS/yfinance coverage as verified.",
+      );
+      return false;
+    }
+
+    const status = String(supplemental.status || "unknown");
+    const warnings = Array.isArray(supplemental.warnings) ? supplemental.warnings.filter(Boolean) : [];
+    const yfinance = supplemental.yfinance || {};
+    const rsScore = supplemental.rs_score || {};
+    const detail = [
+      `Latest run ${row.run_id || "unknown"} supplemental status is ${status}.`,
+      `RS score: ${rsScore.status || "unknown"}.`,
+      `yfinance: ${yfinance.status || "unknown"}${yfinance.attempted != null ? ` (${yfinance.success || 0}/${yfinance.attempted} symbols, rate_limited=${yfinance.rate_limited || 0})` : ""}.`,
+      warnings.length ? `Warnings: ${warnings.slice(0, 3).join(" ")}` : "",
+    ].filter(Boolean).join(" ");
+
+    if (status === "healthy") {
+      addResult("pass", "Supplemental refresh data", detail);
+      return true;
+    }
+
+    addResult(
+      status === "failed" ? "fail" : "warn",
+      "Supplemental refresh data",
+      detail,
+      "Inspect Daily NSE refresh logs before trusting RS-ranked scanner output or yfinance-backed supplemental fields.",
+    );
+    return false;
+  } catch (error) {
+    addResult(
+      "warn",
+      "Supplemental refresh data",
+      error instanceof Error ? error.message : String(error),
+      "Inspect ingest_runs.meta.supplemental_data from Supabase before treating supplemental indicators as verified.",
+    );
+    return false;
+  }
+}
+
 async function checkGithubSecrets() {
   const { code, stdout, stderr } = await run(ghCommand, ["secret", "list", "--repo", repo]);
 
@@ -545,10 +597,11 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, rec
 }
 
 try {
-  const [productionApiOk, , supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady] = await Promise.all([
+  const [productionApiOk, , supabaseFresh, , githubRecoveryReady, recoveryWorkflowReady, localRailwayReady] = await Promise.all([
     checkProductionApi(),
     checkVercelProductionEnv(),
     checkSupabaseEodFreshness(),
+    checkSupplementalRefreshData(),
     checkGithubSecrets(),
     checkRecoveryWorkflowRuns(),
     checkLocalRailway(),

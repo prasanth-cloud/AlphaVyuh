@@ -27,6 +27,7 @@ import {
   formatChartCoverageRange,
   formatChartGranularity,
   getCoverageAvailabilityMessage,
+  getFiveYearHistoryBadge,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
@@ -184,6 +185,20 @@ function computeSmaLine(candles: CandleBar[], period: number): LinePoint[] {
   return out;
 }
 
+function candleIndicatorLine(candles: CandleBar[], key: "ema_20" | "ema_50" | "ema_200"): LinePoint[] {
+  return candles.flatMap((candle) => {
+    const value = candle[key];
+    return typeof value === "number" && Number.isFinite(value)
+      ? [{ time: candle.time, value: Number(value.toFixed(4)) }]
+      : [];
+  });
+}
+
+function preferBroaderLine(endpointLine: LinePoint[] | undefined, candleLine: LinePoint[]): LinePoint[] | undefined {
+  if (candleLine.length > (endpointLine?.length ?? 0)) return candleLine;
+  return endpointLine ?? (candleLine.length ? candleLine : undefined);
+}
+
 function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
   return drawings.map((item) => ({
     ...item,
@@ -315,8 +330,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const fullChartMode = searchParams.get("full") === "1";
   const initialDrawMode = searchParams.get("draw");
   const initialChartType = normalizeChartType(searchParams.get("type"));
+  const initialRangeLabel: WatchlistChartTimeframe = fullChartMode ? "5Y" : "1Y";
 
-  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
+  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>(initialRangeLabel);
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [rangeNote, setRangeNote] = useState<string | null>(null);
   const [timeframeMessage, setTimeframeMessage] = useState("");
@@ -551,10 +567,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   const applyIndicatorPayload = useCallback((resp: Awaited<ReturnType<typeof getIndicators>> | null, candles: CandleBar[] = []) => {
     const ind = (resp?.indicators ?? {}) as Record<string, unknown[]>;
+    const ema20FromCandles = candleIndicatorLine(candles, "ema_20");
+    const ema50FromCandles = candleIndicatorLine(candles, "ema_50");
+    const ema200FromCandles = candleIndicatorLine(candles, "ema_200");
     const nextIndicatorData: IndicatorData = {
-      ema20:    ind.ema20    as LinePoint[] | undefined,
-      ema50:    ind.ema50    as LinePoint[] | undefined,
-      ema200:   ind.ema200   as LinePoint[] | undefined,
+      ema20:    preferBroaderLine(ind.ema20 as LinePoint[] | undefined, ema20FromCandles),
+      ema50:    preferBroaderLine(ind.ema50 as LinePoint[] | undefined, ema50FromCandles),
+      ema200:   preferBroaderLine(ind.ema200 as LinePoint[] | undefined, ema200FromCandles),
       sma50:    computeSmaLine(candles, 50),
       sma200:   computeSmaLine(candles, 200),
       vwap:     ind.vwap     as LinePoint[] | undefined,
@@ -727,7 +746,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     getChartLayout(symbol).then(layout => {
       if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") {
         setTimeframe(layout.timeframe);
-        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "Max");
+        setRangeLabel(layout.timeframe === "D" ? initialRangeLabel : layout.timeframe === "W" ? "3Y" : "Max");
       }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     }).catch(() => {
@@ -760,7 +779,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         }
         setPriceAlertsError(PRICE_ALERTS_UNAVAILABLE_MESSAGE);
       });
-  }, [symbol]);
+  }, [initialRangeLabel, symbol]);
 
   useEffect(() => {
     setLiveQuote(null);
@@ -1757,6 +1776,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const changeAmt = displayClose != null && displayPrevClose ? displayClose - displayPrevClose : null;
   const changePct = displayPctChange;
   const positive = displayPositive;
+  const fiveYearHistoryBadge = data ? getFiveYearHistoryBadge(data.coverage, { label: rangeLabel }) : null;
 
   const w52pct = latest?.week_52_high && latest?.week_52_low
     ? (((displayClose ?? latest.close) - latest.week_52_low) / (latest.week_52_high - latest.week_52_low)) * 100
@@ -3483,6 +3503,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   style={{ background: "rgba(77,214,255,0.09)", color: "#93e5ff", border: "1px solid rgba(77,214,255,0.18)" }}
                 >
                   Measure: {selectedDrawingMeasurement.primary} · {selectedDrawingMeasurement.secondary}
+                </div>
+              )}
+              {fiveYearHistoryBadge && (
+                <div
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  title={fiveYearHistoryBadge.title}
+                  style={fiveYearHistoryBadge.tone === "good"
+                    ? { background: "rgba(38,166,91,0.12)", color: "var(--gain)", border: "1px solid rgba(38,166,91,0.24)" }
+                    : { background: "rgba(217,119,6,0.12)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.24)" }}
+                >
+                  {fiveYearHistoryBadge.label}
                 </div>
               )}
               {data && (

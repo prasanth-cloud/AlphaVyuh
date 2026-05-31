@@ -33,6 +33,7 @@ class Logger:
         self.run_id = run_id
         self.started = datetime.utcnow()
         self.events: list[dict] = []
+        self.warnings: list[dict] = []
         self.errors: list[dict] = []
 
     def info(self, msg: str):
@@ -50,6 +51,16 @@ class Logger:
             "trace": traceback.format_exc() if exc else None,
         })
 
+    def warn(self, msg: str, exc: Exception | None = None):
+        ts = datetime.utcnow().strftime("%H:%M:%S")
+        warn_text = f"{msg}: {exc}" if exc else msg
+        print(f"[{ts}] WARN: {warn_text}")
+        self.warnings.append({
+            "msg": warn_text,
+            "ts": ts,
+            "trace": traceback.format_exc() if exc else None,
+        })
+
     def duration_s(self) -> float:
         return (datetime.utcnow() - self.started).total_seconds()
 
@@ -62,6 +73,9 @@ def is_nse_trading_day(d: date) -> bool:
 def write_run_log(sb, log: Logger, result_meta: dict):
     """Persist run summary to ingest_runs table (best-effort)."""
     try:
+        meta = dict(result_meta)
+        if log.warnings:
+            meta["warnings"] = log.warnings[:10]
         sb.table("ingest_runs").insert({
             "run_id": log.run_id,
             "started_at": log.started.isoformat(),
@@ -69,7 +83,7 @@ def write_run_log(sb, log: Logger, result_meta: dict):
             "event_count": len(log.events),
             "error_count": len(log.errors),
             "errors": log.errors[:5],
-            "meta": result_meta,
+            "meta": meta,
         }).execute()
     except Exception as e:
         print(f"[WARN] Could not write run log: {e}", file=sys.stderr)
@@ -89,6 +103,25 @@ async def run_bhavcopy(target: date, log: Logger) -> dict:
     return result
 
 
+def classify_yfinance_failure(status: str | None = None, error: str | None = None) -> str:
+    text = f"{status or ''} {error or ''}".lower()
+    if "too many requests" in text or "rate limit" in text or "rate_limited" in text or "429" in text:
+        return "rate_limited"
+    if status == "no_data" or "no data" in text:
+        return "no_data"
+    if status:
+        return status
+    return "error"
+
+
+def _yfinance_rate_limit_backoff_s() -> float:
+    raw = os.getenv("YFINANCE_RATE_LIMIT_BACKOFF_S", "2")
+    try:
+        return max(0.0, min(float(raw), 30.0))
+    except ValueError:
+        return 2.0
+
+
 def run_yfinance_top200(target: date, log: Logger, dry_run: bool = False) -> dict:
     """
     Refresh top-200 NSE symbols via yfinance (fallback / supplement).
@@ -97,9 +130,15 @@ def run_yfinance_top200(target: date, log: Logger, dry_run: bool = False) -> dic
     from app.services.yfinance_ingest import fetch_and_ingest, NSE_UNIVERSE
 
     log.info("Starting yfinance refresh for top-200 symbols...")
-    success, failures = 0, []
+    symbols = NSE_UNIVERSE[:200]
+    success = 0
+    rows_updated = 0
+    failures: list[dict] = []
+    failure_reasons: dict[str, int] = {}
+    rate_limited = 0
+    backoff_s = _yfinance_rate_limit_backoff_s()
 
-    for sym in NSE_UNIVERSE[:200]:
+    for sym in symbols:
         if dry_run:
             log.info(f"  [dry-run] would refresh {sym}")
             success += 1
@@ -108,15 +147,111 @@ def run_yfinance_top200(target: date, log: Logger, dry_run: bool = False) -> dic
             r = fetch_and_ingest(sym, period="5d")
             if r.get("status") == "success":
                 success += 1
+                rows_updated += int(r.get("rows") or 0)
             else:
-                failures.append(sym)
+                reason = classify_yfinance_failure(r.get("status"), r.get("error"))
+                failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
+                if reason == "rate_limited":
+                    rate_limited += 1
+                    if backoff_s:
+                        time.sleep(backoff_s)
+                failures.append({
+                    "symbol": sym,
+                    "status": r.get("status", "unknown"),
+                    "reason": reason,
+                    "error": str(r.get("error") or "")[:180],
+                })
         except Exception as e:
-            failures.append(sym)
-            log.error(f"  yfinance {sym}", e)
+            reason = classify_yfinance_failure(error=str(e))
+            failure_reasons[reason] = failure_reasons.get(reason, 0) + 1
+            if reason == "rate_limited":
+                rate_limited += 1
+                if backoff_s:
+                    time.sleep(backoff_s)
+            failures.append({
+                "symbol": sym,
+                "status": "exception",
+                "reason": reason,
+                "error": str(e)[:180],
+            })
         time.sleep(0.25)
 
-    log.info(f"  yfinance: {success}/200 updated, {len(failures)} failures")
-    return {"success": success, "failures": failures[:10]}
+    attempted = len(symbols)
+    failed = len(failures)
+    coverage_pct = round((success / attempted) * 100, 1) if attempted else 0.0
+    if dry_run:
+        status = "dry-run"
+    elif failed == 0:
+        status = "success"
+    elif success == 0:
+        status = "failed"
+    else:
+        status = "degraded"
+
+    detail = (
+        f"  yfinance: status={status}, updated={success}/{attempted}, "
+        f"failures={failed}, rate_limited={rate_limited}, rows={rows_updated}"
+    )
+    if status in {"degraded", "failed"}:
+        log.warn(detail)
+    else:
+        log.info(detail)
+    return {
+        "status": status,
+        "attempted": attempted,
+        "success": success,
+        "failed": failed,
+        "coverage_pct": coverage_pct,
+        "rows_updated": rows_updated,
+        "rate_limited": rate_limited,
+        "failure_reasons": failure_reasons,
+        "failures": failures[:10],
+    }
+
+
+def summarize_supplemental_data(result_meta: dict, *, yfinance_only: bool = False, skip_yfinance: bool = False) -> dict:
+    """Summarize non-critical indicator supplements without hiding degraded coverage."""
+    warnings: list[str] = []
+    status = "healthy"
+
+    bhavcopy = result_meta.get("bhavcopy") if isinstance(result_meta.get("bhavcopy"), dict) else {}
+    rs_score = bhavcopy.get("rs_score") if isinstance(bhavcopy, dict) else None
+    if isinstance(rs_score, dict) and rs_score.get("status") == "failed":
+        status = "degraded"
+        warnings.append("RS score calculation failed for the latest bhavcopy run.")
+
+    yfinance = result_meta.get("yfinance") if isinstance(result_meta.get("yfinance"), dict) else None
+    if skip_yfinance:
+        yfinance_summary = {"status": "skipped"}
+    elif yfinance:
+        yfinance_status = yfinance.get("status")
+        yfinance_summary = {
+            "status": yfinance_status,
+            "attempted": yfinance.get("attempted"),
+            "success": yfinance.get("success"),
+            "failed": yfinance.get("failed"),
+            "coverage_pct": yfinance.get("coverage_pct"),
+            "rate_limited": yfinance.get("rate_limited"),
+            "failure_reasons": yfinance.get("failure_reasons") or {},
+        }
+        if yfinance_status in {"degraded", "failed"}:
+            status = "failed" if yfinance_only and yfinance_status == "failed" else "degraded"
+            warnings.append(
+                "yfinance supplement degraded: "
+                f"{yfinance.get('success', 0)}/{yfinance.get('attempted', 0)} symbols updated."
+            )
+    else:
+        yfinance_summary = {"status": "missing"}
+        if yfinance_only:
+            status = "failed"
+            warnings.append("yfinance-only refresh did not produce supplement metadata.")
+
+    return {
+        "status": status,
+        "warnings": warnings,
+        "rs_score": rs_score or {"status": "not_run" if yfinance_only else "unknown"},
+        "yfinance": yfinance_summary,
+    }
 
 
 def build_breadth_snapshot(sb, target: date, log: Logger, dry_run: bool = False) -> dict:
@@ -249,7 +384,21 @@ def main() -> int:
         result_meta["scan_alerts"] = {"status": "skipped", "reason": alert_skip_reason}
         log.info(f"Skipping saved EOD scan alerts: {alert_skip_reason}")
 
-    # ── Step 5: write run log ─────────────────────────────────────────────────
+    # ── Step 5: supplemental data trust summary ───────────────────────────────
+    result_meta["supplemental_data"] = summarize_supplemental_data(
+        result_meta,
+        yfinance_only=args.yfinance_only,
+        skip_yfinance=args.skip_yfinance,
+    )
+    supplemental = result_meta["supplemental_data"]
+    if supplemental["status"] == "healthy":
+        log.info("Supplemental data: status=healthy")
+    else:
+        log.warn(f"Supplemental data: status={supplemental['status']}; warnings={'; '.join(supplemental['warnings'])}")
+        if supplemental["status"] == "failed" and args.yfinance_only:
+            log.error("yfinance-only refresh failed; no trusted EOD source was updated")
+
+    # ── Step 6: write run log ─────────────────────────────────────────────────
     if not args.dry_run:
         write_run_log(sb, log, result_meta)
 

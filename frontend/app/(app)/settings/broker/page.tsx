@@ -8,11 +8,12 @@ import {
   getBrokerStatus,
   getZerodhaLoginUrl,
   importBrokerTrades,
-  runZerodhaReadOnlySmoke,
+  runBrokerReadOnlySmoke,
   startBrokerConnect,
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist } from "@/lib/broker-safety";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -164,11 +165,13 @@ function BrokerSettingsContent() {
     setError("");
     setSmokeSummary("");
     try {
-      const result = await runZerodhaReadOnlySmoke();
+      const broker = state?.broker === "upstox" ? "upstox" : "zerodha";
+      const result = await runBrokerReadOnlySmoke(broker);
       const checks = Object.entries(result.checks);
       const passed = checks.filter(([, check]) => check.ok).length;
       const failed = checks.length - passed;
-      setSmokeSummary(`${passed}/${checks.length} read-only checks passed${failed ? `; ${failed} need attention` : ""}. No order route was called.`);
+      setSmokeSummary(`${passed}/${checks.length} ${activeBrokerLabel} read-only checks passed${failed ? `; ${failed} need attention` : ""}. No order route was called.`);
+      await loadStatus();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Read-only broker smoke failed");
     } finally {
@@ -182,10 +185,38 @@ function BrokerSettingsContent() {
     borderRadius: "var(--radius-lg)",
   };
 
+  const readOnlySmokeRequired = state?.read_only_smoke_required !== false;
+  const readOnlySmokePassed = state?.read_only_smoke_passed === true;
+  const readOnlySmokeStale = Boolean(state?.read_only_smoke_checked_at && state?.read_only_smoke_fresh === false);
+  const liveOrderEnabled = state?.live_order_enabled === true;
+  const smokeGateStatus = statusError
+    ? "Unknown"
+    : readOnlySmokeRequired
+      ? readOnlySmokeStale
+        ? "Smoke stale"
+        : readOnlySmokePassed
+          ? "Smoke passed"
+          : "Smoke required"
+      : "Not required";
+  const smokeGateCopy = statusError
+    ? "Broker safety state could not be confirmed. Order routes stay unavailable until status recovers."
+    : liveOrderEnabled
+      ? "Broker order routes report enabled. Keep broker confirmation on for every future order intent."
+      : readOnlySmokeStale
+        ? "Read-only broker smoke is older than the 24-hour launch gate. Rerun smoke before any future sandbox or live order route can be enabled."
+        : readOnlySmokeRequired && !readOnlySmokePassed
+          ? "Read-only broker smoke must pass before any future sandbox or live order route can be enabled."
+          : "Read-only broker smoke has passed; order submission still stays disabled until owner approval.";
+  const smokeChecklist = useMemo(() => brokerReadOnlyChecklist(state), [state]);
+  const smokeCheckedAt = state?.read_only_smoke_checked_at
+    ? new Date(state.read_only_smoke_checked_at).toLocaleString()
+    : null;
+
   const healthCards = [
     { label: "Broker app", value: statusError ? "Unknown" : state?.has_api_key ? "Configured" : "Unavailable", icon: ServerCog },
     { label: "Session", value: statusError ? "Unknown" : state?.connected ? "Read-only" : state?.has_token ? "Reconnect" : "Not connected", icon: PlugZap },
     { label: "Expiry", value: statusError ? "Unknown" : state?.token_expires_at ? new Date(state.token_expires_at).toLocaleString() : "No token", icon: Clock3 },
+    { label: "Order gate", value: smokeGateStatus, icon: ShieldCheck },
   ];
   const lastSyncedLabel = statusError ? "Unknown" : state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
   const activeBrokerLabel = state?.broker === "upstox" ? "Upstox" : "Zerodha";
@@ -298,7 +329,7 @@ function BrokerSettingsContent() {
               </Num>
             </div>
 
-            <div className="broker-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
+            <div className="broker-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 10, marginBottom: 18 }}>
               {healthCards.map(({ label, value, icon: Icon }) => (
                 <div key={label} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7, color: "var(--text-tertiary)", marginBottom: 5 }}>
@@ -308,6 +339,54 @@ function BrokerSettingsContent() {
                   <div className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>{value}</div>
                 </div>
               ))}
+            </div>
+
+            <div
+              data-testid="broker-read-only-smoke-gate"
+              style={{
+                marginBottom: 14,
+                padding: "10px 12px",
+                borderRadius: "var(--radius-md)",
+                background: readOnlySmokePassed ? "rgba(18,185,129,0.08)" : "rgba(217,119,6,0.08)",
+                border: `1px solid ${readOnlySmokePassed ? "rgba(18,185,129,0.28)" : "rgba(217,119,6,0.28)"}`,
+              }}
+            >
+              <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: readOnlySmokePassed ? "var(--gain)" : "var(--warn)", marginBottom: 4 }}>
+                Read-only smoke gate: {smokeGateStatus}
+              </div>
+              <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                {smokeGateCopy} Live and sandbox orders are {liveOrderEnabled ? "still confirmation-gated" : "disabled"}.
+              </div>
+            </div>
+
+            <div
+              data-testid="broker-read-only-checklist"
+              style={{ marginBottom: 14, padding: "12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>Read-only readiness checklist</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                    {smokeCheckedAt ? `Last checked ${smokeCheckedAt}` : "Run smoke to verify profile, holdings, positions, orderbook, and trade import reads."}
+                  </div>
+                </div>
+                <span className="workspace-pill" style={{ color: readOnlySmokePassed ? "var(--gain)" : "var(--warn)" }}>
+                  {readOnlySmokeStale ? "Refresh required" : readOnlySmokePassed ? "Read-only verified" : "Pending verification"}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                {smokeChecklist.map((item) => (
+                  <div key={item.id} style={{ padding: "9px 10px", borderRadius: "var(--radius-sm)", background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                      <div className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>{item.label}</div>
+                      <span className="text-[11px] font-semibold" style={{ color: item.tone === "good" ? "var(--gain)" : item.tone === "warn" ? "var(--warn)" : "var(--text-tertiary)" }}>
+                        {item.value}
+                      </span>
+                    </div>
+                    <div className="text-[11px]" style={{ color: "var(--text-secondary)", lineHeight: 1.45 }}>{item.detail}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -344,7 +423,7 @@ function BrokerSettingsContent() {
                 className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
                 style={{ background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)" }}
               >
-                {smokeBusy ? "Checking..." : "Run read-only smoke"}
+                {smokeBusy ? "Checking..." : `Run ${activeBrokerLabel} read-only smoke`}
               </button>
             </div>
           </div>
@@ -367,6 +446,23 @@ function BrokerSettingsContent() {
                   {line}
                 </div>
               ))}
+            </div>
+            <div
+              data-testid="broker-execution-approval-record"
+              style={{ marginTop: 14, padding: "12px", borderRadius: "var(--radius-md)", border: "1px solid rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}
+            >
+              <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--warn)", marginBottom: 6 }}>Required before any future sandbox/live order test</div>
+              <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 10 }}>
+                Read-only smoke is evidence, not approval. A broker order test cannot run unless this owner-confirmed record exists.
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {BROKER_EXECUTION_APPROVAL_ITEMS.map((item) => (
+                  <div key={item} className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    <CheckCircle2 size={12} style={{ display: "inline", marginRight: 7, color: "var(--warn)" }} />
+                    {item}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

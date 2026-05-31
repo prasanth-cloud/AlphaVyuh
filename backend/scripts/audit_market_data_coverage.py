@@ -25,6 +25,9 @@ from supabase import create_client
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+FIVE_YEAR_MIN_TRADING_ROWS = int(252 * 5 * 0.9)
+DEFAULT_SENTINEL_SYMBOLS = ("RELIANCE", "ITC", "AUBANK")
+
 
 def _client():
     url = os.getenv("SUPABASE_URL")
@@ -85,6 +88,24 @@ def _audit_history(client, symbols: list[str], start_date: date, max_rows: int |
     return by_symbol, latest_counts
 
 
+def _sentinel_counts(client, symbols: list[str], start_date: date) -> dict[str, int]:
+    if not symbols:
+        return {}
+    counts: dict[str, int] = {}
+    query = (
+        client.table("daily_ohlcv")
+        .select("symbol,trade_date")
+        .in_("symbol", symbols)
+        .gte("trade_date", str(start_date))
+        .order("trade_date", desc=False)
+    )
+    for row in _paged(query):
+        symbol = row.get("symbol")
+        if symbol:
+            counts[symbol] = counts.get(symbol, 0) + 1
+    return counts
+
+
 def _rpc_audit(client, years: int) -> dict | None:
     try:
         result = client.rpc("market_data_coverage_audit", {"p_years": years}).execute()
@@ -100,9 +121,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Audit market data coverage for AlphaVyuh.")
     parser.add_argument("--years", type=int, default=5, help="History window to audit")
     parser.add_argument("--sample-limit", type=int, default=None, help="Optional row cap per symbol batch for quick checks")
+    parser.add_argument(
+        "--sentinel-symbols",
+        default=",".join(DEFAULT_SENTINEL_SYMBOLS),
+        help="Comma-separated established symbols that should satisfy the 5Y launch contract",
+    )
+    parser.add_argument("--fail-under-contract", action="store_true", help="Exit non-zero if any sentinel is below the 5Y row contract")
     args = parser.parse_args()
 
     client = _client()
+    sentinel_symbols = [symbol.strip().upper() for symbol in args.sentinel_symbols.split(",") if symbol.strip()]
     if args.sample_limit is None:
         rpc = _rpc_audit(client, args.years)
         if rpc:
@@ -114,8 +142,21 @@ def main() -> int:
             print(f"  {args.years}Y chart-ready:          {rpc.get('chart_ready_symbols')}")
             print(f"  Partial history:            {rpc.get('partial_history_symbols')}")
             print(f"  Missing history:            {rpc.get('missing_history_symbols')}")
+            print(f"  Min 5Y daily rows/sentinel: {FIVE_YEAR_MIN_TRADING_ROWS}")
             print("  Path:                       database RPC")
-            return 0
+            if not sentinel_symbols:
+                return 0
+            window_start = rpc.get("window_start")
+            try:
+                sentinel_start = date.fromisoformat(str(window_start))
+            except ValueError:
+                sentinel_start = date.today() - timedelta(days=365 * args.years + 10)
+            counts = _sentinel_counts(client, sentinel_symbols, sentinel_start)
+            weak = [symbol for symbol in sentinel_symbols if counts.get(symbol, 0) < FIVE_YEAR_MIN_TRADING_ROWS]
+            print(f"  Sentinel symbols:           {', '.join(f'{symbol}({counts.get(symbol, 0)})' for symbol in sentinel_symbols)}")
+            if weak:
+                print(f"  Sentinel below contract:    {', '.join(weak)}")
+            return 1 if args.fail_under_contract and weak else 0
 
     symbols = _active_nse_symbols(client)
     start_date = date.today() - timedelta(days=365 * args.years + 10)
@@ -136,12 +177,19 @@ def main() -> int:
     print(f"  {args.years}Y chart-ready:          {len(chart_ready)}")
     print(f"  Partial history:            {len(partial)}")
     print(f"  Missing history:            {len(missing)}")
+    print(f"  Min 5Y daily rows/sentinel: {FIVE_YEAR_MIN_TRADING_ROWS}")
+    sentinel_counts = {symbol: by_symbol.get(symbol, 0) for symbol in sentinel_symbols}
+    weak = [symbol for symbol in sentinel_symbols if sentinel_counts.get(symbol, 0) < FIVE_YEAR_MIN_TRADING_ROWS]
+    if sentinel_symbols:
+        print(f"  Sentinel symbols:           {', '.join(f'{symbol}({sentinel_counts.get(symbol, 0)})' for symbol in sentinel_symbols)}")
+    if weak:
+        print(f"  Sentinel below contract:    {', '.join(weak)}")
     if missing[:10]:
         print(f"  Missing sample:             {', '.join(missing[:10])}")
     if partial[:10]:
         sample = ", ".join(f"{symbol}({by_symbol[symbol]})" for symbol in partial[:10])
         print(f"  Partial sample:             {sample}")
-    return 0
+    return 1 if args.fail_under_contract and weak else 0
 
 
 if __name__ == "__main__":

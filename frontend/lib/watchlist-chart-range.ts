@@ -98,6 +98,10 @@ type ChartCoverageLike = {
   partial?: boolean;
   partial_reason?: string | null;
   coverage_pct?: number | null;
+  five_year_contract?: {
+    years?: number | null;
+    status?: string | null;
+  } | null;
 };
 
 export function formatChartCoverageRange(
@@ -133,6 +137,45 @@ export function getCoverageAvailabilityMessage(
     return `Latest candle is ${coverage.available_to ?? "not current"} for ${request.label}${percent}.`;
   }
   return `Partial chart history for ${request.label}${percent}.`;
+}
+
+export function getFiveYearHistoryBadge(
+  coverage: ChartCoverageLike | null | undefined,
+  request: Pick<WatchlistChartRequest, "label">,
+) {
+  const contract = coverage?.five_year_contract;
+  if (request.label !== "5Y") return null;
+  if (!contract) {
+    return {
+      label: "5Y contract unverified",
+      title: "Chart response did not include five_year_contract metadata; treat this 5Y view as unverified launch evidence.",
+      tone: "warn" as const,
+    };
+  }
+  if (contract.status === "not_requested") return null;
+  const years = contract.years ?? 5;
+  const percent = typeof coverage.coverage_pct === "number" && Number.isFinite(coverage.coverage_pct)
+    ? ` · ${coverage.coverage_pct.toFixed(0)}% coverage`
+    : "";
+  if (contract.status === "met") {
+    return {
+      label: `${years}Y history verified`,
+      title: `Daily ${years}Y chart contract met: ${formatChartCoverageRange(coverage, [])}.`,
+      tone: "good" as const,
+    };
+  }
+  if (contract.status === "partial") {
+    const label = `Limited ${years}Y history`;
+    const reason = coverage?.partial_reason === "five_year_contract_not_met"
+      ? `IPO, rename, or short-history symbol; ${formatChartCoverageRange(coverage, [])}${percent}.`
+      : null;
+    return {
+      label,
+      title: reason ?? getCoverageAvailabilityMessage(coverage, request) ?? `${label}${percent}.`,
+      tone: "warn" as const,
+    };
+  }
+  return null;
 }
 
 export function getRangeAvailabilityMessage(

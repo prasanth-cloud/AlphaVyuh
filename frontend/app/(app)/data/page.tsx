@@ -23,6 +23,7 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import type { ApiReachability } from "@/lib/data-mode";
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from "@/lib/account-data-status";
 import { sectorTaxonomyPresentation } from "@/lib/sector-taxonomy-copy";
+import { brokerOrderGatePresentation } from "@/lib/broker-safety";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
@@ -338,6 +339,8 @@ export default function DataFreshnessPage() {
     : null;
   const missingIndicators = (health?.indicators_missing.rsi_14 ?? 0) + (health?.indicators_missing.ema_200 ?? 0);
   const liveMarket = health?.live_market ?? null;
+  const brokerUnavailable = state.accountIssues.some(issue => issue.id === "broker");
+  const brokerGate = brokerOrderGatePresentation(broker, { unavailable: brokerUnavailable });
 
   if (loading) {
     return (
@@ -426,6 +429,12 @@ export default function DataFreshnessPage() {
           status={state.accountIssues.some(issue => issue.id === "broker") || broker.token_expired ? "bad" : broker.connected ? "good" : "warn"}
         />
         <HealthTile
+          label="Broker order gate"
+          value={brokerGate.value}
+          detail={brokerGate.detail}
+          status={brokerGate.status}
+        />
+        <HealthTile
           label="Kite live feed"
           value={liveMarket?.access_token_valid ? "TOKEN VALID" : liveMarket?.access_token_configured ? "CHECK TOKEN" : "NO TOKEN"}
           detail={liveMarket?.stream_connected ? `${liveMarket.subscriber_count} active stream subscriber${liveMarket.subscriber_count === 1 ? "" : "s"}.` : liveMarket?.last_error || "Live quotes need the daily Kite access token."}
@@ -459,6 +468,7 @@ export default function DataFreshnessPage() {
               ["Last ingest errors", fmtNumber(health?.last_run.errors)],
               ["Kite app", liveMarket?.api_key_configured ? "Configured" : "Missing"],
               ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
+              ["Broker order gate", `${brokerGate.value} · ${brokerGate.detail}`],
               ["Open trades", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : fmtNumber(state.journalStats?.open_trades)],
               ["AI pattern readiness", state.accountIssues.some(issue => issue.id === "journal") || state.aiPatternsError ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
             ].map(([label, value]) => (
