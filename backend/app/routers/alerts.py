@@ -5,9 +5,9 @@ The daily ingest cron calls run_all_alerts() after bhavcopy is ingested.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 import httpx
@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
 FREE_ALERT_LIMIT = 2
 PRO_ALERT_LIMIT  = 20
+MAX_RECENT_MATCH_RUNS_PER_ALERT = 5
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -166,19 +167,33 @@ async def delete_alert(alert_id: str, user_id: str = Depends(get_current_user_id
 
 
 @router.get("/recent/matches")
-async def get_recent_matches(user_id: str = Depends(get_current_user_id)):
-    """Return today's / most-recent matches across all alerts for this user."""
+async def get_recent_matches(
+    runs_per_alert: Annotated[int, Query(ge=1, le=MAX_RECENT_MATCH_RUNS_PER_ALERT)] = 2,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return recent match history per alert so clients can compare entries and exits."""
     try:
         client = get_admin_client()
         res = client.table("scan_alert_matches") \
             .select("*, scan_alerts(name)") \
             .eq("user_id", user_id) \
             .order("run_date", desc=True) \
-            .limit(50) \
+            .limit(max(50, runs_per_alert * PRO_ALERT_LIMIT)) \
             .execute()
     except Exception:
         raise _scan_alerts_unavailable()
-    return {"matches": res.data or []}
+    matches_by_alert: dict[str, int] = {}
+    recent_matches: list[dict] = []
+    for match in res.data or []:
+        alert_id = match.get("alert_id")
+        if not alert_id:
+            continue
+        retained = matches_by_alert.get(alert_id, 0)
+        if retained >= runs_per_alert:
+            continue
+        matches_by_alert[alert_id] = retained + 1
+        recent_matches.append(match)
+    return {"matches": recent_matches}
 
 
 @router.get("/{alert_id}/matches")
