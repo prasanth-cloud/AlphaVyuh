@@ -50,6 +50,8 @@ def test_market_overview_fails_soft_when_admin_client_unavailable(monkeypatch):
     assert overview["total"] == 0
     assert overview["indices"][0]["symbol"] == "NIFTY"
     assert "Market summary" in overview["message"]
+    assert overview["sector_taxonomy"]["display_filter"]["minimum_active_symbols"] == 1
+    assert overview["sector_taxonomy"]["display_filter"]["hidden_sector_count"] == 0
 
 
 def test_market_overview_fails_soft_when_daily_rows_unavailable(monkeypatch):
@@ -64,6 +66,8 @@ def test_market_overview_fails_soft_when_daily_rows_unavailable(monkeypatch):
     assert overview["trade_date"] == "2026-05-04"
     assert overview["top_gainers"] == []
     assert overview["cache_status"] == "miss"
+    assert overview["sector_taxonomy"]["display_filter"]["minimum_active_symbols"] == 1
+    assert overview["sector_taxonomy"]["display_filter"]["hidden_sector_count"] == 0
 
 
 def test_market_overview_uses_breadth_snapshot_before_recomputing(monkeypatch):
@@ -102,3 +106,15 @@ def test_market_overview_uses_breadth_snapshot_before_recomputing(monkeypatch):
     assert overview["trade_date"] == "2026-05-04"
     assert overview["total"] == 1234
     assert overview["sector_breadth"][0]["sector"] == "Banks"
+
+
+def test_live_sector_index_contract_uses_official_labels():
+    labels = [label for _symbol, label in market_router.SECTOR_INDEXES]
+
+    assert "Nifty IT Index" in labels
+    assert "Nifty Healthcare Index" in labels
+    assert "Nifty Chemicals Index" in labels
+    assert "Nifty Consumer Durables Index" in labels
+    assert "Nifty Cement Index" in labels
+    assert "IT" not in labels
+    assert "Banks" not in labels

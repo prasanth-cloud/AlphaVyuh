@@ -14,6 +14,7 @@ from typing import Any
 
 from app.services.market_dates import analyze_trade_date_quality
 from app.services.market_context import eod_source_metadata
+from app.services.sector_taxonomy import build_sector_taxonomy_metadata
 
 SNAPSHOT_RUN_ID_PREFIX = "market-breadth-snapshot"
 MAX_SNAPSHOT_UNCHANGED_RATIO = 0.85
@@ -227,8 +228,6 @@ def build_market_breadth_snapshot(
 
     sector_breadth: list[dict] = []
     for sector, data in sector_map.items():
-        if data["total"] < 3:
-            continue
         advance_breadth = round(data["advances"] / data["total"] * 100, 1)
         above_sector_ema20_pct = (
             round(data["above_ema20"] / data["ema20_valid"] * 100, 1)
@@ -246,6 +245,12 @@ def build_market_breadth_snapshot(
             "basis": "advancing_constituents",
         })
     sector_breadth.sort(key=lambda item: (item["avg_pct_change"], item["breadth_pct"]), reverse=True)
+    sector_taxonomy = build_sector_taxonomy_metadata(
+        [{"symbol": row["symbol"], "sector": row.get("sector")} for row in enriched],
+        active_count=len(enriched),
+        active_count_scope="latest_complete_breadth_rows",
+        hidden_min_active_symbols=1,
+    )
 
     with_pct = [row for row in enriched if row["pct_change"] is not None]
     top_gainers = sorted(with_pct, key=lambda item: item["pct_change"], reverse=True)[:5]
@@ -285,6 +290,7 @@ def build_market_breadth_snapshot(
         "sector_breadth": sector_breadth[:12],
         "sector_breadth_basis": "advancing_constituents",
         "sector_breadth_source": "latest_complete_nse_eq_universe",
+        "sector_taxonomy": sector_taxonomy,
         "top_sectors": sector_breadth[:5],
         "top_gainers": [_mover(row) for row in top_gainers],
         "top_losers": [_mover(row) for row in top_losers],

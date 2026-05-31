@@ -107,6 +107,84 @@ describe("market auxiliary API", () => {
     await expect(getSectors()).resolves.toEqual([]);
   });
 
+  it("keeps sector metadata beside the backwards-compatible sector list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        sectors: ["Energy", "Tiny Sector"],
+        metadata: {
+          source: "stock_universe.sector",
+          taxonomy_status: "unverified",
+          taxonomy_status_reason: "AlphaVyuh currently derives sector labels from stock_universe.sector. Treat sector counts as provisional until NSE industry classification parity is audited.",
+          contract_as_of: "2026-05-30",
+          active_count: 3,
+          active_count_scope: "active_universe",
+          classified_count: 2,
+          unmapped_count: 1,
+          unmapped_symbols: ["UNMAPPED"],
+          unmapped_symbols_truncated: false,
+          sector_count: 2,
+          sector_counts: [
+            { sector: "Energy", active_count: 1, aliases: ["Oil and Gas"], hidden_by_filter: false },
+            { sector: "Tiny Sector", active_count: 1, aliases: [], hidden_by_filter: false },
+          ],
+          alias_policy: {
+            source: "NSE sectoral index aliases",
+            description: "Sector-count aliases are derived only from NSE sectoral-index alias labels.",
+          },
+          audit_scope: {
+            sector_labels: {
+              source: "stock_universe.sector",
+              status: "not_audited",
+              description: "AlphaVyuh sector counts are grouped from active stock_universe.sector labels; the labels are not yet audited against NSE industry classification.",
+            },
+            sectoral_index_reference: {
+              source: "NSE sectoral indices",
+              status: "reference_only",
+              description: "NSE sectoral-index labels are used only as a public reference and alias source.",
+            },
+            industry_taxonomy: {
+              source: "NSE industry classification",
+              status: "not_audited",
+              description: "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts.",
+            },
+          },
+          display_filter: {
+            minimum_active_symbols: 1,
+            hidden_sector_count: 0,
+            description: "All mapped sectors are shown.",
+          },
+          reference: {
+            name: "NSE sectoral indices",
+            url: "https://www.nseindia.com/static/products-services/indices-sectoral",
+            as_of: "2026-03-02",
+            relationship: "reference_only_not_equity_universe_source",
+          },
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getSectors, getSectorsWithMetadata } = await import("@/lib/api");
+
+    await expect(getSectors()).resolves.toEqual(["Energy", "Tiny Sector"]);
+    await expect(getSectorsWithMetadata()).resolves.toMatchObject({
+      sectors: ["Energy", "Tiny Sector"],
+      metadata: {
+        source: "stock_universe.sector",
+        contract_as_of: "2026-05-30",
+        unmapped_count: 1,
+        alias_policy: {
+          source: "NSE sectoral index aliases",
+        },
+        audit_scope: {
+          industry_taxonomy: {
+            status: "not_audited",
+          },
+        },
+      },
+    });
+  });
+
   it("rejects sector list service errors instead of returning empty sectors", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ detail: "Sector list is temporarily unavailable." }),

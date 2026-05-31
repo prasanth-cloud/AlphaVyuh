@@ -21,11 +21,13 @@ class _Query:
         self.insert_payload = None
         self.upsert_payload = None
         self.ilike_value = None
+        self.filters = {}
 
     def select(self, *_args, **_kwargs):
         return self
 
-    def eq(self, *_args, **_kwargs):
+    def eq(self, column, value):
+        self.filters[column] = value
         return self
 
     def ilike(self, _column, value):
@@ -73,6 +75,18 @@ class _Query:
             return type("Result", (), {"data": [self.upsert_payload]})()
         if self.table_name == "workflow_states" and self.client.workflow_state is not None:
             return type("Result", (), {"data": self.client.workflow_state})()
+        if self.table_name == "broker_connections" and self.upsert_payload is not None:
+            self.client.broker_connection_upserts.append(self.upsert_payload)
+            broker = self.upsert_payload.get("broker")
+            if broker:
+                self.client.broker_connection_metadata[broker] = self.upsert_payload.get("metadata")
+            return type("Result", (), {"data": [self.upsert_payload]})()
+        if self.table_name == "broker_connections":
+            broker = self.filters.get("broker")
+            metadata = self.client.broker_connection_metadata.get(broker)
+            if metadata is not None:
+                return type("Result", (), {"data": {"metadata": metadata}})()
+            return type("Result", (), {"data": None})()
         return type("Result", (), {"data": None})()
 
 
@@ -82,6 +96,8 @@ class _FakeSupabase:
         self.workflow_upserts = []
         self.workflow_state = None
         self.updated = []
+        self.broker_connection_metadata = {}
+        self.broker_connection_upserts = []
 
     def table(self, table_name: str):
         return _Query(self, table_name)
@@ -117,6 +133,16 @@ def _order(live_confirmed: bool = False):
         source_page="watchlist",
         live_confirmed=live_confirmed,
     )
+
+
+def _fresh_read_only_smoke(broker: str):
+    return {
+        "read_only_smoke": {
+            "broker": broker,
+            "passed": True,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+    }
 
 
 def test_order_from_valid_plan_carries_context_into_journal(monkeypatch):
@@ -224,8 +250,49 @@ def test_live_order_requires_explicit_confirmation(monkeypatch):
     assert client.journal_inserts == []
 
 
+def test_live_confirmed_order_requires_matching_read_only_smoke(monkeypatch):
+    client = _FakeSupabase()
+    called = {"adapter": False}
+
+    class _Adapter:
+        async def place_order(self, *_args, **_kwargs):
+            called["adapter"] = True
+            raise AssertionError("adapter must not run until read-only smoke passes")
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "read-only broker smoke passes" in str(exc.value.detail)
+    assert called["adapter"] is False
+    assert client.journal_inserts == []
+
+
+def test_live_confirmed_order_requires_smoke_for_same_broker(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_connection_metadata["zerodha"] = {
+        "read_only_smoke": {"broker": "upstox", "passed": True}
+    }
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "Live zerodha order placement is blocked" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
 def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypatch):
     client = _FakeSupabase()
+    client.broker_connection_metadata["zerodha"] = _fresh_read_only_smoke("zerodha")
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
     monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
@@ -251,6 +318,7 @@ def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypa
 
 def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
     client = _FakeSupabase()
+    client.broker_connection_metadata["upstox"] = _fresh_read_only_smoke("upstox")
     captured = {}
 
     class _FakeUpstoxAdapter:
@@ -329,7 +397,24 @@ def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
     assert "alphavyuh-broker-import:zerodha:order:kite-order-1" in client.journal_inserts[0]["entry_reason"]
 
 
+def test_zerodha_import_preserves_read_only_smoke_metadata(monkeypatch):
+    client = _FakeSupabase()
+    existing_metadata = _fresh_read_only_smoke("zerodha")
+    client.broker_connection_metadata["zerodha"] = existing_metadata
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda **_kwargs: [])
+
+    result = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert client.broker_connection_upserts
+    assert client.broker_connection_upserts[-1]["metadata"] == existing_metadata
+
+
 def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
     monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
     monkeypatch.setattr(broker_router.kite_api, "get_profile", lambda *_args, **_kwargs: {"user_id": "kite-user"})
@@ -346,6 +431,129 @@ def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
     assert result["checks"]["holdings"]["count"] == 1
     assert result["checks"]["orderbook"]["count"] == 1
     assert result["checks"]["tradebook"]["count"] == 1
+    assert client.broker_connection_upserts
+    metadata = client.broker_connection_upserts[-1]["metadata"]
+    assert metadata == {
+        "read_only_smoke": {
+            "broker": "zerodha",
+            "passed": True,
+            "checked_at": metadata["read_only_smoke"]["checked_at"],
+            "checks": {
+                "login_url": {"ok": True},
+                "profile": {"ok": True, "user_id_present": True},
+                "positions": {"ok": True, "count": 1},
+                "holdings": {"ok": True, "count": 1},
+                "orderbook": {"ok": True, "count": 1},
+                "tradebook": {"ok": True, "count": 1},
+            },
+        }
+    }
+    assert "access" not in str(metadata).lower()
+    assert "token" not in str(metadata).lower()
+
+
+def test_broker_status_returns_sanitized_read_only_smoke_checks(monkeypatch):
+    client = _FakeSupabase()
+    checked_at = datetime.now(timezone.utc).isoformat()
+    client.broker_connection_metadata["zerodha"] = {
+        "read_only_smoke": {
+            "broker": "zerodha",
+            "passed": True,
+            "checked_at": checked_at,
+            "checks": {
+                "profile": {"ok": True, "user_id_present": True},
+                "holdings": {"ok": True, "count": 2},
+                "orderbook": {"ok": True, "count": 5},
+            },
+        }
+    }
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "_broker_env_value", lambda *_args: "kite-key")
+    monkeypatch.setattr(broker_router, "_get_stored_credential", lambda _user_id, _broker, key: (
+        (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat() if key == "expires_at" else "stored-token"
+    ))
+
+    result = asyncio.run(broker_router.broker_status(user_id="user-1"))
+
+    assert result["read_only_smoke_passed"] is True
+    assert result["read_only_smoke_fresh"] is True
+    assert result["read_only_smoke_checked_at"] == checked_at
+    assert result["read_only_smoke_checks"]["profile"]["user_id_present"] is True
+    assert result["read_only_smoke_checks"]["holdings"]["count"] == 2
+    assert "stored-token" not in str(result)
+
+
+def test_live_confirmed_order_rejects_stale_read_only_smoke(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_connection_metadata["zerodha"] = {
+        "read_only_smoke": {
+            "broker": "zerodha",
+            "passed": True,
+            "checked_at": (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat(),
+        }
+    }
+    called = {"adapter": False}
+
+    class _Adapter:
+        async def place_order(self, *_args, **_kwargs):
+            called["adapter"] = True
+            raise AssertionError("adapter must not run for stale smoke")
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "read-only broker smoke passes" in str(exc.value.detail)
+    assert called["adapter"] is False
+    assert client.journal_inserts == []
+
+
+def test_broker_status_marks_stale_read_only_smoke_unpassed(monkeypatch):
+    client = _FakeSupabase()
+    checked_at = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+    client.broker_connection_metadata["zerodha"] = {
+        "read_only_smoke": {
+            "broker": "zerodha",
+            "passed": True,
+            "checked_at": checked_at,
+            "checks": {"profile": {"ok": True, "user_id_present": True}},
+        }
+    }
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "_broker_env_value", lambda *_args: "kite-key")
+    monkeypatch.setattr(broker_router, "_get_stored_credential", lambda _user_id, _broker, key: (
+        (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat() if key == "expires_at" else "stored-token"
+    ))
+
+    result = asyncio.run(broker_router.broker_status(user_id="user-1"))
+
+    assert result["read_only_smoke_passed"] is False
+    assert result["read_only_smoke_fresh"] is False
+    assert result["read_only_smoke_checked_at"] == checked_at
+    assert result["live_order_enabled"] is False
+
+
+def test_broker_status_does_not_enable_orders_without_active_session(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_connection_metadata["zerodha"] = _fresh_read_only_smoke("zerodha")
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_plan", lambda _user_id: ("pro", None))
+    monkeypatch.setattr(broker_router, "_broker_env_value", lambda *_args: None)
+    monkeypatch.setattr(broker_router, "_get_stored_credential", lambda *_args: None)
+
+    result = asyncio.run(broker_router.broker_status(user_id="user-1"))
+
+    assert result["read_only_smoke_passed"] is True
+    assert result["connected"] is False
+    assert result["live_order_enabled"] is False
 
 
 def test_broker_json_callback_rejects_invalid_oauth_state_before_exchange(monkeypatch):

@@ -33,7 +33,9 @@ run_step() {
 run_step "Git tracked changes" git status --short
 
 run_step "Launch checker regression tests" npm run test:production-api-check
+run_step "Five-year chart contract regression tests" npm run test:five-year-chart-check
 run_step "Production smoke env regression tests" npm run test:production-smoke-env-check
+run_step "Production smoke workflow regression tests" npm run test:production-smoke-workflow-check
 run_step "Railway recovery workflow regression tests" npm run test:railway-recovery-workflow-check
 run_step "Recovery handoff credential regression tests" npm run test:recovery-handoff-credentials-check
 run_step "Signed-in copy posture regression tests" npm run test:signed-in-copy-posture-check
@@ -41,6 +43,8 @@ run_step "Public posture checker regression tests" npm run test:public-posture-c
 run_step "Data recovery checker regression tests" npm run test:data-recovery-check
 run_step "Market-data entitlement contract regression tests" npm run test:market-data-entitlement-check
 run_step "Setup review workflow contract regression tests" npm run test:setup-review-check
+run_step "Sector taxonomy checker regression tests" npm run test:sector-taxonomy-check
+run_step "Broker read-only contract regression tests" npm run test:broker-readonly-check
 run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
 
 run_step "Frontend lint" npm --prefix frontend run lint
@@ -97,12 +101,15 @@ fi
 
 run_step "Signed-in copy posture check" npm run check:signed-in-copy-posture
 run_step "Recovery handoff credential check" npm run check:recovery-handoff-credentials
+run_step "Production smoke workflow check" npm run check:production-smoke-workflow
 run_step "Railway recovery workflow check" npm run check:railway-recovery-workflow
 
 if [[ "${PRODUCTION_API_URL:-${NEXT_PUBLIC_API_URL:-}}" != "" ]]; then
   run_step "Production API data smoke" npm run check:production-api
+  run_step "Production sector taxonomy smoke" npm run check:sector-taxonomy
 else
   echo "Skipping production API data smoke. Set PRODUCTION_API_URL or NEXT_PUBLIC_API_URL to enable it."
+  echo "Skipping production sector taxonomy smoke. Set PRODUCTION_API_URL, NEXT_PUBLIC_API_URL, SECTOR_AUDIT_URL, PUBLIC_SITE_URL, or LIVE_URL to enable it."
   echo
 fi
 
