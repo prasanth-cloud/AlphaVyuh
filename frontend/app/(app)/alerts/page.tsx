@@ -11,6 +11,7 @@ import {
   type ScanAlertMatch,
 } from "@/lib/api";
 import { DataProvenanceBadge, DataTable, DataTableHead, EmptyState, Num, Td, Th, Tr } from "@/components/ui";
+import { describeScanAlertCadence, describeScanAlertIntent, type ScanAlertIntent } from "@/lib/scan-alert-semantics";
 
 function topSymbols(match: ScanAlertMatch) {
   return match.symbols.slice(0, 6);
@@ -21,6 +22,12 @@ function runStatusLabel(status?: string) {
   if (status === "skipped") return "Skipped";
   if (status === "success") return "Checked";
   return "Waiting";
+}
+
+function intentColor(tone: ScanAlertIntent["tone"]) {
+  if (tone === "entry") return "var(--gain)";
+  if (tone === "exit") return "var(--loss)";
+  return "var(--accent)";
 }
 
 export default function AlertsPage() {
@@ -86,7 +93,7 @@ export default function AlertsPage() {
           <div className="label" style={{ marginBottom: 8 }}>Alerts</div>
           <h1 className="heading-card" style={{ fontSize: 24, marginBottom: 6 }}>Scan matches</h1>
           <p className="workspace-card-copy" style={{ maxWidth: 760 }}>
-            Review saved scans after the latest market session is loaded. AlphaVyuh shows matched names for review; execution stays outside AlphaVyuh.
+            Review saved entry and exit screens after the latest cash-equity EOD session is loaded. AlphaVyuh shows matched names for review; execution stays outside AlphaVyuh.
           </p>
         </div>
         <div className="workspace-toolbar-group">
@@ -158,16 +165,27 @@ export default function AlertsPage() {
               <Th width={210}>Controls</Th>
             </DataTableHead>
             <tbody>
-              {alerts.map((alert) => (
-                <Tr key={alert.id}>
-                  <Td emphasized>
-                    <div className="mono" style={{ fontSize: 13, color: "var(--text-primary)" }}>{alert.name}</div>
-                    <div className="caption">{alert.sort_by} · {alert.sort_order}</div>
-                  </Td>
+              {alerts.map((alert) => {
+                const intent = describeScanAlertIntent(alert.filters);
+                return (
+                  <Tr key={alert.id}>
+                    <Td emphasized>
+                      <div className="mono" style={{ fontSize: 13, color: "var(--text-primary)" }}>{alert.name}</div>
+                      <div className="caption">{alert.sort_by} · {alert.sort_order}</div>
+                      <div className="workspace-pill" style={{ marginTop: 8, color: intentColor(intent.tone) }}>
+                        {intent.label}
+                      </div>
+                      <div className="caption" style={{ marginTop: 6, lineHeight: 1.45 }}>
+                        {intent.detail}
+                      </div>
+                    </Td>
                   <Td>
                     <span className="workspace-pill" style={{ color: alert.is_active ? "var(--gain)" : "var(--text-tertiary)" }}>
                       {alert.is_active ? "Active" : "Paused"}
                     </span>
+                    <div className="caption" style={{ marginTop: 6, lineHeight: 1.45 }}>
+                      {describeScanAlertCadence(alert)}
+                    </div>
                     {alert.last_run_status && alert.last_run_status !== "waiting" && (
                       <div className="caption" style={{ marginTop: 6 }}>
                         Last check: {runStatusLabel(alert.last_run_status)}
@@ -193,8 +211,9 @@ export default function AlertsPage() {
                       </button>
                     </div>
                   </Td>
-                </Tr>
-              ))}
+                  </Tr>
+                );
+              })}
             </tbody>
           </DataTable>
         )}
