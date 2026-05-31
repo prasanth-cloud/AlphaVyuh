@@ -541,6 +541,33 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("saved scanner screens can be composed with visible provenance", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/scanner");
+    await page.getByLabel("Select saved screen Trend Template").check();
+    await page.getByLabel("Select saved screen VCP Breakout").check();
+    await page.getByRole("button", { name: /^Combine 2 screens$/ }).click();
+
+    await expect(page.locator(".scanner-results-toolbar")).toContainText("AND · Trend Template + VCP Breakout", { timeout: 20_000 });
+    await expect(page.locator(".scanner-results-toolbar")).toContainText("Saved scan composition");
+    await expect(page.getByText(/matches from AND composition/i)).toBeVisible({ timeout: 10_000 });
+
+    const resultRows = page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) });
+    await expect(resultRows.first()).toBeVisible({ timeout: 10_000 });
+    await expect(resultRows.first()).toContainText("Trend Template + VCP Breakout");
+    await resultRows.first().click();
+    await expect(page.locator("tbody")).toContainText("Screen: Trend Template");
+    await expect(page.locator("tbody")).toContainText("Screen: VCP Breakout");
+
+    expect(errors).toEqual([]);
+  });
+
   test("scanner shortlist creates a selected watchlist and chart drawing survives reload", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
