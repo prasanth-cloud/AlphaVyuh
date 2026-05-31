@@ -273,6 +273,16 @@ test.describe("Mock workflow smoke", () => {
 
     await page.goto("/watchlist");
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+    await page.getByPlaceholder("Add or paste symbols…").fill("NSE:RELIANCE,NSE:AUBANK,NSE:INFY");
+    await page.getByRole("button", { name: /^Import 3$/ }).click();
+    await expect(page.getByText("Imported 3 symbols")).toBeVisible({ timeout: 10_000 });
+    const importedWatchlist = await page.evaluate(() => {
+      const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
+      return lists.find((list: { name: string }) => list.name === "Leaders");
+    });
+    expect(importedWatchlist.items.map((item: { symbol: string }) => item.symbol)).toEqual(
+      expect.arrayContaining(["RELIANCE", "AUBANK", "INFY"]),
+    );
     await page.getByRole("button", { name: /^Details$/ }).click();
     await expect(page.getByText("Fundamentals")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Mkt cap")).toBeVisible();

@@ -69,6 +69,7 @@ import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/cha
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 import { buildMultiChartReviewHref } from "@/lib/multi-chart-review";
+import { parseWatchlistSymbolImport, type WatchlistSymbolImport } from "@/lib/watchlist-symbol-import";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -142,6 +143,32 @@ function formatCompactVolume(value: number): string {
 function formatNullablePrice(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "-";
   return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function watchlistItemFromQuote(symbol: string, quote: Awaited<ReturnType<typeof getQuote>> | null, sortOrder: number): WatchlistItem {
+  return quote
+    ? {
+        symbol: quote.symbol,
+        sort_order: sortOrder,
+        added_at: new Date().toISOString(),
+        company_name: quote.company_name,
+        sector: quote.sector,
+        close: quote.close,
+        pct_change: quote.pct_change,
+        volume_ratio: quote.volume_ratio,
+        rsi_14: quote.rsi_14,
+        pinned: false,
+        tags: [],
+        note: "",
+      }
+    : {
+        symbol,
+        sort_order: sortOrder,
+        added_at: new Date().toISOString(),
+        pinned: false,
+        tags: [],
+        note: "",
+      };
 }
 
 function watchlistInitial(name: string | null | undefined): string {
@@ -1560,6 +1587,9 @@ function WatchlistContent() {
   const selectedPlanStatus = workflowPlanStatus(selectedWorkflow);
   const selectedFundamentals = chartSymbol ? fundamentalsBySymbol[chartSymbol] ?? null : null;
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
+  const importPreview = useMemo(() => parseWatchlistSymbolImport(symbolInput), [symbolInput]);
+  const isBulkSymbolInput = importPreview.symbols.length > 1 || /[\n,]/.test(symbolInput);
+  const addDisabled = adding || !symbolInput.trim() || (isBulkSymbolInput && importPreview.symbols.length === 0);
 
   useEffect(() => {
     if (!chartSymbol || !visibleItems.length) return;
@@ -1734,6 +1764,13 @@ function WatchlistContent() {
 
   const handleSearchInput = useCallback(async (q: string) => {
     setSymbolInput(q);
+    const parsed = parseWatchlistSymbolImport(q);
+    if (parsed.symbols.length > 1 || /[\n,]/.test(q)) {
+      setSearchResults([]);
+      setSymbolSearchError("");
+      setShowDropdown(false);
+      return;
+    }
     if (q.length >= 1) {
       try {
         const results = await searchSymbols(q);
@@ -1763,9 +1800,7 @@ function WatchlistContent() {
     try {
       await addToWatchlist(activeId, symbol);
       const quote = await getQuote(symbol);
-      const newItem: WatchlistItem = quote
-        ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-        : { symbol, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+      const newItem = watchlistItemFromQuote(symbol, quote, activeWl?.items.length ?? 0);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
       setChartSymbol(symbol);
       setSymbolInput("");
@@ -1796,9 +1831,7 @@ function WatchlistContent() {
           continue;
         }
         const quote = await getQuote(symbol).catch(() => null);
-        newItems.push(quote
-          ? { symbol: quote.symbol, sort_order: index, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-          : { symbol, sort_order: index, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" });
+        newItems.push(watchlistItemFromQuote(symbol, quote, (activeWl?.items.length ?? 0) + index));
       }
 
       if (newItems.length) {
@@ -1820,9 +1853,69 @@ function WatchlistContent() {
     }
   }
 
+  async function importSymbolsIntoWatchlist(parsed: WatchlistSymbolImport) {
+    if (!activeId || parsed.symbols.length === 0) return;
+    setAdding(true);
+    setAddMsg("");
+    setShowDropdown(false);
+    setSearchResults([]);
+    try {
+      const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
+      const newItems: WatchlistItem[] = [];
+      let skippedCount = parsed.duplicateCount + parsed.truncatedCount;
+      let failureCount = 0;
+
+      for (const symbol of parsed.symbols) {
+        if (existing.has(symbol)) {
+          skippedCount += 1;
+          continue;
+        }
+        try {
+          await addToWatchlist(activeId, symbol);
+          const quote = await getQuote(symbol).catch(() => null);
+          newItems.push(watchlistItemFromQuote(symbol, quote, (activeWl?.items.length ?? 0) + newItems.length));
+          existing.add(symbol);
+        } catch (error) {
+          if (error instanceof Error && /already in watchlist/i.test(error.message)) {
+            skippedCount += 1;
+          } else {
+            failureCount += 1;
+          }
+        }
+      }
+
+      if (newItems.length) {
+        setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
+        setChartSymbol(newItems[0].symbol);
+      }
+
+      const parts = [
+        newItems.length ? `Imported ${newItems.length} symbol${newItems.length === 1 ? "" : "s"}` : "No new symbols imported",
+        skippedCount ? `skipped ${skippedCount}` : null,
+        failureCount ? `${failureCount} failed` : null,
+      ].filter(Boolean);
+      const message = `${parts.join("; ")}${failureCount ? `. ${WATCHLIST_RECOVERY_MESSAGE}` : ""}`;
+      setAddMsg(message);
+      if (failureCount) showToast(message);
+      if (newItems.length) setSymbolInput("");
+    } catch {
+      const message = `Symbols could not be imported. ${WATCHLIST_RECOVERY_MESSAGE}`;
+      setAddMsg(message);
+      showToast(message);
+    } finally {
+      setAdding(false);
+      setTimeout(() => setAddMsg(""), 3500);
+    }
+  }
+
   async function handleAddSymbol() {
     if (!activeId || !symbolInput.trim()) return;
-    const sym = symbolInput.trim().toUpperCase();
+    const parsed = parseWatchlistSymbolImport(symbolInput);
+    if (parsed.symbols.length > 1 || /[\n,]/.test(symbolInput)) {
+      await importSymbolsIntoWatchlist(parsed);
+      return;
+    }
+    const sym = parsed.symbols[0] ?? symbolInput.trim().toUpperCase();
     setAdding(true);
     setAddMsg("");
     setShowDropdown(false);
@@ -1830,9 +1923,7 @@ function WatchlistContent() {
     try {
       await addToWatchlist(activeId, sym);
       const quote = await getQuote(sym);
-      const newItem: WatchlistItem = quote
-        ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-        : { symbol: sym, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+      const newItem = watchlistItemFromQuote(sym, quote, activeWl?.items.length ?? 0);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
       setChartSymbol(sym);
       setSymbolInput("");
@@ -2119,13 +2210,13 @@ function WatchlistContent() {
                   onChange={e => handleSearchInput(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === "Enter") {
-                      if (searchResults.length > 0) handlePickSymbol(searchResults[0].symbol);
+                      if (!isBulkSymbolInput && searchResults.length > 0) handlePickSymbol(searchResults[0].symbol);
                       else handleAddSymbol();
                     }
                     if (e.key === "Escape") setShowDropdown(false);
                   }}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-                  placeholder="Add symbol…"
+                  placeholder="Add or paste symbols…"
                   style={{ fontSize: 12, borderRadius: "var(--radius-sm)", paddingLeft: 24, paddingRight: 8, paddingTop: 5, paddingBottom: 5, background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none", width: 130 }}
                 />
                 {showDropdown && (searchResults.length > 0 || symbolSearchError) && (
@@ -2147,9 +2238,9 @@ function WatchlistContent() {
                   </div>
                 )}
               </div>
-              <button onClick={handleAddSymbol} disabled={adding || !symbolInput.trim()}
-                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
-                {adding ? "…" : "Add"}
+              <button onClick={handleAddSymbol} disabled={addDisabled}
+                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: addDisabled ? 0.5 : 1 }}>
+                {adding ? "…" : isBulkSymbolInput ? `Import ${importPreview.symbols.length || ""}`.trim() : "Add"}
               </button>
               {activeWl.items.length > 1 && (
                 <button
