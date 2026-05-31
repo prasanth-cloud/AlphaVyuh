@@ -5,6 +5,14 @@ type ScannerTrustInput = {
   coveragePct?: number | null;
 };
 
+type FreshnessTone = "good" | "warn" | "bad";
+
+type FreshnessSignal = {
+  label: string;
+  warning?: string;
+  tone: FreshnessTone;
+};
+
 export type ScannerMatchResult = {
   close?: number | null;
   pct_change?: number | null;
@@ -49,6 +57,15 @@ function uniqueClean(values: Array<string | null | undefined>, fallback: string)
   return seen.size > 0 ? [...seen] : [fallback];
 }
 
+function uniqueCleanOptional(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  for (const value of values) {
+    const next = clean(value);
+    if (next) seen.add(next);
+  }
+  return [...seen];
+}
+
 function formatNumber(value: number | null | undefined, digits = 1): string | null {
   return Number.isFinite(value) ? Number(value).toFixed(digits) : null;
 }
@@ -72,8 +89,68 @@ function setupTone(score: number | null | undefined): "good" | "warn" | "bad" | 
   return "bad";
 }
 
-function scannerNextAction(result: ScannerMatchResult): string {
-  if (result.data_warnings?.length) return "Check data before planning";
+function dayStartMs(value: Date): number {
+  return Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
+}
+
+function parseTradeDate(value: string | null | undefined): Date | null {
+  const cleaned = clean(value);
+  if (!cleaned) return null;
+  const parsed = new Date(cleaned);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function classifyFreshness(
+  asOf: string | null,
+  mode: string | null | undefined,
+  currentDate = new Date(),
+): FreshnessSignal {
+  const normalizedMode = clean(mode)?.toUpperCase();
+  if (normalizedMode && ["FALLBACK", "MOCK", "RECOVERY", "UNAVAILABLE"].includes(normalizedMode)) {
+    return {
+      label: "Degraded",
+      warning: "Scanner is using degraded market data; confirm freshness before planning.",
+      tone: "bad",
+    };
+  }
+
+  const parsedAsOf = parseTradeDate(asOf);
+  if (!parsedAsOf) {
+    return {
+      label: "Unknown",
+      warning: "No market session timestamp is available; check Data Status before planning.",
+      tone: "bad",
+    };
+  }
+
+  const ageDays = Math.floor((dayStartMs(currentDate) - dayStartMs(parsedAsOf)) / 86_400_000);
+  if (ageDays < 0) {
+    return {
+      label: "Future dated",
+      warning: "Market session timestamp is in the future; check Data Status before planning.",
+      tone: "bad",
+    };
+  }
+  if (ageDays > 7) {
+    return {
+      label: `${ageDays} days old`,
+      warning: `Market data is ${ageDays} days old; refresh data before planning.`,
+      tone: "bad",
+    };
+  }
+  if (ageDays > 3) {
+    return {
+      label: `${ageDays} days old`,
+      warning: `Market data is ${ageDays} days old; verify freshness before planning.`,
+      tone: "warn",
+    };
+  }
+  if (ageDays === 0) return { label: "Current session", tone: "good" };
+  return { label: `${ageDays} day${ageDays === 1 ? "" : "s"} old`, tone: "good" };
+}
+
+function scannerNextAction(result: ScannerMatchResult, hasDataTrustWarning: boolean): string {
+  if (hasDataTrustWarning || result.data_warnings?.length) return "Check data before planning";
   if ((result.setup_score ?? 0) >= 80) return "Open chart and plan risk";
   if ((result.setup_score ?? 0) >= 65) return "Review chart structure";
   if (result.rsi_14 != null && result.rsi_14 > 78) return "Check extension risk";
@@ -87,11 +164,17 @@ export function buildScannerMatchExplanation(
     presetName?: string | null;
     tradeDate?: string | null;
     scanTrust?: ScannerTrustInput | null;
+    currentDate?: Date;
   } = {},
 ): ScannerMatchExplanation {
   const source = clean(options.scanTrust?.source);
   const asOf = clean(options.scanTrust?.asOf) ?? clean(options.tradeDate);
   const mode = clean(options.scanTrust?.mode)?.toUpperCase();
+  const freshness = classifyFreshness(asOf, mode, options.currentDate);
+  const warnings = uniqueCleanOptional([
+    ...(result.data_warnings ?? []),
+    freshness.warning,
+  ]);
   const setupLabel = result.setup_score != null
     ? [clean(result.confidence_label), clean(result.setup_grade), String(result.setup_score)].filter(Boolean).join(" · ")
     : clean(result.confidence_label);
@@ -119,12 +202,13 @@ export function buildScannerMatchExplanation(
     headline: reasons[0],
     reasons,
     confirmations,
-    warnings: result.data_warnings?.map((warning) => warning.trim()).filter(Boolean) ?? [],
+    warnings,
     context: [
       clean(options.presetName) ? { label: "Scan", value: clean(options.presetName)! } : null,
       clean(result.sector ?? undefined) ? { label: "Sector", value: clean(result.sector ?? undefined)! } : null,
       source ? { label: "Source", value: [source, mode].filter(Boolean).join(" · ") } : mode ? { label: "Source", value: mode } : null,
       asOf ? { label: "As of", value: asOf } : null,
+      { label: "Freshness", value: freshness.label },
       options.scanTrust?.coveragePct != null ? { label: "Coverage", value: `${options.scanTrust.coveragePct}%` } : null,
     ].filter(Boolean) as { label: string; value: string }[],
     metrics: [
@@ -136,7 +220,8 @@ export function buildScannerMatchExplanation(
       ema50 || ema200 ? { label: "Trend", value: [`EMA50 ${ema50 ?? "n/a"}`, `EMA200 ${ema200 ?? "n/a"}`].join(" · "), tone: isAboveTrend ? "good" : undefined } : null,
       atrPct ? { label: "ATR risk", value: atrPct, tone: result.atr_pct != null && result.atr_pct > 8 ? "warn" : undefined } : null,
       setupLabel ? { label: "Setup quality", value: setupLabel, tone: setupTone(result.setup_score) } : null,
+      { label: "Freshness", value: freshness.label, tone: freshness.tone },
     ].filter(Boolean) as { label: string; value: string; tone?: "good" | "warn" | "bad" }[],
-    nextAction: scannerNextAction(result),
+    nextAction: scannerNextAction(result, Boolean(freshness.warning)),
   };
 }
