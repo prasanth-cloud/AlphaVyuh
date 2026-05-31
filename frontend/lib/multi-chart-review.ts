@@ -150,6 +150,15 @@ export type MultiChartAlertDraft = {
   tone: "good" | "warn" | "muted";
 };
 
+export type MultiChartBoardSummaryItem = {
+  symbol: string;
+  lifecycle?: WorkflowLifecycle | null;
+  analysis?: MultiChartAnalysisSummary | null;
+  trust?: MultiChartTrustContext | null;
+  alertDraft?: MultiChartAlertDraft | null;
+  scannerContext?: ScannerIdeaContext | null;
+};
+
 const BOARD_REVIEW_NOTE_PREFIX = "[Multi-chart review]";
 
 function decisionLabel(lifecycle: MultiChartReviewDecision): string {
@@ -219,6 +228,77 @@ function formatPct(value: number) {
 
 function formatPrice(value: number) {
   return `Rs ${value.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+}
+
+function boardLifecycleLabel(lifecycle: WorkflowLifecycle | null | undefined): string {
+  if (lifecycle === "ready") return "Ready";
+  if (lifecycle === "review_later") return "Later";
+  if (lifecycle === "invalidated") return "Invalidated";
+  if (lifecycle === "idea") return "Idea";
+  if (lifecycle === "watch") return "Watch";
+  if (lifecycle === "triggered") return "Triggered";
+  if (lifecycle === "open") return "Open";
+  if (lifecycle === "closed") return "Closed";
+  if (lifecycle === "reviewed") return "Reviewed";
+  if (lifecycle === "ignored") return "Ignored";
+  return "Undecided";
+}
+
+export function buildMultiChartBoardSummary(
+  items: MultiChartBoardSummaryItem[],
+  options: {
+    rangeLabel?: string | null;
+    sourceLabel?: string | null;
+  } = {},
+): string {
+  const lines = [
+    `AlphaVyuh review board${options.rangeLabel ? ` · ${options.rangeLabel}` : ""}${options.sourceLabel ? ` · ${options.sourceLabel}` : ""}`,
+  ];
+
+  for (const item of items) {
+    const symbol = normalizeSymbol(item.symbol) ?? item.symbol.trim().toUpperCase();
+    if (!symbol) continue;
+
+    const parts = [boardLifecycleLabel(item.lifecycle)];
+
+    if (item.analysis) {
+      parts.push(item.analysis.reviewScore.label);
+      parts.push(item.analysis.playbookDetail);
+      const blockers = item.analysis.reviewScore.blockers.slice(0, 3);
+      if (blockers.length) parts.push(`Needs ${blockers.join(", ")}`);
+      const rs = item.analysis.metrics.find((metricItem) => metricItem.label === "RS")?.value;
+      const week52 = item.analysis.metrics.find((metricItem) => metricItem.label === "52W")?.value;
+      const volume = item.analysis.metrics.find((metricItem) => metricItem.label === "Volume")?.value;
+      if (rs) parts.push(`RS ${rs}`);
+      if (week52) parts.push(`52W ${week52}`);
+      if (volume) parts.push(`Volume ${volume}`);
+    } else {
+      parts.push("Analysis pending");
+    }
+
+    if (item.trust) {
+      parts.push(item.trust.contractLabel);
+      parts.push(`Source ${formatMarketDataSourceLabel(item.trust.sourceLabel)}${item.trust.asOf ? ` as of ${item.trust.asOf}` : ""}`);
+      if (item.trust.availabilityMessage) parts.push(item.trust.availabilityMessage);
+    }
+
+    if (item.alertDraft) {
+      parts.push(`Alert ${item.alertDraft.triggerLabel} ${formatPrice(item.alertDraft.triggerPrice)}`);
+      parts.push(`Invalidation ${formatPrice(item.alertDraft.invalidationPrice)}`);
+    }
+
+    if (item.scannerContext) {
+      const scannerSummary = scannerReviewContextSummary(item.scannerContext);
+      const preset = scannerSummary.pills[0] ?? null;
+      if (preset) parts.push(`Original scan ${preset}`);
+      if (scannerSummary.primaryReason) parts.push(scannerSummary.primaryReason);
+      if (scannerSummary.warnings.length) parts.push(`Warnings ${scannerSummary.warnings.slice(0, 2).join("; ")}`);
+    }
+
+    lines.push(`${symbol}: ${parts.join(" · ")}.`);
+  }
+
+  return lines.join("\n");
 }
 
 function formatRatio(value: number | null | undefined) {

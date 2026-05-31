@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildMultiChartAnalysisSummary,
   buildMultiChartAlertDraft,
+  buildMultiChartBoardSummary,
   buildMultiChartDecisionNote,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
@@ -280,6 +281,56 @@ describe("multi-chart review helpers", () => {
     expect(draft?.triggerPrice).toBeGreaterThan(data.latest!.week_52_high!);
     expect(draft?.invalidationPrice).toBe(data.latest!.ema_50);
     expect(draft?.detail).toContain("52W breakout alert");
+  });
+
+  it("builds a board-level review summary for journal or watchlist handoff", () => {
+    const data = candleResponse({
+      source_metadata: {
+        source_name: "NSE bhavcopy",
+        mode: "eod",
+        as_of: "2026-05-07",
+      },
+      coverage: {
+        requested_from: "2021-05-07",
+        requested_to: "2026-05-07",
+        available_from: "2021-05-07",
+        available_to: "2026-05-07",
+        returned_candles: 1234,
+        requested_limit: 1300,
+        timeframe: "D",
+        coverage_pct: 100,
+        partial: false,
+        source_name: "NSE bhavcopy",
+        as_of: "2026-05-07",
+      },
+    });
+    const context = scannerContext();
+    const analysis = buildMultiChartAnalysisSummary(data, context);
+    const trust = buildMultiChartTrustContext(data, {
+      label: "5Y",
+      timeframe: "D",
+      expectedMonths: 60,
+    });
+    const alertDraft = buildMultiChartAlertDraft(data, analysis);
+
+    const summary = buildMultiChartBoardSummary([{
+      symbol: "NSE:RELIANCE",
+      lifecycle: "ready",
+      analysis,
+      trust,
+      alertDraft,
+      scannerContext: context,
+    }], {
+      rangeLabel: "5Y",
+      sourceLabel: "Scanner review",
+    });
+    expect(summary).toContain("RELIANCE: Ready · 6/6 checks · Weekly/monthly aligned");
+    expect(summary).toContain("RS 86 · 52W 5.0% away · Volume 1.80x");
+    expect(summary).toContain("5Y daily contract ready");
+    expect(summary).toContain("Source NSE bhavcopy as of 2026-05-07");
+    expect(summary).toContain("Alert 52W breakout");
+    expect(summary).toContain("Original scan Trend Template");
+    expect(summary).toContain("All moving averages aligned with 52W proximity.");
   });
 
   it("falls back to follow-through alerts when 52-week context is unavailable", () => {
