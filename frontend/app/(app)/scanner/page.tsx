@@ -29,7 +29,7 @@ import {
   readScannerRunHistory,
   type ScannerRunHistoryEntry,
 } from '@/lib/scanner-run-history'
-import { buildMultiChartReviewHref } from '@/lib/multi-chart-review'
+import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
 
 const API = API_BASE_URL
 
@@ -1092,6 +1092,34 @@ export default function ScannerPage() {
     showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
   }
 
+  function fallbackCopyText(text: string) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+
+  async function copyTradingViewSymbols(symbols: string[]) {
+    const formatted = tradingViewNseSymbols(symbols)
+    if (!formatted) return
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(formatted)
+      } else {
+        fallbackCopyText(formatted)
+      }
+      trackEvent('scanner_tradingview_symbols_copied', { count: symbols.length })
+      showToast(`Copied ${symbols.length} TradingView ${symbols.length === 1 ? 'symbol' : 'symbols'}`)
+    } catch {
+      showToast('Could not copy TradingView symbols. Try Review charts or copy from the table.')
+    }
+  }
+
   async function openScannerChart(result: ScanResult) {
     await bulkUpsertWorkflowStates([
       scannerWorkflowPatch(result.symbol, 'shortlist', undefined, result, scanContextOptions()),
@@ -1579,6 +1607,9 @@ export default function ScannerPage() {
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => router.push(buildMultiChartReviewHref(selectedSymbols(), { source: 'scanner' }))}>
                       Review charts
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => copyTradingViewSymbols(selectedSymbols())}>
+                      Copy TV symbols
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')}>
                       Review later
