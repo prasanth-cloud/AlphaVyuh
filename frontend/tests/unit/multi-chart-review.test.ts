@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildMultiChartAnalysisSummary,
   buildMultiChartAlertDraft,
+  buildMultiChartBoardPulse,
   buildMultiChartBoardSummary,
   buildMultiChartDecisionNote,
   buildMultiChartDecisionPatch,
@@ -331,6 +332,37 @@ describe("multi-chart review helpers", () => {
     expect(summary).toContain("Alert 52W breakout");
     expect(summary).toContain("Original scan Trend Template");
     expect(summary).toContain("All moving averages aligned with 52W proximity.");
+  });
+
+  it("builds a board-level review pulse for ranking setup review work", () => {
+    const data = candleResponse();
+    const strongAnalysis = buildMultiChartAnalysisSummary(data, scannerContext());
+    const weakRsAnalysis = buildMultiChartAnalysisSummary(data, scannerContext({
+      rs_score: 42,
+      confidence_reasons: ["Volume confirmed but RS is lagging."],
+    }));
+
+    const pulse = buildMultiChartBoardPulse([
+      { symbol: "RELIANCE", lifecycle: "idea", analysis: strongAnalysis },
+      { symbol: "INFY", lifecycle: "idea", analysis: weakRsAnalysis },
+      { symbol: "TCS", lifecycle: "idea", analysis: weakRsAnalysis },
+      { symbol: "HDFCBANK", lifecycle: "idea", analysis: null },
+    ]);
+
+    expect(pulse).toMatchObject({
+      loadedCount: 3,
+      readyCount: 3,
+      watchCount: 0,
+      missingCount: 1,
+      averageScoreLabel: "89% avg",
+      topCandidate: {
+        symbol: "RELIANCE",
+        scoreLabel: "6/6 checks",
+        detail: "Weekly/monthly aligned",
+      },
+      topBlocker: "RS 42 (2 symbols)",
+      tone: "good",
+    });
   });
 
   it("falls back to follow-through alerts when 52-week context is unavailable", () => {
