@@ -33,6 +33,7 @@ run_step() {
 run_step "Git tracked changes" git status --short
 
 run_step "Launch checker regression tests" npm run test:production-api-check
+run_step "Five-year chart contract regression tests" npm run test:five-year-chart-check
 run_step "Production smoke env regression tests" npm run test:production-smoke-env-check
 run_step "Production smoke workflow regression tests" npm run test:production-smoke-workflow-check
 run_step "Railway recovery workflow regression tests" npm run test:railway-recovery-workflow-check

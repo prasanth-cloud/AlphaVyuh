@@ -353,6 +353,12 @@ export type ChartCoverage = {
   coverage_pct?: number | null;
   partial?: boolean;
   partial_reason?: string | null;
+  five_year_contract?: {
+    years?: number | null;
+    minimum_calendar_days?: number | null;
+    minimum_daily_candles?: number | null;
+    status?: "met" | "partial" | "not_requested" | string;
+  } | null;
   source_name?: string | null;
   as_of?: string | null;
 };
