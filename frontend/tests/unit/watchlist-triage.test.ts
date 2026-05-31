@@ -9,6 +9,7 @@ describe("watchlist triage", () => {
       symbol: "RELIANCE",
       sort_order: 2,
       added_at: "2026-05-30T09:30:00.000Z",
+      sector: "Energy",
       pct_change: 2.4,
       volume_ratio: 2.2,
       rsi_14: 62,
@@ -24,6 +25,7 @@ describe("watchlist triage", () => {
           source: "scanner",
           setup_score: 88,
           setup_grade: "A",
+          rs_score: 82,
           captured_at: "2026-05-30T09:30:00.000Z",
         },
       },
@@ -35,8 +37,8 @@ describe("watchlist triage", () => {
       "Pinned",
       "Plan ready",
       "A 88 scanner score",
-      "Price + volume",
-      "Volume expansion",
+      "RS 82",
+      "Energy sector context",
     ]));
   });
 
@@ -88,5 +90,46 @@ describe("watchlist triage", () => {
 
     expect(summary.reasons).toContain("Closed trade needs review");
     expect(summary.label).toMatch(/Review next|Monitor/);
+  });
+
+  it("raises broker readiness context for actionable watchlist plans", () => {
+    const summary = buildWatchlistTriageSummary({
+      symbol: "AUBANK",
+      sort_order: 3,
+      added_at: "2026-05-31T09:30:00.000Z",
+      sector: "Financial Services",
+      pct_change: 0.8,
+      volume_ratio: 1.4,
+      rsi_14: 58,
+    }, {
+      now,
+      broker: {
+        connected: false,
+        tokenExpired: true,
+        planAllowsBroker: true,
+        statusError: null,
+      },
+      workflow: {
+        symbol: "AUBANK",
+        lifecycle: "triggered",
+        entry: 710,
+        setup_quality: 4,
+        confidence: 4,
+        scanner_context: {
+          source: "scanner",
+          rs_score: 76,
+          captured_at: "2026-05-31T09:30:00.000Z",
+        },
+      },
+      meta: { note: "Breakout alert confirmed." },
+    });
+
+    expect(summary.reasons).toEqual(expect.arrayContaining([
+      "Trigger hit",
+      "RS 76",
+      "Financial Services sector context",
+      "Broker reconnect needed",
+    ]));
+    expect(summary.label).toMatch(/Act now|Review next/);
   });
 });
