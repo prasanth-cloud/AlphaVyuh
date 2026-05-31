@@ -1,6 +1,7 @@
 name: Migration Drift Check
 
-# Runs on every PR that touches supabase/migrations/.
+# Runs on every PR so the branch-protection-required status is always emitted.
+# It only enforces migration evidence when supabase/migrations/ changes.
 # This is a FORCING FUNCTION — not an automated pipeline.
 # Migrations are never auto-applied. The check enforces the human process:
 #   1. Apply to staging → 2. Apply to prod → 3. Document in PR description
@@ -18,8 +19,6 @@ name: Migration Drift Check
 
 on:
   pull_request:
-    paths:
-      - 'supabase/migrations/**'
 
 jobs:
   check-drift:

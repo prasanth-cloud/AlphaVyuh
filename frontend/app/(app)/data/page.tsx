@@ -20,6 +20,7 @@ import { marketDataHealthPresentation } from "@/lib/data-health-copy";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import type { ApiReachability } from "@/lib/data-mode";
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from "@/lib/account-data-status";
+import { brokerOrderGatePresentation } from "@/lib/broker-safety";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
@@ -301,6 +302,8 @@ export default function DataFreshnessPage() {
     : null;
   const missingIndicators = (health?.indicators_missing.rsi_14 ?? 0) + (health?.indicators_missing.ema_200 ?? 0);
   const liveMarket = health?.live_market ?? null;
+  const brokerUnavailable = state.accountIssues.some(issue => issue.id === "broker");
+  const brokerGate = brokerOrderGatePresentation(broker, { unavailable: brokerUnavailable });
 
   if (loading) {
     return (
@@ -363,7 +366,7 @@ export default function DataFreshnessPage() {
         </Card>
       )}
 
-      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
           value={marketHealth.value}
@@ -381,6 +384,12 @@ export default function DataFreshnessPage() {
           value={state.accountIssues.some(issue => issue.id === "broker") ? "UNAVAILABLE" : broker.connected && !broker.token_expired ? "READY" : broker.token_expired ? "TOKEN EXPIRED" : "SIMULATED"}
           detail={state.accountIssues.some(issue => issue.id === "broker") ? "Broker import state cannot be confirmed right now." : broker.connected ? `${broker.broker ?? "Broker"} connected read-only for import.` : "Order capture remains journal-only; broker import is optional."}
           status={state.accountIssues.some(issue => issue.id === "broker") || broker.token_expired ? "bad" : broker.connected ? "good" : "warn"}
+        />
+        <HealthTile
+          label="Broker order gate"
+          value={brokerGate.value}
+          detail={brokerGate.detail}
+          status={brokerGate.status}
         />
         <HealthTile
           label="Kite live feed"
@@ -407,6 +416,7 @@ export default function DataFreshnessPage() {
               ["Last ingest errors", fmtNumber(health?.last_run.errors)],
               ["Kite app", liveMarket?.api_key_configured ? "Configured" : "Missing"],
               ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
+              ["Broker order gate", `${brokerGate.value} · ${brokerGate.detail}`],
               ["Open trades", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : fmtNumber(state.journalStats?.open_trades)],
               ["AI pattern readiness", state.accountIssues.some(issue => issue.id === "journal") || state.aiPatternsError ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
             ].map(([label, value]) => (

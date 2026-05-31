@@ -29,10 +29,14 @@ Run these before release:
 npm run launch:check
 npm run test:market-data-entitlement-check
 npm run test:setup-review-check
+npm run test:broker-readonly-check
 npm run check:data-recovery
 npm run check:production-api:railway
 npm run check:five-year-charts:railway
-# After Railway recovery, run the full production recovery/browser smoke gate.
+# After the public API and five-year chart smokes pass, run the non-deploy
+# production signed-in smoke GitHub workflow for authenticated scanner/watchlist
+# and browser evidence. Use Railway Backend Recovery only when the backend
+# actually needs recovery.
 # This requires PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL,
 # and PLAYWRIGHT_QA_PASSWORD.
 # RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
@@ -65,7 +69,8 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 `npm run launch:check` runs the deterministic checker tests for production API
 freshness, production smoke credentials, public posture copy, data recovery
 readiness, market-data entitlement boundaries, scanner-to-chart setup review
-contracts, Railway secret preparation, and 5Y chart contract regression
+contracts, broker read-only order-safety contracts, Railway secret preparation,
+and 5Y chart contract regression
 coverage before the heavier app/browser gates. The 5Y gate runs through
 `npm run test:five-year-chart-check`, an explicit alias for the production API
 checker tests that enforce daily candle depth, span, and coverage metadata.
@@ -95,6 +100,10 @@ npm run check:data-recovery
 - Or recover locally with `npm run recover:railway-backend:login`.
 - Do not claim production EOD data is restored until the production API smoke and
   authenticated browser smoke pass against `https://www.alphavyuh.com`.
+- If Railway is already healthy and only trust evidence is needed, run the
+  `Production Signed-In Smoke` GitHub workflow. It prepares the QA smoke account,
+  runs strict authenticated `npm run check:data-recovery`, and runs the signed-in
+  Playwright smoke without deploying Railway or Vercel.
 - The production API smoke must include enough current daily candles for every
   configured chart smoke symbol. By default this is `RELIANCE,ITC,AUBANK`; set
   `PRODUCTION_API_CHART_SYMBOLS` to add or replace launch-candidate symbols.
@@ -126,6 +135,16 @@ npm run test:setup-review-check
 This gate verifies scanner context preservation, setup-review labels, higher
 timeframe chart context, multi-chart review decisions, watchlist chart range
 controls, and the mock scanner-candidate multi-chart browser flow.
+
+Broker read-only launch contract:
+
+```bash
+npm run test:broker-readonly-check
+```
+
+This deterministic gate is secret-free. It verifies frontend order-safety copy,
+backend refusal paths before any live adapter call, sanitized broker status
+metadata, OAuth state validation, and real-account smoke script syntax.
 
 Read-only broker account smoke, when real credentials are available:
 

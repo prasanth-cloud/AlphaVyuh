@@ -1,0 +1,75 @@
+name: Production Signed-In Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_api_url:
+        description: Production API base URL to verify
+        required: true
+        default: https://alphavyuh-production.up.railway.app
+      production_api_chart_symbols:
+        description: Comma-separated chart symbols for production smoke. Optional when PRODUCTION_API_CHART_SYMBOLS secret is set.
+        required: false
+      live_url:
+        description: Public frontend URL for signed-in browser smoke
+        required: true
+        default: https://www.alphavyuh.com
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Verify production data and signed-in app
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Install Playwright Chromium
+        run: npm --prefix frontend exec playwright install --with-deps chromium
+
+      - name: Prepare production smoke account
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          PLAYWRIGHT_QA_EMAIL: ${{ secrets.PLAYWRIGHT_QA_EMAIL }}
+        run: node scripts/prepare-production-smoke-account.mjs
+
+      - name: Validate full production smoke credentials
+        run: npm run check:production-smoke-env
+
+      - name: Strict authenticated production data preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
+          PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS || 'RELIANCE,ITC,AUBANK' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REQUIRE_AUTHENTICATED_SMOKE: "1"
+        run: npm run check:data-recovery
+
+      - name: Strict signed-in production browser smoke
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.live_url }}
+          PLAYWRIGHT_EXPECT_REAL_DATA: "true"
+          PLAYWRIGHT_SMOKE_SYMBOL: RELIANCE
+          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
+        run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts

@@ -154,6 +154,30 @@ python scripts/test_upstox_connection.py --code <authorization_code>
 These scripts verify OAuth/profile/account reads and market/order-book reads where
 supported. They mask tokens by default and never submit, modify, or cancel orders.
 
+## Read-only smoke gate before order mutation
+
+Broker buy/sell in AlphaVyuh must stay as order intent / journal draft until
+read-only trust is explicitly proven for the same broker account path. The
+server-side `/api/v1/orders` route enforces this even if
+`BROKER_LIVE_ORDERS_ENABLED=true` is accidentally set:
+
+1. A read-only smoke endpoint verifies only safe account reads (profile,
+   positions, holdings, orderbook, and tradebook where available).
+2. The endpoint stores sanitized metadata under
+   `broker_connections.metadata.read_only_smoke`: broker id, pass/fail,
+   checked_at, check names, booleans, counts, and non-secret error codes only.
+   Access tokens, request tokens, API secrets, raw account payloads, and order
+   payloads must never be stored there.
+3. Before any real Zerodha/Upstox `place_order` adapter call, the backend checks
+   that metadata contains `{ broker: <same broker>, passed: true }` with a
+   parseable `checked_at` timestamp no older than 24 hours. Missing, failed,
+   stale, stale-shape, or different-broker metadata blocks with `409` before
+   the adapter is called.
+
+This gate does not enable live or sandbox orders by itself. Owner approval is
+still required before changing the product posture from broker import/read-only
+to any broker order mutation.
+
 ---
 
 ## Idempotency

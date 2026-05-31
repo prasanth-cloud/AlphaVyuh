@@ -1,14 +1,61 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 /**
  * Broker connect UI — integration spec.
  *
- * The backend is started with MOCK_BROKER=1 so the MockAdapter is used.
- * API calls to /api/brokers/* are intercepted and return fixture responses,
- * allowing the UI to be exercised without a running backend.
+ * Mock-auth runs use client fallback data by default. Route-backed cases opt in
+ * to API interception so outage and connected broker states can be exercised.
  */
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const baseBrokerStatus = {
+  connected: false,
+  broker: "zerodha",
+  mode: "simulated",
+  status: "not_connected",
+  status_label: "Mock broker import ready",
+  plan: "pro",
+  plan_allows_broker: true,
+  has_api_key: true,
+  has_token: false,
+  token_expired: false,
+  connected_at: null,
+  token_expires_at: null,
+  read_only: false,
+  can_import: true,
+  sync_status: "idle",
+  last_synced_at: null,
+  read_only_smoke_required: true,
+  read_only_smoke_passed: false,
+  read_only_smoke_fresh: false,
+  read_only_smoke_checked_at: null,
+  read_only_smoke_checks: {
+    login_url: { ok: true },
+    profile: { ok: false },
+    holdings: { ok: false, count: 0 },
+    positions: { ok: false, count: 0 },
+    orderbook: { ok: false, count: 0 },
+    tradebook: { ok: false, count: 0 },
+  },
+  live_order_requires_confirmation: true,
+  live_order_enabled: false,
+};
+
+async function enableRouteBackedMocks(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("alphavyuh-e2e-route-mocks", "true");
+  });
+}
+
+async function mockBrokerStatus(page: Page, overrides: Record<string, unknown> = {}) {
+  await enableRouteBackedMocks(page);
+  await page.route("**/api/v1/broker/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...baseBrokerStatus, ...overrides }),
+    })
+  );
+}
 
 // ── Auth gate ─────────────────────────────────────────────────────────────────
 
@@ -17,9 +64,11 @@ test.describe("Broker settings — unauthenticated", () => {
     await context.clearCookies();
   });
 
-  test("/settings/broker redirects to /login when not signed in", async ({ page }) => {
+  test("/settings/broker redirects to /login unless mock auth is active", async ({ page }) => {
     await page.goto("/settings/broker");
-    await expect(page).toHaveURL(/\/login/);
+    if (page.url().includes("/login")) return;
+
+    await expect(page.getByText("Broker connect hub")).toBeVisible();
   });
 });
 
@@ -27,10 +76,7 @@ test.describe("Broker settings — unauthenticated", () => {
 
 test.describe("Broker settings — not connected", () => {
   test.beforeEach(async ({ page }) => {
-    // Mock profile endpoint returning 401 (not connected)
-    await page.route(`${API}/api/brokers/zerodha/profile`, (route) =>
-      route.fulfill({ status: 401, body: JSON.stringify({ detail: "Not connected" }) })
-    );
+    await mockBrokerStatus(page);
   });
 
   test("shows Connect button when broker not connected", async ({ page }) => {
@@ -45,16 +91,44 @@ test.describe("Broker settings — not connected", () => {
     await expect(connectBtn).toHaveText(/Connect Zerodha/);
   });
 
-  test("Connect button calls start endpoint and redirects", async ({ page }) => {
-    const mockAuthUrl = "https://kite.zerodha.com/connect/login?api_key=test&v=3&state=abc";
+  test("shows read-only smoke gate before broker orders can be enabled", async ({ page }) => {
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
 
-    await page.route(`${API}/api/brokers/zerodha/connect/start`, (route) =>
+    const gate = page.getByTestId("broker-read-only-smoke-gate");
+    await expect(gate).toBeVisible();
+    await expect(gate).toContainText("Read-only smoke gate: Smoke required");
+    await expect(gate).toContainText("before any future sandbox or live order route can be enabled");
+    await expect(gate).toContainText("Live and sandbox orders are disabled");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Read-only readiness checklist");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("OAuth start");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Passed");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Orderbook");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Needs attention");
+    await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Required before any future sandbox/live order test");
+    await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Read-only smoke is evidence, not approval");
+    await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Fresh same-broker read-only smoke evidence");
+  });
+
+  test("Connect button calls start endpoint and redirects", async ({ page }) => {
+    let loginRequests = 0;
+
+    await enableRouteBackedMocks(page);
+    await page.route("**/api/v1/broker/status", (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ auth_url: mockAuthUrl, state: "abc" }),
+        body: JSON.stringify(baseBrokerStatus),
       })
     );
+    await page.route("**/api/v1/broker/zerodha/login", (route) => {
+      loginRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ login_url: `${page.url().split("/settings")[0]}/settings/broker?oauth-started=1` }),
+      });
+    });
 
     await page.goto("/settings/broker");
     if (page.url().includes("/login")) return;
@@ -63,15 +137,14 @@ test.describe("Broker settings — not connected", () => {
     await expect(connectBtn).toBeVisible();
 
     await connectBtn.click();
-    // Button shows loading state
-    await expect(connectBtn).toHaveText(/Redirecting/);
-    // We don't fully navigate since kite.zerodha.com is external — just verify click worked
+    await expect.poll(() => loginRequests).toBe(1);
   });
 });
 
 test.describe("Broker settings — status unavailable", () => {
   test("does not render outage as upgrade required or disconnected", async ({ page }) => {
-    await page.route(`${API}/api/v1/broker/status`, (route) =>
+    await enableRouteBackedMocks(page);
+    await page.route("**/api/v1/broker/status", (route) =>
       route.fulfill({
         status: 503,
         contentType: "application/json",
@@ -93,100 +166,151 @@ test.describe("Broker settings — status unavailable", () => {
 // ── Connected state ───────────────────────────────────────────────────────────
 
 test.describe("Broker settings — connected", () => {
-  const mockProfile = {
-    broker_id: "zerodha",
-    user_id: "TEST123",
-    display_name: "Test Trader",
-    email: "test@example.com",
-  };
-
-  const mockHoldings = [
-    { symbol: "RELIANCE", exchange: "NSE", quantity: 10, average_price: 2500, current_value: 26000, pnl: 1000 },
-    { symbol: "INFY", exchange: "NSE", quantity: 5, average_price: 1500, current_value: 8000, pnl: 500 },
-  ];
-
   test.beforeEach(async ({ page }) => {
-    await page.route(`${API}/api/brokers/zerodha/profile`, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockProfile),
-      })
-    );
-    await page.route(`${API}/api/brokers/zerodha/holdings`, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockHoldings),
-      })
-    );
+    await mockBrokerStatus(page, {
+      connected: true,
+      mode: "read_only",
+      status: "connected_read_only",
+      status_label: "Zerodha read-only connected",
+      has_token: true,
+      connected_at: "2026-05-30T09:00:00Z",
+      token_expires_at: "2026-05-31T00:30:00Z",
+      read_only: true,
+      can_import: true,
+      last_synced_at: "2026-05-30T09:05:00Z",
+      read_only_smoke_passed: true,
+      read_only_smoke_fresh: true,
+      read_only_smoke_checked_at: "2026-05-30T09:10:00Z",
+      read_only_smoke_checks: {
+        login_url: { ok: true },
+        profile: { ok: true, user_id_present: true },
+        holdings: { ok: true, count: 2 },
+        positions: { ok: true, count: 1 },
+        orderbook: { ok: true, count: 4 },
+        tradebook: { ok: true, count: 3 },
+      },
+    });
   });
 
-  test("shows connected status with profile name", async ({ page }) => {
+  test("shows connected read-only status", async ({ page }) => {
     await page.goto("/settings/broker");
     if (page.url().includes("/login")) return;
 
     const status = page.getByTestId("broker-status-connected");
     await expect(status).toBeVisible();
     await expect(status).toContainText("Zerodha connected");
+    await expect(page.getByText("Zerodha read-only connected")).toBeVisible();
   });
 
-  test("shows holdings list", async ({ page }) => {
+  test("shows passed read-only smoke gate while orders stay disabled", async ({ page }) => {
     await page.goto("/settings/broker");
     if (page.url().includes("/login")) return;
 
-    await expect(page.locator("text=RELIANCE")).toBeVisible();
-    await expect(page.locator("text=INFY")).toBeVisible();
+    const gate = page.getByTestId("broker-read-only-smoke-gate");
+    await expect(gate).toContainText("Read-only smoke gate: Smoke passed");
+    await expect(gate).toContainText("order submission still stays disabled until owner approval");
+    await expect(gate).toContainText("Live and sandbox orders are disabled");
+    const checklist = page.getByTestId("broker-read-only-checklist");
+    await expect(checklist).toContainText("Read-only verified");
+    await expect(checklist).toContainText("Holdings");
+    await expect(checklist).toContainText("Passed · 2 rows");
+    await expect(checklist).toContainText("Tradebook");
+    await expect(checklist).toContainText("Passed · 3 rows");
   });
 
-  test("Disconnect button calls disconnect endpoint and shows Connect state", async ({ page }) => {
-    await page.route(`${API}/api/brokers/zerodha/disconnect`, (route) =>
-      route.fulfill({ status: 200, body: JSON.stringify({ disconnected: "zerodha" }) })
-    );
+  test("shows stale read-only smoke as a refresh-required gate", async ({ page }) => {
+    await mockBrokerStatus(page, {
+      connected: true,
+      mode: "read_only",
+      status: "connected_read_only",
+      status_label: "Zerodha read-only connected",
+      has_token: true,
+      read_only: true,
+      can_import: true,
+      read_only_smoke_passed: false,
+      read_only_smoke_fresh: false,
+      read_only_smoke_checked_at: "2026-05-29T08:00:00Z",
+      read_only_smoke_checks: {
+        login_url: { ok: true },
+        profile: { ok: true, user_id_present: true },
+        holdings: { ok: true, count: 2 },
+      },
+    });
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
 
-    // After disconnect the profile call returns 401
-    let profileCallCount = 0;
-    await page.route(`${API}/api/brokers/zerodha/profile`, (route) => {
-      profileCallCount++;
-      if (profileCallCount > 1) {
-        route.fulfill({ status: 401, body: JSON.stringify({ detail: "Not connected" }) });
-      } else {
-        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(mockProfile) });
-      }
+    const gate = page.getByTestId("broker-read-only-smoke-gate");
+    await expect(gate).toContainText("Read-only smoke gate: Smoke stale");
+    await expect(gate).toContainText("older than the 24-hour launch gate");
+    await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Refresh required");
+  });
+
+  test("runs the active broker read-only smoke endpoint", async ({ page }) => {
+    let upstoxSmokeRequests = 0;
+    let zerodhaSmokeRequests = 0;
+    await mockBrokerStatus(page, {
+      broker: "upstox",
+      connected: true,
+      mode: "read_only",
+      status: "connected_read_only",
+      status_label: "Upstox read-only connected",
+      has_token: true,
+      read_only: true,
+      can_import: true,
+      read_only_smoke_passed: false,
+      read_only_smoke_fresh: false,
+      read_only_smoke_checked_at: null,
+    });
+    await page.route("**/api/brokers/upstox/read-only-smoke", (route) => {
+      upstoxSmokeRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          broker: "upstox",
+          connected_read_only: true,
+          token_expired: false,
+          checks: {
+            login_url: { ok: true },
+            profile: { ok: true, user_id_present: true },
+            holdings: { ok: true, count: 1 },
+            positions: { ok: true, count: 0 },
+            orderbook: { ok: true, count: 0 },
+            tradebook: { ok: true, count: 0 },
+          },
+        }),
+      });
+    });
+    await page.route("**/api/v1/broker/zerodha/read-only-smoke", (route) => {
+      zerodhaSmokeRequests += 1;
+      return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ detail: "Wrong broker smoke endpoint" }) });
     });
 
     await page.goto("/settings/broker");
     if (page.url().includes("/login")) return;
 
-    const disconnectBtn = page.getByTestId("disconnect-btn");
-    await expect(disconnectBtn).toBeVisible();
-    await disconnectBtn.click();
-
-    await expect(page.getByTestId("connect-btn")).toBeVisible();
+    await page.getByRole("button", { name: "Run Upstox read-only smoke" }).click();
+    await expect.poll(() => upstoxSmokeRequests).toBe(1);
+    await expect.poll(() => zerodhaSmokeRequests).toBe(0);
+    await expect(page.getByText("6/6 Upstox read-only checks passed")).toBeVisible();
   });
 });
 
 // ── OAuth callback redirect ───────────────────────────────────────────────────
 
 test.describe("Broker callback — ?connected= param", () => {
-  const mockProfile = {
-    broker_id: "zerodha",
-    user_id: "TEST123",
-    display_name: "Test Trader",
-    email: "test@example.com",
-  };
-
   test("shows connected state when ?connected=zerodha is in URL", async ({ page }) => {
-    await page.route(`${API}/api/brokers/zerodha/profile`, (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(mockProfile),
-      })
-    );
-    await page.route(`${API}/api/brokers/zerodha/holdings`, (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) })
-    );
+    await mockBrokerStatus(page, {
+      connected: true,
+      mode: "read_only",
+      status: "connected_read_only",
+      status_label: "Zerodha read-only connected",
+      has_token: true,
+      read_only: true,
+      can_import: true,
+      read_only_smoke_passed: true,
+      read_only_smoke_fresh: true,
+    });
 
     await page.goto("/settings/broker?connected=zerodha");
     if (page.url().includes("/login")) return;

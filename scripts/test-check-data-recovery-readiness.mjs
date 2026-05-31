@@ -116,12 +116,16 @@ function serveRailwayFallback(request, response) {
 
 function serveSupabaseRest(request, response) {
   const url = new URL(request.url, "http://127.0.0.1");
-  if (url.pathname !== "/rest/v1/daily_ohlcv" && url.pathname !== "/rest/v1/stock_universe") {
+  if (
+    url.pathname !== "/rest/v1/daily_ohlcv" &&
+    url.pathname !== "/rest/v1/stock_universe" &&
+    url.pathname !== "/rest/v1/ingest_runs"
+  ) {
     return false;
   }
 
   response.setHeader("content-type", "application/json");
-  response.setHeader("content-range", url.pathname.endsWith("daily_ohlcv") ? "0-0/3147" : "0-0/3447");
+  response.setHeader("content-range", url.pathname.endsWith("stock_universe") ? "0-0/3447" : "0-0/3147");
 
   if (url.pathname.endsWith("daily_ohlcv") && url.searchParams.get("trade_date") === "eq.2026-05-18") {
     response.end(JSON.stringify([{ symbol: "RELIANCE" }]));
@@ -131,8 +135,64 @@ function serveSupabaseRest(request, response) {
     response.end(JSON.stringify([{ trade_date: "2026-05-18" }]));
     return true;
   }
+  if (url.pathname.endsWith("ingest_runs")) {
+    response.end(JSON.stringify([{
+      run_id: "refresh-2026-05-18-120000",
+      started_at: "2026-05-18T12:00:00Z",
+      meta: {
+        supplemental_data: {
+          status: "healthy",
+          warnings: [],
+          rs_score: { status: "success", trade_date: "2026-05-18" },
+          yfinance: {
+            status: "success",
+            attempted: 200,
+            success: 200,
+            failed: 0,
+            coverage_pct: 100,
+            rate_limited: 0,
+            failure_reasons: {},
+          },
+        },
+      },
+    }]));
+    return true;
+  }
   response.end(JSON.stringify([{ symbol: "RELIANCE" }]));
   return true;
+}
+
+function serveApiWithDegradedSupplemental(request, response) {
+  const url = new URL(request.url, "http://127.0.0.1");
+  if (url.pathname === "/rest/v1/ingest_runs") {
+    response.setHeader("content-type", "application/json");
+    response.setHeader("content-range", "0-0/1");
+    response.end(JSON.stringify([{
+      run_id: "refresh-2026-05-18-120000",
+      started_at: "2026-05-18T12:00:00Z",
+      meta: {
+        supplemental_data: {
+          status: "degraded",
+          warnings: [
+            "RS score calculation failed for the latest bhavcopy run.",
+            "yfinance supplement degraded: 42/200 symbols updated.",
+          ],
+          rs_score: { status: "failed", trade_date: "2026-05-18" },
+          yfinance: {
+            status: "degraded",
+            attempted: 200,
+            success: 42,
+            failed: 158,
+            coverage_pct: 21,
+            rate_limited: 155,
+            failure_reasons: { rate_limited: 155, no_data: 3 },
+          },
+        },
+      },
+    }]));
+    return;
+  }
+  serveHealthyApi(request, response);
 }
 
 function makeFakeBin({ secrets = [], railwayReady = true, workflowRuns = [], vercelEnv = {} }) {
@@ -237,16 +297,38 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
-  assert.deepEqual(resultNames(stdout).slice(0, 6), [
+  assert.match(stdout, /Supplemental refresh data/);
+  assert.match(stdout, /supplemental status is healthy/);
+  assert.deepEqual(resultNames(stdout).slice(0, 7), [
     "Production API data smoke",
     "Vercel production env",
     "Supabase EOD data",
+    "Supplemental refresh data",
     "Chart smoke config",
     "Authenticated app smoke",
     "GitHub recovery secrets",
   ]);
   assert.match(stdout, /Public API recovery status: production data API is serving real EOD smoke data/);
   assert.match(stdout, /Full app recovery status: not complete until authenticated scanner\/watchlist and signed-in browser smoke pass/);
+});
+
+await withServer(serveApiWithDegradedSupplemental, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
+  assert.equal(code, 0, `public recovery should pass while warning on degraded supplemental data:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /\[WARN] Supplemental refresh data/);
+  assert.match(stdout, /supplemental status is degraded/);
+  assert.match(stdout, /RS score: failed/);
+  assert.match(stdout, /yfinance: degraded \(42\/200 symbols, rate_limited=155\)/);
+  assert.match(stdout, /Inspect Daily NSE refresh logs before trusting RS-ranked scanner output/);
 });
 
 await withServer(serveHealthyApi, async (apiUrl) => {
@@ -308,6 +390,7 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
     "Production API data smoke",
     "Vercel production env",
     "Supabase EOD data",
+    "Supplemental refresh data",
     "Chart smoke config",
     "GitHub recovery secrets",
     "Railway recovery workflow",

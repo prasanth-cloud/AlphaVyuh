@@ -2494,7 +2494,7 @@ export async function connectBrokerCallback(
 // ── Orders / Broker ───────────────────────────────────────────────────────────
 
 export type ZerodhaReadOnlySmoke = {
-  broker: "zerodha";
+  broker: "zerodha" | "upstox";
   connected_read_only: boolean;
   token_expired: boolean;
   checks: Record<string, { ok: boolean; count?: number; error?: string; note?: string; user_id_present?: boolean }>;
@@ -2605,10 +2605,10 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
 
 export const importZerodhaTrades = () => importBrokerTrades("zerodha");
 
-export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
+export async function runBrokerReadOnlySmoke(broker: "zerodha" | "upstox" = "zerodha"): Promise<ZerodhaReadOnlySmoke> {
   if (shouldUseMockFallback()) {
     return {
-      broker: "zerodha",
+      broker,
       connected_read_only: false,
       token_expired: false,
       checks: {
@@ -2622,13 +2622,18 @@ export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
     };
   }
   const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/broker/zerodha/read-only-smoke`, { headers });
+  const path = broker === "zerodha"
+    ? "/api/v1/broker/zerodha/read-only-smoke"
+    : `/api/brokers/${broker}/read-only-smoke`;
+  const res = await fetch(`${API}${path}`, { headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? "Read-only broker smoke failed");
   }
   return res.json();
 }
+
+export const runZerodhaReadOnlySmoke = () => runBrokerReadOnlySmoke("zerodha");
 
 export async function getBrokerStatus(): Promise<{
   connected: boolean;
@@ -2648,6 +2653,17 @@ export async function getBrokerStatus(): Promise<{
   can_import?: boolean;
   sync_status?: "idle" | "running" | "failed";
   last_synced_at?: string | null;
+  read_only_smoke_required?: boolean;
+  read_only_smoke_passed?: boolean;
+  read_only_smoke_fresh?: boolean;
+  read_only_smoke_checked_at?: string | null;
+  read_only_smoke_checks?: Record<string, {
+    ok?: boolean;
+    count?: number;
+    error?: string;
+    note?: string;
+    user_id_present?: boolean;
+  }>;
   live_order_requires_confirmation?: boolean;
   live_order_enabled?: boolean;
 }> {
@@ -2671,6 +2687,11 @@ export async function getBrokerStatus(): Promise<{
         can_import: true,
         sync_status: "idle",
         last_synced_at: sync.last_synced_at,
+        read_only_smoke_required: true,
+        read_only_smoke_passed: false,
+        read_only_smoke_fresh: false,
+        read_only_smoke_checked_at: null,
+        read_only_smoke_checks: {},
         live_order_requires_confirmation: true,
         live_order_enabled: false,
       };
