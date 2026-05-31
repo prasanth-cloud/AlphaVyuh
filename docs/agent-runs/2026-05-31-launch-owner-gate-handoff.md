@@ -34,6 +34,15 @@ as of 2026-05-31.
 - Public Railway API is serving FastAPI data instead of Railway fallback 404.
 - Current-main public production API smoke passes for market summary and core
   chart symbols under the deployed contract.
+- Fresh read-only check from this PR worktree:
+  `npm run check:production-api:railway` passed with summary `2026-05-29`,
+  breadth `652/1745`, and RELIANCE/ITC/AUBANK each returning 500 daily candles
+  through `2026-05-29`. Authenticated scanner data was skipped because
+  `PRODUCTION_API_BEARER_TOKEN` is not available.
+- Fresh public posture check from this PR worktree:
+  `PUBLIC_SITE_URL=https://www.alphavyuh.com npm run check:public-posture`
+  passed. Account-access copy is present and legacy beta/professional-brand
+  posture is absent.
 - Full app recovery is still not proven because authenticated scanner/watchlist
   API smoke and signed-in browser smoke need owner-approved runtime secrets.
 
