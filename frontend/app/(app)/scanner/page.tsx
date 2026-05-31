@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
@@ -33,6 +33,7 @@ import {
   type ScannerRunHistoryEntry,
 } from '@/lib/scanner-run-history'
 import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
+import { buildScannerSectorStrength } from '@/lib/scanner-sector-strength'
 import { sectorTaxonomyPresentation } from '@/lib/sector-taxonomy-copy'
 
 const API = API_BASE_URL
@@ -1435,6 +1436,7 @@ export default function ScannerPage() {
     { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => pageWindowStart + idx,
   );
+  const sectorStrength = useMemo(() => buildScannerSectorStrength(results).slice(0, 5), [results]);
   const sectorTaxonomy = sectorTaxonomyPresentation(sectorTaxonomyMetadata, sectorTaxonomyError);
   const sectorTaxonomyColor = sectorTaxonomy.status === 'good'
     ? 'var(--gain)'
@@ -1882,6 +1884,67 @@ export default function ScannerPage() {
             </div>
           )}
         </div>
+
+        {sectorStrength.length > 0 && (
+          <div
+            data-testid="scanner-sector-strength"
+            style={{
+              padding: '10px 16px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'grid',
+              gap: 8,
+              background: 'rgba(255,255,255,0.015)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div className="label" style={{ marginBottom: 3 }}>Sector strength</div>
+                <div className="caption" style={{ color: 'var(--text-secondary)' }}>
+                  Sector-only ranking from this scan. Industry ranking waits for audited taxonomy.
+                </div>
+              </div>
+              <span className="workspace-pill">
+                {sectorStrength.length} sector{sectorStrength.length === 1 ? '' : 's'} ranked
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+              {sectorStrength.map((sector) => (
+                <div
+                  key={sector.sector}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid var(--border-subtle)',
+                    background: 'rgba(255,255,255,0.025)',
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                    <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {sector.sector}
+                    </div>
+                    <span
+                      className="workspace-pill"
+                      style={{
+                        color: sector.label === 'Leader' ? 'var(--gain)' : sector.label === 'Constructive' ? 'var(--accent)' : sector.label === 'Mixed' ? 'var(--text-secondary)' : 'var(--warn)',
+                      }}
+                    >
+                      {sector.label}
+                    </span>
+                  </div>
+                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                    {sector.reason}
+                  </div>
+                  <div className="workspace-pill-row" style={{ marginTop: 7 }}>
+                    <span className="workspace-pill">{sector.activeCount} active</span>
+                    {sector.avgRsScore != null && <span className="workspace-pill">RS {Math.round(sector.avgRsScore)}</span>}
+                    {sector.topSymbols.length > 0 && <span className="workspace-pill">{sector.topSymbols.join(', ')}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {error && (
