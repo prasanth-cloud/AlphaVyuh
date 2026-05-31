@@ -143,6 +143,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByTestId("multi-chart-card-RELIANCE")).toContainText("RELIANCE", { timeout: 15_000 });
     await expect(page.getByTestId("multi-chart-card-INFY")).toContainText("INFY", { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Scanner review|Source:|As of|loaded/i, { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-board-pulse")).toContainText(/Best candidate|Board score|Top blocker/i, { timeout: 15_000 });
+    await expect(page.getByTestId("multi-chart-board-pulse")).toContainText(/RELIANCE|avg|5Y daily context/i);
     await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Analysis context|W\/M|52W|MA|Volume|RSI/i, { timeout: 15_000 });
     await expect(page.getByTestId("multi-chart-analysis-RELIANCE")).toContainText(/Weekly\/monthly|Moving averages/i);
     await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText(/Original scan|Trend Template|RS|Volume/i);
