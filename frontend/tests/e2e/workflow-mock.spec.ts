@@ -766,6 +766,47 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("selected drawing creates a mock price alert draft", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/charts/AUBANK?full=1");
+    const overlay = page.getByTestId("chart-drawing-overlay");
+    await expect(overlay).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole("button", { name: "Open chart drawing tools", exact: true }).click();
+    await page.getByRole("button", { name: "Horizontal line H", exact: true }).click();
+    await expect(page.getByText(/Horizontal line armed/i)).toBeVisible({ timeout: 10_000 });
+
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) return;
+
+    await page.mouse.move(box.x + box.width * 0.24, box.y + box.height * 0.48);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.68, box.y + box.height * 0.48);
+    await page.mouse.up();
+
+    await expect(page.getByText("Drawings · 1")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Selected: Horizontal line/i)).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: /Alert from drawing/i }).click();
+    await expect(page.getByText(/Alert set (above|below)/i)).toBeVisible({ timeout: 10_000 });
+
+    const alerts = await page.evaluate(() => JSON.parse(localStorage.getItem("alphavyuh-mock-price-alerts-v1") || "[]"));
+    expect(alerts[0]).toMatchObject({
+      symbol: "AUBANK",
+      note: "Horizontal line alert from saved drawing",
+      is_active: true,
+    });
+    expect(["above", "below"]).toContain(alerts[0].condition);
+    expect(typeof alerts[0].target_price).toBe("number");
+    expect(errors).toEqual([]);
+  });
+
   test("remaining full-chart drawing tools persist after reload", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];

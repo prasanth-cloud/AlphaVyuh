@@ -24,6 +24,69 @@ describe("price alerts API", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("creates and persists mock price alerts without hitting the backend", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "mock");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "true");
+    vi.stubGlobal("fetch", vi.fn(() => {
+      throw new Error("mock mode should not call backend");
+    }));
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+
+    const { createPriceAlert, getPriceAlerts } = await import("@/lib/api");
+
+    const created = await createPriceAlert({
+      symbol: "aubank",
+      condition: "above",
+      target_price: 724.126,
+      note: "Horizontal line alert from saved drawing",
+    });
+
+    expect(created).toMatchObject({
+      symbol: "AUBANK",
+      condition: "above",
+      target_price: 724.13,
+      note: "Horizontal line alert from saved drawing",
+      is_active: true,
+    });
+    await expect(getPriceAlerts()).resolves.toEqual(expect.arrayContaining([created]));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("deletes mock price alerts without hitting the backend", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DATA_MODE", "mock");
+    vi.stubEnv("NEXT_PUBLIC_ALLOW_MOCK_FALLBACK", "true");
+    vi.stubGlobal("fetch", vi.fn(() => {
+      throw new Error("mock mode should not call backend");
+    }));
+    const storage = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value),
+      },
+    });
+
+    const { createPriceAlert, deletePriceAlert, getPriceAlerts } = await import("@/lib/api");
+
+    const created = await createPriceAlert({
+      symbol: "RELIANCE",
+      condition: "below",
+      target_price: 1310,
+      note: "Support lost",
+    });
+    await deletePriceAlert(created.id);
+
+    const alerts = await getPriceAlerts();
+    expect(alerts.some((alert) => alert.id === created.id)).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("keeps an empty live alert list as a valid empty state", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.alphavyuh.test");
     vi.stubEnv("NEXT_PUBLIC_FORCE_LIVE_DATA", "true");
