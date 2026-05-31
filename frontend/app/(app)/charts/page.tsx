@@ -20,6 +20,7 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import {
   buildMultiChartAnalysisSummary,
   buildMultiChartAlertDraft,
+  buildMultiChartBoardSummary,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
   buildMultiChartTrustContext,
@@ -142,6 +143,41 @@ export default function ChartsIndexPage() {
     }
   }
 
+  async function copyBoardSummary() {
+    const items = cards
+      .filter((card) => card.data && !card.error)
+      .map((card) => {
+        const workflow = workflowBySymbol[card.symbol];
+        const analysis = buildMultiChartAnalysisSummary(card.data, workflow?.scanner_context);
+        const trust = buildMultiChartTrustContext(card.data, activeRequest);
+        return {
+          symbol: card.symbol,
+          lifecycle: workflow?.lifecycle,
+          analysis,
+          trust,
+          alertDraft: buildMultiChartAlertDraft(card.data, analysis),
+          scannerContext: workflow?.scanner_context,
+        };
+      });
+    const text = buildMultiChartBoardSummary(items, {
+      rangeLabel,
+      sourceLabel: sourceLabel(source, watchlistName),
+    });
+    if (items.length === 0) {
+      setCopyMessage("Review notes are waiting for loaded charts.");
+      window.setTimeout(() => setCopyMessage(""), 3000);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyMessage("Review notes copied.");
+    } catch {
+      setCopyMessage(text);
+    } finally {
+      window.setTimeout(() => setCopyMessage(""), 3000);
+    }
+  }
+
   function openImportedSymbols() {
     const imported = normalizeMultiChartSymbols(symbolImportValue);
     if (imported.length === 0) {
@@ -241,6 +277,15 @@ export default function ChartsIndexPage() {
           ))}
           <button type="button" className="workspace-chip-button" onClick={copyTradingViewSymbols}>
             Copy TV symbols
+          </button>
+          <button
+            type="button"
+            className="workspace-chip-button"
+            data-testid="multi-chart-copy-review-summary"
+            onClick={copyBoardSummary}
+            title="Copy board decisions, review scores, blockers, source, and alert draft levels"
+          >
+            Copy review notes
           </button>
           <input
             value={symbolImportValue}

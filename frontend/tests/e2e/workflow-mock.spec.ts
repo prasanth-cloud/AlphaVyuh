@@ -114,6 +114,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText(/Original scan|Trend Template|RS|Volume/i);
     await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText("All moving averages aligned with 52W proximity.");
     await expect(page.getByTestId("multi-chart-scanner-context-RELIANCE")).toContainText("Sector taxonomy pending NSE audit.");
+    await page.getByTestId("multi-chart-copy-review-summary").click();
+    await expect(page.locator("body")).toContainText(/Review notes copied|AlphaVyuh review board/i);
     await page.getByRole("button", { name: "5Y" }).click();
     await expect(page.getByRole("button", { name: "5Y" })).toHaveClass(/active/);
     await page.getByRole("button", { name: "Max", exact: true }).click();
