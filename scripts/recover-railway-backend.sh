@@ -55,11 +55,18 @@ fi
 linked_for_recovery=0
 if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
   echo "Linking Railway project before recovery ..."
-  (
+  if (
     cd "$BACKEND_DIR"
     railway link "${link_args[@]}"
-  )
-  linked_for_recovery=1
+  ); then
+    linked_for_recovery=1
+  elif [[ "$link_required" == "0" ]]; then
+    echo "Railway project link failed, but explicit project flags are available; continuing with direct deploy." >&2
+    echo "Railway deployment status wait will be skipped for this run." >&2
+  else
+    echo "Railway project link failed and no explicit token/project deploy path is available." >&2
+    exit 1
+  fi
 fi
 
 if [[ "$link_required" == "1" ]]; then
@@ -94,7 +101,7 @@ wait_for_railway_deployment() {
   local status_err="/tmp/alphavyuh-railway-deployments.err"
 
   if [[ "$linked_for_recovery" != "1" ]]; then
-    echo "Skipping Railway deployment status wait because no project ID was available to link."
+    echo "Skipping Railway deployment status wait because no Railway project is linked in this run."
     return 0
   fi
 

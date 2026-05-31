@@ -37,6 +37,7 @@ run_step "Five-year chart contract regression tests" npm run test:five-year-char
 run_step "Production smoke env regression tests" npm run test:production-smoke-env-check
 run_step "Production smoke workflow regression tests" npm run test:production-smoke-workflow-check
 run_step "Railway recovery workflow regression tests" npm run test:railway-recovery-workflow-check
+run_step "Railway recovery script regression tests" npm run test:railway-recovery-script
 run_step "Recovery handoff credential regression tests" npm run test:recovery-handoff-credentials-check
 run_step "Signed-in copy posture regression tests" npm run test:signed-in-copy-posture-check
 run_step "Public posture checker regression tests" npm run test:public-posture-check
