@@ -23,6 +23,12 @@ import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { buildScannerMatchExplanation } from '@/lib/scanner-match-explanation'
+import {
+  appendScannerRunHistory,
+  clearScannerRunHistory,
+  readScannerRunHistory,
+  type ScannerRunHistoryEntry,
+} from '@/lib/scanner-run-history'
 import { buildMultiChartReviewHref } from '@/lib/multi-chart-review'
 
 const API = API_BASE_URL
@@ -591,6 +597,7 @@ export default function ScannerPage() {
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
   const [workflowMarks, setWorkflowMarks] = useState<Record<string, WorkflowMark>>({})
   const [scanTrust, setScanTrust] = useState<ScanTrust | null>(null)
+  const [runHistory, setRunHistory] = useState<ScannerRunHistoryEntry[]>([])
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -607,6 +614,7 @@ export default function ScannerPage() {
       setHasRun(true)
       setHasCachedResults(true)
     }
+    setRunHistory(readScannerRunHistory())
     loadWatchlists()
     loadSavedScreens()
   }, [])
@@ -662,6 +670,100 @@ export default function ScannerPage() {
       setSavedScreens([])
       setSavedScreensError(error instanceof Error ? error.message : 'Saved scanner screens are temporarily unavailable.')
     }
+  }
+
+  const scannerRunLabel = useCallback((eventPreset: string | null | undefined) => {
+    if (eventPreset === 'saved_screen') return activeScreenName ?? 'Saved screen'
+    if (eventPreset && eventPreset !== 'custom') return PRESETS.find(p => p.id === eventPreset)?.name ?? 'Custom scan'
+    return 'Custom scan'
+  }, [activeScreenName])
+
+  const scannerRunPresetId = useCallback((eventPreset: string | null | undefined) => {
+    return eventPreset ?? 'custom'
+  }, [])
+
+  const rememberScannerRun = useCallback((params: {
+    eventPreset: string | null | undefined
+    results: ScanResult[]
+    totalMatches: number
+    totalPages: number
+    currentPage: number
+    tradeDate: string
+    isLimited: boolean
+    scanTrust: ScanTrust
+    filters: Filters
+    sortBy: string
+    sortDesc: boolean
+    pageSize: number
+  }) => {
+    const nextHistory = appendScannerRunHistory({
+      label: scannerRunLabel(params.eventPreset),
+      presetId: scannerRunPresetId(params.eventPreset),
+      totalMatches: params.totalMatches,
+      totalPages: params.totalPages,
+      currentPage: params.currentPage,
+      pageSize: params.pageSize,
+      sortBy: params.sortBy,
+      sortDesc: params.sortDesc,
+      tradeDate: params.tradeDate,
+      isLimited: params.isLimited,
+      dataSource: params.scanTrust.source,
+      dataMode: params.scanTrust.mode,
+      dataAsOf: params.scanTrust.asOf ?? params.tradeDate,
+      coveragePct: params.scanTrust.coveragePct,
+      universeSize: params.scanTrust.universeSize,
+      filters: params.filters,
+      results: params.results,
+    })
+    setRunHistory(nextHistory)
+  }, [scannerRunLabel, scannerRunPresetId])
+
+  function restoreScannerRun(entry: ScannerRunHistoryEntry) {
+    const restoredResults = entry.results as unknown as ScanResult[]
+    const restoredTrust = {
+      mode: (entry.dataMode ?? 'unknown') as ScanTrust['mode'],
+      source: entry.dataSource ?? 'Scanner run history',
+      asOf: entry.dataAsOf ?? entry.tradeDate ?? null,
+      coveragePct: entry.coveragePct,
+      universeSize: entry.universeSize,
+    } satisfies ScanTrust
+    setResults(restoredResults)
+    setSelectedResults(new Set())
+    setTotalMatches(entry.totalMatches)
+    setTotalPages(entry.totalPages)
+    setCurrentPage(entry.currentPage)
+    setPageSize([25, 50, 150, 200].includes(entry.pageSize) ? entry.pageSize as 25 | 50 | 150 | 200 : 25)
+    setTradeDate(entry.tradeDate)
+    setIsLimited(entry.isLimited)
+    setScanTrust(restoredTrust)
+    setSortBy(entry.sortBy)
+    setSortDesc(entry.sortDesc)
+    setFilters({ ...emptyFilters(), ...(entry.filters ?? {}) } as Filters)
+    setActivePreset(entry.presetId === 'custom' ? null : entry.presetId)
+    setActiveScreenName(entry.presetId === 'saved_screen' ? entry.label : null)
+    setHasRun(true)
+    setHasCachedResults(true)
+    setExpandedSymbol(null)
+    setError('')
+    writeScannerSnapshot({
+      results: restoredResults,
+      totalMatches: entry.totalMatches,
+      totalPages: entry.totalPages,
+      currentPage: entry.currentPage,
+      tradeDate: entry.tradeDate,
+      isLimited: entry.isLimited,
+      scanTrust: restoredTrust,
+    })
+    trackEvent('scanner_run_history_restored', {
+      label: entry.label,
+      results: entry.resultCount,
+      mode: entry.dataMode ?? 'unknown',
+    })
+  }
+
+  function clearRecentRuns() {
+    clearScannerRunHistory()
+    setRunHistory([])
   }
 
   const buildPayload = useCallback((f: Filters, sb: string, sd: boolean) => {
@@ -723,10 +825,17 @@ export default function ScannerPage() {
 
   const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
     const hadResults = results.length > 0
+    const activeFilters = overrideFilters || filters
     setLoading(true); setError(''); if (!hadResults) setResults([]); setExpandedSymbol(null)
     try {
       if (scannerUsesClientMockFallback()) {
         const data = mockRunScan()
+        const nextResults = data.results as unknown as ScanResult[]
+        const nextTotalMatches = data.total_matches || 0
+        const nextTotalPages = data.total_pages || 1
+        const nextCurrentPage = data.page || page
+        const nextTradeDate = data.trade_date || ''
+        const nextIsLimited = data.is_limited || false
         const nextTrust = {
           mode: data.source_metadata?.mode ?? 'demo',
           source: formatMarketDataSource(data.source_metadata?.source_name, 'Demo data'),
@@ -735,22 +844,36 @@ export default function ScannerPage() {
           universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
           message: data.source_metadata?.license_notes,
         } satisfies ScanTrust
-        setResults(data.results as unknown as ScanResult[])
-        setTotalMatches(data.total_matches || 0)
-        setTotalPages(data.total_pages || 1)
-        setCurrentPage(data.page || page)
-        setTradeDate(data.trade_date || '')
-        setIsLimited(data.is_limited || false)
+        setResults(nextResults)
+        setTotalMatches(nextTotalMatches)
+        setTotalPages(nextTotalPages)
+        setCurrentPage(nextCurrentPage)
+        setTradeDate(nextTradeDate)
+        setIsLimited(nextIsLimited)
         setScanTrust(nextTrust)
         setHasCachedResults(false)
         writeScannerSnapshot({
-          results: data.results as unknown as ScanResult[],
-          totalMatches: data.total_matches || 0,
-          totalPages: data.total_pages || 1,
-          currentPage: data.page || page,
-          tradeDate: data.trade_date || '',
-          isLimited: data.is_limited || false,
+          results: nextResults,
+          totalMatches: nextTotalMatches,
+          totalPages: nextTotalPages,
+          currentPage: nextCurrentPage,
+          tradeDate: nextTradeDate,
+          isLimited: nextIsLimited,
           scanTrust: nextTrust,
+        })
+        rememberScannerRun({
+          eventPreset,
+          results: nextResults,
+          totalMatches: nextTotalMatches,
+          totalPages: nextTotalPages,
+          currentPage: nextCurrentPage,
+          tradeDate: nextTradeDate,
+          isLimited: nextIsLimited,
+          scanTrust: nextTrust,
+          filters: activeFilters,
+          sortBy: sb,
+          sortDesc: sd,
+          pageSize: size,
         })
         setHasRun(true)
         trackEvent('scanner_run', {
@@ -762,7 +885,7 @@ export default function ScannerPage() {
         return
       }
       const headers = await getAuthHeaders()
-      const payload = buildPayload(overrideFilters || filters, sb, sd)
+      const payload = buildPayload(activeFilters, sb, sd)
       const res = await fetch(`${API}/api/v1/scanner/run`, {
         method: 'POST',
         headers,
@@ -774,6 +897,11 @@ export default function ScannerPage() {
         throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
       }
       const nextResults = data.results || []
+      const nextTotalMatches = data.total_matches || 0
+      const nextTotalPages = data.total_pages || 1
+      const nextCurrentPage = data.page || page
+      const nextTradeDate = data.trade_date || ''
+      const nextIsLimited = data.is_limited || false
       const nextTrust = {
         mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
         source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, 'Market data'),
@@ -784,21 +912,35 @@ export default function ScannerPage() {
       } satisfies ScanTrust
       setResults(nextResults)
       setSelectedResults(new Set())
-      setTotalMatches(data.total_matches || 0)
-      setTotalPages(data.total_pages || 1)
-      setCurrentPage(data.page || page)
-      setTradeDate(data.trade_date || '')
-      setIsLimited(data.is_limited || false)
+      setTotalMatches(nextTotalMatches)
+      setTotalPages(nextTotalPages)
+      setCurrentPage(nextCurrentPage)
+      setTradeDate(nextTradeDate)
+      setIsLimited(nextIsLimited)
       setScanTrust(nextTrust)
       setHasCachedResults(false)
       writeScannerSnapshot({
         results: nextResults,
-        totalMatches: data.total_matches || 0,
-        totalPages: data.total_pages || 1,
-        currentPage: data.page || page,
-        tradeDate: data.trade_date || '',
-        isLimited: data.is_limited || false,
+        totalMatches: nextTotalMatches,
+        totalPages: nextTotalPages,
+        currentPage: nextCurrentPage,
+        tradeDate: nextTradeDate,
+        isLimited: nextIsLimited,
         scanTrust: nextTrust,
+      })
+      rememberScannerRun({
+        eventPreset,
+        results: nextResults,
+        totalMatches: nextTotalMatches,
+        totalPages: nextTotalPages,
+        currentPage: nextCurrentPage,
+        tradeDate: nextTradeDate,
+        isLimited: nextIsLimited,
+        scanTrust: nextTrust,
+        filters: activeFilters,
+        sortBy: sb,
+        sortDesc: sd,
+        pageSize: size,
       })
       setHasRun(true)
       trackEvent('scanner_run', {
@@ -810,7 +952,7 @@ export default function ScannerPage() {
     } catch (e: unknown) {
       setError(describeMarketDataError(e))
     } finally { setLoading(false) }
-  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, results.length, sortBy, sortDesc])
+  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, rememberScannerRun, results.length, sortBy, sortDesc])
 
   const applyPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
@@ -1174,6 +1316,50 @@ export default function ScannerPage() {
             <button className="workspace-chip-button" onClick={loadWatchlists}>
               Retry
             </button>
+          </div>
+        )}
+
+        {runHistory.length > 0 && (
+          <div data-testid="scanner-run-history" className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 210, overflowY: 'auto', flexShrink: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div className="label">Recent runs</div>
+              <button className="caption" onClick={clearRecentRuns} style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+                Clear
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {runHistory.slice(0, 5).map(entry => (
+                <button
+                  key={entry.id}
+                  data-testid="scanner-run-history-entry"
+                  onClick={() => restoreScannerRun(entry)}
+                  title={`Restore ${entry.label}`}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '7px 9px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: 'var(--text-primary)' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
+                    <span style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>{entry.totalMatches.toLocaleString('en-IN')}</span>
+                  </span>
+                  <span className="caption" style={{ display: 'block', marginTop: 3 }}>
+                    {entry.tradeDate || entry.dataAsOf || 'Latest'} · {entry.dataSource ?? 'Source pending'}
+                  </span>
+                  {entry.topSymbols.length > 0 && (
+                    <span className="caption mono" style={{ display: 'block', marginTop: 3, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {entry.topSymbols.slice(0, 4).join(' · ')}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
