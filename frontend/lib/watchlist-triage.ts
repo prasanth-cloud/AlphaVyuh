@@ -12,6 +12,13 @@ export type WatchlistTriageMeta = {
   note?: string | null;
 };
 
+export type WatchlistTriageBrokerContext = {
+  connected?: boolean | null;
+  tokenExpired?: boolean | null;
+  planAllowsBroker?: boolean | null;
+  statusError?: string | null;
+};
+
 export type WatchlistTriageSummary = {
   score: number;
   label: "Act now" | "Review next" | "Monitor" | "Archive check";
@@ -89,6 +96,55 @@ function marketSignalScore(item: WatchlistItem): { score: number; reasons: strin
   return { score, reasons };
 }
 
+function contextScore(
+  item: WatchlistItem,
+  workflow: WorkflowState | null | undefined,
+): { score: number; reasons: string[] } {
+  const scanner = workflow?.scanner_context ?? null;
+  const rsScore = finite(scanner?.rs_score);
+  let score = 0;
+  const reasons: string[] = [];
+
+  if (rsScore != null && rsScore >= 70) {
+    score += 14;
+    reasons.push(`RS ${Math.round(rsScore)}`);
+  } else if (rsScore != null && rsScore >= 50) {
+    score += 6;
+    reasons.push(`RS ${Math.round(rsScore)}`);
+  }
+
+  const sector = item.sector?.trim();
+  if (sector) {
+    score += 4;
+    reasons.push(`${sector} sector context`);
+  }
+
+  return { score, reasons };
+}
+
+function brokerContextScore(
+  workflow: WorkflowState | null | undefined,
+  broker: WatchlistTriageBrokerContext | null | undefined,
+): { score: number; reason: string | null } {
+  if (!broker) {
+    return workflow?.broker_order_id
+      ? { score: 6, reason: "Broker order linked" }
+      : { score: 0, reason: null };
+  }
+  const needsActionContext =
+    workflow?.lifecycle === "ready" ||
+    workflow?.lifecycle === "triggered" ||
+    workflow?.lifecycle === "open" ||
+    workflow?.entry != null;
+
+  if (broker.statusError) return { score: needsActionContext ? 16 : 8, reason: "Broker status check" };
+  if (broker.tokenExpired) return { score: needsActionContext ? 18 : 10, reason: "Broker reconnect needed" };
+  if (broker.planAllowsBroker === false) return { score: needsActionContext ? 12 : 6, reason: "Broker plan gate" };
+  if (broker.connected && needsActionContext) return { score: 8, reason: "Broker import context" };
+  if (needsActionContext) return { score: 6, reason: "Broker not connected" };
+  return { score: 0, reason: null };
+}
+
 function labelForScore(score: number): WatchlistTriageSummary["label"] {
   if (score >= 135) return "Act now";
   if (score >= 88) return "Review next";
@@ -102,6 +158,7 @@ export function buildWatchlistTriageSummary(
     workflow?: WorkflowState | null;
     reviewState?: WatchlistTriageReviewState | null;
     meta?: WatchlistTriageMeta | null;
+    broker?: WatchlistTriageBrokerContext | null;
     now?: Date;
   } = {},
 ): WatchlistTriageSummary {
@@ -135,6 +192,14 @@ export function buildWatchlistTriageSummary(
     score += workflow.confidence * 8;
     reasons.push(`Confidence ${workflow.confidence}/5`);
   }
+
+  const context = contextScore(item, workflow);
+  score += context.score;
+  reasons.push(...context.reasons);
+
+  const broker = brokerContextScore(workflow, options.broker);
+  score += broker.score;
+  if (broker.reason) reasons.push(broker.reason);
 
   const market = marketSignalScore(item);
   score += market.score;
