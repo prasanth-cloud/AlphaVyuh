@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerOrderGatePresentation, brokerReadOnlyChecklist } from "@/lib/broker-safety";
+import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerOrderActionBarPresentation, brokerOrderGatePresentation, brokerReadOnlyChecklist } from "@/lib/broker-safety";
 
 describe("broker order gate presentation", () => {
   it("fails closed when broker status is unavailable", () => {
@@ -106,5 +106,62 @@ describe("broker order gate presentation", () => {
       "Risk plan and confirmation source",
       "Fresh same-broker read-only smoke evidence",
     ]);
+  });
+
+  it("builds a journal-only action bar when live routing is disabled", () => {
+    expect(brokerOrderActionBarPresentation({
+      broker: { broker: "zerodha", connected: true },
+      canRouteLiveOrder: false,
+      side: "buy",
+    })).toEqual({
+      modeLabel: "Import only",
+      detail: "Order capture records a journal draft only. Place any real trade directly with your broker.",
+      primaryLabel: "Save buy journal draft",
+      savingLabel: "Saving...",
+      primaryDisabled: false,
+      requiresLiveConfirmation: false,
+      status: "good",
+    });
+  });
+
+  it("fails the action bar closed when broker status is unavailable", () => {
+    expect(brokerOrderActionBarPresentation({
+      broker: null,
+      unavailable: true,
+      canRouteLiveOrder: false,
+      side: "sell",
+    })).toMatchObject({
+      modeLabel: "Read-only unavailable",
+      detail: "Broker status is unavailable. Save the plan as a journal draft and place any real trade directly with your broker.",
+      primaryLabel: "Save sell journal draft",
+      primaryDisabled: false,
+      status: "bad",
+    });
+  });
+
+  it("requires explicit confirmation when a future live route is owner enabled", () => {
+    expect(brokerOrderActionBarPresentation({
+      broker: { broker: "upstox", connected: true, live_order_enabled: true },
+      canRouteLiveOrder: true,
+      liveConfirmed: false,
+      side: "buy",
+    })).toMatchObject({
+      modeLabel: "OWNER ENABLED",
+      primaryLabel: "Confirm broker order",
+      primaryDisabled: true,
+      requiresLiveConfirmation: true,
+      status: "warn",
+    });
+
+    expect(brokerOrderActionBarPresentation({
+      broker: { broker: "upstox", connected: true, live_order_enabled: true },
+      canRouteLiveOrder: true,
+      liveConfirmed: true,
+      side: "buy",
+    })).toMatchObject({
+      primaryLabel: "Buy via upstox",
+      primaryDisabled: false,
+      requiresLiveConfirmation: true,
+    });
   });
 });

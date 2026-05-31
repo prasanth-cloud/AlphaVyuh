@@ -72,6 +72,7 @@ import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 import { buildMultiChartReviewHref } from "@/lib/multi-chart-review";
 import { parseWatchlistSymbolImport, type WatchlistSymbolImport } from "@/lib/watchlist-symbol-import";
 import { buildWatchlistTriageSummary, type WatchlistTriageSummary } from "@/lib/watchlist-triage";
+import { brokerOrderActionBarPresentation } from "@/lib/broker-safety";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -666,6 +667,13 @@ function ChartPanel({
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
   const canRouteLiveOrder = false;
+  const orderActionBar = brokerOrderActionBarPresentation({
+    broker: brokerStatus,
+    unavailable: Boolean(brokerStatusError),
+    canRouteLiveOrder,
+    liveConfirmed,
+    side,
+  });
   useEffect(() => {
     const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
     setTheme(current);
@@ -1035,7 +1043,7 @@ function ChartPanel({
         <div className="order-ticket-header">
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">Journal capture only: save the plan to Journal. Place any real trade directly with your broker.</div>
+            <div className="caption">{orderActionBar.detail}</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -1050,16 +1058,14 @@ function ChartPanel({
             {brokerStatusError ? "Broker status unavailable" : brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
-            {brokerStatusError
-              ? `${brokerStatusError} Order capture stays as a journal draft.`
-              : brokerStatus?.connected ? "Broker import available; order capture still records as a journal draft" : "Order capture records as a journal draft"}
+            {orderActionBar.detail}
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
           {[
             { label: "R:R", value: planRiskReward != null ? planRiskReward.toFixed(2) : "—", tone: planRiskReward == null ? "var(--text-tertiary)" : planRiskReward >= 2 ? "var(--gain)" : "var(--warn)" },
             { label: "Risk", value: orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", tone: "var(--text-secondary)" },
-            { label: "Mode", value: brokerStatus?.connected ? "Import only" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
+            { label: "Mode", value: orderActionBar.modeLabel, tone: orderActionBar.status === "bad" ? "var(--warn)" : orderActionBar.status === "good" ? "var(--accent)" : "var(--text-tertiary)" },
           ].map((item) => (
             <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
               <div className="label" style={{ marginBottom: 2 }}>{item.label}</div>
@@ -1194,7 +1200,7 @@ function ChartPanel({
           </div>
         )}
 
-        {canRouteLiveOrder && (
+        {orderActionBar.requiresLiveConfirmation && (
           <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.5 }}>
             <input
               type="checkbox"
@@ -1208,17 +1214,17 @@ function ChartPanel({
           </label>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed)}
+        <button onClick={handleOrder} disabled={orderBusy || !planValid || orderActionBar.primaryDisabled}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid ? "not-allowed" : "pointer",
-            opacity: orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed) ? 0.5 : 1,
+            opacity: orderBusy || !planValid || orderActionBar.primaryDisabled ? 0.5 : 1,
           }}>
           {orderBusy
-            ? canRouteLiveOrder && liveConfirmed ? "Submitting..." : "Saving..."
+            ? orderActionBar.savingLabel
             : planValid
-              ? canRouteLiveOrder ? `${side === "buy" ? "Buy" : "Sell"} via ${brokerStatus?.broker ?? "broker"}` : `Save ${side === "buy" ? "buy" : "sell"} journal draft`
+              ? orderActionBar.primaryLabel
               : planNextAction}
         </button>
         </div>
