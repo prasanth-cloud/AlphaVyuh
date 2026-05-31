@@ -63,4 +63,4 @@ execution or the dense watchlist page layout.
 
 ## PR
 
-- Pending.
+- [#319](https://github.com/prasanth-cloud/AlphaVyuh/pull/319)
