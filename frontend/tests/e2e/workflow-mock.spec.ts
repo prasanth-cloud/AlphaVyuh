@@ -398,6 +398,16 @@ test.describe("Mock workflow smoke", () => {
     });
     page.on("pageerror", (error) => errors.push(error.message));
 
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          writeText: async (text: string) => {
+            localStorage.setItem("alphavyuh-test-clipboard", text);
+          },
+        },
+        configurable: true,
+      });
+    });
     await page.goto("/scanner");
     await page.getByRole("button", { name: /^Run scan$/i }).click();
     await expect(page.getByRole("button", { name: /Create watchlist/i }).first()).toBeVisible({ timeout: 20_000 });
@@ -408,6 +418,9 @@ test.describe("Mock workflow smoke", () => {
 
     await resultRows.first().locator("input[type=checkbox]").check({ force: true });
     await expect(page.getByText("1 selected")).toBeVisible();
+    await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Copy TV symbols$/i }).click();
+    await expect(page.getByTestId("scanner-toast")).toContainText("Copied 1 TradingView symbol", { timeout: 10_000 });
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("alphavyuh-test-clipboard"))).toBe(`NSE:${symbol}`);
     await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Shortlist$/i }).click();
     await expect(resultRows.first().getByText("Shortlisted")).toBeVisible();
 
