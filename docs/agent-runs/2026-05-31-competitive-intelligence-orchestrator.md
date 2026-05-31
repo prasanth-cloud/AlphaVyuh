@@ -75,6 +75,15 @@ Use this serialized merge order:
 - Final orchestration: PRs must include screenshots or explicit explanation if
   the change is non-visual.
 
+## PRs Opened
+
+- Orchestration plan: [#316](https://github.com/prasanth-cloud/AlphaVyuh/pull/316)
+- Data Freshness and Signal Explain Drawer: [#317](https://github.com/prasanth-cloud/AlphaVyuh/pull/317)
+- Saved Scan Alerts: [#318](https://github.com/prasanth-cloud/AlphaVyuh/pull/318)
+- Watchlist Prioritizer: [#319](https://github.com/prasanth-cloud/AlphaVyuh/pull/319)
+- Broker-Connected Order Action Bar: [#320](https://github.com/prasanth-cloud/AlphaVyuh/pull/320)
+- Scan Results Workbench: [#321](https://github.com/prasanth-cloud/AlphaVyuh/pull/321)
+
 ## Open Decisions
 
 - Whether the first public-facing implementation should be a scanner workbench
