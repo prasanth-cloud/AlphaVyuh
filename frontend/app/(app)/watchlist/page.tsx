@@ -70,6 +70,7 @@ import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 import { buildMultiChartReviewHref } from "@/lib/multi-chart-review";
 import { parseWatchlistSymbolImport, type WatchlistSymbolImport } from "@/lib/watchlist-symbol-import";
+import { buildWatchlistTriageSummary, type WatchlistTriageSummary } from "@/lib/watchlist-triage";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -216,6 +217,7 @@ function SortableRow({
   isSelected,
   pinned,
   reviewState,
+  triage,
   onRemove,
   onSelect,
   onOpenChart,
@@ -225,6 +227,7 @@ function SortableRow({
   isSelected: boolean;
   pinned: boolean;
   reviewState?: "reviewed" | "needs-review" | "new";
+  triage?: WatchlistTriageSummary;
   onRemove: (symbol: string) => void;
   onSelect: (symbol: string) => void;
   onOpenChart: (symbol: string) => void;
@@ -303,6 +306,24 @@ function SortableRow({
           >
             {setup.label}
           </span>
+          {triage && (
+            <span
+              title={triage.reasons.join(" · ")}
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                color: triage.label === "Act now" ? "var(--gain)" : triage.label === "Review next" ? "var(--accent)" : triage.label === "Monitor" ? "var(--text-secondary)" : "var(--warn)",
+                padding: "2px 6px",
+                borderRadius: 999,
+                background: "rgba(255,255,255,0.035)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {triage.label}
+            </span>
+          )}
         </div>
         {item.company_name && (
           <div className="caption" style={{ maxWidth: dense ? 160 : 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: dense ? 0 : 2, fontSize: dense ? 10 : 11 }}>
@@ -324,6 +345,11 @@ function SortableRow({
                 {reviewState === "reviewed" ? "Reviewed" : reviewState === "needs-review" ? "Needs review" : "New"}
               </span>
             )}
+          </div>
+        )}
+        {(!dense && triage) && (
+          <div className="caption" style={{ marginTop: 4, color: "var(--text-tertiary)", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            Priority: {triage.reason} · {triage.score}
           </div>
         )}
       </td>
@@ -1213,7 +1239,7 @@ function WatchlistContent() {
   const [noteDraft, setNoteDraft] = useState("");
   const [queueView, setQueueView] = useState<"all" | "pinned" | "tagged" | "needs-review">("all");
   const [activeTagFilter, setActiveTagFilter] = useState<string>("all");
-  const [sortMode, setSortMode] = useState<"manual" | "setup" | "move" | "volume" | "rsi">("manual");
+  const [sortMode, setSortMode] = useState<"triage" | "manual" | "setup" | "move" | "volume" | "rsi">("triage");
   const [showDeskControls, setShowDeskControls] = useState(false);
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -1537,7 +1563,7 @@ function WatchlistContent() {
         queueView === "all" ? true :
         queueView === "pinned" ? Boolean(meta.pinned) :
         queueView === "tagged" ? (meta.tags?.length ?? 0) > 0 :
-        !meta.note?.trim();
+        !meta.note?.trim() || symbolReviewMap.get(item.symbol)?.state === "needs-review" || workflowBySymbol[item.symbol]?.review_later === true || workflowBySymbol[item.symbol]?.lifecycle === "review_later";
       const matchesTagFilter =
         activeTagFilter === "all" ? true : Boolean(meta.tags?.includes(activeTagFilter));
       const matchesQuery = !query
@@ -1552,6 +1578,12 @@ function WatchlistContent() {
       const bMeta = getItemMeta(activeId, b.symbol);
       const aPinned = aMeta.pinned ? 1 : 0;
       const bPinned = bMeta.pinned ? 1 : 0;
+      if (sortMode === "triage") {
+        const aTriage = buildWatchlistTriageSummary(a, { meta: aMeta, workflow: workflowBySymbol[a.symbol], reviewState: symbolReviewMap.get(a.symbol) });
+        const bTriage = buildWatchlistTriageSummary(b, { meta: bMeta, workflow: workflowBySymbol[b.symbol], reviewState: symbolReviewMap.get(b.symbol) });
+        const triageDiff = bTriage.score - aTriage.score;
+        if (triageDiff !== 0) return triageDiff;
+      }
       if (sortMode === "move") {
         const changeDiff = (b.pct_change ?? 0) - (a.pct_change ?? 0);
         if (changeDiff !== 0) return changeDiff;
@@ -1568,10 +1600,10 @@ function WatchlistContent() {
         const rsiDiff = (b.rsi_14 ?? 0) - (a.rsi_14 ?? 0);
         if (rsiDiff !== 0) return rsiDiff;
       }
-      if (sortMode === "manual" && aPinned !== bPinned) return bPinned - aPinned;
+      if ((sortMode === "manual" || sortMode === "triage") && aPinned !== bPinned) return bPinned - aPinned;
       return a.sort_order - b.sort_order;
     });
-  }, [activeId, activeWl?.items, deskFilter, listQuery, getItemMeta, queueView, activeTagFilter, sortMode]);
+  }, [activeId, activeWl?.items, deskFilter, listQuery, getItemMeta, queueView, activeTagFilter, sortMode, workflowBySymbol, symbolReviewMap]);
   const queuePageCount = Math.max(1, Math.ceil(visibleItems.length / WATCHLIST_PAGE_SIZE));
   const pageStart = Math.min(queuePage, queuePageCount - 1) * WATCHLIST_PAGE_SIZE;
   const pageItems = visibleItems.slice(pageStart, pageStart + WATCHLIST_PAGE_SIZE);
@@ -1590,6 +1622,11 @@ function WatchlistContent() {
   const importPreview = useMemo(() => parseWatchlistSymbolImport(symbolInput), [symbolInput]);
   const isBulkSymbolInput = importPreview.symbols.length > 1 || /[\n,]/.test(symbolInput);
   const addDisabled = adding || !symbolInput.trim() || (isBulkSymbolInput && importPreview.symbols.length === 0);
+  const selectedTriage = selectedItem ? buildWatchlistTriageSummary(selectedItem, {
+    meta: selectedItemMeta,
+    workflow: selectedWorkflow,
+    reviewState: selectedReviewState,
+  }) : null;
 
   useEffect(() => {
     if (!chartSymbol || !visibleItems.length) return;
@@ -2057,7 +2094,7 @@ function WatchlistContent() {
     setQueueView("all");
     setDeskFilter("all");
     setActiveTagFilter("all");
-    setSortMode("manual");
+    setSortMode("triage");
     setListQuery("");
   }
 
@@ -2302,6 +2339,33 @@ function WatchlistContent() {
                   </button>
                 </div>
               </div>
+              {selectedTriage && (
+                <div
+                  data-testid="watchlist-triage-summary"
+                  style={{
+                    marginTop: 10,
+                    padding: "8px 10px",
+                    borderRadius: 12,
+                    background: selectedTriage.label === "Act now" ? "rgba(27,191,114,0.08)" : selectedTriage.label === "Review next" ? "rgba(77,214,255,0.08)" : "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div className="label" style={{ marginBottom: 3 }}>Review priority</div>
+                      <div className="caption" style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                        {selectedTriage.label}: {selectedTriage.reason}
+                      </div>
+                    </div>
+                    <div className="workspace-pill">Score {selectedTriage.score}</div>
+                  </div>
+                  <div className="workspace-pill-row" style={{ marginTop: 8 }}>
+                    {selectedTriage.reasons.map((reason) => (
+                      <span key={reason} className="workspace-pill">{reason}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {journalLoadError && (
                 <div data-testid="watchlist-journal-status" className="caption" style={{ marginTop: 8, padding: "7px 9px", borderRadius: 10, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--warn)", lineHeight: 1.5 }}>
                   Journal review context is unavailable. {journalLoadError} Watchlist queue, chart review, and planning remain usable.
@@ -2482,7 +2546,7 @@ function WatchlistContent() {
               ))}
             </div>
             <div className="workspace-pill-row">
-              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
+              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "triage" || listQuery.trim()) && (
                 <button className="workspace-chip-button" onClick={resetDeskView}>
                   Reset
                 </button>
@@ -2534,6 +2598,7 @@ function WatchlistContent() {
                   onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
                   style={{ fontSize: 12, borderRadius: 999, padding: "7px 12px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
                 >
+                  <option value="triage">Review priority</option>
                   <option value="manual">Manual order</option>
                   <option value="setup">Sort by setup</option>
                   <option value="move">Sort by move</option>
@@ -2589,6 +2654,7 @@ function WatchlistContent() {
                     <tbody>
                       {pageItems.map(item => {
                         const meta = getItemMeta(activeId, item.symbol);
+                        const triage = buildWatchlistTriageSummary(item, { meta, workflow: workflowBySymbol[item.symbol], reviewState: symbolReviewMap.get(item.symbol) });
                         return (
                         <SortableRow
                           key={item.symbol}
@@ -2596,6 +2662,7 @@ function WatchlistContent() {
                           isSelected={chartSymbol === item.symbol}
                           pinned={Boolean(meta.pinned)}
                           reviewState={symbolReviewMap.get(item.symbol)?.state}
+                          triage={triage}
                           onRemove={handleRemove}
                           onSelect={setChartSymbol}
                           onOpenChart={(sym) => router.push(chartHref(sym))}
@@ -2621,6 +2688,7 @@ function WatchlistContent() {
                 <tbody>
                   {pageItems.map(item => {
                     const meta = getItemMeta(activeId, item.symbol);
+                    const triage = buildWatchlistTriageSummary(item, { meta, workflow: workflowBySymbol[item.symbol], reviewState: symbolReviewMap.get(item.symbol) });
                     return (
                       <SortableRow
                         key={item.symbol}
@@ -2628,6 +2696,7 @@ function WatchlistContent() {
                         isSelected={chartSymbol === item.symbol}
                         pinned={Boolean(meta.pinned)}
                         reviewState={symbolReviewMap.get(item.symbol)?.state}
+                      triage={triage}
                       onRemove={handleRemove}
                       onSelect={setChartSymbol}
                       onOpenChart={(sym) => router.push(chartHref(sym))}
