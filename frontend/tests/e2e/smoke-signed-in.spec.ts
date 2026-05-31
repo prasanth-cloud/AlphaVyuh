@@ -280,6 +280,7 @@ test.describe("Signed-in smoke flow", () => {
 
     await gotoAppPath(page, "/data");
     await expect(page.locator("body")).toContainText(/EOD|coverage|broker import|journal/i, { timeout: 15000 });
+    await expect(page.locator("body")).toContainText(/Broker order gate|SMOKE REQUIRED|ORDERS DISABLED|SMOKE PASSED/i, { timeout: 15000 });
     await expectRealDataContext(page, "data status", /EOD|coverage|broker import|journal|Data status/i);
   });
 });

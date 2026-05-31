@@ -116,7 +116,7 @@ describe("mock order flow", () => {
   });
 
   it("deduplicates mock broker imports and exposes sync state", async () => {
-    const { getBrokerStatus, getJournalEntries, importBrokerTrades, importZerodhaTrades, runZerodhaReadOnlySmoke } = await import("@/lib/api");
+    const { getBrokerStatus, getJournalEntries, importBrokerTrades, importZerodhaTrades, runBrokerReadOnlySmoke, runZerodhaReadOnlySmoke } = await import("@/lib/api");
 
     const before = await getBrokerStatus();
     expect(before.can_import).toBe(true);
@@ -152,5 +152,9 @@ describe("mock order flow", () => {
     const smoke = await runZerodhaReadOnlySmoke();
     expect(smoke.checks.profile.ok).toBe(true);
     expect(smoke.checks.orderbook.count).toBe(2);
+
+    const upstoxSmoke = await runBrokerReadOnlySmoke("upstox");
+    expect(upstoxSmoke.broker).toBe("upstox");
+    expect(upstoxSmoke.checks.tradebook.count).toBe(2);
   });
 });

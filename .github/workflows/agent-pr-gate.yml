@@ -103,6 +103,9 @@ jobs:
       - name: Setup review workflow contract tests
         run: npm run test:setup-review-check
 
+      - name: Broker read-only contract tests
+        run: npm run test:broker-readonly-check
+
       - name: Railway secret prep checker tests
         run: npm run test:railway-secret-prep
 

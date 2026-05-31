@@ -29,6 +29,7 @@ Run these before release:
 npm run launch:check
 npm run test:market-data-entitlement-check
 npm run test:setup-review-check
+npm run test:broker-readonly-check
 npm run check:data-recovery
 npm run check:production-api:railway
 # After the public API smoke passes, run the non-deploy production signed-in smoke
@@ -66,7 +67,7 @@ MARKET_DATA_PROVIDER=mock .venv/bin/python -c "from app.services.market_data imp
 `npm run launch:check` runs the deterministic checker tests for production API
 freshness, production smoke credentials, public posture copy, data recovery
 readiness, market-data entitlement boundaries, scanner-to-chart setup review
-contracts, and Railway secret
+contracts, broker read-only order-safety contracts, and Railway secret
 preparation before the heavier app/browser gates.
 
 The release owner should also complete `docs/customer-launch-runbook.md` before any paid customer release.
@@ -129,6 +130,16 @@ npm run test:setup-review-check
 This gate verifies scanner context preservation, setup-review labels, higher
 timeframe chart context, multi-chart review decisions, watchlist chart range
 controls, and the mock scanner-candidate multi-chart browser flow.
+
+Broker read-only launch contract:
+
+```bash
+npm run test:broker-readonly-check
+```
+
+This deterministic gate is secret-free. It verifies frontend order-safety copy,
+backend refusal paths before any live adapter call, sanitized broker status
+metadata, OAuth state validation, and real-account smoke script syntax.
 
 Read-only broker account smoke, when real credentials are available:
 

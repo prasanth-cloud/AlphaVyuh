@@ -42,6 +42,7 @@ run_step "Public posture checker regression tests" npm run test:public-posture-c
 run_step "Data recovery checker regression tests" npm run test:data-recovery-check
 run_step "Market-data entitlement contract regression tests" npm run test:market-data-entitlement-check
 run_step "Setup review workflow contract regression tests" npm run test:setup-review-check
+run_step "Broker read-only contract regression tests" npm run test:broker-readonly-check
 run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
 
 run_step "Frontend lint" npm --prefix frontend run lint

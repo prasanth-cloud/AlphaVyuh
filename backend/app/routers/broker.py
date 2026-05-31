@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["orders"])
 
 BROKER_IMPORT_MARKER = "alphavyuh-broker-import"
+BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS = 24
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -254,6 +255,20 @@ def _upsert_broker_connection(
     metadata: dict | None = None,
 ) -> None:
     try:
+        safe_metadata = metadata
+        if safe_metadata is None:
+            try:
+                existing = (
+                    sb.table("broker_connections")
+                    .select("metadata")
+                    .eq("user_id", user_id)
+                    .eq("broker", broker)
+                    .maybe_single()
+                    .execute()
+                ).data or {}
+                safe_metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
+            except Exception:
+                safe_metadata = {}
         payload = {
             "user_id": user_id,
             "broker": broker,
@@ -263,7 +278,7 @@ def _upsert_broker_connection(
             "is_active": True,
             "connection_status": connection_status,
             "scopes": scopes or ["profile", "holdings", "positions", "orders", "trades"],
-            "metadata": metadata or {},
+            "metadata": safe_metadata,
         }
         if last_synced_at:
             payload["last_synced_at"] = last_synced_at
@@ -319,6 +334,95 @@ def _record_broker_order(
         ).execute()
     except Exception:
         logger.debug("Broker order log unavailable; migration may not be applied yet.", exc_info=True)
+
+
+def _smoke_checked_at_is_fresh(checked_at: Any) -> bool:
+    if not isinstance(checked_at, str) or not checked_at.strip():
+        return False
+    try:
+        parsed = datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+    except Exception:
+        return False
+    age_seconds = (datetime.now(timezone.utc) - parsed).total_seconds()
+    return 0 <= age_seconds <= BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS * 60 * 60
+
+
+def _smoke_metadata_passed(metadata: dict | None, broker: str) -> bool:
+    if not isinstance(metadata, dict):
+        return False
+    smoke = metadata.get("read_only_smoke")
+    if not isinstance(smoke, dict):
+        return False
+    return (
+        smoke.get("broker") == broker
+        and smoke.get("passed") is True
+        and _smoke_checked_at_is_fresh(smoke.get("checked_at"))
+    )
+
+
+def _smoke_metadata_status(metadata: dict | None, broker: str) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {"passed": False, "checked_at": None, "checks": {}}
+    smoke = metadata.get("read_only_smoke")
+    if not isinstance(smoke, dict) or smoke.get("broker") != broker:
+        return {"passed": False, "checked_at": None, "checks": {}, "fresh": False}
+    checks = smoke.get("checks") if isinstance(smoke.get("checks"), dict) else {}
+    fresh = _smoke_checked_at_is_fresh(smoke.get("checked_at"))
+    return {
+        "passed": smoke.get("passed") is True and fresh,
+        "checked_at": smoke.get("checked_at") if isinstance(smoke.get("checked_at"), str) else None,
+        "checks": checks,
+        "fresh": fresh,
+    }
+
+
+def _broker_read_only_smoke_passed(sb, user_id: str, broker: str) -> bool:
+    try:
+        row = (
+            sb.table("broker_connections")
+            .select("metadata")
+            .eq("user_id", user_id)
+            .eq("broker", broker)
+            .maybe_single()
+            .execute()
+        ).data or {}
+        return _smoke_metadata_passed(row.get("metadata"), broker)
+    except Exception:
+        logger.debug("Unable to read %s read-only smoke gate metadata", broker, exc_info=True)
+        return False
+
+
+def _require_read_only_smoke_gate(sb, user_id: str, broker: str) -> None:
+    if _broker_read_only_smoke_passed(sb, user_id, broker):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"Live {broker} order placement is blocked until the owner-run read-only "
+            "broker smoke passes. Save this as a journal draft and place any real trade "
+            "directly in the broker terminal."
+        ),
+    )
+
+
+def _smoke_metadata(*, broker: str, passed: bool, checked_at: str, checks: dict[str, dict]) -> dict:
+    return {
+        "read_only_smoke": {
+            "broker": broker,
+            "passed": passed,
+            "checked_at": checked_at,
+            "checks": {
+                name: {
+                    key: value
+                    for key, value in check.items()
+                    if key in {"ok", "count", "error", "note", "user_id_present"}
+                }
+                for name, check in checks.items()
+            },
+        }
+    }
 
 
 def _get_stored_credential(user_id: str, broker: str, key_name: str) -> str | None:
@@ -399,6 +503,10 @@ def _status_payload(
     plan: str = "free",
     plan_allows_broker: bool = False,
     broker_user_name: str | None = None,
+    read_only_smoke_passed: bool = False,
+    read_only_smoke_fresh: bool = False,
+    read_only_smoke_checked_at: str | None = None,
+    read_only_smoke_checks: dict[str, Any] | None = None,
 ) -> dict:
     connected = bool(plan_allows_broker and broker and key and token and not token_expired)
     if connected:
@@ -435,8 +543,15 @@ def _status_payload(
         "can_import": connected and broker in {"zerodha", "upstox"},
         "sync_status": "idle",
         "last_synced_at": last_synced_at,
+        "read_only_smoke_required": True,
+        "read_only_smoke_passed": read_only_smoke_passed,
+        "read_only_smoke_fresh": read_only_smoke_fresh,
+        "read_only_smoke_checked_at": read_only_smoke_checked_at,
+        "read_only_smoke_checks": read_only_smoke_checks or {},
         "live_order_requires_confirmation": True,
-        "live_order_enabled": bool(settings.broker_live_orders_enabled and plan_allows_broker),
+        "live_order_enabled": bool(
+            settings.broker_live_orders_enabled and connected and read_only_smoke_passed
+        ),
     }
 
 
@@ -497,6 +612,8 @@ async def place_order(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Live {bt} order requires explicit confirmation. Re-submit after confirming symbol, side, quantity, price, and risk.",
             )
+        if live_ready and body.live_confirmed and bt in {"zerodha", "upstox"}:
+            _require_read_only_smoke_gate(sb, user_id, str(bt))
         if bt == "zerodha" and live_ready:
             import uuid
 
@@ -836,6 +953,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
             last_synced_at=None,
             plan=plan,
             plan_allows_broker=plan_allows_broker,
+            read_only_smoke_passed=False,
         )
 
     bt  = u.data.get("broker_type") or "zerodha"
@@ -844,10 +962,11 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
     expires_at = _get_stored_credential(user_id, bt, "expires_at") or u.data.get("broker_token_expires_at")
     broker_user_name = None
     metadata_last_synced_at = None
+    read_only_smoke = {"passed": False, "checked_at": None, "checks": {}}
     try:
         connection = (
             sb.table("broker_connections")
-            .select("broker_user_name, last_synced_at, token_expires_at, is_active")
+            .select("broker_user_name, last_synced_at, token_expires_at, is_active, metadata")
             .eq("user_id", user_id)
             .eq("broker", bt)
             .maybe_single()
@@ -859,6 +978,7 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
             metadata_last_synced_at = connection["last_synced_at"]
         if connection.get("token_expires_at") and not expires_at:
             expires_at = connection["token_expires_at"]
+        read_only_smoke = _smoke_metadata_status(connection.get("metadata"), bt)
     except Exception:
         logger.debug("Broker connection metadata unavailable for status.", exc_info=True)
 
@@ -885,6 +1005,10 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
         plan=plan,
         plan_allows_broker=plan_allows_broker,
         broker_user_name=broker_user_name,
+        read_only_smoke_passed=bool(read_only_smoke["passed"]),
+        read_only_smoke_fresh=bool(read_only_smoke.get("fresh")),
+        read_only_smoke_checked_at=read_only_smoke["checked_at"],
+        read_only_smoke_checks=read_only_smoke["checks"],
     )
 
 
@@ -930,6 +1054,21 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
     if not api_key:
         checks["login_url"]["error"] = "AlphaVyuh broker app credentials are not configured."
     if not api_key or not access_token or token_expired:
+        checked_at = datetime.now(timezone.utc).isoformat()
+        _upsert_broker_connection(
+            get_admin_client(),
+            user_id=user_id,
+            broker="zerodha",
+            token_expires_at=creds.get("expires_at"),
+            last_synced_at=checked_at,
+            connection_status="connected_read_only" if access_token and not token_expired else "not_connected",
+            metadata=_smoke_metadata(
+                broker="zerodha",
+                passed=False,
+                checked_at=checked_at,
+                checks=checks,
+            ),
+        )
         return {
             "broker": "zerodha",
             "connected_read_only": False,
@@ -973,9 +1112,25 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
     else:
         checks["tradebook"] = {"ok": True, "count": 0, "note": "No completed order available for tradebook probe."}
 
+    passed = all(bool(check.get("ok")) for check in checks.values())
+    checked_at = datetime.now(timezone.utc).isoformat()
+    _upsert_broker_connection(
+        get_admin_client(),
+        user_id=user_id,
+        broker="zerodha",
+        token_expires_at=creds.get("expires_at"),
+        last_synced_at=checked_at,
+        connection_status="connected_read_only",
+        metadata=_smoke_metadata(
+            broker="zerodha",
+            passed=passed,
+            checked_at=checked_at,
+            checks=checks,
+        ),
+    )
     return {
         "broker": "zerodha",
-        "connected_read_only": True,
+        "connected_read_only": passed,
         "token_expired": False,
         "checks": checks,
     }
