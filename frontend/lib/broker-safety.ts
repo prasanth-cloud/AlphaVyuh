@@ -28,6 +28,16 @@ export type BrokerOrderGatePresentation = {
   status: "good" | "warn" | "bad";
 };
 
+export type BrokerOrderActionBarPresentation = {
+  modeLabel: string;
+  detail: string;
+  primaryLabel: string;
+  savingLabel: string;
+  primaryDisabled: boolean;
+  requiresLiveConfirmation: boolean;
+  status: "good" | "warn" | "bad";
+};
+
 function brokerLabel(broker?: string | null) {
   if (!broker) return "Broker";
   if (broker.toLowerCase() === "zerodha") return "Zerodha";
@@ -91,6 +101,44 @@ export function brokerOrderGatePresentation(
     value: "ORDERS DISABLED",
     detail: "Broker import can be read-only; buy/sell remains order intent and journal capture until owner-approved execution work lands.",
     status: broker?.connected ? "good" : "warn",
+  };
+}
+
+export function brokerOrderActionBarPresentation(options: {
+  broker: BrokerSafetyStatus | null | undefined;
+  unavailable?: boolean;
+  canRouteLiveOrder: boolean;
+  liveConfirmed?: boolean;
+  side: "buy" | "sell";
+}): BrokerOrderActionBarPresentation {
+  const sideLabel = options.side === "buy" ? "buy" : "sell";
+  const gate = brokerOrderGatePresentation(options.broker, { unavailable: options.unavailable });
+
+  if (!options.canRouteLiveOrder) {
+    return {
+      modeLabel: options.broker?.connected ? "Import only" : options.unavailable ? "Read-only unavailable" : "Journal draft",
+      detail: options.unavailable
+        ? "Broker status is unavailable. Save the plan as a journal draft and place any real trade directly with your broker."
+        : "Order capture records a journal draft only. Place any real trade directly with your broker.",
+      primaryLabel: `Save ${sideLabel} journal draft`,
+      savingLabel: "Saving...",
+      primaryDisabled: false,
+      requiresLiveConfirmation: false,
+      status: gate.status,
+    };
+  }
+
+  const confirmed = options.liveConfirmed === true;
+  return {
+    modeLabel: gate.value,
+    detail: gate.detail,
+    primaryLabel: confirmed
+      ? `${sideLabel === "buy" ? "Buy" : "Sell"} via ${brokerLabel(options.broker?.broker).toLowerCase()}`
+      : "Confirm broker order",
+    savingLabel: "Submitting...",
+    primaryDisabled: !confirmed,
+    requiresLiveConfirmation: true,
+    status: confirmed ? gate.status : "warn",
   };
 }
 
