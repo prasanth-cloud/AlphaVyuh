@@ -34,6 +34,7 @@
     "check:data-recovery": "node scripts/check-data-recovery-readiness.mjs",
     "check:ci-action-runtime": "node scripts/check-ci-action-runtime.mjs",
     "check:sector-taxonomy": "node scripts/check-sector-taxonomy-contract.mjs",
+    "check:sector-taxonomy:railway": "PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app node scripts/check-sector-taxonomy-contract.mjs",
     "prepare:railway-recovery-secrets": "node scripts/prepare-railway-recovery-secrets.mjs",
     "recover:railway-backend:login": "bash scripts/login-and-recover-railway-backend.sh",
     "recover:railway-backend": "bash scripts/recover-railway-backend.sh",
