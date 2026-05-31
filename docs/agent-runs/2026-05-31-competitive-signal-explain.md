@@ -60,4 +60,4 @@ and trust-state language before any larger scanner workbench UI changes.
 
 ## PR
 
-- Pending.
+- [#317](https://github.com/prasanth-cloud/AlphaVyuh/pull/317)
