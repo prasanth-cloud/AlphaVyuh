@@ -514,6 +514,13 @@ export function mockScanAlertMatches(): ScanAlertMatch[] {
     volume_ratio: stock.volume_ratio,
     rsi_14: stock.rsi_14,
   }));
+  const previousSymbols = MOCK_STOCKS.slice(0, 6).map((stock) => ({
+    symbol: stock.symbol,
+    close: stock.close,
+    pct_change: stock.pct_change,
+    volume_ratio: stock.volume_ratio,
+    rsi_14: stock.rsi_14,
+  }));
   return [
     {
       id: "sam1",
@@ -521,6 +528,16 @@ export function mockScanAlertMatches(): ScanAlertMatch[] {
       run_date: TRADE_DATE,
       symbols,
       match_count: symbols.length,
+      run_status: "success",
+      error_message: null,
+      scan_alerts: { name: "Trend Template" },
+    },
+    {
+      id: "sam1-prev",
+      alert_id: "sa1",
+      run_date: "2026-04-23",
+      symbols: previousSymbols,
+      match_count: previousSymbols.length,
       run_status: "success",
       error_message: null,
       scan_alerts: { name: "Trend Template" },
