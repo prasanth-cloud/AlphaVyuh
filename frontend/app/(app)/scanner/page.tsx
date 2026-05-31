@@ -22,6 +22,7 @@ import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataPr
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
+import { buildScannerMatchExplanation } from '@/lib/scanner-match-explanation'
 import { buildMultiChartReviewHref } from '@/lib/multi-chart-review'
 
 const API = API_BASE_URL
@@ -58,6 +59,7 @@ interface ScanResult {
   ema_200_slope_30d?: number | null
   macd_hist: number | null
   atr_14: number | null
+  atr_pct?: number | null
   adx_14: number | null
   week_52_high: number | null
   week_52_low: number | null
@@ -371,22 +373,24 @@ function MetricCell({ label, value, direction }: { label: string; value: string;
   )
 }
 
-function scannerNextAction(r: ScanResult): string {
-  if (r.data_warnings?.length) return 'Check data before planning'
-  if ((r.setup_score ?? 0) >= 80) return 'Open chart and plan risk'
-  if ((r.setup_score ?? 0) >= 65) return 'Review chart structure'
-  if (r.rsi_14 != null && r.rsi_14 > 78) return 'Check extension risk'
-  if (r.week_52_high_pct != null && r.week_52_high_pct > 15) return 'Wait for cleaner base'
-  return 'Shortlist for review'
+function metricToneColor(tone?: 'good' | 'warn' | 'bad') {
+  if (tone === 'good') return 'var(--gain)'
+  if (tone === 'warn') return 'var(--warn)'
+  if (tone === 'bad') return 'var(--loss)'
+  return 'var(--text-secondary)'
 }
 
 // Inline detail expansion for a selected row
-function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
+function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart, presetName, tradeDate, scanTrust }: {
   r: ScanResult
   watchlists: Watchlist[]
   onAddToWatchlist: (symbol: string, wlId: string) => void
   onOpenChart: (symbol: string) => void
+  presetName?: string | null
+  tradeDate?: string | null
+  scanTrust?: ScanTrust | null
 }) {
+  const explanation = buildScannerMatchExplanation(r, { presetName, tradeDate, scanTrust })
   return (
     <tr>
       <td colSpan={10} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -403,31 +407,56 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {(r.match_reasons?.length ? r.match_reasons : ['Matched the active scanner filters']).map(reason => (
-                <span key={reason} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>{reason}</span>
-              ))}
-              {r.confidence_reasons?.map(reason => (
-                <span key={`confidence-${reason}`} className="workspace-pill" style={{ color: 'var(--gain)' }}>{reason}</span>
+            <div className="caption" style={{ marginBottom: 8, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+              {explanation.headline}
+            </div>
+            <div data-testid={`scanner-match-context-${r.symbol}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {explanation.context.map(item => (
+                <span key={`${item.label}-${item.value}`} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>
+                  {item.label}: {item.value}
+                </span>
               ))}
             </div>
-            {Boolean(r.data_warnings?.length) && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div>
+                <div className="label" style={{ marginBottom: 5 }}>Triggered conditions</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {explanation.reasons.map(reason => (
+                    <span key={reason} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>{reason}</span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom: 5 }}>Confirmations</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {explanation.confirmations.map(reason => (
+                    <span key={`confidence-${reason}`} className="workspace-pill" style={{ color: 'var(--gain)' }}>{reason}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {Boolean(explanation.warnings.length) && (
               <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-                {r.data_warnings!.map(warning => (
+                {explanation.warnings.map(warning => (
                   <div key={warning} className="caption" style={{ color: 'var(--warn)' }}>{warning}</div>
                 ))}
               </div>
             )}
             <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-subtle)' }}>
               <div className="label" style={{ marginBottom: 3 }}>Next action</div>
-              <div className="caption" style={{ color: 'var(--text-secondary)' }}>{scannerNextAction(r)}</div>
+              <div className="caption" style={{ color: 'var(--text-secondary)' }}>{explanation.nextAction}</div>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-            <MetricCell label="EMA 200 slope" value={r.ema_200_slope_30d != null ? `${r.ema_200_slope_30d.toFixed(1)}%` : '—'} direction={r.ema_200_slope_30d != null ? (r.ema_200_slope_30d > 0 ? 'above' : 'below') : undefined} />
-            <MetricCell label="6M perf" value={r.price_perf_6m_pct != null ? `${r.price_perf_6m_pct > 0 ? '+' : ''}${r.price_perf_6m_pct.toFixed(1)}%` : '—'} direction={r.price_perf_6m_pct != null ? (r.price_perf_6m_pct > 0 ? 'above' : 'below') : undefined} />
-            <MetricCell label="3W box" value={r.darvas_box_height_pct != null ? `${r.darvas_box_height_pct.toFixed(1)}%` : '—'} />
-            <MetricCell label="NR7" value={r.is_nr7 == null ? '—' : r.is_nr7 ? 'Yes' : 'No'} direction={r.is_nr7 ? 'above' : undefined} />
+          <div>
+            <div className="label" style={{ marginBottom: 8 }}>Latest values behind the match</div>
+            <div data-testid={`scanner-match-metrics-${r.symbol}`} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+              {explanation.metrics.map(metric => (
+                <div key={`${metric.label}-${metric.value}`} style={{ padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border-subtle)', minWidth: 0 }}>
+                  <div className="label" style={{ marginBottom: 4 }}>{metric.label}</div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metricToneColor(metric.tone), overflowWrap: 'anywhere' }}>{metric.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         <div style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
@@ -1487,6 +1516,9 @@ export default function ScannerPage() {
                         <Td>
                           <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
                           <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                          <div className="caption" title={r.match_reasons?.[0] ?? 'Matched the active scanner filters'} style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-tertiary)' }}>
+                            Matched: {r.match_reasons?.[0] ?? 'Active filters'}
+                          </div>
                           {workflowMarks[r.symbol] && (
                             <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
                               {workflowMarks[r.symbol] === 'shortlist'
@@ -1550,6 +1582,9 @@ export default function ScannerPage() {
                           watchlists={watchlists}
                           onAddToWatchlist={addToWatchlist}
                           onOpenChart={() => void openScannerChart(r)}
+                          presetName={currentScanName()}
+                          tradeDate={tradeDate}
+                          scanTrust={scanTrust}
                         />
                       )}
                     </Fragment>
