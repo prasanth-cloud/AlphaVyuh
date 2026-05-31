@@ -11,6 +11,7 @@ import {
   type ScanAlertMatch,
 } from "@/lib/api";
 import { DataProvenanceBadge, DataTable, DataTableHead, EmptyState, Num, Td, Th, Tr } from "@/components/ui";
+import { buildScanAlertDigests } from "@/lib/scan-alert-digest";
 import { describeScanAlertCadence, describeScanAlertIntent, type ScanAlertIntent } from "@/lib/scan-alert-semantics";
 
 function topSymbols(match: ScanAlertMatch) {
@@ -62,6 +63,7 @@ export default function AlertsPage() {
   const latestRunDate = useMemo(() => {
     return matches.map((match) => match.run_date).sort().at(-1) ?? null;
   }, [matches]);
+  const digests = useMemo(() => buildScanAlertDigests(matches), [matches]);
 
   async function toggleAlert(alert: ScanAlert) {
     try {
@@ -245,7 +247,9 @@ export default function AlertsPage() {
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10, padding: 16 }}>
-            {matches.map((match) => (
+            {digests.map((digest) => {
+              const match = digest.current;
+              return (
               <div
                 key={`${match.alert_id}-${match.run_date}`}
                 className="workspace-card-muted"
@@ -259,6 +263,9 @@ export default function AlertsPage() {
                         ? `${runStatusLabel(match.run_status)} on ${match.run_date}`
                         : <><Num>{match.match_count.toLocaleString("en-IN")}</Num> stocks matched on {match.run_date}</>}
                     </div>
+                    <div className="caption" style={{ marginTop: 5, color: "var(--text-secondary)" }}>
+                      {digest.summary}
+                    </div>
                     {match.error_message && (
                       <div className="workspace-card-copy" style={{ marginTop: 5, color: "var(--warning)" }}>
                         {match.error_message}
@@ -267,6 +274,43 @@ export default function AlertsPage() {
                   </div>
                   <DataProvenanceBadge kind="eod" asOf={match.run_date} compact />
                 </div>
+                {(digest.entered.length > 0 || digest.continuing.length > 0 || digest.exited.length > 0) && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 8, marginBottom: 12 }}>
+                    <div>
+                      <div className="label" style={{ marginBottom: 6, color: "var(--gain)" }}>Entered</div>
+                      <div className="workspace-pill-row">
+                        {digest.entered.slice(0, 5).map((symbol) => (
+                          <Link key={symbol.symbol} className="workspace-pill" href={`/charts/${symbol.symbol}`}>
+                            <span className="mono" style={{ color: "var(--text-primary)" }}>{symbol.symbol}</span>
+                          </Link>
+                        ))}
+                        {digest.entered.length === 0 && <span className="caption">No new names</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="label" style={{ marginBottom: 6, color: "var(--accent)" }}>Still matching</div>
+                      <div className="workspace-pill-row">
+                        {digest.continuing.slice(0, 5).map((symbol) => (
+                          <Link key={symbol.symbol} className="workspace-pill" href={`/charts/${symbol.symbol}`}>
+                            <span className="mono" style={{ color: "var(--text-primary)" }}>{symbol.symbol}</span>
+                          </Link>
+                        ))}
+                        {digest.continuing.length === 0 && <span className="caption">First run or no repeats</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="label" style={{ marginBottom: 6, color: "var(--warn)" }}>Exited</div>
+                      <div className="workspace-pill-row">
+                        {digest.exited.slice(0, 5).map((symbol) => (
+                          <span key={symbol} className="workspace-pill">
+                            <span className="mono" style={{ color: "var(--text-secondary)" }}>{symbol}</span>
+                          </span>
+                        ))}
+                        {digest.exited.length === 0 && <span className="caption">No exits</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="workspace-pill-row">
                   {topSymbols(match).map((symbol) => (
                     <Link key={symbol.symbol} className="workspace-pill" href={`/charts/${symbol.symbol}`}>
@@ -286,7 +330,8 @@ export default function AlertsPage() {
                   </Link>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
