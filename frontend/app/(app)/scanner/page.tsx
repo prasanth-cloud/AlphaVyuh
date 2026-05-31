@@ -18,6 +18,7 @@ import {
   type SectorTaxonomyMetadata,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
+import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
@@ -95,6 +96,7 @@ interface ScanResult {
   dividend_yield: number | null
   roe: number | null
   roce: number | null
+  screen_matches?: string[]
 }
 
 type ScanTrust = {
@@ -106,7 +108,46 @@ type ScanTrust = {
   message?: string
 }
 
+type ScannerRunResponse = {
+  results?: ScanResult[]
+  total_matches?: number
+  total_pages?: number
+  page?: number
+  trade_date?: string
+  is_limited?: boolean
+  coverage_pct?: number | null
+  universe_size?: number | null
+  mode?: string
+  status?: string
+  source?: string
+  message?: string
+  detail?: string
+  source_metadata?: {
+    mode?: string
+    source_name?: string
+    as_of?: string | null
+    coverage_pct?: number | null
+    universe_active?: number | null
+    license_notes?: string
+  }
+}
+
 interface Watchlist { id: string; name: string }
+
+function normalizeScanMode(mode: unknown): ScanTrust['mode'] {
+  return mode === 'demo' || mode === 'eod' || mode === 'fallback' || mode === 'live' ? mode : 'unknown'
+}
+
+function trustFromRunResponse(data: ScannerRunResponse, sourceFallback: string, defaultMode: ScanTrust['mode'] = 'unknown'): ScanTrust {
+  return {
+    mode: normalizeScanMode(data.source_metadata?.mode ?? data.mode ?? defaultMode),
+    source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, sourceFallback),
+    asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
+    coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
+    universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
+    message: data.message ?? data.source_metadata?.license_notes,
+  }
+}
 
 type ScannerCacheSnapshot = {
   results: ScanResult[]
@@ -420,6 +461,9 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart, presetName
               {explanation.headline}
             </div>
             <div data-testid={`scanner-match-context-${r.symbol}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {r.screen_matches?.map(screen => (
+                <span key={`screen-${screen}`} className="workspace-pill" style={{ color: 'var(--accent)' }}>Screen: {screen}</span>
+              ))}
               {explanation.context.map(item => (
                 <span key={`${item.label}-${item.value}`} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>
                   {item.label}: {item.value}
@@ -591,6 +635,10 @@ export default function ScannerPage() {
   const [alertName, setAlertName] = useState('')
   const [alertSaving, setAlertSaving] = useState(false)
   const [activeScreenName, setActiveScreenName] = useState<string | null>(null)
+  const [activeCompositionName, setActiveCompositionName] = useState<string | null>(null)
+  const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set())
+  const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
+  const [composingScreens, setComposingScreens] = useState(false)
   const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -619,6 +667,7 @@ export default function ScannerPage() {
       setScanTrust(cached.scanTrust)
       setHasRun(true)
       setHasCachedResults(true)
+      setActiveCompositionName(null)
     }
     setRunHistory(readScannerRunHistory())
     loadWatchlists()
@@ -857,15 +906,9 @@ export default function ScannerPage() {
         const nextCurrentPage = data.page || page
         const nextTradeDate = data.trade_date || ''
         const nextIsLimited = data.is_limited || false
-        const nextTrust = {
-          mode: data.source_metadata?.mode ?? 'demo',
-          source: formatMarketDataSource(data.source_metadata?.source_name, 'Demo data'),
-          asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
-          coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
-          universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
-          message: data.source_metadata?.license_notes,
-        } satisfies ScanTrust
+        const nextTrust = trustFromRunResponse(data as ScannerRunResponse, 'Demo data', 'demo')
         setResults(nextResults)
+        setActiveCompositionName(null)
         setTotalMatches(nextTotalMatches)
         setTotalPages(nextTotalPages)
         setCurrentPage(nextCurrentPage)
@@ -923,16 +966,10 @@ export default function ScannerPage() {
       const nextCurrentPage = data.page || page
       const nextTradeDate = data.trade_date || ''
       const nextIsLimited = data.is_limited || false
-      const nextTrust = {
-        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
-        source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, 'Market data'),
-        asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
-        coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
-        universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
-        message: data.message ?? data.source_metadata?.license_notes,
-      } satisfies ScanTrust
+      const nextTrust = trustFromRunResponse(data, 'Market data', 'eod')
       setResults(nextResults)
       setSelectedResults(new Set())
+      setActiveCompositionName(null)
       setTotalMatches(nextTotalMatches)
       setTotalPages(nextTotalPages)
       setCurrentPage(nextCurrentPage)
@@ -992,11 +1029,121 @@ export default function ScannerPage() {
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
-    setFilters(f); setActivePreset('saved_screen'); setActiveScreenName(screen.name); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
+    setFilters(f); setActivePreset('saved_screen'); setActiveScreenName(screen.name); setActiveCompositionName(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
   }
 
   function currentScanName() {
-    return activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom scan' : 'Saved scan')
+    return activeCompositionName ?? activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom scan' : 'Saved scan')
+  }
+
+  function toggleCompositionScreen(screenId: string, checked: boolean) {
+    setSelectedScreenIds(prev => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(screenId)
+      } else {
+        next.delete(screenId)
+      }
+      return next
+    })
+  }
+
+  async function runSavedScreen(screen: SavedScreen): Promise<{ screen: SavedScreen; results: ScanResult[]; trust: ScanTrust; tradeDate: string; isLimited: boolean }> {
+    if (scannerUsesClientMockFallback()) {
+      const data = mockRunScan() as unknown as ScannerRunResponse
+      return {
+        screen,
+        results: data.results ?? [],
+        trust: trustFromRunResponse(data, 'Demo data', 'demo'),
+        tradeDate: data.trade_date ?? '',
+        isLimited: data.is_limited === true,
+      }
+    }
+
+    const headers = await getAuthHeaders()
+    const res = await fetch(`${API}/api/v1/scanner/run`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        filters: screen.filters,
+        sort_by: sortBy,
+        sort_order: sortDesc ? 'desc' : 'asc',
+        preset_id: null,
+        page: 1,
+        page_size: 200,
+      }),
+    })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
+    const data = await res.json() as ScannerRunResponse
+    if (data.mode === 'unavailable' || data.status === 'unavailable') {
+      throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
+    }
+    return {
+      screen,
+      results: data.results ?? [],
+      trust: trustFromRunResponse(data, 'Market data', 'eod'),
+      tradeDate: data.trade_date ?? '',
+      isLimited: data.is_limited === true,
+    }
+  }
+
+  async function runSavedScreenComposition() {
+    const screens = savedScreens.filter(screen => selectedScreenIds.has(screen.id))
+    if (screens.length < 2) {
+      showToast('Select at least two saved screens')
+      return
+    }
+    setComposingScreens(true)
+    setLoading(true)
+    setError('')
+    setExpandedSymbol(null)
+    try {
+      const runs = await Promise.all(screens.map(screen => runSavedScreen(screen)))
+      const composed = composeScannerResults(
+        runs.map(run => ({ screenId: run.screen.id, screenName: run.screen.name, results: run.results })),
+        compositionMode,
+      )
+      const nextTrust = {
+        ...runs[0].trust,
+        source: 'Saved scan composition',
+        message: `${compositionMode.toUpperCase()} composition across ${screens.length} saved screens.`,
+      } satisfies ScanTrust
+      const label = `${screens.map(screen => screen.name).join(compositionMode === 'and' ? ' + ' : ' / ')}`
+      setResults(composed)
+      setSelectedResults(new Set())
+      setWorkflowMarks({})
+      setTotalMatches(composed.length)
+      setTotalPages(1)
+      setCurrentPage(1)
+      setTradeDate(runs.find(run => run.tradeDate)?.tradeDate ?? '')
+      setIsLimited(runs.some(run => run.isLimited))
+      setScanTrust(nextTrust)
+      setHasCachedResults(false)
+      setHasRun(true)
+      setActivePreset('saved_screen')
+      setActiveScreenName(null)
+      setActiveCompositionName(`${compositionMode.toUpperCase()} · ${label}`)
+      writeScannerSnapshot({
+        results: composed,
+        totalMatches: composed.length,
+        totalPages: 1,
+        currentPage: 1,
+        tradeDate: runs.find(run => run.tradeDate)?.tradeDate ?? '',
+        isLimited: runs.some(run => run.isLimited),
+        scanTrust: nextTrust,
+      })
+      trackEvent('scanner_saved_screen_composition', {
+        mode: compositionMode,
+        screens: screens.length,
+        results: composed.length,
+      })
+      showToast(`${composed.length} ${composed.length === 1 ? 'match' : 'matches'} from ${compositionMode.toUpperCase()} composition`)
+    } catch (e: unknown) {
+      setError(describeMarketDataError(e))
+    } finally {
+      setLoading(false)
+      setComposingScreens(false)
+    }
   }
 
   function openAlertModal() {
@@ -1073,7 +1220,7 @@ export default function ScannerPage() {
   function scanContextOptions() {
     return {
       presetId: activePreset,
-      presetName: activePresetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
+      presetName: activeCompositionName ?? activePresetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
       tradeDate,
       dataSource: scanTrust?.source ?? null,
       dataMode: scanTrust?.mode ?? null,
@@ -1270,8 +1417,9 @@ export default function ScannerPage() {
     )
   }
 
-  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setActiveScreenName(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
+  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setActiveScreenName(null); setActiveCompositionName(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
   const activePresetMeta = PRESETS.find(p => p.id === activePreset) ?? null
+  const selectedCompositionCount = savedScreens.filter(screen => selectedScreenIds.has(screen.id)).length
   const pageSizeOptions = [
     { value: 25, label: '25' },
     { value: 50, label: '50' },
@@ -1333,10 +1481,17 @@ export default function ScannerPage() {
 
         {/* Saved screens */}
         {savedScreens.length > 0 && (
-          <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 156, overflowY: 'auto', flexShrink: 0 }}>
+          <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 236, overflowY: 'auto', flexShrink: 0 }}>
             <div className="label" style={{ marginBottom: 8 }}>My screens</div>
             {savedScreens.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={selectedScreenIds.has(s.id)}
+                  onChange={e => toggleCompositionScreen(s.id, e.target.checked)}
+                  aria-label={`Select saved screen ${s.name}`}
+                  style={{ accentColor: 'var(--accent)', width: 13, height: 13, flex: '0 0 auto' }}
+                />
                 <button onClick={() => loadScreen(s)} style={{
                   flex: 1, textAlign: 'left', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: 11,
                   background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
@@ -1354,6 +1509,31 @@ export default function ScannerPage() {
                 </button>
               </div>
             ))}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
+              {(['and', 'or'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setCompositionMode(mode)}
+                  className={`workspace-chip-button${compositionMode === mode ? ' active' : ''}`}
+                  style={{ justifyContent: 'center', minHeight: 30 }}
+                >
+                  {mode.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <button
+              className="workspace-chip-button"
+              onClick={runSavedScreenComposition}
+              disabled={selectedCompositionCount < 2 || composingScreens}
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                marginTop: 6,
+                opacity: selectedCompositionCount < 2 || composingScreens ? 0.48 : 1,
+              }}
+            >
+              {composingScreens ? 'Combining…' : `Combine ${selectedCompositionCount || 0} screens`}
+            </button>
           </div>
         )}
         {savedScreensError && (
@@ -1617,6 +1797,11 @@ export default function ScannerPage() {
                 )}
               </div>
               <div className="workspace-toolbar-group scanner-results-toolbar" data-testid="scanner-data-trust">
+                {activeCompositionName && (
+                  <span className="workspace-pill" style={{ color: 'var(--accent)' }}>
+                    {activeCompositionName}
+                  </span>
+                )}
                 {scanTrust && (
                   <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
                     {hasCachedResults ? 'Cached results · ' : ''}Source: {scanTrust.source}{scanTrust.coveragePct != null ? ` · Coverage: ${scanTrust.coveragePct}%` : ''}
@@ -1803,6 +1988,11 @@ export default function ScannerPage() {
                           <div className="caption" title={r.match_reasons?.[0] ?? 'Matched the active scanner filters'} style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-tertiary)' }}>
                             Matched: {r.match_reasons?.[0] ?? 'Active filters'}
                           </div>
+                          {r.screen_matches?.length ? (
+                            <div className="caption" style={{ color: 'var(--accent)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {r.screen_matches.join(' + ')}
+                            </div>
+                          ) : null}
                           {workflowMarks[r.symbol] && (
                             <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
                               {workflowMarks[r.symbol] === 'shortlist'
