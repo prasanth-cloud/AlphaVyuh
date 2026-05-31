@@ -23,11 +23,13 @@ function match(runDate: string, symbols: string[]): ScanAlertMatch {
 
 describe("scan alert digest", () => {
   it("compares consecutive alert runs into entered, continuing, and exited groups", () => {
-    const [latest] = buildScanAlertDigests([
+    const digests = buildScanAlertDigests([
       match("2026-05-30", ["RELIANCE", "TCS", "INFY"]),
       match("2026-05-31", ["RELIANCE", "AUBANK", "INFY"]),
     ]);
+    const [latest] = digests;
 
+    expect(digests).toHaveLength(1);
     expect(latest.current.run_date).toBe("2026-05-31");
     expect(latest.previous?.run_date).toBe("2026-05-30");
     expect(latest.entered.map((symbol) => symbol.symbol)).toEqual(["AUBANK"]);
