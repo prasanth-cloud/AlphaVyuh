@@ -64,6 +64,40 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("scanner recent runs can restore a setup review", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.goto("/scanner");
+    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
+
+    const firstSymbol = ((await page.locator("tbody tr").first().locator(".mono").first().textContent()) ?? "").trim();
+    await expect(page.getByTestId("scanner-run-history")).toContainText(/Trend Template|Custom scan/, { timeout: 10_000 });
+    await expect(page.getByTestId("scanner-run-history")).toContainText(/AlphaVyuh mock fixtures|Demo/i);
+
+    await page.evaluate(() => sessionStorage.removeItem("alphavyuh-scanner-last-results-v1"));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("scanner-run-history")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("scanner-run-history-entry").first().click();
+
+    await expect(page.locator(".scanner-results-toolbar")).toContainText(/Cached results/i, { timeout: 10_000 });
+    await expect(page.locator("tbody tr").first()).toContainText(firstSymbol, { timeout: 10_000 });
+
+    const history = await page.evaluate(() => JSON.parse(localStorage.getItem("alphavyuh-scanner-run-history-v1") || "[]"));
+    expect(history[0]).toMatchObject({
+      dataSource: expect.stringMatching(/AlphaVyuh mock fixtures|Demo/i),
+      topSymbols: expect.arrayContaining([firstSymbol]),
+    });
+    expect(history[0].label).toMatch(/Trend Template|Custom scan/);
+    expect(history[0].results.length).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  });
+
   test("multi-chart review board compares scanner candidates", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
@@ -273,6 +307,16 @@ test.describe("Mock workflow smoke", () => {
 
     await page.goto("/watchlist");
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+    await page.getByPlaceholder("Add or paste symbols…").fill("NSE:RELIANCE,NSE:AUBANK,NSE:INFY");
+    await page.getByRole("button", { name: /^Import 3$/ }).click();
+    await expect(page.getByText("Imported 3 symbols")).toBeVisible({ timeout: 10_000 });
+    const importedWatchlist = await page.evaluate(() => {
+      const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
+      return lists.find((list: { name: string }) => list.name === "Leaders");
+    });
+    expect(importedWatchlist.items.map((item: { symbol: string }) => item.symbol)).toEqual(
+      expect.arrayContaining(["RELIANCE", "AUBANK", "INFY"]),
+    );
     await page.getByRole("button", { name: /^Details$/ }).click();
     await expect(page.getByText("Fundamentals")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Mkt cap")).toBeVisible();

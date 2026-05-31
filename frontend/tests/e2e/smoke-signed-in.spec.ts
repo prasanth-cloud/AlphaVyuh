@@ -231,7 +231,7 @@ test.describe("Signed-in smoke flow", () => {
       }
     }
 
-    const symbolInput = page.getByPlaceholder("Add symbol…");
+    const symbolInput = page.getByPlaceholder("Add or paste symbols…");
     if (!(await symbolInput.isVisible().catch(() => false))) {
       const firstWatchlist = page.locator(".wl-item").first();
       await expect(firstWatchlist).toBeVisible({ timeout: 15000 });
