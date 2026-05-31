@@ -372,10 +372,9 @@ async def download_and_ingest(trade_date: date) -> dict:
         expected_rows = _expected_active_rows(client)
         coverage_pct = round((rows_ingested / expected_rows) * 100, 2) if expected_rows else None
         partial_ingest = bool(expected_rows and rows_ingested < max(100, int(expected_rows * 0.9)))
-        warning_message = (
-            f"Partial ingest: {rows_ingested}/{expected_rows} active symbols ({coverage_pct}%)."
-            if partial_ingest else None
-        )
+        warning_parts = []
+        if partial_ingest:
+            warning_parts.append(f"Partial ingest: {rows_ingested}/{expected_rows} active symbols ({coverage_pct}%).")
 
         # 8 & 9. Compute indicators via bulk fetch (one query, not N queries)
         update_batch = _compute_indicators_bulk(client, df["symbol"].unique().tolist(), trade_date)
@@ -393,10 +392,19 @@ async def download_and_ingest(trade_date: date) -> dict:
 
         # Compute rs_score: requires cross-symbol PERCENT_RANK — done via SQL
         # after per-symbol updates so today's close + lag(close,252) are in place.
+        rs_score_result = {"status": "success", "trade_date": str(trade_date)}
         try:
             client.rpc("compute_rs_score_for_date", {"p_trade_date": str(trade_date)}).execute()
         except Exception as rs_err:
             logger.warning(f"rs_score RPC failed for {trade_date}: {rs_err}")
+            rs_score_result = {
+                "status": "failed",
+                "trade_date": str(trade_date),
+                "error": str(rs_err)[:500],
+            }
+            warning_parts.append("RS score calculation failed; latest EOD OHLCV and breadth remain available.")
+
+        warning_message = "; ".join(warning_parts) if warning_parts else None
 
         try:
             from app.services.market_breadth_snapshot import persist_market_breadth_snapshot
@@ -432,6 +440,7 @@ async def download_and_ingest(trade_date: date) -> dict:
             "expected_rows": expected_rows,
             "coverage_pct": coverage_pct,
             "partial_ingest": partial_ingest,
+            "rs_score": rs_score_result,
         }
 
     except Exception as e:

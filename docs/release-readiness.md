@@ -32,7 +32,9 @@ npm run test:setup-review-check
 npm run test:broker-readonly-check
 npm run check:data-recovery
 npm run check:production-api:railway
-# After Railway recovery, run the full production recovery/browser smoke gate.
+# After the public API smoke passes, run the non-deploy production signed-in smoke
+# GitHub workflow for authenticated scanner/watchlist and browser evidence.
+# Use Railway Backend Recovery only when the backend actually needs recovery.
 # This requires PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL,
 # and PLAYWRIGHT_QA_PASSWORD.
 # RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
@@ -93,6 +95,10 @@ npm run check:data-recovery
 - Or recover locally with `npm run recover:railway-backend:login`.
 - Do not claim production EOD data is restored until the production API smoke and
   authenticated browser smoke pass against `https://www.alphavyuh.com`.
+- If Railway is already healthy and only trust evidence is needed, run the
+  `Production Signed-In Smoke` GitHub workflow. It prepares the QA smoke account,
+  runs strict authenticated `npm run check:data-recovery`, and runs the signed-in
+  Playwright smoke without deploying Railway or Vercel.
 - The production API smoke must include enough current daily candles for every
   configured chart smoke symbol. By default this is `RELIANCE,ITC,AUBANK`; set
   `PRODUCTION_API_CHART_SYMBOLS` to add or replace launch-candidate symbols.
