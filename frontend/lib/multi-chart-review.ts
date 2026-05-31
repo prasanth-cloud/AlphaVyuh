@@ -159,6 +159,21 @@ export type MultiChartBoardSummaryItem = {
   scannerContext?: ScannerIdeaContext | null;
 };
 
+export type MultiChartBoardPulse = {
+  loadedCount: number;
+  readyCount: number;
+  watchCount: number;
+  missingCount: number;
+  averageScoreLabel: string;
+  topCandidate: {
+    symbol: string;
+    scoreLabel: string;
+    detail: string;
+  } | null;
+  topBlocker: string;
+  tone: "good" | "warn" | "muted";
+};
+
 const BOARD_REVIEW_NOTE_PREFIX = "[Multi-chart review]";
 
 function decisionLabel(lifecycle: MultiChartReviewDecision): string {
@@ -299,6 +314,73 @@ export function buildMultiChartBoardSummary(
   }
 
   return lines.join("\n");
+}
+
+function analysisScore(analysis: MultiChartAnalysisSummary): number {
+  return analysis.reviewScore.total > 0
+    ? analysis.reviewScore.passed / analysis.reviewScore.total
+    : 0;
+}
+
+export function buildMultiChartBoardPulse(items: MultiChartBoardSummaryItem[]): MultiChartBoardPulse {
+  const loadedItems = items.filter((item) => item.analysis);
+  const loadedCount = loadedItems.length;
+  const readyCount = loadedItems.filter((item) => item.analysis?.playbookStatus === "ready").length;
+  const watchCount = loadedItems.filter((item) => item.analysis?.playbookStatus === "watch").length;
+  const missingCount = Math.max(0, items.length - loadedCount) +
+    loadedItems.filter((item) => item.analysis?.playbookStatus === "missing").length;
+  const totalChecks = loadedItems.reduce((sum, item) => sum + (item.analysis?.reviewScore.total ?? 0), 0);
+  const passedChecks = loadedItems.reduce((sum, item) => sum + (item.analysis?.reviewScore.passed ?? 0), 0);
+  const averageScoreLabel = totalChecks > 0
+    ? `${Math.round((passedChecks / totalChecks) * 100)}% avg`
+    : "Waiting for charts";
+
+  const ranked = loadedItems
+    .map((item) => ({
+      item,
+      symbol: normalizeSymbol(item.symbol) ?? item.symbol.trim().toUpperCase(),
+      score: item.analysis ? analysisScore(item.analysis) : 0,
+      passed: item.analysis?.reviewScore.passed ?? 0,
+    }))
+    .filter((entry) => entry.symbol)
+    .sort((a, b) => b.score - a.score || b.passed - a.passed || a.symbol.localeCompare(b.symbol));
+
+  const topCandidate = ranked[0]?.item.analysis
+    ? {
+        symbol: ranked[0].symbol,
+        scoreLabel: ranked[0].item.analysis.reviewScore.label,
+        detail: ranked[0].item.analysis.playbookDetail,
+      }
+    : null;
+
+  const blockerCounts = new Map<string, number>();
+  for (const item of loadedItems) {
+    for (const blocker of item.analysis?.reviewScore.blockers ?? []) {
+      blockerCounts.set(blocker, (blockerCounts.get(blocker) ?? 0) + 1);
+    }
+  }
+  const topBlockerEntry = [...blockerCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+  const topBlocker = topBlockerEntry
+    ? topBlockerEntry[1] > 1 ? `${topBlockerEntry[0]} (${topBlockerEntry[1]} symbols)` : topBlockerEntry[0]
+    : loadedCount > 0 ? "No shared blocker" : "Charts loading";
+  const tone = loadedCount === 0
+    ? "muted"
+    : readyCount > 0 && topCandidate?.scoreLabel.startsWith("6/")
+      ? "good"
+      : watchCount > 0 || readyCount > 0
+        ? "warn"
+        : "muted";
+
+  return {
+    loadedCount,
+    readyCount,
+    watchCount,
+    missingCount,
+    averageScoreLabel,
+    topCandidate,
+    topBlocker,
+    tone,
+  };
 }
 
 function formatRatio(value: number | null | undefined) {
