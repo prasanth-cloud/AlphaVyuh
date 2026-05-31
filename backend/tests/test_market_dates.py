@@ -54,8 +54,12 @@ def _date_rows(trade_date, count):
         {
             "trade_date": trade_date,
             "symbol": f"SYM{i}",
+            "open": 100 + i,
+            "high": 103 + i,
+            "low": 98 + i,
             "close": 100,
             "prev_close": 99,
+            "volume": 100000 + i,
             "pct_change": 1.01,
             "stock_universe": {"series": "EQ", "market": "NSE", "is_active": True},
         }
@@ -91,3 +95,38 @@ def test_latest_complete_trade_date_accepts_stored_pct_change_when_prev_close_mi
     client = _Client(rows, active_count=1800)
 
     assert get_latest_complete_trade_date(client) == "2026-05-11"
+
+
+def test_latest_complete_trade_date_rejects_flat_newest_session():
+    flat_latest = _date_rows("2026-05-11", 2300)
+    for row in flat_latest:
+        row["prev_close"] = row["close"]
+        row["pct_change"] = 0
+
+    rows = [
+        *flat_latest,
+        *_date_rows("2026-05-08", 2300),
+    ]
+    client = _Client(rows, active_count=2500)
+
+    assert get_latest_complete_trade_date(client) == "2026-05-08"
+
+
+def test_latest_complete_trade_date_rejects_newest_session_duplicated_from_previous_day():
+    previous = _date_rows("2026-05-08", 2300)
+    duplicated_latest = []
+    for row in previous:
+        duplicated_latest.append({
+            **row,
+            "trade_date": "2026-05-11",
+            "prev_close": row["close"],
+            "pct_change": 0,
+        })
+
+    rows = [
+        *duplicated_latest,
+        *previous,
+    ]
+    client = _Client(rows, active_count=2500)
+
+    assert get_latest_complete_trade_date(client) == "2026-05-08"

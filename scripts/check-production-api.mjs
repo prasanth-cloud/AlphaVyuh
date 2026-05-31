@@ -129,6 +129,33 @@ function numberValue(...values) {
   return null;
 }
 
+function candleNumber(candle, field) {
+  return numberValue(candle?.[field]);
+}
+
+function candleSignature(candle) {
+  const values = [
+    candleNumber(candle, "open"),
+    candleNumber(candle, "high"),
+    candleNumber(candle, "low"),
+    candleNumber(candle, "close"),
+    candleNumber(candle, "volume"),
+  ];
+  if (values.some((value) => value === null)) return null;
+  return values.map((value) => Number(value).toFixed(4)).join("|");
+}
+
+function latestCandlePctChange(candles) {
+  const latest = candles.at(-1);
+  const previous = candles.at(-2);
+  const stored = numberValue(latest?.pct_change, latest?.pctChange, latest?.change_pct, latest?.changePct);
+  if (stored !== null) return stored;
+  const latestClose = candleNumber(latest, "close");
+  const previousClose = candleNumber(previous, "close");
+  if (latestClose === null || previousClose === null || previousClose === 0) return null;
+  return ((latestClose - previousClose) / previousClose) * 100;
+}
+
 function assertFreshDate(label, actualDate, summaryDate, maxLagDays = 10) {
   const parsedSummaryDate = parseIsoDate(summaryDate);
   const parsedActualDate = parseIsoDate(actualDate);
@@ -156,14 +183,24 @@ try {
   const totalStocks = numberValue(summary?.total_stocks, summary?.total, summary?.symbols_count);
   const advances = numberValue(summary?.advances);
   const declines = numberValue(summary?.declines);
+  const unchanged = numberValue(summary?.unchanged);
   assert(totalStocks !== null && totalStocks >= 1000, `Market summary stock count looked too low: ${totalStocks}.`);
   assert(
-    (advances ?? 0) + (declines ?? 0) > 0,
-    `Market summary did not include real breadth counts: advances=${advances}, declines=${declines}.`,
+    advances !== null && declines !== null && unchanged !== null,
+    `Market summary did not include full breadth counts: advances=${advances}, declines=${declines}, unchanged=${unchanged}.`,
+  );
+  assert(
+    advances > 0 && declines > 0,
+    `Market summary did not include a two-sided breadth distribution: advances=${advances}, declines=${declines}.`,
+  );
+  assert(
+    unchanged / totalStocks < 0.85 && (advances + declines) / totalStocks >= 0.08,
+    `Market summary breadth looked implausibly flat: advances=${advances}, declines=${declines}, unchanged=${unchanged}, total=${totalStocks}.`,
   );
 
   assert(chartSmokeSymbols.length > 0, "No chart smoke symbols configured.");
   const chartSummaries = [];
+  const latestPctChanges = [];
   for (const symbol of chartSmokeSymbols) {
     const candles = await fetchJson(`/api/v1/charts/${encodeURIComponent(symbol)}/candles?timeframe=D&limit=500`);
     assert(Array.isArray(candles?.candles), `${symbol} candles response did not include a candles array.`);
@@ -186,8 +223,27 @@ try {
       `${symbol} chart history spans only ${spanDays} days; expected at least 180 days.`,
     );
     assertFreshDate(`Latest ${symbol} candle`, latestCandleDate, summaryDate);
+    const latest = candles.candles.at(-1);
+    const previous = candles.candles.at(-2);
+    if (previous) {
+      const latestSignature = candleSignature(latest);
+      const previousSignature = candleSignature(previous);
+      assert(
+        latestSignature && previousSignature && latestSignature !== previousSignature,
+        `${symbol} latest candle duplicates the previous session OHLCV/volume.`,
+      );
+      const pctChange = latestCandlePctChange(candles.candles);
+      assert(pctChange !== null, `${symbol} latest candle did not expose or allow pct_change calculation.`);
+      latestPctChanges.push({ symbol, pctChange });
+    }
     chartSummaries.push(`${symbol} ${candles.candles.length} candles ${firstCandleDate}->${latestCandleDate}`);
   }
+  assert(
+    latestPctChanges.some((item) => Math.abs(item.pctChange) > 0.05),
+    `Latest smoke candle pct_change values looked implausibly flat: ${
+      latestPctChanges.map((item) => `${item.symbol}=${item.pctChange.toFixed(2)}%`).join(", ")
+    }.`,
+  );
 
   let scannerSummary = "scanner skipped (set PRODUCTION_API_BEARER_TOKEN to verify authenticated scanner data)";
   if (authToken) {
