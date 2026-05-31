@@ -2238,7 +2238,7 @@ export default function ScannerPage() {
             onClick={e => e.stopPropagation()}>
             <div className="heading-card" style={{ marginBottom: 6 }}>Create scan alert</div>
             <div className="caption" style={{ marginBottom: 16, lineHeight: 1.6 }}>
-              AlphaVyuh will check this scan when the next session data is available. Matches appear in Alerts for review.
+              AlphaVyuh checks this cash-equity screen once after each completed EOD session. Use it for entry setup watches or exit/risk reviews; matches appear in Alerts for review.
             </div>
             <input autoFocus value={alertName} onChange={e => setAlertName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && createEodAlert()}
