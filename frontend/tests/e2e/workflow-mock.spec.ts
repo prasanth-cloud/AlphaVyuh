@@ -754,6 +754,8 @@ test.describe("Mock workflow smoke", () => {
 
     await expect(page.getByText("Drawings · 1")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Selected: Rectangle \/ zone/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("chart-drawing-measurement")).toContainText(/Measure: Zone/, { timeout: 10_000 });
+    await expect(page.getByTestId("chart-drawing-measurement")).toContainText(/Height \d+\.\d+%/);
     await page.getByRole("button", { name: /Zone note/i }).click();
     await expect(page.getByText("Drawings · 2")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Zone \d+\.\d+-\d+\.\d+/).first()).toBeVisible({ timeout: 10_000 });

@@ -34,6 +34,7 @@ import {
 import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
+import { buildChartDrawingMeasurement } from "@/lib/chart-drawing-measure";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
@@ -1798,6 +1799,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const selectedDrawing = drawnLines.find(item => item.id === selectedDrawingId) ?? null;
   const activeToolMeta = activeDrawingTool ? DRAW_TOOL_META[activeDrawingTool] : null;
   const visibleDrawings = drawnLines.filter((item) => !item.hidden);
+  const selectedDrawingMeasurement = buildChartDrawingMeasurement(selectedDrawing, {
+    referencePrice: displayClose,
+    currency: symbolCurrency,
+  });
   const selectedPositionDrawing = selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && selectedDrawing.p3 ? selectedDrawing : null;
   const selectedPositionDraft = selectedPositionDrawing?.p3 ? {
     side: selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long",
@@ -3468,6 +3473,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)" }}>
                   Selected: {DRAW_TOOL_META[selectedDrawing.tool].label}
+                </div>
+              )}
+              {selectedDrawingMeasurement && (
+                <div
+                  data-testid="chart-drawing-measurement"
+                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  title={selectedDrawingMeasurement.secondary}
+                  style={{ background: "rgba(77,214,255,0.09)", color: "#93e5ff", border: "1px solid rgba(77,214,255,0.18)" }}
+                >
+                  Measure: {selectedDrawingMeasurement.primary} · {selectedDrawingMeasurement.secondary}
                 </div>
               )}
               {data && (
