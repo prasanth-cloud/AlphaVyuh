@@ -88,6 +88,9 @@ jobs:
       - name: Railway recovery workflow checker tests
         run: npm run test:railway-recovery-workflow-check
 
+      - name: Railway recovery script tests
+        run: npm run test:railway-recovery-script
+
       - name: Recovery handoff credential checker tests
         run: npm run test:recovery-handoff-credentials-check
 

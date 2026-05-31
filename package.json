@@ -18,6 +18,7 @@
     "test:production-smoke-env-check": "node scripts/test-check-production-smoke-env.mjs",
     "test:production-smoke-workflow-check": "node scripts/test-check-production-smoke-workflow.mjs",
     "test:railway-recovery-workflow-check": "node scripts/test-check-railway-recovery-workflow.mjs",
+    "test:railway-recovery-script": "node scripts/test-recover-railway-backend-script.mjs",
     "test:recovery-handoff-credentials-check": "node scripts/test-check-recovery-handoff-credentials.mjs",
     "test:signed-in-copy-posture-check": "node scripts/test-check-signed-in-copy-posture.mjs",
     "test:public-posture-check": "node scripts/test-check-public-posture.mjs",
