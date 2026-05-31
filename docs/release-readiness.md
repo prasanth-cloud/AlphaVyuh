@@ -32,11 +32,12 @@ npm run test:setup-review-check
 npm run test:broker-readonly-check
 npm run check:data-recovery
 npm run check:production-api:railway
+npm run check:sector-taxonomy:railway
 npm run check:five-year-charts:railway
-# After the public API and five-year chart smokes pass, run the non-deploy
-# production signed-in smoke GitHub workflow for authenticated scanner/watchlist
-# and browser evidence. Use Railway Backend Recovery only when the backend
-# actually needs recovery.
+# After the public API, sector taxonomy, and five-year chart smokes pass, run
+# the non-deploy production signed-in smoke GitHub workflow for authenticated
+# scanner/watchlist and browser evidence. Use Railway Backend Recovery only
+# when the backend actually needs recovery.
 # This requires PRODUCTION_API_BEARER_TOKEN, PLAYWRIGHT_QA_EMAIL,
 # and PLAYWRIGHT_QA_PASSWORD.
 # RUN_PRODUCTION_RECOVERY_SMOKE=1 LIVE_URL=https://www.alphavyuh.com npm run launch:check
@@ -194,6 +195,9 @@ symbol, side, quantity, order type, and sandbox/live mode.
 - `npm run check:data-recovery` passes for the production API and raw Supabase EOD store.
 - `npm run check:production-api:railway` returns current market breadth and enough
   current daily candles for the configured chart smoke symbols.
+- `npm run check:sector-taxonomy:railway` passes against the production sector
+  audit endpoint, with source/as-of metadata, unmapped symbols, no hidden-sector
+  filtering, and NSE sectoral-index reference labels visible.
 - `npm run check:five-year-charts:railway` returns at least the configured
   minimum daily candle count and five-year span for every configured chart smoke
   symbol. Defaults: `RELIANCE,ITC,AUBANK`, 1300 requested daily candles, at least

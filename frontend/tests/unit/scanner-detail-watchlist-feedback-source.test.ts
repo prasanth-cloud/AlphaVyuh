@@ -23,4 +23,12 @@ describe("scanner watchlist feedback", () => {
     expect(scannerPageSource).not.toContain("failures.push(error instanceof Error ? error.message");
     expect(scannerPageSource).not.toContain("Watchlist add is temporarily unavailable.");
   });
+
+  it("surfaces sector taxonomy trust inside the scanner filter workflow", () => {
+    expect(scannerPageSource).toContain("getSectorsWithMetadata");
+    expect(scannerPageSource).toContain("sectorTaxonomyPresentation");
+    expect(scannerPageSource).toContain('data-testid="scanner-sector-taxonomy"');
+    expect(scannerPageSource).toContain("Source: {sectorTaxonomy.source}");
+    expect(scannerPageSource).toContain("Industry audit pending");
+  });
 });

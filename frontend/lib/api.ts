@@ -1316,7 +1316,81 @@ export type SectorBreadthItem = {
   above_ema200_pct: number | null;
 };
 
-export async function getSectorBreadth(): Promise<{ trade_date: string | null; sectors: SectorBreadthItem[] } | null> {
+export type SectorTaxonomyMetadata = {
+  source: string;
+  taxonomy_status?: "unverified" | "audited" | string;
+  taxonomy_status_reason?: string;
+  contract_as_of: string;
+  active_count: number;
+  active_count_scope: string;
+  classified_count: number;
+  unmapped_count: number;
+  unmapped_symbols: string[];
+  unmapped_symbols_truncated: boolean;
+  sector_count: number;
+  sector_counts: {
+    sector: string;
+    active_count: number;
+    aliases: string[];
+    related_sectoral_indices?: string[];
+    hidden_by_filter: boolean;
+  }[];
+  alias_policy?: {
+    source: string;
+    description: string;
+  };
+  audit_scope?: {
+    sector_labels?: {
+      source: string;
+      status: string;
+      description: string;
+    };
+    sectoral_index_reference?: {
+      source: string;
+      status: string;
+      description: string;
+    };
+    industry_taxonomy?: {
+      source: string;
+      status: string;
+      description: string;
+    };
+  };
+  reference_coverage?: {
+    matched_sector_count: number;
+    unmatched_sector_count: number;
+    unmatched_sectors: string[];
+    description: string;
+  };
+  display_filter: {
+    minimum_active_symbols: number;
+    hidden_sector_count: number;
+    description: string;
+  };
+  reference?: {
+    name: string;
+    url: string;
+    as_of: string;
+    relationship?: string;
+  };
+  universe_taxonomy?: {
+    name: string;
+    source: string;
+    relationship: string;
+  };
+  sectoral_indices?: {
+    symbol: string;
+    label: string;
+    aliases: string[];
+  }[];
+};
+
+export type SectorListResponse = {
+  sectors: string[];
+  metadata?: SectorTaxonomyMetadata;
+};
+
+export async function getSectorBreadth(): Promise<{ trade_date: string | null; sectors: SectorBreadthItem[]; metadata?: SectorTaxonomyMetadata } | null> {
   if (shouldUseMockFallback()) return mockSectorBreadth();
   const res = await fetch(`${API}/api/v1/market/sector-breadth`, { headers: publicHeaders });
   if (!res.ok) {
@@ -1331,8 +1405,11 @@ export async function getSectorBreadth(): Promise<{ trade_date: string | null; s
   return data;
 }
 
-export async function getSectors(): Promise<string[]> {
-  if (shouldUseMockFallback()) return mockSectorBreadth().sectors.map((s) => s.sector);
+export async function getSectorsWithMetadata(): Promise<SectorListResponse> {
+  if (shouldUseMockFallback()) {
+    const breadth = mockSectorBreadth();
+    return { sectors: breadth.sectors.map((s) => s.sector), metadata: breadth.metadata };
+  }
   const res = await fetch(`${API}/api/v1/market/sectors`, { headers: publicHeaders });
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, `Sector list is temporarily unavailable (${res.status}).`));
@@ -1343,7 +1420,15 @@ export async function getSectors(): Promise<string[]> {
   if (!Array.isArray(data?.sectors)) {
     throw new Error("Sector list is temporarily unavailable.");
   }
-  return data.sectors;
+  return {
+    sectors: data.sectors,
+    metadata: data.metadata,
+  };
+}
+
+export async function getSectors(): Promise<string[]> {
+  const response = await getSectorsWithMetadata();
+  return response.sectors;
 }
 
 export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
@@ -3342,6 +3427,7 @@ export interface MarketOverview {
   is_live?: boolean;
   sector_breadth_basis?: "latest_complete_session" | string;
   sector_breadth_source?: string;
+  sector_taxonomy?: SectorTaxonomyMetadata;
   sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number; advance_breadth_pct?: number | null; above_ema20_pct?: number | null; basis?: string }[];
   top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
   top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
@@ -3390,6 +3476,7 @@ function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined
     is_live: Boolean(data.is_live),
     sector_breadth_basis: data.sector_breadth_basis ?? "latest_complete_session",
     sector_breadth_source: data.sector_breadth_source ?? "daily_ohlcv",
+    sector_taxonomy: data.sector_taxonomy,
     sector_breadth: Array.isArray(data.sector_breadth) ? data.sector_breadth : [],
     top_gainers: Array.isArray(data.top_gainers) ? data.top_gainers : [],
     top_losers: Array.isArray(data.top_losers) ? data.top_losers : [],
