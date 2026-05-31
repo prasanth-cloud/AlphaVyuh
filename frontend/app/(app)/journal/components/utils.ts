@@ -53,6 +53,36 @@ function cleanValue(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+function outcomeLabel(entry: Pick<ContextEntry, "pnl" | "holding_days">): string | null {
+  const parts: string[] = [];
+  if (entry.pnl != null) {
+    parts.push(`${entry.pnl >= 0 ? "Gain" : "Loss"} ${fmtCcy(entry.pnl)}`);
+  }
+  if (entry.holding_days != null) {
+    parts.push(`${entry.holding_days}D hold`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function processFocus(entry: ContextEntry): string | null {
+  const setupScore = entry.scanner_context?.setup_score;
+  if (entry.pnl != null && setupScore != null && setupScore >= 80) {
+    return entry.pnl >= 0
+      ? "High-score setup worked"
+      : "High-score setup failed";
+  }
+  if (entry.pnl != null && entry.risk_reward != null && entry.risk_reward >= 2 && entry.pnl < 0) {
+    return "Good planned R:R, poor outcome";
+  }
+  if (entry.holding_days != null && entry.holding_days <= 1) {
+    return "Fast exit review";
+  }
+  if (entry.holding_days != null && entry.holding_days >= 10) {
+    return "Hold discipline review";
+  }
+  return null;
+}
+
 function sourceLabelFromEntry(entry: Pick<JournalEntry, "source_page" | "entry_reason">): string {
   const reason = (entry.entry_reason || "").toLowerCase();
   if (entry.source_page === "watchlist") return "Watchlist plan";
@@ -71,6 +101,9 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
   const invalidation = cleanValue(entry.invalidation_rule);
   const firstMatch = scanner?.match_reasons?.find(reason => cleanValue(reason));
   const sourceLabel = sourceLabelFromEntry(entry);
+  const hasOriginalContext = Boolean(scanner || thesis || invalidation || entry.source_page || cleanValue(entry.source_context));
+  const outcome = hasOriginalContext ? outcomeLabel(entry) : null;
+  const focus = hasOriginalContext ? processFocus(entry) : null;
 
   const summary = [
     scanner?.preset_name ? { label: "Original scan", value: scanner.preset_name } : null,
@@ -81,11 +114,20 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
     thesis ? { label: "Original thesis", value: thesis } : null,
     invalidation ? { label: "Invalidation", value: invalidation } : null,
     entry.risk_reward != null ? { label: "Planned R:R", value: `1:${entry.risk_reward}` } : null,
+    outcome ? { label: "Outcome", value: outcome } : null,
+    focus ? { label: "Process focus", value: focus } : null,
     scanner?.data_as_of ? { label: "Data at entry", value: scanner.data_as_of } : null,
     { label: "Source", value: sourceLabel },
   ].filter((item): item is { label: string; value: string } => Boolean(item?.value));
 
   const prompts = [
+    focus ? `Process focus: ${focus}. What rule does this trade add, confirm, or retire from your playbook?` : null,
+    entry.pnl != null && scanner?.setup_score != null && scanner.setup_score >= 80
+      ? `Scanner score ${scanner.setup_score} with ${entry.pnl >= 0 ? "positive" : "negative"} outcome. Which setup condition best explained the result?`
+      : null,
+    entry.pnl != null && entry.risk_reward != null && entry.risk_reward >= 2 && entry.pnl < 0
+      ? `Planned R:R was 1:${entry.risk_reward}, but the outcome was negative. Was the issue entry timing, stop discipline, or setup quality?`
+      : null,
     thesis ? `Original thesis: ${thesis}. What changed between entry and exit?` : null,
     invalidation ? `Original invalidation: ${invalidation}. Did the exit happen before, at, or after that point?` : null,
     firstMatch ? `Original scan: ${scanner?.preset_name ?? "Scanner idea"} - ${firstMatch}. Which part of the setup remained visible after entry?` : null,
@@ -105,7 +147,7 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
   return {
     hasContext: summary.length > 1 || prompts.length > 0,
     summary,
-    prompts: prompts.slice(0, 4),
+    prompts: prompts.slice(0, 5),
     fallback,
   };
 }

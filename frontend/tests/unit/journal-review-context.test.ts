@@ -30,8 +30,43 @@ describe("journal review context", () => {
       { label: "Original scan", value: "Trend Template" },
       { label: "Matched reason", value: "Volume expansion" },
       { label: "Original thesis", value: "Breakout holding above prior resistance." },
+      { label: "Outcome", value: "Gain ₹1,200 · 4D hold" },
+      { label: "Process focus", value: "High-score setup worked" },
     ]));
+    expect(context.prompts.join(" ")).toContain("Scanner score 84 with positive outcome");
     expect(context.prompts.join(" ")).toContain("What changed between entry and exit?");
+    expect(context.prompts.join(" ")).not.toMatch(/should|buy|sell|recommend/i);
+  });
+
+  it("turns high-quality losing setups into process review prompts", () => {
+    const context = getReviewContext({
+      entry_reason: "Scanner: Stage 2",
+      status: "closed",
+      lessons: null,
+      setup_type: "stage 2",
+      risk_reward: 2.2,
+      pnl: -900,
+      holding_days: 1,
+      source_page: "scanner",
+      source_context: "Scanner result",
+      thesis: "Breakout from a tight base.",
+      invalidation_rule: "Close below pivot.",
+      scanner_context: {
+        source: "scanner",
+        preset_name: "Stage 2 Breakout",
+        match_reasons: ["Close above pivot"],
+        setup_grade: "A",
+        setup_score: 86,
+        data_as_of: "2026-05-20",
+      },
+    });
+
+    expect(context.summary).toEqual(expect.arrayContaining([
+      { label: "Outcome", value: "Loss -₹900 · 1D hold" },
+      { label: "Process focus", value: "High-score setup failed" },
+    ]));
+    expect(context.prompts.join(" ")).toContain("Scanner score 86 with negative outcome");
+    expect(context.prompts.join(" ")).toContain("Planned R:R was 1:2.2, but the outcome was negative");
     expect(context.prompts.join(" ")).not.toMatch(/should|buy|sell|recommend/i);
   });
 
