@@ -68,4 +68,4 @@ or exited the saved screen.
 
 ## PR
 
-- Pending.
+- [#322](https://github.com/prasanth-cloud/AlphaVyuh/pull/322)
