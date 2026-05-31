@@ -12,9 +12,13 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any
 
+from app.services.market_dates import analyze_trade_date_quality
 from app.services.market_context import eod_source_metadata
 
 SNAPSHOT_RUN_ID_PREFIX = "market-breadth-snapshot"
+MAX_SNAPSHOT_UNCHANGED_RATIO = 0.85
+MIN_SNAPSHOT_MOVING_RATIO = 0.08
+MIN_SNAPSHOT_QUALITY_ROWS = 500
 
 
 def _f(value: Any, default=None):
@@ -77,6 +81,30 @@ def _fetch_daily_rows(client, trade_date: str, *, max_rows: int = 10000) -> list
     return rows
 
 
+def _snapshot_quality_error(overview: dict) -> str | None:
+    total = int(overview.get("total") or overview.get("total_stocks") or 0)
+    advances = int(overview.get("advances") or 0)
+    declines = int(overview.get("declines") or 0)
+    unchanged = int(overview.get("unchanged") or 0)
+    if total < MIN_SNAPSHOT_QUALITY_ROWS:
+        return None
+    moving = advances + declines
+    unchanged_ratio = unchanged / total if total else 0
+    moving_ratio = moving / total if total else 0
+    if unchanged_ratio >= MAX_SNAPSHOT_UNCHANGED_RATIO and moving_ratio < MIN_SNAPSHOT_MOVING_RATIO:
+        return (
+            "market breadth distribution is implausibly flat: "
+            f"advances={advances}, declines={declines}, unchanged={unchanged}, total={total}"
+        )
+    return None
+
+
+def _assert_snapshot_quality(overview: dict) -> None:
+    quality_error = _snapshot_quality_error(overview)
+    if quality_error:
+        raise ValueError(quality_error)
+
+
 def build_market_breadth_snapshot(
     client,
     trade_date: str | date,
@@ -95,6 +123,9 @@ def build_market_breadth_snapshot(
         and (row.get("stock_universe") or {}).get("market") == "NSE"
         and (row.get("stock_universe") or {}).get("is_active", True)
     ]
+    raw_quality = analyze_trade_date_quality(rows)
+    if raw_quality["is_suspicious"]:
+        raise ValueError("; ".join(raw_quality["reasons"]))
 
     enriched: list[dict] = []
     for row in rows:
@@ -234,7 +265,7 @@ def build_market_breadth_snapshot(
     )
 
     generated_at = datetime.now(timezone.utc).isoformat()
-    return {
+    overview = {
         "trade_date": latest_date,
         "advances": advances,
         "declines": declines,
@@ -269,6 +300,8 @@ def build_market_breadth_snapshot(
         "coverage_pct": coverage_pct,
         "universe_active": universe_active or total,
     }
+    _assert_snapshot_quality(overview)
+    return overview
 
 
 def read_market_breadth_snapshot(
@@ -292,6 +325,8 @@ def read_market_breadth_snapshot(
     meta = row.get("meta") or {}
     overview = meta.get("overview") if isinstance(meta, dict) else None
     if not isinstance(overview, dict):
+        return None
+    if _snapshot_quality_error(overview):
         return None
 
     total = overview.get("total") or 0
@@ -338,6 +373,8 @@ def read_latest_market_breadth_snapshot(
         meta = row.get("meta") or {}
         overview = meta.get("overview") if isinstance(meta, dict) else None
         trade_date = overview.get("trade_date") if isinstance(overview, dict) else None
+        if isinstance(overview, dict) and _snapshot_quality_error(overview):
+            continue
         if trade_date:
             snapshot = read_market_breadth_snapshot(client, trade_date, indices, quote_source, indices_live)
             if snapshot:

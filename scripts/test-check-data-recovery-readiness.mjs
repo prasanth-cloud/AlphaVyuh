@@ -56,7 +56,7 @@ function serveHealthyApi(request, response) {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {

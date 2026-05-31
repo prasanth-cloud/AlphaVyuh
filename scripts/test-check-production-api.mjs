@@ -41,21 +41,32 @@ function dailyCandles(startDate, count) {
   const candles = [];
   const current = new Date(`${startDate}T00:00:00Z`);
   for (let index = 0; index < count; index += 1) {
+    const close = 101 + index;
+    const previousClose = index > 0 ? 100 + index : null;
     candles.push({
       time: current.toISOString().slice(0, 10),
       open: 100 + index,
       high: 102 + index,
       low: 99 + index,
-      close: 101 + index,
+      close,
       volume: 1000 + index,
+      pct_change: previousClose ? Number((((close - previousClose) / previousClose) * 100).toFixed(2)) : 0,
     });
     current.setUTCDate(current.getUTCDate() + 1);
   }
   return candles;
 }
 
-function chartResponse(symbol, startDate = "2025-10-31", count = 200) {
+function chartResponse(symbol, startDate = "2025-10-31", count = 200, options = {}) {
   const candles = dailyCandles(startDate, count);
+  if (options.duplicateLatest && candles.length >= 2) {
+    const previous = candles.at(-2);
+    candles[candles.length - 1] = {
+      ...previous,
+      time: candles.at(-1).time,
+      pct_change: 0,
+    };
+  }
   return JSON.stringify({
     candles,
     coverage: {
@@ -99,7 +110,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
@@ -126,7 +137,57 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 0, declines: 2, unchanged: 2462 }));
+    return;
+  }
+
+  response.writeHead(404);
+  response.end(JSON.stringify({ error: "unexpected path" }));
+}, async (apiUrl) => {
+  const { code, stdout, stderr } = await runChecker(apiUrl);
+  assert.notEqual(code, 0, "production API check should fail on implausibly flat breadth");
+  assert.match(
+    stderr,
+    /Market summary did not include a two-sided breadth distribution|Market summary breadth looked implausibly flat/,
+    `stderr should explain flat breadth, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+});
+
+await withServer((request, response) => {
+  response.setHeader("content-type", "application/json");
+  if (request.url === "/health") {
+    response.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (request.url === "/api/v1/market/summary") {
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    return;
+  }
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
+    response.end(chartResponse("RELIANCE", "2025-10-31", 200, { duplicateLatest: true }));
+    return;
+  }
+
+  response.writeHead(404);
+  response.end(JSON.stringify({ error: "unexpected path" }));
+}, async (apiUrl) => {
+  const { code, stdout, stderr } = await runChecker(apiUrl);
+  assert.notEqual(code, 0, "production API check should fail on duplicated latest chart candle");
+  assert.match(
+    stderr,
+    /RELIANCE latest candle duplicates the previous session OHLCV\/volume/,
+    `stderr should explain duplicate latest candle, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+});
+
+await withServer((request, response) => {
+  response.setHeader("content-type", "application/json");
+  if (request.url === "/health") {
+    response.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (request.url === "/api/v1/market/summary") {
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
@@ -158,7 +219,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
@@ -185,7 +246,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
