@@ -1436,6 +1436,12 @@ export default function ScannerPage() {
     { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => pageWindowStart + idx,
   );
+  const scannerWorkbenchResult = expandedSymbol ? results.find(result => result.symbol === expandedSymbol) ?? null : null;
+  const scannerWorkbenchExplanation = scannerWorkbenchResult ? buildScannerMatchExplanation(scannerWorkbenchResult, {
+    presetName: currentScanName(),
+    tradeDate,
+    scanTrust,
+  }) : null;
   const sectorStrength = useMemo(() => buildScannerSectorStrength(results).slice(0, 5), [results]);
   const sectorTaxonomy = sectorTaxonomyPresentation(sectorTaxonomyMetadata, sectorTaxonomyError);
   const sectorTaxonomyColor = sectorTaxonomy.status === 'good'
@@ -1996,6 +2002,69 @@ export default function ScannerPage() {
         {/* Results table */}
         {!loading && results.length > 0 && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
+            {scannerWorkbenchResult && scannerWorkbenchExplanation && (
+              <div
+                data-testid="scanner-workbench"
+                style={{
+                  margin: '12px 16px',
+                  padding: 14,
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(255,255,255,0.025)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
+                  gap: 12,
+                  alignItems: 'stretch',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div className="label" style={{ marginBottom: 5 }}>Scan results workbench</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                    <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>{scannerWorkbenchResult.symbol}</span>
+                    <span className="caption">{scannerWorkbenchResult.company_name}</span>
+                    <span className="workspace-pill">{scannerWorkbenchExplanation.nextAction}</span>
+                  </div>
+                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 8 }}>
+                    {scannerWorkbenchExplanation.headline}
+                  </div>
+                  <div className="workspace-pill-row">
+                    {scannerWorkbenchExplanation.metrics.slice(0, 5).map(metric => (
+                      <span
+                        key={metric.label}
+                        className="workspace-pill"
+                        style={{ color: metric.tone === 'good' ? 'var(--gain)' : metric.tone === 'warn' ? 'var(--warn)' : metric.tone === 'bad' ? 'var(--loss)' : 'var(--text-secondary)' }}
+                      >
+                        {metric.label}: {metric.value}
+                      </span>
+                    ))}
+                  </div>
+                  {scannerWorkbenchExplanation.warnings.length > 0 && (
+                    <div className="caption" style={{ marginTop: 8, color: 'var(--warn)', lineHeight: 1.5 }}>
+                      {scannerWorkbenchExplanation.warnings.join(' · ')}
+                    </div>
+                  )}
+                </div>
+                <div style={{ minWidth: 0, padding: 10, borderRadius: 12, border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.12)' }}>
+                  <div className="label" style={{ marginBottom: 5 }}>Chart + broker context</div>
+                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 10 }}>
+                    Review chart structure first. Broker action stays journal-only until a plan is confirmed outside the scanner.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className="workspace-chip-button active" onClick={() => void openScannerChart(scannerWorkbenchResult)}>
+                      Open chart
+                    </button>
+                    {watchlists[0] && (
+                      <button className="workspace-chip-button" onClick={() => addToWatchlist(scannerWorkbenchResult.symbol, watchlists[0].id)}>
+                        Add to {watchlists[0].name}
+                      </button>
+                    )}
+                    <button className="workspace-chip-button" onClick={() => markWorkflow([scannerWorkbenchResult.symbol], 'review_later')}>
+                      Review later
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <DataTable
               className="scanner-results-table"
               style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}

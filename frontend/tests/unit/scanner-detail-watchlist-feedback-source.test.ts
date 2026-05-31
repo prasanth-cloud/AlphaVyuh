@@ -31,4 +31,11 @@ describe("scanner watchlist feedback", () => {
     expect(scannerPageSource).toContain("Source: {sectorTaxonomy.source}");
     expect(scannerPageSource).toContain("Industry audit pending");
   });
+
+  it("keeps the selected scan result workbench review-only and chart-first", () => {
+    expect(scannerPageSource).toContain('data-testid="scanner-workbench"');
+    expect(scannerPageSource).toContain("Scan results workbench");
+    expect(scannerPageSource).toContain("Chart + broker context");
+    expect(scannerPageSource).toContain("Broker action stays journal-only until a plan is confirmed outside the scanner.");
+  });
 });
