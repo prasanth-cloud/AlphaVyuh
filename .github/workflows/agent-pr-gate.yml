@@ -94,6 +94,9 @@ jobs:
       - name: Data recovery readiness checker tests
         run: npm run test:data-recovery-check
 
+      - name: Market-data entitlement contract tests
+        run: npm run test:market-data-entitlement-check
+
       - name: Setup review workflow contract tests
         run: npm run test:setup-review-check
 
