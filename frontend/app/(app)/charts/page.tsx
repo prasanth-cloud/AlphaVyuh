@@ -20,6 +20,7 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import {
   buildMultiChartAnalysisSummary,
   buildMultiChartAlertDraft,
+  buildMultiChartBoardPulse,
   buildMultiChartBoardSummary,
   buildMultiChartDecisionPatch,
   buildMultiChartReviewHref,
@@ -76,6 +77,20 @@ export default function ChartsIndexPage() {
   const [copyMessage, setCopyMessage] = useState("");
   const [symbolImportValue, setSymbolImportValue] = useState("");
   const activeRequest = useMemo(() => getWatchlistChartRequest(rangeLabel), [rangeLabel]);
+  const reviewItems = useMemo(() => cards.map((card) => {
+    const workflow = workflowBySymbol[card.symbol];
+    const analysis = buildMultiChartAnalysisSummary(card.data, workflow?.scanner_context);
+    const trust = buildMultiChartTrustContext(card.data, activeRequest);
+    return {
+      symbol: card.symbol,
+      lifecycle: workflow?.lifecycle,
+      analysis,
+      trust,
+      alertDraft: buildMultiChartAlertDraft(card.data, analysis),
+      scannerContext: workflow?.scanner_context,
+    };
+  }), [activeRequest, cards, workflowBySymbol]);
+  const boardPulse = useMemo(() => buildMultiChartBoardPulse(reviewItems), [reviewItems]);
 
   useEffect(() => {
     if (symbols.length === 0) {
@@ -144,21 +159,7 @@ export default function ChartsIndexPage() {
   }
 
   async function copyBoardSummary() {
-    const items = cards
-      .filter((card) => card.data && !card.error)
-      .map((card) => {
-        const workflow = workflowBySymbol[card.symbol];
-        const analysis = buildMultiChartAnalysisSummary(card.data, workflow?.scanner_context);
-        const trust = buildMultiChartTrustContext(card.data, activeRequest);
-        return {
-          symbol: card.symbol,
-          lifecycle: workflow?.lifecycle,
-          analysis,
-          trust,
-          alertDraft: buildMultiChartAlertDraft(card.data, analysis),
-          scannerContext: workflow?.scanner_context,
-        };
-      });
+    const items = reviewItems.filter((item) => item.analysis);
     const text = buildMultiChartBoardSummary(items, {
       rangeLabel,
       sourceLabel: sourceLabel(source, watchlistName),
@@ -251,6 +252,44 @@ export default function ChartsIndexPage() {
             <span className="workspace-pill">{sourceLabel(source, watchlistName)}</span>
             <span className="workspace-pill"><Num>{loadedCount}</Num> / <Num>{symbols.length}</Num> loaded</span>
           </div>
+        </div>
+        <div
+          data-testid="multi-chart-board-pulse"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 10,
+            marginTop: 14,
+            paddingTop: 12,
+            borderTop: "1px solid var(--border-subtle)",
+          }}
+        >
+          {[
+            ["Best candidate", boardPulse.topCandidate ? `${boardPulse.topCandidate.symbol} · ${boardPulse.topCandidate.scoreLabel}` : "Waiting for charts", boardPulse.topCandidate?.detail ?? "Load a board to rank setups"],
+            ["Board score", boardPulse.averageScoreLabel, `${boardPulse.readyCount} ready · ${boardPulse.watchCount} watch · ${boardPulse.missingCount} missing`],
+            ["Top blocker", boardPulse.topBlocker, "Shared reason to slow down"],
+            ["Launch review", rangeLabel === "5Y" ? "5Y daily context" : `${rangeLabel} review context`, sourceLabel(source, watchlistName)],
+          ].map(([label, value, detail], index) => (
+            <div key={label} style={{ minWidth: 0 }}>
+              <div className="caption" style={{ marginBottom: 3 }}>{label}</div>
+              <Num
+                style={{
+                  display: "block",
+                  color: index === 0 || index === 1 ? analysisToneColor(boardPulse.tone) : "var(--text-primary)",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {value}
+              </Num>
+              <div className="caption" style={{ marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {detail}
+              </div>
+            </div>
+          ))}
         </div>
         <div className="workspace-pill-row" style={{ marginTop: 12, gap: 8 }}>
           {REVIEW_RANGES.map((range) => (
