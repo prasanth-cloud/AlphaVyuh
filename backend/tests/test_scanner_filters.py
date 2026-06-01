@@ -466,6 +466,38 @@ class TestScannerDbPrefilters:
         ]
 
 
+class TestScannerSortSlice:
+    def test_plan_slice_matches_full_desc_sort_without_sorting_every_result(self):
+        from app.routers.scanner import _sorted_plan_slice
+
+        rows = [
+            {"symbol": "AAA", "volume_ratio": 2.0},
+            {"symbol": "BBB", "volume_ratio": None},
+            {"symbol": "CCC", "volume_ratio": 3.0},
+            {"symbol": "DDD", "volume_ratio": 3.0},
+            {"symbol": "EEE", "volume_ratio": 1.0},
+        ]
+
+        sliced = _sorted_plan_slice(rows, "volume_ratio", reverse=True, limit=3)
+
+        assert [row["symbol"] for row in sliced] == ["CCC", "DDD", "AAA"]
+
+    def test_plan_slice_matches_full_asc_sort_with_null_first(self):
+        from app.routers.scanner import _sorted_plan_slice
+
+        rows = [
+            {"symbol": "AAA", "volume_ratio": 2.0},
+            {"symbol": "BBB", "volume_ratio": None},
+            {"symbol": "CCC", "volume_ratio": 3.0},
+            {"symbol": "DDD", "volume_ratio": 3.0},
+            {"symbol": "EEE", "volume_ratio": 1.0},
+        ]
+
+        sliced = _sorted_plan_slice(rows, "volume_ratio", reverse=False, limit=3)
+
+        assert [row["symbol"] for row in sliced] == ["BBB", "EEE", "AAA"]
+
+
 class TestVCPAsyncPass2:
     """Structural tests for the async _run_vcp_pass2 — no DB required."""
 

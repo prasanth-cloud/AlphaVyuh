@@ -27,6 +27,7 @@
 - Added server-side scanner phase timings (`date_lookup`, `query`, `filter`, `vcp`, `sort`, `universe_count`, `total`) to `source_metadata.scanner_performance` and benchmark output so production latency bottlenecks can be measured instead of guessed.
 - Tightened `SCANNER_BENCHMARK_MIN_SPEEDUP` enforcement so the broad baseline scenario still reports speedup for context, but only optimized selective scanner scenarios gate the 5-10x target.
 - Made speedup enforcement fail closed when any optimized selective scenario is missing baseline p50/p95 evidence, preventing partial benchmark files from proving only part of the 5-10x target.
+- Replaced full-result scanner sorting with a plan-capped top-K slice, preserving existing sort/null/tie behavior while avoiding unnecessary sort work when a scan matches more rows than the free/pro response cap.
 
 ## Why
 
@@ -49,8 +50,8 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> 57 passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 315 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> targeted scanner tests passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 317 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
 - `npm --prefix frontend run typecheck` -> passed.

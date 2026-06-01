@@ -7,6 +7,7 @@ smaller candidate set returned by the DB push-filters.
 from __future__ import annotations
 
 import asyncio
+import heapq
 import threading
 import time
 from datetime import date
@@ -659,6 +660,31 @@ def _score_setup(result: dict, preset_id: str | None) -> dict:
         "confidence_label": label,
         "confidence_reasons": reasons[:3],
     }
+
+
+def _sort_key_value(result: dict, sort_key: str) -> tuple[bool, object]:
+    value = result.get(sort_key)
+    return (value is not None, value or 0)
+
+
+def _sorted_plan_slice(results: list[dict], sort_key: str, reverse: bool, limit: int) -> list[dict]:
+    """Return the same sorted plan slice without sorting the full universe when possible."""
+    if limit <= 0 or len(results) <= limit:
+        return sorted(results, key=lambda row: _sort_key_value(row, sort_key), reverse=reverse)
+
+    if reverse:
+        decorated = heapq.nlargest(
+            limit,
+            enumerate(results),
+            key=lambda item: (_sort_key_value(item[1], sort_key), -item[0]),
+        )
+    else:
+        decorated = heapq.nsmallest(
+            limit,
+            enumerate(results),
+            key=lambda item: (_sort_key_value(item[1], sort_key), item[0]),
+        )
+    return [row for _, row in decorated]
 
 
 def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = None) -> list[dict]:
@@ -1325,11 +1351,10 @@ async def execute_scan(
     sort_started = time.perf_counter()
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
     reverse  = body.sort_order != "asc"
-    results.sort(key=lambda x: (x.get(sort_key) is not None, x.get(sort_key) or 0), reverse=reverse)
+    total = len(results)
+    capped = _sorted_plan_slice(results, sort_key, reverse, hard_limit)
     sort_elapsed_ms = round((time.perf_counter() - sort_started) * 1000)
 
-    total = len(results)
-    capped = results[:hard_limit]
     universe_started = time.perf_counter()
     universe_size = _active_universe_size(client, series_list)
     universe_count_elapsed_ms = round((time.perf_counter() - universe_started) * 1000)
