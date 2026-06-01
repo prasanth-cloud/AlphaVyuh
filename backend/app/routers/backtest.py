@@ -61,7 +61,7 @@ async def run_backtest(
             .execute()
             .data or []
         )
-        matched = _apply_filters(rows, body.filters)
+        matched = _apply_filters(rows, body.filters, score_results=False)
         results.append({
             "date": trade_date,
             "match_count": len(matched),

@@ -1232,6 +1232,7 @@ async def execute_scan(
     plan: str = "free",
     trade_date: str | date | None = None,
     enforce_plan_limit: bool = True,
+    score_results: bool = True,
 ) -> dict:
     """Run the scanner core for UI scans and saved EOD scan alerts."""
     scan_started = time.perf_counter()
@@ -1396,7 +1397,7 @@ async def execute_scan(
         paged = capped[start:end]
         total_pages = max(1, (len(capped) + safe_page_size - 1) // safe_page_size)
 
-    if sort_key != "setup_score" and paged:
+    if score_results and sort_key != "setup_score" and paged:
         score_started = time.perf_counter()
         _score_scan_results(paged, body.preset_id)
         score_elapsed_ms = round(score_elapsed_ms + ((time.perf_counter() - score_started) * 1000))

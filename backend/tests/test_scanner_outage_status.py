@@ -336,6 +336,34 @@ def test_execute_scan_scores_all_matches_when_sorting_by_setup_score(monkeypatch
     assert [row["symbol"] for row in result["results"][:3]] == ["SYM039", "SYM038", "SYM037"]
 
 
+def test_execute_scan_can_skip_return_payload_scoring(monkeypatch):
+    calls = []
+
+    def score_setup(result, _preset_id):
+        calls.append(result["symbol"])
+        return {
+            "setup_score": 77,
+            "setup_grade": "B",
+            "confidence_label": "Worth review",
+            "confidence_reasons": ["test score"],
+        }
+
+    monkeypatch.setattr(scanner, "_score_setup", score_setup)
+    result = asyncio.run(
+        scanner.execute_scan(
+            _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000),
+            scanner.ScanRequest(sort_by="volume_ratio", page_size=25),
+            plan="pro",
+            trade_date="2026-05-19",
+            score_results=False,
+        )
+    )
+
+    assert calls == []
+    assert all("setup_score" not in row for row in result["results"])
+    assert result["source_metadata"]["scanner_performance"]["timing_ms"]["score"] == 0
+
+
 def test_execute_scan_caches_universe_count_for_repeated_scans():
     scanner._universe_count_cache.clear()
     client = _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000)
