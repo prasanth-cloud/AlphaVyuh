@@ -96,6 +96,20 @@ function scannerResponse(requestBody) {
   if (filters.darvas_box_height_pct_max != null) {
     prefilters.push({ op: "lte", column: "darvas_box_height_pct", value: filters.darvas_box_height_pct_max });
   }
+  if (filters.volume_ratio_min != null) {
+    prefilters.push({ op: "or_", column: "volume_ratio", value: `volume_ratio.is.null,volume_ratio.gte.${filters.volume_ratio_min}` });
+  }
+  if (filters.volume_ratio_max != null) {
+    prefilters.push({ op: "or_", column: "volume_ratio", value: `volume_ratio.is.null,volume_ratio.lte.${filters.volume_ratio_max}` });
+  }
+  const w52hLimit = filters.w52h_pct_max ?? filters.week_52_high_pct_max;
+  if (w52hLimit != null) {
+    prefilters.push({ op: "or_", column: "w52h_pct", value: `w52h_pct.is.null,w52h_pct.gte.${-Math.abs(w52hLimit)}` });
+    prefilters.push({ op: "or_", column: "w52h_pct", value: `w52h_pct.is.null,w52h_pct.lte.${Math.abs(w52hLimit)}` });
+  }
+  if (filters.w52l_pct_min != null) {
+    prefilters.push({ op: "or_", column: "w52l_pct", value: `w52l_pct.is.null,w52l_pct.gte.${filters.w52l_pct_min}` });
+  }
 
   const selectivePrefilters = prefilters.length > 2;
   const queryRows = selectivePrefilters ? 120 : 912;

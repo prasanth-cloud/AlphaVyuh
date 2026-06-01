@@ -26,6 +26,7 @@ FREE_RESULT_LIMIT  = 200
 PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 DbPrefilterValue = float | int | bool | str | list[str]
+DbPrefilterOp = tuple[str, str, DbPrefilterValue]
 
 
 def _list_filter(value: list[str] | str | None) -> list[str]:
@@ -36,8 +37,17 @@ def _list_filter(value: list[str] | str | None) -> list[str]:
     return [value] if value else []
 
 
-def _db_prefilter_ops(f: "ScanFilters") -> list[tuple[str, str, DbPrefilterValue]]:
-    ops: list[tuple[str, str, DbPrefilterValue]] = [
+def _pgrest_number(value: float | int) -> str:
+    number = float(value)
+    return str(int(number)) if number.is_integer() else str(number)
+
+
+def _db_or_null_numeric_op(column: str, operator: str, value: float | int) -> DbPrefilterOp:
+    return ("or_", column, f"{column}.is.null,{column}.{operator}.{_pgrest_number(value)}")
+
+
+def _db_prefilter_ops(f: "ScanFilters") -> list[DbPrefilterOp]:
+    ops: list[DbPrefilterOp] = [
         ("eq", "stock_universe.is_active", True),
         ("in_", "stock_universe.series", _list_filter(f.series) or ["EQ", "BE"]),
     ]
@@ -112,11 +122,24 @@ def _db_prefilter_ops(f: "ScanFilters") -> list[tuple[str, str, DbPrefilterValue
         ops.append(("lte", "darvas_box_height_pct", f.darvas_box_height_pct_max))
     if f.nr7 is True:
         ops.append(("eq", "is_nr7", True))
+
+    if f.volume_ratio_min is not None:
+        ops.append(_db_or_null_numeric_op("volume_ratio", "gte", f.volume_ratio_min))
+    if f.volume_ratio_max is not None:
+        ops.append(_db_or_null_numeric_op("volume_ratio", "lte", f.volume_ratio_max))
+
+    w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
+    if w52h_limit is not None:
+        limit = abs(float(w52h_limit))
+        ops.append(_db_or_null_numeric_op("w52h_pct", "gte", -limit))
+        ops.append(_db_or_null_numeric_op("w52h_pct", "lte", limit))
+    if f.w52l_pct_min is not None:
+        ops.append(_db_or_null_numeric_op("w52l_pct", "gte", f.w52l_pct_min))
     return ops
 
 
 def _serialize_prefilter_ops(
-    ops: list[tuple[str, str, DbPrefilterValue]],
+    ops: list[DbPrefilterOp],
 ) -> list[dict[str, DbPrefilterValue]]:
     return [
         {"op": op, "column": column, "value": value}
@@ -128,11 +151,14 @@ def _push_db_prefilters(q, f: "ScanFilters"):
     """Push non-fallback scanner intelligence filters into PostgREST.
 
     Only push fields where a missing DB value is already a hard reject in
-    _apply_filters. Fallback-computed fields such as volume_ratio and w52h_pct
-    stay Python-side so older/partial rows keep their current behavior.
+    _apply_filters. For fallback-computed fields, keep DB-null rows in the
+    query so Python can preserve the older/partial row fallback behavior.
     """
     for op, column, value in _db_prefilter_ops(f):
-        q = getattr(q, op)(column, value)
+        if op == "or_":
+            q = q.or_(str(value))
+        else:
+            q = getattr(q, op)(column, value)
     return q
 
 

@@ -348,6 +348,10 @@ class _RecordingQuery:
         self.calls.append(("in_", column, value))
         return self
 
+    def or_(self, value):
+        self.calls.append(("or_", "", value))
+        return self
+
 
 class TestScannerDbPrefilters:
     def test_exposes_prefilter_ops_for_diagnostics(self):
@@ -438,7 +442,7 @@ class TestScannerDbPrefilters:
             ("gte", "stock_universe.roe", 12),
         ]
 
-    def test_keeps_fallback_computed_filters_python_side(self):
+    def test_pushes_fallback_computed_filters_without_dropping_nulls(self):
         from app.routers.scanner import ScanFilters, _push_db_prefilters
 
         query = _push_db_prefilters(
@@ -454,6 +458,11 @@ class TestScannerDbPrefilters:
         assert query.calls == [
             ("eq", "stock_universe.is_active", True),
             ("in_", "stock_universe.series", ["EQ", "BE"]),
+            ("or_", "", "volume_ratio.is.null,volume_ratio.gte.1.5"),
+            ("or_", "", "volume_ratio.is.null,volume_ratio.lte.5"),
+            ("or_", "", "w52h_pct.is.null,w52h_pct.gte.-10"),
+            ("or_", "", "w52h_pct.is.null,w52h_pct.lte.10"),
+            ("or_", "", "w52l_pct.is.null,w52l_pct.gte.30"),
         ]
 
 

@@ -20,6 +20,7 @@
 - Fixed the declared `market_cap_category` scanner filter so it is selected, applied, returned, and DB-prefiltered instead of being silently ignored.
 - Extended the scanner benchmark to include a `fundamental-category` scenario so category/fundamental DB pushdown is part of the production proof path.
 - Added optional scanner benchmark baseline comparison via `SCANNER_BENCHMARK_BASELINE_JSON` or `SCANNER_BENCHMARK_BASELINE_PATH` and `SCANNER_BENCHMARK_MIN_SPEEDUP`, so the 5-10x target can be enforced with real before/after p50 and p95 latency numbers after deployment.
+- Added null-preserving DB prefilters for fallback-computed `volume_ratio`, `w52h_pct`, and `w52l_pct`, reducing row transfer for backfilled scanner rows while keeping DB-null rows available for the existing Python fallback path.
 
 ## Why
 
@@ -38,7 +39,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
-- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark and speedup-baseline contract coverage.
+- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, and speedup-baseline contract coverage.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
