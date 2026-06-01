@@ -15,6 +15,7 @@
 - Extended the production API checker to report authenticated scanner latency and source-row count, creating a deploy-time evidence path for the 5-10x performance target.
 - Split scanner data coverage from filtered query size so DB-side narrowing no longer makes healthy scans look degraded or shows misleading low coverage copy.
 - Added scanner diagnostics for production evidence: `query_rows`, `source_rows`, `query_row_reduction_pct`, and `db_prefilters_applied`.
+- Added `scripts/benchmark-scanner-api.mjs` plus a mocked contract test so post-deploy scanner p50/p95 latency, row reduction, and DB prefilter count can be measured instead of inferred.
 
 ## Why
 
@@ -33,6 +34,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
+- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark contract coverage.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
@@ -47,7 +49,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 ## Open Risks
 
-- The scanner optimization should be benchmarked against production authenticated scanner once the PR is deployed because local checks prove query shape and regression safety, not live p50/p95.
+- The scanner optimization should be benchmarked against production authenticated scanner once the PR is deployed by running `PRODUCTION_API_URL=<backend> PRODUCTION_API_BEARER_TOKEN=<token> npm run check:scanner-benchmark`.
 - The target 5-10x improvement is plausible for selective presets due reduced row transfer, but not proven end-to-end until a deployed authenticated scanner benchmark records before/after rows and latency.
 - Do not mutate production Supabase, run broker credentials, enable billing, or change TradingView implementation posture without explicit owner approval.
 
