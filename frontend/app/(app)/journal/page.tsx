@@ -11,7 +11,7 @@ import {
 import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
-import { fmtCcy, getTradeFlowMeta } from "./components/utils";
+import { fmtCcy, getDecisionMemorySummary, getTradeFlowMeta } from "./components/utils";
 import { TradeTable } from "./components/TradeTable";
 import { TradePanel } from "./components/TradePanel";
 import { JournalAnalytics as JournalAnalyticsTab } from "./components/JournalAnalytics";
@@ -238,6 +238,13 @@ export default function JournalPage() {
     const manual = entries.length - imported - chartOrders;
     return { needsReview, reviewed, imported, chartOrders, manual };
   }, [entries]);
+  const decisionMemory = useMemo(() => (
+    getDecisionMemorySummary(entries, {
+      closedTrades,
+      reviewedTrades,
+      unavailable: Boolean(journalLoadError),
+    })
+  ), [closedTrades, entries, journalLoadError, reviewedTrades]);
   const handleAddTrade = async () => {
     if (!selectedSymbol || !addForm.entry_price || !addForm.quantity || !addForm.entry_date || !addForm.trade_type) {
       showToast("Fill in symbol, date, price and quantity"); return;
@@ -396,7 +403,7 @@ export default function JournalPage() {
       <div
         className="workspace-card"
         data-testid="journal-review-queue"
-        style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}
+        style={{ padding: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: 14, alignItems: "start" }}
       >
         <div style={{ minWidth: 240, flex: "1 1 320px" }}>
           <EyebrowLabel>Review and improvement</EyebrowLabel>
@@ -411,42 +418,72 @@ export default function JournalPage() {
             Broker imports, chart drafts, journal captures, and manual logs stay labeled so reviews can explain what happened and why.
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setTab("trades");
-              setFilterStatus("closed");
-              setReviewFocus("needs-review");
-            }}
-            className="rounded-[8px] px-3 py-2 text-left"
-            style={{
-              background: journalQueue.needsReview > 0 ? "rgba(217,119,6,0.12)" : "rgba(244,247,251,0.04)",
-              border: "1px solid var(--border-subtle)",
-              color: journalQueue.needsReview > 0 ? "var(--warn)" : "var(--text-secondary)",
-              cursor: "pointer",
-              minWidth: 112,
-            }}
+        <div className="flex flex-col gap-3">
+          <div
+            className="rounded-[8px] p-3"
+            data-testid="journal-decision-memory"
+            style={{ background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)" }}
           >
-            <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>Next action</div>
-            <div className="text-[12px] font-semibold">{journalQueue.needsReview > 0 ? "Review now" : "Log next trade"}</div>
-          </button>
-          {[
-            { label: "Needs review", value: journalQueue.needsReview, color: "var(--warn)" },
-            { label: "Reviewed", value: journalQueue.reviewed, color: "var(--gain)" },
-            { label: "Broker import", value: journalQueue.imported, color: "var(--accent)" },
-            { label: "Chart/sim", value: journalQueue.chartOrders, color: "var(--text-secondary)" },
-            { label: "Manual", value: Math.max(0, journalQueue.manual), color: "var(--text-tertiary)" },
-          ].map(({ label, value, color }) => (
-            <div
-              key={label}
-              className="rounded-[8px] px-3 py-2"
-              style={{ background: "rgba(244,247,251,0.05)", border: "1px solid var(--border-subtle)", minWidth: 92 }}
-            >
-              <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</div>
-              <Num className="text-[16px] font-semibold" style={{ color }}>{value}</Num>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase" style={{ color: "var(--text-tertiary)", letterSpacing: 0 }}>
+                  Decision memory
+                </div>
+                <div className="mt-1 text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {decisionMemory.headline}
+                </div>
+              </div>
+              <div className="text-right">
+                <Num className="text-[18px] font-semibold" style={{ color: decisionMemory.status === "ready" ? "var(--gain)" : "var(--accent)" }}>
+                  {decisionMemory.coveragePct}%
+                </Num>
+                <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>reviewed</div>
+              </div>
             </div>
-          ))}
+            <div className="mt-2 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+              {decisionMemory.nextAction}
+            </div>
+            <div className="mt-2 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <Num>{decisionMemory.decisionContextCount}</Num>/<Num>{decisionMemory.closedTrades}</Num> closed trades include scanner, chart, watchlist, or broker context.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setTab("trades");
+                setFilterStatus("closed");
+                setReviewFocus("needs-review");
+              }}
+              className="rounded-[8px] px-3 py-2 text-left"
+              style={{
+                background: journalQueue.needsReview > 0 ? "rgba(217,119,6,0.12)" : "rgba(244,247,251,0.04)",
+                border: "1px solid var(--border-subtle)",
+                color: journalQueue.needsReview > 0 ? "var(--warn)" : "var(--text-secondary)",
+                cursor: "pointer",
+                minWidth: 112,
+              }}
+            >
+              <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>Next action</div>
+              <div className="text-[12px] font-semibold">{journalQueue.needsReview > 0 ? "Review now" : "Log next trade"}</div>
+            </button>
+            {[
+              { label: "Needs review", value: journalQueue.needsReview, color: "var(--warn)" },
+              { label: "Reviewed", value: journalQueue.reviewed, color: "var(--gain)" },
+              { label: "Broker import", value: journalQueue.imported, color: "var(--accent)" },
+              { label: "Chart/sim", value: journalQueue.chartOrders, color: "var(--text-secondary)" },
+              { label: "Manual", value: Math.max(0, journalQueue.manual), color: "var(--text-tertiary)" },
+            ].map(({ label, value, color }) => (
+              <div
+                key={label}
+                className="rounded-[8px] px-3 py-2"
+                style={{ background: "rgba(244,247,251,0.05)", border: "1px solid var(--border-subtle)", minWidth: 92 }}
+              >
+                <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</div>
+                <Num className="text-[16px] font-semibold" style={{ color }}>{value}</Num>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
