@@ -21,6 +21,9 @@ const BROKERS = [
   { value: "none",     label: "None yet",  logo: "–" },
 ];
 const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TATAMOTORS"];
+const TRADE_SCOPE_OPTIONS = [
+  { value: "equity", label: "NSE/BSE cash equities", detail: "Scanner, watchlist, chart planning, broker import, and journal review stay focused on cash-equity workflows." },
+];
 
 const cardStyle = {
   background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)",
@@ -177,9 +180,31 @@ export default function OnboardingPage() {
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--text-tertiary)" }}>What do you trade?</p>
                 <div className="space-y-2">
-                  <Radio name="trades" value="equity" label="Equity (stocks)" checked={form.trades === "equity"} onSelect={selectRadio} />
-                  <Radio name="trades" value="fno" label="F&O (futures & options)" checked={form.trades === "fno"} onSelect={selectRadio} />
-                  <Radio name="trades" value="both" label="Both" checked={form.trades === "both"} onSelect={selectRadio} />
+                  {TRADE_SCOPE_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex items-start gap-3 p-3 rounded-[8px] border cursor-pointer transition-colors"
+                      style={form.trades === option.value
+                        ? { border: "1px solid var(--accent)", background: "var(--accent-subtle)" }
+                        : { border: "1px solid rgba(255,255,255,0.08)", background: "transparent" }}
+                    >
+                      <input
+                        type="radio"
+                        name="trades"
+                        value={option.value}
+                        checked={form.trades === option.value}
+                        onChange={() => selectRadio("trades", option.value)}
+                        className="mt-1 accent-[var(--accent)]"
+                      />
+                      <span>
+                        <span className="block text-[14px]" style={{ color: "var(--text-primary)" }}>{option.label}</span>
+                        <span className="block text-[12px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>{option.detail}</span>
+                      </span>
+                    </label>
+                  ))}
+                  <div className="rounded-[8px] p-3 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)", background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.24)" }}>
+                    Non-cash-equity workflows are outside this launch scope.
+                  </div>
                 </div>
               </div>
               <button
