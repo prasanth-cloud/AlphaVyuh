@@ -345,6 +345,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).toContainText(/Account-managed access|Account access/i, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Execution not enabled yet/i);
+    await expect(page.locator("body")).toContainText(/NSE\/BSE cash equities/i);
+    await expect(page.locator("body")).not.toContainText(/F&O|futures & options|Greeks|OI dashboards/i);
 
     await page.goto("/settings/broker", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/read-only|import only/i, { timeout: 15_000 });
