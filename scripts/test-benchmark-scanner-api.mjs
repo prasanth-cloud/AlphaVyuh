@@ -63,9 +63,6 @@ function scannerResponse(requestBody) {
   if (filters.sector != null) {
     prefilters.push({ op: "in_", column: "stock_universe.sector", value: filters.sector });
   }
-  if (filters.market_cap_category != null) {
-    prefilters.push({ op: "in_", column: "stock_universe.market_cap_category", value: filters.market_cap_category });
-  }
   if (filters.market === "IN") {
     prefilters.push({ op: "in_", column: "stock_universe.market", value: ["NSE", "BSE"] });
   }
@@ -168,7 +165,7 @@ await withServer(async (request, response) => {
   assert.match(stdout, /baseline: p50=\d+ms p95=\d+ms .*912 rows, 0% query reduction, 2 db prefilters/);
   assert.match(stdout, /trend-template: p50=\d+ms p95=\d+ms .*server total=8ms query=3ms filter=2ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /box-breakout: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
-  assert.match(stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, 11 db prefilters/);
+  assert.match(stdout, /fundamental-filters: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, 10 db prefilters/);
 
   const withBaseline = await runBenchmark(apiUrl, {
     PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
@@ -177,7 +174,7 @@ await withServer(async (request, response) => {
       baseline: { p50: 1, p95: 1 },
       "trend-template": { p50: 500, p95: 500 },
       "box-breakout": { p50: 500, p95: 500 },
-      "fundamental-category": { p50: 500, p95: 500 },
+      "fundamental-filters": { p50: 500, p95: 500 },
     }),
     SCANNER_BENCHMARK_MIN_SPEEDUP: "2",
   });
@@ -188,7 +185,7 @@ await withServer(async (request, response) => {
   );
   assert.match(withBaseline.stdout, /baseline: p50=\d+ms p95=\d+ms .*speedup p50=0\.\d+x p95=0\.\d+x/);
   assert.match(withBaseline.stdout, /trend-template: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
-  assert.match(withBaseline.stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
+  assert.match(withBaseline.stdout, /fundamental-filters: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
 
   const missingSelectiveBaseline = await runBenchmark(apiUrl, {
     PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
@@ -223,7 +220,7 @@ await withServer(async (request, response) => {
     assert.equal(output.api_base, apiUrl);
     assert.ok(Array.isArray(output.results), "benchmark output should include results array");
     assert.ok(output.results.some((result) => result.name === "trend-template" && result.p50 >= 0 && result.p95 >= 0));
-    assert.ok(output.results.some((result) => result.name === "fundamental-category" && result.prefilterCount >= 11));
+    assert.ok(output.results.some((result) => result.name === "fundamental-filters" && result.prefilterCount >= 10));
     assert.ok(output.results.some((result) => result.name === "trend-template" && result.timingMs?.total === 8));
   } finally {
     rmSync(outputDir, { recursive: true, force: true });

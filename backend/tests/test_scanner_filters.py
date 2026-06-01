@@ -410,7 +410,7 @@ class TestScannerDbPrefilters:
             ("eq", "is_nr7", True),
         ]
 
-    def test_pushes_stock_universe_filters_to_db(self):
+    def test_pushes_stock_universe_filters_to_db_without_unmigrated_category(self):
         from app.routers.scanner import ScanFilters, _push_db_prefilters
 
         query = _push_db_prefilters(
@@ -418,6 +418,9 @@ class TestScannerDbPrefilters:
             ScanFilters(
                 series=["EQ"],
                 sector=["Financial Services", "IT"],
+                # market_cap_category is handled Python-side when a row exposes
+                # it. The stock_universe table has no repository migration for
+                # this column, so pushing it to PostgREST breaks production.
                 market_cap_category=["largecap", "midcap"],
                 market="IN",
                 market_cap_min=500,
@@ -433,7 +436,6 @@ class TestScannerDbPrefilters:
             ("eq", "stock_universe.is_active", True),
             ("in_", "stock_universe.series", ["EQ"]),
             ("in_", "stock_universe.sector", ["Financial Services", "IT"]),
-            ("in_", "stock_universe.market_cap_category", ["largecap", "midcap"]),
             ("in_", "stock_universe.market", ["NSE", "BSE"]),
             ("gte", "stock_universe.market_cap_cr", 500),
             ("lte", "stock_universe.market_cap_cr", 50000),
