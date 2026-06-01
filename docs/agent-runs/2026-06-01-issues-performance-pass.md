@@ -44,7 +44,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 ## Learned
 
 - Several open issues are stale from a PR bookkeeping perspective, but not all can be closed safely.
-- #282 setup-review implementation appears landed and is covered by the named setup-review gate.
+- #282 setup-review implementation is closed with evidence and covered by the named setup-review gate.
 - #285 production sector taxonomy contract passes structurally, but the contract correctly reports taxonomy `unverified` and industry taxonomy `not_audited`.
 - #284 still needs production supplemental refresh metadata proof.
 - #287 still needs owner-approved real broker read-only smoke before any broker execution confidence claim.
@@ -79,5 +79,4 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 ## Next Steps
 
 - Keep PR #331 green and merge/deploy only after explicit owner approval.
-- Close #282 if owner accepts the current setup-review evidence as complete.
 - Keep #284, #285, #287, #63, and #42 open with precise remaining gates instead of overclaiming.
