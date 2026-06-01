@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getReviewContext, getTradeFlowMeta } from "@/app/(app)/journal/components/utils";
+import { getDecisionMemorySummary, getReviewContext, getTradeFlowMeta } from "@/app/(app)/journal/components/utils";
 
 describe("journal review context", () => {
   it("builds process prompts from the original scanner idea and plan", () => {
@@ -124,5 +124,86 @@ describe("journal review context", () => {
       lessons: "Wait for confirmation.",
       source_page: "manual",
     })).toMatchObject({ reviewLabel: "Reviewed", reviewTone: "gain" });
+  });
+
+  it("summarizes decision memory coverage without adding trade advice", () => {
+    const summary = getDecisionMemorySummary([
+      {
+        entry_reason: "Scanner: Trend Template",
+        status: "closed",
+        lessons: "Waited for volume confirmation.",
+        source_page: "scanner",
+        source_context: "Trend Template",
+        scanner_context: { source: "scanner", preset_name: "Trend Template", match_reasons: ["Volume expansion"], setup_score: 82 },
+        thesis: "Breakout continuation.",
+        invalidation_rule: "Close below pivot.",
+      },
+      {
+        entry_reason: "[Simulated · watchlist]",
+        status: "closed",
+        lessons: "",
+        source_page: "watchlist",
+        source_context: "Priority watchlist",
+        scanner_context: null,
+        thesis: "Sector leader pullback.",
+        invalidation_rule: null,
+      },
+      {
+        entry_reason: "Zerodha import",
+        status: "closed",
+        lessons: null,
+        source_page: "manual",
+        source_context: "Zerodha upload",
+        scanner_context: null,
+        thesis: null,
+        invalidation_rule: null,
+      },
+    ]);
+
+    expect(summary).toMatchObject({
+      status: "needs-review",
+      coveragePct: 33,
+      closedTrades: 3,
+      reviewedTrades: 1,
+      decisionContextCount: 3,
+      sourceCounts: {
+        scanner: 1,
+        watchlist: 1,
+        chart: 0,
+        broker: 1,
+        manual: 0,
+      },
+    });
+    expect(`${summary.headline} ${summary.nextAction}`).not.toMatch(/should|buy|sell|recommend/i);
+  });
+
+  it("marks decision memory ready only after the review sample is fully covered", () => {
+    const summary = getDecisionMemorySummary([
+      { entry_reason: "Chart order", status: "closed", lessons: "Good stop discipline.", source_page: "chart", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Manual log", status: "closed", lessons: "Entry was late.", source_page: "manual", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Scanner: Stage 2", status: "closed", lessons: "Volume faded.", source_page: "scanner", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+    ]);
+
+    expect(summary).toMatchObject({
+      status: "ready",
+      coveragePct: 100,
+      decisionContextCount: 2,
+    });
+  });
+
+  it("keeps unavailable journal state distinct from an empty journal", () => {
+    expect(getDecisionMemorySummary([], { unavailable: true })).toMatchObject({
+      status: "unavailable",
+      headline: "Decision memory unavailable",
+      coveragePct: 0,
+      closedTrades: 0,
+      reviewedTrades: 0,
+    });
+
+    expect(getDecisionMemorySummary([])).toMatchObject({
+      status: "build-sample",
+      headline: "Build a 3-trade review sample",
+      nextAction: "Close 3 more trades with entry plan context.",
+    });
   });
 });

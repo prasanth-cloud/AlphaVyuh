@@ -48,6 +48,28 @@ export type ReviewContext = {
   fallback: string;
 };
 
+type DecisionMemoryEntry = Pick<
+  JournalEntry,
+  "entry_reason" | "status" | "lessons" | "source_page" | "source_context" | "scanner_context" | "thesis" | "invalidation_rule"
+>;
+
+export type DecisionMemorySummary = {
+  status: "unavailable" | "build-sample" | "needs-review" | "ready";
+  headline: string;
+  nextAction: string;
+  coveragePct: number;
+  closedTrades: number;
+  reviewedTrades: number;
+  decisionContextCount: number;
+  sourceCounts: {
+    scanner: number;
+    watchlist: number;
+    chart: number;
+    broker: number;
+    manual: number;
+  };
+};
+
 function cleanValue(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -189,5 +211,87 @@ export function getTradeFlowMeta(entry: Pick<JournalEntry, "entry_reason" | "sta
     autoRecorded: sourceLabel !== "Manual log",
     reviewLabel: "Needs review",
     reviewTone: "warn",
+  };
+}
+
+function hasDecisionContext(entry: DecisionMemoryEntry): boolean {
+  return Boolean(
+    entry.scanner_context ||
+    cleanValue(entry.source_context) ||
+    cleanValue(entry.thesis) ||
+    cleanValue(entry.invalidation_rule) ||
+    (entry.source_page && entry.source_page !== "manual"),
+  );
+}
+
+export function getDecisionMemorySummary(
+  entries: DecisionMemoryEntry[],
+  options: { closedTrades?: number; reviewedTrades?: number; unavailable?: boolean } = {},
+): DecisionMemorySummary {
+  const closedEntries = entries.filter((entry) => entry.status === "closed");
+  const closedTrades = options.closedTrades ?? closedEntries.length;
+  const reviewedTrades = options.reviewedTrades ?? closedEntries.filter((entry) => Boolean(entry.lessons?.trim())).length;
+  const decisionContextCount = closedEntries.filter(hasDecisionContext).length;
+  const coveragePct = closedTrades > 0 ? Math.min(100, Math.round((reviewedTrades / closedTrades) * 100)) : 0;
+
+  const sourceCounts = entries.reduce<DecisionMemorySummary["sourceCounts"]>((counts, entry) => {
+    const sourceLabel = sourceLabelFromEntry(entry);
+    if (sourceLabel === "Scanner idea") counts.scanner += 1;
+    else if (sourceLabel === "Watchlist plan") counts.watchlist += 1;
+    else if (sourceLabel === "Chart order") counts.chart += 1;
+    else if (sourceLabel === "Broker import") counts.broker += 1;
+    else counts.manual += 1;
+    return counts;
+  }, { scanner: 0, watchlist: 0, chart: 0, broker: 0, manual: 0 });
+
+  if (options.unavailable) {
+    return {
+      status: "unavailable",
+      headline: "Decision memory unavailable",
+      nextAction: "Restore Journal before reviewing playbook quality.",
+      coveragePct: 0,
+      closedTrades: 0,
+      reviewedTrades: 0,
+      decisionContextCount: 0,
+      sourceCounts,
+    };
+  }
+
+  if (closedTrades < 3) {
+    return {
+      status: "build-sample",
+      headline: "Build a 3-trade review sample",
+      nextAction: `Close ${3 - closedTrades} more ${3 - closedTrades === 1 ? "trade" : "trades"} with entry plan context.`,
+      coveragePct,
+      closedTrades,
+      reviewedTrades,
+      decisionContextCount,
+      sourceCounts,
+    };
+  }
+
+  if (reviewedTrades < closedTrades) {
+    const remaining = closedTrades - reviewedTrades;
+    return {
+      status: "needs-review",
+      headline: `${remaining} closed ${remaining === 1 ? "trade needs" : "trades need"} review`,
+      nextAction: "Turn closed trades into lessons before judging setup quality.",
+      coveragePct,
+      closedTrades,
+      reviewedTrades,
+      decisionContextCount,
+      sourceCounts,
+    };
+  }
+
+  return {
+    status: "ready",
+    headline: "Decision memory is current",
+    nextAction: "Keep logging the original plan, source, and outcome for each new trade.",
+    coveragePct,
+    closedTrades,
+    reviewedTrades,
+    decisionContextCount,
+    sourceCounts,
   };
 }
