@@ -39,6 +39,7 @@ const scenarios = [
   {
     name: "baseline",
     expectDbPrefilters: false,
+    enforceSpeedup: false,
     body: {
       filters: { price_min: 1, series: ["EQ"] },
       sort_by: "volume_ratio",
@@ -50,6 +51,7 @@ const scenarios = [
   {
     name: "trend-template",
     expectDbPrefilters: true,
+    enforceSpeedup: true,
     body: {
       preset_id: "trend_template",
       filters: {
@@ -78,6 +80,7 @@ const scenarios = [
   {
     name: "box-breakout",
     expectDbPrefilters: true,
+    enforceSpeedup: true,
     body: {
       preset_id: "darvas_box_breakout",
       filters: {
@@ -98,6 +101,7 @@ const scenarios = [
   {
     name: "fundamental-category",
     expectDbPrefilters: true,
+    enforceSpeedup: true,
     body: {
       filters: {
         series: ["EQ"],
@@ -366,6 +370,7 @@ async function runScenario(scenario) {
     queryReductionPct,
     prefilterCount,
     timingMs,
+    enforceSpeedup: scenario.enforceSpeedup === true,
     totalMatches: numberValue(lastResponse?.total_matches),
     visibleCount: Array.isArray(lastResponse?.results) ? lastResponse.results.length : null,
     tradeDate: lastResponse?.trade_date || lastResponse?.source_metadata?.as_of || null,
@@ -385,7 +390,7 @@ try {
 
   const enrichedResults = results.map((result) => {
     const speedup = speedupSummary(result, baselineByScenario.get(result.name));
-    if (speedup && minSpeedup > 0) {
+    if (result.enforceSpeedup && speedup && minSpeedup > 0) {
       assert(
         speedup.p50 !== null && speedup.p50 >= minSpeedup,
         `${result.name} p50 speedup ${speedup.p50 ?? "unknown"}x was below required ${minSpeedup}x.`,

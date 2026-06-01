@@ -25,6 +25,7 @@
 - Added `SCANNER_BENCHMARK_OUTPUT_JSON` so the authenticated scanner benchmark can save machine-readable baseline and post-deploy p50/p95 evidence without manual copy/paste.
 - Added a short-lived scanner-local latest-complete-date cache, avoiding repeated quality-heavy trade-date discovery during repeated scanner runs while preserving explicit `trade_date` bypass for jobs/tests.
 - Added server-side scanner phase timings (`date_lookup`, `query`, `filter`, `vcp`, `sort`, `universe_count`, `total`) to `source_metadata.scanner_performance` and benchmark output so production latency bottlenecks can be measured instead of guessed.
+- Tightened `SCANNER_BENCHMARK_MIN_SPEEDUP` enforcement so the broad baseline scenario still reports speedup for context, but only optimized selective scanner scenarios gate the 5-10x target.
 
 ## Why
 
@@ -43,12 +44,12 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
-- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, and speedup-baseline contract coverage.
+- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, and selective-scenario speedup-baseline contract coverage.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> 57 passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 313 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 315 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
 - `npm --prefix frontend run typecheck` -> passed.
@@ -60,7 +61,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - The scanner optimization should be benchmarked against production authenticated scanner once the PR is deployed by running `PRODUCTION_API_URL=<backend> PRODUCTION_API_BEARER_TOKEN=<token> npm run check:scanner-benchmark`.
 - To prove the 5-10x target, first record baseline p50/p95 latencies from the currently deployed scanner with `SCANNER_BENCHMARK_OUTPUT_JSON=/tmp/scanner-baseline.json npm run check:scanner-benchmark`, then rerun after deployment with `SCANNER_BENCHMARK_BASELINE_PATH=/tmp/scanner-baseline.json SCANNER_BENCHMARK_MIN_SPEEDUP=5 npm run check:scanner-benchmark`. Use `SCANNER_BENCHMARK_MIN_SPEEDUP=10` only if the owner wants to enforce the upper target.
-- The target 5-10x improvement is plausible for selective presets due reduced row transfer, but not proven end-to-end until the deployed authenticated benchmark records passing before/after speedup ratios.
+- The target 5-10x improvement is plausible for selective presets due reduced row transfer, but not proven end-to-end until the deployed authenticated benchmark records passing before/after speedup ratios. The benchmark still reports the broad baseline scenario, but the hard speedup threshold is intentionally enforced on optimized selective scenarios only.
 - Do not mutate production Supabase, run broker credentials, enable billing, or change TradingView implementation posture without explicit owner approval.
 
 ## Next Steps

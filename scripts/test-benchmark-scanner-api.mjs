@@ -174,6 +174,7 @@ await withServer(async (request, response) => {
     PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
     SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: "80",
     SCANNER_BENCHMARK_BASELINE_JSON: JSON.stringify({
+      baseline: { p50: 1, p95: 1 },
       "trend-template": { p50: 500, p95: 500 },
       "box-breakout": { p50: 500, p95: 500 },
       "fundamental-category": { p50: 500, p95: 500 },
@@ -185,6 +186,7 @@ await withServer(async (request, response) => {
     0,
     `scanner benchmark with baseline should pass:\nSTDOUT:\n${withBaseline.stdout}\nSTDERR:\n${withBaseline.stderr}`,
   );
+  assert.match(withBaseline.stdout, /baseline: p50=\d+ms p95=\d+ms .*speedup p50=0\.\d+x p95=0\.\d+x/);
   assert.match(withBaseline.stdout, /trend-template: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
   assert.match(withBaseline.stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
 
