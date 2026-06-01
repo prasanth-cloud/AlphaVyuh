@@ -687,7 +687,19 @@ def _sorted_plan_slice(results: list[dict], sort_key: str, reverse: bool, limit:
     return [row for _, row in decorated]
 
 
-def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = None) -> list[dict]:
+def _score_scan_results(results: list[dict], preset_id: str | None) -> list[dict]:
+    for result in results:
+        result.update(_score_setup(result, preset_id))
+    return results
+
+
+def _apply_filters(
+    rows: list[dict],
+    f: ScanFilters,
+    preset_id: str | None = None,
+    *,
+    score_results: bool = True,
+) -> list[dict]:
     """
     Enrich each row with computed columns, then apply Python-side filters.
     Returns only matching rows (with computed fields attached).
@@ -1126,7 +1138,8 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
             "roe":             su.get("roe"),
             "roce":            su.get("roce"),
         }
-        result.update(_score_setup(result, preset_id))
+        if score_results:
+            result.update(_score_setup(result, preset_id))
         results.append(result)
 
     return results
@@ -1268,6 +1281,8 @@ async def execute_scan(
     )
 
     q = client.table("daily_ohlcv").select(intelligence_select).eq("trade_date", latest_date)
+    sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
+    reverse  = body.sort_order != "asc"
 
     # ── Push all single-day filters to DB (ADR 005 M3-B) ─────────────────────
     # Precomputed columns already in schema before M3-A:
@@ -1335,7 +1350,7 @@ async def execute_scan(
 
     # Python-side filter for computed columns
     filter_started = time.perf_counter()
-    results = _apply_filters(rows, f, body.preset_id)
+    results = _apply_filters(rows, f, body.preset_id, score_results=False)
     filter_elapsed_ms = round((time.perf_counter() - filter_started) * 1000)
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
@@ -1347,10 +1362,14 @@ async def execute_scan(
         results = await _run_vcp_pass2(client, results, latest_date, f)
         vcp_elapsed_ms = round((time.perf_counter() - vcp_started) * 1000)
 
+    score_elapsed_ms = 0
+    if sort_key == "setup_score":
+        score_started = time.perf_counter()
+        _score_scan_results(results, body.preset_id)
+        score_elapsed_ms = round((time.perf_counter() - score_started) * 1000)
+
     # Sort
     sort_started = time.perf_counter()
-    sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
-    reverse  = body.sort_order != "asc"
     total = len(results)
     capped = _sorted_plan_slice(results, sort_key, reverse, hard_limit)
     sort_elapsed_ms = round((time.perf_counter() - sort_started) * 1000)
@@ -1365,6 +1384,23 @@ async def execute_scan(
         else None
     )
     applied_prefilters = [] if used_fallback_query else _serialize_prefilter_ops(db_prefilter_ops)
+    safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
+    safe_page = max(body.page, 1)
+
+    if safe_page_size == 0:
+        paged = capped
+        total_pages = 1
+    else:
+        start = (safe_page - 1) * safe_page_size
+        end = start + safe_page_size
+        paged = capped[start:end]
+        total_pages = max(1, (len(capped) + safe_page_size - 1) // safe_page_size)
+
+    if sort_key != "setup_score" and paged:
+        score_started = time.perf_counter()
+        _score_scan_results(paged, body.preset_id)
+        score_elapsed_ms = round(score_elapsed_ms + ((time.perf_counter() - score_started) * 1000))
+
     scanner_performance = {
         "query_rows": query_rows,
         "universe_size": universe_size,
@@ -1376,6 +1412,7 @@ async def execute_scan(
             "query": query_elapsed_ms,
             "filter": filter_elapsed_ms,
             "vcp": vcp_elapsed_ms,
+            "score": score_elapsed_ms,
             "sort": sort_elapsed_ms,
             "universe_count": universe_count_elapsed_ms,
             "total": round((time.perf_counter() - scan_started) * 1000),
@@ -1390,17 +1427,6 @@ async def execute_scan(
         universe_active=universe_size,
     )
     metadata["scanner_performance"] = scanner_performance
-    safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
-    safe_page = max(body.page, 1)
-
-    if safe_page_size == 0:
-        paged = capped
-        total_pages = 1
-    else:
-        start = (safe_page - 1) * safe_page_size
-        end = start + safe_page_size
-        paged = capped[start:end]
-        total_pages = max(1, (len(capped) + safe_page_size - 1) // safe_page_size)
 
     return {
         "trade_date":    latest_date,

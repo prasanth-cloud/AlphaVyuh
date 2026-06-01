@@ -24,11 +24,13 @@
 - Added a short-lived active-universe count cache for scanner diagnostics, removing a repeated `stock_universe` count round trip from repeated scans and benchmark samples without changing scan matches.
 - Added `SCANNER_BENCHMARK_OUTPUT_JSON` so the authenticated scanner benchmark can save machine-readable baseline and post-deploy p50/p95 evidence without manual copy/paste.
 - Added a short-lived scanner-local latest-complete-date cache, avoiding repeated quality-heavy trade-date discovery during repeated scanner runs while preserving explicit `trade_date` bypass for jobs/tests.
-- Added server-side scanner phase timings (`date_lookup`, `query`, `filter`, `vcp`, `sort`, `universe_count`, `total`) to `source_metadata.scanner_performance` and benchmark output so production latency bottlenecks can be measured instead of guessed.
+- Added server-side scanner phase timings (`date_lookup`, `query`, `filter`, `vcp`, `score`, `sort`, `universe_count`, `total`) to `source_metadata.scanner_performance` and benchmark output so production latency bottlenecks can be measured instead of guessed.
 - Tightened `SCANNER_BENCHMARK_MIN_SPEEDUP` enforcement so the broad baseline scenario still reports speedup for context, but only optimized selective scanner scenarios gate the 5-10x target.
 - Made speedup enforcement fail closed when any optimized selective scenario is missing baseline p50/p95 evidence, preventing partial benchmark files from proving only part of the 5-10x target.
 - Replaced full-result scanner sorting with a plan-capped top-K slice, preserving existing sort/null/tie behavior while avoiding unnecessary sort work when a scan matches more rows than the free/pro response cap.
 - Added deterministic equivalence coverage proving the plan-capped top-K slice matches the old full-sort result across varied limits, nulls, ties, ascending, and descending sorts.
+- Made scanner setup scoring lazy in the route path: `setup_score` sorts still score all final candidates before ranking, while ordinary sorts score only the visible page returned to the user.
+- Added `score` phase timing to scanner diagnostics so production benchmarks can separate row filtering, sorting, and setup-scoring costs.
 
 ## Why
 
@@ -51,8 +53,8 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> targeted scanner tests passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 317 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> targeted scanner tests passed, including lazy setup-scoring coverage.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 320 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
 - `npm --prefix frontend run typecheck` -> passed.
@@ -69,6 +71,6 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 ## Next Steps
 
-- Open PR for the scanner prefilter optimization.
+- Keep PR #331 green and merge/deploy only after explicit owner approval.
 - Close #282 if owner accepts the current setup-review evidence as complete.
 - Keep #284, #285, #287, #63, and #42 open with precise remaining gates instead of overclaiming.

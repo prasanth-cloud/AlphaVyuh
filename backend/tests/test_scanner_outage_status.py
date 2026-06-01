@@ -270,11 +270,70 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
         "query",
         "filter",
         "vcp",
+        "score",
         "sort",
         "universe_count",
         "total",
     }
     assert all(value >= 0 for value in scanner_performance["timing_ms"].values())
+
+
+def test_execute_scan_scores_only_visible_page_when_not_sorting_by_setup_score(monkeypatch):
+    calls = []
+
+    def score_setup(result, preset_id):
+        calls.append((result["symbol"], preset_id))
+        return {
+            "setup_score": 77,
+            "setup_grade": "B",
+            "confidence_label": "Worth review",
+            "confidence_reasons": ["test score"],
+        }
+
+    monkeypatch.setattr(scanner, "_score_setup", score_setup)
+    rows = [_scanner_row(f"SYM{index:03d}") for index in range(250)]
+    result = asyncio.run(
+        scanner.execute_scan(
+            _ScannerClient(rows, universe_count=1000),
+            scanner.ScanRequest(sort_by="volume_ratio", page_size=25),
+            plan="free",
+            trade_date="2026-05-19",
+        )
+    )
+
+    assert result["total_matches"] == 250
+    assert result["plan_limit"] == 200
+    assert result["visible_count"] == 25
+    assert len(calls) == 25
+    assert all(row["setup_score"] == 77 for row in result["results"])
+
+
+def test_execute_scan_scores_all_matches_when_sorting_by_setup_score(monkeypatch):
+    calls = []
+
+    def score_setup(result, _preset_id):
+        calls.append(result["symbol"])
+        score = int(result["symbol"].removeprefix("SYM"))
+        return {
+            "setup_score": score,
+            "setup_grade": "B",
+            "confidence_label": "Worth review",
+            "confidence_reasons": ["test score"],
+        }
+
+    monkeypatch.setattr(scanner, "_score_setup", score_setup)
+    rows = [_scanner_row(f"SYM{index:03d}") for index in range(40)]
+    result = asyncio.run(
+        scanner.execute_scan(
+            _ScannerClient(rows, universe_count=1000),
+            scanner.ScanRequest(sort_by="setup_score", page_size=25),
+            plan="free",
+            trade_date="2026-05-19",
+        )
+    )
+
+    assert len(calls) == 40
+    assert [row["symbol"] for row in result["results"][:3]] == ["SYM039", "SYM038", "SYM037"]
 
 
 def test_execute_scan_caches_universe_count_for_repeated_scans():
