@@ -37,6 +37,7 @@
 - Hardened backtest date selection when the ingestion log is partial by filling missing sessions from deduped `daily_ohlcv` dates.
 - Normalized the backtest empty-state response to the same shape consumed by the frontend backtest contract.
 - Reused the scanner intelligence select and DB prefilters in historical backtests so multi-day backtests reduce rows before Python filtering instead of fetching broad daily sets for every date.
+- Let internal/background scanner consumers skip diagnostics, then used that for scheduled scan alerts so alert sweeps avoid the extra stock-universe count and prefilter serialization work while public scanner runs keep diagnostics by default.
 
 ## Why
 
@@ -63,7 +64,8 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_outage_status.py backend/tests/test_scan_alerts.py` -> targeted scanner/alerts tests passed, including no-score background execution coverage.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_backtest.py backend/tests/test_scanner_outage_status.py backend/tests/test_scan_alerts.py` -> targeted backtest/scanner/alerts tests passed, including unique backtest date coverage.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_backtest.py backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> 68 passed, including backtest DB-prefilter coverage.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 326 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scan_alerts.py backend/tests/test_scanner_outage_status.py backend/tests/test_scanner_filters.py` -> 77 passed, including background diagnostics-skip coverage.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 327 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
 - `npm --prefix frontend run typecheck` -> passed.

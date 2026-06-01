@@ -391,6 +391,36 @@ def test_execute_scan_caches_universe_count_for_repeated_scans():
     scanner._universe_count_cache.clear()
 
 
+def test_execute_scan_can_skip_diagnostics_for_background_consumers():
+    scanner._universe_count_cache.clear()
+    client = _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000)
+
+    result = asyncio.run(
+        scanner.execute_scan(
+            client,
+            scanner.ScanRequest(
+                filters=scanner.ScanFilters(
+                    rs_score_min=70,
+                    volume_ratio_min=1.0,
+                    series=["EQ"],
+                ),
+                page_size=25,
+            ),
+            plan="pro",
+            trade_date="2026-05-19",
+            include_diagnostics=False,
+        )
+    )
+
+    assert result["total_matches"] == 2
+    assert result["universe_size"] is None
+    assert result["query_row_reduction_pct"] is None
+    assert result["db_prefilters_applied"] == []
+    assert result["source_metadata"]["scanner_performance"]["universe_size"] is None
+    assert result["source_metadata"]["scanner_performance"]["db_prefilters_applied"] == []
+    assert client.table_calls.count("stock_universe") == 0
+
+
 def test_list_screens_keeps_valid_empty_state(monkeypatch):
     monkeypatch.setattr(scanner, "get_admin_client", lambda: _ScreensClient(data=[]))
 

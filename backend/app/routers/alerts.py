@@ -269,6 +269,7 @@ async def run_all_alerts(trade_date: date) -> dict:
                 trade_date=trade_date,
                 enforce_plan_limit=False,
                 score_results=False,
+                include_diagnostics=False,
             )
             results = scan.get("results") or []
             match_count = int(scan.get("total_matches") or 0)

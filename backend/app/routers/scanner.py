@@ -1254,6 +1254,7 @@ async def execute_scan(
     trade_date: str | date | None = None,
     enforce_plan_limit: bool = True,
     score_results: bool = True,
+    include_diagnostics: bool = True,
 ) -> dict:
     """Run the scanner core for UI scans and saved EOD scan alerts."""
     scan_started = time.perf_counter()
@@ -1375,7 +1376,7 @@ async def execute_scan(
     sort_elapsed_ms = round((time.perf_counter() - sort_started) * 1000)
 
     universe_started = time.perf_counter()
-    universe_size = _active_universe_size(client, series_list)
+    universe_size = _active_universe_size(client, series_list) if include_diagnostics else None
     universe_count_elapsed_ms = round((time.perf_counter() - universe_started) * 1000)
     query_rows = len(rows)
     query_row_reduction_pct = (
@@ -1383,7 +1384,7 @@ async def execute_scan(
         if universe_size and query_rows <= universe_size
         else None
     )
-    applied_prefilters = [] if used_fallback_query else _serialize_prefilter_ops(db_prefilter_ops)
+    applied_prefilters = [] if used_fallback_query or not include_diagnostics else _serialize_prefilter_ops(db_prefilter_ops)
     safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
     safe_page = max(body.page, 1)
 
