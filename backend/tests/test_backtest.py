@@ -121,6 +121,22 @@ def test_run_backtest_uses_unique_ingestion_dates(monkeypatch):
     assert ("bhavcopy_ingestion_log", {"status": ["success", "already_done"]}, 3) in client.queries
 
 
+def test_run_backtest_empty_state_matches_normal_response_shape(monkeypatch):
+    client = _BacktestClient()
+    monkeypatch.setattr(backtest, "_get_user_plan", lambda _user_id: "pro")
+    monkeypatch.setattr(backtest, "get_admin_client", lambda: client)
+
+    result = asyncio.run(backtest.run_backtest(backtest.BacktestRequest(days=3), user_id="user-1"))
+
+    assert result == {
+        "days_analysed": 0,
+        "avg_matches": 0,
+        "max_matches": 0,
+        "min_matches": 0,
+        "results": [],
+    }
+
+
 def test_recent_trade_dates_falls_back_to_unique_daily_ohlcv_pages():
     client = _BacktestClient(
         date_rows=[

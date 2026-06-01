@@ -35,6 +35,7 @@
 - Reduced scheduled scan alert payload work from "return all matches then slice 50" to "return the first 50 sorted matches while keeping full `total_matches`."
 - Fixed historical backtest date selection so a multi-day backtest uses recent unique trade sessions instead of accidentally collapsing to the latest few `daily_ohlcv` rows from one session.
 - Hardened backtest date selection when the ingestion log is partial by filling missing sessions from deduped `daily_ohlcv` dates.
+- Normalized the backtest empty-state response to the same shape consumed by the frontend backtest contract.
 
 ## Why
 
@@ -60,7 +61,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> targeted scanner tests passed, including lazy setup-scoring coverage.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_outage_status.py backend/tests/test_scan_alerts.py` -> targeted scanner/alerts tests passed, including no-score background execution coverage.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_backtest.py backend/tests/test_scanner_outage_status.py backend/tests/test_scan_alerts.py` -> targeted backtest/scanner/alerts tests passed, including unique backtest date coverage.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 323 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 325 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
 - `npm --prefix frontend run typecheck` -> passed.

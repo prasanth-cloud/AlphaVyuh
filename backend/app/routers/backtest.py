@@ -102,7 +102,13 @@ async def run_backtest(
     dates = _recent_trade_dates(client, days)
 
     if not dates:
-        return {"dates": [], "match_counts": [], "avg_matches": 0}
+        return {
+            "days_analysed": 0,
+            "avg_matches": 0,
+            "max_matches": 0,
+            "min_matches": 0,
+            "results": [],
+        }
 
     results = []
     for trade_date in dates:
