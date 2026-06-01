@@ -40,7 +40,7 @@ SCANNER_BASE_SELECT = (
     "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
     "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
     "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
 )
 SCANNER_INTELLIGENCE_SELECT = (
     "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,avg_volume_50d,"
@@ -51,7 +51,7 @@ SCANNER_INTELLIGENCE_SELECT = (
     "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
     "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
     "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
 )
 _universe_count_cache: dict[tuple[str, ...], tuple[float, int | None]] = {}
 _universe_count_cache_lock = threading.Lock()
@@ -87,12 +87,6 @@ def _db_prefilter_ops(f: "ScanFilters") -> list[DbPrefilterOp]:
         ops.append(("eq", "stock_universe.sector", sectors[0]))
     elif len(sectors) > 1:
         ops.append(("in_", "stock_universe.sector", sectors))
-
-    market_cap_categories = _list_filter(f.market_cap_category)
-    if len(market_cap_categories) == 1:
-        ops.append(("eq", "stock_universe.market_cap_category", market_cap_categories[0]))
-    elif len(market_cap_categories) > 1:
-        ops.append(("in_", "stock_universe.market_cap_category", market_cap_categories))
 
     if f.market is not None:
         market = f.market.upper()

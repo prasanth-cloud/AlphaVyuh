@@ -99,14 +99,13 @@ const scenarios = [
     },
   },
   {
-    name: "fundamental-category",
+    name: "fundamental-filters",
     expectDbPrefilters: true,
     enforceSpeedup: true,
     body: {
       filters: {
         series: ["EQ"],
         market: "IN",
-        market_cap_category: ["largecap", "midcap"],
         sector: ["Financial Services", "IT"],
         market_cap_min: 500,
         market_cap_max: 100000,

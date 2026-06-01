@@ -391,6 +391,11 @@ def test_execute_scan_caches_universe_count_for_repeated_scans():
     scanner._universe_count_cache.clear()
 
 
+def test_scanner_selects_avoid_unmigrated_market_cap_category_column():
+    assert "market_cap_category" not in scanner.SCANNER_BASE_SELECT
+    assert "market_cap_category" not in scanner.SCANNER_INTELLIGENCE_SELECT
+
+
 def test_execute_scan_can_skip_diagnostics_for_background_consumers():
     scanner._universe_count_cache.clear()
     client = _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000)

@@ -17,8 +17,8 @@
 - Added scanner diagnostics for production evidence: `query_rows`, `source_rows`, `query_row_reduction_pct`, and `db_prefilters_applied`.
 - Added `scripts/benchmark-scanner-api.mjs` plus a mocked contract test so post-deploy scanner p50/p95 latency, row reduction, and DB prefilter count can be measured instead of inferred.
 - Pushed stock-universe hard rejects into PostgREST too: active status, series, sector, market, and fundamental ranges now reduce rows before Python enrichment.
-- Fixed the declared `market_cap_category` scanner filter so it is selected, applied, returned, and DB-prefiltered instead of being silently ignored.
-- Extended the scanner benchmark to include a `fundamental-category` scenario so category/fundamental DB pushdown is part of the production proof path.
+- Kept declared `market_cap_category` scanner handling Python-side only when rows expose it; the repository has no production migration for a `stock_universe.market_cap_category` column, so the scanner select and DB prefilters must not request it.
+- Extended the scanner benchmark to include a `fundamental-filters` scenario so market/sector/fundamental DB pushdown is part of the production proof path without relying on unmigrated category columns.
 - Added optional scanner benchmark baseline comparison via `SCANNER_BENCHMARK_BASELINE_JSON` or `SCANNER_BENCHMARK_BASELINE_PATH` and `SCANNER_BENCHMARK_MIN_SPEEDUP`, so the 5-10x target can be enforced with real before/after p50 and p95 latency numbers after deployment.
 - Added null-preserving DB prefilters for fallback-computed `volume_ratio`, `w52h_pct`, and `w52l_pct`, reducing row transfer for backfilled scanner rows while keeping DB-null rows available for the existing Python fallback path.
 - Added a short-lived active-universe count cache for scanner diagnostics, removing a repeated `stock_universe` count round trip from repeated scans and benchmark samples without changing scan matches.
