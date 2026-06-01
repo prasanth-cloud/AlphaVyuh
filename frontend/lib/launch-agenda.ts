@@ -90,8 +90,8 @@ export function buildLaunchAgenda(input: LaunchAgendaInput): LaunchAgendaItem[] 
     {
       id: "sector-source",
       label: "Sector source",
-      value: input.sectorTaxonomy.status === "good" ? "AUDITED" : "UNVERIFIED",
-      detail: input.sectorTaxonomy.detail,
+      value: input.sectorTaxonomy.status === "good" ? "APPROVED" : "APPROVAL PENDING",
+      detail: `${input.sectorTaxonomy.approvalDetail} ${input.sectorTaxonomy.detail}`,
       status: sectorStatus,
       href: "/data",
     },

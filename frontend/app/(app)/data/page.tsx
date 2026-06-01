@@ -472,6 +472,12 @@ export default function DataFreshnessPage() {
           status={sectorTaxonomy.status}
         />
         <HealthTile
+          label="Sector source approval"
+          value={sectorTaxonomy.approvalStatus.toUpperCase()}
+          detail={sectorTaxonomy.approvalDetail}
+          status={sectorTaxonomy.status}
+        />
+        <HealthTile
           label="Broker channel"
           value={state.accountIssues.some(issue => issue.id === "broker") ? "UNAVAILABLE" : broker.connected && !broker.token_expired ? "READY" : broker.token_expired ? "TOKEN EXPIRED" : "SIMULATED"}
           detail={state.accountIssues.some(issue => issue.id === "broker") ? "Broker import state cannot be confirmed right now." : broker.connected ? `${broker.broker ?? "Broker"} connected read-only for import.` : "Order capture remains journal-only; broker import is optional."}
@@ -520,6 +526,7 @@ export default function DataFreshnessPage() {
               ["Source", formatMarketDataSource(health?.provider?.source_name, "Market data")],
               ["Fallback active", health?.fallback_active ? "Yes" : "No"],
               ["Sector source", sectorTaxonomy.source],
+              ["Sector source approval", `${sectorTaxonomy.approvalStatus} · ${sectorTaxonomy.approvalDetail}`],
               ["Sector audit status", sectorTaxonomy.auditStatus],
               ["Sector contract", sectorTaxonomy.contract],
               ["Sector NSE reference", sectorTaxonomy.reference],

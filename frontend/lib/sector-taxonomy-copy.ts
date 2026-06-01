@@ -15,6 +15,9 @@ export type SectorTaxonomyPresentation = {
   auditStatus: string;
   aliasPolicy: string;
   industryScope: string;
+  approvalStatus: string;
+  approvalDetail: string;
+  launchApprovalBadge: string;
   dashboardBadge: string;
 };
 
@@ -41,6 +44,9 @@ export function sectorTaxonomyPresentation(
       auditStatus: "Unverified",
       aliasPolicy: "Not available",
       industryScope: "Not available",
+      approvalStatus: "Unavailable",
+      approvalDetail: "Sector source approval cannot be granted until taxonomy metadata loads.",
+      launchApprovalBadge: "Source approval unavailable",
       dashboardBadge: "Taxonomy unverified",
     };
   }
@@ -73,6 +79,11 @@ export function sectorTaxonomyPresentation(
   const referenceCoverage = unmatchedReferenceCount > 0
     ? `${fmtNumber(unmatchedReferenceCount)} without NSE sectoral-index reference (${unmatchedReferencePreview}${unmatchedReferenceSectors.length > 5 || unmatchedReferenceCount > unmatchedReferenceSectors.length ? ", ..." : ""})`
     : "All mapped sectors have an NSE sectoral-index reference.";
+  const approvalStatus = status === "good" ? "Approved for launch" : "Needs owner/data approval";
+  const approvalDetail = status === "good"
+    ? "Sector source, contract date, reference coverage, and industry taxonomy are audited for launch claims."
+    : "Use sector labels for navigation only; do not market sector or industry rankings as final until source and audit gaps are owner-approved.";
+  const launchApprovalBadge = status === "good" ? "Sector source approved" : "Source approval pending";
 
   return {
     value: `${fmtNumber(metadata.sector_count)} SECTORS`,
@@ -91,6 +102,9 @@ export function sectorTaxonomyPresentation(
       : `Unverified${metadata.taxonomy_status_reason ? `: ${metadata.taxonomy_status_reason}` : ""}`,
     aliasPolicy: metadata.alias_policy?.description ?? "NSE alias policy not available.",
     industryScope: metadata.audit_scope?.industry_taxonomy?.description ?? "NSE industry taxonomy scope is not available.",
+    approvalStatus,
+    approvalDetail,
+    launchApprovalBadge,
     dashboardBadge: issues.length
       ? `Taxonomy needs audit: ${issues.join(", ")}`
       : `Taxonomy source: ${source}`,

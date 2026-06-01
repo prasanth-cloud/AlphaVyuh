@@ -16,6 +16,9 @@ const sectorTaxonomy: SectorTaxonomyPresentation = {
   auditStatus: "Unverified",
   aliasPolicy: "NSE alias policy.",
   industryScope: "NSE industry taxonomy is not audited.",
+  approvalStatus: "Needs owner/data approval",
+  approvalDetail: "Use sector labels for navigation only; do not market sector or industry rankings as final until source and audit gaps are owner-approved.",
+  launchApprovalBadge: "Source approval pending",
   dashboardBadge: "Taxonomy needs audit",
 };
 
@@ -71,9 +74,10 @@ describe("buildLaunchAgenda", () => {
     const items = agenda({ closedTrades: 5, reviewedTrades: 2 });
 
     expect(items.find((item) => item.id === "sector-source")).toMatchObject({
-      value: "UNVERIFIED",
+      value: "APPROVAL PENDING",
       status: "warn",
     });
+    expect(items.find((item) => item.id === "sector-source")?.detail).toContain("Use sector labels for navigation only");
     expect(items.find((item) => item.id === "decision-memory")).toMatchObject({
       value: "40% REVIEWED",
       status: "warn",
