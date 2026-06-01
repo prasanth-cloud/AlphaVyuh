@@ -30,8 +30,11 @@ SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered qu
 DbPrefilterValue = float | int | bool | str | list[str]
 DbPrefilterOp = tuple[str, str, DbPrefilterValue]
 UNIVERSE_COUNT_CACHE_TTL = 300.0
+LATEST_TRADE_DATE_CACHE_TTL = 60.0
 _universe_count_cache: dict[tuple[str, ...], tuple[float, int | None]] = {}
 _universe_count_cache_lock = threading.Lock()
+_latest_trade_date_cache: tuple[float, str] | None = None
+_latest_trade_date_cache_lock = threading.Lock()
 
 
 def _list_filter(value: list[str] | str | None) -> list[str]:
@@ -195,6 +198,21 @@ def _active_universe_size(client, series_list: list[str]) -> int | None:
         with _universe_count_cache_lock:
             _universe_count_cache[cache_key] = (now + UNIVERSE_COUNT_CACHE_TTL, universe_size)
     return universe_size
+
+
+def _scanner_latest_complete_trade_date(client) -> str | None:
+    global _latest_trade_date_cache
+
+    now = time.monotonic()
+    with _latest_trade_date_cache_lock:
+        if _latest_trade_date_cache and _latest_trade_date_cache[0] > now:
+            return _latest_trade_date_cache[1]
+
+    latest_date = get_latest_complete_trade_date(client)
+    if latest_date:
+        with _latest_trade_date_cache_lock:
+            _latest_trade_date_cache = (now + LATEST_TRADE_DATE_CACHE_TTL, str(latest_date))
+    return str(latest_date) if latest_date else None
 
 
 # ── Filter model ──────────────────────────────────────────────────────────────
@@ -1185,7 +1203,7 @@ async def execute_scan(
         latest_date = str(trade_date)
     else:
         try:
-            latest_date = get_latest_complete_trade_date(client)
+            latest_date = _scanner_latest_complete_trade_date(client)
         except Exception:
             latest_date = None
     if not latest_date:

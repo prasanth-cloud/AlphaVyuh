@@ -179,6 +179,7 @@ def test_run_scanner_raises_503_when_admin_client_is_unavailable(monkeypatch):
 
 
 def test_execute_scan_raises_503_when_trade_date_is_unavailable(monkeypatch):
+    scanner._latest_trade_date_cache = None
     monkeypatch.setattr(scanner, "get_latest_complete_trade_date", lambda client: None)
 
     with pytest.raises(HTTPException) as exc:
@@ -186,6 +187,29 @@ def test_execute_scan_raises_503_when_trade_date_is_unavailable(monkeypatch):
 
     assert exc.value.status_code == 503
     assert exc.value.detail == "No complete trade date is available for scanner."
+
+
+def test_execute_scan_caches_latest_complete_trade_date(monkeypatch):
+    scanner._latest_trade_date_cache = None
+    scanner._universe_count_cache.clear()
+    calls = {"latest_date": 0}
+
+    def latest_date(_client):
+        calls["latest_date"] += 1
+        return "2026-05-19"
+
+    monkeypatch.setattr(scanner, "get_latest_complete_trade_date", latest_date)
+    client = _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000)
+    body = scanner.ScanRequest(filters=scanner.ScanFilters(series=["EQ"]), page_size=25)
+
+    first = asyncio.run(scanner.execute_scan(client, body, plan="pro"))
+    second = asyncio.run(scanner.execute_scan(client, body, plan="pro"))
+
+    assert first["trade_date"] == "2026-05-19"
+    assert second["trade_date"] == "2026-05-19"
+    assert calls["latest_date"] == 1
+    scanner._latest_trade_date_cache = None
+    scanner._universe_count_cache.clear()
 
 
 def test_execute_scan_raises_503_when_primary_and_fallback_queries_fail():
