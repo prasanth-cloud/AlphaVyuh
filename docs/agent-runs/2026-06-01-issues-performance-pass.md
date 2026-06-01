@@ -33,6 +33,7 @@
 - Added `score` phase timing to scanner diagnostics so production benchmarks can separate row filtering, sorting, and setup-scoring costs.
 - Added a no-score execution path for non-UI scanner consumers, then used it for scheduled scan alerts, Telegram `/scan`, and historical backtest counts.
 - Reduced scheduled scan alert payload work from "return all matches then slice 50" to "return the first 50 sorted matches while keeping full `total_matches`."
+- Fixed historical backtest date selection so a multi-day backtest uses recent unique trade sessions instead of accidentally collapsing to the latest few `daily_ohlcv` rows from one session.
 
 ## Why
 
@@ -57,7 +58,8 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `npm run test:broker-readonly-check` -> passed.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> targeted scanner tests passed, including lazy setup-scoring coverage.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_outage_status.py backend/tests/test_scan_alerts.py` -> targeted scanner/alerts tests passed, including no-score background execution coverage.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 321 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_backtest.py backend/tests/test_scanner_outage_status.py backend/tests/test_scan_alerts.py` -> targeted backtest/scanner/alerts tests passed, including unique backtest date coverage.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 323 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
 - `npm --prefix frontend run typecheck` -> passed.

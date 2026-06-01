@@ -15,11 +15,75 @@ from app.services.supabase import get_admin_client
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
 
 MAX_DAYS = 90
+DATE_LOOKBACK_PAGE_SIZE = 1000
 
 
 class BacktestRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
     days: int = 30   # how many trading days to backtest (max 90)
+
+
+def _ordered_unique_dates(rows: list[dict]) -> list[str]:
+    dates: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        raw_trade_date = row.get("trade_date")
+        trade_date = str(raw_trade_date) if raw_trade_date else ""
+        if trade_date and trade_date not in seen:
+            dates.append(trade_date)
+            seen.add(trade_date)
+    return dates
+
+
+def _recent_trade_dates_from_daily_rows(client, days: int) -> list[str]:
+    dates: list[str] = []
+    seen: set[str] = set()
+    offset = 0
+
+    while len(dates) < days:
+        rows = (
+            client.table("daily_ohlcv")
+            .select("trade_date")
+            .order("trade_date", desc=True)
+            .range(offset, offset + DATE_LOOKBACK_PAGE_SIZE - 1)
+            .execute()
+            .data or []
+        )
+        if not rows:
+            break
+
+        for trade_date in _ordered_unique_dates(rows):
+            if trade_date not in seen:
+                dates.append(trade_date)
+                seen.add(trade_date)
+                if len(dates) >= days:
+                    break
+
+        if len(rows) < DATE_LOOKBACK_PAGE_SIZE:
+            break
+        offset += DATE_LOOKBACK_PAGE_SIZE
+
+    return sorted(dates)
+
+
+def _recent_trade_dates(client, days: int) -> list[str]:
+    try:
+        rows = (
+            client.table("bhavcopy_ingestion_log")
+            .select("trade_date")
+            .in_("status", ["success", "already_done"])
+            .order("trade_date", desc=True)
+            .limit(days)
+            .execute()
+            .data or []
+        )
+        dates = _ordered_unique_dates(rows)
+        if dates:
+            return sorted(dates[:days])
+    except Exception:
+        pass
+
+    return _recent_trade_dates_from_daily_rows(client, days)
 
 
 @router.post("/run")
@@ -34,15 +98,7 @@ async def run_backtest(
     days = min(max(1, body.days), MAX_DAYS)
     client = get_admin_client()
 
-    # Get last N unique trade dates
-    dr = (
-        client.table("daily_ohlcv")
-        .select("trade_date")
-        .order("trade_date", desc=True)
-        .limit(days)
-        .execute()
-    )
-    dates = sorted(set(r["trade_date"] for r in (dr.data or [])))
+    dates = _recent_trade_dates(client, days)
 
     if not dates:
         return {"dates": [], "match_counts": [], "avg_matches": 0}
