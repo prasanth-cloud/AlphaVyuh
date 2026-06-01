@@ -18,6 +18,7 @@
 - Added `scripts/benchmark-scanner-api.mjs` plus a mocked contract test so post-deploy scanner p50/p95 latency, row reduction, and DB prefilter count can be measured instead of inferred.
 - Pushed stock-universe hard rejects into PostgREST too: active status, series, sector, market, and fundamental ranges now reduce rows before Python enrichment.
 - Fixed the declared `market_cap_category` scanner filter so it is selected, applied, returned, and DB-prefiltered instead of being silently ignored.
+- Extended the scanner benchmark to include a `fundamental-category` scenario so category/fundamental DB pushdown is part of the production proof path.
 
 ## Why
 

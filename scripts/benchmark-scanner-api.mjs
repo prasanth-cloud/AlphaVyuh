@@ -89,6 +89,28 @@ const scenarios = [
       page_size: 10,
     },
   },
+  {
+    name: "fundamental-category",
+    expectDbPrefilters: true,
+    body: {
+      filters: {
+        series: ["EQ"],
+        market: "IN",
+        market_cap_category: ["largecap", "midcap"],
+        sector: ["Financial Services", "IT"],
+        market_cap_min: 500,
+        market_cap_max: 100000,
+        pe_min: 1,
+        pe_max: 80,
+        roe_min: 10,
+        debt_to_equity_max: 2,
+      },
+      sort_by: "volume_ratio",
+      sort_order: "desc",
+      page: 1,
+      page_size: 10,
+    },
+  },
 ];
 
 if (!apiBase) {

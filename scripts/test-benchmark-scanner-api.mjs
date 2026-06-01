@@ -53,6 +53,33 @@ function scannerResponse(requestBody) {
     { op: "eq", column: "stock_universe.is_active", value: true },
     { op: "in_", column: "stock_universe.series", value: filters.series ?? ["EQ", "BE"] },
   ];
+  if (filters.sector != null) {
+    prefilters.push({ op: "in_", column: "stock_universe.sector", value: filters.sector });
+  }
+  if (filters.market_cap_category != null) {
+    prefilters.push({ op: "in_", column: "stock_universe.market_cap_category", value: filters.market_cap_category });
+  }
+  if (filters.market === "IN") {
+    prefilters.push({ op: "in_", column: "stock_universe.market", value: ["NSE", "BSE"] });
+  }
+  if (filters.market_cap_min != null) {
+    prefilters.push({ op: "gte", column: "stock_universe.market_cap_cr", value: filters.market_cap_min });
+  }
+  if (filters.market_cap_max != null) {
+    prefilters.push({ op: "lte", column: "stock_universe.market_cap_cr", value: filters.market_cap_max });
+  }
+  if (filters.pe_min != null) {
+    prefilters.push({ op: "gte", column: "stock_universe.pe_ratio", value: filters.pe_min });
+  }
+  if (filters.pe_max != null) {
+    prefilters.push({ op: "lte", column: "stock_universe.pe_ratio", value: filters.pe_max });
+  }
+  if (filters.debt_to_equity_max != null) {
+    prefilters.push({ op: "lte", column: "stock_universe.debt_to_equity", value: filters.debt_to_equity_max });
+  }
+  if (filters.roe_min != null) {
+    prefilters.push({ op: "gte", column: "stock_universe.roe", value: filters.roe_min });
+  }
   if (filters.rs_score_min != null) {
     prefilters.push({ op: "gte", column: "rs_score", value: filters.rs_score_min });
   }
@@ -110,6 +137,7 @@ await withServer(async (request, response) => {
   assert.match(stdout, /baseline: p50=\d+ms p95=\d+ms .*912 rows, 0% query reduction, 2 db prefilters/);
   assert.match(stdout, /trend-template: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /box-breakout: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
+  assert.match(stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, 11 db prefilters/);
 });
 
 await withServer(async (request, response) => {
