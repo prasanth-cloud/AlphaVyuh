@@ -114,6 +114,8 @@ def _scanner_row(symbol):
             "is_active": True,
             "market": "NSE",
             "currency": "INR",
+            "market_cap_category": "midcap",
+            "market_cap_cr": 1200,
         },
     }
 

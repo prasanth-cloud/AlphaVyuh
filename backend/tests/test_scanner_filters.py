@@ -189,6 +189,8 @@ def _scanner_row(**overrides):
             "is_active": True,
             "market": "NSE",
             "currency": "INR",
+            "market_cap_category": "midcap",
+            "market_cap_cr": 1200,
         },
     }
     row.update(overrides)
@@ -308,6 +310,19 @@ class TestCanonicalSwingPresets:
         assert len(accepted) == 1
         assert rejected == []
 
+    def test_market_cap_category_filter_uses_stock_universe_field(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [
+            _scanner_row(symbol="MID", stock_universe={**_scanner_row()["stock_universe"], "market_cap_category": "midcap"}),
+            _scanner_row(symbol="SMALL", stock_universe={**_scanner_row()["stock_universe"], "market_cap_category": "smallcap"}),
+        ]
+
+        results = _apply_filters(rows, ScanFilters(market_cap_category=["midcap"]))
+
+        assert [result["symbol"] for result in results] == ["MID"]
+        assert results[0]["market_cap_category"] == "midcap"
+
 
 class _RecordingQuery:
     def __init__(self):
@@ -398,6 +413,7 @@ class TestScannerDbPrefilters:
             ScanFilters(
                 series=["EQ"],
                 sector=["Financial Services", "IT"],
+                market_cap_category=["largecap", "midcap"],
                 market="IN",
                 market_cap_min=500,
                 market_cap_max=50000,
@@ -412,6 +428,7 @@ class TestScannerDbPrefilters:
             ("eq", "stock_universe.is_active", True),
             ("in_", "stock_universe.series", ["EQ"]),
             ("in_", "stock_universe.sector", ["Financial Services", "IT"]),
+            ("in_", "stock_universe.market_cap_category", ["largecap", "midcap"]),
             ("in_", "stock_universe.market", ["NSE", "BSE"]),
             ("gte", "stock_universe.market_cap_cr", 500),
             ("lte", "stock_universe.market_cap_cr", 50000),

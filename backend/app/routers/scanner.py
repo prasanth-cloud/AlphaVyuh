@@ -48,6 +48,12 @@ def _db_prefilter_ops(f: "ScanFilters") -> list[tuple[str, str, DbPrefilterValue
     elif len(sectors) > 1:
         ops.append(("in_", "stock_universe.sector", sectors))
 
+    market_cap_categories = _list_filter(f.market_cap_category)
+    if len(market_cap_categories) == 1:
+        ops.append(("eq", "stock_universe.market_cap_category", market_cap_categories[0]))
+    elif len(market_cap_categories) > 1:
+        ops.append(("in_", "stock_universe.market_cap_category", market_cap_categories))
+
     if f.market is not None:
         market = f.market.upper()
         if market == "IN":
@@ -912,6 +918,10 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         dte  = su.get("debt_to_equity")
         roe_ = su.get("roe")
         roce_= su.get("roce")
+        market_cap_category = su.get("market_cap_category")
+        if f.market_cap_category is not None:
+            market_cap_categories = f.market_cap_category if isinstance(f.market_cap_category, list) else [f.market_cap_category]
+            if market_cap_category not in market_cap_categories: continue
         if f.market_cap_min     is not None and (mc   is None or mc   < f.market_cap_min):     continue
         if f.market_cap_max     is not None and (mc   is None or mc   > f.market_cap_max):     continue
         if f.pe_min             is not None and (pe   is None or pe   < f.pe_min):             continue
@@ -1001,6 +1011,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
             "match_reasons":   match_reasons[:6],
             "data_warnings":   data_warnings[:4],
             # Fundamentals
+            "market_cap_category": su.get("market_cap_category"),
             "market_cap_cr":   su.get("market_cap_cr"),
             "pe_ratio":        su.get("pe_ratio"),
             "pb_ratio":        su.get("pb_ratio"),
@@ -1134,7 +1145,7 @@ async def execute_scan(
         "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
         "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
         "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
     )
     intelligence_select = (
         "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,avg_volume_50d,"
@@ -1145,7 +1156,7 @@ async def execute_scan(
         "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
         "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
         "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
     )
 
     q = client.table("daily_ohlcv").select(intelligence_select).eq("trade_date", latest_date)
