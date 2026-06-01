@@ -384,7 +384,7 @@ await withServer((request, response) => {
       trade_date: "2026-05-18",
       total_matches: 265,
       results: [{ symbol: "RELIANCE", close: 100, volume_ratio: 2.4 }],
-      source_metadata: { as_of: "2026-05-18" },
+      source_metadata: { as_of: "2026-05-18", symbols_count: 912 },
     }));
     return;
   }
@@ -394,7 +394,7 @@ await withServer((request, response) => {
 }, async (apiUrl) => {
   const { code, stdout, stderr } = await runChecker(apiUrl, { PRODUCTION_API_BEARER_TOKEN: "production-smoke-token" });
   assert.equal(code, 0, `production API check should pass with authenticated scanner smoke:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
-  assert.match(stdout, /scanner 1\/265 matches through 2026-05-18/);
+  assert.match(stdout, /scanner 1\/265 matches through 2026-05-18 in \d+ms from 912 source rows/);
 });
 
 console.log("check-production-api fallback and candle freshness tests passed.");

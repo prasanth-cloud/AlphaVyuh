@@ -167,6 +167,16 @@ function latestCandlePctChange(candles) {
   return ((latestClose - previousClose) / previousClose) * 100;
 }
 
+function scannerSourceRows(scanner) {
+  return numberValue(
+    scanner?.query_rows,
+    scanner?.source_rows,
+    scanner?.source_metadata?.symbols_count,
+    scanner?.source_metadata?.symbolsCount,
+    scanner?.symbols_count,
+  );
+}
+
 function assertFreshDate(label, actualDate, summaryDate, maxLagDays = 10) {
   const parsedSummaryDate = parseIsoDate(summaryDate);
   const parsedActualDate = parseIsoDate(actualDate);
@@ -294,6 +304,7 @@ try {
 
   let scannerSummary = "scanner skipped (set PRODUCTION_API_BEARER_TOKEN to verify authenticated scanner data)";
   if (authToken) {
+    const scannerStarted = performance.now();
     const scanner = await fetchJson("/api/v1/scanner/run", {
       method: "POST",
       headers: { Authorization: `Bearer ${authToken}` },
@@ -306,13 +317,16 @@ try {
       },
       timeoutMs: 30_000,
     });
+    const scannerElapsedMs = Math.round(performance.now() - scannerStarted);
     assert(Array.isArray(scanner?.results), "Scanner response did not include a results array.");
     assert(scanner.results.length > 0, "Scanner returned no current EOD matches.");
     assert(numberValue(scanner?.total_matches) > 0, `Scanner total_matches looked empty: ${scanner?.total_matches}.`);
     const scannerDate = scanner?.trade_date || scanner?.as_of || scanner?.source_metadata?.as_of;
     assert(scannerDate, "Scanner response did not include trade/as-of date.");
     assertFreshDate("Scanner trade date", scannerDate, summaryDate);
-    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate}`;
+    const sourceRows = scannerSourceRows(scanner);
+    const sourceRowsCopy = sourceRows === null ? "unknown source rows" : `${sourceRows} source rows`;
+    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate} in ${scannerElapsedMs}ms from ${sourceRowsCopy}`;
   }
 
   console.log(

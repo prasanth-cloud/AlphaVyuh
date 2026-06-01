@@ -309,6 +309,78 @@ class TestCanonicalSwingPresets:
         assert rejected == []
 
 
+class _RecordingQuery:
+    def __init__(self):
+        self.calls = []
+
+    def gte(self, column, value):
+        self.calls.append(("gte", column, value))
+        return self
+
+    def lte(self, column, value):
+        self.calls.append(("lte", column, value))
+        return self
+
+    def gt(self, column, value):
+        self.calls.append(("gt", column, value))
+        return self
+
+    def eq(self, column, value):
+        self.calls.append(("eq", column, value))
+        return self
+
+
+class TestScannerDbPrefilters:
+    def test_pushes_non_fallback_intelligence_filters_to_db(self):
+        from app.routers.scanner import ScanFilters, _push_db_prefilters
+
+        query = _push_db_prefilters(
+            _RecordingQuery(),
+            ScanFilters(
+                rs_score_min=70,
+                rs_score_max=95,
+                avg_volume_50d_min=100000,
+                avg_volume_50d_max=5000000,
+                price_perf_6m_min=20,
+                price_perf_6m_max=200,
+                ema_200_trending_up=True,
+                ema_200_slope_30d_min=1.5,
+                ema_200_slope_30d_max=20,
+                darvas_box_height_pct_max=15,
+                nr7=True,
+            ),
+        )
+
+        assert query.calls == [
+            ("gte", "rs_score", 70),
+            ("lte", "rs_score", 95),
+            ("gte", "avg_volume_50d", 100000),
+            ("lte", "avg_volume_50d", 5000000),
+            ("gte", "price_perf_6m_pct", 20),
+            ("lte", "price_perf_6m_pct", 200),
+            ("gt", "ema_200_slope_30d", 0),
+            ("gte", "ema_200_slope_30d", 1.5),
+            ("lte", "ema_200_slope_30d", 20),
+            ("lte", "darvas_box_height_pct", 15),
+            ("eq", "is_nr7", True),
+        ]
+
+    def test_keeps_fallback_computed_filters_python_side(self):
+        from app.routers.scanner import ScanFilters, _push_db_prefilters
+
+        query = _push_db_prefilters(
+            _RecordingQuery(),
+            ScanFilters(
+                volume_ratio_min=1.5,
+                volume_ratio_max=5,
+                week_52_high_pct_max=10,
+                w52l_pct_min=30,
+            ),
+        )
+
+        assert query.calls == []
+
+
 class TestVCPAsyncPass2:
     """Structural tests for the async _run_vcp_pass2 — no DB required."""
 

@@ -27,6 +27,38 @@ PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 
 
+def _push_db_prefilters(q, f: "ScanFilters"):
+    """Push non-fallback scanner intelligence filters into PostgREST.
+
+    Only push fields where a missing DB value is already a hard reject in
+    _apply_filters. Fallback-computed fields such as volume_ratio and w52h_pct
+    stay Python-side so older/partial rows keep their current behavior.
+    """
+    if f.rs_score_min is not None:
+        q = q.gte("rs_score", f.rs_score_min)
+    if f.rs_score_max is not None:
+        q = q.lte("rs_score", f.rs_score_max)
+    if f.avg_volume_50d_min is not None:
+        q = q.gte("avg_volume_50d", f.avg_volume_50d_min)
+    if f.avg_volume_50d_max is not None:
+        q = q.lte("avg_volume_50d", f.avg_volume_50d_max)
+    if f.price_perf_6m_min is not None:
+        q = q.gte("price_perf_6m_pct", f.price_perf_6m_min)
+    if f.price_perf_6m_max is not None:
+        q = q.lte("price_perf_6m_pct", f.price_perf_6m_max)
+    if f.ema_200_trending_up is True:
+        q = q.gt("ema_200_slope_30d", 0)
+    if f.ema_200_slope_30d_min is not None:
+        q = q.gte("ema_200_slope_30d", f.ema_200_slope_30d_min)
+    if f.ema_200_slope_30d_max is not None:
+        q = q.lte("ema_200_slope_30d", f.ema_200_slope_30d_max)
+    if f.darvas_box_height_pct_max is not None:
+        q = q.lte("darvas_box_height_pct", f.darvas_box_height_pct_max)
+    if f.nr7 is True:
+        q = q.eq("is_nr7", True)
+    return q
+
+
 # ── Filter model ──────────────────────────────────────────────────────────────
 
 class ScanFilters(BaseModel):
@@ -1086,10 +1118,7 @@ async def execute_scan(
     if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
     if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
     if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
-    # M3-A columns: DB push deferred to ingest-job PR — all values currently NULL in production.
-    # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
-    # Python fallback in _apply_filters handles rs_score/volume_ratio/w52h_pct/w52l_pct
-    # until the ingest job populates these columns.
+    q = _push_db_prefilters(q, f)
 
     try:
         rows = q.limit(SCAN_ROW_CAP).execute().data or []
