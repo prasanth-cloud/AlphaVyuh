@@ -79,6 +79,9 @@ jobs:
       - name: Scanner benchmark checker tests
         run: npm run test:scanner-benchmark
 
+      - name: Scanner benchmark workflow checker tests
+        run: npm run test:scanner-benchmark-workflow-check
+
       - name: Five-year chart contract tests
         run: npm run test:five-year-chart-check
 

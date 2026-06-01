@@ -1,0 +1,72 @@
+name: Production Scanner Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_api_url:
+        description: Production API base URL to benchmark
+        required: true
+        default: https://alphavyuh-production.up.railway.app
+      run_label:
+        description: Label for the uploaded benchmark artifact
+        required: true
+        default: post-deploy
+      runs:
+        description: Measured runs per scenario
+        required: true
+        default: "5"
+      warmup_runs:
+        description: Warmup runs per scenario
+        required: true
+        default: "1"
+      min_query_reduction_pct:
+        description: Minimum query reduction percentage for selective scenarios
+        required: false
+        default: "0"
+      min_speedup:
+        description: Minimum p50/p95 speedup for selective scenarios when baseline_json is provided
+        required: false
+        default: "0"
+      baseline_json:
+        description: Optional JSON baseline from a prior artifact to enforce speedup
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Benchmark authenticated production scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Run authenticated scanner benchmark
+        env:
+          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
+          PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+          SCANNER_BENCHMARK_RUNS: ${{ github.event.inputs.runs }}
+          SCANNER_BENCHMARK_WARMUP_RUNS: ${{ github.event.inputs.warmup_runs }}
+          SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: ${{ github.event.inputs.min_query_reduction_pct }}
+          SCANNER_BENCHMARK_MIN_SPEEDUP: ${{ github.event.inputs.min_speedup }}
+          SCANNER_BENCHMARK_BASELINE_JSON: ${{ github.event.inputs.baseline_json }}
+          SCANNER_BENCHMARK_OUTPUT_JSON: /tmp/scanner-benchmark-${{ github.run_id }}.json
+        run: npm run check:scanner-benchmark
+
+      - name: Upload benchmark JSON
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scanner-benchmark-${{ github.event.inputs.run_label }}-${{ github.run_id }}
+          path: /tmp/scanner-benchmark-${{ github.run_id }}.json
+          if-no-files-found: error
+          retention-days: 30

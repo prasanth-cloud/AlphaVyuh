@@ -38,6 +38,7 @@
 - Normalized the backtest empty-state response to the same shape consumed by the frontend backtest contract.
 - Reused the scanner intelligence select and DB prefilters in historical backtests so multi-day backtests reduce rows before Python filtering instead of fetching broad daily sets for every date.
 - Let internal/background scanner consumers skip diagnostics, then used that for scheduled scan alerts so alert sweeps avoid the extra stock-universe count and prefilter serialization work while public scanner runs keep diagnostics by default.
+- Added a non-deploy production scanner benchmark workflow proposal so GitHub-hosted runs can use the repository bearer-token secret, upload p50/p95 JSON artifacts, and optionally enforce a saved baseline speedup comparison.
 
 ## Why
 
@@ -57,6 +58,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
 - `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, selective-scenario speedup-baseline contract coverage, and missing-baseline failure coverage.
+- `npm run test:scanner-benchmark-workflow-check` -> passed, proving the proposed benchmark workflow is authenticated, non-deploying, and uploads JSON evidence.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
