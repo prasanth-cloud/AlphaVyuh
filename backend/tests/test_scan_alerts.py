@@ -280,7 +280,7 @@ def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypa
     fake_client = _FakeClient()
     calls = []
 
-    async def fake_execute_scan(client, body, *, plan, trade_date, enforce_plan_limit):
+    async def fake_execute_scan(client, body, *, plan, trade_date, enforce_plan_limit, score_results, include_diagnostics):
         calls.append({
             "plan": plan,
             "trade_date": str(trade_date),
@@ -288,6 +288,8 @@ def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypa
             "filters": body.filters.model_dump(exclude_none=True),
             "sort_by": body.sort_by,
             "enforce_plan_limit": enforce_plan_limit,
+            "score_results": score_results,
+            "include_diagnostics": include_diagnostics,
         })
         return {
             "total_matches": 2,
@@ -310,10 +312,12 @@ def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypa
     assert calls == [{
         "plan": "pro",
         "trade_date": "2026-05-15",
-        "page_size": 0,
+        "page_size": 50,
         "filters": {"rsi_min": 60.0},
         "sort_by": "volume_ratio",
         "enforce_plan_limit": False,
+        "score_results": False,
+        "include_diagnostics": False,
     }]
     match_upsert = fake_client.upserts[0][1]
     assert match_upsert["match_count"] == 2

@@ -167,6 +167,31 @@ function latestCandlePctChange(candles) {
   return ((latestClose - previousClose) / previousClose) * 100;
 }
 
+function scannerSourceRows(scanner) {
+  return numberValue(
+    scanner?.query_rows,
+    scanner?.source_rows,
+    scanner?.source_metadata?.symbols_count,
+    scanner?.source_metadata?.symbolsCount,
+    scanner?.symbols_count,
+  );
+}
+
+function scannerQueryReduction(scanner) {
+  return numberValue(
+    scanner?.query_row_reduction_pct,
+    scanner?.source_metadata?.scanner_performance?.query_row_reduction_pct,
+  );
+}
+
+function scannerDbPrefilterCount(scanner) {
+  const topLevel = scanner?.db_prefilters_applied;
+  if (Array.isArray(topLevel)) return topLevel.length;
+  const metadata = scanner?.source_metadata?.scanner_performance?.db_prefilters_applied;
+  if (Array.isArray(metadata)) return metadata.length;
+  return null;
+}
+
 function assertFreshDate(label, actualDate, summaryDate, maxLagDays = 10) {
   const parsedSummaryDate = parseIsoDate(summaryDate);
   const parsedActualDate = parseIsoDate(actualDate);
@@ -294,6 +319,7 @@ try {
 
   let scannerSummary = "scanner skipped (set PRODUCTION_API_BEARER_TOKEN to verify authenticated scanner data)";
   if (authToken) {
+    const scannerStarted = performance.now();
     const scanner = await fetchJson("/api/v1/scanner/run", {
       method: "POST",
       headers: { Authorization: `Bearer ${authToken}` },
@@ -306,13 +332,20 @@ try {
       },
       timeoutMs: 30_000,
     });
+    const scannerElapsedMs = Math.round(performance.now() - scannerStarted);
     assert(Array.isArray(scanner?.results), "Scanner response did not include a results array.");
     assert(scanner.results.length > 0, "Scanner returned no current EOD matches.");
     assert(numberValue(scanner?.total_matches) > 0, `Scanner total_matches looked empty: ${scanner?.total_matches}.`);
     const scannerDate = scanner?.trade_date || scanner?.as_of || scanner?.source_metadata?.as_of;
     assert(scannerDate, "Scanner response did not include trade/as-of date.");
     assertFreshDate("Scanner trade date", scannerDate, summaryDate);
-    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate}`;
+    const sourceRows = scannerSourceRows(scanner);
+    const sourceRowsCopy = sourceRows === null ? "unknown source rows" : `${sourceRows} source rows`;
+    const reduction = scannerQueryReduction(scanner);
+    const reductionCopy = reduction === null ? "" : `, ${reduction}% query reduction`;
+    const prefilterCount = scannerDbPrefilterCount(scanner);
+    const prefilterCopy = prefilterCount === null ? "" : `, ${prefilterCount} db prefilters`;
+    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate} in ${scannerElapsedMs}ms from ${sourceRowsCopy}${reductionCopy}${prefilterCopy}`;
   }
 
   console.log(

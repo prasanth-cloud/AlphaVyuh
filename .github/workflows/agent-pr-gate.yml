@@ -76,6 +76,9 @@ jobs:
       - name: Production API checker tests
         run: npm run test:production-api-check
 
+      - name: Scanner benchmark checker tests
+        run: npm run test:scanner-benchmark
+
       - name: Five-year chart contract tests
         run: npm run test:five-year-chart-check
 

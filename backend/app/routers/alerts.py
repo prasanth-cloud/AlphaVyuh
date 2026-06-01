@@ -263,11 +263,13 @@ async def run_all_alerts(trade_date: date) -> dict:
                     sort_by=sort_by,
                     sort_order=sort_order,
                     page=1,
-                    page_size=0,
+                    page_size=50,
                 ),
                 plan=plan,
                 trade_date=trade_date,
                 enforce_plan_limit=False,
+                score_results=False,
+                include_diagnostics=False,
             )
             results = scan.get("results") or []
             match_count = int(scan.get("total_matches") or 0)
@@ -493,7 +495,7 @@ async def telegram_webhook(
                                 "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
                                 "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
                             ).eq("trade_date", latest_date).limit(2000).execute().data or []
-                            matched = _apply_filters(rows, filters)
+                            matched = _apply_filters(rows, filters, score_results=False)
                             matched.sort(key=lambda x: (x.get("volume_ratio") is not None, x.get("volume_ratio") or 0), reverse=True)
                             top = matched[:5]
                             if not top:

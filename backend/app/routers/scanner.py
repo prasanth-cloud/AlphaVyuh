@@ -7,6 +7,9 @@ smaller candidate set returned by the DB push-filters.
 from __future__ import annotations
 
 import asyncio
+import heapq
+import threading
+import time
 from datetime import date
 from uuid import UUID
 
@@ -25,6 +28,213 @@ router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 FREE_RESULT_LIMIT  = 200
 PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
+DbPrefilterValue = float | int | bool | str | list[str]
+DbPrefilterOp = tuple[str, str, DbPrefilterValue]
+UNIVERSE_COUNT_CACHE_TTL = 300.0
+LATEST_TRADE_DATE_CACHE_TTL = 60.0
+SCANNER_BASE_SELECT = (
+    "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
+    "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
+    "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
+    "bb_upper,bb_middle,bb_lower,bb_width,"
+    "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
+    "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
+    "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+)
+SCANNER_INTELLIGENCE_SELECT = (
+    "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,avg_volume_50d,"
+    "turnover,rsi_14,ema_20,ema_50,ema_150,ema_200,ema_200_slope_30d,"
+    "week_52_high,week_52_low,high_3w,low_3w,darvas_box_height_pct,price_perf_6m_pct,is_nr7,atr_14,"
+    "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
+    "bb_upper,bb_middle,bb_lower,bb_width,"
+    "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
+    "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
+    "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+)
+_universe_count_cache: dict[tuple[str, ...], tuple[float, int | None]] = {}
+_universe_count_cache_lock = threading.Lock()
+_latest_trade_date_cache: tuple[float, str] | None = None
+_latest_trade_date_cache_lock = threading.Lock()
+
+
+def _list_filter(value: list[str] | str | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [item for item in value if item]
+    return [value] if value else []
+
+
+def _pgrest_number(value: float | int) -> str:
+    number = float(value)
+    return str(int(number)) if number.is_integer() else str(number)
+
+
+def _db_or_null_numeric_op(column: str, operator: str, value: float | int) -> DbPrefilterOp:
+    return ("or_", column, f"{column}.is.null,{column}.{operator}.{_pgrest_number(value)}")
+
+
+def _db_prefilter_ops(f: "ScanFilters") -> list[DbPrefilterOp]:
+    ops: list[DbPrefilterOp] = [
+        ("eq", "stock_universe.is_active", True),
+        ("in_", "stock_universe.series", _list_filter(f.series) or ["EQ", "BE"]),
+    ]
+
+    sectors = _list_filter(f.sector)
+    if len(sectors) == 1:
+        ops.append(("eq", "stock_universe.sector", sectors[0]))
+    elif len(sectors) > 1:
+        ops.append(("in_", "stock_universe.sector", sectors))
+
+    market_cap_categories = _list_filter(f.market_cap_category)
+    if len(market_cap_categories) == 1:
+        ops.append(("eq", "stock_universe.market_cap_category", market_cap_categories[0]))
+    elif len(market_cap_categories) > 1:
+        ops.append(("in_", "stock_universe.market_cap_category", market_cap_categories))
+
+    if f.market is not None:
+        market = f.market.upper()
+        if market == "IN":
+            ops.append(("in_", "stock_universe.market", ["NSE", "BSE"]))
+        elif market == "US":
+            ops.append(("in_", "stock_universe.market", ["NASDAQ", "NYSE"]))
+        elif market in {"NSE", "BSE", "NASDAQ", "NYSE"}:
+            ops.append(("eq", "stock_universe.market", market))
+
+    if f.market_cap_min is not None:
+        ops.append(("gte", "stock_universe.market_cap_cr", f.market_cap_min))
+    if f.market_cap_max is not None:
+        ops.append(("lte", "stock_universe.market_cap_cr", f.market_cap_max))
+    if f.pe_min is not None:
+        ops.append(("gte", "stock_universe.pe_ratio", f.pe_min))
+    if f.pe_max is not None:
+        ops.append(("lte", "stock_universe.pe_ratio", f.pe_max))
+    if f.pb_min is not None:
+        ops.append(("gte", "stock_universe.pb_ratio", f.pb_min))
+    if f.pb_max is not None:
+        ops.append(("lte", "stock_universe.pb_ratio", f.pb_max))
+    if f.eps_min is not None:
+        ops.append(("gte", "stock_universe.eps", f.eps_min))
+    if f.eps_max is not None:
+        ops.append(("lte", "stock_universe.eps", f.eps_max))
+    if f.dividend_yield_min is not None:
+        ops.append(("gte", "stock_universe.dividend_yield", f.dividend_yield_min))
+    if f.dividend_yield_max is not None:
+        ops.append(("lte", "stock_universe.dividend_yield", f.dividend_yield_max))
+    if f.debt_to_equity_max is not None:
+        ops.append(("lte", "stock_universe.debt_to_equity", f.debt_to_equity_max))
+    if f.roe_min is not None:
+        ops.append(("gte", "stock_universe.roe", f.roe_min))
+    if f.roce_min is not None:
+        ops.append(("gte", "stock_universe.roce", f.roce_min))
+
+    if f.rs_score_min is not None:
+        ops.append(("gte", "rs_score", f.rs_score_min))
+    if f.rs_score_max is not None:
+        ops.append(("lte", "rs_score", f.rs_score_max))
+    if f.avg_volume_50d_min is not None:
+        ops.append(("gte", "avg_volume_50d", f.avg_volume_50d_min))
+    if f.avg_volume_50d_max is not None:
+        ops.append(("lte", "avg_volume_50d", f.avg_volume_50d_max))
+    if f.price_perf_6m_min is not None:
+        ops.append(("gte", "price_perf_6m_pct", f.price_perf_6m_min))
+    if f.price_perf_6m_max is not None:
+        ops.append(("lte", "price_perf_6m_pct", f.price_perf_6m_max))
+    if f.ema_200_trending_up is True:
+        ops.append(("gt", "ema_200_slope_30d", 0))
+    if f.ema_200_slope_30d_min is not None:
+        ops.append(("gte", "ema_200_slope_30d", f.ema_200_slope_30d_min))
+    if f.ema_200_slope_30d_max is not None:
+        ops.append(("lte", "ema_200_slope_30d", f.ema_200_slope_30d_max))
+    if f.darvas_box_height_pct_max is not None:
+        ops.append(("lte", "darvas_box_height_pct", f.darvas_box_height_pct_max))
+    if f.nr7 is True:
+        ops.append(("eq", "is_nr7", True))
+
+    if f.volume_ratio_min is not None:
+        ops.append(_db_or_null_numeric_op("volume_ratio", "gte", f.volume_ratio_min))
+    if f.volume_ratio_max is not None:
+        ops.append(_db_or_null_numeric_op("volume_ratio", "lte", f.volume_ratio_max))
+
+    w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
+    if w52h_limit is not None:
+        limit = abs(float(w52h_limit))
+        ops.append(_db_or_null_numeric_op("w52h_pct", "gte", -limit))
+        ops.append(_db_or_null_numeric_op("w52h_pct", "lte", limit))
+    if f.w52l_pct_min is not None:
+        ops.append(_db_or_null_numeric_op("w52l_pct", "gte", f.w52l_pct_min))
+    return ops
+
+
+def _serialize_prefilter_ops(
+    ops: list[DbPrefilterOp],
+) -> list[dict[str, DbPrefilterValue]]:
+    return [
+        {"op": op, "column": column, "value": value}
+        for op, column, value in ops
+    ]
+
+
+def _push_db_prefilters(q, f: "ScanFilters"):
+    """Push non-fallback scanner intelligence filters into PostgREST.
+
+    Only push fields where a missing DB value is already a hard reject in
+    _apply_filters. For fallback-computed fields, keep DB-null rows in the
+    query so Python can preserve the older/partial row fallback behavior.
+    """
+    for op, column, value in _db_prefilter_ops(f):
+        if op == "or_":
+            q = q.or_(str(value))
+        else:
+            q = getattr(q, op)(column, value)
+    return q
+
+
+def _universe_count_cache_key(series_list: list[str]) -> tuple[str, ...]:
+    return tuple(sorted({series for series in series_list if series}))
+
+
+def _active_universe_size(client, series_list: list[str]) -> int | None:
+    cache_key = _universe_count_cache_key(series_list)
+    now = time.monotonic()
+    with _universe_count_cache_lock:
+        cached = _universe_count_cache.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1]
+
+    try:
+        universe_size = (
+            client.table("stock_universe")
+            .select("symbol", count="exact")
+            .eq("is_active", True)
+            .in_("series", list(cache_key) or ["EQ", "BE"])
+            .execute()
+            .count
+        )
+    except Exception:
+        universe_size = None
+
+    if universe_size is not None:
+        with _universe_count_cache_lock:
+            _universe_count_cache[cache_key] = (now + UNIVERSE_COUNT_CACHE_TTL, universe_size)
+    return universe_size
+
+
+def _scanner_latest_complete_trade_date(client) -> str | None:
+    global _latest_trade_date_cache
+
+    now = time.monotonic()
+    with _latest_trade_date_cache_lock:
+        if _latest_trade_date_cache and _latest_trade_date_cache[0] > now:
+            return _latest_trade_date_cache[1]
+
+    latest_date = get_latest_complete_trade_date(client)
+    if latest_date:
+        with _latest_trade_date_cache_lock:
+            _latest_trade_date_cache = (now + LATEST_TRADE_DATE_CACHE_TTL, str(latest_date))
+    return str(latest_date) if latest_date else None
 
 
 # ── Filter model ──────────────────────────────────────────────────────────────
@@ -473,7 +683,44 @@ def _score_setup(result: dict, preset_id: str | None) -> dict:
     }
 
 
-def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = None) -> list[dict]:
+def _sort_key_value(result: dict, sort_key: str) -> tuple[bool, object]:
+    value = result.get(sort_key)
+    return (value is not None, value or 0)
+
+
+def _sorted_plan_slice(results: list[dict], sort_key: str, reverse: bool, limit: int) -> list[dict]:
+    """Return the same sorted plan slice without sorting the full universe when possible."""
+    if limit <= 0 or len(results) <= limit:
+        return sorted(results, key=lambda row: _sort_key_value(row, sort_key), reverse=reverse)
+
+    if reverse:
+        decorated = heapq.nlargest(
+            limit,
+            enumerate(results),
+            key=lambda item: (_sort_key_value(item[1], sort_key), -item[0]),
+        )
+    else:
+        decorated = heapq.nsmallest(
+            limit,
+            enumerate(results),
+            key=lambda item: (_sort_key_value(item[1], sort_key), item[0]),
+        )
+    return [row for _, row in decorated]
+
+
+def _score_scan_results(results: list[dict], preset_id: str | None) -> list[dict]:
+    for result in results:
+        result.update(_score_setup(result, preset_id))
+    return results
+
+
+def _apply_filters(
+    rows: list[dict],
+    f: ScanFilters,
+    preset_id: str | None = None,
+    *,
+    score_results: bool = True,
+) -> list[dict]:
     """
     Enrich each row with computed columns, then apply Python-side filters.
     Returns only matching rows (with computed fields attached).
@@ -809,6 +1056,10 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
         dte  = su.get("debt_to_equity")
         roe_ = su.get("roe")
         roce_= su.get("roce")
+        market_cap_category = su.get("market_cap_category")
+        if f.market_cap_category is not None:
+            market_cap_categories = f.market_cap_category if isinstance(f.market_cap_category, list) else [f.market_cap_category]
+            if market_cap_category not in market_cap_categories: continue
         if f.market_cap_min     is not None and (mc   is None or mc   < f.market_cap_min):     continue
         if f.market_cap_max     is not None and (mc   is None or mc   > f.market_cap_max):     continue
         if f.pe_min             is not None and (pe   is None or pe   < f.pe_min):             continue
@@ -898,6 +1149,7 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
             "match_reasons":   match_reasons[:6],
             "data_warnings":   data_warnings[:4],
             # Fundamentals
+            "market_cap_category": su.get("market_cap_category"),
             "market_cap_cr":   su.get("market_cap_cr"),
             "pe_ratio":        su.get("pe_ratio"),
             "pb_ratio":        su.get("pb_ratio"),
@@ -907,7 +1159,8 @@ def _apply_filters(rows: list[dict], f: ScanFilters, preset_id: str | None = Non
             "roe":             su.get("roe"),
             "roce":            su.get("roce"),
         }
-        result.update(_score_setup(result, preset_id))
+        if score_results:
+            result.update(_score_setup(result, preset_id))
         results.append(result)
 
     return results
@@ -1000,19 +1253,24 @@ async def execute_scan(
     plan: str = "free",
     trade_date: str | date | None = None,
     enforce_plan_limit: bool = True,
+    score_results: bool = True,
+    include_diagnostics: bool = True,
 ) -> dict:
     """Run the scanner core for UI scans and saved EOD scan alerts."""
+    scan_started = time.perf_counter()
     hard_limit = (
         FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
     ) if enforce_plan_limit else SCAN_ROW_CAP
 
+    date_lookup_started = time.perf_counter()
     if trade_date is not None:
         latest_date = str(trade_date)
     else:
         try:
-            latest_date = get_latest_complete_trade_date(client)
+            latest_date = _scanner_latest_complete_trade_date(client)
         except Exception:
             latest_date = None
+    date_lookup_elapsed_ms = round((time.perf_counter() - date_lookup_started) * 1000)
     if not latest_date:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1023,29 +1281,9 @@ async def execute_scan(
     f = body.filters
     series_list = f.series or ["EQ", "BE"]
 
-    base_select = (
-        "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
-        "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
-        "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
-        "bb_upper,bb_middle,bb_lower,bb_width,"
-        "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
-        "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-        "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
-    )
-    intelligence_select = (
-        "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,avg_volume_50d,"
-        "turnover,rsi_14,ema_20,ema_50,ema_150,ema_200,ema_200_slope_30d,"
-        "week_52_high,week_52_low,high_3w,low_3w,darvas_box_height_pct,price_perf_6m_pct,is_nr7,atr_14,"
-        "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
-        "bb_upper,bb_middle,bb_lower,bb_width,"
-        "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
-        "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-        "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
-    )
-
-    q = client.table("daily_ohlcv").select(intelligence_select).eq("trade_date", latest_date)
+    q = client.table("daily_ohlcv").select(SCANNER_INTELLIGENCE_SELECT).eq("trade_date", latest_date)
+    sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
+    reverse  = body.sort_order != "asc"
 
     # ── Push all single-day filters to DB (ADR 005 M3-B) ─────────────────────
     # Precomputed columns already in schema before M3-A:
@@ -1086,18 +1324,19 @@ async def execute_scan(
     if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
     if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
     if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
-    # M3-A columns: DB push deferred to ingest-job PR — all values currently NULL in production.
-    # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
-    # Python fallback in _apply_filters handles rs_score/volume_ratio/w52h_pct/w52l_pct
-    # until the ingest job populates these columns.
+    db_prefilter_ops = _db_prefilter_ops(f)
+    q = _push_db_prefilters(q, f)
 
+    used_fallback_query = False
+    query_started = time.perf_counter()
     try:
         rows = q.limit(SCAN_ROW_CAP).execute().data or []
     except Exception:
+        used_fallback_query = True
         try:
             rows = (
                 client.table("daily_ohlcv")
-                .select(base_select)
+                .select(SCANNER_BASE_SELECT)
                 .eq("trade_date", latest_date)
                 .limit(SCAN_ROW_CAP)
                 .execute()
@@ -1108,42 +1347,44 @@ async def execute_scan(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Scanner query could not complete; try a narrower preset.",
             )
+    query_elapsed_ms = round((time.perf_counter() - query_started) * 1000)
 
     # Python-side filter for computed columns
-    results = _apply_filters(rows, f, body.preset_id)
+    filter_started = time.perf_counter()
+    results = _apply_filters(rows, f, body.preset_id, score_results=False)
+    filter_elapsed_ms = round((time.perf_counter() - filter_started) * 1000)
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
+    vcp_elapsed_ms = 0
     if f.vcp_contraction is True and results:
         if plan == "free":
             raise HTTPException(403, "VCP scan requires Pro or Elite plan")
+        vcp_started = time.perf_counter()
         results = await _run_vcp_pass2(client, results, latest_date, f)
+        vcp_elapsed_ms = round((time.perf_counter() - vcp_started) * 1000)
+
+    score_elapsed_ms = 0
+    if sort_key == "setup_score":
+        score_started = time.perf_counter()
+        _score_scan_results(results, body.preset_id)
+        score_elapsed_ms = round((time.perf_counter() - score_started) * 1000)
 
     # Sort
-    sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
-    reverse  = body.sort_order != "asc"
-    results.sort(key=lambda x: (x.get(sort_key) is not None, x.get(sort_key) or 0), reverse=reverse)
-
+    sort_started = time.perf_counter()
     total = len(results)
-    capped = results[:hard_limit]
-    try:
-        universe_size = (
-            client.table("stock_universe")
-            .select("symbol", count="exact")
-            .eq("is_active", True)
-            .in_("series", series_list)
-            .execute()
-            .count
-        )
-    except Exception:
-        universe_size = None
-    coverage_pct = round((len(rows) / universe_size) * 100, 1) if universe_size else None
-    metadata = eod_source_metadata(
-        as_of=latest_date,
-        status="degraded" if coverage_pct is not None and coverage_pct < 90 else "healthy",
-        coverage_pct=coverage_pct,
-        symbols_count=len(rows),
-        universe_active=universe_size,
+    capped = _sorted_plan_slice(results, sort_key, reverse, hard_limit)
+    sort_elapsed_ms = round((time.perf_counter() - sort_started) * 1000)
+
+    universe_started = time.perf_counter()
+    universe_size = _active_universe_size(client, series_list) if include_diagnostics else None
+    universe_count_elapsed_ms = round((time.perf_counter() - universe_started) * 1000)
+    query_rows = len(rows)
+    query_row_reduction_pct = (
+        round((1 - (query_rows / universe_size)) * 100, 1)
+        if universe_size and query_rows <= universe_size
+        else None
     )
+    applied_prefilters = [] if used_fallback_query or not include_diagnostics else _serialize_prefilter_ops(db_prefilter_ops)
     safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
     safe_page = max(body.page, 1)
 
@@ -1155,6 +1396,38 @@ async def execute_scan(
         end = start + safe_page_size
         paged = capped[start:end]
         total_pages = max(1, (len(capped) + safe_page_size - 1) // safe_page_size)
+
+    if score_results and sort_key != "setup_score" and paged:
+        score_started = time.perf_counter()
+        _score_scan_results(paged, body.preset_id)
+        score_elapsed_ms = round(score_elapsed_ms + ((time.perf_counter() - score_started) * 1000))
+
+    scanner_performance = {
+        "query_rows": query_rows,
+        "universe_size": universe_size,
+        "query_row_reduction_pct": query_row_reduction_pct,
+        "db_prefilters_applied": applied_prefilters,
+        "fallback_query": used_fallback_query,
+        "timing_ms": {
+            "date_lookup": date_lookup_elapsed_ms,
+            "query": query_elapsed_ms,
+            "filter": filter_elapsed_ms,
+            "vcp": vcp_elapsed_ms,
+            "score": score_elapsed_ms,
+            "sort": sort_elapsed_ms,
+            "universe_count": universe_count_elapsed_ms,
+            "total": round((time.perf_counter() - scan_started) * 1000),
+        },
+    }
+    coverage_pct = None
+    metadata = eod_source_metadata(
+        as_of=latest_date,
+        status="healthy",
+        coverage_pct=coverage_pct,
+        symbols_count=query_rows,
+        universe_active=universe_size,
+    )
+    metadata["scanner_performance"] = scanner_performance
 
     return {
         "trade_date":    latest_date,
@@ -1172,6 +1445,10 @@ async def execute_scan(
         "source": metadata["source_name"],
         "coverage_pct": coverage_pct,
         "universe_size": universe_size,
+        "query_rows": query_rows,
+        "source_rows": query_rows,
+        "query_row_reduction_pct": query_row_reduction_pct,
+        "db_prefilters_applied": applied_prefilters,
     }
 
 
