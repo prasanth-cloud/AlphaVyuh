@@ -3,6 +3,9 @@ import http from "node:http";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { strict as assert } from "node:assert";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 async function withServer(handler, test) {
   const server = http.createServer(handler);
@@ -175,6 +178,30 @@ await withServer(async (request, response) => {
   );
   assert.match(withBaseline.stdout, /trend-template: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
   assert.match(withBaseline.stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
+
+  const outputDir = mkdtempSync(join(tmpdir(), "scanner-benchmark-"));
+  try {
+    const outputPath = join(outputDir, "benchmark.json");
+    const withOutput = await runBenchmark(apiUrl, {
+      PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+      SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: "80",
+      SCANNER_BENCHMARK_OUTPUT_JSON: outputPath,
+    });
+    assert.equal(
+      withOutput.code,
+      0,
+      `scanner benchmark JSON output should pass:\nSTDOUT:\n${withOutput.stdout}\nSTDERR:\n${withOutput.stderr}`,
+    );
+    const output = JSON.parse(readFileSync(outputPath, "utf8"));
+    assert.equal(output.runs, 2);
+    assert.equal(output.warmup_runs, 1);
+    assert.equal(output.api_base, apiUrl);
+    assert.ok(Array.isArray(output.results), "benchmark output should include results array");
+    assert.ok(output.results.some((result) => result.name === "trend-template" && result.p50 >= 0 && result.p95 >= 0));
+    assert.ok(output.results.some((result) => result.name === "fundamental-category" && result.prefilterCount >= 11));
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true });
+  }
 });
 
 await withServer(async (request, response) => {

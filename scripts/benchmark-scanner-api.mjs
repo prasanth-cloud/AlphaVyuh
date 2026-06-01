@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 function normalizeApiBaseUrl(raw, fallback = "") {
   let cleaned = String(raw ?? "")
@@ -33,6 +33,7 @@ const requireDiagnostics = process.env.SCANNER_BENCHMARK_REQUIRE_DIAGNOSTICS !==
 const rawBaseline = String(
   process.env.SCANNER_BENCHMARK_BASELINE_JSON || process.env.SCANNER_BENCHMARK_BASELINE_PATH || "",
 ).trim();
+const outputJsonPath = String(process.env.SCANNER_BENCHMARK_OUTPUT_JSON || "").trim();
 
 const scenarios = [
   {
@@ -271,6 +272,17 @@ function speedupSummary(result, baseline) {
   };
 }
 
+function benchmarkPayload(results) {
+  return {
+    generated_at: new Date().toISOString(),
+    api_base: apiBase,
+    runs,
+    warmup_runs: warmupRuns,
+    scenarios: results,
+    results,
+  };
+}
+
 function dbPrefilterCount(scanner) {
   const topLevel = scanner?.db_prefilters_applied;
   if (Array.isArray(topLevel)) return topLevel.length;
@@ -364,7 +376,7 @@ try {
     results.push(await runScenario(scenario));
   }
 
-  const summary = results.map((result) => {
+  const enrichedResults = results.map((result) => {
     const speedup = speedupSummary(result, baselineByScenario.get(result.name));
     if (speedup && minSpeedup > 0) {
       assert(
@@ -377,14 +389,26 @@ try {
       );
     }
 
+    return {
+      ...result,
+      speedup_p50: speedup?.p50 ?? null,
+      speedup_p95: speedup?.p95 ?? null,
+    };
+  });
+
+  const summary = enrichedResults.map((result) => {
     const queryRows = result.queryRows === null ? "unknown rows" : `${result.queryRows} rows`;
     const reduction = result.queryReductionPct === null ? "unknown reduction" : `${result.queryReductionPct}% query reduction`;
     const prefilters = result.prefilterCount === null ? "unknown db prefilters" : `${result.prefilterCount} db prefilters`;
-    const speedupText = speedup
-      ? `, speedup p50=${speedup.p50 ?? "unknown"}x p95=${speedup.p95 ?? "unknown"}x`
+    const speedupText = result.speedup_p50 !== null || result.speedup_p95 !== null
+      ? `, speedup p50=${result.speedup_p50 ?? "unknown"}x p95=${result.speedup_p95 ?? "unknown"}x`
       : "";
     return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
   });
+
+  if (outputJsonPath) {
+    writeFileSync(outputJsonPath, `${JSON.stringify(benchmarkPayload(enrichedResults), null, 2)}\n`);
+  }
 
   console.log(`Scanner benchmark ok (${runs} measured run${runs === 1 ? "" : "s"} each, ${warmupRuns} warmup):`);
   for (const line of summary) {
