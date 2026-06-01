@@ -133,3 +133,18 @@ def test_recent_trade_dates_falls_back_to_unique_daily_ohlcv_pages():
     )
 
     assert backtest._recent_trade_dates(client, 3) == ["2026-05-13", "2026-05-14", "2026-05-15"]
+
+
+def test_recent_trade_dates_fills_partial_ingestion_log_from_daily_rows():
+    client = _BacktestClient(
+        log_dates=["2026-05-15"],
+        date_rows=[
+            {"trade_date": "2026-05-15"},
+            {"trade_date": "2026-05-15"},
+            {"trade_date": "2026-05-14"},
+            {"trade_date": "2026-05-13"},
+            {"trade_date": "2026-05-12"},
+        ],
+    )
+
+    assert backtest._recent_trade_dates(client, 3) == ["2026-05-13", "2026-05-14", "2026-05-15"]

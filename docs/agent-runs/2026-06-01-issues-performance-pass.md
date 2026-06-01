@@ -34,6 +34,7 @@
 - Added a no-score execution path for non-UI scanner consumers, then used it for scheduled scan alerts, Telegram `/scan`, and historical backtest counts.
 - Reduced scheduled scan alert payload work from "return all matches then slice 50" to "return the first 50 sorted matches while keeping full `total_matches`."
 - Fixed historical backtest date selection so a multi-day backtest uses recent unique trade sessions instead of accidentally collapsing to the latest few `daily_ohlcv` rows from one session.
+- Hardened backtest date selection when the ingestion log is partial by filling missing sessions from deduped `daily_ohlcv` dates.
 
 ## Why
 

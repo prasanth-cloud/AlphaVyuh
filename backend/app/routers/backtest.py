@@ -78,12 +78,13 @@ def _recent_trade_dates(client, days: int) -> list[str]:
             .data or []
         )
         dates = _ordered_unique_dates(rows)
-        if dates:
+        if len(dates) >= days:
             return sorted(dates[:days])
     except Exception:
-        pass
+        dates = []
 
-    return _recent_trade_dates_from_daily_rows(client, days)
+    fallback_dates = _recent_trade_dates_from_daily_rows(client, days)
+    return sorted(set(dates + fallback_dates))[-days:]
 
 
 @router.post("/run")
