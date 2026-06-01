@@ -7,6 +7,8 @@ smaller candidate set returned by the DB push-filters.
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from datetime import date
 from uuid import UUID
 
@@ -27,6 +29,9 @@ PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 DbPrefilterValue = float | int | bool | str | list[str]
 DbPrefilterOp = tuple[str, str, DbPrefilterValue]
+UNIVERSE_COUNT_CACHE_TTL = 300.0
+_universe_count_cache: dict[tuple[str, ...], tuple[float, int | None]] = {}
+_universe_count_cache_lock = threading.Lock()
 
 
 def _list_filter(value: list[str] | str | None) -> list[str]:
@@ -160,6 +165,36 @@ def _push_db_prefilters(q, f: "ScanFilters"):
         else:
             q = getattr(q, op)(column, value)
     return q
+
+
+def _universe_count_cache_key(series_list: list[str]) -> tuple[str, ...]:
+    return tuple(sorted({series for series in series_list if series}))
+
+
+def _active_universe_size(client, series_list: list[str]) -> int | None:
+    cache_key = _universe_count_cache_key(series_list)
+    now = time.monotonic()
+    with _universe_count_cache_lock:
+        cached = _universe_count_cache.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1]
+
+    try:
+        universe_size = (
+            client.table("stock_universe")
+            .select("symbol", count="exact")
+            .eq("is_active", True)
+            .in_("series", list(cache_key) or ["EQ", "BE"])
+            .execute()
+            .count
+        )
+    except Exception:
+        universe_size = None
+
+    if universe_size is not None:
+        with _universe_count_cache_lock:
+            _universe_count_cache[cache_key] = (now + UNIVERSE_COUNT_CACHE_TTL, universe_size)
+    return universe_size
 
 
 # ── Filter model ──────────────────────────────────────────────────────────────
@@ -1265,17 +1300,7 @@ async def execute_scan(
 
     total = len(results)
     capped = results[:hard_limit]
-    try:
-        universe_size = (
-            client.table("stock_universe")
-            .select("symbol", count="exact")
-            .eq("is_active", True)
-            .in_("series", series_list)
-            .execute()
-            .count
-        )
-    except Exception:
-        universe_size = None
+    universe_size = _active_universe_size(client, series_list)
     query_rows = len(rows)
     query_row_reduction_pct = (
         round((1 - (query_rows / universe_size)) * 100, 1)

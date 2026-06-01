@@ -144,6 +144,9 @@ class _ScannerQuery:
     def in_(self, *_args, **_kwargs):
         return self
 
+    def or_(self, *_args, **_kwargs):
+        return self
+
     def limit(self, *_args, **_kwargs):
         return self
 
@@ -157,8 +160,10 @@ class _ScannerClient:
     def __init__(self, rows, universe_count):
         self.rows = rows
         self.universe_count = universe_count
+        self.table_calls = []
 
     def table(self, table_name):
+        self.table_calls.append(table_name)
         return _ScannerQuery(table_name, self.rows, self.universe_count)
 
 
@@ -199,6 +204,7 @@ def test_execute_scan_raises_503_when_primary_and_fallback_queries_fail():
 
 
 def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
+    scanner._universe_count_cache.clear()
     result = asyncio.run(
         scanner.execute_scan(
             _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000),
@@ -233,6 +239,33 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
         ],
         "fallback_query": False,
     }
+
+
+def test_execute_scan_caches_universe_count_for_repeated_scans():
+    scanner._universe_count_cache.clear()
+    client = _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000)
+    body = scanner.ScanRequest(
+        filters=scanner.ScanFilters(
+            rs_score_min=70,
+            volume_ratio_min=1.5,
+            week_52_high_pct_max=10,
+            series=["EQ"],
+        ),
+        page_size=25,
+    )
+
+    first = asyncio.run(scanner.execute_scan(client, body, plan="pro", trade_date="2026-05-19"))
+    second = asyncio.run(scanner.execute_scan(client, body, plan="pro", trade_date="2026-05-19"))
+
+    assert first["universe_size"] == 1000
+    assert second["universe_size"] == 1000
+    assert client.table_calls.count("stock_universe") == 1
+    assert second["source_metadata"]["scanner_performance"]["db_prefilters_applied"][-3:] == [
+        {"op": "or_", "column": "volume_ratio", "value": "volume_ratio.is.null,volume_ratio.gte.1.5"},
+        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.gte.-10"},
+        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.lte.10"},
+    ]
+    scanner._universe_count_cache.clear()
 
 
 def test_list_screens_keeps_valid_empty_state(monkeypatch):

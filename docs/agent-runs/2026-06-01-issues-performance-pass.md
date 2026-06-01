@@ -21,6 +21,7 @@
 - Extended the scanner benchmark to include a `fundamental-category` scenario so category/fundamental DB pushdown is part of the production proof path.
 - Added optional scanner benchmark baseline comparison via `SCANNER_BENCHMARK_BASELINE_JSON` or `SCANNER_BENCHMARK_BASELINE_PATH` and `SCANNER_BENCHMARK_MIN_SPEEDUP`, so the 5-10x target can be enforced with real before/after p50 and p95 latency numbers after deployment.
 - Added null-preserving DB prefilters for fallback-computed `volume_ratio`, `w52h_pct`, and `w52l_pct`, reducing row transfer for backfilled scanner rows while keeping DB-null rows available for the existing Python fallback path.
+- Added a short-lived active-universe count cache for scanner diagnostics, removing a repeated `stock_universe` count round trip from repeated scans and benchmark samples without changing scan matches.
 
 ## Why
 
@@ -43,7 +44,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> 55 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> 56 passed.
 - `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 313 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
