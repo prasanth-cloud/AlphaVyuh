@@ -125,26 +125,34 @@ class _ScannerQuery:
         self.table_name = table_name
         self.rows = rows
         self.universe_count = universe_count
+        self.calls = []
 
     def select(self, *_args, **_kwargs):
         return self
 
-    def eq(self, *_args, **_kwargs):
+    def eq(self, column, value):
+        self.calls.append(("eq", column, value))
         return self
 
-    def gte(self, *_args, **_kwargs):
+    def gte(self, column, value):
+        self.calls.append(("gte", column, value))
         return self
 
-    def lte(self, *_args, **_kwargs):
+    def lte(self, column, value):
+        self.calls.append(("lte", column, value))
         return self
 
-    def gt(self, *_args, **_kwargs):
+    def gt(self, column, value):
+        self.calls.append(("gt", column, value))
         return self
 
-    def in_(self, *_args, **_kwargs):
+    def in_(self, column, value):
+        self.calls.append(("in_", column, value))
         return self
 
-    def or_(self, *_args, **_kwargs):
+    def or_(self, value):
+        column = str(value).split(".", 1)[0]
+        self.calls.append(("or_", column, value))
         return self
 
     def limit(self, *_args, **_kwargs):
@@ -165,6 +173,33 @@ class _ScannerClient:
     def table(self, table_name):
         self.table_calls.append(table_name)
         return _ScannerQuery(table_name, self.rows, self.universe_count)
+
+
+class _ColumnFailingScannerQuery(_ScannerQuery):
+    def __init__(self, table_name, rows, universe_count, failing_columns):
+        super().__init__(table_name, rows, universe_count)
+        self.failing_columns = failing_columns
+
+    def execute(self):
+        if self.table_name == "stock_universe":
+            return _Result([], count=self.universe_count)
+        touched_columns = {column for _op, column, _value in self.calls}
+        if touched_columns & self.failing_columns:
+            raise RuntimeError(f"unsupported columns: {sorted(touched_columns & self.failing_columns)}")
+        return _Result(self.rows)
+
+
+class _ColumnFailingScannerClient(_ScannerClient):
+    def __init__(self, rows, universe_count, failing_columns):
+        super().__init__(rows, universe_count)
+        self.failing_columns = set(failing_columns)
+        self.queries = []
+
+    def table(self, table_name):
+        self.table_calls.append(table_name)
+        query = _ColumnFailingScannerQuery(table_name, self.rows, self.universe_count, self.failing_columns)
+        self.queries.append(query)
+        return query
 
 
 def test_run_scanner_raises_503_when_admin_client_is_unavailable(monkeypatch):
@@ -263,6 +298,7 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
             {"op": "gte", "column": "avg_volume_50d", "value": 100000},
         ],
         "fallback_query": False,
+        "fallback_stage": "none",
         "timing_ms": scanner_performance["timing_ms"],
     }
     assert set(scanner_performance["timing_ms"]) == {
@@ -276,6 +312,51 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
         "total",
     }
     assert all(value >= 0 for value in scanner_performance["timing_ms"].values())
+
+
+def test_execute_scan_retries_compatibility_prefilters_before_broad_fallback():
+    scanner._universe_count_cache.clear()
+    client = _ColumnFailingScannerClient(
+        [_scanner_row("AAA"), _scanner_row("BBB")],
+        universe_count=1000,
+        failing_columns={"darvas_box_height_pct"},
+    )
+
+    result = asyncio.run(
+        scanner.execute_scan(
+            client,
+            scanner.ScanRequest(
+                filters=scanner.ScanFilters(
+                    week_52_high_pct_max=8,
+                    volume_ratio_min=1.5,
+                    darvas_box_height_pct_max=15,
+                    avg_volume_50d_min=100000,
+                    series=["EQ"],
+                ),
+                page_size=25,
+            ),
+            plan="pro",
+            trade_date="2026-05-19",
+        )
+    )
+
+    scanner_performance = result["source_metadata"]["scanner_performance"]
+    assert scanner_performance["fallback_query"] is True
+    assert scanner_performance["fallback_stage"] == "compatibility_prefilter"
+    assert result["db_prefilters_applied"] == [
+        {"op": "eq", "column": "stock_universe.is_active", "value": True},
+        {"op": "in_", "column": "stock_universe.series", "value": ["EQ"]},
+        {"op": "or_", "column": "volume_ratio", "value": "volume_ratio.is.null,volume_ratio.gte.1.5"},
+        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.gte.-8"},
+        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.lte.8"},
+    ]
+    assert result["query_row_reduction_pct"] == 99.8
+    assert client.table_calls.count("daily_ohlcv") == 2
+    assert all(
+        ("darvas_box_height_pct" not in {column for _op, column, _value in query.calls})
+        for query in client.queries[1:]
+        if query.table_name == "daily_ohlcv"
+    )
 
 
 def test_execute_scan_scores_only_visible_page_when_not_sorting_by_setup_score(monkeypatch):

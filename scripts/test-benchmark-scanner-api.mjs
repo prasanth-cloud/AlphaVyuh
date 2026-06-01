@@ -166,6 +166,7 @@ await withServer(async (request, response) => {
   assert.match(stdout, /trend-template: p50=\d+ms p95=\d+ms .*server total=8ms query=3ms filter=2ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /box-breakout: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /fundamental-filters: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, 10 db prefilters/);
+  assert.match(stdout, /Proof status: timing_captured_without_speedup_gate; broad fallbacks=0; missing DB prefilters=0; speedup enforced=no\./);
 
   const withBaseline = await runBenchmark(apiUrl, {
     PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
@@ -186,6 +187,7 @@ await withServer(async (request, response) => {
   assert.match(withBaseline.stdout, /baseline: p50=\d+ms p95=\d+ms .*speedup p50=0\.\d+x p95=0\.\d+x/);
   assert.match(withBaseline.stdout, /trend-template: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
   assert.match(withBaseline.stdout, /fundamental-filters: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
+  assert.match(withBaseline.stdout, /Proof status: speedup_target_met; broad fallbacks=0; missing DB prefilters=0; speedup enforced=2x\./);
 
   const missingSelectiveBaseline = await runBenchmark(apiUrl, {
     PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
@@ -219,6 +221,10 @@ await withServer(async (request, response) => {
     assert.equal(output.warmup_runs, 1);
     assert.equal(output.api_base, apiUrl);
     assert.ok(Array.isArray(output.results), "benchmark output should include results array");
+    assert.equal(output.proof.production_proof, "timing_captured_without_speedup_gate");
+    assert.deepEqual(output.proof.broad_fallbacks, []);
+    assert.deepEqual(output.proof.missing_db_prefilters, []);
+    assert.equal(output.proof.selective_scenarios.length, 3);
     assert.ok(output.results.some((result) => result.name === "trend-template" && result.p50 >= 0 && result.p95 >= 0));
     assert.ok(output.results.some((result) => result.name === "fundamental-filters" && result.prefilterCount >= 10));
     assert.ok(output.results.some((result) => result.name === "trend-template" && result.timingMs?.total === 8));
@@ -243,15 +249,32 @@ await withServer(async (request, response) => {
   response.writeHead(404);
   response.end(JSON.stringify({ error: "unexpected path" }));
 }, async (apiUrl) => {
-  const { code, stdout, stderr } = await runBenchmark(apiUrl, {
-    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
-  });
-  assert.notEqual(code, 0, "scanner benchmark should fail when diagnostics are missing");
-  assert.match(
-    stderr,
-    /trend-template response did not expose query_rows\/source_rows diagnostics|trend-template response did not expose query_row_reduction_pct/,
-    `stderr should explain missing diagnostics, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
-  );
+  const outputDir = mkdtempSync(join(tmpdir(), "scanner-benchmark-failure-"));
+  try {
+    const outputPath = join(outputDir, "failed-benchmark.json");
+    const { code, stdout, stderr } = await runBenchmark(apiUrl, {
+      PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+      SCANNER_BENCHMARK_OUTPUT_JSON: outputPath,
+    });
+    assert.notEqual(code, 0, "scanner benchmark should fail when diagnostics are missing");
+    assert.match(
+      stderr,
+      /trend-template response did not expose query_rows\/source_rows diagnostics|trend-template response did not expose query_row_reduction_pct/,
+      `stderr should explain missing diagnostics, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+    );
+
+    const output = JSON.parse(readFileSync(outputPath, "utf8"));
+    assert.equal(output.status, "failed");
+    assert.equal(output.failure.scenario, "trend-template");
+    assert.equal(output.proof.status, "failed");
+    assert.equal(output.proof.production_proof, "failed");
+    assert.equal(output.proof.failed_scenario, "trend-template");
+    assert.match(output.failure.message, /trend-template response did not expose/);
+    assert.ok(Array.isArray(output.results), "failed benchmark output should include partial results");
+    assert.equal(output.results[0].name, "baseline");
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true });
+  }
 });
 
 await withServer(async (_request, response) => {
