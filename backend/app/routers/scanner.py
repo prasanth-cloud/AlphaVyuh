@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import heapq
+import logging
 import threading
 import time
 from datetime import date
@@ -24,6 +25,7 @@ from app.services.market_dates import get_latest_complete_trade_date
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
+logger = logging.getLogger(__name__)
 
 FREE_RESULT_LIMIT  = 200
 PRO_RESULT_LIMIT   = 1000
@@ -32,6 +34,25 @@ DbPrefilterValue = float | int | bool | str | list[str]
 DbPrefilterOp = tuple[str, str, DbPrefilterValue]
 UNIVERSE_COUNT_CACHE_TTL = 300.0
 LATEST_TRADE_DATE_CACHE_TTL = 60.0
+COMPATIBILITY_PREFILTER_COLUMNS = {
+    "stock_universe.is_active",
+    "stock_universe.series",
+    "stock_universe.sector",
+    "stock_universe.market",
+    "stock_universe.market_cap_cr",
+    "stock_universe.pe_ratio",
+    "stock_universe.pb_ratio",
+    "stock_universe.eps",
+    "stock_universe.dividend_yield",
+    "stock_universe.debt_to_equity",
+    "stock_universe.roe",
+    "stock_universe.roce",
+    "rs_score",
+    "ema_200_slope_30d",
+    "volume_ratio",
+    "w52h_pct",
+    "w52l_pct",
+}
 SCANNER_BASE_SELECT = (
     "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
     "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
@@ -171,6 +192,23 @@ def _serialize_prefilter_ops(
     ]
 
 
+def _compatibility_prefilter_ops(ops: list[DbPrefilterOp]) -> list[DbPrefilterOp]:
+    return [
+        (op, column, value)
+        for op, column, value in ops
+        if column in COMPATIBILITY_PREFILTER_COLUMNS
+    ]
+
+
+def _apply_db_prefilter_ops(q, ops: list[DbPrefilterOp]):
+    for op, _column, value in ops:
+        if op == "or_":
+            q = q.or_(str(value))
+        else:
+            q = getattr(q, op)(_column, value)
+    return q
+
+
 def _push_db_prefilters(q, f: "ScanFilters"):
     """Push non-fallback scanner intelligence filters into PostgREST.
 
@@ -178,11 +216,48 @@ def _push_db_prefilters(q, f: "ScanFilters"):
     _apply_filters. For fallback-computed fields, keep DB-null rows in the
     query so Python can preserve the older/partial row fallback behavior.
     """
-    for op, column, value in _db_prefilter_ops(f):
-        if op == "or_":
-            q = q.or_(str(value))
-        else:
-            q = getattr(q, op)(column, value)
+    return _apply_db_prefilter_ops(q, _db_prefilter_ops(f))
+
+
+def _push_single_day_db_filters(q, f: "ScanFilters"):
+    # Precomputed columns already in schema before M3-A:
+    if f.price_min        is not None: q = q.gte("close",       f.price_min)
+    if f.price_max        is not None: q = q.lte("close",       f.price_max)
+    if f.high_min         is not None: q = q.gte("high",        f.high_min)
+    if f.low_max          is not None: q = q.lte("low",         f.low_max)
+    if f.volume_min       is not None: q = q.gte("volume",      f.volume_min)
+    if f.volume_max       is not None: q = q.lte("volume",      f.volume_max)
+    if f.rsi_min          is not None: q = q.gte("rsi_14",      f.rsi_min)
+    if f.rsi_max          is not None: q = q.lte("rsi_14",      f.rsi_max)
+    if f.atr_min          is not None: q = q.gte("atr_14",      f.atr_min)
+    if f.atr_max          is not None: q = q.lte("atr_14",      f.atr_max)
+    if f.turnover_min     is not None: q = q.gte("turnover",    f.turnover_min)
+    if f.turnover_max     is not None: q = q.lte("turnover",    f.turnover_max)
+    if f.turnover_min_cr  is not None: q = q.gte("turnover",    f.turnover_min_cr * 10_000_000)
+    if f.pct_change_min   is not None: q = q.gte("pct_change",  f.pct_change_min)
+    if f.pct_change_max   is not None: q = q.lte("pct_change",  f.pct_change_max)
+    if f.gap_pct_min      is not None: q = q.gte("gap_pct",     f.gap_pct_min)
+    if f.gap_pct_max      is not None: q = q.lte("gap_pct",     f.gap_pct_max)
+    if f.adx_min          is not None: q = q.gte("adx_14",      f.adx_min)
+    if f.adx_max          is not None: q = q.lte("adx_14",      f.adx_max)
+    if f.stoch_k_min      is not None: q = q.gte("stoch_k",     f.stoch_k_min)
+    if f.stoch_k_max      is not None: q = q.lte("stoch_k",     f.stoch_k_max)
+    if f.stoch_d_min      is not None: q = q.gte("stoch_d",     f.stoch_d_min)
+    if f.stoch_d_max      is not None: q = q.lte("stoch_d",     f.stoch_d_max)
+    if f.cci_min          is not None: q = q.gte("cci_20",      f.cci_min)
+    if f.cci_max          is not None: q = q.lte("cci_20",      f.cci_max)
+    if f.williams_r_min   is not None: q = q.gte("williams_r",  f.williams_r_min)
+    if f.williams_r_max   is not None: q = q.lte("williams_r",  f.williams_r_max)
+    if f.bb_width_min     is not None: q = q.gte("bb_width",    f.bb_width_min)
+    if f.bb_width_max     is not None: q = q.lte("bb_width",    f.bb_width_max)
+    if f.delivery_pct_min is not None: q = q.gte("delivery_pct", f.delivery_pct_min)
+    if f.delivery_pct_max is not None: q = q.lte("delivery_pct", f.delivery_pct_max)
+    # 52-week high/low flags can be absent for bhavcopy-ingested rows, so let
+    # _apply_filters derive them from daily high/low and the rolling 52w bounds.
+    if f.is_inside_bar  is True: q = q.eq("is_inside_bar",  True)
+    if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
+    if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
+    if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
     return q
 
 
@@ -1275,72 +1350,67 @@ async def execute_scan(
     f = body.filters
     series_list = f.series or ["EQ", "BE"]
 
-    q = client.table("daily_ohlcv").select(SCANNER_INTELLIGENCE_SELECT).eq("trade_date", latest_date)
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
     reverse  = body.sort_order != "asc"
-
-    # ── Push all single-day filters to DB (ADR 005 M3-B) ─────────────────────
-    # Precomputed columns already in schema before M3-A:
-    if f.price_min        is not None: q = q.gte("close",       f.price_min)
-    if f.price_max        is not None: q = q.lte("close",       f.price_max)
-    if f.high_min         is not None: q = q.gte("high",        f.high_min)
-    if f.low_max          is not None: q = q.lte("low",         f.low_max)
-    if f.volume_min       is not None: q = q.gte("volume",      f.volume_min)
-    if f.volume_max       is not None: q = q.lte("volume",      f.volume_max)
-    if f.rsi_min          is not None: q = q.gte("rsi_14",      f.rsi_min)
-    if f.rsi_max          is not None: q = q.lte("rsi_14",      f.rsi_max)
-    if f.atr_min          is not None: q = q.gte("atr_14",      f.atr_min)
-    if f.atr_max          is not None: q = q.lte("atr_14",      f.atr_max)
-    if f.turnover_min     is not None: q = q.gte("turnover",    f.turnover_min)
-    if f.turnover_max     is not None: q = q.lte("turnover",    f.turnover_max)
-    if f.turnover_min_cr  is not None: q = q.gte("turnover",    f.turnover_min_cr * 10_000_000)
-    if f.pct_change_min   is not None: q = q.gte("pct_change",  f.pct_change_min)
-    if f.pct_change_max   is not None: q = q.lte("pct_change",  f.pct_change_max)
-    if f.gap_pct_min      is not None: q = q.gte("gap_pct",     f.gap_pct_min)
-    if f.gap_pct_max      is not None: q = q.lte("gap_pct",     f.gap_pct_max)
-    if f.adx_min          is not None: q = q.gte("adx_14",      f.adx_min)
-    if f.adx_max          is not None: q = q.lte("adx_14",      f.adx_max)
-    if f.stoch_k_min      is not None: q = q.gte("stoch_k",     f.stoch_k_min)
-    if f.stoch_k_max      is not None: q = q.lte("stoch_k",     f.stoch_k_max)
-    if f.stoch_d_min      is not None: q = q.gte("stoch_d",     f.stoch_d_min)
-    if f.stoch_d_max      is not None: q = q.lte("stoch_d",     f.stoch_d_max)
-    if f.cci_min          is not None: q = q.gte("cci_20",      f.cci_min)
-    if f.cci_max          is not None: q = q.lte("cci_20",      f.cci_max)
-    if f.williams_r_min   is not None: q = q.gte("williams_r",  f.williams_r_min)
-    if f.williams_r_max   is not None: q = q.lte("williams_r",  f.williams_r_max)
-    if f.bb_width_min     is not None: q = q.gte("bb_width",    f.bb_width_min)
-    if f.bb_width_max     is not None: q = q.lte("bb_width",    f.bb_width_max)
-    if f.delivery_pct_min is not None: q = q.gte("delivery_pct", f.delivery_pct_min)
-    if f.delivery_pct_max is not None: q = q.lte("delivery_pct", f.delivery_pct_max)
-    # 52-week high/low flags can be absent for bhavcopy-ingested rows, so let
-    # _apply_filters derive them from daily high/low and the rolling 52w bounds.
-    if f.is_inside_bar  is True: q = q.eq("is_inside_bar",  True)
-    if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
-    if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
-    if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
     db_prefilter_ops = _db_prefilter_ops(f)
-    q = _push_db_prefilters(q, f)
+    compatibility_prefilter_ops = _compatibility_prefilter_ops(db_prefilter_ops)
 
+    def _build_scan_query(select_fields: str, prefilter_ops: list[DbPrefilterOp] | None = None):
+        q = client.table("daily_ohlcv").select(select_fields).eq("trade_date", latest_date)
+        q = _push_single_day_db_filters(q, f)
+        return _apply_db_prefilter_ops(q, prefilter_ops if prefilter_ops is not None else db_prefilter_ops)
+
+    applied_prefilter_ops = db_prefilter_ops
     used_fallback_query = False
+    fallback_stage = "none"
     query_started = time.perf_counter()
     try:
-        rows = q.limit(SCAN_ROW_CAP).execute().data or []
-    except Exception:
+        rows = _build_scan_query(SCANNER_INTELLIGENCE_SELECT).limit(SCAN_ROW_CAP).execute().data or []
+    except Exception as primary_error:
         used_fallback_query = True
-        try:
-            rows = (
-                client.table("daily_ohlcv")
-                .select(SCANNER_BASE_SELECT)
-                .eq("trade_date", latest_date)
-                .limit(SCAN_ROW_CAP)
-                .execute()
-                .data or []
+        if compatibility_prefilter_ops and compatibility_prefilter_ops != db_prefilter_ops:
+            logger.warning(
+                "Scanner full prefilter query failed; retrying with compatibility prefilters.",
+                exc_info=True,
             )
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Scanner query could not complete; try a narrower preset.",
-            )
+            try:
+                rows = (
+                    _build_scan_query(SCANNER_INTELLIGENCE_SELECT, compatibility_prefilter_ops)
+                    .limit(SCAN_ROW_CAP)
+                    .execute()
+                    .data
+                    or []
+                )
+                fallback_stage = "compatibility_prefilter"
+                applied_prefilter_ops = compatibility_prefilter_ops
+            except Exception:
+                logger.warning(
+                    "Scanner compatibility prefilter query failed; falling back to base query.",
+                    exc_info=True,
+                )
+                rows = None
+        else:
+            logger.warning("Scanner full prefilter query failed; falling back to base query.", exc_info=True)
+            rows = None
+
+        if rows is None:
+            fallback_stage = "base_query"
+            applied_prefilter_ops = []
+            try:
+                rows = (
+                    _push_single_day_db_filters(
+                        client.table("daily_ohlcv").select(SCANNER_BASE_SELECT).eq("trade_date", latest_date),
+                        f,
+                    )
+                    .limit(SCAN_ROW_CAP)
+                    .execute()
+                    .data or []
+                )
+            except Exception:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Scanner query could not complete; try a narrower preset.",
+                ) from primary_error
     query_elapsed_ms = round((time.perf_counter() - query_started) * 1000)
 
     # Python-side filter for computed columns
@@ -1378,7 +1448,7 @@ async def execute_scan(
         if universe_size and query_rows <= universe_size
         else None
     )
-    applied_prefilters = [] if used_fallback_query or not include_diagnostics else _serialize_prefilter_ops(db_prefilter_ops)
+    applied_prefilters = _serialize_prefilter_ops(applied_prefilter_ops) if include_diagnostics else []
     safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
     safe_page = max(body.page, 1)
 
@@ -1402,6 +1472,7 @@ async def execute_scan(
         "query_row_reduction_pct": query_row_reduction_pct,
         "db_prefilters_applied": applied_prefilters,
         "fallback_query": used_fallback_query,
+        "fallback_stage": fallback_stage,
         "timing_ms": {
             "date_lookup": date_lookup_elapsed_ms,
             "query": query_elapsed_ms,

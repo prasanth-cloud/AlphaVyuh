@@ -275,15 +275,105 @@ function speedupSummary(result, baseline) {
   };
 }
 
-function benchmarkPayload(results) {
+function isBroadFallback(result) {
+  return (
+    result?.fallbackStage === "base_query" ||
+    (result?.fallbackQuery === true && result?.prefilterCount === 0)
+  );
+}
+
+function benchmarkProof(results, failure = null) {
+  const selective = results.filter((result) => result?.enforceSpeedup === true);
+  const selectiveScenarios = selective.map((result) => {
+    const queryReductionGatePassed = minQueryReductionPct <= 0
+      ? null
+      : result.queryReductionPct !== null && result.queryReductionPct >= minQueryReductionPct;
+    const speedupGatePassed = minSpeedup <= 0
+      ? null
+      : result.speedup_p50 !== null &&
+        result.speedup_p50 >= minSpeedup &&
+        result.speedup_p95 !== null &&
+        result.speedup_p95 >= minSpeedup;
+
+    return {
+      name: result.name,
+      p50: result.p50,
+      p95: result.p95,
+      speedup_p50: result.speedup_p50 ?? null,
+      speedup_p95: result.speedup_p95 ?? null,
+      query_reduction_pct: result.queryReductionPct,
+      db_prefilters: result.prefilterCount,
+      fallback_query: result.fallbackQuery,
+      fallback_stage: result.fallbackStage,
+      broad_fallback: isBroadFallback(result),
+      db_prefilter_gate_passed: result.prefilterCount !== null && result.prefilterCount > 0,
+      query_reduction_gate_passed: queryReductionGatePassed,
+      speedup_gate_passed: speedupGatePassed,
+    };
+  });
+
+  const broadFallbacks = selectiveScenarios
+    .filter((scenario) => scenario.broad_fallback)
+    .map((scenario) => scenario.name);
+  const missingDbPrefilters = selectiveScenarios
+    .filter((scenario) => !scenario.db_prefilter_gate_passed)
+    .map((scenario) => scenario.name);
+  const queryReductionFailures = selectiveScenarios
+    .filter((scenario) => scenario.query_reduction_gate_passed === false)
+    .map((scenario) => scenario.name);
+  const speedupFailures = selectiveScenarios
+    .filter((scenario) => scenario.speedup_gate_passed === false)
+    .map((scenario) => scenario.name);
+
+  let productionProof = "timing_captured_without_speedup_gate";
+  if (failure) {
+    productionProof = "failed";
+  } else if (
+    minSpeedup > 0 &&
+    speedupFailures.length === 0 &&
+    missingDbPrefilters.length === 0 &&
+    broadFallbacks.length === 0
+  ) {
+    productionProof = "speedup_target_met";
+  }
+
   return {
+    status: failure ? "failed" : "ok",
+    min_query_reduction_pct: minQueryReductionPct,
+    min_speedup: minSpeedup,
+    speedup_enforced: minSpeedup > 0,
+    production_proof: productionProof,
+    selective_scenarios: selectiveScenarios,
+    broad_fallbacks: broadFallbacks,
+    missing_db_prefilters: missingDbPrefilters,
+    query_reduction_failures: queryReductionFailures,
+    speedup_failures: speedupFailures,
+    failed_scenario: failure?.scenario ?? null,
+  };
+}
+
+function benchmarkPayload(results, failure = null) {
+  const payload = {
     generated_at: new Date().toISOString(),
+    status: failure ? "failed" : "ok",
     api_base: apiBase,
     runs,
     warmup_runs: warmupRuns,
     scenarios: results,
     results,
+    proof: benchmarkProof(results, failure),
   };
+  if (failure) payload.failure = failure;
+  return payload;
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function writeBenchmarkJson(results, failure = null) {
+  if (!outputJsonPath) return;
+  writeFileSync(outputJsonPath, `${JSON.stringify(benchmarkPayload(results, failure), null, 2)}\n`);
 }
 
 function dbPrefilterCount(scanner) {
@@ -297,6 +387,20 @@ function dbPrefilterCount(scanner) {
 function scannerTiming(scanner) {
   const timing = scanner?.source_metadata?.scanner_performance?.timing_ms;
   return timing && typeof timing === "object" ? timing : null;
+}
+
+function scannerFallbackQuery(scanner) {
+  const topLevel = scanner?.fallback_query;
+  if (typeof topLevel === "boolean") return topLevel;
+  const metadata = scanner?.source_metadata?.scanner_performance?.fallback_query;
+  return typeof metadata === "boolean" ? metadata : null;
+}
+
+function scannerFallbackStage(scanner) {
+  const topLevel = scanner?.fallback_stage;
+  if (typeof topLevel === "string" && topLevel.trim()) return topLevel;
+  const metadata = scanner?.source_metadata?.scanner_performance?.fallback_stage;
+  return typeof metadata === "string" && metadata.trim() ? metadata : null;
 }
 
 function percentile(values, pct) {
@@ -345,6 +449,8 @@ async function runScenario(scenario) {
   );
   const prefilterCount = dbPrefilterCount(lastResponse);
   const timingMs = scannerTiming(lastResponse);
+  const fallbackQuery = scannerFallbackQuery(lastResponse);
+  const fallbackStage = scannerFallbackStage(lastResponse);
 
   if (requireDiagnostics && scenario.expectDbPrefilters) {
     assert(queryRows !== null, `${scenario.name} response did not expose query_rows/source_rows diagnostics.`);
@@ -369,12 +475,17 @@ async function runScenario(scenario) {
     queryReductionPct,
     prefilterCount,
     timingMs,
+    fallbackQuery,
+    fallbackStage,
     enforceSpeedup: scenario.enforceSpeedup === true,
     totalMatches: numberValue(lastResponse?.total_matches),
     visibleCount: Array.isArray(lastResponse?.results) ? lastResponse.results.length : null,
     tradeDate: lastResponse?.trade_date || lastResponse?.source_metadata?.as_of || null,
   };
 }
+
+let outputResults = [];
+let activeScenario = null;
 
 try {
   const baselineByScenario = loadBaseline(rawBaseline);
@@ -384,33 +495,57 @@ try {
 
   const results = [];
   for (const scenario of scenarios) {
-    results.push(await runScenario(scenario));
+    activeScenario = scenario.name;
+    try {
+      results.push(await runScenario(scenario));
+      outputResults = [...results];
+    } catch (error) {
+      if (error && typeof error === "object") error.scenarioName = scenario.name;
+      throw error;
+    }
   }
 
-  const enrichedResults = results.map((result) => {
+  activeScenario = null;
+  outputResults = results.map((result) => ({
+    ...result,
+    speedup_p50: null,
+    speedup_p95: null,
+  }));
+
+  const enrichedResults = [];
+  for (const [index, result] of results.entries()) {
+    activeScenario = result.name;
     const baseline = baselineByScenario.get(result.name);
     const speedup = speedupSummary(result, baseline);
-    if (result.enforceSpeedup && minSpeedup > 0) {
-      assert(
-        baseline,
-        `${result.name} is missing p50/p95 baseline data required by SCANNER_BENCHMARK_MIN_SPEEDUP.`,
-      );
-      assert(
-        speedup.p50 !== null && speedup.p50 >= minSpeedup,
-        `${result.name} p50 speedup ${speedup.p50 ?? "unknown"}x was below required ${minSpeedup}x.`,
-      );
-      assert(
-        speedup.p95 !== null && speedup.p95 >= minSpeedup,
-        `${result.name} p95 speedup ${speedup.p95 ?? "unknown"}x was below required ${minSpeedup}x.`,
-      );
-    }
-
-    return {
+    const enriched = {
       ...result,
       speedup_p50: speedup?.p50 ?? null,
       speedup_p95: speedup?.p95 ?? null,
     };
-  });
+    outputResults[index] = enriched;
+    enrichedResults.push(enriched);
+
+    if (result.enforceSpeedup && minSpeedup > 0) {
+      try {
+        assert(
+          baseline,
+          `${result.name} is missing p50/p95 baseline data required by SCANNER_BENCHMARK_MIN_SPEEDUP.`,
+        );
+        assert(
+          speedup.p50 !== null && speedup.p50 >= minSpeedup,
+          `${result.name} p50 speedup ${speedup.p50 ?? "unknown"}x was below required ${minSpeedup}x.`,
+        );
+        assert(
+          speedup.p95 !== null && speedup.p95 >= minSpeedup,
+          `${result.name} p95 speedup ${speedup.p95 ?? "unknown"}x was below required ${minSpeedup}x.`,
+        );
+      } catch (error) {
+        if (error && typeof error === "object") error.scenarioName = result.name;
+        throw error;
+      }
+    }
+  }
+  activeScenario = null;
 
   const summary = enrichedResults.map((result) => {
     const queryRows = result.queryRows === null ? "unknown rows" : `${result.queryRows} rows`;
@@ -419,21 +554,30 @@ try {
     const timingText = result.timingMs
       ? `, server total=${result.timingMs.total ?? "unknown"}ms query=${result.timingMs.query ?? "unknown"}ms filter=${result.timingMs.filter ?? "unknown"}ms`
       : "";
+    const fallbackText = result.fallbackQuery ? `, fallback=${result.fallbackStage ?? "unknown"}` : "";
     const speedupText = result.speedup_p50 !== null || result.speedup_p95 !== null
       ? `, speedup p50=${result.speedup_p50 ?? "unknown"}x p95=${result.speedup_p95 ?? "unknown"}x`
       : "";
-    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText}${timingText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
+    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText}${timingText}${fallbackText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
   });
 
-  if (outputJsonPath) {
-    writeFileSync(outputJsonPath, `${JSON.stringify(benchmarkPayload(enrichedResults), null, 2)}\n`);
-  }
+  writeBenchmarkJson(enrichedResults);
 
   console.log(`Scanner benchmark ok (${runs} measured run${runs === 1 ? "" : "s"} each, ${warmupRuns} warmup):`);
   for (const line of summary) {
     console.log(`- ${line}`);
   }
+  const proof = benchmarkProof(enrichedResults);
+  const speedupStatus = proof.speedup_enforced ? `${proof.min_speedup}x` : "no";
+  console.log(
+    `Proof status: ${proof.production_proof}; broad fallbacks=${proof.broad_fallbacks.length}; ` +
+      `missing DB prefilters=${proof.missing_db_prefilters.length}; speedup enforced=${speedupStatus}.`,
+  );
 } catch (error) {
-  console.error(`Scanner benchmark failed: ${error instanceof Error ? error.message : String(error)}`);
+  writeBenchmarkJson(outputResults, {
+    message: errorMessage(error),
+    scenario: error?.scenarioName || activeScenario || null,
+  });
+  console.error(`Scanner benchmark failed: ${errorMessage(error)}`);
   process.exit(1);
 }

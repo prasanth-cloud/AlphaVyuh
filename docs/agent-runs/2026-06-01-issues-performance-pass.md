@@ -27,6 +27,13 @@
 - Added server-side scanner phase timings (`date_lookup`, `query`, `filter`, `vcp`, `score`, `sort`, `universe_count`, `total`) to `source_metadata.scanner_performance` and benchmark output so production latency bottlenecks can be measured instead of guessed.
 - Tightened `SCANNER_BENCHMARK_MIN_SPEEDUP` enforcement so the broad baseline scenario still reports speedup for context, but only optimized selective scanner scenarios gate the 5-10x target.
 - Made speedup enforcement fail closed when any optimized selective scenario is missing baseline p50/p95 evidence, preventing partial benchmark files from proving only part of the 5-10x target.
+- Merged PR #333 to add the non-deploy `Production Scanner Benchmark` workflow.
+- Merged PR #334 after the first workflow dispatch proved the static `PRODUCTION_API_BEARER_TOKEN` secret was stale; the benchmark workflow now mints a fresh QA Supabase session with the existing production smoke-account preparation path.
+- The first runtime-authenticated benchmark exposed a real box-breakout performance trust issue: production fell back to a broad scanner query and returned no `db_prefilters_applied` diagnostics for that scenario.
+- Added a scanner compatibility-prefilter retry path so a failing full prefilter query does not immediately erase DB-side narrowing; the API now retries production-proven compatibility prefilters before broad fallback and reports `fallback_stage` in scanner diagnostics.
+- Extended scanner benchmark output to include scanner fallback status/stage, so future p50/p95 evidence can distinguish fully pushed queries from compatibility fallback.
+- Made scanner benchmark JSON output fail-soft: failed runs now still write `status: failed`, the failing scenario, the error message, and any completed partial scenario results so GitHub artifacts remain useful when a production gate catches a regression.
+- Added an explicit benchmark `proof` summary to the JSON artifact and stdout, making broad fallback, missing DB-prefilter, query-reduction, and speedup-gate status machine-readable for each selective scanner scenario.
 - Replaced full-result scanner sorting with a plan-capped top-K slice, preserving existing sort/null/tie behavior while avoiding unnecessary sort work when a scan matches more rows than the free/pro response cap.
 - Added deterministic equivalence coverage proving the plan-capped top-K slice matches the old full-sort result across varied limits, nulls, ties, ascending, and descending sorts.
 - Made scanner setup scoring lazy in the route path: `setup_score` sorts still score all final candidates before ranking, while ordinary sorts score only the visible page returned to the user.
@@ -57,8 +64,11 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
-- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, selective-scenario speedup-baseline contract coverage, and missing-baseline failure coverage.
+- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, benchmark proof-summary output, selective-scenario speedup-baseline contract coverage, and missing-baseline failure coverage.
 - `npm run test:scanner-benchmark-workflow-check` -> passed, proving the proposed benchmark workflow is authenticated, non-deploying, and uploads JSON evidence.
+- `npm run check:scanner-benchmark-workflow` -> passed after PR #334, proving the benchmark workflow uses runtime smoke credentials and remains non-deploying.
+- `python -m pytest backend/tests/test_scanner_outage_status.py backend/tests/test_scanner_filters.py` -> 66 passed, including compatibility-prefilter retry coverage.
+- `python -m pytest backend/tests` -> 329 passed after the compatibility-prefilter retry patch.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
@@ -77,12 +87,17 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 ## Open Risks
 
-- The scanner optimization should be benchmarked against production authenticated scanner once the PR is deployed by running `PRODUCTION_API_URL=<backend> PRODUCTION_API_BEARER_TOKEN=<token> npm run check:scanner-benchmark`.
+- The scanner compatibility-prefilter retry must be deployed to Railway before the production benchmark can prove the box-breakout scenario no longer broad-fallbacks.
+- Production benchmark runs so far:
+  - Run `26755353643` on main after PR #333 failed with `401 Authentication failed`; this led to PR #334.
+  - Run `26755571100` on PR #334 proved runtime auth works but failed because `box-breakout` returned no `db_prefilters_applied`; this led to the compatibility-prefilter retry patch.
 - To prove the 5-10x target, first record baseline p50/p95 latencies from the currently deployed scanner with `SCANNER_BENCHMARK_OUTPUT_JSON=/tmp/scanner-baseline.json npm run check:scanner-benchmark`, then rerun after deployment with `SCANNER_BENCHMARK_BASELINE_PATH=/tmp/scanner-baseline.json SCANNER_BENCHMARK_MIN_SPEEDUP=5 npm run check:scanner-benchmark`. Use `SCANNER_BENCHMARK_MIN_SPEEDUP=10` only if the owner wants to enforce the upper target.
 - The target 5-10x improvement is plausible for selective presets due reduced row transfer, but not proven end-to-end until the deployed authenticated benchmark records passing before/after speedup ratios. The benchmark still reports the broad baseline scenario, but the hard speedup threshold is intentionally enforced on optimized selective scenarios only.
 - Do not mutate production Supabase, run broker credentials, enable billing, or change TradingView implementation posture without explicit owner approval.
 
 ## Next Steps
 
-- Keep PR #331 green and merge/deploy only after explicit owner approval.
+- Keep PR #335 green and merge/deploy only after explicit owner approval.
+- After approval, merge PR #335, run Railway Backend Recovery on `main`, then dispatch the `Production Scanner Benchmark` workflow on `main`.
+- Download the benchmark JSON artifact and record whether each selective scanner scenario avoided broad fallback, retained DB prefilters, and produced usable p50/p95 timing evidence.
 - Keep #284, #285, #287, #63, and #42 open with precise remaining gates instead of overclaiming.
