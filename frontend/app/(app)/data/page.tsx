@@ -24,6 +24,7 @@ import type { ApiReachability } from "@/lib/data-mode";
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from "@/lib/account-data-status";
 import { sectorTaxonomyPresentation } from "@/lib/sector-taxonomy-copy";
 import { brokerOrderGatePresentation } from "@/lib/broker-safety";
+import { buildLaunchAgenda, type LaunchAgendaStatus } from "@/lib/launch-agenda";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
@@ -122,6 +123,40 @@ function ActionItem({ title, detail, href }: { title: string; detail: string; hr
     >
       <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)" }}>{detail}</div>
+    </Link>
+  );
+}
+
+function LaunchAgendaCard({
+  item,
+}: {
+  item: ReturnType<typeof buildLaunchAgenda>[number];
+}) {
+  const color = statusColor(item.status);
+  return (
+    <Link
+      href={item.href}
+      data-testid={`launch-agenda-${item.id}`}
+      style={{
+        minWidth: 0,
+        display: "block",
+        padding: "14px 15px",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--border-subtle)",
+        background: "var(--surface-2)",
+        textDecoration: "none",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+        <div className="label">{item.label}</div>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      </div>
+      <Num style={{ display: "block", fontSize: 13, fontWeight: 800, color, marginBottom: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.value}
+      </Num>
+      <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)" }}>
+        {item.detail}
+      </div>
     </Link>
   );
 }
@@ -341,6 +376,20 @@ export default function DataFreshnessPage() {
   const liveMarket = health?.live_market ?? null;
   const brokerUnavailable = state.accountIssues.some(issue => issue.id === "broker");
   const brokerGate = brokerOrderGatePresentation(broker, { unavailable: brokerUnavailable });
+  const launchAgenda = buildLaunchAgenda({
+    apiReachable: state.apiReachable,
+    marketStatus: marketHealth.status as LaunchAgendaStatus,
+    marketDetail: marketHealth.detail,
+    sectorTaxonomy,
+    brokerGate: {
+      value: brokerGate.value,
+      detail: brokerGate.detail,
+      status: brokerGate.status as LaunchAgendaStatus,
+    },
+    closedTrades: state.closedTrades,
+    reviewedTrades: state.reviewedTrades,
+    accountIssueCount: state.accountIssues.length,
+  });
 
   if (loading) {
     return (
@@ -441,6 +490,25 @@ export default function DataFreshnessPage() {
           status={liveMarket?.access_token_valid && liveMarket.stream_connected ? "good" : liveMarket?.access_token_configured ? "warn" : "bad"}
         />
       </div>
+
+      <Card padding="lg" data-testid="launch-agenda-contract">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
+          <div>
+            <h2 className="heading-card" style={{ marginBottom: 6 }}>Launch contract</h2>
+            <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)", maxWidth: 760 }}>
+              Operator checklist for the first paid/public release: data must be current, scope stays cash-equity EOD, broker actions stay read-only, and owner-gated decisions remain explicit.
+            </div>
+          </div>
+          <span className="workspace-pill" style={{ color: launchAgenda.some(item => item.status === "bad") ? "var(--loss)" : launchAgenda.some(item => item.status === "warn") ? "var(--warn)" : "var(--gain)" }}>
+            {launchAgenda.filter(item => item.status === "good").length}/{launchAgenda.length} clear
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {launchAgenda.map(item => (
+            <LaunchAgendaCard key={item.id} item={item} />
+          ))}
+        </div>
+      </Card>
 
       <div className="data-detail-grid" style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 16 }}>
         <Card padding="lg">
