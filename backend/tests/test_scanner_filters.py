@@ -331,6 +331,23 @@ class _RecordingQuery:
 
 
 class TestScannerDbPrefilters:
+    def test_exposes_prefilter_ops_for_diagnostics(self):
+        from app.routers.scanner import ScanFilters, _db_prefilter_ops
+
+        assert _db_prefilter_ops(
+            ScanFilters(
+                rs_score_min=70,
+                avg_volume_50d_min=100000,
+                ema_200_trending_up=True,
+                darvas_box_height_pct_max=15,
+            )
+        ) == [
+            ("gte", "rs_score", 70),
+            ("gte", "avg_volume_50d", 100000),
+            ("gt", "ema_200_slope_30d", 0),
+            ("lte", "darvas_box_height_pct", 15),
+        ]
+
     def test_pushes_non_fallback_intelligence_filters_to_db(self):
         from app.routers.scanner import ScanFilters, _push_db_prefilters
 

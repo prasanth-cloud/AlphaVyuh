@@ -177,6 +177,21 @@ function scannerSourceRows(scanner) {
   );
 }
 
+function scannerQueryReduction(scanner) {
+  return numberValue(
+    scanner?.query_row_reduction_pct,
+    scanner?.source_metadata?.scanner_performance?.query_row_reduction_pct,
+  );
+}
+
+function scannerDbPrefilterCount(scanner) {
+  const topLevel = scanner?.db_prefilters_applied;
+  if (Array.isArray(topLevel)) return topLevel.length;
+  const metadata = scanner?.source_metadata?.scanner_performance?.db_prefilters_applied;
+  if (Array.isArray(metadata)) return metadata.length;
+  return null;
+}
+
 function assertFreshDate(label, actualDate, summaryDate, maxLagDays = 10) {
   const parsedSummaryDate = parseIsoDate(summaryDate);
   const parsedActualDate = parseIsoDate(actualDate);
@@ -326,7 +341,11 @@ try {
     assertFreshDate("Scanner trade date", scannerDate, summaryDate);
     const sourceRows = scannerSourceRows(scanner);
     const sourceRowsCopy = sourceRows === null ? "unknown source rows" : `${sourceRows} source rows`;
-    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate} in ${scannerElapsedMs}ms from ${sourceRowsCopy}`;
+    const reduction = scannerQueryReduction(scanner);
+    const reductionCopy = reduction === null ? "" : `, ${reduction}% query reduction`;
+    const prefilterCount = scannerDbPrefilterCount(scanner);
+    const prefilterCopy = prefilterCount === null ? "" : `, ${prefilterCount} db prefilters`;
+    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate} in ${scannerElapsedMs}ms from ${sourceRowsCopy}${reductionCopy}${prefilterCopy}`;
   }
 
   console.log(

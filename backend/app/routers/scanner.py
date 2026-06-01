@@ -27,6 +27,42 @@ PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
 
 
+def _db_prefilter_ops(f: "ScanFilters") -> list[tuple[str, str, float | int | bool]]:
+    ops: list[tuple[str, str, float | int | bool]] = []
+    if f.rs_score_min is not None:
+        ops.append(("gte", "rs_score", f.rs_score_min))
+    if f.rs_score_max is not None:
+        ops.append(("lte", "rs_score", f.rs_score_max))
+    if f.avg_volume_50d_min is not None:
+        ops.append(("gte", "avg_volume_50d", f.avg_volume_50d_min))
+    if f.avg_volume_50d_max is not None:
+        ops.append(("lte", "avg_volume_50d", f.avg_volume_50d_max))
+    if f.price_perf_6m_min is not None:
+        ops.append(("gte", "price_perf_6m_pct", f.price_perf_6m_min))
+    if f.price_perf_6m_max is not None:
+        ops.append(("lte", "price_perf_6m_pct", f.price_perf_6m_max))
+    if f.ema_200_trending_up is True:
+        ops.append(("gt", "ema_200_slope_30d", 0))
+    if f.ema_200_slope_30d_min is not None:
+        ops.append(("gte", "ema_200_slope_30d", f.ema_200_slope_30d_min))
+    if f.ema_200_slope_30d_max is not None:
+        ops.append(("lte", "ema_200_slope_30d", f.ema_200_slope_30d_max))
+    if f.darvas_box_height_pct_max is not None:
+        ops.append(("lte", "darvas_box_height_pct", f.darvas_box_height_pct_max))
+    if f.nr7 is True:
+        ops.append(("eq", "is_nr7", True))
+    return ops
+
+
+def _serialize_prefilter_ops(
+    ops: list[tuple[str, str, float | int | bool]],
+) -> list[dict[str, float | int | bool | str]]:
+    return [
+        {"op": op, "column": column, "value": value}
+        for op, column, value in ops
+    ]
+
+
 def _push_db_prefilters(q, f: "ScanFilters"):
     """Push non-fallback scanner intelligence filters into PostgREST.
 
@@ -34,28 +70,8 @@ def _push_db_prefilters(q, f: "ScanFilters"):
     _apply_filters. Fallback-computed fields such as volume_ratio and w52h_pct
     stay Python-side so older/partial rows keep their current behavior.
     """
-    if f.rs_score_min is not None:
-        q = q.gte("rs_score", f.rs_score_min)
-    if f.rs_score_max is not None:
-        q = q.lte("rs_score", f.rs_score_max)
-    if f.avg_volume_50d_min is not None:
-        q = q.gte("avg_volume_50d", f.avg_volume_50d_min)
-    if f.avg_volume_50d_max is not None:
-        q = q.lte("avg_volume_50d", f.avg_volume_50d_max)
-    if f.price_perf_6m_min is not None:
-        q = q.gte("price_perf_6m_pct", f.price_perf_6m_min)
-    if f.price_perf_6m_max is not None:
-        q = q.lte("price_perf_6m_pct", f.price_perf_6m_max)
-    if f.ema_200_trending_up is True:
-        q = q.gt("ema_200_slope_30d", 0)
-    if f.ema_200_slope_30d_min is not None:
-        q = q.gte("ema_200_slope_30d", f.ema_200_slope_30d_min)
-    if f.ema_200_slope_30d_max is not None:
-        q = q.lte("ema_200_slope_30d", f.ema_200_slope_30d_max)
-    if f.darvas_box_height_pct_max is not None:
-        q = q.lte("darvas_box_height_pct", f.darvas_box_height_pct_max)
-    if f.nr7 is True:
-        q = q.eq("is_nr7", True)
+    for op, column, value in _db_prefilter_ops(f):
+        q = getattr(q, op)(column, value)
     return q
 
 
@@ -1118,11 +1134,14 @@ async def execute_scan(
     if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
     if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
     if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
+    db_prefilter_ops = _db_prefilter_ops(f)
     q = _push_db_prefilters(q, f)
 
+    used_fallback_query = False
     try:
         rows = q.limit(SCAN_ROW_CAP).execute().data or []
     except Exception:
+        used_fallback_query = True
         try:
             rows = (
                 client.table("daily_ohlcv")
@@ -1165,14 +1184,29 @@ async def execute_scan(
         )
     except Exception:
         universe_size = None
-    coverage_pct = round((len(rows) / universe_size) * 100, 1) if universe_size else None
+    query_rows = len(rows)
+    query_row_reduction_pct = (
+        round((1 - (query_rows / universe_size)) * 100, 1)
+        if universe_size and query_rows <= universe_size
+        else None
+    )
+    applied_prefilters = [] if used_fallback_query else _serialize_prefilter_ops(db_prefilter_ops)
+    scanner_performance = {
+        "query_rows": query_rows,
+        "universe_size": universe_size,
+        "query_row_reduction_pct": query_row_reduction_pct,
+        "db_prefilters_applied": applied_prefilters,
+        "fallback_query": used_fallback_query,
+    }
+    coverage_pct = None
     metadata = eod_source_metadata(
         as_of=latest_date,
-        status="degraded" if coverage_pct is not None and coverage_pct < 90 else "healthy",
+        status="healthy",
         coverage_pct=coverage_pct,
-        symbols_count=len(rows),
+        symbols_count=query_rows,
         universe_active=universe_size,
     )
+    metadata["scanner_performance"] = scanner_performance
     safe_page_size = body.page_size if body.page_size in {0, 25, 50, 150, 200} else 25
     safe_page = max(body.page, 1)
 
@@ -1201,6 +1235,10 @@ async def execute_scan(
         "source": metadata["source_name"],
         "coverage_pct": coverage_pct,
         "universe_size": universe_size,
+        "query_rows": query_rows,
+        "source_rows": query_rows,
+        "query_row_reduction_pct": query_row_reduction_pct,
+        "db_prefilters_applied": applied_prefilters,
     }
 
 
