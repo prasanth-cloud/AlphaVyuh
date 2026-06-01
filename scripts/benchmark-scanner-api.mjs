@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 
 function normalizeApiBaseUrl(raw, fallback = "") {
   let cleaned = String(raw ?? "")
@@ -27,7 +28,11 @@ const runs = Math.max(1, Number(process.env.SCANNER_BENCHMARK_RUNS || 5));
 const warmupRuns = Math.max(0, Number(process.env.SCANNER_BENCHMARK_WARMUP_RUNS || 1));
 const timeoutMs = Math.max(1000, Number(process.env.SCANNER_BENCHMARK_TIMEOUT_MS || 30_000));
 const minQueryReductionPct = Number(process.env.SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT || 0);
+const minSpeedup = Number(process.env.SCANNER_BENCHMARK_MIN_SPEEDUP || 0);
 const requireDiagnostics = process.env.SCANNER_BENCHMARK_REQUIRE_DIAGNOSTICS !== "0";
+const rawBaseline = String(
+  process.env.SCANNER_BENCHMARK_BASELINE_JSON || process.env.SCANNER_BENCHMARK_BASELINE_PATH || "",
+).trim();
 
 const scenarios = [
   {
@@ -197,6 +202,75 @@ function numberValue(...values) {
   return null;
 }
 
+function latencyValue(baseline, ...keys) {
+  for (const key of keys) {
+    const value = numberValue(baseline?.[key]);
+    if (value !== null && value > 0) return value;
+  }
+  return null;
+}
+
+function normalizeBaselineEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const p50 = latencyValue(entry, "p50", "p50_ms", "p50Ms", "latency_p50_ms", "latencyP50Ms");
+  const p95 = latencyValue(entry, "p95", "p95_ms", "p95Ms", "latency_p95_ms", "latencyP95Ms");
+  if (p50 === null && p95 === null) return null;
+  return { p50, p95 };
+}
+
+function loadBaseline(raw) {
+  if (!raw) return new Map();
+
+  const text = raw.startsWith("{") || raw.startsWith("[")
+    ? raw
+    : readFileSync(raw, "utf8");
+  const parsed = JSON.parse(text);
+  const entries = new Map();
+
+  if (Array.isArray(parsed)) {
+    for (const item of parsed) {
+      const name = String(item?.name || item?.scenario || "").trim();
+      const baseline = normalizeBaselineEntry(item);
+      if (name && baseline) entries.set(name, baseline);
+    }
+    return entries;
+  }
+
+  const source = Array.isArray(parsed?.results) ? parsed.results : parsed;
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const name = String(item?.name || item?.scenario || "").trim();
+      const baseline = normalizeBaselineEntry(item);
+      if (name && baseline) entries.set(name, baseline);
+    }
+    return entries;
+  }
+
+  if (source && typeof source === "object") {
+    for (const [name, value] of Object.entries(source)) {
+      const baseline = normalizeBaselineEntry(value);
+      if (baseline) entries.set(name, baseline);
+    }
+  }
+
+  return entries;
+}
+
+function speedupRatio(baselineMs, currentMs) {
+  if (!Number.isFinite(baselineMs) || !Number.isFinite(currentMs) || baselineMs <= 0 || currentMs <= 0) {
+    return null;
+  }
+  return Number((baselineMs / currentMs).toFixed(2));
+}
+
+function speedupSummary(result, baseline) {
+  if (!baseline) return null;
+  return {
+    p50: speedupRatio(baseline.p50, result.p50),
+    p95: speedupRatio(baseline.p95, result.p95),
+  };
+}
+
 function dbPrefilterCount(scanner) {
   const topLevel = scanner?.db_prefilters_applied;
   if (Array.isArray(topLevel)) return topLevel.length;
@@ -280,16 +354,36 @@ async function runScenario(scenario) {
 }
 
 try {
+  const baselineByScenario = loadBaseline(rawBaseline);
+  if (rawBaseline && baselineByScenario.size === 0) {
+    throw new Error("SCANNER_BENCHMARK_BASELINE_JSON did not contain any scenario p50/p95 latency baselines.");
+  }
+
   const results = [];
   for (const scenario of scenarios) {
     results.push(await runScenario(scenario));
   }
 
   const summary = results.map((result) => {
+    const speedup = speedupSummary(result, baselineByScenario.get(result.name));
+    if (speedup && minSpeedup > 0) {
+      assert(
+        speedup.p50 !== null && speedup.p50 >= minSpeedup,
+        `${result.name} p50 speedup ${speedup.p50 ?? "unknown"}x was below required ${minSpeedup}x.`,
+      );
+      assert(
+        speedup.p95 !== null && speedup.p95 >= minSpeedup,
+        `${result.name} p95 speedup ${speedup.p95 ?? "unknown"}x was below required ${minSpeedup}x.`,
+      );
+    }
+
     const queryRows = result.queryRows === null ? "unknown rows" : `${result.queryRows} rows`;
     const reduction = result.queryReductionPct === null ? "unknown reduction" : `${result.queryReductionPct}% query reduction`;
     const prefilters = result.prefilterCount === null ? "unknown db prefilters" : `${result.prefilterCount} db prefilters`;
-    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
+    const speedupText = speedup
+      ? `, speedup p50=${speedup.p50 ?? "unknown"}x p95=${speedup.p95 ?? "unknown"}x`
+      : "";
+    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
   });
 
   console.log(`Scanner benchmark ok (${runs} measured run${runs === 1 ? "" : "s"} each, ${warmupRuns} warmup):`);

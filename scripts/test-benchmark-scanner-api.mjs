@@ -47,6 +47,10 @@ function readJsonBody(request) {
   });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function scannerResponse(requestBody) {
   const filters = requestBody?.filters ?? {};
   const prefilters = [
@@ -121,6 +125,7 @@ await withServer(async (request, response) => {
   if (request.url === "/api/v1/scanner/run" && request.method === "POST") {
     assert.equal(request.headers.authorization, "Bearer production-smoke-token");
     const requestBody = await readJsonBody(request);
+    await sleep(8);
     response.end(JSON.stringify(scannerResponse(requestBody)));
     return;
   }
@@ -138,6 +143,24 @@ await withServer(async (request, response) => {
   assert.match(stdout, /trend-template: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /box-breakout: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, 11 db prefilters/);
+
+  const withBaseline = await runBenchmark(apiUrl, {
+    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+    SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: "80",
+    SCANNER_BENCHMARK_BASELINE_JSON: JSON.stringify({
+      "trend-template": { p50: 500, p95: 500 },
+      "box-breakout": { p50: 500, p95: 500 },
+      "fundamental-category": { p50: 500, p95: 500 },
+    }),
+    SCANNER_BENCHMARK_MIN_SPEEDUP: "2",
+  });
+  assert.equal(
+    withBaseline.code,
+    0,
+    `scanner benchmark with baseline should pass:\nSTDOUT:\n${withBaseline.stdout}\nSTDERR:\n${withBaseline.stderr}`,
+  );
+  assert.match(withBaseline.stdout, /trend-template: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
+  assert.match(withBaseline.stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
 });
 
 await withServer(async (request, response) => {

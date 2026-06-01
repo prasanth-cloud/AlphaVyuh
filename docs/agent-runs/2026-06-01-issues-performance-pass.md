@@ -19,6 +19,7 @@
 - Pushed stock-universe hard rejects into PostgREST too: active status, series, sector, market, and fundamental ranges now reduce rows before Python enrichment.
 - Fixed the declared `market_cap_category` scanner filter so it is selected, applied, returned, and DB-prefiltered instead of being silently ignored.
 - Extended the scanner benchmark to include a `fundamental-category` scenario so category/fundamental DB pushdown is part of the production proof path.
+- Added optional scanner benchmark baseline comparison via `SCANNER_BENCHMARK_BASELINE_JSON` or `SCANNER_BENCHMARK_BASELINE_PATH` and `SCANNER_BENCHMARK_MIN_SPEEDUP`, so the 5-10x target can be enforced with real before/after p50 and p95 latency numbers after deployment.
 
 ## Why
 
@@ -37,7 +38,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
-- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark contract coverage.
+- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark and speedup-baseline contract coverage.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
@@ -53,7 +54,8 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 ## Open Risks
 
 - The scanner optimization should be benchmarked against production authenticated scanner once the PR is deployed by running `PRODUCTION_API_URL=<backend> PRODUCTION_API_BEARER_TOKEN=<token> npm run check:scanner-benchmark`.
-- The target 5-10x improvement is plausible for selective presets due reduced row transfer, but not proven end-to-end until a deployed authenticated scanner benchmark records before/after rows and latency.
+- To prove the 5-10x target, first record baseline p50/p95 latencies from the currently deployed scanner, then rerun after deployment with `SCANNER_BENCHMARK_BASELINE_JSON='{"trend-template":{"p50":<old-p50>,"p95":<old-p95>},"box-breakout":{"p50":<old-p50>,"p95":<old-p95>},"fundamental-category":{"p50":<old-p50>,"p95":<old-p95>}}' SCANNER_BENCHMARK_MIN_SPEEDUP=5 npm run check:scanner-benchmark`. Use `SCANNER_BENCHMARK_MIN_SPEEDUP=10` only if the owner wants to enforce the upper target.
+- The target 5-10x improvement is plausible for selective presets due reduced row transfer, but not proven end-to-end until the deployed authenticated benchmark records passing before/after speedup ratios.
 - Do not mutate production Supabase, run broker credentials, enable billing, or change TradingView implementation posture without explicit owner approval.
 
 ## Next Steps
