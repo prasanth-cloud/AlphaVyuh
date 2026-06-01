@@ -28,6 +28,7 @@
 - Tightened `SCANNER_BENCHMARK_MIN_SPEEDUP` enforcement so the broad baseline scenario still reports speedup for context, but only optimized selective scanner scenarios gate the 5-10x target.
 - Made speedup enforcement fail closed when any optimized selective scenario is missing baseline p50/p95 evidence, preventing partial benchmark files from proving only part of the 5-10x target.
 - Replaced full-result scanner sorting with a plan-capped top-K slice, preserving existing sort/null/tie behavior while avoiding unnecessary sort work when a scan matches more rows than the free/pro response cap.
+- Added deterministic equivalence coverage proving the plan-capped top-K slice matches the old full-sort result across varied limits, nulls, ties, ascending, and descending sorts.
 
 ## Why
 

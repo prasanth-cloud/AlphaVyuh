@@ -1,5 +1,6 @@
 """Tests for scanner filter logic (no DB required)."""
 import os
+import random
 
 import pytest
 
@@ -496,6 +497,26 @@ class TestScannerSortSlice:
         sliced = _sorted_plan_slice(rows, "volume_ratio", reverse=False, limit=3)
 
         assert [row["symbol"] for row in sliced] == ["BBB", "EEE", "AAA"]
+
+    def test_plan_slice_matches_full_sort_for_varied_limits_and_ties(self):
+        from app.routers.scanner import _sorted_plan_slice
+
+        rng = random.Random(42)
+        values = [None, 0.0, 1.0, 1.0, 2.5, 2.5, 5.0, -1.0]
+        rows = [
+            {"symbol": f"SYM{index:03d}", "setup_score": rng.choice(values)}
+            for index in range(80)
+        ]
+
+        for reverse in (False, True):
+            for limit in (1, 5, 17, 79):
+                expected = sorted(
+                    rows,
+                    key=lambda row: (row.get("setup_score") is not None, row.get("setup_score") or 0),
+                    reverse=reverse,
+                )[:limit]
+
+                assert _sorted_plan_slice(rows, "setup_score", reverse=reverse, limit=limit) == expected
 
 
 class TestVCPAsyncPass2:
