@@ -57,6 +57,22 @@ class _BacktestQuery:
         self.eq_filters[column] = values
         return self
 
+    def gte(self, column, value):
+        self.eq_filters[column] = (">=", value)
+        return self
+
+    def lte(self, column, value):
+        self.eq_filters[column] = ("<=", value)
+        return self
+
+    def gt(self, column, value):
+        self.eq_filters[column] = (">", value)
+        return self
+
+    def or_(self, value):
+        self.eq_filters.setdefault("or", []).append(value)
+        return self
+
     def order(self, *_args, **_kwargs):
         return self
 
@@ -119,6 +135,51 @@ def test_run_backtest_uses_unique_ingestion_dates(monkeypatch):
     assert [row["date"] for row in result["results"]] == ["2026-05-13", "2026-05-14", "2026-05-15"]
     assert [row["top_symbols"] for row in result["results"]] == [["CCC"], ["BBB"], ["AAA"]]
     assert ("bhavcopy_ingestion_log", {"status": ["success", "already_done"]}, 3) in client.queries
+
+
+def test_run_backtest_pushes_scanner_prefilters_before_python_filtering(monkeypatch):
+    client = _BacktestClient(
+        log_dates=["2026-05-15"],
+        rows_by_date={
+            "2026-05-15": [_ohlcv_row("AAA")],
+        },
+    )
+    monkeypatch.setattr(backtest, "_get_user_plan", lambda _user_id: "pro")
+    monkeypatch.setattr(backtest, "get_admin_client", lambda: client)
+
+    result = asyncio.run(
+        backtest.run_backtest(
+            backtest.BacktestRequest(
+                days=1,
+                filters=backtest.ScanFilters(
+                    rs_score_min=70,
+                    avg_volume_50d_min=100000,
+                    volume_ratio_min=1.5,
+                    week_52_high_pct_max=10,
+                    series=["EQ"],
+                ),
+            ),
+            user_id="user-1",
+        )
+    )
+
+    assert result["days_analysed"] == 1
+    assert (
+        "daily_ohlcv",
+        {
+            "trade_date": "2026-05-15",
+            "stock_universe.is_active": True,
+            "stock_universe.series": ["EQ"],
+            "rs_score": (">=", 70),
+            "avg_volume_50d": (">=", 100000),
+            "or": [
+                "volume_ratio.is.null,volume_ratio.gte.1.5",
+                "w52h_pct.is.null,w52h_pct.gte.-10",
+                "w52h_pct.is.null,w52h_pct.lte.10",
+            ],
+        },
+        3000,
+    ) in client.queries
 
 
 def test_run_backtest_empty_state_matches_normal_response_shape(monkeypatch):

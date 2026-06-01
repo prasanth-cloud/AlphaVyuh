@@ -32,6 +32,27 @@ DbPrefilterValue = float | int | bool | str | list[str]
 DbPrefilterOp = tuple[str, str, DbPrefilterValue]
 UNIVERSE_COUNT_CACHE_TTL = 300.0
 LATEST_TRADE_DATE_CACHE_TTL = 60.0
+SCANNER_BASE_SELECT = (
+    "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
+    "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
+    "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
+    "bb_upper,bb_middle,bb_lower,bb_width,"
+    "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
+    "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
+    "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+)
+SCANNER_INTELLIGENCE_SELECT = (
+    "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,avg_volume_50d,"
+    "turnover,rsi_14,ema_20,ema_50,ema_150,ema_200,ema_200_slope_30d,"
+    "week_52_high,week_52_low,high_3w,low_3w,darvas_box_height_pct,price_perf_6m_pct,is_nr7,atr_14,"
+    "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
+    "bb_upper,bb_middle,bb_lower,bb_width,"
+    "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
+    "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
+    "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
+    "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
+)
 _universe_count_cache: dict[tuple[str, ...], tuple[float, int | None]] = {}
 _universe_count_cache_lock = threading.Lock()
 _latest_trade_date_cache: tuple[float, str] | None = None
@@ -1259,29 +1280,7 @@ async def execute_scan(
     f = body.filters
     series_list = f.series or ["EQ", "BE"]
 
-    base_select = (
-        "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
-        "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
-        "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
-        "bb_upper,bb_middle,bb_lower,bb_width,"
-        "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
-        "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-        "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
-    )
-    intelligence_select = (
-        "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,avg_volume_50d,"
-        "turnover,rsi_14,ema_20,ema_50,ema_150,ema_200,ema_200_slope_30d,"
-        "week_52_high,week_52_low,high_3w,low_3w,darvas_box_height_pct,price_perf_6m_pct,is_nr7,atr_14,"
-        "pct_change,gap_pct,macd_line,macd_signal,macd_hist,"
-        "bb_upper,bb_middle,bb_lower,bb_width,"
-        "stoch_k,stoch_d,adx_14,cci_20,williams_r,"
-        "delivery_pct,is_new_52w_high,is_new_52w_low,is_inside_bar,is_outside_bar,"
-        "rs_score,sma_50,sma_150,sma_200,volume_ratio,w52h_pct,w52l_pct,"
-        "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_category,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)"
-    )
-
-    q = client.table("daily_ohlcv").select(intelligence_select).eq("trade_date", latest_date)
+    q = client.table("daily_ohlcv").select(SCANNER_INTELLIGENCE_SELECT).eq("trade_date", latest_date)
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
     reverse  = body.sort_order != "asc"
 
@@ -1336,7 +1335,7 @@ async def execute_scan(
         try:
             rows = (
                 client.table("daily_ohlcv")
-                .select(base_select)
+                .select(SCANNER_BASE_SELECT)
                 .eq("trade_date", latest_date)
                 .limit(SCAN_ROW_CAP)
                 .execute()

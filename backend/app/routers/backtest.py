@@ -9,7 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
-from app.routers.scanner import ScanFilters, _apply_filters, _get_user_plan
+from app.routers.scanner import (
+    SCANNER_BASE_SELECT,
+    SCANNER_INTELLIGENCE_SELECT,
+    ScanFilters,
+    _apply_filters,
+    _get_user_plan,
+    _push_db_prefilters,
+)
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
@@ -87,6 +94,26 @@ def _recent_trade_dates(client, days: int) -> list[str]:
     return sorted(set(dates + fallback_dates))[-days:]
 
 
+def _daily_rows_for_backtest(client, trade_date: str, filters: ScanFilters) -> list[dict]:
+    query = (
+        client.table("daily_ohlcv")
+        .select(SCANNER_INTELLIGENCE_SELECT)
+        .eq("trade_date", trade_date)
+    )
+    query = _push_db_prefilters(query, filters)
+    try:
+        return query.limit(3000).execute().data or []
+    except Exception:
+        return (
+            client.table("daily_ohlcv")
+            .select(SCANNER_BASE_SELECT)
+            .eq("trade_date", trade_date)
+            .limit(3000)
+            .execute()
+            .data or []
+        )
+
+
 @router.post("/run")
 async def run_backtest(
     body: BacktestRequest,
@@ -112,18 +139,7 @@ async def run_backtest(
 
     results = []
     for trade_date in dates:
-        rows = (
-            client.table("daily_ohlcv")
-            .select(
-                "symbol,open,high,low,close,prev_close,volume,avg_volume_20d,"
-                "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
-                "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
-            )
-            .eq("trade_date", trade_date)
-            .limit(3000)
-            .execute()
-            .data or []
-        )
+        rows = _daily_rows_for_backtest(client, trade_date, body.filters)
         matched = _apply_filters(rows, body.filters, score_results=False)
         results.append({
             "date": trade_date,
