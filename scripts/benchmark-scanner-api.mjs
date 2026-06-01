@@ -389,8 +389,13 @@ try {
   }
 
   const enrichedResults = results.map((result) => {
-    const speedup = speedupSummary(result, baselineByScenario.get(result.name));
-    if (result.enforceSpeedup && speedup && minSpeedup > 0) {
+    const baseline = baselineByScenario.get(result.name);
+    const speedup = speedupSummary(result, baseline);
+    if (result.enforceSpeedup && minSpeedup > 0) {
+      assert(
+        baseline,
+        `${result.name} is missing p50/p95 baseline data required by SCANNER_BENCHMARK_MIN_SPEEDUP.`,
+      );
       assert(
         speedup.p50 !== null && speedup.p50 >= minSpeedup,
         `${result.name} p50 speedup ${speedup.p50 ?? "unknown"}x was below required ${minSpeedup}x.`,

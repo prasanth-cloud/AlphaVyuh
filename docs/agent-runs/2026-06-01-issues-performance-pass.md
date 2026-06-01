@@ -26,6 +26,7 @@
 - Added a short-lived scanner-local latest-complete-date cache, avoiding repeated quality-heavy trade-date discovery during repeated scanner runs while preserving explicit `trade_date` bypass for jobs/tests.
 - Added server-side scanner phase timings (`date_lookup`, `query`, `filter`, `vcp`, `sort`, `universe_count`, `total`) to `source_metadata.scanner_performance` and benchmark output so production latency bottlenecks can be measured instead of guessed.
 - Tightened `SCANNER_BENCHMARK_MIN_SPEEDUP` enforcement so the broad baseline scenario still reports speedup for context, but only optimized selective scanner scenarios gate the 5-10x target.
+- Made speedup enforcement fail closed when any optimized selective scenario is missing baseline p50/p95 evidence, preventing partial benchmark files from proving only part of the 5-10x target.
 
 ## Why
 
@@ -44,7 +45,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
-- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, and selective-scenario speedup-baseline contract coverage.
+- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, selective-scenario speedup-baseline contract coverage, and missing-baseline failure coverage.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.

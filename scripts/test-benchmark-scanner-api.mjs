@@ -190,6 +190,20 @@ await withServer(async (request, response) => {
   assert.match(withBaseline.stdout, /trend-template: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
   assert.match(withBaseline.stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*speedup p50=\d+(\.\d+)?x p95=\d+(\.\d+)?x/);
 
+  const missingSelectiveBaseline = await runBenchmark(apiUrl, {
+    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+    SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: "80",
+    SCANNER_BENCHMARK_BASELINE_JSON: JSON.stringify({
+      "trend-template": { p50: 500, p95: 500 },
+    }),
+    SCANNER_BENCHMARK_MIN_SPEEDUP: "2",
+  });
+  assert.notEqual(missingSelectiveBaseline.code, 0, "speedup enforcement should fail when selective baselines are missing");
+  assert.match(
+    missingSelectiveBaseline.stderr,
+    /box-breakout is missing p50\/p95 baseline data required by SCANNER_BENCHMARK_MIN_SPEEDUP/,
+  );
+
   const outputDir = mkdtempSync(join(tmpdir(), "scanner-benchmark-"));
   try {
     const outputPath = join(outputDir, "benchmark.json");
