@@ -63,7 +63,7 @@ test.describe("Onboarding mutation failures", () => {
     if (page.url().includes("/login")) return;
 
     await page.getByLabel(/Intermediate/).check();
-    await page.getByLabel(/Equity/).check();
+    await page.getByLabel(/cash equities/i).check();
     await page.getByRole("button", { name: /Continue/i }).click();
     await page.getByRole("button", { name: /None yet/i }).click();
     await page.getByRole("button", { name: /Continue/i }).click();

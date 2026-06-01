@@ -20,7 +20,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByRole("heading", { name: /Set up your trading desk/i })).toBeVisible();
 
     await page.getByLabel(/Intermediate/).check();
-    await page.getByLabel(/Equity/).check();
+    await page.getByLabel(/cash equities/i).check();
     await page.getByRole("button", { name: /Continue/i }).click();
     await page.getByRole("button", { name: /None yet/i }).click();
     await page.getByRole("button", { name: /Continue/i }).click();
@@ -744,7 +744,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByRole("button", { name: /Send to desk/i })).toBeVisible({ timeout: 10_000 });
     await page.getByRole("button", { name: /Send to desk/i }).click();
     await expect(page.getByText(/Confirm desk handoff/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/R:R/i)).toBeVisible();
+    await expect(page.getByText("R:R 2.0", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /^Send plan$/i }).click();
 
     await expect(page).toHaveURL(/\/watchlist\?symbol=AUBANK&id=desk-secondary&planDraft=chart/, { timeout: 15_000 });

@@ -340,14 +340,17 @@ async function checkSupplementalRefreshData() {
   if (!supabaseUrl || !supabaseServiceKey) return null;
 
   try {
-    const latest = await fetchSupabase("ingest_runs?select=run_id,started_at,meta&order=started_at.desc&limit=1");
-    const row = latest.data?.[0];
+    const latest = await fetchSupabase("ingest_runs?select=run_id,started_at,meta&order=started_at.desc&limit=20");
+    const rows = Array.isArray(latest.data) ? latest.data : [];
+    const supplementalIndex = rows.findIndex((item) => item?.meta?.supplemental_data);
+    const row = supplementalIndex >= 0 ? rows[supplementalIndex] : null;
     const supplemental = row?.meta?.supplemental_data;
     if (!row || !supplemental) {
+      const runCount = rows.length;
       addResult(
         "warn",
         "Supplemental refresh data",
-        "Latest ingest run does not include supplemental data trust metadata.",
+        `No supplemental data trust metadata found in the latest ${runCount} ingest run${runCount === 1 ? "" : "s"}.`,
         "Run the current Daily NSE refresh before treating RS/yfinance coverage as verified.",
       );
       return false;
@@ -358,7 +361,8 @@ async function checkSupplementalRefreshData() {
     const yfinance = supplemental.yfinance || {};
     const rsScore = supplemental.rs_score || {};
     const detail = [
-      `Latest run ${row.run_id || "unknown"} supplemental status is ${status}.`,
+      `Latest supplemental run ${row.run_id || "unknown"} supplemental status is ${status}.`,
+      supplementalIndex > 0 ? `Skipped ${supplementalIndex} newer non-supplemental ingest run${supplementalIndex === 1 ? "" : "s"}.` : "",
       `RS score: ${rsScore.status || "unknown"}.`,
       `yfinance: ${yfinance.status || "unknown"}${yfinance.attempted != null ? ` (${yfinance.success || 0}/${yfinance.attempted} symbols, rate_limited=${yfinance.rate_limited || 0})` : ""}.`,
       warnings.length ? `Warnings: ${warnings.slice(0, 3).join(" ")}` : "",
