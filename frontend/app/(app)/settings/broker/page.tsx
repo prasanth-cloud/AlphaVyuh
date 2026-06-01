@@ -13,7 +13,7 @@ import {
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
-import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist } from "@/lib/broker-safety";
+import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary } from "@/lib/broker-safety";
 
 type BrokerState = Awaited<ReturnType<typeof getBrokerStatus>>;
 type BrokerCard = {
@@ -208,6 +208,7 @@ function BrokerSettingsContent() {
           ? "Read-only broker smoke must pass before any future sandbox or live order route can be enabled."
           : "Read-only broker smoke has passed; order submission still stays disabled until owner approval.";
   const smokeChecklist = useMemo(() => brokerReadOnlyChecklist(state), [state]);
+  const evidenceSummary = useMemo(() => brokerReadOnlyEvidenceSummary(state, { unavailable: Boolean(statusError) }), [state, statusError]);
   const smokeCheckedAt = state?.read_only_smoke_checked_at
     ? new Date(state.read_only_smoke_checked_at).toLocaleString()
     : null;
@@ -387,6 +388,51 @@ function BrokerSettingsContent() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div
+              data-testid="broker-read-only-evidence-pack"
+              style={{
+                marginBottom: 14,
+                padding: "12px",
+                borderRadius: "var(--radius-md)",
+                background: evidenceSummary.status === "ready-for-owner-review" ? "rgba(18,185,129,0.08)" : "rgba(244,247,251,0.04)",
+                border: `1px solid ${evidenceSummary.status === "ready-for-owner-review" ? "rgba(18,185,129,0.28)" : "var(--border-subtle)"}`,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 10 }}>
+                <div>
+                  <div className="text-[11px] uppercase tracking-[0.1em]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>Read-only evidence pack</div>
+                  <div className="text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>{evidenceSummary.headline}</div>
+                </div>
+                <span
+                  className="workspace-pill"
+                  style={{ color: evidenceSummary.canProceedToOwnerReview ? "var(--gain)" : evidenceSummary.status === "unavailable" ? "var(--loss)" : "var(--warn)" }}
+                >
+                  {evidenceSummary.canProceedToOwnerReview ? "Owner review ready" : evidenceSummary.status === "refresh-required" ? "Refresh required" : "Blocked"}
+                </span>
+              </div>
+              <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 10 }}>
+                {evidenceSummary.detail}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))", gap: 8, marginBottom: evidenceSummary.blockers.length ? 10 : 0 }}>
+                {evidenceSummary.evidenceItems.map((item) => (
+                  <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
+                    <div className="text-[11px]" style={{ color: "var(--text-tertiary)", marginBottom: 3 }}>{item.label}</div>
+                    <div className="text-[12px] font-semibold" style={{ color: "var(--text-primary)" }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              {evidenceSummary.blockers.length > 0 && (
+                <div style={{ display: "grid", gap: 5 }}>
+                  {evidenceSummary.blockers.slice(0, 4).map((blocker) => (
+                    <div key={blocker} className="text-[12px]" style={{ color: "var(--warn)", lineHeight: 1.45 }}>
+                      <CheckCircle2 size={12} style={{ display: "inline", marginRight: 7, color: "var(--warn)" }} />
+                      {blocker}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>

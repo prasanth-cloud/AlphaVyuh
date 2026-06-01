@@ -108,6 +108,9 @@ test.describe("Broker settings — not connected", () => {
     await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Required before any future sandbox/live order test");
     await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Read-only smoke is evidence, not approval");
     await expect(page.getByTestId("broker-execution-approval-record")).toContainText("Fresh same-broker read-only smoke evidence");
+    await expect(page.getByTestId("broker-read-only-evidence-pack")).toContainText("Read-only evidence pack");
+    await expect(page.getByTestId("broker-read-only-evidence-pack")).toContainText("Read-only evidence incomplete");
+    await expect(page.getByTestId("broker-read-only-evidence-pack")).toContainText("Evidence only");
   });
 
   test("Connect button calls start endpoint and redirects", async ({ page }) => {
@@ -216,6 +219,11 @@ test.describe("Broker settings — connected", () => {
     await expect(checklist).toContainText("Passed · 2 rows");
     await expect(checklist).toContainText("Tradebook");
     await expect(checklist).toContainText("Passed · 3 rows");
+    const evidence = page.getByTestId("broker-read-only-evidence-pack");
+    await expect(evidence).toContainText("Read-only evidence ready for owner review");
+    await expect(evidence).toContainText("Owner review ready");
+    await expect(evidence).toContainText("6/6 checks passed");
+    await expect(evidence).toContainText("evidence, not approval to place orders");
   });
 
   test("shows stale read-only smoke as a refresh-required gate", async ({ page }) => {
@@ -243,6 +251,7 @@ test.describe("Broker settings — connected", () => {
     await expect(gate).toContainText("Read-only smoke gate: Smoke stale");
     await expect(gate).toContainText("older than the 24-hour launch gate");
     await expect(page.getByTestId("broker-read-only-checklist")).toContainText("Refresh required");
+    await expect(page.getByTestId("broker-read-only-evidence-pack")).toContainText("Refresh read-only evidence");
   });
 
   test("runs the active broker read-only smoke endpoint", async ({ page }) => {

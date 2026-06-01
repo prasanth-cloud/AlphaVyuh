@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerOrderActionBarPresentation, brokerOrderGatePresentation, brokerReadOnlyChecklist } from "@/lib/broker-safety";
+import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerOrderActionBarPresentation, brokerOrderGatePresentation, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary } from "@/lib/broker-safety";
 
 describe("broker order gate presentation", () => {
   it("fails closed when broker status is unavailable", () => {
@@ -106,6 +106,95 @@ describe("broker order gate presentation", () => {
       "Risk plan and confirmation source",
       "Fresh same-broker read-only smoke evidence",
     ]);
+  });
+
+  it("builds a blocked read-only evidence pack while checks are incomplete", () => {
+    const summary = brokerReadOnlyEvidenceSummary({
+      broker: "zerodha",
+      connected: true,
+      read_only_smoke_required: true,
+      read_only_smoke_passed: false,
+      read_only_smoke_checked_at: "2026-05-30T08:00:00Z",
+      read_only_smoke_fresh: true,
+      read_only_smoke_checks: {
+        login_url: { ok: true },
+        profile: { ok: true, user_id_present: true },
+        holdings: { ok: false, error: "TokenException access-token stored-token" },
+      },
+    });
+
+    expect(summary).toMatchObject({
+      status: "blocked",
+      headline: "Read-only evidence incomplete",
+      passedChecks: 2,
+      totalChecks: 6,
+      canProceedToOwnerReview: false,
+    });
+    expect(summary.blockers).toEqual(expect.arrayContaining([
+      "Holdings check is not passing",
+      "Positions check is not passing",
+      "Orderbook check is not passing",
+      "Tradebook check is not passing",
+    ]));
+    expect(JSON.stringify(summary)).not.toContain("access-token");
+    expect(JSON.stringify(summary)).not.toContain("stored-token");
+  });
+
+  it("allows owner review only when every read-only check passed and is fresh", () => {
+    const summary = brokerReadOnlyEvidenceSummary({
+      broker: "upstox",
+      connected: true,
+      read_only_smoke_required: true,
+      read_only_smoke_passed: true,
+      read_only_smoke_checked_at: "2026-05-30T09:00:00Z",
+      read_only_smoke_fresh: true,
+      read_only_smoke_checks: {
+        login_url: { ok: true },
+        profile: { ok: true, user_id_present: true },
+        holdings: { ok: true, count: 1 },
+        positions: { ok: true, count: 0 },
+        orderbook: { ok: true, count: 2 },
+        tradebook: { ok: true, count: 2 },
+      },
+    });
+
+    expect(summary).toMatchObject({
+      status: "ready-for-owner-review",
+      headline: "Read-only evidence ready for owner review",
+      brokerLabel: "Upstox",
+      passedChecks: 6,
+      totalChecks: 6,
+      canProceedToOwnerReview: true,
+      blockers: [],
+    });
+    expect(summary.detail).toContain("evidence, not approval to place orders");
+    expect(summary.evidenceItems).toEqual(expect.arrayContaining([
+      { label: "Approval status", value: "Evidence only" },
+      { label: "Freshness", value: "Fresh" },
+    ]));
+  });
+
+  it("requires a refreshed smoke before stale evidence can support owner review", () => {
+    expect(brokerReadOnlyEvidenceSummary({
+      broker: "zerodha",
+      connected: true,
+      read_only_smoke_required: true,
+      read_only_smoke_passed: true,
+      read_only_smoke_checked_at: "2026-05-29T08:00:00Z",
+      read_only_smoke_fresh: false,
+      read_only_smoke_checks: {
+        login_url: { ok: true },
+        profile: { ok: true },
+        holdings: { ok: true },
+        positions: { ok: true },
+        orderbook: { ok: true },
+        tradebook: { ok: true },
+      },
+    })).toMatchObject({
+      status: "refresh-required",
+      canProceedToOwnerReview: false,
+      blockers: ["Read-only smoke is older than the 24-hour launch gate"],
+    });
   });
 
   it("builds a journal-only action bar when live routing is disabled", () => {

@@ -38,6 +38,19 @@ export type BrokerOrderActionBarPresentation = {
   status: "good" | "warn" | "bad";
 };
 
+export type BrokerReadOnlyEvidenceSummary = {
+  status: "unavailable" | "blocked" | "refresh-required" | "ready-for-owner-review";
+  headline: string;
+  detail: string;
+  brokerLabel: string;
+  checkedAt: string | null;
+  passedChecks: number;
+  totalChecks: number;
+  canProceedToOwnerReview: boolean;
+  blockers: string[];
+  evidenceItems: Array<{ label: string; value: string }>;
+};
+
 function brokerLabel(broker?: string | null) {
   if (!broker) return "Broker";
   if (broker.toLowerCase() === "zerodha") return "Zerodha";
@@ -179,4 +192,89 @@ export function brokerReadOnlyChecklist(broker: BrokerReadOnlySmokeState | null 
       detail,
     };
   });
+}
+
+export function brokerReadOnlyEvidenceSummary(
+  broker: BrokerReadOnlySmokeState | null | undefined,
+  options: { unavailable?: boolean } = {},
+): BrokerReadOnlyEvidenceSummary {
+  const label = brokerLabel(broker?.broker);
+  const checklist = brokerReadOnlyChecklist(broker);
+  const passedChecks = checklist.filter((item) => item.tone === "good").length;
+  const totalChecks = checklist.length;
+  const incompleteChecks = checklist
+    .filter((item) => item.tone !== "good")
+    .map((item) => item.label);
+  const checkedAt = broker?.read_only_smoke_checked_at ?? null;
+  const baseItems = [
+    { label: "Broker", value: label },
+    { label: "Read-only smoke", value: `${passedChecks}/${totalChecks} checks passed` },
+    { label: "Freshness", value: checkedAt ? broker?.read_only_smoke_fresh === false ? "Refresh required" : "Fresh" : "Not run" },
+    { label: "Approval status", value: "Evidence only" },
+  ];
+
+  if (options.unavailable) {
+    return {
+      status: "unavailable",
+      headline: "Broker evidence unavailable",
+      detail: "Broker status cannot be confirmed. Keep order capture as journal drafts until status recovers.",
+      brokerLabel: label,
+      checkedAt: null,
+      passedChecks: 0,
+      totalChecks,
+      canProceedToOwnerReview: false,
+      blockers: ["Broker status unavailable"],
+      evidenceItems: baseItems,
+    };
+  }
+
+  const blockers = [
+    broker?.connected ? null : "No read-only broker session connected",
+    broker?.token_expired ? "Broker token expired" : null,
+    broker?.read_only_smoke_required !== false && !checkedAt ? "Read-only smoke has not run" : null,
+    ...incompleteChecks.map((label) => `${label} check is not passing`),
+  ].filter((item): item is string => Boolean(item));
+
+  if (checkedAt && broker?.read_only_smoke_fresh === false) {
+    return {
+      status: "refresh-required",
+      headline: "Refresh read-only evidence",
+      detail: `${label} read-only smoke evidence is stale. Rerun smoke before this can support owner review.`,
+      brokerLabel: label,
+      checkedAt,
+      passedChecks,
+      totalChecks,
+      canProceedToOwnerReview: false,
+      blockers: ["Read-only smoke is older than the 24-hour launch gate", ...blockers.filter((item) => !item.includes("has not run"))],
+      evidenceItems: baseItems,
+    };
+  }
+
+  if (broker?.read_only_smoke_passed === true && broker?.read_only_smoke_fresh !== false && passedChecks === totalChecks) {
+    return {
+      status: "ready-for-owner-review",
+      headline: "Read-only evidence ready for owner review",
+      detail: `${label} profile, holdings, positions, orderbook, and tradebook reads passed. This is evidence, not approval to place orders.`,
+      brokerLabel: label,
+      checkedAt,
+      passedChecks,
+      totalChecks,
+      canProceedToOwnerReview: true,
+      blockers: [],
+      evidenceItems: baseItems,
+    };
+  }
+
+  return {
+    status: "blocked",
+    headline: "Read-only evidence incomplete",
+    detail: `${label} read-only evidence must be complete before any sandbox/live order route can be considered.`,
+    brokerLabel: label,
+    checkedAt,
+    passedChecks,
+    totalChecks,
+    canProceedToOwnerReview: false,
+    blockers,
+    evidenceItems: baseItems,
+  };
 }
