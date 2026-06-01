@@ -16,9 +16,18 @@ const requiredSnippets = [
   "uses: actions/checkout@v6",
   "uses: actions/setup-node@v6",
   "node-version: 22",
+  "cache-dependency-path: frontend/package-lock.json",
+  "Install frontend dependencies",
+  "npm --prefix frontend ci",
+  "Prepare production benchmark account",
+  "SUPABASE_URL: ${{ secrets.SUPABASE_URL }}",
+  "SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}",
+  "node scripts/prepare-production-smoke-account.mjs",
+  "Validate production benchmark credentials",
+  "npm run check:production-smoke-env",
   "Run authenticated scanner benchmark",
   "PRODUCTION_API_URL:",
-  "PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}",
   "SCANNER_BENCHMARK_RUNS:",
   "SCANNER_BENCHMARK_WARMUP_RUNS:",
   "SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT:",
@@ -41,7 +50,7 @@ const forbiddenSnippets = [
   "vercel deploy",
   "vercel build",
   "VERCEL_TOKEN",
-  "SUPABASE_SERVICE_ROLE_KEY",
+  "PRODUCTION_API_BEARER_TOKEN: ${{ secrets.PRODUCTION_API_BEARER_TOKEN }}",
 ];
 
 function assert(condition, message) {
@@ -60,11 +69,15 @@ try {
     assert(!body.includes(snippet), `Scanner benchmark workflow must not deploy or require recovery credentials: ${snippet}`);
   }
 
+  const prepareIndex = body.indexOf("Prepare production benchmark account");
+  const validateIndex = body.indexOf("Validate production benchmark credentials");
   const benchmarkIndex = body.indexOf("Run authenticated scanner benchmark");
   const uploadIndex = body.indexOf("Upload benchmark JSON");
+  assert(prepareIndex < validateIndex, "Scanner benchmark workflow must prepare runtime credentials before validating them.");
+  assert(validateIndex < benchmarkIndex, "Scanner benchmark workflow must validate runtime credentials before benchmarking.");
   assert(benchmarkIndex < uploadIndex, "Scanner benchmark workflow must upload JSON only after running the benchmark.");
 
-  console.log("Scanner benchmark workflow ok: authenticated non-deploy benchmark and artifact upload are wired.");
+  console.log("Scanner benchmark workflow ok: runtime-authenticated non-deploy benchmark and artifact upload are wired.");
 } catch (error) {
   console.error(`Scanner benchmark workflow check failed: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
