@@ -16,6 +16,7 @@
 - Split scanner data coverage from filtered query size so DB-side narrowing no longer makes healthy scans look degraded or shows misleading low coverage copy.
 - Added scanner diagnostics for production evidence: `query_rows`, `source_rows`, `query_row_reduction_pct`, and `db_prefilters_applied`.
 - Added `scripts/benchmark-scanner-api.mjs` plus a mocked contract test so post-deploy scanner p50/p95 latency, row reduction, and DB prefilter count can be measured instead of inferred.
+- Pushed stock-universe hard rejects into PostgREST too: active status, series, sector, market, and fundamental ranges now reduce rows before Python enrichment.
 
 ## Why
 
@@ -38,8 +39,8 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> 53 passed.
-- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 311 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests/test_scanner_filters.py backend/tests/test_scanner_outage_status.py` -> 54 passed.
+- `uv run --with pytest --with-requirements backend/requirements.txt python -m pytest backend/tests` -> 312 passed.
 - `npm run test:sector-taxonomy-check` -> passed.
 - `npm run test:market-data-entitlement-check` -> passed.
 - `npm --prefix frontend run typecheck` -> passed.

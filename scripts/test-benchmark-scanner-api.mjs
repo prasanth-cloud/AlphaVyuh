@@ -49,7 +49,10 @@ function readJsonBody(request) {
 
 function scannerResponse(requestBody) {
   const filters = requestBody?.filters ?? {};
-  const prefilters = [];
+  const prefilters = [
+    { op: "eq", column: "stock_universe.is_active", value: true },
+    { op: "in_", column: "stock_universe.series", value: filters.series ?? ["EQ", "BE"] },
+  ];
   if (filters.rs_score_min != null) {
     prefilters.push({ op: "gte", column: "rs_score", value: filters.rs_score_min });
   }
@@ -63,11 +66,12 @@ function scannerResponse(requestBody) {
     prefilters.push({ op: "lte", column: "darvas_box_height_pct", value: filters.darvas_box_height_pct_max });
   }
 
-  const queryRows = prefilters.length ? 120 : 912;
-  const queryReductionPct = prefilters.length ? 86.8 : 0;
+  const selectivePrefilters = prefilters.length > 2;
+  const queryRows = selectivePrefilters ? 120 : 912;
+  const queryReductionPct = selectivePrefilters ? 86.8 : 0;
   return {
     trade_date: "2026-05-29",
-    total_matches: prefilters.length ? 34 : 265,
+    total_matches: selectivePrefilters ? 34 : 265,
     visible_count: 10,
     results: [{ symbol: "RELIANCE", close: 100, volume_ratio: 2.4 }],
     query_rows: queryRows,
@@ -103,7 +107,7 @@ await withServer(async (request, response) => {
   });
   assert.equal(code, 0, `scanner benchmark should pass:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Scanner benchmark ok \(2 measured runs each, 1 warmup\):/);
-  assert.match(stdout, /baseline: p50=\d+ms p95=\d+ms .*912 rows, 0% query reduction, 0 db prefilters/);
+  assert.match(stdout, /baseline: p50=\d+ms p95=\d+ms .*912 rows, 0% query reduction, 2 db prefilters/);
   assert.match(stdout, /trend-template: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /box-breakout: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
 });

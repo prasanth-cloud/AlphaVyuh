@@ -224,6 +224,8 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
         "universe_size": 1000,
         "query_row_reduction_pct": 99.8,
         "db_prefilters_applied": [
+            {"op": "eq", "column": "stock_universe.is_active", "value": True},
+            {"op": "in_", "column": "stock_universe.series", "value": ["EQ"]},
             {"op": "gte", "column": "rs_score", "value": 70},
             {"op": "gte", "column": "avg_volume_50d", "value": 100000},
         ],

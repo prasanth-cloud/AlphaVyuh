@@ -329,6 +329,10 @@ class _RecordingQuery:
         self.calls.append(("eq", column, value))
         return self
 
+    def in_(self, column, value):
+        self.calls.append(("in_", column, value))
+        return self
+
 
 class TestScannerDbPrefilters:
     def test_exposes_prefilter_ops_for_diagnostics(self):
@@ -342,6 +346,8 @@ class TestScannerDbPrefilters:
                 darvas_box_height_pct_max=15,
             )
         ) == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ", "BE"]),
             ("gte", "rs_score", 70),
             ("gte", "avg_volume_50d", 100000),
             ("gt", "ema_200_slope_30d", 0),
@@ -369,6 +375,8 @@ class TestScannerDbPrefilters:
         )
 
         assert query.calls == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ", "BE"]),
             ("gte", "rs_score", 70),
             ("lte", "rs_score", 95),
             ("gte", "avg_volume_50d", 100000),
@@ -380,6 +388,37 @@ class TestScannerDbPrefilters:
             ("lte", "ema_200_slope_30d", 20),
             ("lte", "darvas_box_height_pct", 15),
             ("eq", "is_nr7", True),
+        ]
+
+    def test_pushes_stock_universe_filters_to_db(self):
+        from app.routers.scanner import ScanFilters, _push_db_prefilters
+
+        query = _push_db_prefilters(
+            _RecordingQuery(),
+            ScanFilters(
+                series=["EQ"],
+                sector=["Financial Services", "IT"],
+                market="IN",
+                market_cap_min=500,
+                market_cap_max=50000,
+                pe_min=5,
+                pe_max=80,
+                roe_min=12,
+                debt_to_equity_max=1.5,
+            ),
+        )
+
+        assert query.calls == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ"]),
+            ("in_", "stock_universe.sector", ["Financial Services", "IT"]),
+            ("in_", "stock_universe.market", ["NSE", "BSE"]),
+            ("gte", "stock_universe.market_cap_cr", 500),
+            ("lte", "stock_universe.market_cap_cr", 50000),
+            ("gte", "stock_universe.pe_ratio", 5),
+            ("lte", "stock_universe.pe_ratio", 80),
+            ("lte", "stock_universe.debt_to_equity", 1.5),
+            ("gte", "stock_universe.roe", 12),
         ]
 
     def test_keeps_fallback_computed_filters_python_side(self):
@@ -395,7 +434,10 @@ class TestScannerDbPrefilters:
             ),
         )
 
-        assert query.calls == []
+        assert query.calls == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ", "BE"]),
+        ]
 
 
 class TestVCPAsyncPass2:

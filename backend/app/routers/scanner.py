@@ -25,10 +25,65 @@ router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 FREE_RESULT_LIMIT  = 200
 PRO_RESULT_LIMIT   = 1000
 SCAN_ROW_CAP       = 10_000  # safety limit for unfiltered / lightly-filtered queries
+DbPrefilterValue = float | int | bool | str | list[str]
 
 
-def _db_prefilter_ops(f: "ScanFilters") -> list[tuple[str, str, float | int | bool]]:
-    ops: list[tuple[str, str, float | int | bool]] = []
+def _list_filter(value: list[str] | str | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [item for item in value if item]
+    return [value] if value else []
+
+
+def _db_prefilter_ops(f: "ScanFilters") -> list[tuple[str, str, DbPrefilterValue]]:
+    ops: list[tuple[str, str, DbPrefilterValue]] = [
+        ("eq", "stock_universe.is_active", True),
+        ("in_", "stock_universe.series", _list_filter(f.series) or ["EQ", "BE"]),
+    ]
+
+    sectors = _list_filter(f.sector)
+    if len(sectors) == 1:
+        ops.append(("eq", "stock_universe.sector", sectors[0]))
+    elif len(sectors) > 1:
+        ops.append(("in_", "stock_universe.sector", sectors))
+
+    if f.market is not None:
+        market = f.market.upper()
+        if market == "IN":
+            ops.append(("in_", "stock_universe.market", ["NSE", "BSE"]))
+        elif market == "US":
+            ops.append(("in_", "stock_universe.market", ["NASDAQ", "NYSE"]))
+        elif market in {"NSE", "BSE", "NASDAQ", "NYSE"}:
+            ops.append(("eq", "stock_universe.market", market))
+
+    if f.market_cap_min is not None:
+        ops.append(("gte", "stock_universe.market_cap_cr", f.market_cap_min))
+    if f.market_cap_max is not None:
+        ops.append(("lte", "stock_universe.market_cap_cr", f.market_cap_max))
+    if f.pe_min is not None:
+        ops.append(("gte", "stock_universe.pe_ratio", f.pe_min))
+    if f.pe_max is not None:
+        ops.append(("lte", "stock_universe.pe_ratio", f.pe_max))
+    if f.pb_min is not None:
+        ops.append(("gte", "stock_universe.pb_ratio", f.pb_min))
+    if f.pb_max is not None:
+        ops.append(("lte", "stock_universe.pb_ratio", f.pb_max))
+    if f.eps_min is not None:
+        ops.append(("gte", "stock_universe.eps", f.eps_min))
+    if f.eps_max is not None:
+        ops.append(("lte", "stock_universe.eps", f.eps_max))
+    if f.dividend_yield_min is not None:
+        ops.append(("gte", "stock_universe.dividend_yield", f.dividend_yield_min))
+    if f.dividend_yield_max is not None:
+        ops.append(("lte", "stock_universe.dividend_yield", f.dividend_yield_max))
+    if f.debt_to_equity_max is not None:
+        ops.append(("lte", "stock_universe.debt_to_equity", f.debt_to_equity_max))
+    if f.roe_min is not None:
+        ops.append(("gte", "stock_universe.roe", f.roe_min))
+    if f.roce_min is not None:
+        ops.append(("gte", "stock_universe.roce", f.roce_min))
+
     if f.rs_score_min is not None:
         ops.append(("gte", "rs_score", f.rs_score_min))
     if f.rs_score_max is not None:
@@ -55,8 +110,8 @@ def _db_prefilter_ops(f: "ScanFilters") -> list[tuple[str, str, float | int | bo
 
 
 def _serialize_prefilter_ops(
-    ops: list[tuple[str, str, float | int | bool]],
-) -> list[dict[str, float | int | bool | str]]:
+    ops: list[tuple[str, str, DbPrefilterValue]],
+) -> list[dict[str, DbPrefilterValue]]:
     return [
         {"op": op, "column": column, "value": value}
         for op, column, value in ops
