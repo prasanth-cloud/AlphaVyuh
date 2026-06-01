@@ -251,7 +251,8 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
     assert result["coverage_pct"] is None
     assert result["source_metadata"]["mode"] == "eod"
     assert result["source_metadata"]["confidence"] == "healthy"
-    assert result["source_metadata"]["scanner_performance"] == {
+    scanner_performance = result["source_metadata"]["scanner_performance"]
+    assert scanner_performance == {
         "query_rows": 2,
         "universe_size": 1000,
         "query_row_reduction_pct": 99.8,
@@ -262,7 +263,18 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
             {"op": "gte", "column": "avg_volume_50d", "value": 100000},
         ],
         "fallback_query": False,
+        "timing_ms": scanner_performance["timing_ms"],
     }
+    assert set(scanner_performance["timing_ms"]) == {
+        "date_lookup",
+        "query",
+        "filter",
+        "vcp",
+        "sort",
+        "universe_count",
+        "total",
+    }
+    assert all(value >= 0 for value in scanner_performance["timing_ms"].values())
 
 
 def test_execute_scan_caches_universe_count_for_repeated_scans():

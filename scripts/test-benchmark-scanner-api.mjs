@@ -132,6 +132,15 @@ function scannerResponse(requestBody) {
         query_rows: queryRows,
         query_row_reduction_pct: queryReductionPct,
         db_prefilters_applied: prefilters,
+        timing_ms: {
+          date_lookup: 1,
+          query: 3,
+          filter: 2,
+          vcp: 0,
+          sort: 1,
+          universe_count: 1,
+          total: 8,
+        },
       },
     },
   };
@@ -157,7 +166,7 @@ await withServer(async (request, response) => {
   assert.equal(code, 0, `scanner benchmark should pass:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
   assert.match(stdout, /Scanner benchmark ok \(2 measured runs each, 1 warmup\):/);
   assert.match(stdout, /baseline: p50=\d+ms p95=\d+ms .*912 rows, 0% query reduction, 2 db prefilters/);
-  assert.match(stdout, /trend-template: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
+  assert.match(stdout, /trend-template: p50=\d+ms p95=\d+ms .*server total=8ms query=3ms filter=2ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /box-breakout: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, [1-9]\d* db prefilters/);
   assert.match(stdout, /fundamental-category: p50=\d+ms p95=\d+ms .*120 rows, 86\.8% query reduction, 11 db prefilters/);
 
@@ -199,6 +208,7 @@ await withServer(async (request, response) => {
     assert.ok(Array.isArray(output.results), "benchmark output should include results array");
     assert.ok(output.results.some((result) => result.name === "trend-template" && result.p50 >= 0 && result.p95 >= 0));
     assert.ok(output.results.some((result) => result.name === "fundamental-category" && result.prefilterCount >= 11));
+    assert.ok(output.results.some((result) => result.name === "trend-template" && result.timingMs?.total === 8));
   } finally {
     rmSync(outputDir, { recursive: true, force: true });
   }

@@ -24,6 +24,7 @@
 - Added a short-lived active-universe count cache for scanner diagnostics, removing a repeated `stock_universe` count round trip from repeated scans and benchmark samples without changing scan matches.
 - Added `SCANNER_BENCHMARK_OUTPUT_JSON` so the authenticated scanner benchmark can save machine-readable baseline and post-deploy p50/p95 evidence without manual copy/paste.
 - Added a short-lived scanner-local latest-complete-date cache, avoiding repeated quality-heavy trade-date discovery during repeated scanner runs while preserving explicit `trade_date` bypass for jobs/tests.
+- Added server-side scanner phase timings (`date_lookup`, `query`, `filter`, `vcp`, `sort`, `universe_count`, `total`) to `source_metadata.scanner_performance` and benchmark output so production latency bottlenecks can be measured instead of guessed.
 
 ## Why
 
@@ -42,7 +43,7 @@ Scanner launch presets such as Trend Template and Box Breakout were still fetchi
 
 - `npm run check:production-api:railway` -> passed public API data smoke; authenticated scanner skipped without local bearer token.
 - `npm run test:production-api-check` -> passed, including authenticated scanner latency/source-row output coverage.
-- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, JSON output, and speedup-baseline contract coverage.
+- `npm run test:scanner-benchmark` -> passed, including diagnostic-required benchmark, fallback-prefilter diagnostics, server timing output, JSON output, and speedup-baseline contract coverage.
 - `npm run check:sector-taxonomy:railway` -> passed structurally; reports taxonomy unverified and industry taxonomy not audited.
 - `npm run test:setup-review-check` -> passed.
 - `npm run test:broker-readonly-check` -> passed.

@@ -291,6 +291,11 @@ function dbPrefilterCount(scanner) {
   return null;
 }
 
+function scannerTiming(scanner) {
+  const timing = scanner?.source_metadata?.scanner_performance?.timing_ms;
+  return timing && typeof timing === "object" ? timing : null;
+}
+
 function percentile(values, pct) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -336,6 +341,7 @@ async function runScenario(scenario) {
     lastResponse?.source_metadata?.scanner_performance?.query_row_reduction_pct,
   );
   const prefilterCount = dbPrefilterCount(lastResponse);
+  const timingMs = scannerTiming(lastResponse);
 
   if (requireDiagnostics && scenario.expectDbPrefilters) {
     assert(queryRows !== null, `${scenario.name} response did not expose query_rows/source_rows diagnostics.`);
@@ -359,6 +365,7 @@ async function runScenario(scenario) {
     queryRows,
     queryReductionPct,
     prefilterCount,
+    timingMs,
     totalMatches: numberValue(lastResponse?.total_matches),
     visibleCount: Array.isArray(lastResponse?.results) ? lastResponse.results.length : null,
     tradeDate: lastResponse?.trade_date || lastResponse?.source_metadata?.as_of || null,
@@ -400,10 +407,13 @@ try {
     const queryRows = result.queryRows === null ? "unknown rows" : `${result.queryRows} rows`;
     const reduction = result.queryReductionPct === null ? "unknown reduction" : `${result.queryReductionPct}% query reduction`;
     const prefilters = result.prefilterCount === null ? "unknown db prefilters" : `${result.prefilterCount} db prefilters`;
+    const timingText = result.timingMs
+      ? `, server total=${result.timingMs.total ?? "unknown"}ms query=${result.timingMs.query ?? "unknown"}ms filter=${result.timingMs.filter ?? "unknown"}ms`
+      : "";
     const speedupText = result.speedup_p50 !== null || result.speedup_p95 !== null
       ? `, speedup p50=${result.speedup_p50 ?? "unknown"}x p95=${result.speedup_p95 ?? "unknown"}x`
       : "";
-    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
+    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText}${timingText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
   });
 
   if (outputJsonPath) {

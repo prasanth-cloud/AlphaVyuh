@@ -1195,10 +1195,12 @@ async def execute_scan(
     enforce_plan_limit: bool = True,
 ) -> dict:
     """Run the scanner core for UI scans and saved EOD scan alerts."""
+    scan_started = time.perf_counter()
     hard_limit = (
         FREE_RESULT_LIMIT if plan == "free" else PRO_RESULT_LIMIT
     ) if enforce_plan_limit else SCAN_ROW_CAP
 
+    date_lookup_started = time.perf_counter()
     if trade_date is not None:
         latest_date = str(trade_date)
     else:
@@ -1206,6 +1208,7 @@ async def execute_scan(
             latest_date = _scanner_latest_complete_trade_date(client)
         except Exception:
             latest_date = None
+    date_lookup_elapsed_ms = round((time.perf_counter() - date_lookup_started) * 1000)
     if not latest_date:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1283,6 +1286,7 @@ async def execute_scan(
     q = _push_db_prefilters(q, f)
 
     used_fallback_query = False
+    query_started = time.perf_counter()
     try:
         rows = q.limit(SCAN_ROW_CAP).execute().data or []
     except Exception:
@@ -1301,24 +1305,34 @@ async def execute_scan(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Scanner query could not complete; try a narrower preset.",
             )
+    query_elapsed_ms = round((time.perf_counter() - query_started) * 1000)
 
     # Python-side filter for computed columns
+    filter_started = time.perf_counter()
     results = _apply_filters(rows, f, body.preset_id)
+    filter_elapsed_ms = round((time.perf_counter() - filter_started) * 1000)
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
+    vcp_elapsed_ms = 0
     if f.vcp_contraction is True and results:
         if plan == "free":
             raise HTTPException(403, "VCP scan requires Pro or Elite plan")
+        vcp_started = time.perf_counter()
         results = await _run_vcp_pass2(client, results, latest_date, f)
+        vcp_elapsed_ms = round((time.perf_counter() - vcp_started) * 1000)
 
     # Sort
+    sort_started = time.perf_counter()
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
     reverse  = body.sort_order != "asc"
     results.sort(key=lambda x: (x.get(sort_key) is not None, x.get(sort_key) or 0), reverse=reverse)
+    sort_elapsed_ms = round((time.perf_counter() - sort_started) * 1000)
 
     total = len(results)
     capped = results[:hard_limit]
+    universe_started = time.perf_counter()
     universe_size = _active_universe_size(client, series_list)
+    universe_count_elapsed_ms = round((time.perf_counter() - universe_started) * 1000)
     query_rows = len(rows)
     query_row_reduction_pct = (
         round((1 - (query_rows / universe_size)) * 100, 1)
@@ -1332,6 +1346,15 @@ async def execute_scan(
         "query_row_reduction_pct": query_row_reduction_pct,
         "db_prefilters_applied": applied_prefilters,
         "fallback_query": used_fallback_query,
+        "timing_ms": {
+            "date_lookup": date_lookup_elapsed_ms,
+            "query": query_elapsed_ms,
+            "filter": filter_elapsed_ms,
+            "vcp": vcp_elapsed_ms,
+            "sort": sort_elapsed_ms,
+            "universe_count": universe_count_elapsed_ms,
+            "total": round((time.perf_counter() - scan_started) * 1000),
+        },
     }
     coverage_pct = None
     metadata = eod_source_metadata(
