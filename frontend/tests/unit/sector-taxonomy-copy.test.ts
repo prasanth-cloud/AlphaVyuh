@@ -65,6 +65,9 @@ describe("sectorTaxonomyPresentation", () => {
       value: "UNVERIFIED",
       status: "bad",
       detail: "Sector audit is unavailable.",
+      approvalStatus: "Unavailable",
+      approvalDetail: "Sector source approval cannot be granted until taxonomy metadata loads.",
+      launchApprovalBadge: "Source approval unavailable",
       dashboardBadge: "Taxonomy unverified",
     });
   });
@@ -80,6 +83,9 @@ describe("sectorTaxonomyPresentation", () => {
       auditStatus: "Unverified: AlphaVyuh currently derives sector labels from stock_universe.sector. Treat sector counts as provisional until NSE industry classification parity is audited.",
       aliasPolicy: "Sector-count aliases are derived only from NSE sectoral-index alias labels. An empty aliases list means AlphaVyuh has no audited NSE alias for that sector label yet.",
       industryScope: "NSE industry-level classification is not yet mapped into AlphaVyuh sector counts; treat industry parity as unverified until a separate industry taxonomy audit lands.",
+      approvalStatus: "Needs owner/data approval",
+      approvalDetail: "Use sector labels for navigation only; do not market sector or industry rankings as final until source and audit gaps are owner-approved.",
+      launchApprovalBadge: "Source approval pending",
       dashboardBadge: "Taxonomy needs audit: sector taxonomy unverified, industry taxonomy unaudited",
     });
   });
@@ -161,6 +167,9 @@ describe("sectorTaxonomyPresentation", () => {
     }))).toMatchObject({
       status: "good",
       auditStatus: "Audited",
+      approvalStatus: "Approved for launch",
+      approvalDetail: "Sector source, contract date, reference coverage, and industry taxonomy are audited for launch claims.",
+      launchApprovalBadge: "Sector source approved",
       dashboardBadge: "Taxonomy source: stock_universe.sector",
     });
   });
