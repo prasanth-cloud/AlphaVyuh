@@ -4,7 +4,7 @@
   "scripts": {
     "typecheck": "npm --prefix frontend run typecheck",
     "lint": "npm --prefix frontend run lint",
-    "test": "npm --prefix frontend run test -- --run",
+    "test": "cd frontend && npm run test",
     "test:e2e:mock": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/workflow-mock.spec.ts",
     "test:e2e:backend": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.backend.config.ts",
     "test:e2e:perf": "npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/performance-smoke.spec.ts",

@@ -30,6 +30,16 @@ export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
+export function hasSupabaseAuthConfig(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+function redirectToLogin(request: NextRequest, pathname: string) {
+  const loginUrl = new URL("/login", request.url);
+  loginUrl.searchParams.set("next", pathname);
+  return NextResponse.redirect(loginUrl);
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -57,6 +67,10 @@ export async function proxy(request: NextRequest) {
   if (isPublicPath(pathname)) return response;
   if (allowMockAppAuth()) return response;
 
+  if (!hasSupabaseAuthConfig()) {
+    return redirectToLogin(request, pathname);
+  }
+
   const supabase = createMiddlewareClient(request, response);
 
   // getUser() hits Supabase Auth servers — validates JWT, never trusts cache
@@ -65,9 +79,7 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    return redirectToLogin(request, pathname);
   }
 
   // Onboarding check is handled by the (app)/ layout Server Component,

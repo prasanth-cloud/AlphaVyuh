@@ -50,7 +50,7 @@ run_step "Railway secret prep regression tests" npm run test:railway-secret-prep
 
 run_step "Frontend lint" npm --prefix frontend run lint
 run_step "Frontend typecheck" npm --prefix frontend run typecheck
-run_step "Frontend unit tests" npm --prefix frontend run test
+run_step "Frontend unit tests" bash -lc "cd frontend && npm run test"
 run_step "Frontend production build" npm --prefix frontend run build
 run_step "Frontend dependency audit" npm audit --audit-level=moderate
 

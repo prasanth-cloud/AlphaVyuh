@@ -136,26 +136,38 @@ function serveSupabaseRest(request, response) {
     return true;
   }
   if (url.pathname.endsWith("ingest_runs")) {
-    response.end(JSON.stringify([{
-      run_id: "refresh-2026-05-18-120000",
-      started_at: "2026-05-18T12:00:00Z",
-      meta: {
-        supplemental_data: {
-          status: "healthy",
-          warnings: [],
-          rs_score: { status: "success", trade_date: "2026-05-18" },
-          yfinance: {
-            status: "success",
-            attempted: 200,
-            success: 200,
-            failed: 0,
-            coverage_pct: 100,
-            rate_limited: 0,
-            failure_reasons: {},
+    response.end(JSON.stringify([
+      {
+        run_id: "market-breadth-snapshot-2026-05-18",
+        started_at: "2026-05-18T13:00:00Z",
+        meta: {
+          snapshot: {
+            status: "healthy",
+            trade_date: "2026-05-18",
           },
         },
       },
-    }]));
+      {
+        run_id: "refresh-2026-05-18-120000",
+        started_at: "2026-05-18T12:00:00Z",
+        meta: {
+          supplemental_data: {
+            status: "healthy",
+            warnings: [],
+            rs_score: { status: "success", trade_date: "2026-05-18" },
+            yfinance: {
+              status: "success",
+              attempted: 200,
+              success: 200,
+              failed: 0,
+              coverage_pct: 100,
+              rate_limited: 0,
+              failure_reasons: {},
+            },
+          },
+        },
+      },
+    ]));
     return true;
   }
   response.end(JSON.stringify([{ symbol: "RELIANCE" }]));
@@ -187,6 +199,26 @@ function serveApiWithDegradedSupplemental(request, response) {
             rate_limited: 155,
             failure_reasons: { rate_limited: 155, no_data: 3 },
           },
+        },
+      },
+    }]));
+    return;
+  }
+  serveHealthyApi(request, response);
+}
+
+function serveApiWithoutSupplementalRuns(request, response) {
+  const url = new URL(request.url, "http://127.0.0.1");
+  if (url.pathname === "/rest/v1/ingest_runs") {
+    response.setHeader("content-type", "application/json");
+    response.setHeader("content-range", "0-0/1");
+    response.end(JSON.stringify([{
+      run_id: "market-breadth-snapshot-2026-05-18",
+      started_at: "2026-05-18T13:00:00Z",
+      meta: {
+        snapshot: {
+          status: "healthy",
+          trade_date: "2026-05-18",
         },
       },
     }]));
@@ -300,7 +332,8 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
   assert.match(stdout, /Supplemental refresh data/);
-  assert.match(stdout, /supplemental status is healthy/);
+  assert.match(stdout, /Latest supplemental run refresh-2026-05-18-120000 supplemental status is healthy/);
+  assert.match(stdout, /Skipped 1 newer non-supplemental ingest run/);
   assert.deepEqual(resultNames(stdout).slice(0, 7), [
     "Production API data smoke",
     "Vercel production env",
@@ -331,6 +364,23 @@ await withServer(serveApiWithDegradedSupplemental, async (apiUrl) => {
   assert.match(stdout, /RS score: failed/);
   assert.match(stdout, /yfinance: degraded \(42\/200 symbols, rate_limited=155\)/);
   assert.match(stdout, /Inspect Daily NSE refresh logs before trusting RS-ranked scanner output/);
+});
+
+await withServer(serveApiWithoutSupplementalRuns, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
+  assert.equal(code, 0, `public recovery should pass while warning when recent runs lack supplemental metadata:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /\[WARN] Supplemental refresh data/);
+  assert.match(stdout, /No supplemental data trust metadata found in the latest 1 ingest run/);
+  assert.match(stdout, /Run the current Daily NSE refresh before treating RS\/yfinance coverage as verified/);
 });
 
 await withServer(serveHealthyApi, async (apiUrl) => {
