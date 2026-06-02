@@ -24,12 +24,11 @@ describe("scanner watchlist feedback", () => {
     expect(scannerPageSource).not.toContain("Watchlist add is temporarily unavailable.");
   });
 
-  it("surfaces sector taxonomy trust inside the scanner filter workflow", () => {
-    expect(scannerPageSource).toContain("getSectorsWithMetadata");
-    expect(scannerPageSource).toContain("sectorTaxonomyPresentation");
-    expect(scannerPageSource).toContain('data-testid="scanner-sector-taxonomy"');
-    expect(scannerPageSource).toContain("Source: {sectorTaxonomy.source}");
-    expect(scannerPageSource).toContain("Industry audit pending");
+  it("keeps taxonomy audit details out of the scanner startup path", () => {
+    expect(scannerPageSource).not.toContain("getSectorsWithMetadata");
+    expect(scannerPageSource).not.toContain("sectorTaxonomyPresentation");
+    expect(scannerPageSource).not.toContain('data-testid="scanner-sector-taxonomy"');
+    expect(scannerPageSource).toContain("Source audit details stay in Data Trust.");
   });
 
   it("keeps the selected scan result workbench review-only and chart-first", () => {
