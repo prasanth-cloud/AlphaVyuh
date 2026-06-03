@@ -14,6 +14,7 @@
     "test:e2e:prod:layout": "PLAYWRIGHT_BASE_URL=https://www.alphavyuh.com npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/layout-smoke.spec.ts",
     "test:e2e:prod:smoke": "PLAYWRIGHT_BASE_URL=https://www.alphavyuh.com PLAYWRIGHT_EXPECT_REAL_DATA=true npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts",
     "test:production-api-check": "node scripts/test-check-production-api.mjs",
+    "test:production-smoke-account-identity": "node scripts/test-production-smoke-account-identity.mjs",
     "test:scanner-benchmark": "node scripts/test-benchmark-scanner-api.mjs",
     "test:scanner-benchmark-workflow-check": "node scripts/test-check-scanner-benchmark-workflow.mjs",
     "test:five-year-chart-check": "node scripts/test-check-production-api.mjs",

@@ -145,6 +145,12 @@ function scannerResponse(requestBody) {
 
 await withServer(async (request, response) => {
   response.setHeader("content-type", "application/json");
+  if (request.url === "/api/v1/me" && request.method === "GET") {
+    assert.equal(request.headers.authorization, "Bearer production-smoke-token");
+    response.end(JSON.stringify({ id: "qa-user", email: "qa@example.com" }));
+    return;
+  }
+
   if (request.url === "/api/v1/scanner/run" && request.method === "POST") {
     assert.equal(request.headers.authorization, "Bearer production-smoke-token");
     const requestBody = await readJsonBody(request);
@@ -235,6 +241,11 @@ await withServer(async (request, response) => {
 
 await withServer(async (request, response) => {
   response.setHeader("content-type", "application/json");
+  if (request.url === "/api/v1/me" && request.method === "GET") {
+    response.end(JSON.stringify({ id: "qa-user", email: "qa@example.com" }));
+    return;
+  }
+
   if (request.url === "/api/v1/scanner/run" && request.method === "POST") {
     await readJsonBody(request);
     response.end(JSON.stringify({
@@ -287,6 +298,37 @@ await withServer(async (_request, response) => {
   });
   assert.notEqual(code, 0, "scanner benchmark should fail without an auth token");
   assert.match(stderr, /Scanner benchmark requires PRODUCTION_API_BEARER_TOKEN/);
+});
+
+await withServer(async (request, response) => {
+  response.setHeader("content-type", "application/json");
+  if (request.url === "/api/v1/me" && request.method === "GET") {
+    response.writeHead(401);
+    response.end(JSON.stringify({ detail: "Authentication failed" }));
+    return;
+  }
+
+  response.writeHead(500);
+  response.end(JSON.stringify({ error: "scanner should not run after failed auth preflight" }));
+}, async (apiUrl) => {
+  const outputDir = mkdtempSync(join(tmpdir(), "scanner-benchmark-auth-failure-"));
+  try {
+    const outputPath = join(outputDir, "failed-auth-benchmark.json");
+    const { code, stderr } = await runBenchmark(apiUrl, {
+      PRODUCTION_API_BEARER_TOKEN: "stale-token",
+      SCANNER_BENCHMARK_OUTPUT_JSON: outputPath,
+    });
+    assert.notEqual(code, 0, "scanner benchmark should fail before timing when auth preflight fails");
+    assert.match(stderr, /Scanner benchmark auth preflight failed before timing/);
+
+    const output = JSON.parse(readFileSync(outputPath, "utf8"));
+    assert.equal(output.status, "failed");
+    assert.equal(output.failure.scenario, "auth-preflight");
+    assert.match(output.failure.message, /production smoke bearer token was rejected/i);
+    assert.deepEqual(output.results, []);
+  } finally {
+    rmSync(outputDir, { recursive: true, force: true });
+  }
 });
 
 console.log("scanner benchmark checker tests passed.");

@@ -23,6 +23,7 @@ const requiredSnippets = [
   "SUPABASE_URL: ${{ secrets.SUPABASE_URL }}",
   "SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}",
+  'PLAYWRIGHT_QA_EMAIL_UNIQUE_PER_RUN: "1"',
   "node scripts/prepare-production-smoke-account.mjs",
   "Validate production benchmark credentials",
   "npm run check:production-smoke-env",

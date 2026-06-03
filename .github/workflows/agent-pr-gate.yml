@@ -76,6 +76,9 @@ jobs:
       - name: Production API checker tests
         run: npm run test:production-api-check
 
+      - name: Production smoke account identity tests
+        run: npm run test:production-smoke-account-identity
+
       - name: Scanner benchmark checker tests
         run: npm run test:scanner-benchmark
 
