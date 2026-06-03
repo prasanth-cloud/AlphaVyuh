@@ -1847,34 +1847,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     trackEvent("chart_plan_handoff_previewed", { symbol, timeframe, side });
   }
 
-  function sendSelectedPositionToDesk() {
-    if (!selectedPositionDrawing?.p3) return;
-    const side = selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long";
-    const draft = buildChartPlanDraft({
-      symbol,
-      side,
-      entry: selectedPositionDrawing.p1.price,
-      stop: selectedPositionDrawing.p2.price,
-      target: selectedPositionDrawing.p3.price,
-      timeframe,
-      drawingId: selectedPositionDrawing.id,
-      setupLabel,
-      playbookScore,
-      readyChecks: playbookItems.filter((item) => item.status === "ready").map((item) => `${item.label}: ${item.detail}`),
-    });
-    if (!draft) {
-      setPlanHandoffConfirmOpen(false);
-      setPlanUpgradeToast("Draw a valid entry, stop, and target before sending the plan");
-      return;
-    }
-    try {
-      window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify(draft));
-      trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true, playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
-      router.push(buildWatchlistReturnHref(true));
-    } catch {
-      router.push(buildWatchlistReturnHref(false));
-    }
-  }
   const latestVolumeRatio = latest?.volume_ratio ?? null;
   const recentCandles = data?.candles?.slice(-40) ?? [];
   const higherTimeframeReview = buildHigherTimeframeReview(data?.candles ?? []);
@@ -1942,6 +1914,37 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   ];
   const playbookReadyCount = playbookItems.filter((item) => item.status === "ready").length;
   const playbookScore = Math.round((playbookReadyCount / playbookItems.length) * 100);
+  const selectedPositionPlanPacket = selectedPositionDrawing?.p3 ? buildChartPlanDraft({
+    symbol,
+    side: selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long",
+    entry: selectedPositionDrawing.p1.price,
+    stop: selectedPositionDrawing.p2.price,
+    target: selectedPositionDrawing.p3.price,
+    timeframe,
+    drawingId: selectedPositionDrawing.id,
+    setupLabel,
+    playbookScore,
+    readyChecks: playbookItems.filter((item) => item.status === "ready").map((item) => `${item.label}: ${item.detail}`),
+  }) : null;
+
+  function sendSelectedPositionToDesk() {
+    if (!selectedPositionDrawing?.p3) return;
+    const side = selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long";
+    const draft = selectedPositionPlanPacket;
+    if (!draft) {
+      setPlanHandoffConfirmOpen(false);
+      setPlanUpgradeToast("Draw a valid entry, stop, and target before sending the plan");
+      return;
+    }
+    try {
+      window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify(draft));
+      trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true, playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
+      router.push(buildWatchlistReturnHref(true));
+    } catch {
+      router.push(buildWatchlistReturnHref(false));
+    }
+  }
+
   const chartSnapshot = [
     { label: liveQuote ? "Live price" : "Last price", value: displayClose != null ? fmtPrice(displayClose, symbolCurrency) : "Pending", tone: "var(--text-primary)" },
     { label: "Session move", value: changePct != null ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%` : "Pending", tone: positive ? "var(--gain)" : "var(--loss)" },
@@ -3576,7 +3579,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   style={{ background: "rgba(0,229,196,0.12)", color: "var(--app-teal)", border: "1px solid rgba(0,229,196,0.22)" }}
                 >
                   <MoveRight size={12} />
-                  Send to desk
+                  Send plan to Watchlist Desk
                 </button>
               )}
               {planHandoffConfirmOpen && selectedPositionDraft && (
@@ -3587,19 +3590,36 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     border: "1px solid rgba(0,229,196,0.22)",
                     color: "var(--app-text2)",
                     boxShadow: "0 14px 34px rgba(0,0,0,0.35)",
-                    minWidth: 260,
+                    minWidth: 320,
+                    maxWidth: 420,
                   }}
                 >
                   <div className="flex items-center justify-between gap-3" style={{ marginBottom: 6 }}>
-                    <span className="font-semibold" style={{ color: "var(--app-text)" }}>Confirm desk handoff</span>
+                    <div>
+                      <span className="font-semibold" style={{ color: "var(--app-text)" }}>Plan Packet</span>
+                      <div style={{ color: "var(--app-text3)", marginTop: 2 }}>Confirm desk handoff</div>
+                    </div>
                     <span className="uppercase" style={{ color: "var(--app-teal)", fontWeight: 700 }}>{selectedPositionDraft.side}</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 mono" style={{ color: "var(--app-text2)", marginBottom: 8 }}>
-                    <span>Entry {fmtPrice(selectedPositionDraft.entry, symbolCurrency)}</span>
-                    <span>Stop {fmtPrice(selectedPositionDraft.stop, symbolCurrency)}</span>
-                    <span>Target {fmtPrice(selectedPositionDraft.target, symbolCurrency)}</span>
-                    <span>R:R {selectedPositionDraft.riskReward.toFixed(1)}</span>
-                  </div>
+                  {selectedPositionPlanPacket ? (
+                    <>
+                      <div className="grid grid-cols-4 gap-2 mono" style={{ color: "var(--app-text2)", marginBottom: 8 }}>
+                        <span>Side {selectedPositionPlanPacket.side}</span>
+                        <span>Entry {fmtPrice(selectedPositionPlanPacket.entry, symbolCurrency)}</span>
+                        <span>Stop {fmtPrice(selectedPositionPlanPacket.stop, symbolCurrency)}</span>
+                        <span>Target {fmtPrice(selectedPositionPlanPacket.target, symbolCurrency)}</span>
+                      </div>
+                      <div className="rounded-md" style={{ padding: "7px 8px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 8 }}>
+                        <div className="mono" style={{ color: "var(--app-teal)", fontWeight: 700, marginBottom: 4 }}>R:R {selectedPositionPlanPacket.riskReward.toFixed(1)}</div>
+                        <div style={{ color: "var(--app-text2)", lineHeight: 1.45 }}>{selectedPositionPlanPacket.thesis}</div>
+                        <div style={{ color: "var(--app-text3)", lineHeight: 1.45, marginTop: 4 }}>{selectedPositionPlanPacket.invalidationRule}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ color: "var(--warn)", lineHeight: 1.5, marginBottom: 8 }}>
+                      Draw a valid entry, stop, and target before sending the plan.
+                    </div>
+                  )}
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => setPlanHandoffConfirmOpen(false)}
@@ -3610,10 +3630,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     </button>
                     <button
                       onClick={sendSelectedPositionToDesk}
+                      disabled={!selectedPositionPlanPacket}
                       className="rounded-full px-2.5 py-1 font-semibold"
-                      style={{ background: "rgba(0,229,196,0.14)", border: "1px solid rgba(0,229,196,0.28)", color: "var(--app-teal)" }}
+                      style={{ background: "rgba(0,229,196,0.14)", border: "1px solid rgba(0,229,196,0.28)", color: "var(--app-teal)", opacity: selectedPositionPlanPacket ? 1 : 0.45 }}
                     >
-                      Send plan
+                      Confirm handoff
                     </button>
                   </div>
                 </div>
