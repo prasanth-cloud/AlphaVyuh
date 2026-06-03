@@ -10,4 +10,4 @@ export type {
 } from "@/lib/api";
 
 export type PanelMode = "add" | "close" | "view" | null;
-export type Tab = "trades" | "analytics" | "ai";
+export type Tab = "queue" | "ai" | "analytics" | "trades";
