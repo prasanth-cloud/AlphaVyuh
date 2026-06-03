@@ -39,6 +39,88 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("watchlist id-only route auto-focuses the top priority symbol", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+
+    await page.addInitScript(() => {
+      localStorage.setItem("alphavyuh-mock-watchlists-v1", JSON.stringify([
+        {
+          id: "priority-queue",
+          name: "Priority queue",
+          sort_order: 0,
+          created_at: "2026-05-20T00:00:00.000Z",
+          items: [
+            {
+              symbol: "TCS",
+              sort_order: 0,
+              added_at: "2026-05-20T00:00:00.000Z",
+              company_name: "Tata Consultancy Services",
+              sector: "IT",
+              pinned: false,
+              tags: [],
+              note: "Lower priority setup",
+              close: 3800,
+              pct_change: 0.1,
+              volume_ratio: 0.9,
+              rsi_14: 48,
+            },
+            {
+              symbol: "AUBANK",
+              sort_order: 1,
+              added_at: "2026-05-20T00:00:00.000Z",
+              company_name: "AU Small Finance Bank",
+              sector: "Banks",
+              pinned: true,
+              tags: ["priority"],
+              note: "Ready from chart handoff",
+              close: 700,
+              pct_change: 2.6,
+              volume_ratio: 2.1,
+              rsi_14: 62,
+            },
+          ],
+        },
+      ]));
+      localStorage.setItem("alphavyuh-workflow-state-v1", JSON.stringify({
+        AUBANK: {
+          symbol: "AUBANK",
+          watchlist_id: "priority-queue",
+          lifecycle: "ready",
+          source: "watchlist",
+          setup_type: "breakout",
+          entry: 700,
+          stop: 675,
+          target: 755,
+          position_size: 10,
+          timeframe: "D",
+          thesis: "Priority setup with chart packet.",
+          invalidation_rule: "Invalidate below 675.",
+          confidence: 4,
+          setup_quality: 4,
+          tags: ["chart-plan", "long"],
+        },
+      }));
+    });
+
+    await page.goto("/watchlist?id=priority-queue", { waitUntil: "domcontentloaded" });
+    await expect(page.locator(".workspace-pill").filter({ hasText: "Focus: AUBANK" }).first()).toBeVisible({ timeout: 15_000 });
+
+    const actions = page.getByTestId("watchlist-selected-actions");
+    await expect(actions).toContainText(/Review journal/);
+    await expect(actions).toContainText(/Full chart/);
+    await expect(actions).toContainText(/Plan ready/);
+    const labels = await actions.locator("button, span").evaluateAll((nodes) =>
+      nodes.map((node) => node.textContent?.replace(/\s+/g, " ").trim()).filter(Boolean),
+    );
+    expect(labels.slice(0, 4)).toEqual(["Review journal", "Full chart", "Plan ready", "Details"]);
+    expect(errors).toEqual([]);
+  });
+
   test("market data provenance is visible across core workflow surfaces", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
@@ -455,7 +537,7 @@ test.describe("Mock workflow smoke", () => {
       return lists.find((list: { name: string }) => list.name === "Launch Flow QA");
     });
     const watchlistUrl = `/watchlist?id=${launchWatchlist.id}&symbol=${encodeURIComponent(symbol)}`;
-    await page.getByRole("button", { name: /^Open chart$/ }).first().click();
+    await page.getByRole("button", { name: /^Full chart$/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/charts/${symbol}`), { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
     await expect(page.getByTestId("chart-scanner-context")).toContainText(/Original scan|Trend Template/i, { timeout: 15_000 });
@@ -741,11 +823,14 @@ test.describe("Mock workflow smoke", () => {
     await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.66);
     await page.mouse.up();
 
-    await expect(page.getByRole("button", { name: /Send to desk/i })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole("button", { name: /Send to desk/i }).click();
-    await expect(page.getByText(/Confirm desk handoff/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /Send plan to Watchlist Desk/i })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: /Send plan to Watchlist Desk/i }).click();
+    await expect(page.getByText(/Plan Packet/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Confirm desk handoff/i)).toBeVisible();
     await expect(page.getByText("R:R 2.0", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: /^Send plan$/i }).click();
+    await expect(page.getByText(/Chart plan:/i)).toBeVisible();
+    await expect(page.getByText(/drawn stop below/i)).toBeVisible();
+    await page.getByRole("button", { name: /^Confirm handoff$/i }).click();
 
     await expect(page).toHaveURL(/\/watchlist\?symbol=AUBANK&id=desk-secondary&planDraft=chart/, { timeout: 15_000 });
     await expect(page.getByText(/Chart plan context loaded into Decision Desk/i)).toBeVisible({ timeout: 15_000 });
