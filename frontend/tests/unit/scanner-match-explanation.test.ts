@@ -50,7 +50,7 @@ describe("scanner match explanation", () => {
       { label: "Freshness", value: "2 days old", tone: "good" },
       { label: "Setup quality", value: "High confidence · A · 83", tone: "good" },
     ]));
-    expect(explanation.nextAction).toBe("Open chart and plan risk");
+    expect(explanation.nextAction).toBe("Open chart, then add to Watchlist");
   });
 
   it("falls back to active filters and chart confirmation when reason detail is missing", () => {

@@ -493,7 +493,7 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart, presetName
                 ))}
               </div>
             )}
-            <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-subtle)' }}>
+            <div data-testid={`scanner-next-action-${r.symbol}`} style={{ marginTop: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-subtle)' }}>
               <div className="label" style={{ marginBottom: 3 }}>Next action</div>
               <div className="caption" style={{ color: 'var(--text-secondary)' }}>{explanation.nextAction}</div>
             </div>
@@ -558,7 +558,7 @@ function ScannerRowActions({
   onReport: (symbol: string) => void
 }) {
   return (
-    <div className="scanner-row-actions">
+    <div className="scanner-row-actions" data-testid={`scanner-primary-actions-${result.symbol}`}>
       <button
         className="scanner-row-action scanner-row-action-primary"
         title={`Shortlist ${result.symbol}`}
@@ -567,13 +567,37 @@ function ScannerRowActions({
       >
         Shortlist
       </button>
+      {watchlists.length > 0 && (
+        <select
+          aria-label={`Add ${result.symbol} to watchlist`}
+          className="scanner-row-select scanner-watchlist-select"
+          onClick={e => e.stopPropagation()}
+          onChange={e => {
+            e.stopPropagation()
+            const watchlistId = e.target.value
+            e.target.value = ''
+            if (watchlistId) onAddToWatchlist(result.symbol, watchlistId)
+          }}
+        >
+          <option value="">Add to watchlist…</option>
+          {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+      )}
       <button
         className="scanner-row-action"
         title={`Open ${result.symbol} chart`}
         onClick={e => { e.stopPropagation(); onOpenChart(result.symbol) }}
         style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
       >
-        Chart
+        Open chart
+      </button>
+      <button
+        className="scanner-row-action"
+        title={`Review ${result.symbol} later`}
+        onClick={e => { e.stopPropagation(); onMark([result.symbol], 'review_later') }}
+        style={{ color: 'var(--warn)', cursor: 'pointer' }}
+      >
+        Review later
       </button>
       <select
         aria-label={`More actions for ${result.symbol}`}
@@ -583,19 +607,15 @@ function ScannerRowActions({
           e.stopPropagation()
           const action = e.target.value
           e.target.value = ''
-          if (action.startsWith('add:')) onAddToWatchlist(result.symbol, action.slice(4))
           if (action === 'ignore') onMark([result.symbol], 'ignored')
-          if (action === 'later') onMark([result.symbol], 'review_later')
           if (action === 'journal') window.location.assign(`/journal?symbol=${encodeURIComponent(result.symbol)}&review=needs-review`)
           if (action === 'report') onReport(result.symbol)
         }}
       >
         <option value="">More</option>
-        {watchlists.map(w => <option key={w.id} value={`add:${w.id}`}>Add to {w.name}</option>)}
+        <option value="journal">Review journal</option>
         <option value="ignore">Ignore</option>
-        <option value="later">Review later</option>
-        <option value="journal">Journal</option>
-        <option value="report">Report</option>
+        <option value="report">Report data</option>
       </select>
     </div>
   )
@@ -1424,7 +1444,7 @@ export default function ScannerPage() {
   const sectorStrength = useMemo(() => buildScannerSectorStrength(results).slice(0, 5), [results]);
   return (
     <div className="workspace-page">
-      <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
+      <div className="workspace-grid scanner-workspace-grid">
 
       {/* ── LEFT PANEL ── */}
       <div className="workspace-card workspace-card-muted" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1983,14 +2003,17 @@ export default function ScannerPage() {
                     Review chart structure first. Broker action stays journal-only until a plan is confirmed outside the scanner.
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button className="workspace-chip-button active" onClick={() => void openScannerChart(scannerWorkbenchResult)}>
-                      Open chart
+                    <button className="workspace-chip-button active" onClick={() => markWorkflow([scannerWorkbenchResult.symbol], 'shortlist')}>
+                      Shortlist
                     </button>
                     {watchlists[0] && (
                       <button className="workspace-chip-button" onClick={() => addToWatchlist(scannerWorkbenchResult.symbol, watchlists[0].id)}>
                         Add to {watchlists[0].name}
                       </button>
                     )}
+                    <button className="workspace-chip-button" onClick={() => void openScannerChart(scannerWorkbenchResult)}>
+                      Open chart
+                    </button>
                     <button className="workspace-chip-button" onClick={() => markWorkflow([scannerWorkbenchResult.symbol], 'review_later')}>
                       Review later
                     </button>
@@ -2001,7 +2024,7 @@ export default function ScannerPage() {
             <DataTable
               className="scanner-results-table"
               style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}
-              tableStyle={{ minWidth: 860, tableLayout: 'fixed' }}
+              tableStyle={{ minWidth: 980, tableLayout: 'fixed' }}
             >
               <DataTableHead>
                 <Th width={32}>
@@ -2016,7 +2039,7 @@ export default function ScannerPage() {
                 <Th align="right" width={50}>RS</Th>
                 <Th align="right" width={68}>52W H%</Th>
                 <Th align="right" width={66}>Score</Th>
-                <Th width={178}>Action</Th>
+                <Th width={268}>Action</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {

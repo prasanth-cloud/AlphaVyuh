@@ -603,7 +603,7 @@ test.describe("Mock workflow smoke", () => {
     expect(workflowMarks[ignoredSymbol]).toMatchObject({ lifecycle: "ignored", ignored: true, source: "scanner" });
     expect(workflowMarks[reviewSymbol]).toMatchObject({ lifecycle: "review_later", review_later: true, source: "scanner" });
 
-    await resultRows.nth(0).getByLabel(new RegExp(`More actions for ${shortlistSymbol}`)).selectOption({ label: "Add to Leaders" });
+    await resultRows.nth(0).getByLabel(new RegExp(`Add ${shortlistSymbol} to watchlist`)).selectOption({ label: "Leaders" });
     await expect(page.getByText(`${shortlistSymbol} added`)).toBeVisible({ timeout: 10_000 });
     await expect(resultRows.nth(0).getByText("Watching")).toBeVisible({ timeout: 10_000 });
     const leadersWatchlist = await page.evaluate(() => {

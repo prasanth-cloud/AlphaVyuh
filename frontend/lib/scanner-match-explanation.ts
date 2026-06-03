@@ -151,11 +151,11 @@ function classifyFreshness(
 
 function scannerNextAction(result: ScannerMatchResult, hasDataTrustWarning: boolean): string {
   if (hasDataTrustWarning || result.data_warnings?.length) return "Check data before planning";
-  if ((result.setup_score ?? 0) >= 80) return "Open chart and plan risk";
-  if ((result.setup_score ?? 0) >= 65) return "Review chart structure";
-  if (result.rsi_14 != null && result.rsi_14 > 78) return "Check extension risk";
-  if (result.week_52_high_pct != null && result.week_52_high_pct > 15) return "Wait for cleaner base";
-  return "Shortlist for review";
+  if ((result.setup_score ?? 0) >= 80) return "Open chart, then add to Watchlist";
+  if ((result.setup_score ?? 0) >= 65) return "Open chart to confirm structure";
+  if (result.rsi_14 != null && result.rsi_14 > 78) return "Review later until extension cools";
+  if (result.week_52_high_pct != null && result.week_52_high_pct > 15) return "Review later for a cleaner base";
+  return "Shortlist for Watchlist review";
 }
 
 export function buildScannerMatchExplanation(

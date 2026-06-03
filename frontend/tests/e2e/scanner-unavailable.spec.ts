@@ -127,7 +127,8 @@ test.describe("Scanner unavailable payloads", () => {
     await page.getByRole("button", { name: /^Run scan$/i }).click();
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Shortlist" })).toBeVisible();
-    await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Chart" })).toBeVisible();
+    await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Open chart" })).toBeVisible();
+    await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Review later" })).toBeVisible();
     await expect(page.locator(".scanner-row-actions").first().getByRole("combobox", { name: /More actions/i })).toBeVisible();
     await expect(page.locator(".scanner-row-actions").first().getByText(/Add to/i)).toHaveCount(0);
 

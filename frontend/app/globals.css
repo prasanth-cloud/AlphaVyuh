@@ -373,6 +373,10 @@ input, textarea, select {
   min-height: min(760px, calc(100vh - 260px));
 }
 
+.scanner-workspace-grid {
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+}
+
 .workspace-card {
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -671,9 +675,9 @@ input, textarea, select {
 .scanner-row-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 4px 5px;
+  flex-wrap: wrap;
   min-width: 0;
   max-width: 100%;
 }
@@ -688,6 +692,7 @@ input, textarea, select {
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .scanner-row-action-primary {
@@ -705,15 +710,17 @@ input, textarea, select {
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 
 .scanner-lifecycle-select,
 .scanner-more-select {
-  max-width: 58px;
+  max-width: 66px;
 }
 
 .scanner-watchlist-select {
-  max-width: 86px;
+  max-width: 118px;
+  min-width: 98px;
 }
 
 .scanner-results-table table {
@@ -989,6 +996,11 @@ input, textarea, select {
 }
 
 @media (max-width: 900px) {
+  .scanner-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+  }
+
   .app-auth-grid {
     grid-template-columns: 1fr;
   }
@@ -1100,7 +1112,7 @@ input, textarea, select {
 
   .scanner-row-actions {
     justify-content: flex-start;
-    min-width: 180px;
+    min-width: 238px;
   }
 
   .decision-desk-primary-grid,
