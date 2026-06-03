@@ -86,11 +86,65 @@ def test_yfinance_supplement_records_rate_limit_degradation(monkeypatch):
 
     assert result["status"] == "degraded"
     assert result["attempted"] == 3
+    assert result["total_symbols"] == 3
     assert result["success"] == 1
     assert result["failed"] == 2
+    assert result["stopped_reason"] is None
     assert result["rate_limited"] == 1
     assert result["failure_reasons"] == {"rate_limited": 1, "no_data": 1}
     assert result["failures"][0]["symbol"] == "ITC"
+    assert log.errors == []
+    assert log.warnings
+
+
+def test_yfinance_supplement_degrades_when_symbol_limit_is_bounded(monkeypatch):
+    from app.services import yfinance_ingest
+
+    monkeypatch.setattr(yfinance_ingest, "NSE_UNIVERSE", ["RELIANCE", "ITC", "AUBANK", "TCS"])
+    monkeypatch.setattr(daily_refresh.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        yfinance_ingest,
+        "fetch_and_ingest",
+        lambda symbol, period: {"symbol": symbol, "status": "success", "rows": 5},
+    )
+
+    log = daily_refresh.Logger("test-run")
+    result = daily_refresh.run_yfinance_top200(date(2026, 5, 29), log, limit=2)
+
+    assert result["status"] == "degraded"
+    assert result["attempted"] == 2
+    assert result["total_symbols"] == 4
+    assert result["success"] == 2
+    assert result["failed"] == 0
+    assert result["coverage_pct"] == 50.0
+    assert result["stopped_reason"] == "limit"
+    assert log.errors == []
+    assert log.warnings
+
+
+def test_yfinance_supplement_degrades_when_time_budget_is_reached(monkeypatch):
+    from app.services import yfinance_ingest
+
+    monkeypatch.setattr(yfinance_ingest, "NSE_UNIVERSE", ["RELIANCE", "ITC", "AUBANK", "TCS"])
+    monkeypatch.setattr(daily_refresh.time, "sleep", lambda _: None)
+    monkeypatch.setattr(
+        yfinance_ingest,
+        "fetch_and_ingest",
+        lambda symbol, period: {"symbol": symbol, "status": "success", "rows": 5},
+    )
+    ticks = iter([0.0, 0.0, 2.0])
+    monkeypatch.setattr(daily_refresh.time, "monotonic", lambda: next(ticks))
+
+    log = daily_refresh.Logger("test-run")
+    result = daily_refresh.run_yfinance_top200(date(2026, 5, 29), log, time_budget_s=1)
+
+    assert result["status"] == "degraded"
+    assert result["attempted"] == 1
+    assert result["total_symbols"] == 4
+    assert result["success"] == 1
+    assert result["failed"] == 0
+    assert result["coverage_pct"] == 25.0
+    assert result["stopped_reason"] == "time_budget"
     assert log.errors == []
     assert log.warnings
 
@@ -105,6 +159,7 @@ def test_supplemental_summary_surfaces_rs_and_yfinance_degradation():
         "yfinance": {
             "status": "degraded",
             "attempted": 200,
+            "total_symbols": 200,
             "success": 42,
             "failed": 158,
             "coverage_pct": 21,
@@ -128,6 +183,7 @@ def test_supplemental_summary_fails_when_yfinance_only_has_no_updates():
             "yfinance": {
                 "status": "failed",
                 "attempted": 200,
+                "total_symbols": 200,
                 "success": 0,
                 "failed": 200,
                 "coverage_pct": 0,
