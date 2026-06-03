@@ -253,7 +253,7 @@ test.describe("Signed-in smoke flow", () => {
     const firstSymbol = firstRowText?.trim().match(/^[A-Z0-9&-]+/)?.[0] ?? SMOKE_SYMBOL;
 
     await rows.first().click();
-    await expect(page.getByRole("button", { name: /Open chart/i })).toBeVisible();
+    await expect(page.getByTestId("watchlist-selected-actions").getByRole("button", { name: "Full chart", exact: true })).toBeVisible();
     await expect(page.locator(`text=${firstSymbol}`).first()).toBeVisible();
     await expectRealDataContext(page, "watchlist", /Latest session|Daily|as of|Data status|Market data/i);
 

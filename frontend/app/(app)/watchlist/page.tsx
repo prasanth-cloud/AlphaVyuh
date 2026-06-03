@@ -1274,6 +1274,7 @@ function WatchlistContent() {
   const appliedChartDrafts = useRef<Set<string>>(new Set());
   const pendingRouteSymbolRef = useRef<string | null>(null);
   const routeAutoAddAttempts = useRef<Set<string>>(new Set());
+  const chartSelectionModeRef = useRef<"auto" | "manual" | "route" | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -1366,6 +1367,21 @@ function WatchlistContent() {
     setTimeout(() => setToast(""), 3500);
   }
 
+  const selectManualSymbol = useCallback((symbol: string) => {
+    chartSelectionModeRef.current = "manual";
+    setChartSymbol(symbol);
+  }, []);
+
+  const selectRouteSymbol = useCallback((symbol: string) => {
+    chartSelectionModeRef.current = "route";
+    setChartSymbol(symbol);
+  }, []);
+
+  const clearAutoSymbol = useCallback(() => {
+    chartSelectionModeRef.current = null;
+    setChartSymbol(null);
+  }, []);
+
   function watchlistUnavailableMessage(): string {
     return WATCHLIST_DATA_UNAVAILABLE_MESSAGE;
   }
@@ -1384,10 +1400,10 @@ function WatchlistContent() {
     } catch {
       setWatchlistError(watchlistUnavailableMessage());
       setLoading(false);
-      if (requestedSymbol) setChartSymbol(requestedSymbol);
+      if (requestedSymbol) selectRouteSymbol(requestedSymbol);
       return;
     }
-    if (requestedSymbol) setChartSymbol(requestedSymbol);
+    if (requestedSymbol) selectRouteSymbol(requestedSymbol);
     setLoading(false);
 
     getWatchlists({ force: true })
@@ -1397,7 +1413,7 @@ function WatchlistContent() {
         if (enrichedLists.length > 0 && !activeId) {
           setActiveId(enrichedLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : enrichedLists[0].id);
         }
-        if (requestedSymbol) setChartSymbol(requestedSymbol);
+        if (requestedSymbol) selectRouteSymbol(requestedSymbol);
       })
       .catch(() => {
         setWatchlistError(watchlistUnavailableMessage());
@@ -1449,15 +1465,15 @@ function WatchlistContent() {
     const matchedRequestedSymbol = requestedSymbol && matched.items?.some((item) => item.symbol === requestedSymbol);
     if (requestedSymbol) {
       pendingRouteSymbolRef.current = requestedSymbol;
-      setChartSymbol(requestedSymbol);
+      selectRouteSymbol(requestedSymbol);
       trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: matched.id, source: "route" });
-    } else if (matched.items?.[0]?.symbol) {
-      setChartSymbol(matched.items[0].symbol);
+    } else {
+      clearAutoSymbol();
     }
     if (planDraftParam !== "chart" && (!requestedSymbol || matchedRequestedSymbol)) {
       router.replace("/watchlist", { scroll: false });
     }
-  }, [planDraftParam, symbolParam, watchlistIdParam, watchlists, router]);
+  }, [clearAutoSymbol, planDraftParam, selectRouteSymbol, symbolParam, watchlistIdParam, watchlists, router]);
 
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
@@ -1467,7 +1483,7 @@ function WatchlistContent() {
     for (const wl of watchlists) {
       if (wl.items?.some((i: WatchlistItem) => i.symbol === requestedSymbol)) {
         setActiveId(wl.id);
-        setChartSymbol(requestedSymbol);
+        selectRouteSymbol(requestedSymbol);
         trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: wl.id, source: "scanner_handoff" });
         found = true;
         break;
@@ -1487,17 +1503,17 @@ function WatchlistContent() {
             ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
             : { symbol: requestedSymbol, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
           setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...(w.items || []), newItem] } : w));
-          setChartSymbol(requestedSymbol);
+          selectRouteSymbol(requestedSymbol);
           trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         })
         .catch(() => {
-          setChartSymbol(requestedSymbol);
+          selectRouteSymbol(requestedSymbol);
           showToast(`${requestedSymbol} could not be added to the active watchlist. ${WATCHLIST_RECOVERY_MESSAGE}`);
           trackEvent("watchlist_symbol_focus_failed", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         });
     }
     if (planDraftParam !== "chart") router.replace("/watchlist", { scroll: false });
-  }, [planDraftParam, symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [planDraftParam, selectRouteSymbol, symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1715,16 +1731,11 @@ function WatchlistContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, pageSymbolsKey]);
 
-  useEffect(() => {
-    if (symbolParam || !visibleItems.length) return;
-    const selectedIsVisible = chartSymbol && visibleItems.some(item => item.symbol === chartSymbol);
-    if (!selectedIsVisible) setChartSymbol(visibleItems[0].symbol);
-  }, [chartSymbol, symbolParam, visibleItems]);
-
   const moveSelection = useCallback((direction: "prev" | "next") => {
     if (!visibleItems.length) return;
     const currentIndex = visibleItems.findIndex(item => item.symbol === chartSymbol);
     if (currentIndex === -1) {
+      chartSelectionModeRef.current = "manual";
       setChartSymbol(visibleItems[0].symbol);
       return;
     }
@@ -1733,26 +1744,36 @@ function WatchlistContent() {
       : Math.max(0, currentIndex - 1);
     const nextItem = visibleItems[nextIndex];
     if (nextItem) {
+      chartSelectionModeRef.current = "manual";
       setChartSymbol(nextItem.symbol);
     }
   }, [chartSymbol, visibleItems]);
 
   useEffect(() => {
     if (!visibleItems.length) {
-      setChartSymbol(null);
+      if (!symbolParam && !pendingRouteSymbolRef.current && chartSymbol !== null) {
+        clearAutoSymbol();
+      }
       return;
     }
+    const prioritySymbol = visibleItems[0].symbol;
     const hasSelectedSymbol = chartSymbol && visibleItems.some(item => item.symbol === chartSymbol);
     if (hasSelectedSymbol && pendingRouteSymbolRef.current === chartSymbol) {
       pendingRouteSymbolRef.current = null;
     }
-    if (!hasSelectedSymbol && (symbolParam?.toUpperCase() === chartSymbol || pendingRouteSymbolRef.current === chartSymbol)) {
+    if (chartSymbol && !hasSelectedSymbol && (symbolParam?.toUpperCase() === chartSymbol || pendingRouteSymbolRef.current === chartSymbol)) {
       return;
     }
     if (!hasSelectedSymbol) {
-      setChartSymbol(visibleItems[0].symbol);
+      chartSelectionModeRef.current = "auto";
+      setChartSymbol(prioritySymbol);
+      return;
     }
-  }, [activeId, chartSymbol, symbolParam, visibleItems]);
+    if (!symbolParam && (chartSelectionModeRef.current === null || chartSelectionModeRef.current === "auto") && chartSymbol !== prioritySymbol) {
+      chartSelectionModeRef.current = "auto";
+      setChartSymbol(prioritySymbol);
+    }
+  }, [activeId, chartSymbol, clearAutoSymbol, symbolParam, visibleItems]);
 
   useEffect(() => {
     setQueuePage(0);
@@ -1804,7 +1825,7 @@ function WatchlistContent() {
       const remaining = watchlists.filter(w => w.id !== id);
       setWatchlists(remaining);
       if (activeId === id) setActiveId(remaining[0]?.id ?? null);
-      if (chartSymbol) setChartSymbol(null);
+      if (chartSymbol) clearAutoSymbol();
     } catch {
       showToast(WATCHLIST_DELETE_FAILED_MESSAGE);
     }
@@ -1816,6 +1837,7 @@ function WatchlistContent() {
       const wl = await createWatchlist(newWlName.trim());
       setWatchlists(prev => [...prev, { ...wl, items: [] }]);
       setActiveId(wl.id);
+      clearAutoSymbol();
       setNewWlName("");
       setShowNewWl(false);
     } catch {
@@ -1863,7 +1885,7 @@ function WatchlistContent() {
       const quote = await getQuote(symbol);
       const newItem = watchlistItemFromQuote(symbol, quote, activeWl?.items.length ?? 0);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
-      setChartSymbol(symbol);
+      selectManualSymbol(symbol);
       setSymbolInput("");
       setAddMsg("Added");
     } catch (e: unknown) {
@@ -1897,7 +1919,7 @@ function WatchlistContent() {
 
       if (newItems.length) {
         setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
-        setChartSymbol(newItems[0].symbol);
+        selectManualSymbol(newItems[0].symbol);
       }
       if (failureCount) {
         const message = newItems.length ? `Added ${newItems.length}; ${failureCount} could not be added. ${WATCHLIST_RECOVERY_MESSAGE}` : WATCHLIST_STARTER_FAILED_MESSAGE;
@@ -1947,7 +1969,7 @@ function WatchlistContent() {
 
       if (newItems.length) {
         setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
-        setChartSymbol(newItems[0].symbol);
+        selectManualSymbol(newItems[0].symbol);
       }
 
       const parts = [
@@ -1986,7 +2008,7 @@ function WatchlistContent() {
       const quote = await getQuote(sym);
       const newItem = watchlistItemFromQuote(sym, quote, activeWl?.items.length ?? 0);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
-      setChartSymbol(sym);
+      selectManualSymbol(sym);
       setSymbolInput("");
       setAddMsg("Added");
     } catch (e: unknown) {
@@ -2004,7 +2026,7 @@ function WatchlistContent() {
       setWatchlists(prev =>
         prev.map(w => w.id === activeId ? { ...w, items: w.items.filter(i => i.symbol !== symbol) } : w)
       );
-      if (chartSymbol === symbol) setChartSymbol(null);
+      if (chartSymbol === symbol) clearAutoSymbol();
     } catch {
       showToast(watchlistRemoveFailedMessage(symbol));
     }
@@ -2124,7 +2146,10 @@ function WatchlistContent() {
 
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
-      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
+      <div
+        className="workspace-grid watchlist-workspace-grid"
+        style={{ gridTemplateColumns: sidebarCollapsed ? "var(--watchlist-grid-columns-collapsed)" : "var(--watchlist-grid-columns)", minHeight: "calc(100vh - 104px)" }}
+      >
       {/* Toast */}
       {toast && (
         <div data-testid="watchlist-toast" style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
@@ -2134,7 +2159,7 @@ function WatchlistContent() {
 
       {/* ── Watchlist tabs sidebar ─── */}
       {sidebarCollapsed ? (
-        <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
+        <div className="workspace-card workspace-card-muted watchlist-sidebar-panel" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
           <button onClick={() => setSidebarCollapsed(false)} style={{ color: "var(--text-tertiary)" }}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
               <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2146,6 +2171,7 @@ function WatchlistContent() {
                 key={wl.id}
                 onClick={() => {
                   setActiveId(wl.id);
+                  clearAutoSymbol();
                   setSidebarCollapsed(false);
                 }}
                 title={wl.name}
@@ -2157,7 +2183,7 @@ function WatchlistContent() {
           </div>
         </div>
       ) : (
-        <aside className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <aside className="workspace-card workspace-card-muted watchlist-sidebar-panel" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <div className="workspace-card-header" style={{ padding: "14px 14px" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Watchlists</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2210,7 +2236,10 @@ function WatchlistContent() {
                 const active = activeId === wl.id;
                 return (
                   <div key={wl.id} style={{ position: "relative", display: "flex", alignItems: "center" }} className="wl-item">
-                    <button onClick={() => setActiveId(wl.id)}
+                    <button onClick={() => {
+                      setActiveId(wl.id);
+                      clearAutoSymbol();
+                    }}
                       style={{
                         flex: 1, textAlign: "left", padding: "8px 14px", fontSize: 13, cursor: "pointer",
                         background: active ? "var(--accent-subtle)" : "transparent",
@@ -2244,7 +2273,7 @@ function WatchlistContent() {
       )}
 
       {/* ── Stock list ─────────────────────────────────────── */}
-      <div className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="workspace-card workspace-card-muted watchlist-list-panel" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Header */}
         <div className="workspace-card-header" style={{ paddingBottom: 10, flexShrink: 0 }}>
           <div>
@@ -2351,13 +2380,19 @@ function WatchlistContent() {
                     {selectedItem.company_name || selectedItem.sector || "Active watchlist symbol"}
                   </div>
                 </div>
-                <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-                  <button className="workspace-chip-button" onClick={() => router.push(chartHref(selectedItem.symbol))}>
-                    Open chart
-                  </button>
+                <div data-testid="watchlist-selected-actions" className="workspace-pill-row" style={{ marginTop: 0 }}>
                   <button className="workspace-chip-button" onClick={() => router.push(`/journal?symbol=${selectedItem.symbol}`)}>
                     Review journal
                   </button>
+                  <button className="workspace-chip-button" onClick={() => router.push(chartHref(selectedItem.symbol))}>
+                    Full chart
+                  </button>
+                  <span
+                    className={`workspace-pill${selectedPlanStatus.valid ? " active" : ""}`}
+                    title={selectedPlanStatus.valid ? "Plan ready" : selectedPlanStatus.next}
+                  >
+                    {selectedPlanStatus.valid ? "Plan ready" : selectedPlanStatus.next}
+                  </span>
                   <button className={`workspace-chip-button${showSelectedMeta ? " active" : ""}`} onClick={() => setShowSelectedMeta((current) => !current)}>
                     {showSelectedMeta ? "Hide details" : "Details"}
                   </button>
@@ -2688,7 +2723,7 @@ function WatchlistContent() {
                           reviewState={symbolReviewMap.get(item.symbol)?.state}
                           triage={triage}
                           onRemove={handleRemove}
-                          onSelect={setChartSymbol}
+                          onSelect={selectManualSymbol}
                           onOpenChart={(sym) => router.push(chartHref(sym))}
                           dense={denseRows}
                         />
@@ -2722,7 +2757,7 @@ function WatchlistContent() {
                         reviewState={symbolReviewMap.get(item.symbol)?.state}
                       triage={triage}
                       onRemove={handleRemove}
-                      onSelect={setChartSymbol}
+                      onSelect={selectManualSymbol}
                       onOpenChart={(sym) => router.push(chartHref(sym))}
                       dense={denseRows}
                     />
@@ -2770,7 +2805,7 @@ function WatchlistContent() {
       </div>
 
       {/* ── Chart + order panel ─────────────────────────────── */}
-      <div className="workspace-card" style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div className="workspace-card watchlist-chart-panel" style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {chartSymbol ? (
           <>
             <div style={{ flex: 1, minHeight: 0 }}>

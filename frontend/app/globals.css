@@ -820,6 +820,11 @@ input, textarea, select {
   gap: 8px;
 }
 
+.watchlist-workspace-grid {
+  --watchlist-grid-columns: 252px 360px minmax(0, 1fr);
+  --watchlist-grid-columns-collapsed: 48px 360px minmax(0, 1fr);
+}
+
 .order-ticket-header {
   display: flex;
   align-items: flex-start;
@@ -1164,6 +1169,29 @@ input, textarea, select {
   .watchlist-chart-stats,
   .watchlist-chart-details {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .watchlist-workspace-grid {
+    grid-template-columns: 1fr !important;
+    min-height: auto !important;
+  }
+
+  .watchlist-list-panel {
+    order: 1;
+    min-height: auto;
+  }
+
+  .watchlist-chart-panel {
+    order: 2;
+    min-height: 680px;
+  }
+
+  .watchlist-sidebar-panel {
+    order: 3;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 260px;
+    overflow: auto;
   }
 }
 
