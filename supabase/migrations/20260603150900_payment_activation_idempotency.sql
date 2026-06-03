@@ -24,8 +24,90 @@ alter table public.payment_logs
   add column if not exists billing text check (billing in ('monthly', 'annual', 'access_code')),
   add column if not exists status text not null default 'success',
   add column if not exists plan_expires_at timestamptz,
+  add column if not exists created_at timestamptz not null default now(),
+  alter column amount set default 0,
+  alter column currency set default 'INR',
+  alter column status set default 'success';
+
+update public.payment_logs
+set
+  razorpay_order_id = coalesce(nullif(razorpay_order_id, ''), 'legacy-' || id::text),
+  razorpay_payment_id = coalesce(nullif(razorpay_payment_id, ''), 'legacy-' || id::text),
+  plan = case when plan in ('pro', 'elite') then plan else 'pro' end,
+  amount = case when amount is null or amount < 0 then 0 else amount end,
+  currency = case when currency in ('INR', 'USD') then currency else 'INR' end,
+  status = coalesce(nullif(status, ''), 'success'),
+  created_at = coalesce(created_at, now());
+
+with duplicate_payments as (
+  select
+    id,
+    razorpay_payment_id,
+    row_number() over (
+      partition by razorpay_payment_id
+      order by created_at desc nulls last, id desc
+    ) as duplicate_rank
+  from public.payment_logs
+  where razorpay_payment_id not like 'access-%'
+)
+update public.payment_logs p
+set razorpay_payment_id = p.razorpay_payment_id || '-legacy-' || p.id::text
+from duplicate_payments d
+where p.id = d.id
+  and d.duplicate_rank > 1;
+
+alter table public.payment_logs
   alter column razorpay_payment_id set not null,
-  alter column razorpay_order_id set not null;
+  alter column razorpay_order_id set not null,
+  alter column plan set not null,
+  alter column amount set not null,
+  alter column currency set not null,
+  alter column status set not null,
+  alter column created_at set not null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.payment_logs'::regclass
+      and conname = 'payment_logs_plan_check'
+  ) then
+    alter table public.payment_logs
+      add constraint payment_logs_plan_check check (plan in ('pro', 'elite')) not valid;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.payment_logs'::regclass
+      and conname = 'payment_logs_amount_check'
+  ) then
+    alter table public.payment_logs
+      add constraint payment_logs_amount_check check (amount >= 0) not valid;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.payment_logs'::regclass
+      and conname = 'payment_logs_currency_check'
+  ) then
+    alter table public.payment_logs
+      add constraint payment_logs_currency_check check (currency in ('INR','USD')) not valid;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.payment_logs'::regclass
+      and conname = 'payment_logs_billing_check'
+  ) then
+    alter table public.payment_logs
+      add constraint payment_logs_billing_check check (billing in ('monthly', 'annual', 'access_code')) not valid;
+  end if;
+end $$;
+
+alter table public.payment_logs validate constraint payment_logs_plan_check;
+alter table public.payment_logs validate constraint payment_logs_amount_check;
+alter table public.payment_logs validate constraint payment_logs_currency_check;
+alter table public.payment_logs validate constraint payment_logs_billing_check;
 
 create unique index if not exists idx_payment_logs_razorpay_payment_id
   on public.payment_logs (razorpay_payment_id)
