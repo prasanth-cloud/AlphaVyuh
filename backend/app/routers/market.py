@@ -277,7 +277,7 @@ async def live_market_stream(
     async def events():
         subscriber = None
         try:
-            subscriber = await kite_live_ticker.subscribe(requested, mode=stream_mode)
+            subscriber = await kite_live_ticker.subscribe(requested, mode=stream_mode, user_id=user_id)
             yield _sse("ready", {"provider": "kite_ws", "symbols": requested, "mode": stream_mode})
             while True:
                 try:

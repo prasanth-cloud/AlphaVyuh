@@ -312,6 +312,21 @@ def test_scan_alerts_migration_defines_rls_and_unique_snapshot_constraint():
     assert "auth.uid() = user_id" in sql
 
 
+def test_scan_alert_matches_rls_requires_owned_parent_alert():
+    sql = " ".join(
+        (REPO_ROOT / "supabase/migrations/20260603140800_enforce_scan_alert_match_parent_rls.sql")
+        .read_text()
+        .lower()
+        .split()
+    )
+
+    assert 'drop policy if exists "users manage own scan_alert_matches" on public.scan_alert_matches' in sql
+    assert 'create policy "users manage own scan_alert_matches" on public.scan_alert_matches for all' in sql
+    assert "auth.uid() = user_id and exists" in sql
+    assert "from public.scan_alerts a where a.id = scan_alert_matches.alert_id and a.user_id = auth.uid()" in sql
+    assert sql.count("from public.scan_alerts a where a.id = scan_alert_matches.alert_id") == 2
+
+
 def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypatch):
     fake_client = _FakeClient()
     calls = []

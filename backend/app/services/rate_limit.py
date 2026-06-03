@@ -66,9 +66,8 @@ plan_cache      = PlanCache(ttl=60.0)
 
 def client_rate_key(request, scope: str) -> str:
     """Build a coarse per-client key for public route protection."""
-    forwarded = getattr(request, "headers", {}).get("x-forwarded-for", "")
-    client_ip = forwarded.split(",", 1)[0].strip()
-    if not client_ip:
-        client = getattr(request, "client", None)
-        client_ip = getattr(client, "host", None) or "unknown"
+    # Public clients can spoof X-Forwarded-For unless the deployment proxy
+    # overwrites it. Prefer the ASGI client address for provider-backed routes.
+    client = getattr(request, "client", None)
+    client_ip = getattr(client, "host", None) or "unknown"
     return f"{scope}:{client_ip}"

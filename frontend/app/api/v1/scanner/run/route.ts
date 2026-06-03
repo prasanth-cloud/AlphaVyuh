@@ -2,9 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { runRecoveryScanner } from "@/lib/server/recovery-market-data";
 
 export const runtime = "nodejs";
+const MAX_RECOVERY_SCANNER_BODY_BYTES = 32_768;
 
 export async function POST(request: NextRequest) {
   try {
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (contentLength > MAX_RECOVERY_SCANNER_BODY_BYTES) {
+      return NextResponse.json(
+        {
+          status: "unavailable",
+          mode: "unavailable",
+          detail: "Scanner recovery request is too large.",
+        },
+        { status: 413 },
+      );
+    }
+
     const body = await request.json().catch(() => ({}));
     const payload = await runRecoveryScanner({
       filters: body?.filters ?? {},

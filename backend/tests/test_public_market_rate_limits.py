@@ -24,10 +24,10 @@ class _FakeRequest:
             self.headers["x-forwarded-for"] = forwarded_for
 
 
-def test_client_rate_key_prefers_forwarded_for_first_ip():
+def test_client_rate_key_ignores_spoofable_forwarded_for():
     request = _FakeRequest(host="10.0.0.2", forwarded_for="203.0.113.10, 10.0.0.2")
 
-    assert client_rate_key(request, "quote-live") == "quote-live:203.0.113.10"
+    assert client_rate_key(request, "quote-live") == "quote-live:10.0.0.2"
 
 
 def test_quote_live_rate_limit_blocks_before_provider_call(monkeypatch):
