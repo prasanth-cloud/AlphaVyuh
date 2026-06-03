@@ -498,7 +498,8 @@ export async function bulkUpsertWorkflowStates(patches: WorkflowStatePatch[]): P
 export async function getMarketSummary(): Promise<MarketSummary | null> {
   if (shouldUseMockFallback()) return mockMarketSummary();
   try {
-    const res = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/market/summary`, { headers });
     if (!res.ok) return shouldUseMockFallback() ? mockMarketSummary() : null;
     const data = await res.json();
     const unavailableMessage = unavailablePayloadMessage(data, "Market summary is temporarily unavailable.");
@@ -793,7 +794,8 @@ export async function getCandles(
   if (shouldUseMockFallback()) return cachedClientRequest(cacheKey, 60_000, async () => mockCandles(sym, params?.timeframe, params?.limit));
   return cachedClientRequest(cacheKey, 60_000, async () => {
     try {
-      const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers: publicHeaders });
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers });
       if (!res.ok) {
         if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
         const text = await res.text().catch(() => "");
@@ -828,9 +830,10 @@ export async function getIndicators(
   if (shouldUseMockFallback()) return cachedClientRequest(cacheKey, 60_000, async () => mockIndicators(sym));
   return cachedClientRequest(cacheKey, 60_000, async () => {
     try {
+      const headers = await authHeaders();
       const res = await fetch(
         `${API}/api/v1/charts/${sym}/indicators?indicators=${cleanIndicators.join(",")}&timeframe=${timeframe}`,
-        { headers: publicHeaders }
+        { headers }
       );
       if (!res.ok) {
         if (shouldUseMockFallback()) return mockIndicators(sym);
@@ -2691,7 +2694,7 @@ export async function getMarketOverview(): Promise<MarketOverview> {
 
     // Legacy fallback: compose from public endpoints so dashboard still renders
     // sector and EMA breadth if the authenticated overview endpoint is blocked.
-    const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
+    const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers });
     if (!legacyRes.ok) throw new Error("Failed to fetch market overview");
     const s: MarketSummary = await legacyRes.json();
     const unavailableMessage = unavailablePayloadMessage(s, "Market summary is temporarily unavailable.");

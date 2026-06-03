@@ -55,6 +55,21 @@ def _lookup_market(sym: str) -> tuple[str, str]:
     return ("NSE", "INR")
 
 
+def _lookup_fundamentals_market(sym: str) -> tuple[str, str]:
+    """Return market metadata only for known active symbols before provider calls."""
+    try:
+        r = get_admin_client().table("stock_universe") \
+            .select("market,currency").eq("symbol", sym).eq("is_active", True).maybe_single().execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Fundamentals are temporarily unavailable.",
+        )
+    if not r or not r.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Symbol not found")
+    return (r.data.get("market") or "NSE", r.data.get("currency") or "INR")
+
+
 def _yf_ticker_symbol(sym: str, market: str) -> str:
     """Yahoo Finance uses .NS suffix for NSE stocks, bare symbol for US."""
     return yf_ticker_symbol(sym, market)
@@ -535,7 +550,7 @@ async def get_sector_breadth():
 
 
 @router.get("/stocks/{symbol}/fundamentals")
-async def get_fundamentals(symbol: str):
+async def get_fundamentals(symbol: str, request: Request):
     """Basic fundamentals from Yahoo Finance: PE, market cap, P/B, dividend yield, EPS etc."""
     sym = _normalize_public_symbol(symbol)
     now = time.time()
@@ -544,8 +559,9 @@ async def get_fundamentals(symbol: str):
         cached_at, cached_data = _fund_cache[sym]
         if now - cached_at < _FUND_TTL:
             return cached_data
+    _enforce_public_market_limit(request, "fundamentals")
     try:
-        market, currency = _lookup_market(sym)
+        market, currency = _lookup_fundamentals_market(sym)
         ticker = yf.Ticker(_yf_ticker_symbol(sym, market))
         info = ticker.info
 

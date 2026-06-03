@@ -78,21 +78,31 @@ describe("recovery market data guards", () => {
   });
 
   it("rejects oversized scanner recovery request bodies before reading Supabase", async () => {
-    const { POST } = await import("@/app/api/v1/scanner/run/route");
-    const response = await POST(new Request("https://alphavyuh.test/api/v1/scanner/run", {
+    const { RecoveryScannerBodyTooLargeError, readBoundedRecoveryScannerBody } = await import("@/lib/server/recovery-scanner-body");
+
+    const request = new Request("https://alphavyuh.test/api/v1/scanner/run", {
       method: "POST",
       headers: {
         "content-length": String(32_769),
         "content-type": "application/json",
       },
-      body: JSON.stringify({ filters: {} }),
-    }) as never);
-
-    expect(response.status).toBe(413);
-    await expect(response.json()).resolves.toMatchObject({
-      status: "unavailable",
-      mode: "unavailable",
-      detail: "Scanner recovery request is too large.",
+      body: JSON.stringify({ filters: { note: "x".repeat(32_769) } }),
     });
+
+    await expect(readBoundedRecoveryScannerBody(request)).rejects.toBeInstanceOf(RecoveryScannerBodyTooLargeError);
+  });
+
+  it("rejects oversized scanner recovery request bodies without trusting content-length", async () => {
+    const { RecoveryScannerBodyTooLargeError, readBoundedRecoveryScannerBody } = await import("@/lib/server/recovery-scanner-body");
+
+    const request = new Request("https://alphavyuh.test/api/v1/scanner/run", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ filters: { note: "x".repeat(32_769) } }),
+    });
+
+    await expect(readBoundedRecoveryScannerBody(request)).rejects.toBeInstanceOf(RecoveryScannerBodyTooLargeError);
   });
 });

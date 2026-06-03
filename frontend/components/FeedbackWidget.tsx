@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { createFeedbackReport } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
+import { currentFeedbackHref } from "@/lib/feedback-context";
 
 type FeedbackWidgetProps = {
   defaultCategory?: "general" | "bug" | "data_issue" | "feature_request";
@@ -34,7 +35,7 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
         severity: category === "data_issue" || category === "bug" ? "high" : "normal",
         message: text,
         context: {
-          href: typeof window !== "undefined" ? window.location.href : pathname,
+          href: currentFeedbackHref(pathname),
           user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
         },
       });

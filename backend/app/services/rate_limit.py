@@ -61,6 +61,8 @@ class PlanCache:
 scanner_limiter = RateLimiter(max_calls=30, period=60.0)   # 30 scans/minute per user
 ai_limiter      = RateLimiter(max_calls=5,  period=300.0)  # 5 trade-review calls per 5 min per user
 public_market_limiter = RateLimiter(max_calls=120, period=60.0)  # Provider-backed public quotes/candles
+market_live_limiter = RateLimiter(max_calls=30, period=60.0)  # Authenticated provider-backed live status/sectors
+public_options_limiter = RateLimiter(max_calls=60, period=60.0)  # Public options calculators
 plan_cache      = PlanCache(ttl=60.0)
 
 

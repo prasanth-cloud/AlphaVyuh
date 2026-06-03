@@ -130,27 +130,39 @@ def _activate_paid_plan(
     razorpay_payment_id: str,
 ) -> dict:
     meta = PLAN_PRICES[(plan, currency, billing)]
-    expires_at = (datetime.now(timezone.utc) + timedelta(days=meta["days"])).isoformat()
 
     sb = get_admin_client()
-    sb.table("users").update({
-        "plan": plan,
-        "plan_expires_at": expires_at,
-        "billing_currency": currency,
-        "billing_period": billing,
-    }).eq("id", user_id).execute()
+    try:
+        result = sb.rpc("activate_razorpay_payment", {
+            "p_user_id": user_id,
+            "p_plan": plan,
+            "p_currency": currency,
+            "p_billing": billing,
+            "p_razorpay_order_id": razorpay_order_id,
+            "p_razorpay_payment_id": razorpay_payment_id,
+            "p_amount": meta["amount"],
+            "p_plan_days": meta["days"],
+        }).execute()
+    except Exception as exc:
+        logger.error("Razorpay payment activation RPC failed: %s", exc)
+        raise HTTPException(500, "Payment activation is temporarily unavailable") from exc
 
-    sb.table("payment_logs").insert({
-        "user_id": user_id,
-        "razorpay_order_id": razorpay_order_id,
-        "razorpay_payment_id": razorpay_payment_id,
-        "plan": plan,
-        "amount": meta["amount"],
-        "currency": currency,
-        "status": "success",
-    }).execute()
+    data = result.data
+    row = data[0] if isinstance(data, list) and data else data if isinstance(data, dict) else None
+    if not row:
+        raise HTTPException(500, "Payment activation is temporarily unavailable")
 
-    return {"status": "success", "plan": plan, "expires_at": expires_at, "currency": currency, "billing": billing}
+    expires_at = row.get("expires_at") or row.get("plan_expires_at")
+    if hasattr(expires_at, "isoformat"):
+        expires_at = expires_at.isoformat()
+    return {
+        "status": row.get("status") or "success",
+        "plan": row.get("plan") or plan,
+        "expires_at": expires_at,
+        "currency": row.get("currency") or currency,
+        "billing": row.get("billing") or billing,
+        "replayed": bool(row.get("replayed")),
+    }
 
 
 # ── Create Order ──────────────────────────────────────────────────────────────

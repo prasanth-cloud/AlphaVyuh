@@ -46,3 +46,22 @@ def test_waitlist_feedback_row_preserves_report_context():
     assert report["message"] == "52 week high scanner is empty"
     assert report["status"] == "triaged"
     assert report["context"]["email"] == "user@example.com"
+
+
+def test_feedback_context_redacts_broker_callback_secrets():
+    context = {
+        "href": "https://www.alphavyuh.com/broker/callback?broker=zerodha&request_token=rt_123&state=oauth-state&code=code_123",
+        "nested": {
+            "access_token": "access-secret",
+            "safe": "kept",
+        },
+    }
+
+    sanitized = feedback._sanitize_feedback_context(context)
+
+    assert sanitized["href"] == (
+        "https://www.alphavyuh.com/broker/callback?"
+        "broker=zerodha&request_token=%5Bredacted%5D&state=%5Bredacted%5D&code=%5Bredacted%5D"
+    )
+    assert sanitized["nested"]["access_token"] == "[redacted]"
+    assert sanitized["nested"]["safe"] == "kept"

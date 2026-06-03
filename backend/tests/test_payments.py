@@ -358,6 +358,44 @@ class _ActivationClient:
         return _ActivationQuery(self, table_name)
 
 
+class _ActivationRpcQuery:
+    def __init__(self, client, name: str, params: dict):
+        self.client = client
+        self.name = name
+        self.params = params
+
+    def execute(self):
+        assert self.name == "activate_razorpay_payment"
+        self.client.rpc_calls.append((self.name, self.params))
+        payment_id = self.params["p_razorpay_payment_id"]
+        if payment_id in self.client.payment_rows:
+            row = dict(self.client.payment_rows[payment_id])
+            row["replayed"] = True
+            return _FakeResult([row])
+
+        self.client.activations += 1
+        row = {
+            "status": "success",
+            "plan": self.params["p_plan"],
+            "expires_at": f"expires-{self.client.activations}",
+            "currency": self.params["p_currency"],
+            "billing": self.params["p_billing"],
+            "replayed": False,
+        }
+        self.client.payment_rows[payment_id] = dict(row)
+        return _FakeResult([row])
+
+
+class _ActivationRpcClient:
+    def __init__(self):
+        self.rpc_calls = []
+        self.payment_rows = {}
+        self.activations = 0
+
+    def rpc(self, name: str, params: dict):
+        return _ActivationRpcQuery(self, name, params)
+
+
 class _OrderApi:
     def __init__(self, order):
         self.order = order
@@ -413,7 +451,7 @@ def test_webhook_activates_from_fetched_order_not_payment_notes(monkeypatch):
     body = json.dumps(payload, separators=(",", ":")).encode()
     secret = "webhook-secret"
     signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    client = _ActivationClient()
+    client = _ActivationRpcClient()
 
     monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
     monkeypatch.setattr(payments.settings, "razorpay_webhook_secret", secret)
@@ -423,13 +461,74 @@ def test_webhook_activates_from_fetched_order_not_payment_notes(monkeypatch):
     result = asyncio.run(payments.razorpay_webhook(_WebhookRequest(body, signature)))
 
     assert result == {"status": "ok"}
-    assert client.updates[0][0] == "users"
-    assert client.updates[0][1]["plan"] == "pro"
-    assert client.updates[0][1]["billing_currency"] == "INR"
-    assert client.updates[0][2] == ("id", "user-123")
-    assert client.inserts[0][1]["user_id"] == "user-123"
-    assert client.inserts[0][1]["razorpay_payment_id"] == "pay_123"
-    assert client.inserts[0][1]["amount"] == payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"]
+    assert client.activations == 1
+    assert client.rpc_calls[0][1]["p_user_id"] == "user-123"
+    assert client.rpc_calls[0][1]["p_plan"] == "pro"
+    assert client.rpc_calls[0][1]["p_currency"] == "INR"
+    assert client.rpc_calls[0][1]["p_razorpay_payment_id"] == "pay_123"
+    assert client.rpc_calls[0][1]["p_amount"] == payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"]
+
+
+@pytest.mark.anyio
+async def test_verify_payment_replay_returns_existing_activation_without_extension(monkeypatch):
+    order = _razorpay_order(user_id="user-123", plan="pro", currency="INR", billing="monthly")
+    payment = {
+        "id": "pay_replay",
+        "order_id": order["id"],
+        "amount": payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "status": "captured",
+    }
+    secret = "verify-secret"
+    signature = hmac.new(secret.encode(), f"{order['id']}|{payment['id']}".encode(), hashlib.sha256).hexdigest()
+    client = _ActivationRpcClient()
+
+    monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+    monkeypatch.setattr(payments.settings, "razorpay_key_secret", secret)
+    monkeypatch.setattr(payments, "_rzp_client", lambda: _RazorpayClient(order, payment))
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    body = payments.VerifyRequest(
+        razorpay_order_id=order["id"],
+        razorpay_payment_id=payment["id"],
+        razorpay_signature=signature,
+        plan="elite",
+        currency="USD",
+        billing="annual",
+    )
+
+    first = await payments.verify_payment(body, user_id="user-123")
+    second = await payments.verify_payment(body, user_id="user-123")
+
+    assert first["replayed"] is False
+    assert second["replayed"] is True
+    assert second["expires_at"] == first["expires_at"]
+    assert client.activations == 1
+
+
+def test_webhook_replay_returns_ok_without_second_activation(monkeypatch):
+    order = _razorpay_order(user_id="user-123", plan="pro", currency="INR", billing="monthly")
+    payment = {
+        "id": "pay_webhook_replay",
+        "order_id": order["id"],
+        "amount": payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "status": "captured",
+    }
+    payload = {"event": "payment.captured", "payload": {"payment": {"entity": payment}}}
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    secret = "webhook-secret"
+    signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    client = _ActivationRpcClient()
+
+    monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+    monkeypatch.setattr(payments.settings, "razorpay_webhook_secret", secret)
+    monkeypatch.setattr(payments, "_rzp_client", lambda: _RazorpayClient(order))
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    assert asyncio.run(payments.razorpay_webhook(_WebhookRequest(body, signature))) == {"status": "ok"}
+    assert asyncio.run(payments.razorpay_webhook(_WebhookRequest(body, signature))) == {"status": "ok"}
+    assert client.activations == 1
 
 
 def test_effective_plan_helper_treats_expired_paid_rows_as_free():

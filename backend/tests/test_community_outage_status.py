@@ -19,14 +19,18 @@ class _SharedScreensQuery:
     def __init__(self, data=None, fail=False):
         self.data = data if data is not None else []
         self.fail = fail
+        self.selected = None
+        self.limit_value = None
 
-    def select(self, *_args, **_kwargs):
+    def select(self, columns, **_kwargs):
+        self.selected = columns
         return self
 
     def order(self, *_args, **_kwargs):
         return self
 
-    def limit(self, *_args, **_kwargs):
+    def limit(self, value, **_kwargs):
+        self.limit_value = value
         return self
 
     def eq(self, *_args, **_kwargs):
@@ -42,10 +46,12 @@ class _SharedScreensClient:
     def __init__(self, data=None, fail=False):
         self.data = data
         self.fail = fail
+        self.query = None
 
     def table(self, table_name):
         assert table_name == "shared_screens"
-        return _SharedScreensQuery(self.data, self.fail)
+        self.query = _SharedScreensQuery(self.data, self.fail)
+        return self.query
 
 
 def test_list_shared_screens_returns_enveloped_empty_list(monkeypatch):
@@ -56,9 +62,12 @@ def test_list_shared_screens_returns_enveloped_empty_list(monkeypatch):
 
 def test_list_shared_screens_returns_enveloped_rows(monkeypatch):
     rows = [{"id": "screen-1", "title": "VCP leaders", "upvotes": 3}]
-    monkeypatch.setattr(community, "get_admin_client", lambda: _SharedScreensClient(data=rows))
+    client = _SharedScreensClient(data=rows)
+    monkeypatch.setattr(community, "get_admin_client", lambda: client)
 
     assert asyncio.run(community.list_shared_screens(limit=10, featured=True)) == {"screens": rows}
+    assert client.query.limit_value == 10
+    assert client.query.selected == "id,screen_id,title,description,tags,upvotes,is_featured,created_at"
 
 
 def test_list_shared_screens_raises_503_when_store_query_fails(monkeypatch):

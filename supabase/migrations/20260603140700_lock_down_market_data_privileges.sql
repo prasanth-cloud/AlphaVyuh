@@ -2,7 +2,8 @@
 --
 -- Public roles may read market-data tables/views used by public charts,
 -- scanners, and recovery surfaces. Market-data writes and mutating definer RPCs
--- stay service-role only.
+-- stay service-role only. Operational ingest logs and health internals stay
+-- service-role only; public routes expose sanitized summaries instead.
 
 do $$
 declare
@@ -12,8 +13,6 @@ begin
     'stock_universe',
     'daily_ohlcv',
     'weekly_ohlcv',
-    'ingest_runs',
-    'bhavcopy_ingestion_log',
     'corporate_actions'
   ] loop
     if to_regclass('public.' || table_name) is not null then
@@ -26,9 +25,19 @@ begin
     end if;
   end loop;
 
+  foreach table_name in array array[
+    'ingest_runs',
+    'bhavcopy_ingestion_log'
+  ] loop
+    if to_regclass('public.' || table_name) is not null then
+      execute format('revoke all on table public.%I from anon, authenticated', table_name);
+      execute format('grant all on table public.%I to service_role', table_name);
+    end if;
+  end loop;
+
   if to_regclass('public.data_health') is not null then
     revoke all on table public.data_health from anon, authenticated;
-    grant select on table public.data_health to anon, authenticated, service_role;
+    grant all on table public.data_health to service_role;
   end if;
 end $$;
 

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 const workflowPaths = (
   process.env.MANUAL_WORKFLOW_SHELL_SAFETY_PATHS
-  || ".github/workflows/benchmark-vcp.yml,.github/workflows/daily-refresh.yml"
+  || ".github/workflows/benchmark-vcp.yml,.github/workflows/daily-refresh.yml,.github/workflows/deploy.yml,.github/workflows/production-scanner-benchmark.yml,.github/workflows/production-signed-in-smoke.yml,.github/workflows/railway-backend-recovery.yml"
 )
   .split(",")
   .map((value) => value.trim())

@@ -16,8 +16,6 @@ def test_market_data_tables_are_read_only_for_public_roles():
         "stock_universe",
         "daily_ohlcv",
         "weekly_ohlcv",
-        "ingest_runs",
-        "bhavcopy_ingestion_log",
         "corporate_actions",
     ):
         assert table_name in sql
@@ -25,7 +23,17 @@ def test_market_data_tables_are_read_only_for_public_roles():
     assert "revoke insert, update, delete, truncate, references, trigger on table public.%i from anon, authenticated" in sql
     assert "grant select on table public.%i to anon, authenticated" in sql
     assert "grant all on table public.%i to service_role" in sql
-    assert "grant select on table public.data_health to anon, authenticated, service_role" in sql
+
+
+def test_operational_market_data_logs_are_service_role_only():
+    sql = _normalized_sql()
+
+    for table_name in ("ingest_runs", "bhavcopy_ingestion_log"):
+        assert table_name in sql
+    assert "revoke all on table public.%i from anon, authenticated" in sql
+    assert "grant all on table public.%i to service_role" in sql
+    assert "grant all on table public.data_health to service_role" in sql
+    assert "grant select on table public.data_health to anon" not in sql
 
 
 def test_mutating_rs_score_rpc_is_service_role_only():

@@ -43,6 +43,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const fullChart = pathname.startsWith('/charts/') && searchParams.get('full') === '1'
+  const hideFeedback = fullChart || pathname.startsWith('/broker/callback')
   const router = useRouter()
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
@@ -160,7 +161,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <KiteTokenBanner />
       <main className={fullChart ? 'app-content app-content-full-chart' : 'app-content'}>{children}</main>
-      {!fullChart && <FeedbackWidget />}
+      {!hideFeedback && <FeedbackWidget />}
     </div>
   )
 }
