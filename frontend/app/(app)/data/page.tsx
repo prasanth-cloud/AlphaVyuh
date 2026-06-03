@@ -266,19 +266,19 @@ export default function DataFreshnessPage() {
     if (state.apiReachable === "down") {
       next.push({
         title: "Restore market data service",
-        detail: "The platform is reachable, but the market data API is down. Scanner, dashboard, and charts need service recovery before data can be trusted.",
+        detail: "The platform is reachable, but the market data API is down. Scanner, Today, and charts need service recovery before data can be trusted.",
         href: "/data",
       });
     } else if (!health) {
       next.push({
         title: "Check market data API",
-        detail: "The freshness endpoint did not return data, so scanner and dashboard confidence cannot be shown.",
+        detail: "The freshness endpoint did not return data, so scanner and Today confidence cannot be shown.",
         href: "/dashboard",
       });
     } else if (health.status !== "healthy") {
       next.push({
         title: health.status === "degraded" ? "Review latest ingest fallback" : "Refresh stale market data",
-        detail: "Scanner, charts, and dashboard may be using the latest available session instead of the newest ingest.",
+        detail: "Scanner, charts, and Today may be using the latest available session instead of the newest ingest.",
         href: "/scanner",
       });
     }
@@ -446,7 +446,7 @@ export default function DataFreshnessPage() {
               </div>
             </div>
             <Link href="/dashboard" className="workspace-chip-button" style={{ textDecoration: "none" }}>
-              Dashboard
+              Today
             </Link>
           </div>
         </Card>
@@ -630,7 +630,7 @@ export default function DataFreshnessPage() {
           {[
             ["Scanner", "Uses the latest available session and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
             ["Charts", "Shows source and freshness directly in the chart toolbar before planning.", "/charts/RELIANCE"],
-            ["Dashboard", "Shows market pulse, sector participation, and freshness without mixing data sources.", "/dashboard"],
+            ["Today", "Shows review due work, active plans, market pulse, and freshness without mixing data sources.", "/dashboard"],
             ["Broker", "Broker import is read-only/import only; journal capture still records review context.", "/settings/broker"],
           ].map(([title, detail, href]) => (
             <Link key={title} href={href} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", textDecoration: "none" }}>

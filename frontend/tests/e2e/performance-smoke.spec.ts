@@ -10,8 +10,8 @@ type PageBudget = {
 const budgets: PageBudget[] = [
   {
     path: "/dashboard",
-    name: "dashboard",
-    marker: (page) => page.getByText("Market pulse"),
+    name: "today",
+    marker: (page) => page.getByTestId("today-cockpit"),
     maxMs: 8_000,
   },
   {
@@ -41,7 +41,7 @@ const budgets: PageBudget[] = [
 ];
 
 test.describe("Mock workflow performance", () => {
-  test("mock login reaches a usable dashboard and records startup timing marks", async ({ page }) => {
+  test("mock login reaches a usable Today view and records startup timing marks", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
     page.on("console", (message) => {
@@ -56,10 +56,10 @@ test.describe("Mock workflow performance", () => {
     await page.getByRole("button", { name: "Sign in" }).click();
 
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
-    await expect(page.getByText("Market pulse")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId("today-cockpit")).toBeVisible({ timeout: 8_000 });
 
     const elapsed = Date.now() - started;
-    expect(elapsed, `mock login to dashboard usable in ${elapsed}ms`).toBeLessThanOrEqual(8_000);
+    expect(elapsed, `mock login to Today usable in ${elapsed}ms`).toBeLessThanOrEqual(8_000);
 
     const timings = await page.evaluate(() => {
       const win = window as Window & { __alphavyuhTimings?: { name: string; at: number }[] };

@@ -12,10 +12,10 @@ import { allowClientMockFallback } from '@/lib/runtime-mode'
 import { useWorkflowState } from '@/lib/workflow'
 
 const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/scanner',   label: 'Scanner' },
-  { href: '/watchlist', label: 'Watchlist' },
+  { href: '/dashboard', label: 'Today' },
   { href: '/journal',   label: 'Journal' },
+  { href: '/watchlist', label: 'Watchlist' },
+  { href: '/scanner',   label: 'Scanner' },
 ]
 
 const IDLE_PREFETCH_ROUTES = [
@@ -29,11 +29,11 @@ type CommandResult = { command: string; label: string; detail: string; href: str
 type SearchResult = SymbolResult | CommandResult
 
 const COMMAND_RESULTS: CommandResult[] = [
-  { command: 'dashboard', label: 'Open Dashboard', detail: 'Market pulse, review queue, next actions', href: '/dashboard' },
-  { command: 'scanner', label: 'Run Scanner', detail: 'Find setups from the six swing presets', href: '/scanner' },
-  { command: 'watchlist', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
+  { command: 'today dashboard', label: 'Open Today', detail: 'Review queue, active plans, watchlist focus, data health', href: '/dashboard' },
+  { command: 'journal review', label: 'Review Journal', detail: 'Close the learning loop and process notes', href: '/journal?review=needs-review' },
+  { command: 'watchlist desk', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
+  { command: 'scanner discovery', label: 'Discover Setups', detail: 'Find candidates to feed watchlist and journal review', href: '/scanner' },
   { command: 'chart', label: 'Open Full Chart', detail: 'Focused chart review', href: '/charts/RELIANCE?full=1' },
-  { command: 'journal', label: 'Review Journal', detail: 'Close the learning loop', href: '/journal?review=needs-review' },
   { command: 'agents', label: 'Agent Mission Control', detail: 'Operator view of agent work, blockers, and next actions', href: '/agents' },
   { command: 'broker', label: 'Broker Settings', detail: 'Read-only/import status and reconnect flow', href: '/settings/broker' },
   { command: 'data', label: 'Data Status', detail: 'Freshness, coverage, and operator checks', href: '/data' },
