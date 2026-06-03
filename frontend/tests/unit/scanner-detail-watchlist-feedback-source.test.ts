@@ -31,7 +31,7 @@ describe("scanner watchlist feedback", () => {
     expect(scannerPageSource).toContain("Source audit details stay in Data Trust.");
   });
 
-  it("keeps the selected scan result workbench review-only and chart-first", () => {
+  it("keeps the selected scan result workbench review-only with handoff actions", () => {
     expect(scannerPageSource).toContain('data-testid="scanner-workbench"');
     expect(scannerPageSource).toContain("Scan results workbench");
     expect(scannerPageSource).toContain("Chart + broker context");
