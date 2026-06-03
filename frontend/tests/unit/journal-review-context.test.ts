@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getDecisionMemorySummary, getReviewContext, getTradeFlowMeta } from "@/app/(app)/journal/components/utils";
+import { getDecisionMemorySummary, getJournalReviewStage, getReviewContext, getTradeFlowMeta } from "@/app/(app)/journal/components/utils";
 
 describe("journal review context", () => {
   it("builds process prompts from the original scanner idea and plan", () => {
@@ -204,6 +204,71 @@ describe("journal review context", () => {
       status: "build-sample",
       headline: "Build a 3-trade review sample",
       nextAction: "Close 3 more trades with entry plan context.",
+    });
+  });
+
+  it("guides empty and under-sampled journals toward review unlock without trade advice", () => {
+    expect(getJournalReviewStage([], {
+      totalTrades: 0,
+      closedTrades: 0,
+      reviewedTrades: 0,
+      needsReview: 0,
+    })).toMatchObject({
+      status: "empty",
+      headline: "Start with one logged or imported trade",
+      primaryAction: "Log first trade",
+      secondaryAction: "Import broker trades",
+      progressLabel: "0/3 closed trades",
+    });
+
+    const stage = getJournalReviewStage([
+      { entry_reason: "Open plan", status: "open", lessons: null, source_page: "chart", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Closed trade", status: "closed", lessons: "Wait for confirmation.", source_page: "manual", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+    ], {
+      totalTrades: 2,
+      closedTrades: 1,
+      reviewedTrades: 1,
+      needsReview: 0,
+    });
+
+    expect(stage).toMatchObject({
+      status: "build-sample",
+      headline: "Build a 3-trade review base",
+      progressLabel: "1/3 closed trades",
+      progressPct: 33,
+    });
+    expect(`${stage.headline} ${stage.detail} ${stage.processChange}`).not.toMatch(/should|buy|sell|recommend/i);
+  });
+
+  it("surfaces review-ready action only after closed trades are reviewed", () => {
+    const entries = [
+      { entry_reason: "Chart order", status: "closed", lessons: "Protected the stop.", source_page: "chart", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Manual log", status: "closed", lessons: "Late entry.", source_page: "manual", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Scanner: Stage 2", status: "closed", lessons: "Volume faded.", source_page: "scanner", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+      { entry_reason: "Open plan", status: "open", lessons: null, source_page: "watchlist", source_context: null, scanner_context: null, thesis: null, invalidation_rule: null },
+    ] satisfies Parameters<typeof getJournalReviewStage>[0];
+
+    expect(getJournalReviewStage(entries, {
+      totalTrades: 4,
+      closedTrades: 3,
+      reviewedTrades: 3,
+      needsReview: 0,
+    })).toMatchObject({
+      status: "ready",
+      primaryAction: "Run journal-wide review",
+      secondaryAction: "Open Analytics",
+      progressLabel: "3/3 reviewed",
+      progressPct: 100,
+    });
+
+    expect(getJournalReviewStage(entries, {
+      totalTrades: 4,
+      closedTrades: 2,
+      reviewedTrades: 2,
+      needsReview: 0,
+    })).toMatchObject({
+      status: "build-sample",
+      progressLabel: "2/3 closed trades",
     });
   });
 });

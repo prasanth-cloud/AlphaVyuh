@@ -106,7 +106,7 @@ export function TradePanel({
   const reviewDraft = lessonDraft.trim();
 
   return (
-    <div style={{ width: 340, flexShrink: 0 }}>
+    <div className="journal-trade-panel">
       <Card padding="lg" style={{ borderRadius: "var(--radius-lg)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
