@@ -308,7 +308,7 @@ export default function OnboardingPage() {
               {[
                 { title: "Run a scan", text: "Find breakouts and high relative-strength stocks.", href: "/scanner" },
                 { title: "Starter queue", text: "Create a sample watchlist with liquid names and setup scoring.", href: "/watchlist", seed: true },
-                { title: "Open dashboard", text: "Review market pulse, breadth, and account status.", href: "/dashboard" },
+                { title: "Open Today", text: "Review due work, active plans, watchlist focus, and data health.", href: "/dashboard" },
               ].map((item) => (
                 <button
                   key={item.href}
@@ -336,7 +336,7 @@ export default function OnboardingPage() {
               style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
               disabled={loading}
               onClick={() => finish("/dashboard")}>
-              {loading ? "Setting up…" : "Go to Dashboard →"}
+              {loading ? "Setting up…" : "Go to Today →"}
             </button>
           </div>
         )}

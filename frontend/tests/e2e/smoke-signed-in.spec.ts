@@ -118,17 +118,17 @@ async function expectRealDataContext(
   await expect(body, `${surface} must expose source, freshness, or coverage context`).toContainText(requiredCopy, { timeout: 15000 });
 }
 
-async function expectDashboardReady(page: import("@playwright/test").Page) {
-  const marketPulse = page.getByText(/Market pulse/i);
+async function expectTodayReady(page: import("@playwright/test").Page) {
+  const todayCockpit = page.getByTestId("today-cockpit");
   for (let attempt = 1; attempt <= 4; attempt += 1) {
-    if (await marketPulse.isVisible().catch(() => false)) return;
+    if (await todayCockpit.isVisible().catch(() => false)) return;
     const retry = page.getByRole("button", { name: "Retry" });
     if (await retry.isVisible().catch(() => false)) {
       await retry.click({ force: true, timeout: 3000 }).catch(() => {});
     }
     await page.waitForTimeout(attempt * 1500);
   }
-  await expect(marketPulse).toBeVisible({ timeout: 15000 });
+  await expect(todayCockpit).toBeVisible({ timeout: 15000 });
 }
 
 async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
@@ -157,16 +157,16 @@ async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Signed-in smoke flow", () => {
-  test("dashboard, scanner, watchlist, full chart, journal, settings, broker, and data load in a usable state", async ({ page }) => {
+  test("Today, scanner, watchlist, full chart, journal, settings, broker, and data load in a usable state", async ({ page }) => {
     test.setTimeout(EXPECT_REAL_DATA ? 90_000 : 30_000);
     await login(page);
 
-    await expectDashboardReady(page);
+    await expectTodayReady(page);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
-    const openScannerLink = page.getByRole("link", { name: /Open scanner/i });
-    await expect(openScannerLink).toBeVisible();
-    await expectRealDataContext(page, "dashboard", /Latest session|EOD|Market|coverage|NSE universe/i);
+    const discoverSetupsLink = page.getByRole("link", { name: /Discover setups/i });
+    await expect(discoverSetupsLink).toBeVisible();
+    await expectRealDataContext(page, "today", /Latest session|EOD|Market|coverage|NSE universe/i);
 
     await page.locator(".app-nav").getByRole("link", { name: "Scanner" }).click();
     await expectPathname(page, "/scanner");

@@ -7,7 +7,7 @@ type WorkflowPage = {
 };
 
 const pages: WorkflowPage[] = [
-  { path: "/dashboard", name: "dashboard", marker: (page) => page.getByText("Market pulse") },
+  { path: "/dashboard", name: "today", marker: (page) => page.getByTestId("today-cockpit") },
   { path: "/scanner", name: "scanner", marker: (page) => page.getByRole("button", { name: /^Run scan$/i }) },
   { path: "/watchlist", name: "watchlist", marker: (page) => page.getByText("Decision desk") },
   { path: "/charts/AUBANK?full=1", name: "full chart", marker: (page) => page.getByTestId("chart-drawing-overlay") },
@@ -205,11 +205,18 @@ test.describe("Workflow layout smoke", () => {
 
   test("top search opens workflow commands", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Market pulse")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("today-cockpit")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Today", "Journal", "Watchlist", "Scanner"]);
+    await page.keyboard.press("/");
+    await page.getByPlaceholder("Search symbol or command...").fill("today");
+    await expect(page.locator(".app-float-panel").getByText("Open Today", { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+
     await page.keyboard.press("/");
     await page.getByPlaceholder("Search symbol or command...").fill("journal");
-    await expect(page.getByText("Review Journal")).toBeVisible();
-    await page.getByText("Review Journal").click();
+    const commandPanel = page.locator(".app-float-panel");
+    await expect(commandPanel.getByText("Review Journal", { exact: true })).toBeVisible();
+    await commandPanel.getByText("Review Journal", { exact: true }).click();
     await expect(page).toHaveURL(/\/journal/);
     await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
   });

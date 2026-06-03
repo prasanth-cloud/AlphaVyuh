@@ -82,7 +82,7 @@ export function buildLaunchAgenda(input: LaunchAgendaInput): LaunchAgendaItem[] 
       label: "Market data trust",
       value: dataValue,
       detail: input.apiReachable === "down"
-        ? "Market data API is unreachable; do not trust scanner, dashboard, or chart state until service recovery passes."
+        ? "Market data API is unreachable; do not trust Today, scanner, or chart state until service recovery passes."
         : input.marketDetail,
       status: dataStatus,
       href: "/data",

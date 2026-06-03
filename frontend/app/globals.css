@@ -1126,6 +1126,7 @@ input, textarea, select {
 
 @media (max-width: 920px) {
   .dashboard-checklist-grid,
+  .dashboard-today-grid,
   .dashboard-action-grid,
   .dashboard-stat-grid,
   .dashboard-main-grid {
@@ -1143,6 +1144,7 @@ input, textarea, select {
 
 @media (min-width: 721px) and (max-width: 1180px) {
   .dashboard-checklist-grid,
+  .dashboard-today-grid,
   .dashboard-action-grid,
   .dashboard-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;

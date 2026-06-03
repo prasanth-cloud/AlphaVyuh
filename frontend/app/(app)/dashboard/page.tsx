@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import {
   getAiPatterns,
   getBrokerStatus,
@@ -18,7 +19,6 @@ import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
-import { sectorTaxonomyPresentation } from '@/lib/sector-taxonomy-copy'
 
 function safeNumber(value: unknown, fallback = 0): number {
   const numeric = typeof value === 'number' ? value : Number(value)
@@ -28,6 +28,14 @@ function safeNumber(value: unknown, fallback = 0): number {
 function formatPercent(value: unknown, digits = 0): string {
   const numeric = safeNumber(value, NaN)
   return Number.isFinite(numeric) ? `${numeric.toFixed(digits)}%` : '—'
+}
+
+const humanLabelStyle: CSSProperties = {
+  color: 'var(--text-secondary)',
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 0,
+  textTransform: 'none',
 }
 
 function breadthLabel(phase: string): string {
@@ -140,33 +148,6 @@ function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHeal
       </div>
     </Card>
   )
-}
-
-function SectorTaxonomyBadge({ data }: { data: MarketOverview }) {
-  const taxonomy = sectorTaxonomyPresentation(data.sector_taxonomy);
-  const tone = taxonomy.status === 'good'
-    ? 'var(--gain)'
-    : taxonomy.status === 'warn'
-      ? 'var(--warn)'
-      : 'var(--loss)';
-
-  return (
-    <span
-      className="caption"
-      data-testid="dashboard-sector-taxonomy-badge"
-      title={taxonomy.detail}
-      style={{
-        maxWidth: 320,
-        textAlign: 'right',
-        color: tone,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {taxonomy.dashboardBadge}
-    </span>
-  );
 }
 
 function SectorBar({
@@ -300,6 +281,7 @@ type WorkflowState = {
   watchlists: number
   trackedSymbols: number
   totalTrades: number
+  openTrades: number
   brokerConnected: boolean
   brokerName: string | null
   brokerStatusLabel: string | null
@@ -350,7 +332,7 @@ function AccountDataStatusCard({ issues }: { issues: AccountDataIssue[] }) {
         <div style={{ minWidth: 0 }}>
           <div className="label" style={{ color: 'var(--warn)', marginBottom: 6 }}>Account data unavailable</div>
           <div className="body-secondary" style={{ marginBottom: 10 }}>
-            Dashboard workflow counts are paused until account data services respond. Existing watchlists, journal entries, and broker state are not being treated as empty.
+            Today workflow counts are paused until account data services respond. Existing watchlists, journal entries, and broker state are not being treated as empty.
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {issues.map((issue) => (
@@ -363,6 +345,112 @@ function AccountDataStatusCard({ issues }: { issues: AccountDataIssue[] }) {
         <Button variant="secondary" size="sm" onClick={() => { window.location.href = '/data' }}>
           Open Data Status
         </Button>
+      </div>
+    </Card>
+  )
+}
+
+function TodayCockpit({
+  workflow,
+  data,
+  dataHealth,
+}: {
+  workflow: WorkflowState
+  data: MarketOverview
+  dataHealth: DataHealth | null
+}) {
+  const journalIssue = workflow.accountIssues.find(issue => issue.id === 'journal')
+  const watchlistIssue = workflow.accountIssues.find(issue => issue.id === 'watchlists')
+  const reviewDue = Math.max(0, workflow.closedTrades - workflow.reviewedTrades)
+  const reviewValue = journalIssue
+    ? 'Paused'
+    : workflow.closedTrades < 3
+      ? `${Math.max(0, 3 - workflow.closedTrades)} to unlock`
+      : reviewDue > 0
+        ? `${reviewDue} due`
+        : 'Clear'
+  const reviewDetail = journalIssue
+    ? 'Journal status is unavailable; existing trades are not counted as empty.'
+    : workflow.closedTrades < 3
+      ? 'Close 3 trades to make review patterns useful.'
+      : reviewDue > 0
+        ? 'Start with notes before adding new ideas.'
+        : 'Closed trades in the current sample have review notes.'
+
+  const dataStatus = dataHealth?.status === 'healthy'
+    ? 'Ready'
+    : dataHealth?.status === 'stale'
+      ? 'Stale'
+      : dataHealth?.status === 'degraded'
+        ? 'Check'
+        : dataHealth?.mode === 'demo'
+          ? 'Demo'
+          : 'Pending'
+
+  const cards = [
+    {
+      label: 'Review due',
+      value: reviewValue,
+      detail: reviewDetail,
+      href: '/journal?review=needs-review',
+      tone: journalIssue ? 'var(--warn)' : reviewDue > 0 || workflow.closedTrades < 3 ? 'var(--accent)' : 'var(--gain)',
+    },
+    {
+      label: 'Active plans',
+      value: journalIssue ? 'Paused' : workflow.openTrades.toLocaleString('en-IN'),
+      detail: journalIssue ? 'Open trade count waits for Journal recovery.' : workflow.openTrades > 0 ? 'Manage open ideas from Journal and chart context.' : 'No open journal positions in the current sample.',
+      href: '/journal',
+      tone: journalIssue ? 'var(--warn)' : workflow.openTrades > 0 ? 'var(--accent)' : 'var(--text-secondary)',
+    },
+    {
+      label: 'Watchlist focus',
+      value: watchlistIssue ? 'Paused' : `${workflow.trackedSymbols.toLocaleString('en-IN')} symbols`,
+      detail: watchlistIssue ? 'Watchlist counts wait for service recovery.' : workflow.watchlists > 0 ? `${workflow.watchlists} list${workflow.watchlists === 1 ? '' : 's'} feeding the desk.` : 'Create one focused queue before scanning broadly.',
+      href: '/watchlist',
+      tone: watchlistIssue ? 'var(--warn)' : workflow.trackedSymbols > 0 ? 'var(--gain)' : 'var(--accent)',
+    },
+    {
+      label: 'Data health',
+      value: dataStatus,
+      detail: data.trade_date ? `Latest market snapshot ${data.trade_date}.` : 'Waiting for market snapshot date.',
+      href: '/data',
+      tone: dataStatus === 'Ready' ? 'var(--gain)' : dataStatus === 'Stale' || dataStatus === 'Check' ? 'var(--warn)' : 'var(--text-secondary)',
+    },
+  ]
+
+  return (
+    <Card padding="md" style={{ marginBottom: 16 }} data-testid="today-cockpit">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h1 className="heading-card" style={{ marginBottom: 4 }}>Today</h1>
+          <div className="caption">Start with review, then plan, then discover.</div>
+        </div>
+        <a href="/journal?review=needs-review" className="workspace-pill" style={{ textDecoration: 'none', color: 'var(--accent)' }}>
+          Review journal
+        </a>
+      </div>
+      <div className="dashboard-today-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+        {cards.map(card => (
+          <a
+            key={card.label}
+            href={card.href}
+            style={{
+              display: 'block',
+              minHeight: 86,
+              padding: '12px 14px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              background: 'var(--surface-2)',
+              textDecoration: 'none',
+            }}
+          >
+            <div style={{ ...humanLabelStyle, marginBottom: 7 }}>{card.label}</div>
+            <Num style={{ display: 'block', fontSize: 15, fontWeight: 700, color: card.tone, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {card.value}
+            </Num>
+            <div className="caption" style={{ marginTop: 5, lineHeight: 1.45 }}>{card.detail}</div>
+          </a>
+        ))}
       </div>
     </Card>
   )
@@ -436,7 +524,7 @@ function WorkflowChecklistCard({
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'center' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-            <div className="label" style={{ color: 'var(--accent)' }}>Setup progress</div>
+            <div style={{ ...humanLabelStyle, color: 'var(--accent)' }}>Setup progress</div>
             <span className="workspace-pill">
               <Num>{completedCount}</Num>/<Num>{steps.length}</Num> done
             </span>
@@ -574,10 +662,11 @@ export default function DashboardPage() {
     watchlists: 0,
     trackedSymbols: 0,
     totalTrades: 0,
-      brokerConnected: false,
-      brokerName: null,
-      brokerStatusLabel: null,
-      brokerLastSyncedAt: null,
+    openTrades: 0,
+    brokerConnected: false,
+    brokerName: null,
+    brokerStatusLabel: null,
+    brokerLastSyncedAt: null,
     closedTrades: 0,
     reviewedTrades: 0,
     onboardingCompleted: false,
@@ -682,12 +771,14 @@ export default function DashboardPage() {
         ])
         const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
         const closedTradesInSample = journal.entries.filter(entry => entry.status === 'closed').length
+        const openTradesInSample = journal.entries.filter(entry => entry.status === 'open').length
         const closedTrades = Math.max(closedTradesInSample, stats?.total_trades ?? 0)
         const reviewedTrades = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
         const nextWorkflow: WorkflowState = {
           watchlists: watchlists.length,
           trackedSymbols,
           totalTrades: stats?.total_trades ?? journal.entries.length,
+          openTrades: stats?.open_trades ?? openTradesInSample,
           brokerConnected: Boolean(broker.connected),
           brokerName: broker.broker,
           brokerStatusLabel: broker.status_label ?? null,
@@ -751,7 +842,7 @@ export default function DashboardPage() {
 
       {!loading && data && (
         <div>
-          <MarketPulsePanel data={data} dataHealth={dataHealth} />
+          <TodayCockpit workflow={workflow} data={data} dataHealth={dataHealth} />
 
           <AccountDataStatusCard issues={workflow.accountIssues} />
 
@@ -768,15 +859,15 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
               <div>
                 <h2 className="heading-card" style={{ marginBottom: 4 }}>Next actions</h2>
-                <div className="caption">Move straight into discovery, planning, or review.</div>
+                <div className="caption">Follow the loop: review, plan, discover, then come back to Journal.</div>
               </div>
             </div>
             <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
               {[
-                { label: 'Open scanner', detail: 'Run user-defined filters on market data.', href: '/scanner' },
-                { label: 'Open watchlist', detail: 'Organize symbols, notes, charts, and order entry.', href: '/watchlist' },
-                { label: 'Open journal', detail: 'Review closed trades and performance history.', href: '/journal' },
-                { label: 'Upload trade report', detail: 'Import CSV, contract notes, or screenshots.', href: '/upload' },
+                { label: 'Review journal', detail: 'Start with closed trades, lessons, and process drift.', href: '/journal?review=needs-review' },
+                { label: 'Open watchlist', detail: 'Pick the next symbol and continue the Decision Desk.', href: '/watchlist' },
+                { label: 'Discover setups', detail: 'Use Scanner when the current queue needs fresh ideas.', href: '/scanner' },
+                { label: 'Import trades', detail: 'Bring in contract notes or broker reports for review.', href: '/upload' },
               ].map((item) => (
                 <a
                   key={item.href}
@@ -797,6 +888,8 @@ export default function DashboardPage() {
               ))}
             </div>
           </Card>
+
+          <MarketPulsePanel data={data} dataHealth={dataHealth} />
 
           {/* Stat cards */}
           <div className="dashboard-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
@@ -830,10 +923,12 @@ export default function DashboardPage() {
             <Card padding="lg">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
                 <h2 className="heading-card">Sector breadth</h2>
-                <SectorTaxonomyBadge data={data} />
+                <a href="/data" className="caption" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>
+                  Data Status
+                </a>
               </div>
               <div className="caption" style={{ marginTop: -10, marginBottom: 14 }}>
-                {data.sector_taxonomy?.display_filter?.description ?? 'Advancers · avg chg · above EMA20'}
+                Advancers · avg chg · above EMA20
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (
@@ -871,7 +966,7 @@ export default function DashboardPage() {
         <div>
           <EmptyState
             title="Market data is not connected"
-            description="The dashboard needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
+            description="Today needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
             action={{ label: 'Retry', onClick: load }}
           />
         </div>
