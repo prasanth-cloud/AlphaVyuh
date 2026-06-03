@@ -24,6 +24,7 @@ const STARTER_SYMBOLS = ["RELIANCE", "TCS", "INFY", "HDFCBANK", "ICICIBANK", "TA
 const TRADE_SCOPE_OPTIONS = [
   { value: "equity", label: "NSE/BSE cash equities", detail: "Scanner, watchlist, chart planning, broker import, and journal review stay focused on cash-equity workflows." },
 ];
+const DEFAULT_TRADE_SCOPE = TRADE_SCOPE_OPTIONS[0]?.value ?? "";
 
 const cardStyle = {
   background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015)), var(--surface-1)",
@@ -37,12 +38,14 @@ function Radio({
   value,
   label,
   checked,
+  disabled = false,
   onSelect,
 }: {
   name: keyof FormState;
   value: string;
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onSelect: (name: keyof FormState, value: string) => void;
 }) {
   return (
@@ -57,6 +60,7 @@ function Radio({
         name={name}
         value={value}
         checked={checked}
+        disabled={disabled}
         onChange={() => onSelect(name, value)}
         className="accent-[var(--accent)]"
       />
@@ -67,10 +71,11 @@ function Radio({
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [form, setForm] = useState<FormState>({
-    experience: "", trades: "", broker: "",
+    experience: "", trades: DEFAULT_TRADE_SCOPE, broker: "",
   });
 
   const selectRadio = (name: keyof FormState, value: string) => {
@@ -78,6 +83,7 @@ export default function OnboardingPage() {
   };
 
   useEffect(() => {
+    setReady(true);
     trackEvent("onboarding_viewed", { surface: "professional_access" });
   }, []);
 
@@ -172,9 +178,9 @@ export default function OnboardingPage() {
               <div>
                 <p className="text-[12px] font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--text-tertiary)" }}>Experience level</p>
                 <div className="space-y-2">
-                  <Radio name="experience" value="beginner" label="Beginner — new to trading" checked={form.experience === "beginner"} onSelect={selectRadio} />
-                  <Radio name="experience" value="intermediate" label="Intermediate — 1–3 years" checked={form.experience === "intermediate"} onSelect={selectRadio} />
-                  <Radio name="experience" value="expert" label="Expert — 3+ years" checked={form.experience === "expert"} onSelect={selectRadio} />
+                  <Radio name="experience" value="beginner" label="Beginner — new to trading" checked={form.experience === "beginner"} disabled={!ready} onSelect={selectRadio} />
+                  <Radio name="experience" value="intermediate" label="Intermediate — 1–3 years" checked={form.experience === "intermediate"} disabled={!ready} onSelect={selectRadio} />
+                  <Radio name="experience" value="expert" label="Expert — 3+ years" checked={form.experience === "expert"} disabled={!ready} onSelect={selectRadio} />
                 </div>
               </div>
               <div>
@@ -193,6 +199,7 @@ export default function OnboardingPage() {
                         name="trades"
                         value={option.value}
                         checked={form.trades === option.value}
+                        disabled={!ready}
                         onChange={() => selectRadio("trades", option.value)}
                         className="mt-1 accent-[var(--accent)]"
                       />
@@ -210,7 +217,7 @@ export default function OnboardingPage() {
               <button
                 className="w-full py-3 rounded-[8px] text-[14px] font-bold text-white transition-opacity disabled:opacity-50"
                 style={{ background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "var(--text-on-accent)" }}
-                disabled={!form.experience || !form.trades}
+                disabled={!ready || !form.experience || !form.trades}
                 onClick={() => setStep(1)}>
                 Continue →
               </button>
