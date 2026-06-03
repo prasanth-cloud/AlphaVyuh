@@ -70,9 +70,26 @@ export type DecisionMemorySummary = {
   };
 };
 
+export type JournalReviewStage = {
+  status: "unavailable" | "empty" | "build-sample" | "needs-review" | "ready";
+  headline: string;
+  detail: string;
+  primaryAction: string;
+  secondaryAction: string;
+  progressLabel: string;
+  progressPct: number;
+  processChange: string;
+};
+
 function cleanValue(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function compactLesson(value: string | null | undefined): string | null {
+  const cleaned = cleanValue(value);
+  if (!cleaned) return null;
+  return cleaned.length > 96 ? `${cleaned.slice(0, 93).trim()}...` : cleaned;
 }
 
 function outcomeLabel(entry: Pick<ContextEntry, "pnl" | "holding_days">): string | null {
@@ -293,5 +310,96 @@ export function getDecisionMemorySummary(
     reviewedTrades,
     decisionContextCount,
     sourceCounts,
+  };
+}
+
+export function getJournalReviewStage(
+  entries: DecisionMemoryEntry[],
+  options: {
+    totalTrades: number;
+    closedTrades: number;
+    reviewedTrades: number;
+    needsReview: number;
+    unavailable?: boolean;
+  },
+): JournalReviewStage {
+  const reviewBasePct = Math.min(100, Math.round((Math.min(options.closedTrades, 3) / 3) * 100));
+  const coveragePct = options.closedTrades > 0
+    ? Math.min(100, Math.round((options.reviewedTrades / options.closedTrades) * 100))
+    : 0;
+  const latestLesson = compactLesson(
+    entries
+      .filter((entry) => entry.status === "closed" && entry.lessons?.trim())
+      .slice()
+      .reverse()
+      .find((entry) => entry.lessons?.trim())?.lessons,
+  );
+
+  if (options.unavailable) {
+    return {
+      status: "unavailable",
+      headline: "Journal review is paused",
+      detail: "Trades are not being treated as empty while Journal recovers.",
+      primaryAction: "Retry Journal",
+      secondaryAction: "Open Data Status",
+      progressLabel: "Review paused",
+      progressPct: 0,
+      processChange: "Process review waits for account data to recover.",
+    };
+  }
+
+  if (options.totalTrades === 0) {
+    return {
+      status: "empty",
+      headline: "Start with one logged or imported trade",
+      detail: "Import a broker report or log a manual trade so Journal can preserve the entry idea, exit, and lesson.",
+      primaryAction: "Log first trade",
+      secondaryAction: "Import broker trades",
+      progressLabel: "0/3 closed trades",
+      progressPct: 0,
+      processChange: "No process pattern yet. Capture the first decision before judging performance.",
+    };
+  }
+
+  if (options.closedTrades < 3) {
+    const remaining = 3 - options.closedTrades;
+    return {
+      status: "build-sample",
+      headline: "Build a 3-trade review base",
+      detail: `${remaining} more closed ${remaining === 1 ? "trade" : "trades"} before journal-wide review has enough history.`,
+      primaryAction: "Log or close next trade",
+      secondaryAction: "View Trades",
+      progressLabel: `${options.closedTrades}/3 closed trades`,
+      progressPct: reviewBasePct,
+      processChange: "Early sample: record entry setup, stop, target, exit note, and one lesson per closed trade.",
+    };
+  }
+
+  if (options.needsReview > 0) {
+    return {
+      status: "needs-review",
+      headline: `${options.needsReview} closed ${options.needsReview === 1 ? "trade needs" : "trades need"} review`,
+      detail: "Attach a lesson to every closed trade before trusting broad pattern analysis.",
+      primaryAction: "Review next trade",
+      secondaryAction: "View reviewed trades",
+      progressLabel: `${options.reviewedTrades}/${options.closedTrades} reviewed`,
+      progressPct: coveragePct,
+      processChange: latestLesson
+        ? `Latest process note: ${latestLesson}`
+        : "The process story is incomplete until the next closed trade gets a lesson.",
+    };
+  }
+
+  return {
+    status: "ready",
+    headline: "Review coverage is current",
+    detail: "Closed trades have lessons attached, so the next useful step is pattern review before another plan.",
+    primaryAction: "Run journal-wide review",
+    secondaryAction: "Open Analytics",
+    progressLabel: `${options.reviewedTrades}/${options.closedTrades} reviewed`,
+    progressPct: coveragePct,
+    processChange: latestLesson
+      ? `Latest process note: ${latestLesson}`
+      : "Process notes are current; keep attaching the original plan and exit reason to each new trade.",
   };
 }

@@ -22,4 +22,13 @@ describe("journal feedback copy", () => {
     expect(source).not.toContain('showToast(e instanceof Error ? e.message : "Import failed")');
     expect(source).not.toContain('setAiError(e instanceof Error ? e.message : "Analysis failed")');
   });
+
+  it("keeps Journal review-first before the trade ledger", () => {
+    expect(source).toContain('useState<Tab>("queue")');
+    expect(source).toContain('{ id: "queue", label: "Review queue" }');
+    expect(source).toContain('{ id: "ai", label: "Trade review" }');
+    expect(source.indexOf('data-testid="journal-review-queue"')).toBeLessThan(source.indexOf('<TradeTable'));
+    expect(source).toContain('getJournalReviewStage(entries');
+    expect(source).toContain('reviewStage.primaryAction');
+  });
 });
