@@ -2,8 +2,9 @@
 import { appendFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createClient } from "../frontend/node_modules/@supabase/supabase-js/dist/index.mjs";
+import { resolveProductionSmokeQaEmail } from "./production-smoke-account-identity.mjs";
 
-const qaEmail = (process.env.PLAYWRIGHT_QA_EMAIL || "qa.smoke@alphavyuh.local").trim().toLowerCase();
+const qaEmail = resolveProductionSmokeQaEmail(process.env.PLAYWRIGHT_QA_EMAIL);
 const supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
 const serviceRoleKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "").trim();

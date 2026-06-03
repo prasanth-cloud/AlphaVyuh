@@ -414,6 +414,21 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function validateBenchmarkAuth() {
+  try {
+    const me = await fetchJson("/api/v1/me", { attempts: 1 });
+    assert(me && typeof me === "object", "auth preflight did not return a user object.");
+    return me;
+  } catch (error) {
+    const preflightError = new Error(
+      `Scanner benchmark auth preflight failed before timing: ${errorMessage(error)}. ` +
+        "The production smoke bearer token was rejected; rerun the smoke account preparation with a run-scoped QA user.",
+    );
+    preflightError.scenarioName = "auth-preflight";
+    throw preflightError;
+  }
+}
+
 async function runScenario(scenario) {
   for (let index = 0; index < warmupRuns; index += 1) {
     await fetchJson("/api/v1/scanner/run", {
@@ -488,6 +503,10 @@ let outputResults = [];
 let activeScenario = null;
 
 try {
+  activeScenario = "auth-preflight";
+  await validateBenchmarkAuth();
+  activeScenario = null;
+
   const baselineByScenario = loadBaseline(rawBaseline);
   if (rawBaseline && baselineByScenario.size === 0) {
     throw new Error("SCANNER_BENCHMARK_BASELINE_JSON did not contain any scenario p50/p95 latency baselines.");
