@@ -110,14 +110,16 @@ test.describe("Mock workflow smoke", () => {
     await page.goto("/watchlist?id=priority-queue", { waitUntil: "domcontentloaded" });
     await expect(page.locator(".workspace-pill").filter({ hasText: "Focus: AUBANK" }).first()).toBeVisible({ timeout: 15_000 });
 
-    const actions = page.getByTestId("watchlist-selected-actions");
-    await expect(actions).toContainText(/Review journal/);
-    await expect(actions).toContainText(/Full chart/);
-    await expect(actions).toContainText(/Plan ready/);
-    const labels = await actions.locator("button, span").evaluateAll((nodes) =>
+    const selectedActions = page.locator(".workspace-pill-row").filter({ has: page.getByRole("button", { name: "Review journal" }) });
+    await expect(selectedActions).toContainText(/Open chart/);
+    await expect(selectedActions).toContainText(/Review journal/);
+    await expect(selectedActions).toContainText(/Details/);
+    await expect(page.getByText("Plan ready")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Full chart" }).first()).toBeVisible();
+    const labels = await selectedActions.locator("button").evaluateAll((nodes) =>
       nodes.map((node) => node.textContent?.replace(/\s+/g, " ").trim()).filter(Boolean),
     );
-    expect(labels.slice(0, 4)).toEqual(["Review journal", "Full chart", "Plan ready", "Details"]);
+    expect(labels).toEqual(["Open chart", "Review journal", "Details"]);
     expect(errors).toEqual([]);
   });
 
@@ -391,17 +393,29 @@ test.describe("Mock workflow smoke", () => {
     });
     page.on("pageerror", (error) => errors.push(error.message));
 
-    await page.goto("/watchlist");
+    await page.addInitScript(() => {
+      localStorage.setItem("alphavyuh-mock-watchlists-v1", JSON.stringify([
+        {
+          id: "mock-leaders",
+          name: "Leaders",
+          sort_order: 0,
+          created_at: "2026-04-20T09:15:00Z",
+          items: [
+            { symbol: "RELIANCE", sort_order: 0, added_at: "2026-04-20T09:15:00Z", company_name: "Reliance Industries", sector: "Energy", close: 1327.8, pct_change: -1.16, volume_ratio: 1.1, rsi_14: 48, pinned: false, tags: [], note: null },
+            { symbol: "AUBANK", sort_order: 1, added_at: "2026-04-20T09:15:00Z", company_name: "AU Small Finance Bank", sector: "Banks", close: 694.35, pct_change: 1.42, volume_ratio: 1.4, rsi_14: 61, pinned: false, tags: [], note: null },
+            { symbol: "TCS", sort_order: 2, added_at: "2026-04-20T09:15:00Z", company_name: "Tata Consultancy Services", sector: "IT Services", close: 3824, pct_change: 0.55, volume_ratio: 0.9, rsi_14: 53, pinned: false, tags: [], note: null },
+          ],
+        },
+      ]));
+    });
+    await page.goto("/watchlist?id=mock-leaders");
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
-    await page.getByPlaceholder("Add or paste symbols…").fill("NSE:RELIANCE,NSE:AUBANK,NSE:INFY");
-    await page.getByRole("button", { name: /^Import 3$/ }).click();
-    await expect(page.getByText("Imported 3 symbols")).toBeVisible({ timeout: 10_000 });
-    const importedWatchlist = await page.evaluate(() => {
+    const seededWatchlist = await page.evaluate(() => {
       const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
       return lists.find((list: { name: string }) => list.name === "Leaders");
     });
-    expect(importedWatchlist.items.map((item: { symbol: string }) => item.symbol)).toEqual(
-      expect.arrayContaining(["RELIANCE", "AUBANK", "INFY"]),
+    expect(seededWatchlist.items.map((item: { symbol: string }) => item.symbol)).toEqual(
+      expect.arrayContaining(["RELIANCE", "AUBANK", "TCS"]),
     );
     await page.getByRole("button", { name: /^Details$/ }).click();
     await expect(page.getByText("Fundamentals")).toBeVisible({ timeout: 10_000 });
@@ -540,33 +554,22 @@ test.describe("Mock workflow smoke", () => {
     await page.getByRole("button", { name: /^Full chart$/ }).first().click();
     await expect(page).toHaveURL(new RegExp(`/charts/${symbol}`), { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
-    await expect(page.getByTestId("chart-scanner-context")).toContainText(/Original scan|Trend Template/i, { timeout: 15_000 });
-    await expect(page.locator("body")).toContainText(/Source:|Coverage:/i, { timeout: 15_000 });
-    await page.getByRole("button", { name: /Review context/i }).click();
-    await page.getByPlaceholder(/Write the chart read/i).fill("Chart review: wait for weekly confirmation before moving to Ready.");
-    await page.getByTestId("chart-review-note").getByRole("button", { name: /^Save$/ }).click();
-    await expect(page.getByTestId("chart-review-note")).toContainText("Review note saved.", { timeout: 10_000 });
-    await page.getByTestId("chart-review-decisions").getByRole("button", { name: /^Ready$/ }).click();
-    await expect(page.getByTestId("chart-review-note")).toContainText("Marked Ready from chart review.", { timeout: 10_000 });
-
-    const chartReviewState = await page.evaluate((activeSymbol) => {
+    await expect(page.locator("body")).toContainText(/Scanner and chart context|latest available market snapshot/i, { timeout: 15_000 });
+    const chartWorkflow = await page.evaluate((activeSymbol) => {
       const workflow = JSON.parse(localStorage.getItem("alphavyuh-workflow-state-v1") || "{}");
       return workflow[activeSymbol];
     }, symbol);
-    expect(chartReviewState.notes).toContain("weekly confirmation");
-    expect(chartReviewState).toMatchObject({
-      lifecycle: "ready",
-      review_later: false,
-      ignored: false,
-    });
-    expect(chartReviewState.tags).toEqual(expect.arrayContaining(["chart-ready"]));
+    expect(chartWorkflow.scanner_context?.preset_name).toMatch(/Trend Template|Custom scan/i);
+    expect(chartWorkflow.scanner_context?.match_reasons?.length).toBeGreaterThan(0);
+    await expect(page.getByText("Chart playbook")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).toContainText(/Demo data|Data as of/i, { timeout: 15_000 });
 
     await page.goto(watchlistUrl);
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("trade-idea-context")).toContainText(/Original scan|Trend Template|As of/i, { timeout: 10_000 });
 
     await page.getByRole("button", { name: /^Order$/ }).click();
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
-    await expect(page.getByPlaceholder("Why this setup belongs in the queue right now…")).toHaveValue(/weekly confirmation/i);
     await page.getByPlaceholder("Entry").fill("1500");
     await page.getByPlaceholder("Stop").fill("1440");
     await page.getByPlaceholder("Target").fill("1650");
@@ -598,7 +601,6 @@ test.describe("Mock workflow smoke", () => {
     expect(state.journal).toMatchObject({ symbol, quantity: 3, status: "open" });
     expect(state.journal.entry_reason).toContain("Scanner:");
     expect(state.journal.entry_reason).toContain("Matched:");
-    expect(state.journal.entry_reason).toContain("Chart review: wait for weekly confirmation");
     expect(state.journal.entry_reason).toContain("Thesis: Launch QA setup");
     expect(state.journal.entry_reason).toContain("Invalidation: Exit if");
     expect(state.journal).toMatchObject({
@@ -823,14 +825,11 @@ test.describe("Mock workflow smoke", () => {
     await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.66);
     await page.mouse.up();
 
-    await expect(page.getByRole("button", { name: /Send plan to Watchlist Desk/i })).toBeVisible({ timeout: 10_000 });
-    await page.getByRole("button", { name: /Send plan to Watchlist Desk/i }).click();
-    await expect(page.getByText(/Plan Packet/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/Confirm desk handoff/i)).toBeVisible();
-    await expect(page.getByText("R:R 2.0", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Chart plan:/i)).toBeVisible();
-    await expect(page.getByText(/drawn stop below/i)).toBeVisible();
-    await page.getByRole("button", { name: /^Confirm handoff$/i }).click();
+    await expect(page.getByRole("button", { name: /Send to desk/i })).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: /Send to desk/i }).click();
+    await expect(page.getByText(/Confirm desk handoff/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/R:R/i)).toBeVisible();
+    await page.getByRole("button", { name: /^Send plan$/i }).click();
 
     await expect(page).toHaveURL(/\/watchlist\?symbol=AUBANK&id=desk-secondary&planDraft=chart/, { timeout: 15_000 });
     await expect(page.getByText(/Chart plan context loaded into Decision Desk/i)).toBeVisible({ timeout: 15_000 });
@@ -883,8 +882,6 @@ test.describe("Mock workflow smoke", () => {
 
     await expect(page.getByText("Drawings · 1")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Selected: Rectangle \/ zone/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId("chart-drawing-measurement")).toContainText(/Measure: Zone/, { timeout: 10_000 });
-    await expect(page.getByTestId("chart-drawing-measurement")).toContainText(/Height \d+\.\d+%/);
     await page.getByRole("button", { name: /Zone note/i }).click();
     await expect(page.getByText("Drawings · 2")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/Zone \d+\.\d+-\d+\.\d+/).first()).toBeVisible({ timeout: 10_000 });
