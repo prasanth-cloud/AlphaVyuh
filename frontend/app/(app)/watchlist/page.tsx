@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag } from "lucide-react";
 import dynamic from "next/dynamic";
-import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals } from "@/lib/api";
+import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals, ScanResult } from "@/lib/api";
 import {
   getWatchlists,
   getJournalEntries,
@@ -30,11 +30,11 @@ import {
   reorderWatchlist,
   updateWatchlistItemMetadata,
   getQuote,
+  getQuotes,
   searchSymbols,
   getCandles,
   prefetchCandles,
   placeOrder,
-  getQuoteLive,
   getFundamentals,
   getBrokerStatus,
   getWorkflowStates,
@@ -58,7 +58,6 @@ import {
   formatChartCoverageRange,
   formatChartGranularity,
   getCoverageAvailabilityMessage,
-  getFiveYearHistoryBadge,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
@@ -68,11 +67,6 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
-import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
-import { buildMultiChartReviewHref } from "@/lib/multi-chart-review";
-import { parseWatchlistSymbolImport, type WatchlistSymbolImport } from "@/lib/watchlist-symbol-import";
-import { buildWatchlistTriageSummary, type WatchlistTriageSummary } from "@/lib/watchlist-triage";
-import { brokerOrderActionBarPresentation } from "@/lib/broker-safety";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -148,30 +142,32 @@ function formatNullablePrice(value: number | null | undefined): string {
   return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function watchlistItemFromQuote(symbol: string, quote: Awaited<ReturnType<typeof getQuote>> | null, sortOrder: number): WatchlistItem {
-  return quote
-    ? {
-        symbol: quote.symbol,
-        sort_order: sortOrder,
-        added_at: new Date().toISOString(),
-        company_name: quote.company_name,
-        sector: quote.sector,
-        close: quote.close,
-        pct_change: quote.pct_change,
-        volume_ratio: quote.volume_ratio,
-        rsi_14: quote.rsi_14,
-        pinned: false,
-        tags: [],
-        note: "",
-      }
-    : {
-        symbol,
-        sort_order: sortOrder,
-        added_at: new Date().toISOString(),
-        pinned: false,
-        tags: [],
-        note: "",
-      };
+function watchlistItemFromQuote(quote: ScanResult, sortOrder = 0): WatchlistItem {
+  return {
+    symbol: quote.symbol,
+    sort_order: sortOrder,
+    added_at: new Date().toISOString(),
+    company_name: quote.company_name,
+    sector: quote.sector,
+    close: quote.close,
+    pct_change: quote.pct_change,
+    volume_ratio: quote.volume_ratio,
+    rsi_14: quote.rsi_14,
+    pinned: false,
+    tags: [],
+    note: "",
+  };
+}
+
+function watchlistItemFromSymbol(symbol: string, sortOrder = 0): WatchlistItem {
+  return {
+    symbol: symbol.toUpperCase(),
+    sort_order: sortOrder,
+    added_at: new Date().toISOString(),
+    pinned: false,
+    tags: [],
+    note: "",
+  };
 }
 
 function watchlistInitial(name: string | null | undefined): string {
@@ -219,7 +215,6 @@ function SortableRow({
   isSelected,
   pinned,
   reviewState,
-  triage,
   onRemove,
   onSelect,
   onOpenChart,
@@ -229,7 +224,6 @@ function SortableRow({
   isSelected: boolean;
   pinned: boolean;
   reviewState?: "reviewed" | "needs-review" | "new";
-  triage?: WatchlistTriageSummary;
   onRemove: (symbol: string) => void;
   onSelect: (symbol: string) => void;
   onOpenChart: (symbol: string) => void;
@@ -308,24 +302,6 @@ function SortableRow({
           >
             {setup.label}
           </span>
-          {triage && (
-            <span
-              title={triage.reasons.join(" · ")}
-              style={{
-                fontSize: 9,
-                fontWeight: 800,
-                letterSpacing: "0.04em",
-                textTransform: "uppercase",
-                color: triage.label === "Act now" ? "var(--gain)" : triage.label === "Review next" ? "var(--accent)" : triage.label === "Monitor" ? "var(--text-secondary)" : "var(--warn)",
-                padding: "2px 6px",
-                borderRadius: 999,
-                background: "rgba(255,255,255,0.035)",
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}
-            >
-              {triage.label}
-            </span>
-          )}
         </div>
         {item.company_name && (
           <div className="caption" style={{ maxWidth: dense ? 160 : 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: dense ? 0 : 2, fontSize: dense ? 10 : 11 }}>
@@ -347,11 +323,6 @@ function SortableRow({
                 {reviewState === "reviewed" ? "Reviewed" : reviewState === "needs-review" ? "Needs review" : "New"}
               </span>
             )}
-          </div>
-        )}
-        {(!dense && triage) && (
-          <div className="caption" style={{ marginTop: 4, color: "var(--text-tertiary)", maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            Priority: {triage.reason} · {triage.score}
           </div>
         )}
       </td>
@@ -430,7 +401,6 @@ function DecisionDesk({
       ? (Math.abs(draft.target - draft.entry) / Math.abs(draft.entry - draft.stop)).toFixed(2)
       : null;
   const riskRewardValue = riskReward ? Number(riskReward) : null;
-  const scannerContext = scannerReviewContextSummary(draft.scanner_context);
   const planNudges = [
     ...requiredFields
       .filter((field) => !field.complete)
@@ -529,20 +499,23 @@ function DecisionDesk({
         >
           <div className="label" style={{ marginBottom: 5 }}>Original scan</div>
           <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-            {scannerContext.pills.map((pill) => (
-              <span key={pill} className="workspace-pill">{pill}</span>
-            ))}
+            {draft.scanner_context.preset_name && (
+              <span className="workspace-pill">{draft.scanner_context.preset_name}</span>
+            )}
+            {(draft.scanner_context.setup_grade || draft.scanner_context.setup_score != null) && (
+              <span className="workspace-pill">
+                {[draft.scanner_context.setup_grade, draft.scanner_context.setup_score].filter((value) => value != null && value !== "").join(" ")}
+              </span>
+            )}
+            {draft.scanner_context.data_as_of && (
+              <span className="workspace-pill">As of {draft.scanner_context.data_as_of}</span>
+            )}
           </div>
-          {scannerContext.primaryReason && (
+          {draft.scanner_context.match_reasons?.[0] && (
             <div className="caption" style={{ marginTop: 6, lineHeight: 1.55 }}>
-              {scannerContext.primaryReason}
+              {draft.scanner_context.match_reasons[0]}
             </div>
           )}
-          {scannerContext.warnings.map((warning) => (
-            <div key={warning} className="caption" style={{ marginTop: 4, color: "var(--warn)", lineHeight: 1.5 }}>
-              {warning}
-            </div>
-          ))}
         </div>
       )}
       <div className="decision-desk-primary-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 8 }}>
@@ -610,14 +583,7 @@ function ChartPanel({
   const [chartErrorMessage, setChartErrorMessage] = useState("");
   const [tf, setTf] = useState<WatchlistChartTimeframe>("3M");
   const [chartRequest, setChartRequest] = useState<WatchlistChartRequest>(() => getWatchlistChartRequest("3M"));
-  const [chartSource, setChartSource] = useState<{
-    mode?: string | null;
-    source?: string | null;
-    asOf?: string | null;
-    symbol?: string | null;
-    range?: string | null;
-    limitedHistoryBadge?: { label: string; title: string; tone: "good" | "warn" } | null;
-  } | null>(null);
+  const [chartSource, setChartSource] = useState<{ mode?: string | null; source?: string | null; asOf?: string | null; symbol?: string | null; range?: string | null } | null>(null);
   const [chartRangeNote, setChartRangeNote] = useState<string | null>(null);
   const [chartTimeframeMessage, setChartTimeframeMessage] = useState("");
   const [chartType, setChartType] = useState<ChartDisplayType>(() => readWatchlistChartType());
@@ -667,13 +633,6 @@ function ChartPanel({
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
   const canRouteLiveOrder = false;
-  const orderActionBar = brokerOrderActionBarPresentation({
-    broker: brokerStatus,
-    unavailable: Boolean(brokerStatusError),
-    canRouteLiveOrder,
-    liveConfirmed,
-    side,
-  });
   useEffect(() => {
     const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
     setTheme(current);
@@ -775,7 +734,6 @@ function ChartPanel({
           asOf: d.coverage?.as_of ?? d.source_metadata?.as_of ?? rows[rows.length - 1]?.time ?? null,
           symbol: responseSymbol,
           range: formatChartCoverageRange(d.coverage, rows),
-          limitedHistoryBadge: getFiveYearHistoryBadge(d.coverage, request),
         });
         setChartRangeNote(getCoverageAvailabilityMessage(d.coverage, request) ?? getRangeAvailabilityMessage(rows, request));
         if (d.latest?.close && !price) setPrice(String(d.latest.close));
@@ -888,20 +846,6 @@ function ChartPanel({
               {chartSource?.source ?? (isMockMode ? "Demo data" : "Market data")}
             </span>
             <span className="caption">{chartRequest.label} · {formatChartGranularity(chartRequest.timeframe)} · {chartSource?.range ?? formatCandleRange(candles)}</span>
-            {chartSource && (
-              <span className="workspace-pill" title="Chart review coverage for the selected range">
-                Coverage: {chartSource.range}
-              </span>
-            )}
-            {chartSource?.limitedHistoryBadge && (
-              <span
-                className="workspace-pill"
-                title={chartSource.limitedHistoryBadge.title}
-                style={{ color: chartSource.limitedHistoryBadge.tone === "good" ? "var(--gain)" : "var(--warn)" }}
-              >
-                {chartSource.limitedHistoryBadge.label}
-              </span>
-            )}
           </div>
           {chartSource && (
             <div className="caption" style={{ marginTop: 3 }}>
@@ -1043,7 +987,7 @@ function ChartPanel({
         <div className="order-ticket-header">
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">{orderActionBar.detail}</div>
+            <div className="caption">Journal capture only: save the plan to Journal. Place any real trade directly with your broker.</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -1058,14 +1002,16 @@ function ChartPanel({
             {brokerStatusError ? "Broker status unavailable" : brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
-            {orderActionBar.detail}
+            {brokerStatusError
+              ? `${brokerStatusError} Order capture stays as a journal draft.`
+              : brokerStatus?.connected ? "Broker import available; order capture still records as a journal draft" : "Order capture records as a journal draft"}
           </span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginBottom: 10 }}>
           {[
             { label: "R:R", value: planRiskReward != null ? planRiskReward.toFixed(2) : "—", tone: planRiskReward == null ? "var(--text-tertiary)" : planRiskReward >= 2 ? "var(--gain)" : "var(--warn)" },
             { label: "Risk", value: orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", tone: "var(--text-secondary)" },
-            { label: "Mode", value: orderActionBar.modeLabel, tone: orderActionBar.status === "bad" ? "var(--warn)" : orderActionBar.status === "good" ? "var(--accent)" : "var(--text-tertiary)" },
+            { label: "Mode", value: brokerStatus?.connected ? "Import only" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
           ].map((item) => (
             <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
               <div className="label" style={{ marginBottom: 2 }}>{item.label}</div>
@@ -1200,7 +1146,7 @@ function ChartPanel({
           </div>
         )}
 
-        {orderActionBar.requiresLiveConfirmation && (
+        {canRouteLiveOrder && (
           <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.5 }}>
             <input
               type="checkbox"
@@ -1214,17 +1160,17 @@ function ChartPanel({
           </label>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy || !planValid || orderActionBar.primaryDisabled}
+        <button onClick={handleOrder} disabled={orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed)}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid ? "not-allowed" : "pointer",
-            opacity: orderBusy || !planValid || orderActionBar.primaryDisabled ? 0.5 : 1,
+            opacity: orderBusy || !planValid || (canRouteLiveOrder && !liveConfirmed) ? 0.5 : 1,
           }}>
           {orderBusy
-            ? orderActionBar.savingLabel
+            ? canRouteLiveOrder && liveConfirmed ? "Submitting..." : "Saving..."
             : planValid
-              ? orderActionBar.primaryLabel
+              ? canRouteLiveOrder ? `${side === "buy" ? "Buy" : "Sell"} via ${brokerStatus?.broker ?? "broker"}` : `Save ${side === "buy" ? "buy" : "sell"} journal draft`
               : planNextAction}
         </button>
         </div>
@@ -1263,18 +1209,18 @@ function WatchlistContent() {
   const [noteDraft, setNoteDraft] = useState("");
   const [queueView, setQueueView] = useState<"all" | "pinned" | "tagged" | "needs-review">("all");
   const [activeTagFilter, setActiveTagFilter] = useState<string>("all");
-  const [sortMode, setSortMode] = useState<"triage" | "manual" | "setup" | "move" | "volume" | "rsi">("triage");
+  const [sortMode, setSortMode] = useState<"manual" | "setup" | "move" | "volume" | "rsi">("manual");
   const [showDeskControls, setShowDeskControls] = useState(false);
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
   const [queuePage, setQueuePage] = useState(0);
+  const [quotesAsOf, setQuotesAsOf] = useState<string | null>(null);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
   const appliedChartDrafts = useRef<Set<string>>(new Set());
   const pendingRouteSymbolRef = useRef<string | null>(null);
   const routeAutoAddAttempts = useRef<Set<string>>(new Set());
-  const chartSelectionModeRef = useRef<"auto" | "manual" | "route" | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const metaKey = "alphavyuh-watchlist-meta-v1";
@@ -1367,21 +1313,6 @@ function WatchlistContent() {
     setTimeout(() => setToast(""), 3500);
   }
 
-  const selectManualSymbol = useCallback((symbol: string) => {
-    chartSelectionModeRef.current = "manual";
-    setChartSymbol(symbol);
-  }, []);
-
-  const selectRouteSymbol = useCallback((symbol: string) => {
-    chartSelectionModeRef.current = "route";
-    setChartSymbol(symbol);
-  }, []);
-
-  const clearAutoSymbol = useCallback(() => {
-    chartSelectionModeRef.current = null;
-    setChartSymbol(null);
-  }, []);
-
   function watchlistUnavailableMessage(): string {
     return WATCHLIST_DATA_UNAVAILABLE_MESSAGE;
   }
@@ -1400,10 +1331,10 @@ function WatchlistContent() {
     } catch {
       setWatchlistError(watchlistUnavailableMessage());
       setLoading(false);
-      if (requestedSymbol) selectRouteSymbol(requestedSymbol);
+      if (requestedSymbol) setChartSymbol(requestedSymbol);
       return;
     }
-    if (requestedSymbol) selectRouteSymbol(requestedSymbol);
+    if (requestedSymbol) setChartSymbol(requestedSymbol);
     setLoading(false);
 
     getWatchlists({ force: true })
@@ -1413,7 +1344,7 @@ function WatchlistContent() {
         if (enrichedLists.length > 0 && !activeId) {
           setActiveId(enrichedLists.some((list) => list.id === requestedWatchlistId) ? requestedWatchlistId : enrichedLists[0].id);
         }
-        if (requestedSymbol) selectRouteSymbol(requestedSymbol);
+        if (requestedSymbol) setChartSymbol(requestedSymbol);
       })
       .catch(() => {
         setWatchlistError(watchlistUnavailableMessage());
@@ -1465,15 +1396,15 @@ function WatchlistContent() {
     const matchedRequestedSymbol = requestedSymbol && matched.items?.some((item) => item.symbol === requestedSymbol);
     if (requestedSymbol) {
       pendingRouteSymbolRef.current = requestedSymbol;
-      selectRouteSymbol(requestedSymbol);
+      setChartSymbol(requestedSymbol);
       trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: matched.id, source: "route" });
-    } else {
-      clearAutoSymbol();
+    } else if (matched.items?.[0]?.symbol) {
+      setChartSymbol(matched.items[0].symbol);
     }
     if (planDraftParam !== "chart" && (!requestedSymbol || matchedRequestedSymbol)) {
       router.replace("/watchlist", { scroll: false });
     }
-  }, [clearAutoSymbol, planDraftParam, selectRouteSymbol, symbolParam, watchlistIdParam, watchlists, router]);
+  }, [planDraftParam, symbolParam, watchlistIdParam, watchlists, router]);
 
   useEffect(() => {
     if (!symbolParam || watchlists.length === 0) return;
@@ -1483,7 +1414,7 @@ function WatchlistContent() {
     for (const wl of watchlists) {
       if (wl.items?.some((i: WatchlistItem) => i.symbol === requestedSymbol)) {
         setActiveId(wl.id);
-        selectRouteSymbol(requestedSymbol);
+        setChartSymbol(requestedSymbol);
         trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: wl.id, source: "scanner_handoff" });
         found = true;
         break;
@@ -1497,23 +1428,23 @@ function WatchlistContent() {
       }
       routeAutoAddAttempts.current.add(attemptKey);
       addToWatchlist(activeId, requestedSymbol)
-        .then(() => getQuote(requestedSymbol))
-        .then(quote => {
-          const newItem: WatchlistItem = quote
-            ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-            : { symbol: requestedSymbol, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+        .then(() => getQuotes([requestedSymbol]))
+        .then(({ quotes, as_of }) => {
+          if (as_of) setQuotesAsOf(as_of);
+          const quote = quotes[requestedSymbol];
+          const newItem = quote ? watchlistItemFromQuote(quote) : watchlistItemFromSymbol(requestedSymbol);
           setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...(w.items || []), newItem] } : w));
-          selectRouteSymbol(requestedSymbol);
+          setChartSymbol(requestedSymbol);
           trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         })
         .catch(() => {
-          selectRouteSymbol(requestedSymbol);
+          setChartSymbol(requestedSymbol);
           showToast(`${requestedSymbol} could not be added to the active watchlist. ${WATCHLIST_RECOVERY_MESSAGE}`);
           trackEvent("watchlist_symbol_focus_failed", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
         });
     }
     if (planDraftParam !== "chart") router.replace("/watchlist", { scroll: false });
-  }, [planDraftParam, selectRouteSymbol, symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [planDraftParam, symbolParam, watchlists.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1603,7 +1534,7 @@ function WatchlistContent() {
         queueView === "all" ? true :
         queueView === "pinned" ? Boolean(meta.pinned) :
         queueView === "tagged" ? (meta.tags?.length ?? 0) > 0 :
-        !meta.note?.trim() || symbolReviewMap.get(item.symbol)?.state === "needs-review" || workflowBySymbol[item.symbol]?.review_later === true || workflowBySymbol[item.symbol]?.lifecycle === "review_later";
+        !meta.note?.trim();
       const matchesTagFilter =
         activeTagFilter === "all" ? true : Boolean(meta.tags?.includes(activeTagFilter));
       const matchesQuery = !query
@@ -1618,12 +1549,6 @@ function WatchlistContent() {
       const bMeta = getItemMeta(activeId, b.symbol);
       const aPinned = aMeta.pinned ? 1 : 0;
       const bPinned = bMeta.pinned ? 1 : 0;
-      if (sortMode === "triage") {
-        const aTriage = buildWatchlistTriageSummary(a, { meta: aMeta, workflow: workflowBySymbol[a.symbol], reviewState: symbolReviewMap.get(a.symbol) });
-        const bTriage = buildWatchlistTriageSummary(b, { meta: bMeta, workflow: workflowBySymbol[b.symbol], reviewState: symbolReviewMap.get(b.symbol) });
-        const triageDiff = bTriage.score - aTriage.score;
-        if (triageDiff !== 0) return triageDiff;
-      }
       if (sortMode === "move") {
         const changeDiff = (b.pct_change ?? 0) - (a.pct_change ?? 0);
         if (changeDiff !== 0) return changeDiff;
@@ -1640,17 +1565,13 @@ function WatchlistContent() {
         const rsiDiff = (b.rsi_14 ?? 0) - (a.rsi_14 ?? 0);
         if (rsiDiff !== 0) return rsiDiff;
       }
-      if ((sortMode === "manual" || sortMode === "triage") && aPinned !== bPinned) return bPinned - aPinned;
+      if (sortMode === "manual" && aPinned !== bPinned) return bPinned - aPinned;
       return a.sort_order - b.sort_order;
     });
-  }, [activeId, activeWl?.items, deskFilter, listQuery, getItemMeta, queueView, activeTagFilter, sortMode, workflowBySymbol, symbolReviewMap]);
+  }, [activeId, activeWl?.items, deskFilter, listQuery, getItemMeta, queueView, activeTagFilter, sortMode]);
   const queuePageCount = Math.max(1, Math.ceil(visibleItems.length / WATCHLIST_PAGE_SIZE));
   const pageStart = Math.min(queuePage, queuePageCount - 1) * WATCHLIST_PAGE_SIZE;
   const pageItems = visibleItems.slice(pageStart, pageStart + WATCHLIST_PAGE_SIZE);
-  const multiChartReviewHref = useMemo(() => buildMultiChartReviewHref(
-    visibleItems.map((item) => item.symbol),
-    { source: "watchlist", watchlistId: activeWl?.id, watchlistName: activeWl?.name },
-  ), [activeWl?.id, activeWl?.name, visibleItems]);
   const pageSymbolsKey = pageItems.map(item => item.symbol).join(",");
   const selectedItem = activeWl?.items.find(item => item.symbol === chartSymbol) ?? null;
   const selectedItemMeta = getItemMeta(activeId, chartSymbol);
@@ -1659,14 +1580,6 @@ function WatchlistContent() {
   const selectedPlanStatus = workflowPlanStatus(selectedWorkflow);
   const selectedFundamentals = chartSymbol ? fundamentalsBySymbol[chartSymbol] ?? null : null;
   const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
-  const importPreview = useMemo(() => parseWatchlistSymbolImport(symbolInput), [symbolInput]);
-  const isBulkSymbolInput = importPreview.symbols.length > 1 || /[\n,]/.test(symbolInput);
-  const addDisabled = adding || !symbolInput.trim() || (isBulkSymbolInput && importPreview.symbols.length === 0);
-  const selectedTriage = selectedItem ? buildWatchlistTriageSummary(selectedItem, {
-    meta: selectedItemMeta,
-    workflow: selectedWorkflow,
-    reviewState: selectedReviewState,
-  }) : null;
 
   useEffect(() => {
     if (!chartSymbol || !visibleItems.length) return;
@@ -1695,27 +1608,18 @@ function WatchlistContent() {
     let cancelled = false;
 
     async function refreshLiveQuotes() {
-      const updates = await Promise.all(
-        pageItems.map(async (item) => {
-          const live = await getQuoteLive(item.symbol).catch(() => null);
-          return live ? {
-            symbol: item.symbol,
-            close: live.close ?? undefined,
-            pct_change: live.pct_change ?? undefined,
-          } : null;
-        })
-      );
+      const { quotes, as_of } = await getQuotes(pageItems.map((item) => item.symbol)).catch(() => ({ quotes: {} as Record<string, ScanResult>, as_of: null }));
 
       if (cancelled) return;
-      const liveMap = new Map(updates.filter(Boolean).map((u) => [u!.symbol, u!]));
+      if (as_of) setQuotesAsOf(as_of);
       setWatchlists(prev => prev.map(w => (
         w.id !== activeId
           ? w
           : {
               ...w,
               items: w.items.map(item => {
-                const live = liveMap.get(item.symbol);
-                return live ? { ...item, close: live.close, pct_change: live.pct_change } : item;
+                const quote = quotes[item.symbol];
+                return quote ? { ...item, close: quote.close, pct_change: quote.pct_change } : item;
               }),
             }
       )));
@@ -1731,11 +1635,16 @@ function WatchlistContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, pageSymbolsKey]);
 
+  useEffect(() => {
+    if (symbolParam || !visibleItems.length) return;
+    const selectedIsVisible = chartSymbol && visibleItems.some(item => item.symbol === chartSymbol);
+    if (!selectedIsVisible) setChartSymbol(visibleItems[0].symbol);
+  }, [chartSymbol, symbolParam, visibleItems]);
+
   const moveSelection = useCallback((direction: "prev" | "next") => {
     if (!visibleItems.length) return;
     const currentIndex = visibleItems.findIndex(item => item.symbol === chartSymbol);
     if (currentIndex === -1) {
-      chartSelectionModeRef.current = "manual";
       setChartSymbol(visibleItems[0].symbol);
       return;
     }
@@ -1744,36 +1653,26 @@ function WatchlistContent() {
       : Math.max(0, currentIndex - 1);
     const nextItem = visibleItems[nextIndex];
     if (nextItem) {
-      chartSelectionModeRef.current = "manual";
       setChartSymbol(nextItem.symbol);
     }
   }, [chartSymbol, visibleItems]);
 
   useEffect(() => {
     if (!visibleItems.length) {
-      if (!symbolParam && !pendingRouteSymbolRef.current && chartSymbol !== null) {
-        clearAutoSymbol();
-      }
+      setChartSymbol(null);
       return;
     }
-    const prioritySymbol = visibleItems[0].symbol;
     const hasSelectedSymbol = chartSymbol && visibleItems.some(item => item.symbol === chartSymbol);
     if (hasSelectedSymbol && pendingRouteSymbolRef.current === chartSymbol) {
       pendingRouteSymbolRef.current = null;
     }
-    if (chartSymbol && !hasSelectedSymbol && (symbolParam?.toUpperCase() === chartSymbol || pendingRouteSymbolRef.current === chartSymbol)) {
+    if (!hasSelectedSymbol && (symbolParam?.toUpperCase() === chartSymbol || pendingRouteSymbolRef.current === chartSymbol)) {
       return;
     }
     if (!hasSelectedSymbol) {
-      chartSelectionModeRef.current = "auto";
-      setChartSymbol(prioritySymbol);
-      return;
+      setChartSymbol(visibleItems[0].symbol);
     }
-    if (!symbolParam && (chartSelectionModeRef.current === null || chartSelectionModeRef.current === "auto") && chartSymbol !== prioritySymbol) {
-      chartSelectionModeRef.current = "auto";
-      setChartSymbol(prioritySymbol);
-    }
-  }, [activeId, chartSymbol, clearAutoSymbol, symbolParam, visibleItems]);
+  }, [activeId, chartSymbol, symbolParam, visibleItems]);
 
   useEffect(() => {
     setQueuePage(0);
@@ -1825,7 +1724,7 @@ function WatchlistContent() {
       const remaining = watchlists.filter(w => w.id !== id);
       setWatchlists(remaining);
       if (activeId === id) setActiveId(remaining[0]?.id ?? null);
-      if (chartSymbol) clearAutoSymbol();
+      if (chartSymbol) setChartSymbol(null);
     } catch {
       showToast(WATCHLIST_DELETE_FAILED_MESSAGE);
     }
@@ -1837,7 +1736,6 @@ function WatchlistContent() {
       const wl = await createWatchlist(newWlName.trim());
       setWatchlists(prev => [...prev, { ...wl, items: [] }]);
       setActiveId(wl.id);
-      clearAutoSymbol();
       setNewWlName("");
       setShowNewWl(false);
     } catch {
@@ -1847,13 +1745,6 @@ function WatchlistContent() {
 
   const handleSearchInput = useCallback(async (q: string) => {
     setSymbolInput(q);
-    const parsed = parseWatchlistSymbolImport(q);
-    if (parsed.symbols.length > 1 || /[\n,]/.test(q)) {
-      setSearchResults([]);
-      setSymbolSearchError("");
-      setShowDropdown(false);
-      return;
-    }
     if (q.length >= 1) {
       try {
         const results = await searchSymbols(q);
@@ -1882,10 +1773,12 @@ function WatchlistContent() {
     setAddMsg("");
     try {
       await addToWatchlist(activeId, symbol);
-      const quote = await getQuote(symbol);
-      const newItem = watchlistItemFromQuote(symbol, quote, activeWl?.items.length ?? 0);
+      const { quotes, as_of } = await getQuotes([symbol]);
+      if (as_of) setQuotesAsOf(as_of);
+      const quote = quotes[symbol.toUpperCase()];
+      const newItem = quote ? watchlistItemFromQuote(quote) : watchlistItemFromSymbol(symbol);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
-      selectManualSymbol(symbol);
+      setChartSymbol(symbol);
       setSymbolInput("");
       setAddMsg("Added");
     } catch (e: unknown) {
@@ -1903,23 +1796,30 @@ function WatchlistContent() {
     try {
       const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
       const symbols = STARTER_SYMBOLS.filter((symbol) => !existing.has(symbol));
-      const newItems: WatchlistItem[] = [];
+      const addedSymbols: string[] = [];
       let failureCount = 0;
 
-      for (const [index, symbol] of symbols.entries()) {
+      for (const symbol of symbols) {
         try {
           await addToWatchlist(activeId, symbol);
+          addedSymbols.push(symbol);
         } catch {
           failureCount += 1;
-          continue;
         }
-        const quote = await getQuote(symbol).catch(() => null);
-        newItems.push(watchlistItemFromQuote(symbol, quote, (activeWl?.items.length ?? 0) + index));
       }
+
+      const { quotes, as_of } = addedSymbols.length
+        ? await getQuotes(addedSymbols).catch(() => ({ quotes: {} as Record<string, ScanResult>, as_of: null }))
+        : { quotes: {} as Record<string, ScanResult>, as_of: null };
+      if (as_of) setQuotesAsOf(as_of);
+      const newItems = addedSymbols.map((symbol, index) => {
+        const quote = quotes[symbol.toUpperCase()];
+        return quote ? { ...watchlistItemFromQuote(quote, index) } : watchlistItemFromSymbol(symbol, index);
+      });
 
       if (newItems.length) {
         setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
-        selectManualSymbol(newItems[0].symbol);
+        setChartSymbol(newItems[0].symbol);
       }
       if (failureCount) {
         const message = newItems.length ? `Added ${newItems.length}; ${failureCount} could not be added. ${WATCHLIST_RECOVERY_MESSAGE}` : WATCHLIST_STARTER_FAILED_MESSAGE;
@@ -1936,79 +1836,21 @@ function WatchlistContent() {
     }
   }
 
-  async function importSymbolsIntoWatchlist(parsed: WatchlistSymbolImport) {
-    if (!activeId || parsed.symbols.length === 0) return;
-    setAdding(true);
-    setAddMsg("");
-    setShowDropdown(false);
-    setSearchResults([]);
-    try {
-      const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
-      const newItems: WatchlistItem[] = [];
-      let skippedCount = parsed.duplicateCount + parsed.truncatedCount;
-      let failureCount = 0;
-
-      for (const symbol of parsed.symbols) {
-        if (existing.has(symbol)) {
-          skippedCount += 1;
-          continue;
-        }
-        try {
-          await addToWatchlist(activeId, symbol);
-          const quote = await getQuote(symbol).catch(() => null);
-          newItems.push(watchlistItemFromQuote(symbol, quote, (activeWl?.items.length ?? 0) + newItems.length));
-          existing.add(symbol);
-        } catch (error) {
-          if (error instanceof Error && /already in watchlist/i.test(error.message)) {
-            skippedCount += 1;
-          } else {
-            failureCount += 1;
-          }
-        }
-      }
-
-      if (newItems.length) {
-        setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
-        selectManualSymbol(newItems[0].symbol);
-      }
-
-      const parts = [
-        newItems.length ? `Imported ${newItems.length} symbol${newItems.length === 1 ? "" : "s"}` : "No new symbols imported",
-        skippedCount ? `skipped ${skippedCount}` : null,
-        failureCount ? `${failureCount} failed` : null,
-      ].filter(Boolean);
-      const message = `${parts.join("; ")}${failureCount ? `. ${WATCHLIST_RECOVERY_MESSAGE}` : ""}`;
-      setAddMsg(message);
-      if (failureCount) showToast(message);
-      if (newItems.length) setSymbolInput("");
-    } catch {
-      const message = `Symbols could not be imported. ${WATCHLIST_RECOVERY_MESSAGE}`;
-      setAddMsg(message);
-      showToast(message);
-    } finally {
-      setAdding(false);
-      setTimeout(() => setAddMsg(""), 3500);
-    }
-  }
-
   async function handleAddSymbol() {
     if (!activeId || !symbolInput.trim()) return;
-    const parsed = parseWatchlistSymbolImport(symbolInput);
-    if (parsed.symbols.length > 1 || /[\n,]/.test(symbolInput)) {
-      await importSymbolsIntoWatchlist(parsed);
-      return;
-    }
-    const sym = parsed.symbols[0] ?? symbolInput.trim().toUpperCase();
+    const sym = symbolInput.trim().toUpperCase();
     setAdding(true);
     setAddMsg("");
     setShowDropdown(false);
     setSearchResults([]);
     try {
       await addToWatchlist(activeId, sym);
-      const quote = await getQuote(sym);
-      const newItem = watchlistItemFromQuote(sym, quote, activeWl?.items.length ?? 0);
+      const { quotes, as_of } = await getQuotes([sym]);
+      if (as_of) setQuotesAsOf(as_of);
+      const quote = quotes[sym];
+      const newItem = quote ? watchlistItemFromQuote(quote) : watchlistItemFromSymbol(sym);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
-      selectManualSymbol(sym);
+      setChartSymbol(sym);
       setSymbolInput("");
       setAddMsg("Added");
     } catch (e: unknown) {
@@ -2026,7 +1868,7 @@ function WatchlistContent() {
       setWatchlists(prev =>
         prev.map(w => w.id === activeId ? { ...w, items: w.items.filter(i => i.symbol !== symbol) } : w)
       );
-      if (chartSymbol === symbol) clearAutoSymbol();
+      if (chartSymbol === symbol) setChartSymbol(null);
     } catch {
       showToast(watchlistRemoveFailedMessage(symbol));
     }
@@ -2140,16 +1982,13 @@ function WatchlistContent() {
     setQueueView("all");
     setDeskFilter("all");
     setActiveTagFilter("all");
-    setSortMode("triage");
+    setSortMode("manual");
     setListQuery("");
   }
 
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
-      <div
-        className="workspace-grid watchlist-workspace-grid"
-        style={{ gridTemplateColumns: sidebarCollapsed ? "var(--watchlist-grid-columns-collapsed)" : "var(--watchlist-grid-columns)", minHeight: "calc(100vh - 104px)" }}
-      >
+      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
       {/* Toast */}
       {toast && (
         <div data-testid="watchlist-toast" style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
@@ -2159,7 +1998,7 @@ function WatchlistContent() {
 
       {/* ── Watchlist tabs sidebar ─── */}
       {sidebarCollapsed ? (
-        <div className="workspace-card workspace-card-muted watchlist-sidebar-panel" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
+        <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
           <button onClick={() => setSidebarCollapsed(false)} style={{ color: "var(--text-tertiary)" }}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
               <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2171,7 +2010,6 @@ function WatchlistContent() {
                 key={wl.id}
                 onClick={() => {
                   setActiveId(wl.id);
-                  clearAutoSymbol();
                   setSidebarCollapsed(false);
                 }}
                 title={wl.name}
@@ -2183,7 +2021,7 @@ function WatchlistContent() {
           </div>
         </div>
       ) : (
-        <aside className="workspace-card workspace-card-muted watchlist-sidebar-panel" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <aside className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <div className="workspace-card-header" style={{ padding: "14px 14px" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Watchlists</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2236,10 +2074,7 @@ function WatchlistContent() {
                 const active = activeId === wl.id;
                 return (
                   <div key={wl.id} style={{ position: "relative", display: "flex", alignItems: "center" }} className="wl-item">
-                    <button onClick={() => {
-                      setActiveId(wl.id);
-                      clearAutoSymbol();
-                    }}
+                    <button onClick={() => setActiveId(wl.id)}
                       style={{
                         flex: 1, textAlign: "left", padding: "8px 14px", fontSize: 13, cursor: "pointer",
                         background: active ? "var(--accent-subtle)" : "transparent",
@@ -2273,7 +2108,7 @@ function WatchlistContent() {
       )}
 
       {/* ── Stock list ─────────────────────────────────────── */}
-      <div className="workspace-card workspace-card-muted watchlist-list-panel" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Header */}
         <div className="workspace-card-header" style={{ paddingBottom: 10, flexShrink: 0 }}>
           <div>
@@ -2300,13 +2135,13 @@ function WatchlistContent() {
                   onChange={e => handleSearchInput(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === "Enter") {
-                      if (!isBulkSymbolInput && searchResults.length > 0) handlePickSymbol(searchResults[0].symbol);
+                      if (searchResults.length > 0) handlePickSymbol(searchResults[0].symbol);
                       else handleAddSymbol();
                     }
                     if (e.key === "Escape") setShowDropdown(false);
                   }}
                   onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-                  placeholder="Add or paste symbols…"
+                  placeholder="Add symbol…"
                   style={{ fontSize: 12, borderRadius: "var(--radius-sm)", paddingLeft: 24, paddingRight: 8, paddingTop: 5, paddingBottom: 5, background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", outline: "none", width: 130 }}
                 />
                 {showDropdown && (searchResults.length > 0 || symbolSearchError) && (
@@ -2328,19 +2163,10 @@ function WatchlistContent() {
                   </div>
                 )}
               </div>
-              <button onClick={handleAddSymbol} disabled={addDisabled}
-                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: addDisabled ? 0.5 : 1 }}>
-                {adding ? "…" : isBulkSymbolInput ? `Import ${importPreview.symbols.length || ""}`.trim() : "Add"}
+              <button onClick={handleAddSymbol} disabled={adding || !symbolInput.trim()}
+                style={{ padding: "5px 8px", borderRadius: "var(--radius-sm)", fontSize: 11, fontWeight: 700, background: "linear-gradient(180deg, var(--accent-strong), var(--accent))", color: "#04120d", border: "1px solid rgba(244,247,251,0.24)", cursor: "pointer", opacity: (adding || !symbolInput.trim()) ? 0.5 : 1 }}>
+                {adding ? "…" : "Add"}
               </button>
-              {activeWl.items.length > 1 && (
-                <button
-                  className="workspace-chip-button"
-                  onClick={() => router.push(multiChartReviewHref)}
-                  title="Open up to four queue symbols in a multi-chart review board"
-                >
-                  Review 4 charts
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -2378,53 +2204,21 @@ function WatchlistContent() {
                   </div>
                   <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedItem.company_name || selectedItem.sector || "Active watchlist symbol"}
+                    {quotesAsOf ? ` · As of ${quotesAsOf}` : ""}
                   </div>
                 </div>
-                <div data-testid="watchlist-selected-actions" className="workspace-pill-row" style={{ marginTop: 0 }}>
+                <div className="workspace-pill-row" style={{ marginTop: 0 }}>
+                  <button className="workspace-chip-button" onClick={() => router.push(chartHref(selectedItem.symbol))}>
+                    Open chart
+                  </button>
                   <button className="workspace-chip-button" onClick={() => router.push(`/journal?symbol=${selectedItem.symbol}`)}>
                     Review journal
                   </button>
-                  <button className="workspace-chip-button" onClick={() => router.push(chartHref(selectedItem.symbol))}>
-                    Full chart
-                  </button>
-                  <span
-                    className={`workspace-pill${selectedPlanStatus.valid ? " active" : ""}`}
-                    title={selectedPlanStatus.valid ? "Plan ready" : selectedPlanStatus.next}
-                  >
-                    {selectedPlanStatus.valid ? "Plan ready" : selectedPlanStatus.next}
-                  </span>
                   <button className={`workspace-chip-button${showSelectedMeta ? " active" : ""}`} onClick={() => setShowSelectedMeta((current) => !current)}>
                     {showSelectedMeta ? "Hide details" : "Details"}
                   </button>
                 </div>
               </div>
-              {selectedTriage && (
-                <div
-                  data-testid="watchlist-triage-summary"
-                  style={{
-                    marginTop: 10,
-                    padding: "8px 10px",
-                    borderRadius: 12,
-                    background: selectedTriage.label === "Act now" ? "rgba(27,191,114,0.08)" : selectedTriage.label === "Review next" ? "rgba(77,214,255,0.08)" : "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                    <div>
-                      <div className="label" style={{ marginBottom: 3 }}>Review priority</div>
-                      <div className="caption" style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                        {selectedTriage.label}: {selectedTriage.reason}
-                      </div>
-                    </div>
-                    <div className="workspace-pill">Score {selectedTriage.score}</div>
-                  </div>
-                  <div className="workspace-pill-row" style={{ marginTop: 8 }}>
-                    {selectedTriage.reasons.map((reason) => (
-                      <span key={reason} className="workspace-pill">{reason}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
               {journalLoadError && (
                 <div data-testid="watchlist-journal-status" className="caption" style={{ marginTop: 8, padding: "7px 9px", borderRadius: 10, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--warn)", lineHeight: 1.5 }}>
                   Journal review context is unavailable. {journalLoadError} Watchlist queue, chart review, and planning remain usable.
@@ -2605,7 +2399,7 @@ function WatchlistContent() {
               ))}
             </div>
             <div className="workspace-pill-row">
-              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "triage" || listQuery.trim()) && (
+              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
                 <button className="workspace-chip-button" onClick={resetDeskView}>
                   Reset
                 </button>
@@ -2657,7 +2451,6 @@ function WatchlistContent() {
                   onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
                   style={{ fontSize: 12, borderRadius: 999, padding: "7px 12px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
                 >
-                  <option value="triage">Review priority</option>
                   <option value="manual">Manual order</option>
                   <option value="setup">Sort by setup</option>
                   <option value="move">Sort by move</option>
@@ -2713,7 +2506,6 @@ function WatchlistContent() {
                     <tbody>
                       {pageItems.map(item => {
                         const meta = getItemMeta(activeId, item.symbol);
-                        const triage = buildWatchlistTriageSummary(item, { meta, workflow: workflowBySymbol[item.symbol], reviewState: symbolReviewMap.get(item.symbol) });
                         return (
                         <SortableRow
                           key={item.symbol}
@@ -2721,9 +2513,8 @@ function WatchlistContent() {
                           isSelected={chartSymbol === item.symbol}
                           pinned={Boolean(meta.pinned)}
                           reviewState={symbolReviewMap.get(item.symbol)?.state}
-                          triage={triage}
                           onRemove={handleRemove}
-                          onSelect={selectManualSymbol}
+                          onSelect={setChartSymbol}
                           onOpenChart={(sym) => router.push(chartHref(sym))}
                           dense={denseRows}
                         />
@@ -2747,7 +2538,6 @@ function WatchlistContent() {
                 <tbody>
                   {pageItems.map(item => {
                     const meta = getItemMeta(activeId, item.symbol);
-                    const triage = buildWatchlistTriageSummary(item, { meta, workflow: workflowBySymbol[item.symbol], reviewState: symbolReviewMap.get(item.symbol) });
                     return (
                       <SortableRow
                         key={item.symbol}
@@ -2755,9 +2545,8 @@ function WatchlistContent() {
                         isSelected={chartSymbol === item.symbol}
                         pinned={Boolean(meta.pinned)}
                         reviewState={symbolReviewMap.get(item.symbol)?.state}
-                      triage={triage}
                       onRemove={handleRemove}
-                      onSelect={selectManualSymbol}
+                      onSelect={setChartSymbol}
                       onOpenChart={(sym) => router.push(chartHref(sym))}
                       dense={denseRows}
                     />
@@ -2805,7 +2594,7 @@ function WatchlistContent() {
       </div>
 
       {/* ── Chart + order panel ─────────────────────────────── */}
-      <div className="workspace-card watchlist-chart-panel" style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div className="workspace-card" style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {chartSymbol ? (
           <>
             <div style={{ flex: 1, minHeight: 0 }}>

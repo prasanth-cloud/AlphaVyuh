@@ -123,32 +123,37 @@ def _index_quotes() -> tuple[list[dict], str, bool]:
     return quotes, "kite_ws" if live_ticks else "latest_complete_session", bool(live_ticks)
 
 
-def _sector_index_quotes() -> tuple[list[dict], str, bool]:
+def _sector_index_quote(provider, symbol: str, label: str) -> tuple[dict, bool]:
+    try:
+        q = provider.live_quote(symbol, MarketIdentity(market="NSE", currency="INR"))
+        return ({
+            "symbol": symbol,
+            "label": label,
+            "close": _finite_float(q.get("close")),
+            "pct_change": _finite_float(q.get("pct_change")),
+            "prev_close": _finite_float(q.get("prev_close")),
+            "source": q.get("source") or provider.name,
+        }, True)
+    except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
+        return ({
+            "symbol": symbol,
+            "label": label,
+            "close": None,
+            "pct_change": None,
+            "prev_close": None,
+            "source": provider.name,
+            "error": str(exc),
+        }, False)
+
+
+async def _sector_index_quotes() -> tuple[list[dict], str, bool]:
     provider = get_market_data_provider()
-    quotes: list[dict] = []
-    live = True
-    for symbol, label in SECTOR_INDEXES:
-        try:
-            q = provider.live_quote(symbol, MarketIdentity(market="NSE", currency="INR"))
-            quotes.append({
-                "symbol": symbol,
-                "label": label,
-                "close": _finite_float(q.get("close")),
-                "pct_change": _finite_float(q.get("pct_change")),
-                "prev_close": _finite_float(q.get("prev_close")),
-                "source": q.get("source") or provider.name,
-            })
-        except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
-            live = False
-            quotes.append({
-                "symbol": symbol,
-                "label": label,
-                "close": None,
-                "pct_change": None,
-                "prev_close": None,
-                "source": provider.name,
-                "error": str(exc),
-            })
+    results = await asyncio.gather(*[
+        asyncio.to_thread(_sector_index_quote, provider, symbol, label)
+        for symbol, label in SECTOR_INDEXES
+    ])
+    quotes = [quote for quote, _ in results]
+    live = all(ok for _, ok in results)
     return quotes, provider.name, live
 
 
@@ -248,7 +253,7 @@ async def live_market_status(user_id: str = Depends(get_current_user_id)):
 
 @router.get("/live/sectors")
 async def live_sector_indices(user_id: str = Depends(get_current_user_id)):
-    sectors, source, is_live = _sector_index_quotes()
+    sectors, source, is_live = await _sector_index_quotes()
     return {
         "basis": "live_sector_indices",
         "source": source,

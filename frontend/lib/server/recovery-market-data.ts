@@ -42,6 +42,9 @@ type DailyRow = {
   volume_ratio?: number | null;
   w52h_pct?: number | null;
   w52l_pct?: number | null;
+  sma_50?: number | null;
+  sma_150?: number | null;
+  sma_200?: number | null;
   stock_universe?: UniverseRow | UniverseRow[] | null;
 };
 
@@ -107,7 +110,104 @@ const DAILY_SELECT = [
   "volume_ratio",
   "w52h_pct",
   "w52l_pct",
+  "sma_50",
+  "sma_150",
+  "sma_200",
 ].join(",");
+
+const RECOVERY_SCAN_ROW_CAP = 2500;
+
+type FilterableQuery = {
+  gte(column: string, value: number | string): FilterableQuery;
+  lte(column: string, value: number | string): FilterableQuery;
+  gt(column: string, value: number | string): FilterableQuery;
+  lt(column: string, value: number | string): FilterableQuery;
+  eq(column: string, value: boolean | number | string): FilterableQuery;
+  in(column: string, values: string[]): FilterableQuery;
+};
+
+function filterBool(filters: ScanFilters, key: string): boolean | null {
+  const value = filters[key];
+  return value === true ? true : value === false ? false : null;
+}
+
+export function applyRecoveryDbFilters(query: FilterableQuery, filters: ScanFilters): FilterableQuery {
+  let q: FilterableQuery = query;
+  const num = (key: string) => numberValue(filters[key]);
+
+  const priceMin = num("price_min");
+  if (priceMin != null) q = q.gte("close", priceMin);
+  const priceMax = num("price_max");
+  if (priceMax != null) q = q.lte("close", priceMax);
+  const highMin = num("high_min");
+  if (highMin != null) q = q.gte("high", highMin);
+  const lowMax = num("low_max");
+  if (lowMax != null) q = q.lte("low", lowMax);
+  const volumeMin = num("volume_min");
+  if (volumeMin != null) q = q.gte("volume", volumeMin);
+  const volumeMax = num("volume_max");
+  if (volumeMax != null) q = q.lte("volume", volumeMax);
+  const rsiMin = num("rsi_min");
+  if (rsiMin != null) q = q.gte("rsi_14", rsiMin);
+  const rsiMax = num("rsi_max");
+  if (rsiMax != null) q = q.lte("rsi_14", rsiMax);
+  const atrMin = num("atr_min");
+  if (atrMin != null) q = q.gte("atr_14", atrMin);
+  const atrMax = num("atr_max");
+  if (atrMax != null) q = q.lte("atr_14", atrMax);
+  const turnoverMin = num("turnover_min");
+  if (turnoverMin != null) q = q.gte("turnover", turnoverMin);
+  const turnoverMax = num("turnover_max");
+  if (turnoverMax != null) q = q.lte("turnover", turnoverMax);
+  const turnoverMinCr = num("turnover_min_cr");
+  if (turnoverMinCr != null) q = q.gte("turnover", turnoverMinCr * 10_000_000);
+  const pctChangeMin = num("pct_change_min");
+  if (pctChangeMin != null) q = q.gte("pct_change", pctChangeMin);
+  const pctChangeMax = num("pct_change_max");
+  if (pctChangeMax != null) q = q.lte("pct_change", pctChangeMax);
+  const gapPctMin = num("gap_pct_min");
+  if (gapPctMin != null) q = q.gte("gap_pct", gapPctMin);
+  const gapPctMax = num("gap_pct_max");
+  if (gapPctMax != null) q = q.lte("gap_pct", gapPctMax);
+  const adxMin = num("adx_min");
+  if (adxMin != null) q = q.gte("adx_14", adxMin);
+  const adxMax = num("adx_max");
+  if (adxMax != null) q = q.lte("adx_14", adxMax);
+  const volumeRatioMin = num("volume_ratio_min");
+  if (volumeRatioMin != null) q = q.gte("volume_ratio", volumeRatioMin);
+  const volumeRatioMax = num("volume_ratio_max");
+  if (volumeRatioMax != null) q = q.lte("volume_ratio", volumeRatioMax);
+  const rsScoreMin = num("rs_score_min");
+  if (rsScoreMin != null) q = q.gte("rs_score", rsScoreMin);
+  const rsScoreMax = num("rs_score_max");
+  if (rsScoreMax != null) q = q.lte("rs_score", rsScoreMax);
+  const w52hMax = num("w52h_pct_max") ?? num("week_52_high_pct_max");
+  if (w52hMax != null) q = q.lte("w52h_pct", w52hMax);
+  const w52lMin = num("w52l_pct_min");
+  if (w52lMin != null) q = q.gte("w52l_pct", w52lMin);
+  const avgVolume50dMin = num("avg_volume_50d_min");
+  if (avgVolume50dMin != null) q = q.gte("avg_volume_50d", avgVolume50dMin);
+  const avgVolume50dMax = num("avg_volume_50d_max");
+  if (avgVolume50dMax != null) q = q.lte("avg_volume_50d", avgVolume50dMax);
+  const pricePerf6mMin = num("price_perf_6m_min");
+  if (pricePerf6mMin != null) q = q.gte("price_perf_6m_pct", pricePerf6mMin);
+  const pricePerf6mMax = num("price_perf_6m_max");
+  if (pricePerf6mMax != null) q = q.lte("price_perf_6m_pct", pricePerf6mMax);
+  const ema200SlopeMin = num("ema_200_slope_30d_min");
+  if (ema200SlopeMin != null) q = q.gte("ema_200_slope_30d", ema200SlopeMin);
+  const ema200SlopeMax = num("ema_200_slope_30d_max");
+  if (ema200SlopeMax != null) q = q.lte("ema_200_slope_30d", ema200SlopeMax);
+  if (filterBool(filters, "ema_200_trending_up") === true) q = q.gt("ema_200_slope_30d", 0);
+  if (filterBool(filters, "is_inside_bar") === true) q = q.eq("is_inside_bar", true);
+  if (filterBool(filters, "is_outside_bar") === true) q = q.eq("is_outside_bar", true);
+  if (filterBool(filters, "macd_hist_positive") === true) q = q.gt("macd_hist", 0);
+  if (filterBool(filters, "macd_hist_positive") === false) q = q.lt("macd_hist", 0);
+
+  const series = Array.isArray(filters.series) ? filters.series.map(String) : [];
+  if (series.length) q = q.in("stock_universe.series", series);
+
+  return q;
+}
 
 const DAILY_WITH_UNIVERSE_SELECT = `${DAILY_SELECT},stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)`;
 
@@ -212,6 +312,29 @@ function candleFromRow(row: DailyRow) {
   };
 }
 
+function intelligenceDataWarnings(row: DailyRow): string[] {
+  const warnings: string[] = [];
+  if (numberValue(row.ema_150) == null) {
+    warnings.push("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.");
+  }
+  if (numberValue(row.ema_200_slope_30d) == null) {
+    warnings.push("EMA 200 slope is unavailable until the scanner intelligence migration is applied/backfilled.");
+  }
+  if (numberValue(row.avg_volume_50d) == null) {
+    warnings.push("50-day average volume is unavailable.");
+  }
+  if (numberValue(row.price_perf_6m_pct) == null) {
+    warnings.push("6-month price performance is unavailable until the scanner intelligence migration is applied/backfilled.");
+  }
+  if (numberValue(row.high_3w) == null || numberValue(row.low_3w) == null) {
+    warnings.push("3-week box height is unavailable until the scanner intelligence migration is applied/backfilled.");
+  }
+  if (row.is_nr7 == null) {
+    warnings.push("NR7 range flag is unavailable.");
+  }
+  return warnings;
+}
+
 function scanResultFromRow(row: DailyRow) {
   const meta = firstUniverse(row);
   const close = numberValue(row.close) ?? 0;
@@ -274,6 +397,7 @@ function scanResultFromRow(row: DailyRow) {
     roe: numberValue(meta.roe),
     roce: numberValue(meta.roce),
     match_reasons: recoveryMatchReasons(row),
+    data_warnings: intelligenceDataWarnings(row),
   };
 }
 
@@ -610,11 +734,18 @@ export async function getRecoveryMarketSummary() {
 }
 
 export async function runRecoveryScanner(body: { filters?: ScanFilters; sort_by?: string; sort_order?: string; page?: number; page_size?: number }) {
+  const filters = body.filters ?? {};
+  if (filters.vcp_contraction === true) {
+    return unavailable(
+      "VCP contraction scans require the full scanner API with multi-day pivot analysis. Recovery mode only supports single-day EOD filters.",
+      422,
+    );
+  }
   const client = getRecoverySupabaseClient();
   const latest = await getLatestTradeDate(client);
   if (!latest) return unavailable("No complete trade date is available for scanner.", 503);
-  const rows = await latestRows(client, latest);
-  const filtered = rows.filter((row) => rowMatchesFilters(row, body.filters ?? {}));
+  const rows = await latestRows(client, latest, filters);
+  const filtered = rows.filter((row) => rowMatchesFilters(row, filters));
   const sortKey = String(body.sort_by || "volume_ratio");
   const direction = body.sort_order === "asc" ? 1 : -1;
   filtered.sort((a, b) => direction * ((scanSortValue(a, sortKey) ?? -Infinity) - (scanSortValue(b, sortKey) ?? -Infinity)));
@@ -624,6 +755,8 @@ export async function runRecoveryScanner(body: { filters?: ScanFilters; sort_by?
   const paged = pageSize === 0 ? capped : capped.slice((page - 1) * pageSize, page * pageSize);
   const coverage = await getLatestCoverage(client, latest);
   const metadata = sourceMetadata(latest, coverage.symbols_count, coverage.universe_active);
+  const scanResults = paged.map(scanResultFromRow);
+  const incomplete_indicator_count = scanResults.filter((result) => (result.data_warnings?.length ?? 0) > 0).length;
   return {
     trade_date: latest,
     total_matches: filtered.length,
@@ -634,25 +767,27 @@ export async function runRecoveryScanner(body: { filters?: ScanFilters; sort_by?
     page_size: pageSize,
     total_pages: pageSize === 0 ? 1 : Math.max(1, Math.ceil(capped.length / pageSize)),
     visible_count: paged.length,
-    results: paged.map(scanResultFromRow),
+    results: scanResults,
     source_metadata: metadata,
     mode: metadata.mode,
     source: metadata.source_name,
     coverage_pct: metadata.coverage_pct,
     universe_size: coverage.universe_active,
+    incomplete_indicator_count,
     recovery_mode: "vercel_readonly",
   };
 }
 
-async function latestRows(client: SupabaseClient, latest: string) {
+async function latestRows(client: SupabaseClient, latest: string, filters: ScanFilters = {}) {
   const rows: DailyRow[] = [];
   const pageSize = 1000;
-  for (let offset = 0; offset < 5000; offset += pageSize) {
-    const { data, error } = await client
+  for (let offset = 0; offset < RECOVERY_SCAN_ROW_CAP; offset += pageSize) {
+    const baseQuery = client
       .from("daily_ohlcv")
       .select(DAILY_WITH_UNIVERSE_SELECT)
-      .eq("trade_date", latest)
-      .range(offset, offset + pageSize - 1);
+      .eq("trade_date", latest);
+    const filteredQuery = applyRecoveryDbFilters(baseQuery as unknown as FilterableQuery, filters);
+    const { data, error } = await (filteredQuery as unknown as typeof baseQuery).range(offset, offset + pageSize - 1);
     if (error) throw error;
     const page = (data ?? []) as unknown as DailyRow[];
     rows.push(...page);
@@ -666,8 +801,18 @@ function percent(rows: DailyRow[], predicate: (row: DailyRow) => boolean): numbe
   return Number(((rows.filter(predicate).length / rows.length) * 100).toFixed(1));
 }
 
-function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {
+export function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {
   const result = scanResultFromRow(row);
+  const close = numberValue(row.close);
+  const ema50 = numberValue(row.ema_50);
+  const ema150 = numberValue(row.ema_150);
+  const ema200 = numberValue(row.ema_200);
+  const ema200Slope = numberValue(row.ema_200_slope_30d);
+  const sma50 = numberValue(row.sma_50);
+  const sma150 = numberValue(row.sma_150);
+  const sma200 = numberValue(row.sma_200);
+  const avgVolume50d = numberValue(row.avg_volume_50d);
+  const pricePerf6m = numberValue(row.price_perf_6m_pct);
   const checks: Array<[string, (value: number) => boolean]> = [
     ["price_min", (value) => result.close >= value],
     ["price_max", (value) => result.close <= value],
@@ -687,6 +832,10 @@ function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {
     ["week_52_high_pct_max", (value) => (result.week_52_high_pct ?? Infinity) <= value],
     ["w52l_pct_min", (value) => (result.week_52_low_pct ?? -Infinity) >= value],
     ["rs_score_min", (value) => (result.rs_score ?? -Infinity) >= value],
+    ["rs_score_max", (value) => (result.rs_score ?? Infinity) <= value],
+    ["price_perf_6m_min", (value) => (pricePerf6m ?? -Infinity) >= value],
+    ["avg_volume_50d_min", (value) => (avgVolume50d ?? -Infinity) >= value],
+    ["atr_pct_max", (value) => (result.atr_pct ?? Infinity) <= value],
   ];
   for (const [key, check] of checks) {
     const value = numberValue(filters[key]);
@@ -696,10 +845,34 @@ function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {
   if (filters.above_ema50 === true && !(result.ema_50 != null && result.close >= result.ema_50)) return false;
   if (filters.above_ema200 === true && !(result.ema_200 != null && result.close >= result.ema_200)) return false;
   if (filters.ema20_above_ema50 === true && !(result.ema_20 != null && result.ema_50 != null && result.ema_20 >= result.ema_50)) return false;
+  if (filters.ema50_above_ema150 === true && !(ema50 != null && ema150 != null && ema50 > ema150)) return false;
+  if (filters.ema150_above_ema200 === true && !(ema150 != null && ema200 != null && ema150 > ema200)) return false;
+  if (filters.ema_200_trending_up === true && !(ema200Slope != null && ema200Slope > 0)) return false;
+  if (filters.all_smas_bullish === true && (
+    sma50 == null || sma150 == null || sma200 == null || close == null
+    || close <= sma50 || !(sma50 > sma150 && sma150 > sma200)
+  )) return false;
+  if (filters.price_vs_sma50 === "above" && !(sma50 != null && close != null && close > sma50)) return false;
+  if (filters.price_vs_sma50 === "below" && !(sma50 != null && close != null && close < sma50)) return false;
+  if (filters.price_vs_sma150 === "above" && !(sma150 != null && close != null && close > sma150)) return false;
+  if (filters.price_vs_sma150 === "below" && !(sma150 != null && close != null && close < sma150)) return false;
+  if (filters.price_vs_sma200 === "above" && !(sma200 != null && close != null && close > sma200)) return false;
+  if (filters.price_vs_sma200 === "below" && !(sma200 != null && close != null && close < sma200)) return false;
+  if (filters.price_vs_ema50 === "above" && !(ema50 != null && close != null && close > ema50)) return false;
+  if (filters.price_vs_ema50 === "below" && !(ema50 != null && close != null && close < ema50)) return false;
+  if (filters.price_vs_ema150 === "above" && !(ema150 != null && close != null && close > ema150)) return false;
+  if (filters.price_vs_ema150 === "below" && !(ema150 != null && close != null && close < ema150)) return false;
+  if (filters.price_vs_ema200 === "above" && !(ema200 != null && close != null && close > ema200)) return false;
+  if (filters.price_vs_ema200 === "below" && !(ema200 != null && close != null && close < ema200)) return false;
   if (filters.new_52w_high === true && !result.is_new_52w_high) return false;
   const series = Array.isArray(filters.series) ? filters.series.map(String) : [];
   if (series.length && !series.includes(result.series)) return false;
-  const sectors = Array.isArray(filters.sectors) ? filters.sectors.map(String) : [];
+  const sectorFilter = filters.sector;
+  const sectors = Array.isArray(sectorFilter)
+    ? sectorFilter.map(String)
+    : typeof sectorFilter === "string" && sectorFilter
+      ? [sectorFilter]
+      : [];
   if (sectors.length && (!result.sector || !sectors.includes(result.sector))) return false;
   return true;
 }

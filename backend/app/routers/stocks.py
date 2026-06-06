@@ -62,32 +62,7 @@ def _market_summary_from_snapshot(snapshot: dict) -> dict:
     }
 
 
-@router.get("/stocks/{symbol}/quote")
-async def get_quote(symbol: str):
-    sym = symbol.upper()
-    try:
-        client = get_admin_client()
-        result = client.table("daily_ohlcv") \
-            .select(
-                "symbol, trade_date, open, high, low, close, prev_close, volume, "
-                "avg_volume_20d, week_52_high, week_52_low, rsi_14, "
-                "ema_20, ema_50, ema_200, atr_14, turnover, "
-                "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series, market, currency)"
-            ) \
-            .eq("symbol", sym) \
-            .order("trade_date", desc=True) \
-            .limit(1) \
-            .execute()
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Quote data is temporarily unavailable.",
-        )
-
-    if not result.data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Symbol not found")
-
-    row = result.data[0]
+def _quote_from_row(row: dict, sym: str) -> dict:
     su = row.get("stock_universe") or {}
     if isinstance(su, list):
         su = su[0] if su else {}
@@ -127,6 +102,81 @@ async def get_quote(symbol: str):
         "atr_14": float(row["atr_14"]) if row["atr_14"] is not None else None,
         "turnover": float(row["turnover"]) if row["turnover"] is not None else None,
     }
+
+
+_QUOTE_SELECT = (
+    "symbol, trade_date, open, high, low, close, prev_close, volume, "
+    "avg_volume_20d, week_52_high, week_52_low, rsi_14, "
+    "ema_20, ema_50, ema_200, atr_14, turnover, "
+    "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series, market, currency)"
+)
+
+
+@router.get("/stocks/quotes")
+async def get_quotes(symbols: str):
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="symbols parameter required")
+    if len(sym_list) > 50:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Maximum 50 symbols per request")
+
+    unique_symbols = list(dict.fromkeys(sym_list))
+    try:
+        client = get_admin_client()
+        latest_date = get_latest_complete_trade_date(client)
+        if not latest_date:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Quote data is temporarily unavailable.",
+            )
+        result = (
+            client.table("daily_ohlcv")
+            .select(_QUOTE_SELECT)
+            .eq("trade_date", latest_date)
+            .in_("symbol", unique_symbols)
+            .execute()
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Quote data is temporarily unavailable.",
+        )
+
+    quotes = {
+        row["symbol"]: _quote_from_row(row, row["symbol"])
+        for row in (result.data or [])
+    }
+    return quotes
+
+
+@router.get("/stocks/{symbol}/quote")
+async def get_quote(symbol: str):
+    sym = symbol.upper()
+    try:
+        client = get_admin_client()
+        result = client.table("daily_ohlcv") \
+            .select(
+                "symbol, trade_date, open, high, low, close, prev_close, volume, "
+                "avg_volume_20d, week_52_high, week_52_low, rsi_14, "
+                "ema_20, ema_50, ema_200, atr_14, turnover, "
+                "stock_universe!daily_ohlcv_symbol_fkey(company_name, sector, series, market, currency)"
+            ) \
+            .eq("symbol", sym) \
+            .order("trade_date", desc=True) \
+            .limit(1) \
+            .execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Quote data is temporarily unavailable.",
+        )
+
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Symbol not found")
+
+    return _quote_from_row(result.data[0], sym)
 
 
 @router.get("/market/summary")

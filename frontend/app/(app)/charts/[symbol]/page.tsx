@@ -7,42 +7,33 @@ import Link from "next/link";
 import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist, WorkflowLifecycle, WorkflowState,
+  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
 } from "@/lib/api";
 import {
-  getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
+  getCandles, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators, getWorkflowStates, upsertWorkflowState,
+  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators,
 } from "@/lib/api";
+import { useChartData } from "@/components/charts/hooks/useChartData";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
-import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
+import type { ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 import {
   formatChartCoverageRange,
   formatChartGranularity,
-  getCoverageAvailabilityMessage,
-  getFiveYearHistoryBadge,
-  getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataSource } from "@/lib/data-copy";
-import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
-import { buildChartDrawingMeasurement } from "@/lib/chart-drawing-measure";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
-import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
-import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
 
-type LinePoint = { time: string; value: number };
-type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
-type StochPoint = { time: string; k: number; d: number | null };
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 type SymbolReviewContext = {
   closed: number;
@@ -100,15 +91,6 @@ const INDICATOR_CONFIG = [
 type DrawingTool = "Trendline" | "Ray" | "Horizontal" | "HorizontalRay" | "Rectangle" | "Fib" | "LongPosition" | "ShortPosition" | "Text";
 const FULL_CHART_DRAWING_TOOLS: DrawingTool[] = ["Trendline", "Horizontal", "HorizontalRay", "Ray", "Rectangle", "Fib", "Text", "LongPosition", "ShortPosition"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
-type ChartDataCacheEntry = {
-  data: CandlesResponse;
-  indicatorData: IndicatorData;
-  rsiData: LinePoint[];
-  macdData: MACDPoint[];
-  stochData: StochPoint[];
-  atrData: LinePoint[];
-  loadedAt: number;
-};
 
 const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: typeof PencilLine; hint: string }> = {
   Trendline: { label: "Trendline", short: "T", icon: PencilLine, hint: "Two-point trendline" },
@@ -122,8 +104,6 @@ const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: 
   Text: { label: "Text note", short: "N", icon: Type, hint: "Chart annotation" },
 };
 
-const chartDataCache = new Map<string, ChartDataCacheEntry>();
-const CHART_CACHE_TTL_MS = 60_000;
 const CHART_TYPE_STORAGE_KEY = "alphavyuh-chart-type";
 const CHART_LAYOUT_UNAVAILABLE_MESSAGE = "Chart layout is temporarily unavailable. Charting, alerts, and order planning remain usable.";
 const CHART_LAYOUT_SAVE_FAILED_MESSAGE = "Chart layout could not be saved. Check Data Status, then try again.";
@@ -170,33 +150,6 @@ function fmtPrice(v: number | null | undefined, currency = "INR"): string {
     return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function computeSmaLine(candles: CandleBar[], period: number): LinePoint[] {
-  const out: LinePoint[] = [];
-  let sum = 0;
-  for (let index = 0; index < candles.length; index += 1) {
-    sum += candles[index].close;
-    if (index >= period) sum -= candles[index - period].close;
-    if (index + 1 >= period) {
-      out.push({ time: candles[index].time, value: Number((sum / period).toFixed(4)) });
-    }
-  }
-  return out;
-}
-
-function candleIndicatorLine(candles: CandleBar[], key: "ema_20" | "ema_50" | "ema_200"): LinePoint[] {
-  return candles.flatMap((candle) => {
-    const value = candle[key];
-    return typeof value === "number" && Number.isFinite(value)
-      ? [{ time: candle.time, value: Number(value.toFixed(4)) }]
-      : [];
-  });
-}
-
-function preferBroaderLine(endpointLine: LinePoint[] | undefined, candleLine: LinePoint[]): LinePoint[] | undefined {
-  if (candleLine.length > (endpointLine?.length ?? 0)) return candleLine;
-  return endpointLine ?? (candleLine.length ? candleLine : undefined);
 }
 
 function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
@@ -330,11 +283,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const fullChartMode = searchParams.get("full") === "1";
   const initialDrawMode = searchParams.get("draw");
   const initialChartType = normalizeChartType(searchParams.get("type"));
-  const initialRangeLabel: WatchlistChartTimeframe = fullChartMode ? "5Y" : "1Y";
 
-  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>(initialRangeLabel);
+  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
-  const [rangeNote, setRangeNote] = useState<string | null>(null);
   const [timeframeMessage, setTimeframeMessage] = useState("");
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>(() => initialChartType ?? readStoredChartType());
@@ -365,9 +316,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return () => window.removeEventListener("alphavyuh:theme-changed", syncTheme);
   }, []);
 
-  const [data, setData] = useState<CandlesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [liveQuote, setLiveQuote] = useState<LiveQuote | null>(null);
   const [liveQuoteUpdatedAt, setLiveQuoteUpdatedAt] = useState<string | null>(null);
 
@@ -401,22 +349,34 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [redoStack, setRedoStack] = useState<ChartDrawing[][]>([]);
   const [snapToPrice, setSnapToPrice] = useState(true);
   const chartHandleRef = useRef<ChartHandle | null>(null);
-  const dataRef = useRef<CandlesResponse | null>(null);
-  const lastBaseChartKeyRef = useRef<string | null>(null);
   const loadedDrawingsKeyRef = useRef<string | null>(null);
   const loadedPriceAlertsSymbolRef = useRef<string | null>(null);
 
-  const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
-  const [indicatorError, setIndicatorError] = useState<string | null>(null);
-  const [rsiData, setRsiData] = useState<LinePoint[]>([]);
-  const [macdData, setMacdData] = useState<MACDPoint[]>([]);
-  const [stochData, setStochData] = useState<StochPoint[]>([]);
-  const [atrData, setAtrData] = useState<LinePoint[]>([]);
-
-  // Crosshair legend
   const [legendBar, setLegendBar] = useState<{
     time: string; open: number; high: number; low: number; close: number; volume: number;
   } | null>(null);
+
+  const {
+    data,
+    loading,
+    error,
+    indicatorData,
+    rsiData,
+    macdData,
+    stochData,
+    atrData,
+    rangeNote,
+    indicatorError,
+  } = useChartData({
+    symbol,
+    rangeLabel,
+    timeframe,
+    setTimeframe,
+    liveMode,
+    setLiveMode,
+    activeIndicators,
+    onLegendReset: () => setLegendBar(null),
+  });
 
   // Chart sync
   const [logicalRange, setLogicalRange] = useState<LogicalRange | null>(null);
@@ -429,13 +389,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [watchlists, setWatchlists] = useState<{ id: string; name: string }[]>([]);
   const [sourceQueue, setSourceQueue] = useState<Watchlist | null>(null);
   const [sourceQueueError, setSourceQueueError] = useState<string | null>(null);
-  const [workflowState, setWorkflowState] = useState<WorkflowState | null>(null);
-  const [workflowStateError, setWorkflowStateError] = useState<string | null>(null);
-  const [reviewNoteDraft, setReviewNoteDraft] = useState("");
-  const [reviewNoteDirty, setReviewNoteDirty] = useState(false);
-  const [reviewNoteSaving, setReviewNoteSaving] = useState(false);
-  const [reviewDecisionSaving, setReviewDecisionSaving] = useState<WorkflowLifecycle | null>(null);
-  const [reviewNoteMessage, setReviewNoteMessage] = useState("");
 
   // Fundamentals & Technicals accordions
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
@@ -478,10 +431,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
   const FREE_INDICATORS = INDICATOR_CONFIG.map((indicator) => indicator.id);
-
-  useEffect(() => {
-    dataRef.current = data;
-  }, [data]);
 
   // Toolbar dropdowns
   const [showDrawMenu, setShowDrawMenu] = useState(false);
@@ -565,35 +514,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return findNearestCandlePrice(data?.candles, time, price);
   }, [data?.candles, snapToPrice]);
 
-  const applyIndicatorPayload = useCallback((resp: Awaited<ReturnType<typeof getIndicators>> | null, candles: CandleBar[] = []) => {
-    const ind = (resp?.indicators ?? {}) as Record<string, unknown[]>;
-    const ema20FromCandles = candleIndicatorLine(candles, "ema_20");
-    const ema50FromCandles = candleIndicatorLine(candles, "ema_50");
-    const ema200FromCandles = candleIndicatorLine(candles, "ema_200");
-    const nextIndicatorData: IndicatorData = {
-      ema20:    preferBroaderLine(ind.ema20 as LinePoint[] | undefined, ema20FromCandles),
-      ema50:    preferBroaderLine(ind.ema50 as LinePoint[] | undefined, ema50FromCandles),
-      ema200:   preferBroaderLine(ind.ema200 as LinePoint[] | undefined, ema200FromCandles),
-      sma50:    computeSmaLine(candles, 50),
-      sma200:   computeSmaLine(candles, 200),
-      vwap:     ind.vwap     as LinePoint[] | undefined,
-      bb:       ind.bb       as never,
-      ichimoku: ind.ichimoku as IchimokuPoint[] | undefined,
-    };
-    const nextRsi = (ind.rsi as LinePoint[] | undefined) ?? [];
-    const nextMacd = (ind.macd as MACDPoint[] | undefined) ?? [];
-    const nextStoch = (ind.stoch as StochPoint[] | undefined) ?? [];
-    const nextAtr = (ind.atr as LinePoint[] | undefined) ?? [];
-
-    setIndicatorData(nextIndicatorData);
-    setRsiData(nextRsi);
-    setMacdData(nextMacd);
-    setStochData(nextStoch);
-    setAtrData(nextAtr);
-
-    return { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr };
-  }, []);
-
   // Load compare symbol data
   useEffect(() => {
     if (!compareSymbol) {
@@ -628,125 +548,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     };
   }, [compareRetryNonce, compareSymbol, rangeLabel]);
 
-  // Load chart data
-  useEffect(() => {
-    let cancelled = false;
-    const request = getWatchlistChartRequest(rangeLabel);
-    if (request.timeframe !== timeframe) setTimeframe(request.timeframe);
-    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap"].includes(i));
-    const panelInds = activeIndicators.filter(i => ["rsi", "macd"].includes(i));
-    const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
-    const baseCacheKey = [symbol, rangeLabel, request.timeframe, request.from_date, request.to_date, request.limit, liveMode ? "live" : "eod"].join(":");
-    const cacheKey = [baseCacheKey, allInds.sort().join(",")].join(":");
-    const cached = chartDataCache.get(cacheKey);
-    const freshCached = cached && Date.now() - cached.loadedAt < CHART_CACHE_TTL_MS ? cached : null;
-    const canKeepVisibleChart = dataRef.current && lastBaseChartKeyRef.current === baseCacheKey;
-
-    setLoading(true);
-    setError("");
-    if (freshCached) {
-      setData(freshCached.data);
-      lastBaseChartKeyRef.current = baseCacheKey;
-      setLegendBar(null);
-      setRangeNote(getCoverageAvailabilityMessage(freshCached.data.coverage, request) ?? getRangeAvailabilityMessage(freshCached.data.candles ?? [], request));
-      setIndicatorError(null);
-      setIndicatorData(freshCached.indicatorData);
-      setRsiData(freshCached.rsiData);
-      setMacdData(freshCached.macdData);
-      setStochData(freshCached.stochData);
-      setAtrData(freshCached.atrData);
-    } else if (canKeepVisibleChart) {
-      setRangeNote(null);
-      setIndicatorData({});
-      setRsiData([]);
-      setMacdData([]);
-      setStochData([]);
-      setAtrData([]);
-    } else {
-      setData(null);
-      setRangeNote(null);
-      setRsiData([]);
-      setMacdData([]);
-      setStochData([]);
-      setAtrData([]);
-      setIndicatorData({});
-    }
-    if (!allInds.length) setIndicatorError(null);
-
-    const candlesParams = {
-      limit: request.limit,
-      timeframe: request.timeframe,
-      from_date: request.from_date,
-      to_date: request.to_date,
-    };
-    const candlesPromise = liveMode
-      ? getCandlesLive(symbol, { limit: Math.min(request.limit, 1000), timeframe: request.timeframe }).catch(() => {
-          if (!cancelled) setLiveMode(false);
-          return getCandles(symbol, candlesParams);
-        })
-      : getCandles(symbol, candlesParams);
-    const indicatorsPromise = allInds.length
-      ? getIndicators(symbol, allInds, request.timeframe)
-        .then((payload) => ({ payload, error: null as string | null }))
-        .catch((error) => ({
-          payload: null,
-          error: error instanceof Error && error.message.trim()
-            ? error.message
-            : "Chart indicators are temporarily unavailable.",
-        }))
-      : Promise.resolve({ payload: null, error: null as string | null });
-
-    Promise.all([candlesPromise, indicatorsPromise])
-      .then(([nextData, indicatorsResp]) => {
-        if (cancelled) return;
-        setData(nextData);
-        lastBaseChartKeyRef.current = baseCacheKey;
-        setLegendBar(null);
-        setRangeNote(getCoverageAvailabilityMessage(nextData.coverage, request) ?? getRangeAvailabilityMessage(nextData.candles ?? [], request));
-        setIndicatorError(indicatorsResp.error);
-        const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp.payload, nextData.candles ?? []);
-        if (!indicatorsResp.error) {
-          chartDataCache.set(cacheKey, {
-            data: nextData,
-            indicatorData: nextIndicatorData,
-            rsiData: nextRsi,
-            macdData: nextMacd,
-            stochData: nextStoch,
-            atrData: nextAtr,
-            loadedAt: Date.now(),
-          });
-        }
-      })
-      .catch(e => {
-        if (!cancelled) setError(describeMarketDataError(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeIndicators, applyIndicatorPayload, liveMode, rangeLabel, symbol, timeframe]);
-
-  // Auto-refresh every 5 minutes in live mode
-  useEffect(() => {
-    if (!liveMode) return;
-    const interval = setInterval(() => {
-      const request = getWatchlistChartRequest(rangeLabel);
-      getCandlesLive(symbol, { limit: Math.min(request.limit, 1000), timeframe: request.timeframe })
-        .then(d => { setData(d); setLegendBar(null); })
-        .catch(() => {});
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [liveMode, rangeLabel, symbol]);
-
   // Load saved layout + plan + alerts
   useEffect(() => {
     getChartLayout(symbol).then(layout => {
       if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") {
         setTimeframe(layout.timeframe);
-        setRangeLabel(layout.timeframe === "D" ? initialRangeLabel : layout.timeframe === "W" ? "3Y" : "Max");
+        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "5Y");
       }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     }).catch(() => {
@@ -779,7 +586,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         }
         setPriceAlertsError(PRICE_ALERTS_UNAVAILABLE_MESSAGE);
       });
-  }, [initialRangeLabel, symbol]);
+  }, [symbol]);
 
   useEffect(() => {
     setLiveQuote(null);
@@ -843,35 +650,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   useEffect(() => {
     loadSourceQueue();
   }, [loadSourceQueue]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setWorkflowStateError(null);
-    getWorkflowStates({ symbols: [symbol], watchlistId: sourceWatchlistId ?? undefined })
-      .then((states) => {
-        if (cancelled) return;
-        setWorkflowState(states.find((state) => state.symbol === symbol) ?? null);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setWorkflowState(null);
-        setWorkflowStateError(accountDataErrorMessage(error, "Setup review context is temporarily unavailable."));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [sourceWatchlistId, symbol]);
-
-  useEffect(() => {
-    setReviewNoteDraft("");
-    setReviewNoteDirty(false);
-    setReviewNoteMessage("");
-  }, [symbol]);
-
-  useEffect(() => {
-    if (reviewNoteDirty) return;
-    setReviewNoteDraft(workflowState?.notes ?? "");
-  }, [reviewNoteDirty, workflowState?.notes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1776,7 +1554,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const changeAmt = displayClose != null && displayPrevClose ? displayClose - displayPrevClose : null;
   const changePct = displayPctChange;
   const positive = displayPositive;
-  const fiveYearHistoryBadge = data ? getFiveYearHistoryBadge(data.coverage, { label: rangeLabel }) : null;
 
   const w52pct = latest?.week_52_high && latest?.week_52_low
     ? (((displayClose ?? latest.close) - latest.week_52_low) / (latest.week_52_high - latest.week_52_low)) * 100
@@ -1819,10 +1596,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const selectedDrawing = drawnLines.find(item => item.id === selectedDrawingId) ?? null;
   const activeToolMeta = activeDrawingTool ? DRAW_TOOL_META[activeDrawingTool] : null;
   const visibleDrawings = drawnLines.filter((item) => !item.hidden);
-  const selectedDrawingMeasurement = buildChartDrawingMeasurement(selectedDrawing, {
-    referencePrice: displayClose,
-    currency: symbolCurrency,
-  });
   const selectedPositionDrawing = selectedDrawing && isPositionDrawingTool(selectedDrawing.tool) && selectedDrawing.p3 ? selectedDrawing : null;
   const selectedPositionDraft = selectedPositionDrawing?.p3 ? {
     side: selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long",
@@ -1847,9 +1620,36 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     trackEvent("chart_plan_handoff_previewed", { symbol, timeframe, side });
   }
 
+  function sendSelectedPositionToDesk() {
+    if (!selectedPositionDrawing?.p3) return;
+    const side = selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long";
+    const draft = buildChartPlanDraft({
+      symbol,
+      side,
+      entry: selectedPositionDrawing.p1.price,
+      stop: selectedPositionDrawing.p2.price,
+      target: selectedPositionDrawing.p3.price,
+      timeframe,
+      drawingId: selectedPositionDrawing.id,
+      setupLabel,
+      playbookScore,
+      readyChecks: playbookItems.filter((item) => item.status === "ready").map((item) => `${item.label}: ${item.detail}`),
+    });
+    if (!draft) {
+      setPlanHandoffConfirmOpen(false);
+      setPlanUpgradeToast("Draw a valid entry, stop, and target before sending the plan");
+      return;
+    }
+    try {
+      window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify(draft));
+      trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true, playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
+      router.push(buildWatchlistReturnHref(true));
+    } catch {
+      router.push(buildWatchlistReturnHref(false));
+    }
+  }
   const latestVolumeRatio = latest?.volume_ratio ?? null;
   const recentCandles = data?.candles?.slice(-40) ?? [];
-  const higherTimeframeReview = buildHigherTimeframeReview(data?.candles ?? []);
   const recentHigh = recentCandles.length ? Math.max(...recentCandles.map((c) => c.high)) : null;
   const recentLow = recentCandles.length ? Math.min(...recentCandles.map((c) => c.low)) : null;
   const ema20Latest = indicatorData.ema20?.at(-1)?.value ?? data?.candles?.at(-1)?.ema_20 ?? null;
@@ -1880,12 +1680,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       detail: structureReady ? "Price above EMA stack" : ema20Latest != null ? "EMA stack not aligned" : "Add EMA 20/50",
     },
     {
-      key: "higher-timeframe",
-      label: "HTF",
-      status: higherTimeframeReview.playbookStatus,
-      detail: higherTimeframeReview.playbookDetail,
-    },
-    {
       key: "level",
       label: "Level",
       status: nearSupport != null && nearSupport <= 4 || nearResistance != null && nearResistance <= 4 ? "ready" : recentHigh && recentLow ? "watch" : "missing",
@@ -1914,37 +1708,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   ];
   const playbookReadyCount = playbookItems.filter((item) => item.status === "ready").length;
   const playbookScore = Math.round((playbookReadyCount / playbookItems.length) * 100);
-  const selectedPositionPlanPacket = selectedPositionDrawing?.p3 ? buildChartPlanDraft({
-    symbol,
-    side: selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long",
-    entry: selectedPositionDrawing.p1.price,
-    stop: selectedPositionDrawing.p2.price,
-    target: selectedPositionDrawing.p3.price,
-    timeframe,
-    drawingId: selectedPositionDrawing.id,
-    setupLabel,
-    playbookScore,
-    readyChecks: playbookItems.filter((item) => item.status === "ready").map((item) => `${item.label}: ${item.detail}`),
-  }) : null;
-
-  function sendSelectedPositionToDesk() {
-    if (!selectedPositionDrawing?.p3) return;
-    const side = selectedPositionDrawing.tool === "ShortPosition" ? "short" : "long";
-    const draft = selectedPositionPlanPacket;
-    if (!draft) {
-      setPlanHandoffConfirmOpen(false);
-      setPlanUpgradeToast("Draw a valid entry, stop, and target before sending the plan");
-      return;
-    }
-    try {
-      window.localStorage.setItem(`alphavyuh-chart-plan-draft:${symbol}`, JSON.stringify(draft));
-      trackEvent("chart_plan_draft_created", { symbol, timeframe, side, confirmed: true, playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
-      router.push(buildWatchlistReturnHref(true));
-    } catch {
-      router.push(buildWatchlistReturnHref(false));
-    }
-  }
-
   const chartSnapshot = [
     { label: liveQuote ? "Live price" : "Last price", value: displayClose != null ? fmtPrice(displayClose, symbolCurrency) : "Pending", tone: "var(--text-primary)" },
     { label: "Session move", value: changePct != null ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%` : "Pending", tone: positive ? "var(--gain)" : "var(--loss)" },
@@ -1961,21 +1724,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       tone: brokerConnected ? "var(--gain)" : "var(--warn)",
     },
   ];
-  const scannerContext = scannerReviewContextSummary(workflowState?.scanner_context);
-  const chartSourceLabel = data
-    ? formatMarketDataSource(data.source_metadata?.source_name ?? data.coverage?.source_name ?? data.source, isMockMode ? "Demo data" : "Market data")
-    : null;
-  const chartCoverageLabel = data ? formatChartCoverageRange(data.coverage, data.candles) : null;
   const chartContextPills = [
     sourcePage === "watchlist" && sourceWatchlist ? `Queue · ${sourceWatchlist}` : sourcePage === "scanner" ? "Flow · Scanner chart" : "Flow · Direct chart",
-    scannerContext.pills[0] ? `Original scan · ${scannerContext.pills[0]}` : null,
-    `HTF · ${higherTimeframeReview.alignment}`,
     activeToolMeta ? `Tool · ${activeToolMeta.label}` : "Tool · Cursor",
     drawingsError ? "Drawings unavailable" : selectedDrawing ? `Selected · ${selectedDrawing.tool}` : `${visibleDrawings.length} drawings`,
     indicatorError ? "Indicators unavailable" : null,
     compareError ? "Compare unavailable" : null,
     symbolReviewError ? "Review unavailable" : null,
-    workflowStateError ? "Setup context unavailable" : null,
     sourceQueueError ? "Watchlists unavailable" : null,
     priceAlertsError ? "Alerts unavailable" : priceAlerts.length > 0 ? `Alerts · ${priceAlerts.length}` : null,
     symbolPositionsError ? "Positions unavailable" : symbolPositions.length > 0 ? `Positions · ${symbolPositions.length}` : "No position",
@@ -1998,70 +1753,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     }
   }
 
-  async function saveReviewNote() {
-    const note = reviewNoteDraft.trim();
-    setReviewNoteSaving(true);
-    setReviewNoteMessage("Saving review note...");
-    try {
-      const saved = await upsertWorkflowState({
-        symbol,
-        lifecycle: workflowState?.lifecycle ?? "watch",
-        source: workflowState?.source ?? sourcePage ?? "chart",
-        watchlist_id: workflowState?.watchlist_id ?? sourceWatchlistId ?? null,
-        notes: note || null,
-        scanner_context: workflowState?.scanner_context ?? null,
-        setup_quality: workflowState?.setup_quality ?? null,
-        tags: workflowState?.tags ?? [],
-      });
-      setWorkflowState(saved);
-      setReviewNoteDirty(false);
-      setReviewNoteMessage(note ? "Review note saved." : "Review note cleared.");
-      trackEvent("chart_review_note_saved", { symbol, source: saved.source ?? "chart", has_note: Boolean(note) });
-    } catch {
-      setReviewNoteMessage("Review note could not be saved. Try again before leaving the chart.");
-    } finally {
-      setReviewNoteSaving(false);
-      window.setTimeout(() => setReviewNoteMessage(""), 3500);
-    }
-  }
-
-  async function saveReviewDecision(nextLifecycle: Extract<WorkflowLifecycle, "ready" | "review_later" | "invalidated">) {
-    const note = reviewNoteDraft.trim();
-    setReviewDecisionSaving(nextLifecycle);
-    setReviewNoteMessage("Saving review decision...");
-    try {
-      const nextTags = new Set(workflowState?.tags ?? []);
-      nextTags.add(`chart-${nextLifecycle.replace("_", "-")}`);
-      const saved = await upsertWorkflowState({
-        symbol,
-        lifecycle: nextLifecycle,
-        source: workflowState?.source ?? sourcePage ?? "chart",
-        watchlist_id: workflowState?.watchlist_id ?? sourceWatchlistId ?? null,
-        notes: note || workflowState?.notes || null,
-        scanner_context: workflowState?.scanner_context ?? null,
-        setup_quality: workflowState?.setup_quality ?? null,
-        tags: [...nextTags],
-        ignored: nextLifecycle === "invalidated",
-        review_later: nextLifecycle === "review_later",
-      });
-      setWorkflowState(saved);
-      setReviewNoteDirty(false);
-      setReviewNoteMessage(
-        nextLifecycle === "ready"
-          ? "Marked Ready from chart review."
-          : nextLifecycle === "review_later"
-            ? "Marked for later review."
-            : "Marked invalidated from chart review."
-      );
-      trackEvent("chart_review_decision_saved", { symbol, lifecycle: nextLifecycle, source: saved.source ?? "chart" });
-    } catch {
-      setReviewNoteMessage("Review decision could not be saved. Try again before leaving the chart.");
-    } finally {
-      setReviewDecisionSaving(null);
-      window.setTimeout(() => setReviewNoteMessage(""), 3500);
-    }
-  }
-
   return (
     <div
       className="workspace-page"
@@ -2080,13 +1771,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             {sourcePage === "watchlist" && sourceWatchlist && (
               <div className="caption" style={{ marginTop: 8 }}>
                 Opened from <Num style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</Num>.
-              </div>
-            )}
-            {scannerContext.pills.length > 0 && (
-              <div data-testid="chart-scanner-context" className="workspace-pill-row" style={{ marginTop: 8, gap: 6 }}>
-                {scannerContext.pills.map((pill) => (
-                  <span key={pill} className="workspace-pill">{pill}</span>
-                ))}
               </div>
             )}
           </div>
@@ -2310,7 +1994,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               const request = getWatchlistChartRequest(next);
               setRangeLabel(next);
               setTimeframe(request.timeframe);
-              setRangeNote(null);
               setTimeframeMessage("");
             }}
             onUnavailable={setTimeframeMessage}
@@ -2805,36 +2488,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       ))}
                     </div>
                   </details>
-                  <details
-                    data-testid="chart-higher-timeframe-review"
-                    className="rounded-[10px]"
-                    style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
-                    open={higherTimeframeReview.alignment !== "aligned"}
-                  >
-                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Higher timeframe</summary>
-                    <div className="px-3 pb-3 space-y-2">
-                      {[higherTimeframeReview.weekly, higherTimeframeReview.monthly].map((item) => {
-                        const tone = item.status === "uptrend" || item.status === "constructive"
-                          ? "#4ade80"
-                          : item.status === "limited"
-                            ? "var(--app-text3)"
-                            : item.status === "downtrend"
-                              ? "#f87171"
-                              : "#fbbf24";
-                        return (
-                          <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] font-semibold" style={{ color: "var(--app-text2)" }}>{item.label}</span>
-                              <span className="text-[10px] font-bold tabular-nums" style={{ color: tone }}>{item.changePct != null ? `${item.changePct >= 0 ? "+" : ""}${item.changePct.toFixed(1)}%` : "Limited"}</span>
-                            </div>
-                            <div className="mt-1 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
-                              {item.summary}. {item.detail}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </details>
                   <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
                     <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Trade plan</summary>
                     <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
@@ -2898,46 +2551,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </button>
                 {showReviewPanel && (
                   <div className="px-4 pb-4 space-y-2">
-                    {scannerContext.pills.length > 0 && (
-                      <div
-                        data-testid="chart-review-scanner-context"
-                        className="rounded-[8px] px-3 py-2 text-[10px] leading-4"
-                        style={{ background: "rgba(77,214,255,0.08)", border: "1px solid rgba(77,214,255,0.18)", color: "var(--app-text2)" }}
-                      >
-                        <div className="text-[9px] uppercase tracking-[0.4px] font-semibold" style={{ color: "var(--app-text3)", marginBottom: 4 }}>
-                          Original scan
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {scannerContext.pills.map((pill) => (
-                            <span key={pill} className="rounded-full px-2 py-0.5" style={{ background: "rgba(255,255,255,0.06)", color: "var(--app-text2)" }}>
-                              {pill}
-                            </span>
-                          ))}
-                        </div>
-                        {scannerContext.primaryReason && (
-                          <div style={{ marginTop: 6 }}>{scannerContext.primaryReason}</div>
-                        )}
-                        {scannerContext.metrics.length > 0 && (
-                          <div className="grid grid-cols-2 gap-1.5 mt-2">
-                            {scannerContext.metrics.map((metric) => (
-                              <div key={metric.label} className="rounded-[7px] px-2 py-1.5" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                                <div className="text-[8px] uppercase tracking-[0.35px]" style={{ color: "var(--app-text3)" }}>{metric.label}</div>
-                                <div className="text-[11px] font-semibold tabular-nums" style={{ color: "var(--app-text1)" }}>{metric.value}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {scannerContext.warnings.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            {scannerContext.warnings.slice(0, 2).map((warning) => (
-                              <div key={warning} className="text-[9px] leading-4" style={{ color: "#fbbf24" }}>
-                                {warning}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
                     {symbolReviewError && (
                       <div
                         data-testid="chart-review-context-unavailable"
@@ -2947,68 +2560,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                         <strong>Review context unavailable for {symbol}.</strong> {symbolReviewError} Closed trades are not being treated as empty while review context is unavailable.
                       </div>
                     )}
-                    <div
-                      data-testid="chart-review-note"
-                      className="rounded-[10px] px-3 py-3 space-y-2"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-[9px] uppercase tracking-[0.4px] font-semibold" style={{ color: "var(--app-text3)" }}>Review note</div>
-                          <div className="text-[10px] mt-0.5" style={{ color: "var(--app-text3)" }}>Saved with this setup before any order intent.</div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => void saveReviewNote()}
-                          disabled={reviewNoteSaving || (!reviewNoteDirty && reviewNoteDraft.trim() === (workflowState?.notes ?? "").trim())}
-                          className="rounded-[8px] px-3 py-1.5 text-[10px] font-bold disabled:opacity-50"
-                          style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                        >
-                          {reviewNoteSaving ? "Saving..." : "Save"}
-                        </button>
-                      </div>
-                      <textarea
-                        value={reviewNoteDraft}
-                        onChange={(event) => {
-                          setReviewNoteDraft(event.target.value);
-                          setReviewNoteDirty(true);
-                        }}
-                        placeholder="Write the chart read: trigger, invalidation, volume clue, or why this setup should be skipped."
-                        className="w-full min-h-[72px] rounded-[8px] px-2.5 py-2 text-[11px] leading-5 outline-none resize-none"
-                        style={{ background: "var(--app-surface2)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
-                      />
-                      <div data-testid="chart-review-decisions" className="grid grid-cols-3 gap-1.5">
-                        {([
-                          ["ready", "Ready"],
-                          ["review_later", "Review later"],
-                          ["invalidated", "Invalidate"],
-                        ] as const).map(([nextLifecycle, label]) => {
-                          const active = workflowState?.lifecycle === nextLifecycle;
-                          const busy = reviewDecisionSaving === nextLifecycle;
-                          return (
-                            <button
-                              key={nextLifecycle}
-                              type="button"
-                              onClick={() => void saveReviewDecision(nextLifecycle)}
-                              disabled={reviewNoteSaving || reviewDecisionSaving != null}
-                              className="rounded-[8px] px-2 py-1.5 text-[10px] font-bold disabled:opacity-50"
-                              style={{
-                                background: active ? "rgba(77,214,255,0.14)" : "var(--app-surface3)",
-                                border: active ? "1px solid rgba(77,214,255,0.32)" : "1px solid var(--app-border)",
-                                color: active ? "var(--accent)" : "var(--app-text2)",
-                              }}
-                            >
-                              {busy ? "Saving..." : label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {reviewNoteMessage && (
-                        <div className="text-[10px]" style={{ color: reviewNoteMessage.includes("could not") ? "#f87171" : "#4ade80" }}>
-                          {reviewNoteMessage}
-                        </div>
-                      )}
-                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       {[
                         { label: "Closed", value: symbolReviewError ? "—" : String(symbolReview.closed) },
@@ -3498,46 +3049,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   Selected: {DRAW_TOOL_META[selectedDrawing.tool].label}
                 </div>
               )}
-              {selectedDrawingMeasurement && (
-                <div
-                  data-testid="chart-drawing-measurement"
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  title={selectedDrawingMeasurement.secondary}
-                  style={{ background: "rgba(77,214,255,0.09)", color: "#93e5ff", border: "1px solid rgba(77,214,255,0.18)" }}
-                >
-                  Measure: {selectedDrawingMeasurement.primary} · {selectedDrawingMeasurement.secondary}
-                </div>
-              )}
-              {fiveYearHistoryBadge && (
-                <div
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  title={fiveYearHistoryBadge.title}
-                  style={fiveYearHistoryBadge.tone === "good"
-                    ? { background: "rgba(38,166,91,0.12)", color: "var(--gain)", border: "1px solid rgba(38,166,91,0.24)" }
-                    : { background: "rgba(217,119,6,0.12)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.24)" }}
-                >
-                  {fiveYearHistoryBadge.label}
+              {data && (
+                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                  {rangeLabel} · {formatChartGranularity(timeframe)} · {formatChartCoverageRange(data.coverage, data.candles)}
                 </div>
               )}
               {data && (
                 <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
                   style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  Coverage: {rangeLabel} · {formatChartGranularity(timeframe)} · {chartCoverageLabel}
-                </div>
-              )}
-              {data && (
-                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: "rgba(255,255,255,0.05)", color: "var(--app-text2)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  Source: {chartSourceLabel} · As of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}
-                </div>
-              )}
-              {scannerContext.pills[0] && (
-                <div
-                  data-testid="chart-scanner-context"
-                  className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                  style={{ background: "rgba(77,214,255,0.1)", color: "#93e5ff", border: "1px solid rgba(77,214,255,0.18)" }}
-                >
-                  Original scan: {scannerContext.pills[0]}
+                  Data as of {data.coverage?.as_of ?? data.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}
                 </div>
               )}
               {drawnLines.length > 0 && (
@@ -3579,7 +3100,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   style={{ background: "rgba(0,229,196,0.12)", color: "var(--app-teal)", border: "1px solid rgba(0,229,196,0.22)" }}
                 >
                   <MoveRight size={12} />
-                  Send plan to Watchlist Desk
+                  Send to desk
                 </button>
               )}
               {planHandoffConfirmOpen && selectedPositionDraft && (
@@ -3590,36 +3111,19 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     border: "1px solid rgba(0,229,196,0.22)",
                     color: "var(--app-text2)",
                     boxShadow: "0 14px 34px rgba(0,0,0,0.35)",
-                    minWidth: 320,
-                    maxWidth: 420,
+                    minWidth: 260,
                   }}
                 >
                   <div className="flex items-center justify-between gap-3" style={{ marginBottom: 6 }}>
-                    <div>
-                      <span className="font-semibold" style={{ color: "var(--app-text)" }}>Plan Packet</span>
-                      <div style={{ color: "var(--app-text3)", marginTop: 2 }}>Confirm desk handoff</div>
-                    </div>
+                    <span className="font-semibold" style={{ color: "var(--app-text)" }}>Confirm desk handoff</span>
                     <span className="uppercase" style={{ color: "var(--app-teal)", fontWeight: 700 }}>{selectedPositionDraft.side}</span>
                   </div>
-                  {selectedPositionPlanPacket ? (
-                    <>
-                      <div className="grid grid-cols-4 gap-2 mono" style={{ color: "var(--app-text2)", marginBottom: 8 }}>
-                        <span>Side {selectedPositionPlanPacket.side}</span>
-                        <span>Entry {fmtPrice(selectedPositionPlanPacket.entry, symbolCurrency)}</span>
-                        <span>Stop {fmtPrice(selectedPositionPlanPacket.stop, symbolCurrency)}</span>
-                        <span>Target {fmtPrice(selectedPositionPlanPacket.target, symbolCurrency)}</span>
-                      </div>
-                      <div className="rounded-md" style={{ padding: "7px 8px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 8 }}>
-                        <div className="mono" style={{ color: "var(--app-teal)", fontWeight: 700, marginBottom: 4 }}>R:R {selectedPositionPlanPacket.riskReward.toFixed(1)}</div>
-                        <div style={{ color: "var(--app-text2)", lineHeight: 1.45 }}>{selectedPositionPlanPacket.thesis}</div>
-                        <div style={{ color: "var(--app-text3)", lineHeight: 1.45, marginTop: 4 }}>{selectedPositionPlanPacket.invalidationRule}</div>
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{ color: "var(--warn)", lineHeight: 1.5, marginBottom: 8 }}>
-                      Draw a valid entry, stop, and target before sending the plan.
-                    </div>
-                  )}
+                  <div className="grid grid-cols-4 gap-2 mono" style={{ color: "var(--app-text2)", marginBottom: 8 }}>
+                    <span>Entry {fmtPrice(selectedPositionDraft.entry, symbolCurrency)}</span>
+                    <span>Stop {fmtPrice(selectedPositionDraft.stop, symbolCurrency)}</span>
+                    <span>Target {fmtPrice(selectedPositionDraft.target, symbolCurrency)}</span>
+                    <span>R:R {selectedPositionDraft.riskReward.toFixed(1)}</span>
+                  </div>
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => setPlanHandoffConfirmOpen(false)}
@@ -3630,11 +3134,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                     </button>
                     <button
                       onClick={sendSelectedPositionToDesk}
-                      disabled={!selectedPositionPlanPacket}
                       className="rounded-full px-2.5 py-1 font-semibold"
-                      style={{ background: "rgba(0,229,196,0.14)", border: "1px solid rgba(0,229,196,0.28)", color: "var(--app-teal)", opacity: selectedPositionPlanPacket ? 1 : 0.45 }}
+                      style={{ background: "rgba(0,229,196,0.14)", border: "1px solid rgba(0,229,196,0.28)", color: "var(--app-teal)" }}
                     >
-                      Confirm handoff
+                      Send plan
                     </button>
                   </div>
                 </div>
@@ -3701,6 +3204,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           </div>
           {/* OHLCV legend / crosshair overlay */}
           <div className="chart-canvas-panel relative flex-1 min-h-0">
+            {loading && !data && (
+              <div className="absolute inset-0 z-10 flex items-end gap-[3px] px-4 pb-6 pt-16" aria-hidden="true">
+                {[42, 68, 55, 78, 48, 62, 38, 72, 58, 44, 66, 52, 74, 46, 60, 50, 70, 40, 64, 56, 48, 68, 54, 76, 42, 58, 66, 50, 72, 44].map((height, index) => (
+                  <div
+                    key={index}
+                    className="flex-1 rounded-t-[3px] animate-pulse"
+                    style={{ height: `${height}%`, background: "var(--app-surface3)" }}
+                  />
+                ))}
+              </div>
+            )}
             {loading && data && (
               <div
                 className="absolute top-3 left-1/2 -translate-x-1/2 z-30 rounded-full px-3 py-1.5 text-[11px] font-semibold pointer-events-none"

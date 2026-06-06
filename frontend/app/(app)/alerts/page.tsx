@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  addToWatchlist,
   deleteAlert,
   getRecentAlertMatches,
+  getWatchlists,
   listAlerts,
   updateAlert,
   type ScanAlert,
@@ -37,6 +39,8 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [watchlists, setWatchlists] = useState<Array<{ id: string; name: string }>>([]);
+  const [addingSymbol, setAddingSymbol] = useState<string | null>(null);
 
   async function loadAlerts() {
     setLoading(true);
@@ -58,7 +62,22 @@ export default function AlertsPage() {
 
   useEffect(() => {
     loadAlerts();
+    getWatchlists({ lite: true })
+      .then((lists) => setWatchlists(lists.map(({ id, name }) => ({ id, name }))))
+      .catch(() => setWatchlists([]));
   }, []);
+
+  async function handleAddToWatchlist(symbol: string, watchlistId: string) {
+    setAddingSymbol(symbol);
+    try {
+      await addToWatchlist(watchlistId, symbol);
+      setMessage(`${symbol} added to watchlist`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not add symbol to watchlist");
+    } finally {
+      setAddingSymbol(null);
+    }
+  }
 
   const latestRunDate = useMemo(() => {
     return matches.map((match) => match.run_date).sort().at(-1) ?? null;
@@ -313,12 +332,48 @@ export default function AlertsPage() {
                 )}
                 <div className="workspace-pill-row">
                   {topSymbols(match).map((symbol) => (
-                    <Link key={symbol.symbol} className="workspace-pill" href={`/charts/${symbol.symbol}`}>
-                      <span className="mono" style={{ color: "var(--text-primary)" }}>{symbol.symbol}</span>
-                      <span className="mono" style={{ color: (symbol.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
-                        {(symbol.pct_change ?? 0) >= 0 ? "+" : ""}{symbol.pct_change?.toFixed(2) ?? "0.00"}%
-                      </span>
-                    </Link>
+                    <div
+                      key={symbol.symbol}
+                      className="workspace-pill"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+                    >
+                      <Link href={`/charts/${symbol.symbol}`} style={{ display: "inline-flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+                        <span className="mono" style={{ color: "var(--text-primary)" }}>{symbol.symbol}</span>
+                        <span className="mono" style={{ color: (symbol.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                          {(symbol.pct_change ?? 0) >= 0 ? "+" : ""}{symbol.pct_change?.toFixed(2) ?? "0.00"}%
+                        </span>
+                      </Link>
+                      {watchlists.length > 0 && (
+                        watchlists.length === 1 ? (
+                          <button
+                            className="workspace-chip-button"
+                            style={{ padding: "2px 8px", fontSize: 10 }}
+                            disabled={addingSymbol === symbol.symbol}
+                            onClick={() => handleAddToWatchlist(symbol.symbol, watchlists[0].id)}
+                          >
+                            Add to watchlist
+                          </button>
+                        ) : (
+                          <select
+                            aria-label={`Add ${symbol.symbol} to watchlist`}
+                            className="scanner-row-select"
+                            style={{ fontSize: 10, padding: "2px 6px" }}
+                            disabled={addingSymbol === symbol.symbol}
+                            defaultValue=""
+                            onChange={(e) => {
+                              const watchlistId = e.target.value;
+                              e.target.value = "";
+                              if (watchlistId) handleAddToWatchlist(symbol.symbol, watchlistId);
+                            }}
+                          >
+                            <option value="">Add to watchlist…</option>
+                            {watchlists.map((watchlist) => (
+                              <option key={watchlist.id} value={watchlist.id}>{watchlist.name}</option>
+                            ))}
+                          </select>
+                        )
+                      )}
+                    </div>
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>

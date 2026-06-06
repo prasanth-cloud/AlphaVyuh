@@ -31,9 +31,26 @@ class CredentialDecryptionError(Exception):
     """Raised on GCM InvalidTag. Never includes raw credential bytes."""
 
 
+def _key_bytes(raw: str) -> bytes:
+    return bytes.fromhex(raw)
+
+
+def _decrypt_keys() -> list[bytes]:
+    keys: list[bytes] = []
+    primary = os.environ.get("BROKER_CREDS_KEY")
+    if primary:
+        keys.append(_key_bytes(primary))
+    previous = os.environ.get("BROKER_CREDS_KEY_PREVIOUS")
+    if previous:
+        prev_bytes = _key_bytes(previous)
+        if prev_bytes not in keys:
+            keys.append(prev_bytes)
+    return keys
+
+
 def _key() -> bytes:
     raw = os.environ["BROKER_CREDS_KEY"]   # KeyError on missing = startup fails fast
-    return bytes.fromhex(raw)
+    return _key_bytes(raw)
 
 
 def _aad(user_id: str, broker: str, key_name: str) -> bytes:
@@ -46,14 +63,23 @@ def encrypt_credential(plaintext: str, user_id: str, broker: str, key_name: str)
     return iv + ct   # ct already includes the 16-byte GCM tag
 
 
-def decrypt_credential(blob: bytes, user_id: str, broker: str, key_name: str) -> str:
+def decrypt_credential(blob: bytes, user_id: str, broker: str, key_name: str, *, key_version: int = 1) -> str:
     iv, ct = blob[:12], blob[12:]
-    try:
-        return AESGCM(_key()).decrypt(iv, ct, _aad(user_id, broker, key_name)).decode()
-    except InvalidTag:
-        # Wipe local references before raising so raw bytes never reach Sentry locals.
-        blob = ct = iv = b""  # noqa: F841
-        raise CredentialDecryptionError("decryption failed") from None
+    aad = _aad(user_id, broker, key_name)
+    keys = _decrypt_keys()
+    if not keys:
+        raise CredentialDecryptionError("decryption failed")
+    if key_version == 2 and len(keys) > 1:
+        keys = [keys[0]]
+    last_err: Exception | None = None
+    for key_bytes in keys:
+        try:
+            return AESGCM(key_bytes).decrypt(iv, ct, aad).decode()
+        except InvalidTag as exc:
+            last_err = exc
+            continue
+    blob = ct = iv = b""  # noqa: F841
+    raise CredentialDecryptionError("decryption failed") from last_err
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
