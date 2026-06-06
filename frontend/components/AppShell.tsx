@@ -84,8 +84,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
     }
 
-    const warmData = () => warmCoreMarketData()
-    const warmSecondaryData = () => warmSecondaryWorkflowData()
+    const runWhenVisible = (task: () => void) => {
+      if (document.visibilityState !== 'visible') return
+      task()
+    }
+
+    const warmData = () => runWhenVisible(() => {
+      if (pathname.startsWith('/charts/')) return
+      warmCoreMarketData()
+    })
+    const warmSecondaryData = () => runWhenVisible(() => {
+      if (!['/dashboard', '/watchlist', '/journal'].some((route) => pathname.startsWith(route))) return
+      warmSecondaryWorkflowData()
+    })
 
     if ('requestIdleCallback' in window) {
       const routeId = window.requestIdleCallback(prefetchCoreRoutes, { timeout: 3000 })

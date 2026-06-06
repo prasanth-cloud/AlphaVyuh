@@ -561,6 +561,10 @@ export default function ScannerPage() {
   const [selectedResults, setSelectedResults] = useState<Set<string>>(new Set())
   const [workflowMarks, setWorkflowMarks] = useState<Record<string, WorkflowMark>>({})
   const [scanTrust, setScanTrust] = useState<ScanTrust | null>(null)
+  const [scanElapsedMs, setScanElapsedMs] = useState<number | null>(null)
+  const [recoveryMode, setRecoveryMode] = useState(false)
+  const [incompleteIndicatorCount, setIncompleteIndicatorCount] = useState(0)
+  const [symbolsScanned, setSymbolsScanned] = useState<number | null>(null)
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -693,7 +697,9 @@ export default function ScannerPage() {
 
   const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
     const hadResults = results.length > 0
+    const scanStartedAt = performance.now()
     setLoading(true); setError(''); if (!hadResults) setResults([]); setExpandedSymbol(null)
+    setScanElapsedMs(null)
     try {
       if (scannerUsesClientMockFallback()) {
         const data = mockRunScan()
@@ -712,6 +718,10 @@ export default function ScannerPage() {
         setTradeDate(data.trade_date || '')
         setIsLimited(data.is_limited || false)
         setScanTrust(nextTrust)
+        setRecoveryMode(false)
+        setIncompleteIndicatorCount(0)
+        setSymbolsScanned(data.source_metadata?.symbols_count ?? null)
+        setScanElapsedMs(Math.round(performance.now() - scanStartedAt))
         setHasCachedResults(false)
         writeScannerSnapshot({
           results: data.results as unknown as ScanResult[],
@@ -760,6 +770,13 @@ export default function ScannerPage() {
       setTradeDate(data.trade_date || '')
       setIsLimited(data.is_limited || false)
       setScanTrust(nextTrust)
+      setRecoveryMode(data.recovery_mode === 'vercel_readonly' || API_BASE_URL === '')
+      setIncompleteIndicatorCount(
+        data.incomplete_indicator_count
+        ?? nextResults.filter((result: ScanResult) => (result.data_warnings?.length ?? 0) > 0).length,
+      )
+      setSymbolsScanned(data.source_metadata?.symbols_count ?? null)
+      setScanElapsedMs(Math.round(performance.now() - scanStartedAt))
       setHasCachedResults(false)
       writeScannerSnapshot({
         results: nextResults,
@@ -1303,6 +1320,25 @@ export default function ScannerPage() {
                     {hasCachedResults ? 'Cached results' : scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
                   </span>
                 )}
+                {(loading || scanElapsedMs != null) && (
+                  <span
+                    className="workspace-pill"
+                    style={{ color: loading ? 'var(--text-secondary)' : (scanElapsedMs != null && scanElapsedMs > 3000 ? 'var(--warn)' : 'var(--text-secondary)') }}
+                    data-testid="scanner-scan-time"
+                  >
+                    {loading ? 'Scanning…' : `Scanned in ${(scanElapsedMs! / 1000).toFixed(1)}s`}
+                  </span>
+                )}
+                {scanTrust?.universeSize != null && symbolsScanned != null && (
+                  <span className="workspace-pill" data-testid="scanner-coverage-pill">
+                    <Num>{symbolsScanned.toLocaleString('en-IN')}</Num> / <Num>{scanTrust.universeSize.toLocaleString('en-IN')}</Num> symbols
+                  </span>
+                )}
+                {incompleteIndicatorCount > 0 && (
+                  <span className="workspace-pill" style={{ color: 'var(--warn)' }} data-testid="scanner-incomplete-warning">
+                    <Num>{incompleteIndicatorCount}</Num> with incomplete indicator data
+                  </span>
+                )}
                 {loading && results.length > 0 && (
                   <span className="workspace-pill" style={{ color: 'var(--warn)' }}>
                     Refreshing scan…
@@ -1372,6 +1408,15 @@ export default function ScannerPage() {
             </div>
           )}
         </div>
+
+        {recoveryMode && hasRun && !error && (
+          <div
+            data-testid="scanner-recovery-banner"
+            style={{ margin: '12px 16px', padding: '10px 14px', background: 'var(--warn-subtle)', border: '1px solid rgba(217,119,6,0.24)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--warn)', lineHeight: 1.6 }}
+          >
+            Read-only recovery is active while the Railway scanner API is unavailable. VCP and multi-day pivot filters need the full API; single-day EOD presets still run against the latest Supabase session.
+          </div>
+        )}
 
         {/* Error */}
         {error && (

@@ -10,35 +10,30 @@ import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
 } from "@/lib/api";
 import {
-  getCandles, getCandlesLive, getIndicators, getDrawings, saveDrawing,
+  getCandles, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
   streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators,
 } from "@/lib/api";
+import { useChartData } from "@/components/charts/hooks/useChartData";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
-import type { IndicatorData, IchimokuPoint, ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
+import type { ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 import {
   formatChartCoverageRange,
   formatChartGranularity,
-  getCoverageAvailabilityMessage,
-  getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   type WatchlistChartTimeframe,
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataSource } from "@/lib/data-copy";
-import { describeMarketDataError } from "@/lib/data-errors";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 
-type LinePoint = { time: string; value: number };
-type MACDPoint = { time: string; macd: number | null; signal: number | null; histogram: number | null };
-type StochPoint = { time: string; k: number; d: number | null };
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 type SymbolReviewContext = {
   closed: number;
@@ -96,15 +91,6 @@ const INDICATOR_CONFIG = [
 type DrawingTool = "Trendline" | "Ray" | "Horizontal" | "HorizontalRay" | "Rectangle" | "Fib" | "LongPosition" | "ShortPosition" | "Text";
 const FULL_CHART_DRAWING_TOOLS: DrawingTool[] = ["Trendline", "Horizontal", "HorizontalRay", "Ray", "Rectangle", "Fib", "Text", "LongPosition", "ShortPosition"];
 const DRAWING_DEFAULT_COLOR = "#f4f7fb";
-type ChartDataCacheEntry = {
-  data: CandlesResponse;
-  indicatorData: IndicatorData;
-  rsiData: LinePoint[];
-  macdData: MACDPoint[];
-  stochData: StochPoint[];
-  atrData: LinePoint[];
-  loadedAt: number;
-};
 
 const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: typeof PencilLine; hint: string }> = {
   Trendline: { label: "Trendline", short: "T", icon: PencilLine, hint: "Two-point trendline" },
@@ -118,8 +104,6 @@ const DRAW_TOOL_META: Record<DrawingTool, { label: string; short: string; icon: 
   Text: { label: "Text note", short: "N", icon: Type, hint: "Chart annotation" },
 };
 
-const chartDataCache = new Map<string, ChartDataCacheEntry>();
-const CHART_CACHE_TTL_MS = 60_000;
 const CHART_TYPE_STORAGE_KEY = "alphavyuh-chart-type";
 const CHART_LAYOUT_UNAVAILABLE_MESSAGE = "Chart layout is temporarily unavailable. Charting, alerts, and order planning remain usable.";
 const CHART_LAYOUT_SAVE_FAILED_MESSAGE = "Chart layout could not be saved. Check Data Status, then try again.";
@@ -166,19 +150,6 @@ function fmtPrice(v: number | null | undefined, currency = "INR"): string {
     return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function computeSmaLine(candles: CandleBar[], period: number): LinePoint[] {
-  const out: LinePoint[] = [];
-  let sum = 0;
-  for (let index = 0; index < candles.length; index += 1) {
-    sum += candles[index].close;
-    if (index >= period) sum -= candles[index - period].close;
-    if (index + 1 >= period) {
-      out.push({ time: candles[index].time, value: Number((sum / period).toFixed(4)) });
-    }
-  }
-  return out;
 }
 
 function cloneDrawings(drawings: ChartDrawing[]): ChartDrawing[] {
@@ -315,7 +286,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
 
   const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
-  const [rangeNote, setRangeNote] = useState<string | null>(null);
   const [timeframeMessage, setTimeframeMessage] = useState("");
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>(() => initialChartType ?? readStoredChartType());
@@ -346,9 +316,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return () => window.removeEventListener("alphavyuh:theme-changed", syncTheme);
   }, []);
 
-  const [data, setData] = useState<CandlesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [liveQuote, setLiveQuote] = useState<LiveQuote | null>(null);
   const [liveQuoteUpdatedAt, setLiveQuoteUpdatedAt] = useState<string | null>(null);
 
@@ -382,22 +349,34 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [redoStack, setRedoStack] = useState<ChartDrawing[][]>([]);
   const [snapToPrice, setSnapToPrice] = useState(true);
   const chartHandleRef = useRef<ChartHandle | null>(null);
-  const dataRef = useRef<CandlesResponse | null>(null);
-  const lastBaseChartKeyRef = useRef<string | null>(null);
   const loadedDrawingsKeyRef = useRef<string | null>(null);
   const loadedPriceAlertsSymbolRef = useRef<string | null>(null);
 
-  const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
-  const [indicatorError, setIndicatorError] = useState<string | null>(null);
-  const [rsiData, setRsiData] = useState<LinePoint[]>([]);
-  const [macdData, setMacdData] = useState<MACDPoint[]>([]);
-  const [stochData, setStochData] = useState<StochPoint[]>([]);
-  const [atrData, setAtrData] = useState<LinePoint[]>([]);
-
-  // Crosshair legend
   const [legendBar, setLegendBar] = useState<{
     time: string; open: number; high: number; low: number; close: number; volume: number;
   } | null>(null);
+
+  const {
+    data,
+    loading,
+    error,
+    indicatorData,
+    rsiData,
+    macdData,
+    stochData,
+    atrData,
+    rangeNote,
+    indicatorError,
+  } = useChartData({
+    symbol,
+    rangeLabel,
+    timeframe,
+    setTimeframe,
+    liveMode,
+    setLiveMode,
+    activeIndicators,
+    onLegendReset: () => setLegendBar(null),
+  });
 
   // Chart sync
   const [logicalRange, setLogicalRange] = useState<LogicalRange | null>(null);
@@ -452,10 +431,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
   const FREE_INDICATORS = INDICATOR_CONFIG.map((indicator) => indicator.id);
-
-  useEffect(() => {
-    dataRef.current = data;
-  }, [data]);
 
   // Toolbar dropdowns
   const [showDrawMenu, setShowDrawMenu] = useState(false);
@@ -539,32 +514,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     return findNearestCandlePrice(data?.candles, time, price);
   }, [data?.candles, snapToPrice]);
 
-  const applyIndicatorPayload = useCallback((resp: Awaited<ReturnType<typeof getIndicators>> | null, candles: CandleBar[] = []) => {
-    const ind = (resp?.indicators ?? {}) as Record<string, unknown[]>;
-    const nextIndicatorData: IndicatorData = {
-      ema20:    ind.ema20    as LinePoint[] | undefined,
-      ema50:    ind.ema50    as LinePoint[] | undefined,
-      ema200:   ind.ema200   as LinePoint[] | undefined,
-      sma50:    computeSmaLine(candles, 50),
-      sma200:   computeSmaLine(candles, 200),
-      vwap:     ind.vwap     as LinePoint[] | undefined,
-      bb:       ind.bb       as never,
-      ichimoku: ind.ichimoku as IchimokuPoint[] | undefined,
-    };
-    const nextRsi = (ind.rsi as LinePoint[] | undefined) ?? [];
-    const nextMacd = (ind.macd as MACDPoint[] | undefined) ?? [];
-    const nextStoch = (ind.stoch as StochPoint[] | undefined) ?? [];
-    const nextAtr = (ind.atr as LinePoint[] | undefined) ?? [];
-
-    setIndicatorData(nextIndicatorData);
-    setRsiData(nextRsi);
-    setMacdData(nextMacd);
-    setStochData(nextStoch);
-    setAtrData(nextAtr);
-
-    return { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr };
-  }, []);
-
   // Load compare symbol data
   useEffect(() => {
     if (!compareSymbol) {
@@ -598,119 +547,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       cancelled = true;
     };
   }, [compareRetryNonce, compareSymbol, rangeLabel]);
-
-  // Load chart data
-  useEffect(() => {
-    let cancelled = false;
-    const request = getWatchlistChartRequest(rangeLabel);
-    if (request.timeframe !== timeframe) setTimeframe(request.timeframe);
-    const overlayInds = activeIndicators.filter(i => ["ema20", "ema50", "ema200", "bb", "vwap"].includes(i));
-    const panelInds = activeIndicators.filter(i => ["rsi", "macd"].includes(i));
-    const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
-    const baseCacheKey = [symbol, rangeLabel, request.timeframe, request.from_date, request.to_date, request.limit, liveMode ? "live" : "eod"].join(":");
-    const cacheKey = [baseCacheKey, allInds.sort().join(",")].join(":");
-    const cached = chartDataCache.get(cacheKey);
-    const freshCached = cached && Date.now() - cached.loadedAt < CHART_CACHE_TTL_MS ? cached : null;
-    const canKeepVisibleChart = dataRef.current && lastBaseChartKeyRef.current === baseCacheKey;
-
-    setLoading(true);
-    setError("");
-    if (freshCached) {
-      setData(freshCached.data);
-      lastBaseChartKeyRef.current = baseCacheKey;
-      setLegendBar(null);
-      setRangeNote(getCoverageAvailabilityMessage(freshCached.data.coverage, request) ?? getRangeAvailabilityMessage(freshCached.data.candles ?? [], request));
-      setIndicatorError(null);
-      setIndicatorData(freshCached.indicatorData);
-      setRsiData(freshCached.rsiData);
-      setMacdData(freshCached.macdData);
-      setStochData(freshCached.stochData);
-      setAtrData(freshCached.atrData);
-    } else if (canKeepVisibleChart) {
-      setRangeNote(null);
-      setIndicatorData({});
-      setRsiData([]);
-      setMacdData([]);
-      setStochData([]);
-      setAtrData([]);
-    } else {
-      setData(null);
-      setRangeNote(null);
-      setRsiData([]);
-      setMacdData([]);
-      setStochData([]);
-      setAtrData([]);
-      setIndicatorData({});
-    }
-    if (!allInds.length) setIndicatorError(null);
-
-    const candlesParams = {
-      limit: request.limit,
-      timeframe: request.timeframe,
-      from_date: request.from_date,
-      to_date: request.to_date,
-    };
-    const candlesPromise = liveMode
-      ? getCandlesLive(symbol, { limit: Math.min(request.limit, 1000), timeframe: request.timeframe }).catch(() => {
-          if (!cancelled) setLiveMode(false);
-          return getCandles(symbol, candlesParams);
-        })
-      : getCandles(symbol, candlesParams);
-    const indicatorsPromise = allInds.length
-      ? getIndicators(symbol, allInds, request.timeframe)
-        .then((payload) => ({ payload, error: null as string | null }))
-        .catch((error) => ({
-          payload: null,
-          error: error instanceof Error && error.message.trim()
-            ? error.message
-            : "Chart indicators are temporarily unavailable.",
-        }))
-      : Promise.resolve({ payload: null, error: null as string | null });
-
-    Promise.all([candlesPromise, indicatorsPromise])
-      .then(([nextData, indicatorsResp]) => {
-        if (cancelled) return;
-        setData(nextData);
-        lastBaseChartKeyRef.current = baseCacheKey;
-        setLegendBar(null);
-        setRangeNote(getCoverageAvailabilityMessage(nextData.coverage, request) ?? getRangeAvailabilityMessage(nextData.candles ?? [], request));
-        setIndicatorError(indicatorsResp.error);
-        const { nextIndicatorData, nextRsi, nextMacd, nextStoch, nextAtr } = applyIndicatorPayload(indicatorsResp.payload, nextData.candles ?? []);
-        if (!indicatorsResp.error) {
-          chartDataCache.set(cacheKey, {
-            data: nextData,
-            indicatorData: nextIndicatorData,
-            rsiData: nextRsi,
-            macdData: nextMacd,
-            stochData: nextStoch,
-            atrData: nextAtr,
-            loadedAt: Date.now(),
-          });
-        }
-      })
-      .catch(e => {
-        if (!cancelled) setError(describeMarketDataError(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeIndicators, applyIndicatorPayload, liveMode, rangeLabel, symbol, timeframe]);
-
-  // Auto-refresh every 5 minutes in live mode
-  useEffect(() => {
-    if (!liveMode) return;
-    const interval = setInterval(() => {
-      const request = getWatchlistChartRequest(rangeLabel);
-      getCandlesLive(symbol, { limit: Math.min(request.limit, 1000), timeframe: request.timeframe })
-        .then(d => { setData(d); setLegendBar(null); })
-        .catch(() => {});
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [liveMode, rangeLabel, symbol]);
 
   // Load saved layout + plan + alerts
   useEffect(() => {
@@ -2158,7 +1994,6 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               const request = getWatchlistChartRequest(next);
               setRangeLabel(next);
               setTimeframe(request.timeframe);
-              setRangeNote(null);
               setTimeframeMessage("");
             }}
             onUnavailable={setTimeframeMessage}
@@ -3369,6 +3204,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           </div>
           {/* OHLCV legend / crosshair overlay */}
           <div className="chart-canvas-panel relative flex-1 min-h-0">
+            {loading && !data && (
+              <div className="absolute inset-0 z-10 flex items-end gap-[3px] px-4 pb-6 pt-16" aria-hidden="true">
+                {[42, 68, 55, 78, 48, 62, 38, 72, 58, 44, 66, 52, 74, 46, 60, 50, 70, 40, 64, 56, 48, 68, 54, 76, 42, 58, 66, 50, 72, 44].map((height, index) => (
+                  <div
+                    key={index}
+                    className="flex-1 rounded-t-[3px] animate-pulse"
+                    style={{ height: `${height}%`, background: "var(--app-surface3)" }}
+                  />
+                ))}
+              </div>
+            )}
             {loading && data && (
               <div
                 className="absolute top-3 left-1/2 -translate-x-1/2 z-30 rounded-full px-3 py-1.5 text-[11px] font-semibold pointer-events-none"

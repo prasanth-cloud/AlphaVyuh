@@ -202,6 +202,25 @@ export function JournalAiInsights({
         )}
       </Card>
 
+      {closedTrades >= 3 && !aiAnalysis && !aiLoading && (
+        <Card padding="lg" data-testid="journal-analysis-prompt">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div>
+              <div className="heading-card" style={{ marginBottom: 4 }}>Pattern analysis ready</div>
+              <div className="body-secondary">
+                You have {closedTrades} closed trades — run pattern analysis to surface repeat mistakes, strengths, and habits from your journal.
+              </div>
+            </div>
+            <button
+              onClick={onAnalyse}
+              style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 700, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer" }}
+            >
+              Run pattern analysis
+            </button>
+          </div>
+        </Card>
+      )}
+
       {/* Trade review */}
       <Card padding="lg">
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>

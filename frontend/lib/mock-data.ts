@@ -18,7 +18,7 @@ import type {
   SectorBreadthItem,
   SymbolSearchResult,
   Watchlist,
-} from "./api";
+} from "./api/types";
 
 const TRADE_DATE = "2026-04-24";
 

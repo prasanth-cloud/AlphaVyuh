@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag } from "lucide-react";
 import dynamic from "next/dynamic";
-import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals } from "@/lib/api";
+import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals, ScanResult } from "@/lib/api";
 import {
   getWatchlists,
   getJournalEntries,
@@ -29,12 +29,11 @@ import {
   removeFromWatchlist,
   reorderWatchlist,
   updateWatchlistItemMetadata,
-  getQuote,
+  getQuotes,
   searchSymbols,
   getCandles,
   prefetchCandles,
   placeOrder,
-  getQuoteLive,
   getFundamentals,
   getBrokerStatus,
   getWorkflowStates,
@@ -140,6 +139,34 @@ function formatCompactVolume(value: number): string {
 function formatNullablePrice(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "-";
   return value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function watchlistItemFromQuote(quote: ScanResult, sortOrder = 0): WatchlistItem {
+  return {
+    symbol: quote.symbol,
+    sort_order: sortOrder,
+    added_at: new Date().toISOString(),
+    company_name: quote.company_name,
+    sector: quote.sector,
+    close: quote.close,
+    pct_change: quote.pct_change,
+    volume_ratio: quote.volume_ratio,
+    rsi_14: quote.rsi_14,
+    pinned: false,
+    tags: [],
+    note: "",
+  };
+}
+
+function watchlistItemFromSymbol(symbol: string, sortOrder = 0): WatchlistItem {
+  return {
+    symbol: symbol.toUpperCase(),
+    sort_order: sortOrder,
+    added_at: new Date().toISOString(),
+    pinned: false,
+    tags: [],
+    note: "",
+  };
 }
 
 function watchlistInitial(name: string | null | undefined): string {
@@ -1187,6 +1214,7 @@ function WatchlistContent() {
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
   const [queuePage, setQueuePage] = useState(0);
+  const [quotesAsOf, setQuotesAsOf] = useState<string | null>(null);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
   const appliedChartDrafts = useRef<Set<string>>(new Set());
@@ -1399,11 +1427,11 @@ function WatchlistContent() {
       }
       routeAutoAddAttempts.current.add(attemptKey);
       addToWatchlist(activeId, requestedSymbol)
-        .then(() => getQuote(requestedSymbol))
-        .then(quote => {
-          const newItem: WatchlistItem = quote
-            ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-            : { symbol: requestedSymbol, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+        .then(() => getQuotes([requestedSymbol]))
+        .then(({ quotes, as_of }) => {
+          if (as_of) setQuotesAsOf(as_of);
+          const quote = quotes[requestedSymbol];
+          const newItem = quote ? watchlistItemFromQuote(quote) : watchlistItemFromSymbol(requestedSymbol);
           setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...(w.items || []), newItem] } : w));
           setChartSymbol(requestedSymbol);
           trackEvent("watchlist_symbol_focused", { symbol: requestedSymbol, watchlist_id: activeId, source: "scanner_auto_add" });
@@ -1579,27 +1607,18 @@ function WatchlistContent() {
     let cancelled = false;
 
     async function refreshLiveQuotes() {
-      const updates = await Promise.all(
-        pageItems.map(async (item) => {
-          const live = await getQuoteLive(item.symbol).catch(() => null);
-          return live ? {
-            symbol: item.symbol,
-            close: live.close ?? undefined,
-            pct_change: live.pct_change ?? undefined,
-          } : null;
-        })
-      );
+      const { quotes, as_of } = await getQuotes(pageItems.map((item) => item.symbol)).catch(() => ({ quotes: {} as Record<string, ScanResult>, as_of: null }));
 
       if (cancelled) return;
-      const liveMap = new Map(updates.filter(Boolean).map((u) => [u!.symbol, u!]));
+      if (as_of) setQuotesAsOf(as_of);
       setWatchlists(prev => prev.map(w => (
         w.id !== activeId
           ? w
           : {
               ...w,
               items: w.items.map(item => {
-                const live = liveMap.get(item.symbol);
-                return live ? { ...item, close: live.close, pct_change: live.pct_change } : item;
+                const quote = quotes[item.symbol];
+                return quote ? { ...item, close: quote.close, pct_change: quote.pct_change } : item;
               }),
             }
       )));
@@ -1753,10 +1772,10 @@ function WatchlistContent() {
     setAddMsg("");
     try {
       await addToWatchlist(activeId, symbol);
-      const quote = await getQuote(symbol);
-      const newItem: WatchlistItem = quote
-        ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-        : { symbol, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+      const { quotes, as_of } = await getQuotes([symbol]);
+      if (as_of) setQuotesAsOf(as_of);
+      const quote = quotes[symbol.toUpperCase()];
+      const newItem = quote ? watchlistItemFromQuote(quote) : watchlistItemFromSymbol(symbol);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
       setChartSymbol(symbol);
       setSymbolInput("");
@@ -1776,21 +1795,26 @@ function WatchlistContent() {
     try {
       const existing = new Set((activeWl?.items ?? []).map((item) => item.symbol));
       const symbols = STARTER_SYMBOLS.filter((symbol) => !existing.has(symbol));
-      const newItems: WatchlistItem[] = [];
+      const addedSymbols: string[] = [];
       let failureCount = 0;
 
-      for (const [index, symbol] of symbols.entries()) {
+      for (const symbol of symbols) {
         try {
           await addToWatchlist(activeId, symbol);
+          addedSymbols.push(symbol);
         } catch {
           failureCount += 1;
-          continue;
         }
-        const quote = await getQuote(symbol).catch(() => null);
-        newItems.push(quote
-          ? { symbol: quote.symbol, sort_order: index, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-          : { symbol, sort_order: index, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" });
       }
+
+      const { quotes, as_of } = addedSymbols.length
+        ? await getQuotes(addedSymbols).catch(() => ({ quotes: {} as Record<string, ScanResult>, as_of: null }))
+        : { quotes: {} as Record<string, ScanResult>, as_of: null };
+      if (as_of) setQuotesAsOf(as_of);
+      const newItems = addedSymbols.map((symbol, index) => {
+        const quote = quotes[symbol.toUpperCase()];
+        return quote ? { ...watchlistItemFromQuote(quote, index) } : watchlistItemFromSymbol(symbol, index);
+      });
 
       if (newItems.length) {
         setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, ...newItems] } : w));
@@ -1820,10 +1844,10 @@ function WatchlistContent() {
     setSearchResults([]);
     try {
       await addToWatchlist(activeId, sym);
-      const quote = await getQuote(sym);
-      const newItem: WatchlistItem = quote
-        ? { symbol: quote.symbol, sort_order: 0, added_at: new Date().toISOString(), company_name: quote.company_name, sector: quote.sector, close: quote.close, pct_change: quote.pct_change, volume_ratio: quote.volume_ratio, rsi_14: quote.rsi_14, pinned: false, tags: [], note: "" }
-        : { symbol: sym, sort_order: 0, added_at: new Date().toISOString(), pinned: false, tags: [], note: "" };
+      const { quotes, as_of } = await getQuotes([sym]);
+      if (as_of) setQuotesAsOf(as_of);
+      const quote = quotes[sym];
+      const newItem = quote ? watchlistItemFromQuote(quote) : watchlistItemFromSymbol(sym);
       setWatchlists(prev => prev.map(w => w.id === activeId ? { ...w, items: [...w.items, newItem] } : w));
       setChartSymbol(sym);
       setSymbolInput("");
@@ -2179,6 +2203,7 @@ function WatchlistContent() {
                   </div>
                   <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {selectedItem.company_name || selectedItem.sector || "Active watchlist symbol"}
+                    {quotesAsOf ? ` · As of ${quotesAsOf}` : ""}
                   </div>
                 </div>
                 <div className="workspace-pill-row" style={{ marginTop: 0 }}>

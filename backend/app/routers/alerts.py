@@ -4,6 +4,9 @@ The daily ingest cron calls run_all_alerts() after bhavcopy is ingested.
 """
 from __future__ import annotations
 
+import json
+import logging
+from collections import defaultdict
 from datetime import date
 from typing import Any
 
@@ -11,11 +14,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
 import httpx
-import logging
 
 from app.middleware.auth import get_current_user_id
 from app.routers.scanner import ScanFilters, ScanRequest, SORT_KEYS, execute_scan
-from app.services.plans import get_effective_user_plan
+from app.services.plans import effective_plan_from_record, get_effective_user_plan
 from app.services.supabase import get_admin_client, settings
 
 logger = logging.getLogger(__name__)
@@ -211,6 +213,38 @@ async def get_alert_matches(
 
 # ── Internal: called by the daily ingest cron ─────────────────────────────────
 
+def _plan_priority(plan: str) -> int:
+    return {"free": 0, "pro": 1, "elite": 2}.get(plan, 0)
+
+
+def _batch_user_plans(client, user_ids: list[str]) -> dict[str, str]:
+    if not user_ids:
+        return {}
+    try:
+        res = (
+            client.table("users")
+            .select("id, plan, plan_expires_at")
+            .in_("id", user_ids)
+            .execute()
+        )
+        plan_map: dict[str, str] = {}
+        for row in res.data or []:
+            plan, _, _ = effective_plan_from_record(row)
+            plan_map[row["id"]] = plan
+        for uid in user_ids:
+            plan_map.setdefault(uid, "free")
+        return plan_map
+    except Exception:
+        return {uid: _get_user_plan(uid) for uid in user_ids}
+
+
+def _scan_group_key(alert: dict) -> tuple[str, str, str]:
+    filters = alert.get("filters") or {}
+    sort_by = alert.get("sort_by", "volume_ratio")
+    sort_order = alert.get("sort_order", "desc")
+    return (json.dumps(filters, sort_keys=True), sort_by, sort_order)
+
+
 async def run_all_alerts(trade_date: date) -> dict:
     """
     Run every active scan alert against today's data and store matches.
@@ -228,20 +262,31 @@ async def run_all_alerts(trade_date: date) -> dict:
     if not alerts:
         return {"trade_date": str(trade_date), "alerts_run": 0, "total_matches": 0}
 
+    if not alerts:
+        return {"trade_date": str(trade_date), "alerts_run": 0, "total_matches": 0}
+
+    unique_user_ids = list({a["user_id"] for a in alerts})
+    plan_map = _batch_user_plans(client, unique_user_ids)
+
+    groups: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
+    for alert in alerts:
+        groups[_scan_group_key(alert)].append(alert)
+
     total_matches = 0
     run_summaries: list[dict] = []
-    for alert in alerts:
-        run_status = "success"
-        error_message = None
-        snapshot: list[dict] = []
-        match_count = 0
+    for group_key, group_alerts in groups.items():
+        filters_json, sort_by, sort_order = group_key
+        scan_result: dict | None = None
+        scan_error: HTTPException | None = None
+        scan_exc: Exception | None = None
         try:
-            filters = ScanFilters(**alert["filters"])
-            sort_by = alert.get("sort_by", "volume_ratio")
-            sort_order = alert.get("sort_order", "desc")
+            filters = ScanFilters(**json.loads(filters_json))
             _validate_sort(sort_by, sort_order)
-            plan = _get_user_plan(alert["user_id"])
-            scan = await execute_scan(
+            group_plan = max(
+                (plan_map.get(a["user_id"], "free") for a in group_alerts),
+                key=_plan_priority,
+            )
+            scan_result = await execute_scan(
                 client,
                 ScanRequest(
                     filters=filters,
@@ -250,64 +295,72 @@ async def run_all_alerts(trade_date: date) -> dict:
                     page=1,
                     page_size=0,
                 ),
-                plan=plan,
+                plan=group_plan,
                 trade_date=trade_date,
                 enforce_plan_limit=False,
             )
-            results = scan.get("results") or []
-            match_count = int(scan.get("total_matches") or 0)
-            total_matches += match_count
-
-            snapshot = [
-                {
-                    "symbol":       r["symbol"],
-                    "close":        r.get("close"),
-                    "pct_change":   r.get("pct_change"),
-                    "volume_ratio": r.get("volume_ratio"),
-                    "rsi_14":       r.get("rsi_14"),
-                }
-                for r in results[:50]
-            ]
         except HTTPException as e:
-            run_status = "skipped"
-            error_message = str(e.detail)
+            scan_error = e
         except Exception as e:
-            run_status = "failed"
-            error_message = str(e)
+            scan_exc = e
 
-        # Upsert match row (one per alert per day)
-        client.table("scan_alert_matches").upsert(
-            {
-                "alert_id":    alert["id"],
-                "user_id":     alert["user_id"],
-                "run_date":    str(trade_date),
-                "symbols":     snapshot,
+        for alert in group_alerts:
+            run_status = "success"
+            error_message = None
+            snapshot: list[dict] = []
+            match_count = 0
+            if scan_result is not None:
+                results = scan_result.get("results") or []
+                match_count = int(scan_result.get("total_matches") or 0)
+                total_matches += match_count
+                snapshot = [
+                    {
+                        "symbol":       r["symbol"],
+                        "close":        r.get("close"),
+                        "pct_change":   r.get("pct_change"),
+                        "volume_ratio": r.get("volume_ratio"),
+                        "rsi_14":       r.get("rsi_14"),
+                    }
+                    for r in results[:50]
+                ]
+            elif scan_error is not None:
+                run_status = "skipped"
+                error_message = str(scan_error.detail)
+            elif scan_exc is not None:
+                run_status = "failed"
+                error_message = str(scan_exc)
+
+            client.table("scan_alert_matches").upsert(
+                {
+                    "alert_id":    alert["id"],
+                    "user_id":     alert["user_id"],
+                    "run_date":    str(trade_date),
+                    "symbols":     snapshot,
+                    "match_count": match_count,
+                    "run_status":  run_status,
+                    "error_message": error_message,
+                },
+                on_conflict="alert_id,run_date",
+                ignore_duplicates=False,
+            ).execute()
+
+            client.table("scan_alerts").update({
+                "last_run_at":     "now()",
+                "last_match_count": match_count,
+                "last_run_status": run_status,
+                "last_error":      error_message,
+                "updated_at":      "now()",
+            }).eq("id", alert["id"]).execute()
+
+            run_summaries.append({
+                "alert_id": alert["id"],
+                "user_id": alert["user_id"],
+                "name": alert["name"],
                 "match_count": match_count,
-                "run_status":  run_status,
+                "symbols": snapshot,
+                "run_status": run_status,
                 "error_message": error_message,
-            },
-            on_conflict="alert_id,run_date",
-            ignore_duplicates=False,
-        ).execute()
-
-        # Update last_run_at and match count on the alert
-        client.table("scan_alerts").update({
-            "last_run_at":     "now()",
-            "last_match_count": match_count,
-            "last_run_status": run_status,
-            "last_error":      error_message,
-            "updated_at":      "now()",
-        }).eq("id", alert["id"]).execute()
-
-        run_summaries.append({
-            "alert_id": alert["id"],
-            "user_id": alert["user_id"],
-            "name": alert["name"],
-            "match_count": match_count,
-            "symbols": snapshot,
-            "run_status": run_status,
-            "error_message": error_message,
-        })
+            })
 
     # Send Telegram notifications if bot token is configured
     if settings.telegram_bot_token:

@@ -365,6 +365,99 @@ def _token_is_expired(expires_at: str | None) -> bool:
         return True
 
 
+def _workflow_context_for_import(sb, user_id: str, symbol: str) -> dict:
+    try:
+        return (
+            sb.table("workflow_states")
+            .select("setup_type,scanner_context")
+            .eq("user_id", user_id)
+            .eq("symbol", symbol)
+            .maybe_single()
+            .execute()
+            .data or {}
+        )
+    except Exception:
+        return {}
+
+
+def _journal_enrichment_from_workflow(workflow: dict) -> dict:
+    scanner_context = workflow.get("scanner_context")
+    setup_type = workflow.get("setup_type")
+    enrichment: dict[str, Any] = {}
+    if setup_type:
+        enrichment["setup_type"] = setup_type
+    if isinstance(scanner_context, dict):
+        enrichment["scanner_context"] = scanner_context
+    enrichment["source_page"] = "broker-import"
+    return enrichment
+
+
+def _fifo_close_open_long(
+    sb,
+    user_id: str,
+    symbol: str,
+    exit_price: float,
+    exit_reason: str,
+) -> bool:
+    open_res = (
+        sb.table("trade_journal")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("symbol", symbol)
+        .eq("trade_type", "long")
+        .eq("status", "open")
+        .order("entry_date", desc=False)
+        .order("created_at", desc=False)
+        .limit(1)
+        .execute()
+    )
+    if not open_res.data:
+        return False
+
+    entry = open_res.data[0]
+    entry_price = float(entry["entry_price"])
+    qty = int(entry["quantity"])
+    pnl = (exit_price - entry_price) * qty
+    pnl_pct = round(pnl / (entry_price * qty) * 100, 4) if entry_price and qty else 0
+
+    try:
+        from datetime import date as date_
+        ed = date_.fromisoformat(entry["entry_date"])
+        holding_days = (date_.today() - ed).days
+    except Exception:
+        holding_days = None
+
+    sb.table("trade_journal").update({
+        "exit_date": str(date.today()),
+        "exit_price": exit_price,
+        "exit_reason": exit_reason,
+        "pnl": round(pnl, 2),
+        "pnl_pct": pnl_pct,
+        "holding_days": holding_days,
+        "status": "closed",
+    }).eq("id", entry["id"]).execute()
+    sync_workflow_state(sb, user_id, symbol, {
+        "source": "broker-import",
+        "lifecycle": "closed",
+        "journal_id": entry["id"],
+    })
+    return True
+
+
+def _import_already_recorded(sb, user_id: str, marker: str) -> bool:
+    for column in ("entry_reason", "exit_reason"):
+        existing = (
+            sb.table("trade_journal")
+            .select("id")
+            .eq("user_id", user_id)
+            .ilike(column, f"%{marker}%")
+            .execute()
+        )
+        if existing.data:
+            return True
+    return False
+
+
 def _broker_import_marker(broker: str, order_id: str) -> str:
     return f"{BROKER_IMPORT_MARKER}:{broker}:order:{order_id}"
 
@@ -1022,35 +1115,36 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         if not sym or not qty or not avg_px or not order_id:
             continue
 
-        existing = (
-            sb.table("trade_journal")
-            .select("id")
-            .eq("user_id", user_id)
-            .ilike("entry_reason", f"%{marker}%")
-            .execute()
-        )
-        if existing.data:
+        existing = _import_already_recorded(sb, user_id, marker)
+        if existing:
             skipped += 1
             continue
 
-        # Try to get company name
+        executed_at = str(order.get("exchange_timestamp") or order.get("order_timestamp") or date.today())
+        entry_date = executed_at[:10] if len(executed_at) >= 10 else str(date.today())
+        exit_reason = f"Zerodha import — order #{order_id} [{marker}] [Zerodha · auto]"
+
+        if txn == "SELL":
+            if _fifo_close_open_long(sb, user_id, sym, avg_px, exit_reason):
+                imported += 1
+            continue
+
         stock = sb.table("stock_universe").select("company_name") \
             .eq("symbol", sym).maybe_single().execute()
         company_name = stock.data["company_name"] if stock.data else sym
+        workflow = _workflow_context_for_import(sb, user_id, sym)
 
-        trade_type = "long" if txn == "BUY" else "short"
-        executed_at = str(order.get("exchange_timestamp") or order.get("order_timestamp") or date.today())
-        entry_date = executed_at[:10] if len(executed_at) >= 10 else str(date.today())
         entry = {
             "user_id":      user_id,
             "symbol":       sym,
             "company_name": company_name,
-            "trade_type":   trade_type,
+            "trade_type":   "long",
             "entry_date":   entry_date,
             "entry_price":  avg_px,
             "quantity":     qty,
             "entry_reason": f"Zerodha import — order #{order_id} [{marker}] [Zerodha · auto]",
             "status":       "open",
+            **_journal_enrichment_from_workflow(workflow),
         }
         inserted = sb.table("trade_journal").insert(entry).execute()
         journal_entry = (inserted.data or [{}])[0]
@@ -1122,33 +1216,36 @@ async def import_broker_trades(
     skipped = 0
     for order in filled:
         marker = _broker_import_marker(broker_name, str(order.broker_order_id))
-        existing = (
-            sb.table("trade_journal")
-            .select("id")
-            .eq("user_id", user_id)
-            .ilike("entry_reason", f"%{marker}%")
-            .execute()
-        )
-        if existing.data:
+        existing = _import_already_recorded(sb, user_id, marker)
+        if existing:
             skipped += 1
+            continue
+
+        entry_price = order.average_price or order.limit_price or 0
+        if not entry_price:
+            continue
+
+        exit_reason = f"{broker_name.capitalize()} import — order #{order.broker_order_id} [{marker}] [{broker_name.capitalize()} · auto]"
+        if order.side == "SELL":
+            if _fifo_close_open_long(sb, user_id, order.symbol, entry_price, exit_reason):
+                imported += 1
             continue
 
         stock = sb.table("stock_universe").select("company_name") \
             .eq("symbol", order.symbol).maybe_single().execute()
         company_name = stock.data["company_name"] if stock.data else order.symbol
-        entry_price = order.average_price or order.limit_price or 0
-        if not entry_price:
-            continue
+        workflow = _workflow_context_for_import(sb, user_id, order.symbol)
         entry = {
             "user_id": user_id,
             "symbol": order.symbol,
             "company_name": company_name,
-            "trade_type": "long" if order.side == "BUY" else "short",
+            "trade_type": "long",
             "entry_date": order.updated_at.date().isoformat(),
             "entry_price": entry_price,
             "quantity": order.filled_quantity,
             "entry_reason": f"{broker_name.capitalize()} import — order #{order.broker_order_id} [{marker}] [{broker_name.capitalize()} · auto]",
             "status": "open",
+            **_journal_enrichment_from_workflow(workflow),
         }
         inserted = sb.table("trade_journal").insert(entry).execute()
         journal_entry = (inserted.data or [{}])[0]

@@ -1,0 +1,898 @@
+export type ScanResult = {
+  symbol: string;
+  company_name: string;
+  series: string;
+  sector: string | null;
+  market?: string;
+  currency?: string;
+  close: number;
+  prev_close: number;
+  open: number;
+  high: number;
+  low: number;
+  pct_change: number | null;
+  gap_pct: number | null;
+  volume: number;
+  avg_volume_20d: number;
+  avg_volume_50d?: number | null;
+  volume_ratio: number | null;
+  turnover: number | null;
+  rsi_14: number | null;
+  ema_20: number | null;
+  ema_50: number | null;
+  ema_150?: number | null;
+  ema_200: number | null;
+  ema_200_slope_30d?: number | null;
+  ema_20_dist: number | null;
+  ema_50_dist: number | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+  week_52_high_pct: number | null;
+  week_52_low_pct: number | null;
+  price_perf_6m_pct?: number | null;
+  high_3w?: number | null;
+  low_3w?: number | null;
+  darvas_box_height_pct?: number | null;
+  atr_14: number | null;
+  atr_pct: number | null;
+  turnover_cr?: number | null;
+  macd_hist?: number | null;
+  bb_width?: number | null;
+  stoch_k?: number | null;
+  adx_14?: number | null;
+  delivery_pct?: number | null;
+  is_new_52w_high?: boolean;
+  is_nr7?: boolean | null;
+  is_inside_bar?: boolean;
+  rs_score?: number | null;
+  match_reasons?: string[];
+  data_warnings?: string[];
+  setup_score?: number | null;
+  setup_grade?: string | null;
+  confidence_label?: string | null;
+  confidence_reasons?: string[];
+  market_cap_cr?: number | null;
+  pe_ratio?: number | null;
+  pb_ratio?: number | null;
+  eps?: number | null;
+  dividend_yield?: number | null;
+  roe?: number | null;
+  roce?: number | null;
+};
+
+export type ScanFilters = {
+  // Price & Performance
+  price_min?: number;
+  price_max?: number;
+  pct_change_min?: number;
+  pct_change_max?: number;
+  gap_pct_min?: number;
+  gap_pct_max?: number;
+  high_min?: number;
+  low_max?: number;
+  // Volume
+  volume_min?: number;
+  volume_max?: number;
+  volume_ratio_min?: number;
+  volume_ratio_max?: number;
+  turnover_min?: number;
+  turnover_max?: number;
+  // Momentum
+  rsi_min?: number;
+  rsi_max?: number;
+  // Trend
+  above_ema20?: boolean;
+  below_ema20?: boolean;
+  above_ema50?: boolean;
+  below_ema50?: boolean;
+  above_ema200?: boolean;
+  below_ema200?: boolean;
+  ema20_above_ema50?: boolean;
+  ema50_above_ema200?: boolean;
+  ema50_above_ema150?: boolean;
+  ema150_above_ema200?: boolean;
+  all_emas_bullish?: boolean;
+  all_smas_bullish?: boolean;
+  all_emas_bearish?: boolean;
+  ema_200_trending_up?: boolean;
+  ema_200_slope_30d_min?: number;
+  ema_200_slope_30d_max?: number;
+  ema20_dist_min?: number;
+  ema20_dist_max?: number;
+  ema50_dist_min?: number;
+  ema50_dist_max?: number;
+  // Volatility
+  atr_min?: number;
+  atr_max?: number;
+  atr_pct_min?: number;
+  atr_pct_max?: number;
+  // 52-Week
+  w52h_pct_max?: number;
+  week_52_high_pct_max?: number;  // alias for w52h_pct_max (new scanner UI)
+  w52l_pct_min?: number;
+  new_52w_high?: boolean;
+  new_52w_low?: boolean;
+  rs_score_min?: number;
+  rs_score_max?: number;
+  price_perf_6m_min?: number;
+  price_perf_6m_max?: number;
+  avg_volume_50d_min?: number;
+  avg_volume_50d_max?: number;
+  darvas_box_height_pct_max?: number;
+  nr7?: boolean;
+  // EMA position aliases (new scanner UI: 'above' | 'below')
+  price_vs_ema20?: string;
+  price_vs_ema50?: string;
+  price_vs_ema150?: string;
+  price_vs_ema200?: string;
+  price_vs_sma50?: string;
+  price_vs_sma150?: string;
+  price_vs_sma200?: string;
+  vcp_contraction?: boolean;
+  vcp_min_pivots?: number;
+  vcp_max_depth_pct?: number;
+  vcp_pivot_proximity_pct?: number;
+  // Market
+  series?: string[];
+  sector?: string;
+  market?: string;  // "IN" | "US" | "NSE" | "BSE" | "NASDAQ" | "NYSE"
+};
+
+export type Market = {
+  key: string;
+  label: string;
+  currency: string;
+  count: number;
+};
+
+export type ScanResponse = {
+  trade_date: string | null;
+  total_matches: number;
+  plan_limit: number;
+  plan?: string;
+  mode?: DataMode;
+  source?: string;
+  source_metadata?: SourceMetadata;
+  coverage_pct?: number | null;
+  universe_size?: number | null;
+  message?: string;
+  results: ScanResult[];
+};
+
+export type DataMode = "live" | "eod" | "fallback" | "unknown" | "demo";
+
+export type SourceMetadata = {
+  source_name: string;
+  mode: DataMode;
+  as_of: string | null;
+  generated_at?: string;
+  confidence?: string;
+  coverage_pct?: number | null;
+  symbols_count?: number | null;
+  universe_active?: number | null;
+  cache_status?: string | null;
+  license_notes?: string;
+  message?: string;
+};
+
+export type ChartCoverage = {
+  requested_from?: string | null;
+  requested_to?: string | null;
+  available_from?: string | null;
+  available_to?: string | null;
+  returned_candles?: number | null;
+  requested_limit?: number | null;
+  timeframe?: string | null;
+  requested_days?: number | null;
+  covered_days?: number | null;
+  coverage_pct?: number | null;
+  partial?: boolean;
+  partial_reason?: string | null;
+  source_name?: string | null;
+  as_of?: string | null;
+};
+
+export type MarketSummary = {
+  trade_date: string;
+  advances: number;
+  declines: number;
+  unchanged: number;
+  advance_decline_ratio: number | null;
+  new_52w_highs: number;
+  new_52w_lows: number;
+  above_ema20_pct: number | null;
+  above_ema50_pct: number | null;
+  above_ema200_pct: number | null;
+  total_stocks: number;
+};
+
+export type WatchlistItem = {
+  symbol: string;
+  sort_order: number;
+  added_at: string;
+  company_name?: string;
+  sector?: string | null;
+  close?: number;
+  pct_change?: number | null;
+  volume_ratio?: number | null;
+  rsi_14?: number | null;
+  pinned?: boolean;
+  tags?: string[];
+  note?: string | null;
+};
+
+export type Watchlist = {
+  id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+  items: WatchlistItem[];
+};
+
+export type SavedScreen = {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  is_default: boolean;
+  created_at: string;
+};
+
+export type WatchlistItemMetadataUpdate = {
+  pinned?: boolean;
+  tags?: string[];
+  note?: string | null;
+};
+
+export type WorkflowLifecycle =
+  | "idea"
+  | "watch"
+  | "ready"
+  | "triggered"
+  | "open"
+  | "closed"
+  | "reviewed"
+  | "invalidated"
+  | "ignored"
+  | "review_later";
+
+export type WorkflowState = {
+  id?: string;
+  user_id?: string;
+  symbol: string;
+  watchlist_id?: string | null;
+  source?: string;
+  lifecycle: WorkflowLifecycle;
+  setup_type?: string | null;
+  entry?: number | null;
+  stop?: number | null;
+  target?: number | null;
+  position_size?: number | null;
+  timeframe?: string;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
+  confidence?: number | null;
+  setup_quality?: number | null;
+  notes?: string | null;
+  tags?: string[];
+  scanner_context?: ScannerIdeaContext | null;
+  pinned?: boolean;
+  review_later?: boolean;
+  ignored?: boolean;
+  broker_order_id?: string | null;
+  journal_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ScannerIdeaContext = {
+  source: "scanner";
+  preset_id?: string | null;
+  preset_name?: string | null;
+  match_reasons?: string[];
+  confidence_reasons?: string[];
+  data_warnings?: string[];
+  setup_score?: number | null;
+  setup_grade?: string | null;
+  confidence_label?: string | null;
+  scan_trade_date?: string | null;
+  data_source?: string | null;
+  data_mode?: string | null;
+  data_as_of?: string | null;
+  captured_at?: string;
+};
+
+export type WorkflowStatePatch = Partial<Omit<WorkflowState, "id" | "user_id" | "created_at" | "updated_at">> & {
+  symbol: string;
+};
+
+export type LiveQuote = {
+  symbol: string;
+  market?: string;
+  currency?: string;
+  close: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  volume: number | null;
+  prev_close: number | null;
+  pct_change: number | null;
+  week_52_high?: number | null;
+  week_52_low?: number | null;
+  source: string;
+  as_of?: string;
+};
+
+export type LiveMarketStatus = {
+  provider: string;
+  api_key_configured: boolean;
+  access_token_configured: boolean;
+  access_token_valid: boolean;
+  token_refresh: "daily_manual" | string;
+  stream_connected: boolean;
+  stream_connecting: boolean;
+  subscriber_count: number;
+  subscribed_symbols: string[];
+  last_error: string | null;
+};
+
+export type LiveSectorIndex = {
+  symbol: string;
+  label: string;
+  close: number | null;
+  pct_change: number | null;
+  prev_close: number | null;
+  source: string;
+  error?: string;
+};
+
+export type CandleBar = {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  ema_20?: number | null;
+  ema_50?: number | null;
+  ema_200?: number | null;
+};
+
+export type CandlesResponse = {
+  symbol: string;
+  company_name: string | null;
+  sector: string | null;
+  timeframe: string;
+  mode?: DataMode;
+  source?: string;
+  source_metadata?: SourceMetadata;
+  coverage?: ChartCoverage;
+  candles: CandleBar[];
+  latest: {
+    close: number;
+    pct_change: number | null;
+    volume: number;
+    volume_ratio: number | null;
+    rsi_14: number | null;
+    ema_20: number | null;
+    ema_50: number | null;
+    ema_200: number | null;
+    atr_14: number | null;
+    week_52_high: number | null;
+    week_52_low: number | null;
+    open: number;
+    high: number;
+    low: number;
+    prev_close: number | null;
+  } | null;
+};
+
+export type IndicatorsResponse = {
+  symbol: string;
+  indicators: Record<string, unknown[]>;
+};
+
+export type SymbolSearchResult = {
+  symbol: string;
+  company_name: string;
+  sector: string | null;
+  series: string;
+};
+
+export type Drawing = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  timeframe: string;
+  tool_type: string;
+  points: unknown[];
+  style: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ChartLayout = {
+  id?: string;
+  symbol: string;
+  timeframe: string;
+  indicators: string[];
+  drawing_tools: unknown[];
+};
+
+export type ChartWorkspaceIndicator = {
+  type: "ema" | "sma" | "vwap" | "rsi" | "macd" | "volume" | "bollinger";
+  params?: Record<string, unknown>;
+};
+
+export type ChartWorkspaceDrawing =
+  | { id: string; kind: "trendline"; p1: { time: string; price: number }; p2: { time: string; price: number }; color: string; width: number }
+  | { id: string; kind: "hline"; price: number; color: string; width: number; label?: string }
+  | { id: string; tool_type: string; points: unknown[]; style: Record<string, unknown>; timeframe?: string; created_at?: string };
+
+export type ChartWorkspace = {
+  symbol: string;
+  timeframe: string;
+  indicators: ChartWorkspaceIndicator[];
+  drawings: ChartWorkspaceDrawing[];
+};
+
+export type MarketMover = {
+  symbol: string;
+  company_name: string;
+  close: number;
+  pct_change: number;
+  volume_ratio: number | null;
+};
+
+export type MarketMovers = {
+  trade_date: string | null;
+  gainers: MarketMover[];
+  losers: MarketMover[];
+  volume_surge: MarketMover[];
+};
+
+export type SectorBreadthItem = {
+  sector: string;
+  total: number;
+  advances: number;
+  declines: number;
+  unchanged: number;
+  ad_ratio: number | null;
+  above_ema200_pct: number | null;
+};
+
+export type JournalEntry = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  company_name: string | null;
+  trade_type: "long" | "short";
+  setup_type: string | null;
+  entry_date: string;
+  entry_price: number;
+  quantity: number;
+  exit_date: string | null;
+  exit_price: number | null;
+  pnl: number | null;
+  pnl_pct: number | null;
+  holding_days: number | null;
+  stop_loss: number | null;
+  target_price: number | null;
+  risk_reward: number | null;
+  entry_reason: string | null;
+  exit_reason: string | null;
+  mistakes: string | null;
+  lessons: string | null;
+  status: "open" | "closed" | "cancelled";
+  source_page?: "chart" | "watchlist" | "scanner" | "manual" | null;
+  source_context?: string | null;
+  scanner_context?: ScannerIdeaContext | null;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JournalStats = {
+  total_trades: number;
+  open_trades: number;
+  total_pnl: number;
+  win_rate: number;
+  avg_pnl: number;
+  avg_win: number;
+  avg_loss: number;
+  best_trade: number;
+  worst_trade: number;
+  avg_holding_days: number;
+};
+
+export type CreateJournalEntry = {
+  symbol: string;
+  trade_type: "long" | "short";
+  entry_date: string;
+  entry_price: number;
+  quantity: number;
+  setup_type?: string;
+  stop_loss?: number;
+  target_price?: number;
+  entry_reason?: string;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual";
+  source_context?: string | null;
+  scanner_context?: ScannerIdeaContext | null;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
+};
+
+export type UpdateJournalEntry = {
+  exit_date?: string;
+  exit_price?: number;
+  exit_reason?: string;
+  mistakes?: string;
+  lessons?: string;
+  stop_loss?: number | null;
+  target_price?: number | null;
+  setup_type?: string;
+  entry_reason?: string;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual" | null;
+  source_context?: string | null;
+  scanner_context?: ScannerIdeaContext | null;
+  thesis?: string | null;
+  invalidation_rule?: string | null;
+  status?: string;
+};
+
+export type JournalAnalytics = {
+  equity_curve: { date: string; cumulative_pnl: number }[];
+  setup_breakdown: {
+    setup: string;
+    trades: number;
+    wins: number;
+    win_rate: number;
+    total_pnl: number;
+    avg_pnl: number;
+  }[];
+  monthly_pnl: { month: string; pnl: number }[];
+  drawdown_curve: { date: string; drawdown: number; drawdown_pct: number }[];
+  max_drawdown: number | null;
+  longest_dd_days: number;
+  recovery_factor: number | null;
+  profit_factor: number | null;
+};
+
+export type Fundamentals = {
+  symbol: string;
+  market?: string;
+  currency?: string;
+  data_status?: "available" | "stale" | "unavailable" | string;
+  message?: string;
+  trailing_pe: number | null;
+  forward_pe: number | null;
+  price_to_book: number | null;
+  dividend_yield: number | null;
+  trailing_eps: number | null;
+  forward_eps: number | null;
+  earnings_growth: number | null;
+  revenue_growth: number | null;
+  return_on_equity: number | null;
+  debt_to_equity: number | null;
+  market_cap: number | null;
+  market_cap_str: string | null;
+  shares_outstanding?: number | null;
+};
+
+export type PlanStatus = {
+  plan: string;
+  expires_at: string | null;
+  active: boolean;
+};
+
+export type PaymentConfig = {
+  gateway: "razorpay";
+  configured: boolean;
+  mode: "live" | "test" | "disabled";
+  key_prefix: string;
+  access_code_available?: boolean;
+};
+
+export type PlanPrice = {
+  plan: "pro" | "elite";
+  currency: "INR" | "USD";
+  amount: number;          // smallest unit (paise/cents)
+  amount_display: number;  // whole currency
+  label: string;
+  days: number;
+};
+
+export type ScanAlert = {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  sort_by: string;
+  sort_order: string;
+  is_active: boolean;
+  last_run_at: string | null;
+  last_match_count: number | null;
+  last_run_status?: "waiting" | "success" | "skipped" | "failed";
+  last_error?: string | null;
+  created_at: string;
+};
+
+export type ScanAlertMatch = {
+  id: string;
+  alert_id: string;
+  run_date: string;
+  symbols: Array<{
+    symbol: string;
+    close: number;
+    pct_change: number | null;
+    volume_ratio: number | null;
+    rsi_14: number | null;
+  }>;
+  match_count: number;
+  run_status?: "success" | "skipped" | "failed";
+  error_message?: string | null;
+  scan_alerts?: { name: string };
+};
+
+export type UserProfile = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  plan: string;
+  plan_expires_at: string | null;
+  onboarding_completed: boolean;
+  telegram_chat_id: string | null;
+  broker_type: string | null;
+  broker_connected_at: string | null;
+  billing_region?: string;         // "IN" | "NRI" | "US" | "INTL"
+  billing_currency?: string;       // "INR" | "USD"
+  created_at: string;
+};
+
+export type ZerodhaReadOnlySmoke = {
+  broker: "zerodha";
+  connected_read_only: boolean;
+  token_expired: boolean;
+  checks: Record<string, { ok: boolean; count?: number; error?: string; note?: string; user_id_present?: boolean }>;
+};
+
+export type PlaceOrderRequest = {
+  symbol:       string;
+  side:         "buy" | "sell";
+  quantity:     number;
+  price:        number;
+  order_type?:  "market" | "limit";
+  stop_loss?:   number;
+  target_price?: number;
+  setup_type?:  string;
+  notes?:       string;
+  thesis?:      string;
+  invalidation_rule?: string;
+  scanner_context?: ScannerIdeaContext | null;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual";
+  source_context?: string;
+  live_confirmed?: boolean;
+  idempotency_key?: string;
+};
+
+export type OrderResult = {
+  status:           string;
+  message:          string;
+  journal_id:       string | null;
+  symbol:           string;
+  side:             string;
+  quantity:         number;
+  price:            number;
+  broker:           string;          // "simulated" | "zerodha" | "upstox"
+  broker_order_id:  string | null;
+  execution_mode?:  string;
+  journal_status?:  string;
+  risk_reward?:     number | null;
+  next_actions?:    string[];
+};
+
+export type DataHealth = {
+  status: "healthy" | "degraded" | "stale" | "unknown";
+  latest_trade_date: string | null;
+  last_successful_eod_date?: string | null;
+  hours_since_refresh: number | null;
+  symbols_on_latest_date: number | null;
+  universe_active: number | null;
+  coverage_pct?: number | null;
+  mode?: DataMode;
+  message?: string;
+  indicators_missing: {
+    rsi_14: number | null;
+    ema_200: number | null;
+  };
+  last_run: {
+    id: string | null;
+    errors: number | null;
+  };
+  last_bhavcopy?: {
+    trade_date: string | null;
+    status: string | null;
+    rows_ingested: number | null;
+    source_url?: string | null;
+    error_message?: string | null;
+  };
+  provider?: SourceMetadata;
+  fallback_active?: boolean;
+  next_refresh_hint?: string;
+  live_market?: LiveMarketStatus | null;
+};
+
+export type DataRun = {
+  run_id: string;
+  started_at: string | null;
+  duration_s: number | null;
+  event_count: number | null;
+  error_count: number | null;
+};
+
+export type AiPatterns = {
+  ready: boolean;
+  total_trades?: number;
+  min_trades_required?: number;
+  trades_available?: number;
+  avg_hold_winners?: number | null;
+  avg_hold_losers?: number | null;
+  coaching_cards?: { label: string; value: string; detail: string; tone: "gain" | "loss" | "warn" | "accent" | "neutral" }[];
+  day_of_week?: { day: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
+  by_direction?: { direction: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
+  by_holding_period?: { bucket: string; trades: number; wins: number; win_rate: number }[];
+};
+
+export type PriceAlert = {
+  id: string;
+  symbol: string;
+  condition: "above" | "below";
+  target_price: number;
+  note: string | null;
+  is_active: boolean;
+  triggered_at: string | null;
+  created_at: string;
+};
+
+export type PortfolioPosition = {
+  id: string;
+  symbol: string;
+  company_name: string | null;
+  trade_type: "long" | "short";
+  entry_date: string;
+  entry_price: number;
+  quantity: number;
+  stop_loss: number | null;
+  target_price: number | null;
+  setup_type: string | null;
+  current_price: number;
+  day_change_pct: number | null;
+  unrealised_pnl: number;
+  unrealised_pnl_pct: number;
+  invested: number;
+  sector: string | null;
+};
+
+export type PortfolioResponse = {
+  positions: PortfolioPosition[];
+  summary: {
+    total_invested: number;
+    total_current: number;
+    total_pnl: number;
+    total_pnl_pct: number;
+    open_count: number;
+  };
+  sectors: { sector: string; pnl: number }[];
+};
+
+export type BacktestResult = {
+  date: string;
+  match_count: number;
+  top_symbols: string[];
+};
+
+export type BacktestResponse = {
+  days_analysed: number;
+  avg_matches: number;
+  max_matches: number;
+  min_matches: number;
+  results: BacktestResult[];
+};
+
+export type SharedScreen = {
+  id: string;
+  user_id: string;
+  screen_id: string;
+  title: string;
+  description: string | null;
+  tags: string[];
+  upvotes: number;
+  is_featured: boolean;
+  created_at: string;
+};
+
+export interface MarketOverview {
+  trade_date: string | null;
+  advances: number;
+  declines: number;
+  unchanged: number;
+  total: number;
+  advance_decline_ratio: number;
+  new_52w_highs: number;
+  new_52w_lows: number;
+  above_ema20_pct: number;
+  above_ema50_pct: number;
+  above_ema200_pct: number;
+  market_phase: string;
+  market_phase_desc: string;
+  indices?: { symbol: string; label: string; close: number | null; pct_change: number | null; prev_close: number | null; source: string; error?: string }[];
+  top_sectors?: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number; advance_breadth_pct?: number | null; above_ema20_pct?: number | null; basis?: string }[];
+  market_data_source?: string;
+  is_live?: boolean;
+  sector_breadth_basis?: "latest_complete_session" | string;
+  sector_breadth_source?: string;
+  sector_breadth: { sector: string; total: number; advances: number; declines: number; avg_pct_change: number; breadth_pct: number; advance_breadth_pct?: number | null; above_ema20_pct?: number | null; basis?: string }[];
+  top_gainers: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
+  top_losers:  { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
+  most_active: { symbol: string; company_name: string; close: number; pct_change: number; volume_ratio: number | null }[];
+  as_of?: string | null;
+  generated_at?: string | null;
+  cache_status?: "hit" | "miss" | string;
+  source_metadata?: SourceMetadata;
+  provider?: SourceMetadata;
+}
+
+export type MarketSnapshot = {
+  overview: MarketOverview;
+  health: DataHealth | null;
+  asOf: string | null;
+  mode: DataMode;
+  source: string;
+  generatedAt: string;
+  cacheStatus: string;
+};
+
+export type WaitlistLead = {
+  id: string;
+  email: string;
+  source: string;
+  invite_code: string | null;
+  status: string;
+  created_at: string;
+};
+
+export type FeedbackReport = {
+  id: string;
+  user_id: string | null;
+  category: "general" | "bug" | "data_issue" | "feature_request";
+  page: string | null;
+  symbol: string | null;
+  severity: "low" | "normal" | "high";
+  message: string;
+  context: Record<string, unknown>;
+  status: "new" | "triaged" | "resolved" | "closed";
+  created_at: string;
+};
+
+export interface ScanPreset {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  filters: Record<string, unknown>;
+}
+
+export type BrokerProfile = {
+  broker_id: string;
+  user_id: string;
+  display_name: string;
+  email: string;
+};
+
+export type BrokerHolding = {
+  symbol: string;
+  exchange: string;
+  quantity: number;
+  average_price: number;
+  current_value: number;
+  pnl: number;
+};

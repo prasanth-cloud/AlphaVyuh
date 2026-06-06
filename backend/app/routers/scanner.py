@@ -7,6 +7,7 @@ smaller candidate set returned by the DB push-filters.
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import date
 from uuid import UUID
 
@@ -991,6 +992,31 @@ async def _run_vcp_pass2(
     ]
 
 
+def _m3a_columns_ready(client, trade_date: str) -> bool:
+    """True when >=80% of rows for trade_date have non-null rs_score."""
+    try:
+        total_res = (
+            client.table("daily_ohlcv")
+            .select("symbol", count="exact")
+            .eq("trade_date", trade_date)
+            .execute()
+        )
+        total = total_res.count or 0
+        if total == 0:
+            return False
+        scored_res = (
+            client.table("daily_ohlcv")
+            .select("symbol", count="exact")
+            .eq("trade_date", trade_date)
+            .not_.is_("rs_score", "null")
+            .execute()
+        )
+        scored = scored_res.count or 0
+        return (scored / total) >= 0.8
+    except Exception:
+        return False
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 async def execute_scan(
@@ -1086,11 +1112,16 @@ async def execute_scan(
     if f.is_outside_bar is True: q = q.eq("is_outside_bar", True)
     if f.macd_hist_positive is True:  q = q.gt("macd_hist", 0)
     if f.macd_hist_positive is False: q = q.lt("macd_hist", 0)
-    # M3-A columns: DB push deferred to ingest-job PR — all values currently NULL in production.
-    # Postgres treats NULL >= X as NULL (falsy), so pushing now would return 0 results.
-    # Python fallback in _apply_filters handles rs_score/volume_ratio/w52h_pct/w52l_pct
-    # until the ingest job populates these columns.
+    if _m3a_columns_ready(client, latest_date):
+        if f.rs_score_min     is not None: q = q.gte("rs_score",     f.rs_score_min)
+        if f.rs_score_max     is not None: q = q.lte("rs_score",     f.rs_score_max)
+        if f.volume_ratio_min is not None: q = q.gte("volume_ratio", f.volume_ratio_min)
+        if f.volume_ratio_max is not None: q = q.lte("volume_ratio", f.volume_ratio_max)
+        if f.w52l_pct_min     is not None: q = q.gte("w52l_pct",     f.w52l_pct_min)
+        w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
+        if w52h_limit is not None: q = q.lte("w52h_pct", w52h_limit)
 
+    query_start = time.perf_counter()
     try:
         rows = q.limit(SCAN_ROW_CAP).execute().data or []
     except Exception:
@@ -1111,6 +1142,7 @@ async def execute_scan(
 
     # Python-side filter for computed columns
     results = _apply_filters(rows, f, body.preset_id)
+    query_ms = round((time.perf_counter() - query_start) * 1000, 1)
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
     if f.vcp_contraction is True and results:
@@ -1172,6 +1204,7 @@ async def execute_scan(
         "source": metadata["source_name"],
         "coverage_pct": coverage_pct,
         "universe_size": universe_size,
+        "query_ms": query_ms,
     }
 
 
