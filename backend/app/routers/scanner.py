@@ -97,7 +97,7 @@ def _db_or_null_numeric_op(column: str, operator: str, value: float | int) -> Db
     return ("or_", column, f"{column}.is.null,{column}.{operator}.{_pgrest_number(value)}")
 
 
-def _db_prefilter_ops(f: "ScanFilters") -> list[DbPrefilterOp]:
+def _db_prefilter_ops(f: "ScanFilters", *, m3a_ready: bool = False) -> list[DbPrefilterOp]:
     ops: list[DbPrefilterOp] = [
         ("eq", "stock_universe.is_active", True),
         ("in_", "stock_universe.series", _list_filter(f.series) or ["EQ", "BE"]),
@@ -145,10 +145,22 @@ def _db_prefilter_ops(f: "ScanFilters") -> list[DbPrefilterOp]:
     if f.roce_min is not None:
         ops.append(("gte", "stock_universe.roce", f.roce_min))
 
-    if f.rs_score_min is not None:
-        ops.append(("gte", "rs_score", f.rs_score_min))
-    if f.rs_score_max is not None:
-        ops.append(("lte", "rs_score", f.rs_score_max))
+    if m3a_ready:
+        if f.rs_score_min is not None:
+            ops.append(("gte", "rs_score", f.rs_score_min))
+        if f.rs_score_max is not None:
+            ops.append(("lte", "rs_score", f.rs_score_max))
+        if f.volume_ratio_min is not None:
+            ops.append(("gte", "volume_ratio", f.volume_ratio_min))
+        if f.volume_ratio_max is not None:
+            ops.append(("lte", "volume_ratio", f.volume_ratio_max))
+        w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
+        if w52h_limit is not None:
+            limit = abs(float(w52h_limit))
+            ops.append(("gte", "w52h_pct", -limit))
+            ops.append(("lte", "w52h_pct", limit))
+        if f.w52l_pct_min is not None:
+            ops.append(("gte", "w52l_pct", f.w52l_pct_min))
     if f.avg_volume_50d_min is not None:
         ops.append(("gte", "avg_volume_50d", f.avg_volume_50d_min))
     if f.avg_volume_50d_max is not None:
@@ -168,18 +180,6 @@ def _db_prefilter_ops(f: "ScanFilters") -> list[DbPrefilterOp]:
     if f.nr7 is True:
         ops.append(("eq", "is_nr7", True))
 
-    if f.volume_ratio_min is not None:
-        ops.append(_db_or_null_numeric_op("volume_ratio", "gte", f.volume_ratio_min))
-    if f.volume_ratio_max is not None:
-        ops.append(_db_or_null_numeric_op("volume_ratio", "lte", f.volume_ratio_max))
-
-    w52h_limit = f.w52h_pct_max if f.w52h_pct_max is not None else f.week_52_high_pct_max
-    if w52h_limit is not None:
-        limit = abs(float(w52h_limit))
-        ops.append(_db_or_null_numeric_op("w52h_pct", "gte", -limit))
-        ops.append(_db_or_null_numeric_op("w52h_pct", "lte", limit))
-    if f.w52l_pct_min is not None:
-        ops.append(_db_or_null_numeric_op("w52l_pct", "gte", f.w52l_pct_min))
     return ops
 
 
@@ -209,14 +209,13 @@ def _apply_db_prefilter_ops(q, ops: list[DbPrefilterOp]):
     return q
 
 
-def _push_db_prefilters(q, f: "ScanFilters"):
+def _push_db_prefilters(q, f: "ScanFilters", *, m3a_ready: bool = False):
     """Push non-fallback scanner intelligence filters into PostgREST.
 
-    Only push fields where a missing DB value is already a hard reject in
-    _apply_filters. For fallback-computed fields, keep DB-null rows in the
-    query so Python can preserve the older/partial row fallback behavior.
+    M3-A columns (rs_score, volume_ratio, 52W %) are pushed only when
+    _m3a_columns_ready reports >=80% rs_score coverage for the trade date.
     """
-    return _apply_db_prefilter_ops(q, _db_prefilter_ops(f))
+    return _apply_db_prefilter_ops(q, _db_prefilter_ops(f, m3a_ready=m3a_ready))
 
 
 def _push_single_day_db_filters(q, f: "ScanFilters"):
@@ -304,6 +303,31 @@ def _scanner_latest_complete_trade_date(client) -> str | None:
         with _latest_trade_date_cache_lock:
             _latest_trade_date_cache = (now + LATEST_TRADE_DATE_CACHE_TTL, str(latest_date))
     return str(latest_date) if latest_date else None
+
+
+def _m3a_columns_ready(client, trade_date: str) -> bool:
+    """True when >=80% of rows for trade_date have non-null rs_score."""
+    try:
+        total_res = (
+            client.table("daily_ohlcv")
+            .select("symbol", count="exact")
+            .eq("trade_date", trade_date)
+            .execute()
+        )
+        total = total_res.count or 0
+        if total == 0:
+            return False
+        scored_res = (
+            client.table("daily_ohlcv")
+            .select("symbol", count="exact")
+            .eq("trade_date", trade_date)
+            .not_.is_("rs_score", "null")
+            .execute()
+        )
+        scored = scored_res.count or 0
+        return (scored / total) >= 0.8
+    except Exception:
+        return False
 
 
 # ── Filter model ──────────────────────────────────────────────────────────────
@@ -1352,7 +1376,10 @@ async def execute_scan(
 
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
     reverse  = body.sort_order != "asc"
-    db_prefilter_ops = _db_prefilter_ops(f)
+    m3a_ready_started = time.perf_counter()
+    m3a_columns_ready = _m3a_columns_ready(client, latest_date)
+    m3a_ready_elapsed_ms = round((time.perf_counter() - m3a_ready_started) * 1000)
+    db_prefilter_ops = _db_prefilter_ops(f, m3a_ready=m3a_columns_ready)
     compatibility_prefilter_ops = _compatibility_prefilter_ops(db_prefilter_ops)
 
     def _build_scan_query(select_fields: str, prefilter_ops: list[DbPrefilterOp] | None = None):
@@ -1471,10 +1498,12 @@ async def execute_scan(
         "universe_size": universe_size,
         "query_row_reduction_pct": query_row_reduction_pct,
         "db_prefilters_applied": applied_prefilters,
+        "m3a_columns_ready": m3a_columns_ready,
         "fallback_query": used_fallback_query,
         "fallback_stage": fallback_stage,
         "timing_ms": {
             "date_lookup": date_lookup_elapsed_ms,
+            "m3a_ready": m3a_ready_elapsed_ms,
             "query": query_elapsed_ms,
             "filter": filter_elapsed_ms,
             "vcp": vcp_elapsed_ms,

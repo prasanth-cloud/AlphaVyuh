@@ -15,6 +15,7 @@ from app.routers.scanner import (
     ScanFilters,
     _apply_filters,
     _get_user_plan,
+    _m3a_columns_ready,
     _push_db_prefilters,
 )
 from app.services.supabase import get_admin_client
@@ -100,7 +101,8 @@ def _daily_rows_for_backtest(client, trade_date: str, filters: ScanFilters) -> l
         .select(SCANNER_INTELLIGENCE_SELECT)
         .eq("trade_date", trade_date)
     )
-    query = _push_db_prefilters(query, filters)
+    m3a_ready = _m3a_columns_ready(client, trade_date)
+    query = _push_db_prefilters(query, filters, m3a_ready=m3a_ready)
     try:
         return query.limit(3000).execute().data or []
     except Exception:

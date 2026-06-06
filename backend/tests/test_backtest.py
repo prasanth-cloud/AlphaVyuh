@@ -41,6 +41,15 @@ def _ohlcv_row(symbol: str, close: float = 105.0) -> dict:
     }
 
 
+class _Not:
+    def __init__(self, parent):
+        self._parent = parent
+
+    def is_(self, column, value):
+        self._parent._exclude_null_column = column
+        return self._parent
+
+
 class _BacktestQuery:
     def __init__(self, client, table_name):
         self.client = client
@@ -49,8 +58,16 @@ class _BacktestQuery:
         self.limit_value = None
         self.range_start = None
         self.range_end = None
+        self._count_mode = False
+        self._exclude_null_column = None
 
-    def select(self, *_args, **_kwargs):
+    @property
+    def not_(self):
+        return _Not(self)
+
+    def select(self, *_args, **kwargs):
+        if kwargs.get("count") == "exact":
+            self._count_mode = True
         return self
 
     def in_(self, column, values):
@@ -90,7 +107,8 @@ class _BacktestQuery:
         return self
 
     def execute(self):
-        self.client.queries.append((self.table_name, dict(self.eq_filters), self.limit_value))
+        if not self._count_mode:
+            self.client.queries.append((self.table_name, dict(self.eq_filters), self.limit_value))
         if self.table_name == "bhavcopy_ingestion_log":
             return _Result([
                 {"trade_date": trade_date}
@@ -102,6 +120,15 @@ class _BacktestQuery:
             end = self.range_end if self.range_end is not None else len(rows) - 1
             return _Result(rows[start : end + 1])
         if self.table_name == "daily_ohlcv":
+            if self._count_mode:
+                rows = self.client.rows_by_date.get(self.eq_filters["trade_date"], [])
+                if self._exclude_null_column:
+                    scored = sum(
+                        1 for row in rows
+                        if row.get(self._exclude_null_column) is not None
+                    )
+                    return type("R", (), {"count": scored})()
+                return type("R", (), {"count": len(rows)})()
             return _Result(self.client.rows_by_date.get(self.eq_filters["trade_date"], []))
         return _Result()
 
@@ -170,13 +197,7 @@ def test_run_backtest_pushes_scanner_prefilters_before_python_filtering(monkeypa
             "trade_date": "2026-05-15",
             "stock_universe.is_active": True,
             "stock_universe.series": ["EQ"],
-            "rs_score": (">=", 70),
             "avg_volume_50d": (">=", 100000),
-            "or": [
-                "volume_ratio.is.null,volume_ratio.gte.1.5",
-                "w52h_pct.is.null,w52h_pct.gte.-10",
-                "w52h_pct.is.null,w52h_pct.lte.10",
-            ],
         },
         3000,
     ) in client.queries

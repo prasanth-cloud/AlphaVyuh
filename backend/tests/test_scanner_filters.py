@@ -364,7 +364,8 @@ class TestScannerDbPrefilters:
                 avg_volume_50d_min=100000,
                 ema_200_trending_up=True,
                 darvas_box_height_pct_max=15,
-            )
+            ),
+            m3a_ready=True,
         ) == [
             ("eq", "stock_universe.is_active", True),
             ("in_", "stock_universe.series", ["EQ", "BE"]),
@@ -392,6 +393,7 @@ class TestScannerDbPrefilters:
                 darvas_box_height_pct_max=15,
                 nr7=True,
             ),
+            m3a_ready=True,
         )
 
         assert query.calls == [
@@ -445,27 +447,50 @@ class TestScannerDbPrefilters:
             ("gte", "stock_universe.roe", 12),
         ]
 
-    def test_pushes_fallback_computed_filters_without_dropping_nulls(self):
+    def test_skips_m3a_filters_when_columns_not_ready(self):
         from app.routers.scanner import ScanFilters, _push_db_prefilters
 
         query = _push_db_prefilters(
             _RecordingQuery(),
             ScanFilters(
+                rs_score_min=70,
                 volume_ratio_min=1.5,
                 volume_ratio_max=5,
                 week_52_high_pct_max=10,
                 w52l_pct_min=30,
             ),
+            m3a_ready=False,
         )
 
         assert query.calls == [
             ("eq", "stock_universe.is_active", True),
             ("in_", "stock_universe.series", ["EQ", "BE"]),
-            ("or_", "", "volume_ratio.is.null,volume_ratio.gte.1.5"),
-            ("or_", "", "volume_ratio.is.null,volume_ratio.lte.5"),
-            ("or_", "", "w52h_pct.is.null,w52h_pct.gte.-10"),
-            ("or_", "", "w52h_pct.is.null,w52h_pct.lte.10"),
-            ("or_", "", "w52l_pct.is.null,w52l_pct.gte.30"),
+        ]
+
+    def test_pushes_m3a_filters_when_columns_ready(self):
+        from app.routers.scanner import ScanFilters, _push_db_prefilters
+
+        query = _push_db_prefilters(
+            _RecordingQuery(),
+            ScanFilters(
+                rs_score_min=70,
+                volume_ratio_min=1.5,
+                volume_ratio_max=5,
+                week_52_high_pct_max=10,
+                w52l_pct_min=30,
+            ),
+            m3a_ready=True,
+        )
+
+        assert query.calls == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ", "BE"]),
+            ("gte", "rs_score", 70),
+            ("gte", "volume_ratio", 1.5),
+            ("lte", "volume_ratio", 5),
+            ("gte", "w52h_pct", -10),
+            ("lte", "w52h_pct", 10),
+            ("gte", "w52l_pct", 30),
         ]
 
 
@@ -521,6 +546,72 @@ class TestScannerSortSlice:
                 assert _sorted_plan_slice(rows, "setup_score", reverse=reverse, limit=limit) == expected
 
 
+class TestM3aDbPush:
+    def test_m3a_columns_ready_when_eighty_percent_scored(self):
+        from app.routers.scanner import _m3a_columns_ready
+
+        class _Not:
+            def __init__(self, parent):
+                self._parent = parent
+
+            def is_(self, *_args, **_kwargs):
+                return self._parent
+
+        class _Client:
+            def __init__(self):
+                self._call = 0
+                self.not_ = _Not(self)
+
+            def table(self, _name):
+                return self
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                self._call += 1
+                if self._call == 1:
+                    return type("R", (), {"count": 100})()
+                return type("R", (), {"count": 85})()
+
+        assert _m3a_columns_ready(_Client(), "2026-05-01") is True
+
+    def test_m3a_columns_ready_false_below_threshold(self):
+        from app.routers.scanner import _m3a_columns_ready
+
+        class _Not:
+            def __init__(self, parent):
+                self._parent = parent
+
+            def is_(self, *_args, **_kwargs):
+                return self._parent
+
+        class _Client:
+            def __init__(self):
+                self._call = 0
+                self.not_ = _Not(self)
+
+            def table(self, _name):
+                return self
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                self._call += 1
+                if self._call == 1:
+                    return type("R", (), {"count": 100})()
+                return type("R", (), {"count": 50})()
+
+        assert _m3a_columns_ready(_Client(), "2026-05-01") is False
+
+
 class TestExecuteScanDiagnostics:
     def test_execute_scan_includes_query_timing_ms(self, monkeypatch):
         import asyncio
@@ -548,6 +639,7 @@ class TestExecuteScanDiagnostics:
             lambda _c: "2026-05-01",
         )
         monkeypatch.setattr("app.routers.scanner._active_universe_size", lambda *_args: 100)
+        monkeypatch.setattr("app.routers.scanner._m3a_columns_ready", lambda *_args: False)
 
         result = asyncio.run(
             execute_scan(
@@ -558,7 +650,9 @@ class TestExecuteScanDiagnostics:
         )
         timing = result["source_metadata"]["scanner_performance"]["timing_ms"]
         assert "query" in timing
+        assert "m3a_ready" in timing
         assert isinstance(timing["query"], (int, float))
+        assert result["source_metadata"]["scanner_performance"]["m3a_columns_ready"] is False
 
 
 class TestVCPAsyncPass2:

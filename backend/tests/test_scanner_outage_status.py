@@ -120,14 +120,31 @@ def _scanner_row(symbol):
     }
 
 
+class _Not:
+    def __init__(self, parent):
+        self._parent = parent
+
+    def is_(self, column, value):
+        self._parent._exclude_null_column = column
+        return self._parent
+
+
 class _ScannerQuery:
     def __init__(self, table_name, rows, universe_count):
         self.table_name = table_name
         self.rows = rows
         self.universe_count = universe_count
         self.calls = []
+        self._count_mode = False
+        self._exclude_null_column = None
 
-    def select(self, *_args, **_kwargs):
+    @property
+    def not_(self):
+        return _Not(self)
+
+    def select(self, *_args, **kwargs):
+        if kwargs.get("count") == "exact":
+            self._count_mode = True
         return self
 
     def eq(self, column, value):
@@ -161,6 +178,15 @@ class _ScannerQuery:
     def execute(self):
         if self.table_name == "stock_universe":
             return _Result([], count=self.universe_count)
+        if self._count_mode:
+            total = len(self.rows)
+            if self._exclude_null_column:
+                scored = sum(
+                    1 for row in self.rows
+                    if row.get(self._exclude_null_column) is not None
+                )
+                return _Result(count=scored)
+            return _Result(count=total)
         return _Result(self.rows)
 
 
@@ -183,6 +209,8 @@ class _ColumnFailingScannerQuery(_ScannerQuery):
     def execute(self):
         if self.table_name == "stock_universe":
             return _Result([], count=self.universe_count)
+        if self._count_mode:
+            return super().execute()
         touched_columns = {column for _op, column, _value in self.calls}
         if touched_columns & self.failing_columns:
             raise RuntimeError(f"unsupported columns: {sorted(touched_columns & self.failing_columns)}")
@@ -297,12 +325,14 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
             {"op": "gte", "column": "rs_score", "value": 70},
             {"op": "gte", "column": "avg_volume_50d", "value": 100000},
         ],
+        "m3a_columns_ready": True,
         "fallback_query": False,
         "fallback_stage": "none",
         "timing_ms": scanner_performance["timing_ms"],
     }
     assert set(scanner_performance["timing_ms"]) == {
         "date_lookup",
+        "m3a_ready",
         "query",
         "filter",
         "vcp",
@@ -346,17 +376,19 @@ def test_execute_scan_retries_compatibility_prefilters_before_broad_fallback():
     assert result["db_prefilters_applied"] == [
         {"op": "eq", "column": "stock_universe.is_active", "value": True},
         {"op": "in_", "column": "stock_universe.series", "value": ["EQ"]},
-        {"op": "or_", "column": "volume_ratio", "value": "volume_ratio.is.null,volume_ratio.gte.1.5"},
-        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.gte.-8"},
-        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.lte.8"},
+        {"op": "gte", "column": "volume_ratio", "value": 1.5},
+        {"op": "gte", "column": "w52h_pct", "value": -8},
+        {"op": "lte", "column": "w52h_pct", "value": 8},
     ]
     assert result["query_row_reduction_pct"] == 99.8
-    assert client.table_calls.count("daily_ohlcv") == 2
-    assert all(
-        ("darvas_box_height_pct" not in {column for _op, column, _value in query.calls})
-        for query in client.queries[1:]
-        if query.table_name == "daily_ohlcv"
-    )
+    assert client.table_calls.count("daily_ohlcv") == 4
+    scan_queries = [
+        query for query in client.queries
+        if query.table_name == "daily_ohlcv" and not query._count_mode
+    ]
+    assert "darvas_box_height_pct" not in {
+        column for _op, column, _value in scan_queries[-1].calls
+    }
 
 
 def test_execute_scan_scores_only_visible_page_when_not_sorting_by_setup_score(monkeypatch):
@@ -464,10 +496,11 @@ def test_execute_scan_caches_universe_count_for_repeated_scans():
     assert first["universe_size"] == 1000
     assert second["universe_size"] == 1000
     assert client.table_calls.count("stock_universe") == 1
-    assert second["source_metadata"]["scanner_performance"]["db_prefilters_applied"][-3:] == [
-        {"op": "or_", "column": "volume_ratio", "value": "volume_ratio.is.null,volume_ratio.gte.1.5"},
-        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.gte.-10"},
-        {"op": "or_", "column": "w52h_pct", "value": "w52h_pct.is.null,w52h_pct.lte.10"},
+    assert second["source_metadata"]["scanner_performance"]["db_prefilters_applied"][-4:] == [
+        {"op": "gte", "column": "rs_score", "value": 70},
+        {"op": "gte", "column": "volume_ratio", "value": 1.5},
+        {"op": "gte", "column": "w52h_pct", "value": -10},
+        {"op": "lte", "column": "w52h_pct", "value": 10},
     ]
     scanner._universe_count_cache.clear()
 
