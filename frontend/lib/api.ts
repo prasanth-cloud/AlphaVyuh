@@ -22,12 +22,8 @@ import {
 import {
   authHeaders,
   cachedClientRequest,
-  clearAuthHeaderCache,
   invalidateClientCache,
-  isMockMode,
-  liveQuotePollingEnabled,
   responseErrorMessage,
-  routeBackedE2eMocksEnabled,
   shouldUseMockFallback,
   unavailablePayloadMessage,
   withTimeout,
