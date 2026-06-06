@@ -69,6 +69,8 @@ import type {
   ScanResponse,
   ScanResult,
   SectorBreadthItem,
+  SectorListResponse,
+  SectorTaxonomyMetadata,
   SharedScreen,
   SymbolSearchResult,
   UpdateJournalEntry,
@@ -879,7 +881,7 @@ export async function getMarketMovers(): Promise<MarketMovers | null> {
 }
 
 
-export async function getSectorBreadth(): Promise<{ trade_date: string | null; sectors: SectorBreadthItem[] } | null> {
+export async function getSectorBreadth(): Promise<{ trade_date: string | null; sectors: SectorBreadthItem[]; metadata?: SectorTaxonomyMetadata } | null> {
   if (shouldUseMockFallback()) return mockSectorBreadth();
   const res = await fetch(`${API}/api/v1/market/sector-breadth`, { headers: publicHeaders });
   if (!res.ok) {
@@ -894,8 +896,11 @@ export async function getSectorBreadth(): Promise<{ trade_date: string | null; s
   return data;
 }
 
-export async function getSectors(): Promise<string[]> {
-  if (shouldUseMockFallback()) return mockSectorBreadth().sectors.map((s) => s.sector);
+export async function getSectorsWithMetadata(): Promise<SectorListResponse> {
+  if (shouldUseMockFallback()) {
+    const breadth = mockSectorBreadth();
+    return { sectors: breadth.sectors.map((s) => s.sector), metadata: breadth.metadata };
+  }
   const res = await fetch(`${API}/api/v1/market/sectors`, { headers: publicHeaders });
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, `Sector list is temporarily unavailable (${res.status}).`));
@@ -906,7 +911,15 @@ export async function getSectors(): Promise<string[]> {
   if (!Array.isArray(data?.sectors)) {
     throw new Error("Sector list is temporarily unavailable.");
   }
-  return data.sectors;
+  return {
+    sectors: data.sectors,
+    metadata: data.metadata,
+  };
+}
+
+export async function getSectors(): Promise<string[]> {
+  const response = await getSectorsWithMetadata();
+  return response.sectors;
 }
 
 export async function searchSymbols(q: string): Promise<SymbolSearchResult[]> {
@@ -1952,10 +1965,10 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
 
 export const importZerodhaTrades = () => importBrokerTrades("zerodha");
 
-export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
+export async function runBrokerReadOnlySmoke(broker: "zerodha" | "upstox" = "zerodha"): Promise<ZerodhaReadOnlySmoke> {
   if (shouldUseMockFallback()) {
     return {
-      broker: "zerodha",
+      broker,
       connected_read_only: false,
       token_expired: false,
       checks: {
@@ -1969,13 +1982,18 @@ export async function runZerodhaReadOnlySmoke(): Promise<ZerodhaReadOnlySmoke> {
     };
   }
   const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/broker/zerodha/read-only-smoke`, { headers });
+  const path = broker === "zerodha"
+    ? "/api/v1/broker/zerodha/read-only-smoke"
+    : `/api/brokers/${broker}/read-only-smoke`;
+  const res = await fetch(`${API}${path}`, { headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail ?? "Read-only broker smoke failed");
   }
   return res.json();
 }
+
+export const runZerodhaReadOnlySmoke = () => runBrokerReadOnlySmoke("zerodha");
 
 export async function getBrokerStatus(): Promise<{
   connected: boolean;
@@ -1997,6 +2015,10 @@ export async function getBrokerStatus(): Promise<{
   last_synced_at?: string | null;
   live_order_requires_confirmation?: boolean;
   live_order_enabled?: boolean;
+  read_only_smoke_checked_at?: string | null;
+  read_only_smoke_fresh?: boolean;
+  read_only_smoke_required?: boolean;
+  read_only_smoke_passed?: boolean;
 }> {
   if (shouldUseMockFallback()) {
     return cachedClientRequest("broker:status", 5_000, async () => {

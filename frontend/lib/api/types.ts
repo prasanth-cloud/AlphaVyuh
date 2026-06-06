@@ -294,6 +294,11 @@ export type ScannerIdeaContext = {
   setup_score?: number | null;
   setup_grade?: string | null;
   confidence_label?: string | null;
+  rs_score?: number | null;
+  price_perf_6m_pct?: number | null;
+  week_52_high_pct?: number | null;
+  volume_ratio?: number | null;
+  rsi_14?: number | null;
   scan_trade_date?: string | null;
   data_source?: string | null;
   data_mode?: string | null;
@@ -648,8 +653,71 @@ export type UserProfile = {
   created_at: string;
 };
 
+
+
+export type SectorTaxonomyMetadata = {
+  source: string;
+  taxonomy_status?: "unverified" | "audited" | string;
+  taxonomy_status_reason?: string;
+  contract_as_of: string;
+  active_count: number;
+  active_count_scope: string;
+  classified_count: number;
+  unmapped_count: number;
+  unmapped_symbols: string[];
+  unmapped_symbols_truncated: boolean;
+  sector_count: number;
+  sector_counts: {
+    sector: string;
+    active_count: number;
+    aliases: string[];
+    related_sectoral_indices?: string[];
+    hidden_by_filter: boolean;
+  }[];
+  alias_policy?: {
+    source: string;
+    description: string;
+  };
+  audit_scope?: {
+    sector_labels?: { source: string; status: string; description: string };
+    sectoral_index_reference?: { source: string; status: string; description: string };
+    industry_taxonomy?: { source: string; status: string; description: string };
+  };
+  reference_coverage?: {
+    matched_sector_count: number;
+    unmatched_sector_count: number;
+    unmatched_sectors: string[];
+    description: string;
+  };
+  display_filter: {
+    minimum_active_symbols: number;
+    hidden_sector_count: number;
+    description: string;
+  };
+  reference?: {
+    name: string;
+    url: string;
+    as_of: string;
+    relationship?: string;
+  };
+  universe_taxonomy?: {
+    name: string;
+    source: string;
+    relationship: string;
+  };
+  sectoral_indices?: {
+    symbol: string;
+    label: string;
+    aliases: string[];
+  }[];
+};
+
+export type SectorListResponse = {
+  sectors: string[];
+  metadata?: SectorTaxonomyMetadata;
+};
 export type ZerodhaReadOnlySmoke = {
-  broker: "zerodha";
+  broker: "zerodha" | "upstox";
   connected_read_only: boolean;
   token_expired: boolean;
   checks: Record<string, { ok: boolean; count?: number; error?: string; note?: string; user_id_present?: boolean }>;
