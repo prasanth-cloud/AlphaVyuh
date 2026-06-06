@@ -316,6 +316,13 @@ export function goalPercent(goal: Goal): number {
   return Math.max(0, Math.min(100, Math.round((goal.currentProgress / goal.targetValue) * 100)))
 }
 
+export function workflowLifecycleFlags(lifecycle: ApiWorkflowState['lifecycle']): Pick<ApiWorkflowState, 'ignored' | 'review_later'> {
+  return {
+    ignored: lifecycle === 'ignored',
+    review_later: lifecycle === 'review_later',
+  }
+}
+
 export function workflowPlanStatus(plan: ApiWorkflowState | null) {
   if (!plan) return { valid: false, next: 'Create a plan before drafting an order.' }
   if (!plan.entry || plan.entry <= 0) return { valid: false, next: 'Complete entry.' }

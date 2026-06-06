@@ -51,7 +51,7 @@ import { DataProvenanceBadge, EmptyState, Num } from "@/components/ui";
 import IndicatorMenu from "@/components/charts/IndicatorMenu";
 import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
-import { workflowPlanStatus } from "@/lib/workflow";
+import { workflowLifecycleFlags, workflowPlanStatus } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
 import {
   formatCandleRange,
@@ -65,6 +65,7 @@ import {
 } from "@/lib/watchlist-chart-range";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import { describeMarketDataError } from "@/lib/data-errors";
+import { decisionRecordRows, decisionLifecycleLabel, type DecisionRecordReviewState } from "@/lib/decision-record";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 
@@ -363,27 +364,31 @@ function SortableRow({
   );
 }
 
-const LIFECYCLES: WorkflowLifecycle[] = ["idea", "watch", "ready", "triggered", "open", "closed", "reviewed", "invalidated"];
+const LIFECYCLES: WorkflowLifecycle[] = ["watch", "ready", "review_later", "ignored", "reviewed", "idea", "triggered", "open", "closed", "invalidated"];
 
 function lifecycleLabel(value: WorkflowLifecycle) {
-  return value.replace("_", " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  return decisionLifecycleLabel({ lifecycle: value });
 }
 
 function DecisionDesk({
   symbol,
   watchlistId,
   plan,
+  item,
+  reviewState,
   onPlanChange,
   onToast,
 }: {
   symbol: string;
   watchlistId: string | null;
   plan: WorkflowState | null;
+  item: WatchlistItem | null;
+  reviewState: DecisionRecordReviewState;
   onPlanChange: (plan: WorkflowState) => void;
   onToast: (msg: string) => void;
 }) {
   const status = workflowPlanStatus(plan);
-  const draft = plan ?? { symbol, watchlist_id: watchlistId, lifecycle: "watch", timeframe: "D", tags: [] };
+  const draft = plan ?? { symbol, watchlist_id: watchlistId, source: "watchlist", lifecycle: "watch", timeframe: "D", tags: [] };
   const requiredFields = [
     { key: "entry", label: "Entry", complete: Boolean(draft.entry && draft.entry > 0) },
     { key: "stop", label: "Stop", complete: Boolean(draft.stop && draft.stop > 0) },
@@ -408,9 +413,15 @@ function DecisionDesk({
       .map((field) => `Complete ${field.label.toLowerCase()}`),
     ...(invalidRisk ? ["Stop must sit below entry for a long plan"] : []),
     ...(invalidReward ? ["Target must sit above entry for a long plan"] : []),
-    ...(riskRewardValue != null && riskRewardValue < 2 ? ["R:R is below 2.0; confirm the trade is still worth taking"] : []),
+    ...(riskRewardValue != null && riskRewardValue < 2 ? ["R:R is below 2.0; record why this plan still fits the setup"] : []),
     ...(draft.confidence != null && draft.confidence <= 2 ? ["Setup quality is low; keep it in watch/review"] : []),
   ].slice(0, 4);
+  const decisionRows = decisionRecordRows({
+    workflow: draft as WorkflowState,
+    reviewState,
+    currentPrice: item?.close,
+    currentChangePct: item?.pct_change,
+  });
   const inputStyle: React.CSSProperties = {
     width: "100%",
     fontSize: 12,
@@ -423,9 +434,11 @@ function DecisionDesk({
   };
 
   async function patch(updates: Partial<WorkflowState>) {
+    const lifecycleFlags = updates.lifecycle ? workflowLifecycleFlags(updates.lifecycle) : {};
     const next = await upsertWorkflowState({
       ...draft,
       ...updates,
+      ...lifecycleFlags,
       symbol,
       watchlist_id: watchlistId,
       source: draft.source ?? "watchlist",
@@ -445,7 +458,7 @@ function DecisionDesk({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
         <div>
           <div className="label" style={{ marginBottom: 3 }}>Decision desk</div>
-          <div className="caption">{status.next}</div>
+        <div className="caption">{status.next}</div>
         </div>
         <div className="workspace-pill-row" style={{ marginTop: 0 }}>
           <button className={`workspace-chip-button${status.valid ? " active" : ""}`} disabled={!status.valid} onClick={markReady} style={{ opacity: status.valid ? 1 : 0.45 }}>
@@ -479,12 +492,52 @@ function DecisionDesk({
           background: status.valid ? "rgba(27,191,114,0.055)" : "rgba(217,119,6,0.08)",
         }}
       >
-        <div className="label" style={{ marginBottom: 4 }}>{status.valid ? "Plan ready" : "Next best action"}</div>
+        <div className="label" style={{ marginBottom: 4 }}>{status.valid ? "Plan ready" : "Next workflow step"}</div>
         <div className="caption" style={{ color: status.valid ? "var(--gain)" : "var(--warn)", lineHeight: 1.55 }}>
           {status.valid
             ? (riskReward ? `Ready for journal capture draft. Risk/reward ${riskReward}.` : "Ready for journal capture draft.")
             : (planNudges.length ? planNudges.join(" · ") : status.next)}
         </div>
+      </div>
+      <div
+        data-testid="watchlist-decision-record"
+        style={{
+          marginBottom: 10,
+          padding: "8px 10px",
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.07)",
+          background: "rgba(255,255,255,0.03)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", marginBottom: 7 }}>
+          <div className="label">Decision record</div>
+          <span className="caption" style={{ color: "var(--text-tertiary)" }}>
+            {draft.updated_at ? `Updated ${new Date(draft.updated_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}` : "Local draft"}
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 }}>
+          {decisionRows.map((row) => (
+            <div key={`${row.label}-${row.value}`} style={{ minWidth: 0 }}>
+              <div className="caption" style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{row.label}</div>
+              <div style={{ fontSize: 12, lineHeight: 1.35, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.value}>
+                {row.value}
+              </div>
+            </div>
+          ))}
+        </div>
+        {(draft.thesis?.trim() || draft.invalidation_rule?.trim() || draft.notes?.trim()) && (
+          <div style={{ display: "grid", gap: 5, marginTop: 8 }}>
+            {draft.thesis?.trim() && (
+              <div className="caption" style={{ lineHeight: 1.5 }}><span style={{ color: "var(--text-primary)" }}>Thesis:</span> {draft.thesis}</div>
+            )}
+            {draft.invalidation_rule?.trim() && (
+              <div className="caption" style={{ lineHeight: 1.5 }}><span style={{ color: "var(--text-primary)" }}>Invalidation:</span> {draft.invalidation_rule}</div>
+            )}
+            {draft.notes?.trim() && (
+              <div className="caption" style={{ lineHeight: 1.5 }}><span style={{ color: "var(--text-primary)" }}>Notes:</span> {draft.notes}</div>
+            )}
+          </div>
+        )}
       </div>
       {draft.scanner_context && (
         <div
@@ -2612,6 +2665,8 @@ function WatchlistContent() {
               symbol={chartSymbol}
               watchlistId={activeWl?.id ?? null}
               plan={selectedWorkflow}
+              item={selectedItem}
+              reviewState={selectedReviewState}
               onPlanChange={(next) => setWorkflowBySymbol((prev) => ({ ...prev, [next.symbol]: next }))}
               onToast={showToast}
             />

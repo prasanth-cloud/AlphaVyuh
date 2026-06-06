@@ -22,6 +22,9 @@ describe("journal review context", () => {
         setup_grade: "A",
         setup_score: 84,
         data_as_of: "2026-05-15",
+        captured_price: 2847.5,
+        captured_change_pct: 4.72,
+        captured_volume_ratio: 1.87,
       },
     });
 
@@ -30,9 +33,12 @@ describe("journal review context", () => {
       { label: "Original scan", value: "Trend Template" },
       { label: "Matched reason", value: "Volume expansion" },
       { label: "Original thesis", value: "Breakout holding above prior resistance." },
+      { label: "Captured price", value: "₹2,847.50 · +4.72% · 1.87x volume" },
       { label: "Outcome", value: "Gain ₹1,200 · 4D hold" },
       { label: "Process focus", value: "High-score setup worked" },
     ]));
+    expect(context.prompts.join(" ")).toContain("Did this trade follow the recorded thesis and invalidation");
+    expect(context.prompts.join(" ")).toContain("What leaked edge in this trade");
     expect(context.prompts.join(" ")).toContain("Scanner score 84 with positive outcome");
     expect(context.prompts.join(" ")).toContain("What changed between entry and exit?");
     expect(context.prompts.join(" ")).not.toMatch(/should|buy|sell|recommend/i);
@@ -80,6 +86,48 @@ describe("journal review context", () => {
       pnl: -300,
       holding_days: 2,
       source_page: null,
+      source_context: null,
+      thesis: null,
+      invalidation_rule: null,
+      scanner_context: null,
+    });
+
+    expect(context.hasContext).toBe(false);
+    expect(context.fallback).toMatch(/Original idea context was not captured/i);
+  });
+
+  it("keeps fallback details when source context is only plumbing", () => {
+    const context = getReviewContext({
+      entry_reason: "Chart order with stop and target",
+      status: "closed",
+      lessons: null,
+      setup_type: null,
+      risk_reward: 1.8,
+      pnl: -250,
+      holding_days: 2,
+      source_page: "chart",
+      source_context: "SBIN chart",
+      thesis: null,
+      invalidation_rule: null,
+      scanner_context: null,
+    });
+
+    expect(context.hasContext).toBe(false);
+    expect(context.summary).toEqual(expect.arrayContaining([{ label: "Source", value: "Chart order" }]));
+    expect(context.summary).not.toEqual(expect.arrayContaining([{ label: "Outcome", value: expect.any(String) }]));
+    expect(context.fallback).toMatch(/entry, stop, target, exit, P&L, and notes/i);
+  });
+
+  it("does not treat manual source-only trades as original idea context", () => {
+    const context = getReviewContext({
+      entry_reason: "Manual log",
+      status: "closed",
+      lessons: null,
+      setup_type: null,
+      risk_reward: null,
+      pnl: 450,
+      holding_days: 3,
+      source_page: "manual",
       source_context: null,
       thesis: null,
       invalidation_rule: null,

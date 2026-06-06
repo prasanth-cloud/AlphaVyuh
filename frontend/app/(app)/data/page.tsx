@@ -350,14 +350,14 @@ export default function DataFreshnessPage() {
       });
     } else if (state.closedTrades < 3) {
       next.push({
-        title: "Build AI review base",
+        title: "Build pattern review base",
         detail: "Close at least 3 trades before relying on journal-wide pattern analysis.",
         href: "/journal",
       });
     } else if (reviewCoverage < 70) {
       next.push({
         title: "Improve journal review coverage",
-        detail: `${reviewCoverage}% of closed trades have lessons. Push this toward 70% before treating AI review as grounded.`,
+        detail: `${reviewCoverage}% of closed trades have lessons. Push this toward 70% before treating pattern review as grounded.`,
         href: "/journal",
       });
     }
@@ -545,7 +545,7 @@ export default function DataFreshnessPage() {
               ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
               ["Broker order gate", `${brokerGate.value} · ${brokerGate.detail}`],
               ["Open trades", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : fmtNumber(state.journalStats?.open_trades)],
-              ["AI pattern readiness", state.accountIssues.some(issue => issue.id === "journal") || state.aiPatternsError ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
+              ["Pattern review readiness", state.accountIssues.some(issue => issue.id === "journal") || state.aiPatternsError ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
             ].map(([label, value]) => (
               <div key={label} style={{ padding: "11px 12px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
                 <div className="label" style={{ marginBottom: 4 }}>{label}</div>

@@ -299,6 +299,9 @@ export type ScannerIdeaContext = {
   week_52_high_pct?: number | null;
   volume_ratio?: number | null;
   rsi_14?: number | null;
+  captured_price?: number | null;
+  captured_change_pct?: number | null;
+  captured_volume_ratio?: number | null;
   scan_trade_date?: string | null;
   data_source?: string | null;
   data_mode?: string | null;

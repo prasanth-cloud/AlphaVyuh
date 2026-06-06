@@ -231,7 +231,7 @@ test.describe("Signed-in smoke flow", () => {
       }
     }
 
-    const symbolInput = page.getByPlaceholder("Add or paste symbols…");
+    const symbolInput = page.getByPlaceholder(/Add (?:or paste symbols|symbol)…/);
     if (!(await symbolInput.isVisible().catch(() => false))) {
       const firstWatchlist = page.locator(".wl-item").first();
       await expect(firstWatchlist).toBeVisible({ timeout: 15000 });
@@ -253,7 +253,7 @@ test.describe("Signed-in smoke flow", () => {
     const firstSymbol = firstRowText?.trim().match(/^[A-Z0-9&-]+/)?.[0] ?? SMOKE_SYMBOL;
 
     await rows.first().click();
-    await expect(page.getByTestId("watchlist-selected-actions").getByRole("button", { name: "Full chart", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open chart", exact: true }).first()).toBeVisible();
     await expect(page.locator(`text=${firstSymbol}`).first()).toBeVisible();
     await expectRealDataContext(page, "watchlist", /Latest session|Daily|as of|Data status|Market data/i);
 

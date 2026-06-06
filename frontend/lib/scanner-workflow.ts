@@ -15,6 +15,8 @@ type ScannerResultContext = {
   week_52_high_pct?: number | null;
   volume_ratio?: number | null;
   rsi_14?: number | null;
+  close?: number | null;
+  pct_change?: number | null;
 };
 
 type ScannerContextOptions = {
@@ -45,6 +47,9 @@ export function scannerIdeaContext(
     week_52_high_pct: result.week_52_high_pct ?? null,
     volume_ratio: result.volume_ratio ?? null,
     rsi_14: result.rsi_14 ?? null,
+    captured_price: result.close ?? null,
+    captured_change_pct: result.pct_change ?? null,
+    captured_volume_ratio: result.volume_ratio ?? null,
     scan_trade_date: options.tradeDate ?? null,
     data_source: options.dataSource ?? null,
     data_mode: options.dataMode ?? null,

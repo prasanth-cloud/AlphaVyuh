@@ -135,6 +135,9 @@ test.describe("Mock workflow smoke", () => {
       await page.goto(route, { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toContainText(/Demo|Market data|BACKEND DATA|DEMO DATA/i, { timeout: 15_000 });
       await expect(page.locator("body")).toContainText(/As of|Updated|Data is|Source|Provider|coverage|Data: Demo fixtures/i, { timeout: 15_000 });
+      if (route === "/dashboard") {
+        await expect(page.getByTestId("today-workflow-command-center")).toContainText(/Today's workflow|Market\/data status|Scan alert matches|Watchlist review|Journal review debt|Broker import status/i);
+      }
     }
 
     await page.goto("/scanner");
@@ -444,7 +447,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(lockedOrder).toBeVisible();
     await expect(lockedOrder).toBeDisabled();
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
-    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Complete entry|Next best action/i);
+    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Complete entry|Next workflow step/i);
     await expect(page.getByTestId("order-safety-nudges")).toContainText(/Create a plan|Complete entry|Decision Desk/i);
 
     await page.getByPlaceholder("Entry").fill("1500");
@@ -531,6 +534,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page).toHaveURL(/\/watchlist/, { timeout: 15_000 });
     await expect(page.getByText("Launch Flow QA").first()).toBeVisible();
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("watchlist-decision-record")).toContainText(/Decision record|Source|Reason|Data as of|Captured price|Current price|Journal/i, { timeout: 10_000 });
     await expect(page.getByTestId("trade-idea-context")).toContainText(/Original scan|Trend Template|As of/i, { timeout: 10_000 });
 
     const seededContext = await page.evaluate((activeSymbol) => {
@@ -545,6 +549,8 @@ test.describe("Mock workflow smoke", () => {
       },
     });
     expect(seededContext.scanner_context.match_reasons.length).toBeGreaterThan(0);
+    expect(seededContext.scanner_context.captured_price).toEqual(expect.any(Number));
+    expect(seededContext.scanner_context.captured_volume_ratio).toEqual(expect.any(Number));
 
     const launchWatchlist = await page.evaluate(() => {
       const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");

@@ -289,9 +289,9 @@ export default function LandingPage() {
               <div className="lp-live-pill"><div className="lp-pulse"></div>Account access · EOD market data</div>
             </div>
             <h1 className="lp-h1">
-              <span className="lp-h1-s1">AlphaVyuh</span>
+              <span className="lp-h1-s1">A trading workflow journal for Indian swing traders.</span>
             </h1>
-            <p className="lp-sub">A calmer trading workflow for Indian cash-equity traders: review today, plan the active queue, discover fresh setups, and close the loop in Journal.</p>
+            <p className="lp-sub">Scan after market close, keep the reason, plan levels, and review what your closed trades taught you.</p>
             <div className="lp-ctas">
               <Link href="/signup" className="lp-btn-primary">Request access →</Link>
               <a href="#features" className="lp-btn-secondary">
@@ -349,8 +349,8 @@ export default function LandingPage() {
           <div className="lp-stats-grid">
             <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Workflow surfaces</div><div className="lp-stat-sub">Today, journal, watchlist, scanner</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">Symbols tracked</div><div className="lp-stat-sub">latest market snapshot</div></div>
-            <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="20" data-suffix="+">0</div><div className="lp-stat-label">Scanner filters</div><div className="lp-stat-sub">momentum, volume, RS, trend</div></div>
-            <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected desk</div><div className="lp-stat-sub">from signal to review</div></div>
+            <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="5">0</div><div className="lp-stat-label">Context handoffs</div><div className="lp-stat-sub">reason, price, levels, notes, outcome</div></div>
+            <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected routine</div><div className="lp-stat-sub">from scan to review</div></div>
           </div>
         </div>
       </section>
@@ -359,8 +359,8 @@ export default function LandingPage() {
       <section id="how" style={{padding:"88px 0 96px",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)",borderBottom:"1px solid var(--lp-border)"}}>
         <div className="lp-wrap" style={{textAlign:"center"}}>
           <span className="lp-sec-label">Daily loop</span>
-          <h2 className="lp-sec-title">A routine the trader can repeat.</h2>
-          <p className="lp-sec-sub" style={{margin:"0 auto"}}>AlphaVyuh is shaped around one desk flow: decide what needs review, keep context attached, and close the loop after the trade.</p>
+          <h2 className="lp-sec-title">A process the product remembers.</h2>
+          <p className="lp-sec-sub" style={{margin:"0 auto"}}>AlphaVyuh is shaped around one desk flow: review the journal, work the active queue, keep context attached, and close the loop after the trade.</p>
           <div className="lp-steps">
             {[
               ["Today", "See review due, active plans, watchlist focus, and data health first."],
@@ -397,10 +397,10 @@ export default function LandingPage() {
           <div className="lp-tab-panel" id="lp-tab-scanner">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Scanner</span>
-              <h3 className="lp-tp-h">A scanner for cleaner shortlists</h3>
-              <p className="lp-tp-p">Run multi-condition scans across NSE/BSE equities. Use presets for VCP, Stage 2, breakout, and RS leaders.</p>
+              <h3 className="lp-tp-h">Discovery that keeps the reason</h3>
+              <p className="lp-tp-p">Run EOD scans across NSE/BSE equities, then move candidates into review with the original match context attached.</p>
               <ul className="lp-feat-list">
-                {["Technical filters for RSI, MACD, ATR, volume, and EMA","Relative Strength score vs Nifty 50 for every stock","Pre-built scans: VCP, Cup & Handle, Breakout, Stage 2","Saved custom scans for repeatable routines","Scanner results can move directly into a watchlist"].map(f => (
+                {["EOD presets for repeatable NSE/BSE routines","Scanner reason, score, and data date stay attached","Relative strength and volume context travel with the symbol","Saved scans can be checked after the next session","Results move into watchlist review without copy-paste"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -486,10 +486,10 @@ export default function LandingPage() {
           <div className="lp-tab-panel lp-tab-active" id="lp-tab-journal">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Journal</span>
-              <h3 className="lp-tp-h">A review layer for closed trades</h3>
-              <p className="lp-tp-p">Log closed trades, review P&L by context, and inspect patterns in your own history.</p>
+              <h3 className="lp-tp-h">The proof layer for your process</h3>
+              <p className="lp-tp-p">Log or import closed trades, compare outcome with the original reason, and save the process lesson that matters next time.</p>
               <ul className="lp-feat-list">
-                {["Manual journal entry for trading routines","P&L by stock, sector, time-of-day, holding period","Review observations based only on closed trades","Lessons saved per trade — searchable, filterable","Equity curve + win rate + avg R:R metrics"].map(f=>(
+                {["Manual journal entry for trading routines","Broker-imported fills can become review items","Original scan, thesis, and invalidation stay visible","Lessons saved per trade — searchable, filterable","Pattern review is based only on closed trades"].map(f=>(
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
@@ -588,7 +588,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="lp-pcard lp-pcard-featured lp-fade" style={{transitionDelay:".1s"}}>
-              <div className="lp-featured-badge">Recommended</div>
+              <div className="lp-featured-badge">Core workflow</div>
               <span className="lp-plan-tier">Pro</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-pro">1,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-pro-old" style={{display:"none"}}>₹1,999</span></div>
               <p className="lp-pdesc">For active swing traders who scan daily and keep a structured review routine.</p>
@@ -643,7 +643,7 @@ export default function LandingPage() {
         <div style={{position:"relative",zIndex:1}}>
           <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Account access</div>
           <h2 className="lp-sec-title lp-final-title" style={{marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
-          <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Run a scan, build a watchlist, plan on the chart, and close the loop in Journal.</p>
+          <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Scan after market close, keep the reason, plan levels, and review what happened.</p>
           <Link href="/signup" className="lp-btn-cta-big">Request access →</Link>
           <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Account access · EOD market data · Broker import only · No investment advice</p>
         </div>

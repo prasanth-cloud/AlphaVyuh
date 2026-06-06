@@ -5,8 +5,8 @@ const landingSource = readFileSync("app/page.tsx", "utf8");
 
 describe("landing page humanization", () => {
   it("keeps the public hero calm and product-scoped", () => {
-    expect(landingSource).toContain("<span className=\"lp-h1-s1\">AlphaVyuh</span>");
-    expect(landingSource).toContain("A calmer trading workflow for Indian cash-equity traders");
+    expect(landingSource).toContain("A trading workflow journal for Indian swing traders.");
+    expect(landingSource).toContain("Scan after market close, keep the reason, plan levels, and review what your closed trades taught you.");
     expect(landingSource).toContain("NSE/BSE cash equity");
     expect(landingSource).toContain("No trade calls");
 
@@ -16,6 +16,8 @@ describe("landing page humanization", () => {
     expect(landingSource).not.toContain("lp-ring");
     expect(landingSource).not.toContain("lp-orb");
     expect(landingSource).not.toContain("cursor:none");
+    expect(landingSource).not.toContain("Scanner filters");
+    expect(landingSource).not.toContain("Recommended</div>");
   });
 
   it("does not ship fake social proof or out-of-scope markets", () => {

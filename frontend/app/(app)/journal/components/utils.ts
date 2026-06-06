@@ -103,6 +103,22 @@ function outcomeLabel(entry: Pick<ContextEntry, "pnl" | "holding_days">): string
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
+function capturedPriceLabel(entry: ContextEntry): string | null {
+  const scanner = entry.scanner_context;
+  const price = scanner?.captured_price;
+  if (price == null || !Number.isFinite(price)) return null;
+  const parts = [
+    `₹${price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    scanner?.captured_change_pct != null && Number.isFinite(scanner.captured_change_pct)
+      ? `${scanner.captured_change_pct >= 0 ? "+" : ""}${scanner.captured_change_pct.toFixed(2)}%`
+      : null,
+    scanner?.captured_volume_ratio != null && Number.isFinite(scanner.captured_volume_ratio)
+      ? `${scanner.captured_volume_ratio.toFixed(2)}x volume`
+      : null,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
 function processFocus(entry: ContextEntry): string | null {
   const setupScore = entry.scanner_context?.setup_score;
   if (entry.pnl != null && setupScore != null && setupScore >= 80) {
@@ -140,13 +156,15 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
   const invalidation = cleanValue(entry.invalidation_rule);
   const firstMatch = scanner?.match_reasons?.find(reason => cleanValue(reason));
   const sourceLabel = sourceLabelFromEntry(entry);
-  const hasOriginalContext = Boolean(scanner || thesis || invalidation || entry.source_page || cleanValue(entry.source_context));
+  const hasOriginalContext = Boolean(scanner || thesis || invalidation);
   const outcome = hasOriginalContext ? outcomeLabel(entry) : null;
   const focus = hasOriginalContext ? processFocus(entry) : null;
+  const captured = hasOriginalContext ? capturedPriceLabel(entry) : null;
 
   const summary = [
     scanner?.preset_name ? { label: "Original scan", value: scanner.preset_name } : null,
     firstMatch ? { label: "Matched reason", value: firstMatch } : null,
+    captured ? { label: "Captured price", value: captured } : null,
     scanner?.setup_grade || scanner?.setup_score != null
       ? { label: "Setup score", value: [scanner.setup_grade, scanner.setup_score].filter(value => value != null && value !== "").join(" ") }
       : null,
@@ -160,6 +178,10 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
   ].filter((item): item is { label: string; value: string } => Boolean(item?.value));
 
   const prompts = [
+    thesis || invalidation
+      ? "Did this trade follow the recorded thesis and invalidation, or did the plan change after entry?"
+      : null,
+    "What leaked edge in this trade: entry timing, exit discipline, sizing, setup quality, or market regime?",
     focus ? `Process focus: ${focus}. What rule does this trade add, confirm, or retire from your playbook?` : null,
     entry.pnl != null && scanner?.setup_score != null && scanner.setup_score >= 80
       ? `Scanner score ${scanner.setup_score} with ${entry.pnl >= 0 ? "positive" : "negative"} outcome. Which setup condition best explained the result?`
@@ -184,7 +206,7 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
         : "Use the recorded plan and outcome to review process quality.";
 
   return {
-    hasContext: summary.length > 1 || prompts.length > 0,
+    hasContext: hasOriginalContext,
     summary,
     prompts: prompts.slice(0, 5),
     fallback,

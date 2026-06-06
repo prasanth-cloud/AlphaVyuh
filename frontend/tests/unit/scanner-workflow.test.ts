@@ -62,6 +62,8 @@ describe("scanner workflow helpers", () => {
         week_52_high_pct: 3.4,
         volume_ratio: 1.87,
         rsi_14: 63.2,
+        close: 2847.5,
+        pct_change: 4.72,
       },
     ], "wl-setup", {
       presetId: "trend_template",
@@ -92,6 +94,9 @@ describe("scanner workflow helpers", () => {
         week_52_high_pct: 3.4,
         volume_ratio: 1.87,
         rsi_14: 63.2,
+        captured_price: 2847.5,
+        captured_change_pct: 4.72,
+        captured_volume_ratio: 1.87,
         scan_trade_date: "2026-05-29",
         data_source: "NSE bhavcopy",
         data_mode: "eod",
