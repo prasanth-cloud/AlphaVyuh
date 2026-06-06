@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync("app/(app)/charts/[symbol]/page.tsx", "utf8");
+const chartDataHook = readFileSync("components/charts/hooks/useChartData.ts", "utf8");
 
 describe("chart feedback copy", () => {
   it("uses stable action-oriented copy for chart workspace failures", () => {
@@ -21,10 +22,10 @@ describe("chart feedback copy", () => {
   });
 
   it("prefers full candle-window EMA overlays for long-range chart review", () => {
-    expect(source).toContain("function candleIndicatorLine");
-    expect(source).toContain("preferBroaderLine");
-    expect(source).toContain('candleIndicatorLine(candles, "ema_200")');
-    expect(source).toContain("preferBroaderLine(ind.ema200 as LinePoint[] | undefined, ema200FromCandles)");
+    expect(chartDataHook).toContain("function computePrecomputedEmaLine");
+    expect(chartDataHook).toContain('ema200: "ema_200"');
+    expect(chartDataHook).toContain("buildCandleEmaIndicatorPayload");
+    expect(chartDataHook).toContain("canUsePrecomputedCandleEmas");
   });
 
   it("opens full chart review on the five-year launch contract range", () => {

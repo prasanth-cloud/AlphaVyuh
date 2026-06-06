@@ -283,8 +283,9 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const fullChartMode = searchParams.get("full") === "1";
   const initialDrawMode = searchParams.get("draw");
   const initialChartType = normalizeChartType(searchParams.get("type"));
+  const initialRangeLabel: WatchlistChartTimeframe = fullChartMode ? "5Y" : "1Y";
 
-  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>("1Y");
+  const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>(initialRangeLabel);
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [timeframeMessage, setTimeframeMessage] = useState("");
   const [liveMode, setLiveMode] = useState(false);
@@ -553,7 +554,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     getChartLayout(symbol).then(layout => {
       if (layout.timeframe === "D" || layout.timeframe === "W" || layout.timeframe === "M") {
         setTimeframe(layout.timeframe);
-        setRangeLabel(layout.timeframe === "D" ? "1Y" : layout.timeframe === "W" ? "3Y" : "5Y");
+        setRangeLabel(layout.timeframe === "D" ? initialRangeLabel : layout.timeframe === "W" ? "3Y" : "Max");
       }
       if (layout.indicators?.length) setActiveIndicators(layout.indicators);
     }).catch(() => {
