@@ -2322,8 +2322,26 @@ export async function getCandlesLive(
 // ── Price alerts ─────────────────────────────────────────────────────────────
 
 
+const mockPriceAlertsKey = "alphavyuh-mock-price-alerts-v1";
+
+function readMockPriceAlerts(): PriceAlert[] {
+  if (typeof window === "undefined") return mockPriceAlerts();
+  try {
+    const raw = window.localStorage.getItem(mockPriceAlertsKey);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed : mockPriceAlerts();
+  } catch {
+    return mockPriceAlerts();
+  }
+}
+
+function writeMockPriceAlerts(alerts: PriceAlert[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(mockPriceAlertsKey, JSON.stringify(alerts));
+}
+
 export async function getPriceAlerts(): Promise<PriceAlert[]> {
-  if (shouldUseMockFallback()) return mockPriceAlerts();
+  if (shouldUseMockFallback()) return readMockPriceAlerts();
   return cachedClientRequest("price-alerts", 20_000, async () => {
     const headers = await authHeaders();
     const res = await fetch(`${API}/api/v1/price-alerts`, { headers });
@@ -2341,6 +2359,20 @@ export async function getPriceAlerts(): Promise<PriceAlert[]> {
 export async function createPriceAlert(
   payload: { symbol: string; condition: "above" | "below"; target_price: number; note?: string }
 ): Promise<PriceAlert> {
+  if (shouldUseMockFallback()) {
+    const alert: PriceAlert = {
+      id: `mock-price-alert-${Date.now()}`,
+      symbol: payload.symbol.toUpperCase(),
+      condition: payload.condition,
+      target_price: Number(payload.target_price.toFixed(2)),
+      note: payload.note?.trim() ? payload.note.trim() : null,
+      is_active: true,
+      triggered_at: null,
+      created_at: new Date().toISOString(),
+    };
+    writeMockPriceAlerts([alert, ...readMockPriceAlerts()]);
+    return alert;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/price-alerts`, {
     method: "POST", headers, body: JSON.stringify(payload),
@@ -2355,6 +2387,10 @@ export async function createPriceAlert(
 }
 
 export async function deletePriceAlert(id: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeMockPriceAlerts(readMockPriceAlerts().filter((alert) => alert.id !== id));
+    return;
+  }
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/v1/price-alerts/${id}`, { method: "DELETE", headers });
   if (!res.ok) {
