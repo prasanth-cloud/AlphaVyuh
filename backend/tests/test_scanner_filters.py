@@ -521,72 +521,8 @@ class TestScannerSortSlice:
                 assert _sorted_plan_slice(rows, "setup_score", reverse=reverse, limit=limit) == expected
 
 
-class TestM3aDbPush:
-    def test_m3a_columns_ready_when_eighty_percent_scored(self):
-        from app.routers.scanner import _m3a_columns_ready
-
-        class _Not:
-            def __init__(self, parent):
-                self._parent = parent
-
-            def is_(self, *_args, **_kwargs):
-                return self._parent
-
-        class _Client:
-            def __init__(self):
-                self._call = 0
-                self.not_ = _Not(self)
-
-            def table(self, _name):
-                return self
-
-            def select(self, *_args, **_kwargs):
-                return self
-
-            def eq(self, *_args, **_kwargs):
-                return self
-
-            def execute(self):
-                self._call += 1
-                if self._call == 1:
-                    return type("R", (), {"count": 100})()
-                return type("R", (), {"count": 85})()
-
-        assert _m3a_columns_ready(_Client(), "2026-05-01") is True
-
-    def test_m3a_columns_ready_false_below_threshold(self):
-        from app.routers.scanner import _m3a_columns_ready
-
-        class _Not:
-            def __init__(self, parent):
-                self._parent = parent
-
-            def is_(self, *_args, **_kwargs):
-                return self._parent
-
-        class _Client:
-            def __init__(self):
-                self._call = 0
-                self.not_ = _Not(self)
-
-            def table(self, _name):
-                return self
-
-            def select(self, *_args, **_kwargs):
-                return self
-
-            def eq(self, *_args, **_kwargs):
-                return self
-
-            def execute(self):
-                self._call += 1
-                if self._call == 1:
-                    return type("R", (), {"count": 100})()
-                return type("R", (), {"count": 50})()
-
-        assert _m3a_columns_ready(_Client(), "2026-05-01") is False
-
-    def test_execute_scan_includes_query_ms(self, monkeypatch):
+class TestExecuteScanDiagnostics:
+    def test_execute_scan_includes_query_timing_ms(self, monkeypatch):
         import asyncio
         from app.routers.scanner import ScanRequest, ScanFilters, execute_scan
 
@@ -607,8 +543,11 @@ class TestM3aDbPush:
             def table(self, _name):
                 return _FakeQuery()
 
-        monkeypatch.setattr("app.routers.scanner.get_latest_complete_trade_date", lambda _c: "2026-05-01")
-        monkeypatch.setattr("app.routers.scanner._m3a_columns_ready", lambda *_args: False)
+        monkeypatch.setattr(
+            "app.routers.scanner._scanner_latest_complete_trade_date",
+            lambda _c: "2026-05-01",
+        )
+        monkeypatch.setattr("app.routers.scanner._active_universe_size", lambda *_args: 100)
 
         result = asyncio.run(
             execute_scan(
@@ -617,8 +556,9 @@ class TestM3aDbPush:
                 plan="pro",
             )
         )
-        assert "query_ms" in result
-        assert isinstance(result["query_ms"], (int, float))
+        timing = result["source_metadata"]["scanner_performance"]["timing_ms"]
+        assert "query" in timing
+        assert isinstance(timing["query"], (int, float))
 
 
 class TestVCPAsyncPass2:
