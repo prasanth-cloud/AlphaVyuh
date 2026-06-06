@@ -76,11 +76,29 @@ jobs:
       - name: Production API checker tests
         run: npm run test:production-api-check
 
+      - name: Production smoke account identity tests
+        run: npm run test:production-smoke-account-identity
+
+      - name: Scanner benchmark checker tests
+        run: npm run test:scanner-benchmark
+
+      - name: Scanner benchmark workflow checker tests
+        run: npm run test:scanner-benchmark-workflow-check
+
+      - name: Five-year chart contract tests
+        run: npm run test:five-year-chart-check
+
       - name: Production smoke env checker tests
         run: npm run test:production-smoke-env-check
 
+      - name: Production smoke workflow checker tests
+        run: npm run test:production-smoke-workflow-check
+
       - name: Railway recovery workflow checker tests
         run: npm run test:railway-recovery-workflow-check
+
+      - name: Railway recovery script tests
+        run: npm run test:railway-recovery-script
 
       - name: Recovery handoff credential checker tests
         run: npm run test:recovery-handoff-credentials-check
@@ -93,6 +111,18 @@ jobs:
 
       - name: Data recovery readiness checker tests
         run: npm run test:data-recovery-check
+
+      - name: Market-data entitlement contract tests
+        run: npm run test:market-data-entitlement-check
+
+      - name: Setup review workflow contract tests
+        run: npm run test:setup-review-check
+
+      - name: Sector taxonomy checker tests
+        run: npm run test:sector-taxonomy-check
+
+      - name: Broker read-only contract tests
+        run: npm run test:broker-readonly-check
 
       - name: Railway secret prep checker tests
         run: npm run test:railway-secret-prep

@@ -8,9 +8,9 @@ import json
 import logging
 from collections import defaultdict
 from datetime import date
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 import httpx
@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api/v1/alerts", tags=["alerts"])
 
 FREE_ALERT_LIMIT = 2
 PRO_ALERT_LIMIT  = 20
+MAX_RECENT_MATCH_RUNS_PER_ALERT = 5
 
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -168,19 +169,33 @@ async def delete_alert(alert_id: str, user_id: str = Depends(get_current_user_id
 
 
 @router.get("/recent/matches")
-async def get_recent_matches(user_id: str = Depends(get_current_user_id)):
-    """Return today's / most-recent matches across all alerts for this user."""
+async def get_recent_matches(
+    runs_per_alert: Annotated[int, Query(ge=1, le=MAX_RECENT_MATCH_RUNS_PER_ALERT)] = 2,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return recent match history per alert so clients can compare entries and exits."""
     try:
         client = get_admin_client()
         res = client.table("scan_alert_matches") \
             .select("*, scan_alerts(name)") \
             .eq("user_id", user_id) \
             .order("run_date", desc=True) \
-            .limit(50) \
+            .limit(max(50, runs_per_alert * PRO_ALERT_LIMIT)) \
             .execute()
     except Exception:
         raise _scan_alerts_unavailable()
-    return {"matches": res.data or []}
+    matches_by_alert: dict[str, int] = {}
+    recent_matches: list[dict] = []
+    for match in res.data or []:
+        alert_id = match.get("alert_id")
+        if not alert_id:
+            continue
+        retained = matches_by_alert.get(alert_id, 0)
+        if retained >= runs_per_alert:
+            continue
+        matches_by_alert[alert_id] = retained + 1
+        recent_matches.append(match)
+    return {"matches": recent_matches}
 
 
 @router.get("/{alert_id}/matches")
@@ -293,11 +308,13 @@ async def run_all_alerts(trade_date: date) -> dict:
                     sort_by=sort_by,
                     sort_order=sort_order,
                     page=1,
-                    page_size=0,
+                    page_size=50,
                 ),
                 plan=group_plan,
                 trade_date=trade_date,
                 enforce_plan_limit=False,
+                score_results=False,
+                include_diagnostics=False,
             )
         except HTTPException as e:
             scan_error = e
@@ -531,7 +548,7 @@ async def telegram_webhook(
                                 "turnover,rsi_14,ema_20,ema_50,ema_200,week_52_high,week_52_low,atr_14,"
                                 "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency)"
                             ).eq("trade_date", latest_date).limit(2000).execute().data or []
-                            matched = _apply_filters(rows, filters)
+                            matched = _apply_filters(rows, filters, score_results=False)
                             matched.sort(key=lambda x: (x.get("volume_ratio") is not None, x.get("volume_ratio") or 0), reverse=True)
                             top = matched[:5]
                             if not top:

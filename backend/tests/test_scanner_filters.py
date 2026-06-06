@@ -1,5 +1,6 @@
 """Tests for scanner filter logic (no DB required)."""
 import os
+import random
 
 import pytest
 
@@ -189,6 +190,8 @@ def _scanner_row(**overrides):
             "is_active": True,
             "market": "NSE",
             "currency": "INR",
+            "market_cap_category": "midcap",
+            "market_cap_cr": 1200,
         },
     }
     row.update(overrides)
@@ -307,6 +310,215 @@ class TestCanonicalSwingPresets:
 
         assert len(accepted) == 1
         assert rejected == []
+
+    def test_market_cap_category_filter_uses_stock_universe_field(self):
+        from app.routers.scanner import ScanFilters, _apply_filters
+
+        rows = [
+            _scanner_row(symbol="MID", stock_universe={**_scanner_row()["stock_universe"], "market_cap_category": "midcap"}),
+            _scanner_row(symbol="SMALL", stock_universe={**_scanner_row()["stock_universe"], "market_cap_category": "smallcap"}),
+        ]
+
+        results = _apply_filters(rows, ScanFilters(market_cap_category=["midcap"]))
+
+        assert [result["symbol"] for result in results] == ["MID"]
+        assert results[0]["market_cap_category"] == "midcap"
+
+
+class _RecordingQuery:
+    def __init__(self):
+        self.calls = []
+
+    def gte(self, column, value):
+        self.calls.append(("gte", column, value))
+        return self
+
+    def lte(self, column, value):
+        self.calls.append(("lte", column, value))
+        return self
+
+    def gt(self, column, value):
+        self.calls.append(("gt", column, value))
+        return self
+
+    def eq(self, column, value):
+        self.calls.append(("eq", column, value))
+        return self
+
+    def in_(self, column, value):
+        self.calls.append(("in_", column, value))
+        return self
+
+    def or_(self, value):
+        self.calls.append(("or_", "", value))
+        return self
+
+
+class TestScannerDbPrefilters:
+    def test_exposes_prefilter_ops_for_diagnostics(self):
+        from app.routers.scanner import ScanFilters, _db_prefilter_ops
+
+        assert _db_prefilter_ops(
+            ScanFilters(
+                rs_score_min=70,
+                avg_volume_50d_min=100000,
+                ema_200_trending_up=True,
+                darvas_box_height_pct_max=15,
+            )
+        ) == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ", "BE"]),
+            ("gte", "rs_score", 70),
+            ("gte", "avg_volume_50d", 100000),
+            ("gt", "ema_200_slope_30d", 0),
+            ("lte", "darvas_box_height_pct", 15),
+        ]
+
+    def test_pushes_non_fallback_intelligence_filters_to_db(self):
+        from app.routers.scanner import ScanFilters, _push_db_prefilters
+
+        query = _push_db_prefilters(
+            _RecordingQuery(),
+            ScanFilters(
+                rs_score_min=70,
+                rs_score_max=95,
+                avg_volume_50d_min=100000,
+                avg_volume_50d_max=5000000,
+                price_perf_6m_min=20,
+                price_perf_6m_max=200,
+                ema_200_trending_up=True,
+                ema_200_slope_30d_min=1.5,
+                ema_200_slope_30d_max=20,
+                darvas_box_height_pct_max=15,
+                nr7=True,
+            ),
+        )
+
+        assert query.calls == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ", "BE"]),
+            ("gte", "rs_score", 70),
+            ("lte", "rs_score", 95),
+            ("gte", "avg_volume_50d", 100000),
+            ("lte", "avg_volume_50d", 5000000),
+            ("gte", "price_perf_6m_pct", 20),
+            ("lte", "price_perf_6m_pct", 200),
+            ("gt", "ema_200_slope_30d", 0),
+            ("gte", "ema_200_slope_30d", 1.5),
+            ("lte", "ema_200_slope_30d", 20),
+            ("lte", "darvas_box_height_pct", 15),
+            ("eq", "is_nr7", True),
+        ]
+
+    def test_pushes_stock_universe_filters_to_db_without_unmigrated_category(self):
+        from app.routers.scanner import ScanFilters, _push_db_prefilters
+
+        query = _push_db_prefilters(
+            _RecordingQuery(),
+            ScanFilters(
+                series=["EQ"],
+                sector=["Financial Services", "IT"],
+                # market_cap_category is handled Python-side when a row exposes
+                # it. The stock_universe table has no repository migration for
+                # this column, so pushing it to PostgREST breaks production.
+                market_cap_category=["largecap", "midcap"],
+                market="IN",
+                market_cap_min=500,
+                market_cap_max=50000,
+                pe_min=5,
+                pe_max=80,
+                roe_min=12,
+                debt_to_equity_max=1.5,
+            ),
+        )
+
+        assert query.calls == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ"]),
+            ("in_", "stock_universe.sector", ["Financial Services", "IT"]),
+            ("in_", "stock_universe.market", ["NSE", "BSE"]),
+            ("gte", "stock_universe.market_cap_cr", 500),
+            ("lte", "stock_universe.market_cap_cr", 50000),
+            ("gte", "stock_universe.pe_ratio", 5),
+            ("lte", "stock_universe.pe_ratio", 80),
+            ("lte", "stock_universe.debt_to_equity", 1.5),
+            ("gte", "stock_universe.roe", 12),
+        ]
+
+    def test_pushes_fallback_computed_filters_without_dropping_nulls(self):
+        from app.routers.scanner import ScanFilters, _push_db_prefilters
+
+        query = _push_db_prefilters(
+            _RecordingQuery(),
+            ScanFilters(
+                volume_ratio_min=1.5,
+                volume_ratio_max=5,
+                week_52_high_pct_max=10,
+                w52l_pct_min=30,
+            ),
+        )
+
+        assert query.calls == [
+            ("eq", "stock_universe.is_active", True),
+            ("in_", "stock_universe.series", ["EQ", "BE"]),
+            ("or_", "", "volume_ratio.is.null,volume_ratio.gte.1.5"),
+            ("or_", "", "volume_ratio.is.null,volume_ratio.lte.5"),
+            ("or_", "", "w52h_pct.is.null,w52h_pct.gte.-10"),
+            ("or_", "", "w52h_pct.is.null,w52h_pct.lte.10"),
+            ("or_", "", "w52l_pct.is.null,w52l_pct.gte.30"),
+        ]
+
+
+class TestScannerSortSlice:
+    def test_plan_slice_matches_full_desc_sort_without_sorting_every_result(self):
+        from app.routers.scanner import _sorted_plan_slice
+
+        rows = [
+            {"symbol": "AAA", "volume_ratio": 2.0},
+            {"symbol": "BBB", "volume_ratio": None},
+            {"symbol": "CCC", "volume_ratio": 3.0},
+            {"symbol": "DDD", "volume_ratio": 3.0},
+            {"symbol": "EEE", "volume_ratio": 1.0},
+        ]
+
+        sliced = _sorted_plan_slice(rows, "volume_ratio", reverse=True, limit=3)
+
+        assert [row["symbol"] for row in sliced] == ["CCC", "DDD", "AAA"]
+
+    def test_plan_slice_matches_full_asc_sort_with_null_first(self):
+        from app.routers.scanner import _sorted_plan_slice
+
+        rows = [
+            {"symbol": "AAA", "volume_ratio": 2.0},
+            {"symbol": "BBB", "volume_ratio": None},
+            {"symbol": "CCC", "volume_ratio": 3.0},
+            {"symbol": "DDD", "volume_ratio": 3.0},
+            {"symbol": "EEE", "volume_ratio": 1.0},
+        ]
+
+        sliced = _sorted_plan_slice(rows, "volume_ratio", reverse=False, limit=3)
+
+        assert [row["symbol"] for row in sliced] == ["BBB", "EEE", "AAA"]
+
+    def test_plan_slice_matches_full_sort_for_varied_limits_and_ties(self):
+        from app.routers.scanner import _sorted_plan_slice
+
+        rng = random.Random(42)
+        values = [None, 0.0, 1.0, 1.0, 2.5, 2.5, 5.0, -1.0]
+        rows = [
+            {"symbol": f"SYM{index:03d}", "setup_score": rng.choice(values)}
+            for index in range(80)
+        ]
+
+        for reverse in (False, True):
+            for limit in (1, 5, 17, 79):
+                expected = sorted(
+                    rows,
+                    key=lambda row: (row.get("setup_score") is not None, row.get("setup_score") or 0),
+                    reverse=reverse,
+                )[:limit]
+
+                assert _sorted_plan_slice(rows, "setup_score", reverse=reverse, limit=limit) == expected
 
 
 class TestM3aDbPush:

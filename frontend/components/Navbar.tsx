@@ -8,7 +8,7 @@ import { LogoFull } from "@/components/ui/Logo";
 
 const NAV_ITEMS = [
   {
-    href: "/dashboard", label: "Dashboard", prefix: "/dashboard",
+    href: "/dashboard", label: "Today", prefix: "/dashboard",
     icon: (active: boolean) => (
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
         <rect x="1" y="1" width="6" height="6" rx="1.5" fill={active ? '#f4f7fb' : '#555'} />

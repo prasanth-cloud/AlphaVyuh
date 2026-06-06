@@ -23,4 +23,18 @@ describe("scanner watchlist feedback", () => {
     expect(scannerPageSource).not.toContain("failures.push(error instanceof Error ? error.message");
     expect(scannerPageSource).not.toContain("Watchlist add is temporarily unavailable.");
   });
+
+  it("keeps taxonomy audit details out of the scanner startup path", () => {
+    expect(scannerPageSource).not.toContain("getSectorsWithMetadata");
+    expect(scannerPageSource).not.toContain("sectorTaxonomyPresentation");
+    expect(scannerPageSource).not.toContain('data-testid="scanner-sector-taxonomy"');
+    expect(scannerPageSource).toContain("Source audit details stay in Data Trust.");
+  });
+
+  it("keeps the selected scan result workbench review-only with handoff actions", () => {
+    expect(scannerPageSource).toContain('data-testid="scanner-workbench"');
+    expect(scannerPageSource).toContain("Scan results workbench");
+    expect(scannerPageSource).toContain("Chart + broker context");
+    expect(scannerPageSource).toContain("Broker action stays journal-only until a plan is confirmed outside the scanner.");
+  });
 });

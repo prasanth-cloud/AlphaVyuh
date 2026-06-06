@@ -13,6 +13,18 @@ on:
         description: 'Skip bhavcopy, use yfinance only'
         required: false
         default: 'false'
+      dry_run:
+        description: 'Log only; do not write market data or run mutations'
+        required: false
+        default: 'false'
+      yfinance_limit:
+        description: 'Maximum yfinance supplement symbols'
+        required: false
+        default: '60'
+      yfinance_time_budget_s:
+        description: 'Seconds allowed for yfinance supplement'
+        required: false
+        default: '180'
 
 jobs:
   refresh:
@@ -37,16 +49,28 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          YFINANCE_LIMIT: ${{ github.event.inputs.yfinance_limit || '60' }}
+          YFINANCE_TIME_BUDGET_S: ${{ github.event.inputs.yfinance_time_budget_s || '180' }}
         run: |
           cd backend
-          ARGS=""
+          ARGS="--yfinance-limit ${YFINANCE_LIMIT:-60} --yfinance-time-budget-s ${YFINANCE_TIME_BUDGET_S:-180}"
           if [ -n "${{ github.event.inputs.date }}" ]; then
             ARGS="$ARGS --date ${{ github.event.inputs.date }}"
           fi
           if [ "${{ github.event.inputs.yfinance_only }}" = "true" ]; then
             ARGS="$ARGS --yfinance-only"
           fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run --force"
+          fi
           python scripts/daily_refresh.py $ARGS
+          {
+            echo "### Daily refresh guardrails"
+            echo "- dry run: ${{ github.event.inputs.dry_run || 'false' }}"
+            echo "- yfinance supplement limit: ${YFINANCE_LIMIT:-60}"
+            echo "- yfinance supplement time budget: ${YFINANCE_TIME_BUDGET_S:-180}s"
+            echo "- trusted core path runs before yfinance supplement: bhavcopy, breadth snapshot, scan alerts"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report status
         if: always()

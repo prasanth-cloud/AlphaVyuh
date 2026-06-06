@@ -81,7 +81,7 @@ test("signed-in app navigation and chart toolbar are functional", async ({ page 
 
   await expectNoRuntimeErrors(page, async () => {
     await page.goto("/charts/RELIANCE");
-    await expect(page.locator("summary", { hasText: /1D|1W|1M|3M|6M|1Y|3Y|5Y|10Y/ })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("summary", { hasText: /1D|1W|1M|3M|6M|1Y|3Y|5Y|Max/ })).toBeVisible({ timeout: 15000 });
     const indicatorsButton = page.locator("button").filter({ hasText: /Indicators|EMA 20|EMA 50|RSI/ }).first();
     const chartToolsButton = page.getByRole("button", { name: "Open chart drawing tools", exact: true });
     await expect(indicatorsButton).toBeVisible();

@@ -14,6 +14,7 @@ from app.services.market_data import (
     yf_ticker_symbol,
 )
 from app.services.rate_limit import client_rate_key, public_market_limiter
+from app.services.sector_taxonomy import build_sector_taxonomy_metadata
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
@@ -390,19 +391,40 @@ async def list_markets():
 
 @router.get("/market/sectors")
 async def list_sectors():
-    """Returns distinct sector names that have at least 3 stocks."""
+    """Returns all mapped active sector names plus taxonomy trust metadata."""
     try:
         client = get_admin_client()
-        res = client.table("stock_universe").select("sector").not_.is_("sector", "null").eq("is_active", True).execute()
+        res = client.table("stock_universe").select("symbol,sector").eq("is_active", True).execute()
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Sector list is temporarily unavailable.",
-        )
+    )
     from collections import Counter
-    counts = Counter(r["sector"] for r in (res.data or []) if r.get("sector"))
-    sectors = sorted(s for s, c in counts.items() if c >= 3)
-    return {"sectors": sectors}
+    counts = Counter(
+        str(r["sector"]).strip()
+        for r in (res.data or [])
+        if r.get("sector") and str(r["sector"]).strip()
+    )
+    sectors = sorted(counts)
+    metadata = build_sector_taxonomy_metadata(res.data or [], active_count=len(res.data or []))
+    return {"sectors": sectors, "metadata": metadata}
+
+
+@router.get("/market/sectors/audit")
+async def audit_sectors():
+    """Returns the sector taxonomy audit contract without filtering sector names."""
+    try:
+        client = get_admin_client()
+        res = client.table("stock_universe").select("symbol,sector").eq("is_active", True).execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sector audit is temporarily unavailable.",
+        )
+
+    metadata = build_sector_taxonomy_metadata(res.data or [], active_count=len(res.data or []))
+    return {"status": "ok", "metadata": metadata}
 
 
 @router.get("/market/sector-breadth")
@@ -436,6 +458,7 @@ async def get_sector_breadth():
             if len(chunk.data) < 1000:
                 break
             offset += 1000
+        universe_res = client.table("stock_universe").select("symbol,sector").eq("is_active", True).execute()
     except HTTPException:
         raise
     except Exception:
@@ -486,7 +509,12 @@ async def get_sector_breadth():
             "above_ema200_pct": round(s["above_ema200"] / total * 100, 1) if total else None,
         })
 
-    return {"trade_date": latest_date, "sectors": result}
+    metadata = build_sector_taxonomy_metadata(
+        universe_res.data or [],
+        active_count=len(universe_res.data or []),
+        hidden_min_active_symbols=1,
+    )
+    return {"trade_date": latest_date, "sectors": result, "metadata": metadata}
 
 
 @router.get("/stocks/{symbol}/fundamentals")

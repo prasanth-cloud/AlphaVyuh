@@ -118,17 +118,17 @@ async function expectRealDataContext(
   await expect(body, `${surface} must expose source, freshness, or coverage context`).toContainText(requiredCopy, { timeout: 15000 });
 }
 
-async function expectDashboardReady(page: import("@playwright/test").Page) {
-  const marketPulse = page.getByText(/Market pulse/i);
+async function expectTodayReady(page: import("@playwright/test").Page) {
+  const todayCockpit = page.getByTestId("today-cockpit");
   for (let attempt = 1; attempt <= 4; attempt += 1) {
-    if (await marketPulse.isVisible().catch(() => false)) return;
+    if (await todayCockpit.isVisible().catch(() => false)) return;
     const retry = page.getByRole("button", { name: "Retry" });
     if (await retry.isVisible().catch(() => false)) {
       await retry.click({ force: true, timeout: 3000 }).catch(() => {});
     }
     await page.waitForTimeout(attempt * 1500);
   }
-  await expect(marketPulse).toBeVisible({ timeout: 15000 });
+  await expect(todayCockpit).toBeVisible({ timeout: 15000 });
 }
 
 async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
@@ -157,16 +157,16 @@ async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Signed-in smoke flow", () => {
-  test("dashboard, scanner, watchlist, full chart, journal, settings, broker, and data load in a usable state", async ({ page }) => {
+  test("Today, scanner, watchlist, full chart, journal, settings, broker, and data load in a usable state", async ({ page }) => {
     test.setTimeout(EXPECT_REAL_DATA ? 90_000 : 30_000);
     await login(page);
 
-    await expectDashboardReady(page);
+    await expectTodayReady(page);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
-    const openScannerLink = page.getByRole("link", { name: /Open scanner/i });
-    await expect(openScannerLink).toBeVisible();
-    await expectRealDataContext(page, "dashboard", /Latest session|EOD|Market|coverage|NSE universe/i);
+    const discoverSetupsLink = page.getByRole("link", { name: /Discover setups/i });
+    await expect(discoverSetupsLink).toBeVisible();
+    await expectRealDataContext(page, "today", /Latest session|EOD|Market|coverage|NSE universe/i);
 
     await page.locator(".app-nav").getByRole("link", { name: "Scanner" }).click();
     await expectPathname(page, "/scanner");
@@ -231,7 +231,7 @@ test.describe("Signed-in smoke flow", () => {
       }
     }
 
-    const symbolInput = page.getByPlaceholder("Add symbol…");
+    const symbolInput = page.getByPlaceholder("Add or paste symbols…");
     if (!(await symbolInput.isVisible().catch(() => false))) {
       const firstWatchlist = page.locator(".wl-item").first();
       await expect(firstWatchlist).toBeVisible({ timeout: 15000 });
@@ -253,7 +253,7 @@ test.describe("Signed-in smoke flow", () => {
     const firstSymbol = firstRowText?.trim().match(/^[A-Z0-9&-]+/)?.[0] ?? SMOKE_SYMBOL;
 
     await rows.first().click();
-    await expect(page.getByRole("button", { name: /Open chart/i })).toBeVisible();
+    await expect(page.getByTestId("watchlist-selected-actions").getByRole("button", { name: "Full chart", exact: true })).toBeVisible();
     await expect(page.locator(`text=${firstSymbol}`).first()).toBeVisible();
     await expectRealDataContext(page, "watchlist", /Latest session|Daily|as of|Data status|Market data/i);
 
@@ -279,7 +279,8 @@ test.describe("Signed-in smoke flow", () => {
     await expect(page.getByRole("navigation")).toBeVisible({ timeout: 15000 });
 
     await gotoAppPath(page, "/data");
-    await expect(page.locator("body")).toContainText(/EOD|coverage|broker import|journal/i, { timeout: 15000 });
-    await expectRealDataContext(page, "data status", /EOD|coverage|broker import|journal|Data status/i);
+    await expect(page.locator("body")).toContainText(/EOD|coverage|broker import|journal|Sector taxonomy/i, { timeout: 15000 });
+    await expect(page.locator("body")).toContainText(/Broker order gate|SMOKE REQUIRED|ORDERS DISABLED|SMOKE PASSED/i, { timeout: 15000 });
+    await expectRealDataContext(page, "data status", /EOD|coverage|broker import|journal|Sector taxonomy|Data status/i);
   });
 });

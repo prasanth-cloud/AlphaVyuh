@@ -29,6 +29,7 @@ import {
   removeFromWatchlist,
   reorderWatchlist,
   updateWatchlistItemMetadata,
+  getQuote,
   getQuotes,
   searchSymbols,
   getCandles,

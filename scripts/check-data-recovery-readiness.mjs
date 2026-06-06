@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { once } from "node:events";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -33,6 +32,7 @@ const resultOrder = [
   "Production API data smoke",
   "Vercel production env",
   "Supabase EOD data",
+  "Supplemental refresh data",
   "Chart smoke config",
   "Authenticated app smoke",
   "GitHub recovery secrets",
@@ -82,27 +82,40 @@ function parseChartSymbols(raw) {
 }
 
 async function run(command, args, options = {}) {
-  const child = spawn(command, args, {
-    cwd: options.cwd || rootDir,
-    env: {
-      ...process.env,
-      ...(options.env || {}),
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
   let stdout = "";
   let stderr = "";
+
+  let child;
+  try {
+    child = spawn(command, args, {
+      cwd: options.cwd || rootDir,
+      env: {
+        ...process.env,
+        ...(options.env || {}),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    return { code: 127, stdout, stderr: error instanceof Error ? error.message : String(error) };
+  }
+
   child.stdout.on("data", (chunk) => { stdout += chunk; });
   child.stderr.on("data", (chunk) => { stderr += chunk; });
-  child.on("error", (error) => {
-    stderr += error.message;
+
+  const code = await new Promise((resolve) => {
+    let settled = false;
+    const finish = (exitCode) => {
+      if (settled) return;
+      settled = true;
+      resolve(exitCode ?? 0);
+    };
+    child.on("error", (error) => {
+      stderr += `${stderr ? "\n" : ""}${error.message}`;
+      finish(127);
+    });
+    child.on("close", finish);
   });
 
-  const [code] = await Promise.race([
-    once(child, "exit"),
-    once(child, "error").then(() => [127]),
-  ]);
   return { code, stdout, stderr };
 }
 
@@ -318,6 +331,61 @@ async function checkSupabaseEodFreshness() {
       "Supabase EOD data",
       error instanceof Error ? error.message : String(error),
       "Inspect Supabase credentials/connectivity before treating this as an empty-data problem.",
+    );
+    return false;
+  }
+}
+
+async function checkSupplementalRefreshData() {
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+
+  try {
+    const latest = await fetchSupabase("ingest_runs?select=run_id,started_at,meta&order=started_at.desc&limit=20");
+    const rows = Array.isArray(latest.data) ? latest.data : [];
+    const supplementalIndex = rows.findIndex((item) => item?.meta?.supplemental_data);
+    const row = supplementalIndex >= 0 ? rows[supplementalIndex] : null;
+    const supplemental = row?.meta?.supplemental_data;
+    if (!row || !supplemental) {
+      const runCount = rows.length;
+      addResult(
+        "warn",
+        "Supplemental refresh data",
+        `No supplemental data trust metadata found in the latest ${runCount} ingest run${runCount === 1 ? "" : "s"}.`,
+        "Run the current Daily NSE refresh before treating RS/yfinance coverage as verified.",
+      );
+      return false;
+    }
+
+    const status = String(supplemental.status || "unknown");
+    const warnings = Array.isArray(supplemental.warnings) ? supplemental.warnings.filter(Boolean) : [];
+    const yfinance = supplemental.yfinance || {};
+    const rsScore = supplemental.rs_score || {};
+    const detail = [
+      `Latest supplemental run ${row.run_id || "unknown"} supplemental status is ${status}.`,
+      supplementalIndex > 0 ? `Skipped ${supplementalIndex} newer non-supplemental ingest run${supplementalIndex === 1 ? "" : "s"}.` : "",
+      `RS score: ${rsScore.status || "unknown"}.`,
+      `yfinance: ${yfinance.status || "unknown"}${yfinance.attempted != null ? ` (${yfinance.success || 0}/${yfinance.attempted} symbols, rate_limited=${yfinance.rate_limited || 0})` : ""}.`,
+      warnings.length ? `Warnings: ${warnings.slice(0, 3).join(" ")}` : "",
+    ].filter(Boolean).join(" ");
+
+    if (status === "healthy") {
+      addResult("pass", "Supplemental refresh data", detail);
+      return true;
+    }
+
+    addResult(
+      status === "failed" ? "fail" : "warn",
+      "Supplemental refresh data",
+      detail,
+      "Inspect Daily NSE refresh logs before trusting RS-ranked scanner output or yfinance-backed supplemental fields.",
+    );
+    return false;
+  } catch (error) {
+    addResult(
+      "warn",
+      "Supplemental refresh data",
+      error instanceof Error ? error.message : String(error),
+      "Inspect ingest_runs.meta.supplemental_data from Supabase before treating supplemental indicators as verified.",
     );
     return false;
   }
@@ -545,10 +613,11 @@ function printResults({ productionApiOk, supabaseFresh, githubRecoveryReady, rec
 }
 
 try {
-  const [productionApiOk, , supabaseFresh, githubRecoveryReady, recoveryWorkflowReady, localRailwayReady] = await Promise.all([
+  const [productionApiOk, , supabaseFresh, , githubRecoveryReady, recoveryWorkflowReady, localRailwayReady] = await Promise.all([
     checkProductionApi(),
     checkVercelProductionEnv(),
     checkSupabaseEodFreshness(),
+    checkSupplementalRefreshData(),
     checkGithubSecrets(),
     checkRecoveryWorkflowRuns(),
     checkLocalRailway(),

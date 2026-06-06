@@ -7,7 +7,7 @@ type WorkflowPage = {
 };
 
 const pages: WorkflowPage[] = [
-  { path: "/dashboard", name: "dashboard", marker: (page) => page.getByText("Market pulse") },
+  { path: "/dashboard", name: "today", marker: (page) => page.getByTestId("today-cockpit") },
   { path: "/scanner", name: "scanner", marker: (page) => page.getByRole("button", { name: /^Run scan$/i }) },
   { path: "/watchlist", name: "watchlist", marker: (page) => page.getByText("Decision desk") },
   { path: "/charts/AUBANK?full=1", name: "full chart", marker: (page) => page.getByTestId("chart-drawing-overlay") },
@@ -158,11 +158,21 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.getByRole("button", { name: /Technicals/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Fundamentals/i })).toBeVisible();
     await page.getByRole("button", { name: /^Run scan$/i }).click();
-    await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Shortlist" })).toBeVisible();
-    await expect(page.locator(".scanner-row-actions").first().getByRole("button", { name: "Chart" })).toBeVisible();
-    await expect(page.locator(".scanner-row-actions").first().getByRole("combobox", { name: /More actions/i })).toBeVisible();
-    await expect(page.locator(".scanner-row-actions").first().getByRole("button")).toHaveCount(2);
+    const firstRowActions = page.locator(".scanner-row-actions").first();
+    await expect(firstRowActions).toBeVisible({ timeout: 20_000 });
+    await expect(firstRowActions.getByRole("button", { name: "Shortlist" })).toBeVisible();
+    await expect(firstRowActions.getByRole("combobox", { name: /Add .* to watchlist/i })).toBeVisible();
+    await expect(firstRowActions.getByRole("button", { name: "Open chart" })).toBeVisible();
+    await expect(firstRowActions.getByRole("button", { name: "Review later" })).toBeVisible();
+    await expect(firstRowActions.getByRole("combobox", { name: /More actions/i })).toBeVisible();
+    await expect(firstRowActions.getByRole("button")).toHaveCount(3);
+    const primaryActionOrder = await firstRowActions.locator("button, select").evaluateAll((controls) =>
+      controls.slice(0, 4).map((control) => {
+        if (control instanceof HTMLSelectElement) return control.options[control.selectedIndex]?.textContent?.trim();
+        return control.textContent?.trim();
+      })
+    );
+    expect(primaryActionOrder).toEqual(["Shortlist", "Add to watchlist…", "Open chart", "Review later"]);
     await expect(page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first()).toContainText(/A|B|C|D|\d{2,3}/);
     await page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first().click();
     await expect(page.getByText("Why this matched")).toBeVisible();
@@ -205,11 +215,18 @@ test.describe("Workflow layout smoke", () => {
 
   test("top search opens workflow commands", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Market pulse")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("today-cockpit")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Today", "Journal", "Watchlist", "Scanner"]);
+    await page.keyboard.press("/");
+    await page.getByPlaceholder("Search symbol or command...").fill("today");
+    await expect(page.locator(".app-float-panel").getByText("Open Today", { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+
     await page.keyboard.press("/");
     await page.getByPlaceholder("Search symbol or command...").fill("journal");
-    await expect(page.getByText("Review Journal")).toBeVisible();
-    await page.getByText("Review Journal").click();
+    const commandPanel = page.locator(".app-float-panel");
+    await expect(commandPanel.getByText("Review Journal", { exact: true })).toBeVisible();
+    await commandPanel.getByText("Review Journal", { exact: true }).click();
     await expect(page).toHaveURL(/\/journal/);
     await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
   });
@@ -260,8 +277,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header")).toContainText(/Data as of \d{4}-\d{2}-\d{2}/i);
     await expect(page.locator(".watchlist-chart-header")).toContainText(/\d+ bars/i);
 
-    await page.locator(".watchlist-chart-header").getByRole("button", { name: "10Y", exact: true }).click();
-    await expect(page.locator(".watchlist-chart-header")).toContainText(/10Y · Monthly · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
+    await page.locator(".watchlist-chart-header").getByRole("button", { name: "Max", exact: true }).click();
+    await expect(page.locator(".watchlist-chart-header")).toContainText(/Max · Monthly · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
 
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
     await page.locator(".watchlist-chart-header").getByText(/SMA|Indicators/).first().click();
@@ -345,6 +362,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).toContainText(/Account-managed access|Account access/i, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Market data/i);
     await expect(page.locator("body")).toContainText(/Execution not enabled yet/i);
+    await expect(page.locator("body")).toContainText(/NSE\/BSE cash equities/i);
+    await expect(page.locator("body")).not.toContainText(/F&O|futures & options|Greeks|OI dashboards/i);
 
     await page.goto("/settings/broker", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).toContainText(/read-only|import only/i, { timeout: 15_000 });

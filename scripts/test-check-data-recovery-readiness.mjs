@@ -36,14 +36,28 @@ function dailyCandles(startDate, count) {
   return candles;
 }
 
-function chartResponse(symbol, startDate = "2025-10-31", count = 200) {
+function chartResponse(symbol, startDate = "2021-05-18", count = 1827) {
   const candles = dailyCandles(startDate, count);
+  const endDate = candles.at(-1)?.time;
   return JSON.stringify({
+    symbol,
+    timeframe: "D",
     candles,
     coverage: {
       available_from: startDate,
-      available_to: candles.at(-1)?.time,
+      available_to: endDate,
+      requested_from: startDate,
+      requested_to: endDate,
+      requested_limit: 1300,
+      returned_candles: candles.length,
+      timeframe: "D",
       symbol,
+      five_year_contract: {
+        years: 5,
+        minimum_calendar_days: 1811,
+        minimum_daily_candles: 1200,
+        status: "met",
+      },
     },
   });
 }
@@ -56,18 +70,18 @@ function serveHealthyApi(request, response) {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900 }));
+    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
     return;
   }
-  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("RELIANCE"));
     return;
   }
-  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/ITC/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("ITC"));
     return;
   }
-  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&limit=500") {
+  if (request.url === "/api/v1/charts/AUBANK/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
     response.end(chartResponse("AUBANK"));
     return;
   }
@@ -102,12 +116,16 @@ function serveRailwayFallback(request, response) {
 
 function serveSupabaseRest(request, response) {
   const url = new URL(request.url, "http://127.0.0.1");
-  if (url.pathname !== "/rest/v1/daily_ohlcv" && url.pathname !== "/rest/v1/stock_universe") {
+  if (
+    url.pathname !== "/rest/v1/daily_ohlcv" &&
+    url.pathname !== "/rest/v1/stock_universe" &&
+    url.pathname !== "/rest/v1/ingest_runs"
+  ) {
     return false;
   }
 
   response.setHeader("content-type", "application/json");
-  response.setHeader("content-range", url.pathname.endsWith("daily_ohlcv") ? "0-0/3147" : "0-0/3447");
+  response.setHeader("content-range", url.pathname.endsWith("stock_universe") ? "0-0/3447" : "0-0/3147");
 
   if (url.pathname.endsWith("daily_ohlcv") && url.searchParams.get("trade_date") === "eq.2026-05-18") {
     response.end(JSON.stringify([{ symbol: "RELIANCE" }]));
@@ -117,11 +135,99 @@ function serveSupabaseRest(request, response) {
     response.end(JSON.stringify([{ trade_date: "2026-05-18" }]));
     return true;
   }
+  if (url.pathname.endsWith("ingest_runs")) {
+    response.end(JSON.stringify([
+      {
+        run_id: "market-breadth-snapshot-2026-05-18",
+        started_at: "2026-05-18T13:00:00Z",
+        meta: {
+          snapshot: {
+            status: "healthy",
+            trade_date: "2026-05-18",
+          },
+        },
+      },
+      {
+        run_id: "refresh-2026-05-18-120000",
+        started_at: "2026-05-18T12:00:00Z",
+        meta: {
+          supplemental_data: {
+            status: "healthy",
+            warnings: [],
+            rs_score: { status: "success", trade_date: "2026-05-18" },
+            yfinance: {
+              status: "success",
+              attempted: 200,
+              success: 200,
+              failed: 0,
+              coverage_pct: 100,
+              rate_limited: 0,
+              failure_reasons: {},
+            },
+          },
+        },
+      },
+    ]));
+    return true;
+  }
   response.end(JSON.stringify([{ symbol: "RELIANCE" }]));
   return true;
 }
 
-function makeFakeBin({ secrets = [], railwayReady = true, workflowRuns = [], vercelEnv = {} }) {
+function serveApiWithDegradedSupplemental(request, response) {
+  const url = new URL(request.url, "http://127.0.0.1");
+  if (url.pathname === "/rest/v1/ingest_runs") {
+    response.setHeader("content-type", "application/json");
+    response.setHeader("content-range", "0-0/1");
+    response.end(JSON.stringify([{
+      run_id: "refresh-2026-05-18-120000",
+      started_at: "2026-05-18T12:00:00Z",
+      meta: {
+        supplemental_data: {
+          status: "degraded",
+          warnings: [
+            "RS score calculation failed for the latest bhavcopy run.",
+            "yfinance supplement degraded: 42/200 symbols updated.",
+          ],
+          rs_score: { status: "failed", trade_date: "2026-05-18" },
+          yfinance: {
+            status: "degraded",
+            attempted: 200,
+            success: 42,
+            failed: 158,
+            coverage_pct: 21,
+            rate_limited: 155,
+            failure_reasons: { rate_limited: 155, no_data: 3 },
+          },
+        },
+      },
+    }]));
+    return;
+  }
+  serveHealthyApi(request, response);
+}
+
+function serveApiWithoutSupplementalRuns(request, response) {
+  const url = new URL(request.url, "http://127.0.0.1");
+  if (url.pathname === "/rest/v1/ingest_runs") {
+    response.setHeader("content-type", "application/json");
+    response.setHeader("content-range", "0-0/1");
+    response.end(JSON.stringify([{
+      run_id: "market-breadth-snapshot-2026-05-18",
+      started_at: "2026-05-18T13:00:00Z",
+      meta: {
+        snapshot: {
+          status: "healthy",
+          trade_date: "2026-05-18",
+        },
+      },
+    }]));
+    return;
+  }
+  serveHealthyApi(request, response);
+}
+
+function makeFakeBin({ secrets = [], railwayReady = true, installRailway = true, workflowRuns = [], vercelEnv = {} }) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "alphavyuh-recovery-bin-"));
   const secretOutput = secrets.map((secret) => `${secret}\t2026-05-18T00:00:00Z`).join("\n");
   const workflowOutput = JSON.stringify(workflowRuns);
@@ -164,7 +270,9 @@ process.exit(1);
 `;
 
   fs.writeFileSync(path.join(dir, "gh"), gh, { mode: 0o755 });
-  fs.writeFileSync(path.join(dir, "railway"), railway, { mode: 0o755 });
+  if (installRailway) {
+    fs.writeFileSync(path.join(dir, "railway"), railway, { mode: 0o755 });
+  }
   fs.writeFileSync(path.join(dir, "vercel"), vercel, { mode: 0o755 });
   return dir;
 }
@@ -223,16 +331,56 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   assert.match(stdout, /Production chart smoke will verify: RELIANCE, ITC, AUBANK/);
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Skipped scanner\/watchlist authenticated API verification/);
-  assert.deepEqual(resultNames(stdout).slice(0, 6), [
+  assert.match(stdout, /Supplemental refresh data/);
+  assert.match(stdout, /Latest supplemental run refresh-2026-05-18-120000 supplemental status is healthy/);
+  assert.match(stdout, /Skipped 1 newer non-supplemental ingest run/);
+  assert.deepEqual(resultNames(stdout).slice(0, 7), [
     "Production API data smoke",
     "Vercel production env",
     "Supabase EOD data",
+    "Supplemental refresh data",
     "Chart smoke config",
     "Authenticated app smoke",
     "GitHub recovery secrets",
   ]);
   assert.match(stdout, /Public API recovery status: production data API is serving real EOD smoke data/);
   assert.match(stdout, /Full app recovery status: not complete until authenticated scanner\/watchlist and signed-in browser smoke pass/);
+});
+
+await withServer(serveApiWithDegradedSupplemental, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
+  assert.equal(code, 0, `public recovery should pass while warning on degraded supplemental data:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /\[WARN] Supplemental refresh data/);
+  assert.match(stdout, /supplemental status is degraded/);
+  assert.match(stdout, /RS score: failed/);
+  assert.match(stdout, /yfinance: degraded \(42\/200 symbols, rate_limited=155\)/);
+  assert.match(stdout, /Inspect Daily NSE refresh logs before trusting RS-ranked scanner output/);
+});
+
+await withServer(serveApiWithoutSupplementalRuns, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    railwayReady: true,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin);
+  assert.equal(code, 0, `public recovery should pass while warning when recent runs lack supplemental metadata:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /\[WARN] Supplemental refresh data/);
+  assert.match(stdout, /No supplemental data trust metadata found in the latest 1 ingest run/);
+  assert.match(stdout, /Run the current Daily NSE refresh before treating RS\/yfinance coverage as verified/);
 });
 
 await withServer(serveHealthyApi, async (apiUrl) => {
@@ -252,6 +400,27 @@ await withServer(serveHealthyApi, async (apiUrl) => {
   assert.match(stdout, /Authenticated app smoke/);
   assert.match(stdout, /Production API check included authenticated scanner verification/);
   assert.match(stdout, /Full app recovery status: authenticated scanner verification passed; run the signed-in browser smoke before launch/);
+});
+
+await withServer(serveHealthyApi, async (apiUrl) => {
+  const fakeBin = makeFakeBin({
+    secrets: [...requiredSecrets, "PRODUCTION_API_BEARER_TOKEN"],
+    installRailway: false,
+    vercelEnv: {
+      NEXT_PUBLIC_API_URL: apiUrl,
+      NEXT_PUBLIC_DATA_MODE: "live",
+      NEXT_PUBLIC_ALLOW_MOCK_FALLBACK: "false",
+    },
+  });
+  const { code, stdout, stderr } = await runPreflight(apiUrl, fakeBin, {
+    PRODUCTION_API_BEARER_TOKEN: "production-smoke-token",
+    REQUIRE_AUTHENTICATED_SMOKE: "1",
+  });
+  assert.equal(code, 0, `strict preflight should not fail a recovered API because local Railway CLI is absent:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`);
+  assert.match(stdout, /\[WARN] Local Railway CLI/);
+  assert.match(stdout, /spawn .*railway ENOENT/);
+  assert.match(stdout, /Production API check included authenticated scanner verification/);
+  assert.equal(stderr, "");
 });
 
 await withServer(serveHealthyApi, async (apiUrl) => {
@@ -294,6 +463,7 @@ await withServer(serveRailwayFallback, async (apiUrl) => {
     "Production API data smoke",
     "Vercel production env",
     "Supabase EOD data",
+    "Supplemental refresh data",
     "Chart smoke config",
     "GitHub recovery secrets",
     "Railway recovery workflow",

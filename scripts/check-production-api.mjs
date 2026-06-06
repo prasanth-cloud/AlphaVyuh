@@ -27,6 +27,9 @@ const chartSmokeSymbols = String(process.env.PRODUCTION_API_CHART_SYMBOLS || "RE
   .split(",")
   .map((symbol) => symbol.trim().toUpperCase())
   .filter(Boolean);
+const fiveYearChartLimit = Number(process.env.PRODUCTION_API_5Y_CHART_LIMIT || 1300);
+const fiveYearMinCandles = Number(process.env.PRODUCTION_API_5Y_MIN_CANDLES || Math.floor(252 * 5 * 0.9));
+const fiveYearMinSpanDays = Number(process.env.PRODUCTION_API_5Y_MIN_SPAN_DAYS || (365 * 5 - 14));
 
 if (!apiBase) {
   console.log("Skipping production API check: PRODUCTION_API_URL or NEXT_PUBLIC_API_URL is not set.");
@@ -121,11 +124,71 @@ function daysBetween(start, end) {
   return Math.round((end.getTime() - start.getTime()) / 86_400_000);
 }
 
+function subtractYearsIso(value, years) {
+  const parsed = parseIsoDate(value);
+  assert(parsed, `Could not derive 5Y chart window from non-ISO date: ${value}`);
+  const next = new Date(parsed.getTime());
+  next.setUTCFullYear(next.getUTCFullYear() - years);
+  return next.toISOString().slice(0, 10);
+}
+
 function numberValue(...values) {
   for (const value of values) {
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }
+  return null;
+}
+
+function candleNumber(candle, field) {
+  return numberValue(candle?.[field]);
+}
+
+function candleSignature(candle) {
+  const values = [
+    candleNumber(candle, "open"),
+    candleNumber(candle, "high"),
+    candleNumber(candle, "low"),
+    candleNumber(candle, "close"),
+    candleNumber(candle, "volume"),
+  ];
+  if (values.some((value) => value === null)) return null;
+  return values.map((value) => Number(value).toFixed(4)).join("|");
+}
+
+function latestCandlePctChange(candles) {
+  const latest = candles.at(-1);
+  const previous = candles.at(-2);
+  const stored = numberValue(latest?.pct_change, latest?.pctChange, latest?.change_pct, latest?.changePct);
+  if (stored !== null) return stored;
+  const latestClose = candleNumber(latest, "close");
+  const previousClose = candleNumber(previous, "close");
+  if (latestClose === null || previousClose === null || previousClose === 0) return null;
+  return ((latestClose - previousClose) / previousClose) * 100;
+}
+
+function scannerSourceRows(scanner) {
+  return numberValue(
+    scanner?.query_rows,
+    scanner?.source_rows,
+    scanner?.source_metadata?.symbols_count,
+    scanner?.source_metadata?.symbolsCount,
+    scanner?.symbols_count,
+  );
+}
+
+function scannerQueryReduction(scanner) {
+  return numberValue(
+    scanner?.query_row_reduction_pct,
+    scanner?.source_metadata?.scanner_performance?.query_row_reduction_pct,
+  );
+}
+
+function scannerDbPrefilterCount(scanner) {
+  const topLevel = scanner?.db_prefilters_applied;
+  if (Array.isArray(topLevel)) return topLevel.length;
+  const metadata = scanner?.source_metadata?.scanner_performance?.db_prefilters_applied;
+  if (Array.isArray(metadata)) return metadata.length;
   return null;
 }
 
@@ -156,21 +219,51 @@ try {
   const totalStocks = numberValue(summary?.total_stocks, summary?.total, summary?.symbols_count);
   const advances = numberValue(summary?.advances);
   const declines = numberValue(summary?.declines);
+  const unchanged = numberValue(summary?.unchanged);
   assert(totalStocks !== null && totalStocks >= 1000, `Market summary stock count looked too low: ${totalStocks}.`);
   assert(
-    (advances ?? 0) + (declines ?? 0) > 0,
-    `Market summary did not include real breadth counts: advances=${advances}, declines=${declines}.`,
+    advances !== null && declines !== null && unchanged !== null,
+    `Market summary did not include full breadth counts: advances=${advances}, declines=${declines}, unchanged=${unchanged}.`,
+  );
+  assert(
+    advances > 0 && declines > 0,
+    `Market summary did not include a two-sided breadth distribution: advances=${advances}, declines=${declines}.`,
+  );
+  assert(
+    unchanged / totalStocks < 0.85 && (advances + declines) / totalStocks >= 0.08,
+    `Market summary breadth looked implausibly flat: advances=${advances}, declines=${declines}, unchanged=${unchanged}, total=${totalStocks}.`,
   );
 
   assert(chartSmokeSymbols.length > 0, "No chart smoke symbols configured.");
+  assert(Number.isFinite(fiveYearChartLimit) && fiveYearChartLimit >= fiveYearMinCandles, `5Y chart limit ${fiveYearChartLimit} is below the minimum candle contract ${fiveYearMinCandles}.`);
+  const fiveYearStartDate = subtractYearsIso(summaryDate, 5);
   const chartSummaries = [];
+  const latestPctChanges = [];
   for (const symbol of chartSmokeSymbols) {
-    const candles = await fetchJson(`/api/v1/charts/${encodeURIComponent(symbol)}/candles?timeframe=D&limit=500`);
+    const candlePath = `/api/v1/charts/${encodeURIComponent(symbol)}/candles?timeframe=D&from_date=${fiveYearStartDate}&to_date=${summaryDate}&limit=${fiveYearChartLimit}`;
+    const candles = await fetchJson(candlePath);
     assert(Array.isArray(candles?.candles), `${symbol} candles response did not include a candles array.`);
     assert(candles.candles.length > 0, `${symbol} candles response was empty.`);
+    assert(candles.coverage && typeof candles.coverage === "object", `${symbol} candles response did not include coverage metadata.`);
     assert(
-      candles.candles.length >= 120,
-      `${symbol} chart history was too shallow for watchlist/full-chart use: ${candles.candles.length} candles.`,
+      candles.timeframe === "D" || candles.coverage.timeframe === "D",
+      `${symbol} 5Y chart smoke must use daily candles; response timeframe=${candles.timeframe}, coverage timeframe=${candles.coverage.timeframe}.`,
+    );
+    assert(
+      candles.coverage.requested_from === fiveYearStartDate,
+      `${symbol} coverage requested_from ${candles.coverage.requested_from} did not match requested 5Y start ${fiveYearStartDate}.`,
+    );
+    assert(
+      candles.coverage.requested_to === summaryDate,
+      `${symbol} coverage requested_to ${candles.coverage.requested_to} did not match market summary date ${summaryDate}.`,
+    );
+    assert(
+      Number(candles.coverage.requested_limit) >= fiveYearMinCandles,
+      `${symbol} coverage requested_limit ${candles.coverage.requested_limit} is below the 5Y minimum ${fiveYearMinCandles}.`,
+    );
+    assert(
+      candles.candles.length >= fiveYearMinCandles,
+      `${symbol} daily 5Y chart history was too shallow: ${candles.candles.length} candles, expected at least ${fiveYearMinCandles}.`,
     );
     const latestCandleDate = candles.candles[candles.candles.length - 1]?.time || candles.coverage?.available_to;
     assert(latestCandleDate, `${symbol} candles response did not include a latest candle date.`);
@@ -182,15 +275,51 @@ try {
     assert(parsedLatestCandleDate, `Latest ${symbol} candle date was not ISO-like: ${latestCandleDate}`);
     const spanDays = daysBetween(parsedFirstCandleDate, parsedLatestCandleDate);
     assert(
-      spanDays >= 180,
-      `${symbol} chart history spans only ${spanDays} days; expected at least 180 days.`,
+      spanDays >= fiveYearMinSpanDays,
+      `${symbol} daily chart history spans only ${spanDays} days; expected at least ${fiveYearMinSpanDays} days for the 5Y launch contract.`,
+    );
+    const contract = candles.coverage.five_year_contract;
+    assert(contract && typeof contract === "object", `${symbol} coverage did not include five_year_contract metadata.`);
+    assert(Number(contract.years) === 5, `${symbol} five_year_contract years was ${contract.years}, expected 5.`);
+    assert(
+      Number(contract.minimum_calendar_days) >= fiveYearMinSpanDays,
+      `${symbol} five_year_contract minimum_calendar_days ${contract.minimum_calendar_days} is below configured minimum ${fiveYearMinSpanDays}.`,
+    );
+    assert(
+      Number(contract.minimum_daily_candles) >= fiveYearMinCandles,
+      `${symbol} five_year_contract minimum_daily_candles ${contract.minimum_daily_candles} is below configured minimum ${fiveYearMinCandles}.`,
+    );
+    const contractStatus = contract.status;
+    assert(
+      contractStatus === "met",
+      `${symbol} daily 5Y chart contract status was ${contractStatus}.`,
     );
     assertFreshDate(`Latest ${symbol} candle`, latestCandleDate, summaryDate);
-    chartSummaries.push(`${symbol} ${candles.candles.length} candles ${firstCandleDate}->${latestCandleDate}`);
+    const latest = candles.candles.at(-1);
+    const previous = candles.candles.at(-2);
+    if (previous) {
+      const latestSignature = candleSignature(latest);
+      const previousSignature = candleSignature(previous);
+      assert(
+        latestSignature && previousSignature && latestSignature !== previousSignature,
+        `${symbol} latest candle duplicates the previous session OHLCV/volume.`,
+      );
+      const pctChange = latestCandlePctChange(candles.candles);
+      assert(pctChange !== null, `${symbol} latest candle did not expose or allow pct_change calculation.`);
+      latestPctChanges.push({ symbol, pctChange });
+    }
+    chartSummaries.push(`${symbol} ${candles.candles.length} daily candles ${firstCandleDate}->${latestCandleDate}`);
   }
+  assert(
+    latestPctChanges.some((item) => Math.abs(item.pctChange) > 0.05),
+    `Latest smoke candle pct_change values looked implausibly flat: ${
+      latestPctChanges.map((item) => `${item.symbol}=${item.pctChange.toFixed(2)}%`).join(", ")
+    }.`,
+  );
 
   let scannerSummary = "scanner skipped (set PRODUCTION_API_BEARER_TOKEN to verify authenticated scanner data)";
   if (authToken) {
+    const scannerStarted = performance.now();
     const scanner = await fetchJson("/api/v1/scanner/run", {
       method: "POST",
       headers: { Authorization: `Bearer ${authToken}` },
@@ -203,13 +332,20 @@ try {
       },
       timeoutMs: 30_000,
     });
+    const scannerElapsedMs = Math.round(performance.now() - scannerStarted);
     assert(Array.isArray(scanner?.results), "Scanner response did not include a results array.");
     assert(scanner.results.length > 0, "Scanner returned no current EOD matches.");
     assert(numberValue(scanner?.total_matches) > 0, `Scanner total_matches looked empty: ${scanner?.total_matches}.`);
     const scannerDate = scanner?.trade_date || scanner?.as_of || scanner?.source_metadata?.as_of;
     assert(scannerDate, "Scanner response did not include trade/as-of date.");
     assertFreshDate("Scanner trade date", scannerDate, summaryDate);
-    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate}`;
+    const sourceRows = scannerSourceRows(scanner);
+    const sourceRowsCopy = sourceRows === null ? "unknown source rows" : `${sourceRows} source rows`;
+    const reduction = scannerQueryReduction(scanner);
+    const reductionCopy = reduction === null ? "" : `, ${reduction}% query reduction`;
+    const prefilterCount = scannerDbPrefilterCount(scanner);
+    const prefilterCopy = prefilterCount === null ? "" : `, ${prefilterCount} db prefilters`;
+    scannerSummary = `scanner ${scanner.results.length}/${scanner.total_matches} matches through ${scannerDate} in ${scannerElapsedMs}ms from ${sourceRowsCopy}${reductionCopy}${prefilterCopy}`;
   }
 
   console.log(

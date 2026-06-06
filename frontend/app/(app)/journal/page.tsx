@@ -11,7 +11,7 @@ import {
 import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
-import { fmtCcy, getTradeFlowMeta } from "./components/utils";
+import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
 import { TradeTable } from "./components/TradeTable";
 import { TradePanel } from "./components/TradePanel";
 import { JournalAnalytics as JournalAnalyticsTab } from "./components/JournalAnalytics";
@@ -35,7 +35,7 @@ const JOURNAL_IMPORT_RESULT_FAILED_MESSAGE = `Broker import result was unavailab
 export default function JournalPage() {
   const searchParams = useSearchParams();
   const { completeReview } = useWorkflowState();
-  const [tab, setTab] = useState<Tab>("trades");
+  const [tab, setTab] = useState<Tab>("queue");
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [journalPlan, setJournalPlan] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
@@ -87,9 +87,8 @@ export default function JournalPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const params = filterStatus === "all" ? {} : { status: filterStatus };
     const [entriesResult, statsResult] = await Promise.allSettled([
-      getJournalEntries(params),
+      getJournalEntries({}),
       getJournalStats(),
     ]);
 
@@ -121,14 +120,18 @@ export default function JournalPage() {
     }
 
     setLoading(false);
-  }, [filterStatus]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     const requestedTab = searchParams.get("tab");
-    if (requestedTab === "analytics" || requestedTab === "ai" || requestedTab === "trades") {
+    if (requestedTab === "queue" || requestedTab === "review") {
+      setTab("queue");
+    } else if (requestedTab === "analytics" || requestedTab === "ai" || requestedTab === "trades") {
       setTab(requestedTab);
+    } else {
+      setTab("queue");
     }
     const requestedSymbol = searchParams.get("symbol");
     setSymbolFocus(requestedSymbol?.toUpperCase() ?? "");
@@ -214,12 +217,14 @@ export default function JournalPage() {
     : null;
 
   const closedTradesFromRows = entries.filter(entry => entry.status === "closed").length;
-  const closedTrades = stats?.total_trades ?? (journalLoadError ? 0 : closedTradesFromRows);
+  const totalTrades = stats?.total_trades ?? (journalLoadError ? 0 : entries.length);
+  const closedTrades = journalLoadError ? 0 : closedTradesFromRows;
   const reviewedTrades = entries.filter(entry => entry.status === "closed" && Boolean(entry.lessons?.trim())).length;
   const reviewReady = closedTrades >= 3;
   const visibleEntries = useMemo(() => (
     entries.filter((entry) => {
       if (symbolFocus && entry.symbol !== symbolFocus) return false;
+      if (filterStatus !== "all" && entry.status !== filterStatus) return false;
       if (reviewFocus === "needs-review") {
         return entry.status === "closed" && !entry.lessons?.trim();
       }
@@ -228,7 +233,7 @@ export default function JournalPage() {
       }
       return true;
     })
-  ), [entries, reviewFocus, symbolFocus]);
+  ), [entries, filterStatus, reviewFocus, symbolFocus]);
   const journalQueue = useMemo(() => {
     const closed = entries.filter((entry) => entry.status === "closed");
     const needsReview = closed.filter((entry) => !entry.lessons?.trim()).length;
@@ -236,8 +241,25 @@ export default function JournalPage() {
     const imported = entries.filter((entry) => getTradeFlowMeta(entry).sourceLabel === "Broker import").length;
     const chartOrders = entries.filter((entry) => getTradeFlowMeta(entry).sourceLabel === "Chart order").length;
     const manual = entries.length - imported - chartOrders;
-    return { needsReview, reviewed, imported, chartOrders, manual };
+    const open = entries.filter((entry) => entry.status === "open").length;
+    return { needsReview, reviewed, imported, chartOrders, manual, open };
   }, [entries]);
+  const reviewStage = useMemo(() => (
+    getJournalReviewStage(entries, {
+      totalTrades,
+      closedTrades,
+      reviewedTrades,
+      needsReview: journalQueue.needsReview,
+      unavailable: Boolean(journalLoadError),
+    })
+  ), [closedTrades, entries, journalLoadError, journalQueue.needsReview, reviewedTrades, totalTrades]);
+  const decisionMemory = useMemo(() => (
+    getDecisionMemorySummary(entries, {
+      closedTrades,
+      reviewedTrades,
+      unavailable: Boolean(journalLoadError),
+    })
+  ), [closedTrades, entries, journalLoadError, reviewedTrades]);
   const handleAddTrade = async () => {
     if (!selectedSymbol || !addForm.entry_price || !addForm.quantity || !addForm.entry_date || !addForm.trade_type) {
       showToast("Fill in symbol, date, price and quantity"); return;
@@ -343,6 +365,74 @@ export default function JournalPage() {
     finally { setAiLoading(false); }
   };
 
+  const focusNeedsReview = () => {
+    setTab("queue");
+    setFilterStatus("closed");
+    setReviewFocus("needs-review");
+  };
+
+  const focusReviewedTrades = () => {
+    setTab("queue");
+    setFilterStatus("closed");
+    setReviewFocus("reviewed");
+  };
+
+  const openReviewAction = () => {
+    if (journalLoadError) {
+      void load();
+      refreshBrokerStatus();
+      return;
+    }
+    if (reviewStage.status === "empty") {
+      openAddPanel();
+      return;
+    }
+    if (reviewStage.status === "build-sample") {
+      setTab("queue");
+      setReviewFocus("all");
+      setFilterStatus("all");
+      if (journalQueue.open > 0) {
+        const firstOpen = entries.find((entry) => entry.status === "open");
+        if (firstOpen) openClosePanel(firstOpen);
+      } else {
+        openAddPanel();
+      }
+      return;
+    }
+    if (reviewStage.status === "needs-review") {
+      focusNeedsReview();
+      const next = entries.find((entry) => entry.status === "closed" && !entry.lessons?.trim());
+      if (next) {
+        setSelectedEntry(next);
+        setPanelMode("view");
+      }
+      return;
+    }
+    setTab("ai");
+  };
+
+  const openSecondaryReviewAction = () => {
+    if (reviewStage.status === "unavailable") {
+      window.location.href = "/data";
+      return;
+    }
+    if (reviewStage.status === "empty") {
+      void handleImportZerodha();
+      return;
+    }
+    if (reviewStage.status === "needs-review") {
+      focusReviewedTrades();
+      return;
+    }
+    if (reviewStage.status === "ready") {
+      setTab("analytics");
+      return;
+    }
+    setTab("queue");
+    setReviewFocus("all");
+    setFilterStatus("all");
+  };
+
   return (
     <div style={{ minHeight: "100%", background: "transparent", display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Toast */}
@@ -394,59 +484,134 @@ export default function JournalPage() {
       )}
 
       <div
-        className="workspace-card"
+        className="workspace-card journal-review-cockpit"
         data-testid="journal-review-queue"
-        style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}
+        style={{ padding: 16, display: "grid", gap: 16, alignItems: "stretch" }}
       >
-        <div style={{ minWidth: 240, flex: "1 1 320px" }}>
-          <EyebrowLabel>Review and improvement</EyebrowLabel>
-          <div className="mt-1 text-[14px] font-semibold" style={{ color: "var(--text-primary)" }}>
-            {journalLoadError
-              ? "Journal entries are temporarily unavailable"
-              : journalQueue.needsReview > 0
-              ? <><Num>{journalQueue.needsReview}</Num> closed {journalQueue.needsReview === 1 ? "trade needs" : "trades need"} review</>
-              : "No closed trades waiting for review"}
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 18 }}>
+          <div>
+            <EyebrowLabel>Review queue</EyebrowLabel>
+            <div className="mt-2 text-[24px] font-semibold leading-tight" style={{ color: "var(--text-primary)" }}>
+              {reviewStage.headline}
+            </div>
+            <div className="mt-2 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              {reviewStage.detail}
+            </div>
           </div>
-          <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
-            Broker imports, chart drafts, journal captures, and manual logs stay labeled so reviews can explain what happened and why.
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+            {[
+              { label: "Closed coverage", value: reviewStage.progressLabel, detail: `${reviewStage.progressPct}%`, tone: reviewStage.progressPct >= 70 ? "var(--gain)" : reviewStage.progressPct > 0 ? "var(--warn)" : "var(--text-secondary)" },
+              { label: "Needs review", value: String(journalQueue.needsReview), detail: journalQueue.needsReview === 1 ? "trade" : "trades", tone: journalQueue.needsReview > 0 ? "var(--warn)" : "var(--gain)" },
+              { label: "Open plans", value: String(journalQueue.open), detail: journalQueue.open === 1 ? "position" : "positions", tone: journalQueue.open > 0 ? "var(--accent)" : "var(--text-secondary)" },
+            ].map((item) => (
+              <div key={item.label} style={{ borderRadius: "var(--radius-md)", padding: "11px 12px", background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)", minWidth: 0 }}>
+                <div className="text-[11px] font-semibold" style={{ color: "var(--text-tertiary)" }}>{item.label}</div>
+                <div className="mt-1 text-[16px] font-semibold truncate" style={{ color: item.tone }}>{item.value}</div>
+                <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{item.detail}</div>
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 6 }}>
+              <div className="text-[11px] font-semibold" style={{ color: "var(--text-tertiary)" }}>Review unlock progress</div>
+              <Num className="text-[12px]" style={{ color: "var(--text-secondary)" }}>{reviewStage.progressPct}%</Num>
+            </div>
+            <div style={{ height: 7, borderRadius: 999, overflow: "hidden", background: "var(--surface-3)" }}>
+              <div
+                style={{
+                  width: `${reviewStage.progressPct}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  background: reviewStage.status === "ready" ? "var(--gain)" : reviewStage.status === "needs-review" ? "var(--warn)" : "var(--accent)",
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={openReviewAction}
+              className="workspace-chip-button"
+              style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)" }}
+            >
+              {reviewStage.primaryAction}
+            </button>
+            <button
+              type="button"
+              onClick={openSecondaryReviewAction}
+              disabled={reviewStage.status === "empty" && !brokerCanImport}
+              className="workspace-chip-button"
+              style={{
+                opacity: reviewStage.status === "empty" && !brokerCanImport ? 0.55 : 1,
+                cursor: reviewStage.status === "empty" && !brokerCanImport ? "not-allowed" : "pointer",
+              }}
+              title={reviewStage.status === "empty" && !brokerCanImport ? "Connect a read-only broker import before importing trades." : undefined}
+            >
+              {reviewStage.secondaryAction}
+            </button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setTab("trades");
-              setFilterStatus("closed");
-              setReviewFocus("needs-review");
-            }}
-            className="rounded-[8px] px-3 py-2 text-left"
-            style={{
-              background: journalQueue.needsReview > 0 ? "rgba(217,119,6,0.12)" : "rgba(244,247,251,0.04)",
-              border: "1px solid var(--border-subtle)",
-              color: journalQueue.needsReview > 0 ? "var(--warn)" : "var(--text-secondary)",
-              cursor: "pointer",
-              minWidth: 112,
-            }}
+
+        <div className="flex flex-col gap-3" style={{ minWidth: 0 }}>
+          <div
+            className="rounded-[8px] p-3"
+            data-testid="journal-decision-memory"
+            style={{ background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)" }}
           >
-            <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>Next action</div>
-            <div className="text-[12px] font-semibold">{journalQueue.needsReview > 0 ? "Review now" : "Log next trade"}</div>
-          </button>
-          {[
-            { label: "Needs review", value: journalQueue.needsReview, color: "var(--warn)" },
-            { label: "Reviewed", value: journalQueue.reviewed, color: "var(--gain)" },
-            { label: "Broker import", value: journalQueue.imported, color: "var(--accent)" },
-            { label: "Chart/sim", value: journalQueue.chartOrders, color: "var(--text-secondary)" },
-            { label: "Manual", value: Math.max(0, journalQueue.manual), color: "var(--text-tertiary)" },
-          ].map(({ label, value, color }) => (
-            <div
-              key={label}
-              className="rounded-[8px] px-3 py-2"
-              style={{ background: "rgba(244,247,251,0.05)", border: "1px solid var(--border-subtle)", minWidth: 92 }}
-            >
-              <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</div>
-              <Num className="text-[16px] font-semibold" style={{ color }}>{value}</Num>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] font-semibold uppercase" style={{ color: "var(--text-tertiary)", letterSpacing: 0 }}>
+                  Decision memory
+                </div>
+                <div className="mt-1 text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {decisionMemory.headline}
+                </div>
+              </div>
+              <div className="text-right">
+                <Num className="text-[18px] font-semibold" style={{ color: decisionMemory.status === "ready" ? "var(--gain)" : "var(--accent)" }}>
+                  {decisionMemory.coveragePct}%
+                </Num>
+                <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>reviewed</div>
+              </div>
             </div>
-          ))}
+            <div className="mt-2 text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+              {decisionMemory.nextAction}
+            </div>
+            <div className="mt-2 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <Num>{decisionMemory.decisionContextCount}</Num>/<Num>{decisionMemory.closedTrades}</Num> closed trades include scanner, chart, watchlist, or broker context.
+            </div>
+          </div>
+          <div
+            className="rounded-[8px] p-3"
+            data-testid="journal-process-change"
+            style={{ background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)" }}
+          >
+            <div className="text-[11px] font-semibold" style={{ color: "var(--text-tertiary)" }}>What changed in my process</div>
+            <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-primary)" }}>
+              {reviewStage.processChange}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { label: "Needs review", value: journalQueue.needsReview, color: "var(--warn)" },
+              { label: "Reviewed", value: journalQueue.reviewed, color: "var(--gain)" },
+              { label: "Broker import", value: journalQueue.imported, color: "var(--accent)" },
+              { label: "Chart/sim", value: journalQueue.chartOrders, color: "var(--text-secondary)" },
+              { label: "Manual", value: Math.max(0, journalQueue.manual), color: "var(--text-tertiary)" },
+            ].map(({ label, value, color }) => (
+              <div
+                key={label}
+                className="rounded-[8px] px-3 py-2"
+                style={{ background: "rgba(244,247,251,0.05)", border: "1px solid var(--border-subtle)", minWidth: 92 }}
+              >
+                <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</div>
+                <Num className="text-[16px] font-semibold" style={{ color }}>{value}</Num>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -454,13 +619,18 @@ export default function JournalPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
         <StatCard label="Total P&L" value={stats ? fmtCcy(stats.total_pnl) : journalStatsError ? "Unavailable" : "—"} deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"} />
         <StatCard label="Win rate" value={stats ? `${stats.win_rate}%` : journalStatsError ? "Unavailable" : "—"} deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"} />
-        <StatCard label="Closed trades" value={String(stats?.total_trades ?? "—")} />
-        <StatCard label="Open trades" value={String(stats?.open_trades ?? "—")} />
+        <StatCard label="Closed trades" value={journalLoadError ? "—" : String(closedTrades)} />
+        <StatCard label="Open trades" value={journalLoadError ? "—" : String(stats?.open_trades ?? journalQueue.open)} />
       </div>
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {([{ id: "trades", label: "Trades" }, { id: "analytics", label: "Analytics" }, { id: "ai", label: "Trade review" }] as { id: Tab; label: string }[]).map(({ id, label }) => (
+        {([
+          { id: "queue", label: "Review queue" },
+          { id: "ai", label: "Trade review" },
+          { id: "analytics", label: "Analytics" },
+          { id: "trades", label: "Trades" },
+        ] as { id: Tab; label: string }[]).map(({ id, label }) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer",
             color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
@@ -493,9 +663,9 @@ export default function JournalPage() {
         />
       )}
 
-      {/* ── Trades tab ── */}
-      {tab === "trades" && (
-        <div style={{ display: "flex", gap: 20 }}>
+      {/* ── Review queue / Trades tab ── */}
+      {(tab === "queue" || tab === "trades") && (
+        <div className="journal-trades-layout">
           <TradeTable
             entries={visibleEntries}
             loading={loading}

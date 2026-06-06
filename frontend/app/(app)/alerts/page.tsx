@@ -13,6 +13,8 @@ import {
   type ScanAlertMatch,
 } from "@/lib/api";
 import { DataProvenanceBadge, DataTable, DataTableHead, EmptyState, Num, Td, Th, Tr } from "@/components/ui";
+import { buildScanAlertDigests } from "@/lib/scan-alert-digest";
+import { describeScanAlertCadence, describeScanAlertIntent, type ScanAlertIntent } from "@/lib/scan-alert-semantics";
 
 function topSymbols(match: ScanAlertMatch) {
   return match.symbols.slice(0, 6);
@@ -23,6 +25,12 @@ function runStatusLabel(status?: string) {
   if (status === "skipped") return "Skipped";
   if (status === "success") return "Checked";
   return "Waiting";
+}
+
+function intentColor(tone: ScanAlertIntent["tone"]) {
+  if (tone === "entry") return "var(--gain)";
+  if (tone === "exit") return "var(--loss)";
+  return "var(--accent)";
 }
 
 export default function AlertsPage() {
@@ -74,6 +82,7 @@ export default function AlertsPage() {
   const latestRunDate = useMemo(() => {
     return matches.map((match) => match.run_date).sort().at(-1) ?? null;
   }, [matches]);
+  const digests = useMemo(() => buildScanAlertDigests(matches), [matches]);
 
   async function toggleAlert(alert: ScanAlert) {
     try {
@@ -105,7 +114,7 @@ export default function AlertsPage() {
           <div className="label" style={{ marginBottom: 8 }}>Alerts</div>
           <h1 className="heading-card" style={{ fontSize: 24, marginBottom: 6 }}>Scan matches</h1>
           <p className="workspace-card-copy" style={{ maxWidth: 760 }}>
-            Review saved scans after the latest market session is loaded. AlphaVyuh shows matched names for review; execution stays outside AlphaVyuh.
+            Review saved entry and exit screens after the latest cash-equity EOD session is loaded. AlphaVyuh shows matched names for review; execution stays outside AlphaVyuh.
           </p>
         </div>
         <div className="workspace-toolbar-group">
@@ -177,16 +186,27 @@ export default function AlertsPage() {
               <Th width={210}>Controls</Th>
             </DataTableHead>
             <tbody>
-              {alerts.map((alert) => (
-                <Tr key={alert.id}>
-                  <Td emphasized>
-                    <div className="mono" style={{ fontSize: 13, color: "var(--text-primary)" }}>{alert.name}</div>
-                    <div className="caption">{alert.sort_by} · {alert.sort_order}</div>
-                  </Td>
+              {alerts.map((alert) => {
+                const intent = describeScanAlertIntent(alert.filters);
+                return (
+                  <Tr key={alert.id}>
+                    <Td emphasized>
+                      <div className="mono" style={{ fontSize: 13, color: "var(--text-primary)" }}>{alert.name}</div>
+                      <div className="caption">{alert.sort_by} · {alert.sort_order}</div>
+                      <div className="workspace-pill" style={{ marginTop: 8, color: intentColor(intent.tone) }}>
+                        {intent.label}
+                      </div>
+                      <div className="caption" style={{ marginTop: 6, lineHeight: 1.45 }}>
+                        {intent.detail}
+                      </div>
+                    </Td>
                   <Td>
                     <span className="workspace-pill" style={{ color: alert.is_active ? "var(--gain)" : "var(--text-tertiary)" }}>
                       {alert.is_active ? "Active" : "Paused"}
                     </span>
+                    <div className="caption" style={{ marginTop: 6, lineHeight: 1.45 }}>
+                      {describeScanAlertCadence(alert)}
+                    </div>
                     {alert.last_run_status && alert.last_run_status !== "waiting" && (
                       <div className="caption" style={{ marginTop: 6 }}>
                         Last check: {runStatusLabel(alert.last_run_status)}
@@ -212,8 +232,9 @@ export default function AlertsPage() {
                       </button>
                     </div>
                   </Td>
-                </Tr>
-              ))}
+                  </Tr>
+                );
+              })}
             </tbody>
           </DataTable>
         )}
@@ -245,7 +266,9 @@ export default function AlertsPage() {
           </div>
         ) : (
           <div style={{ display: "grid", gap: 10, padding: 16 }}>
-            {matches.map((match) => (
+            {digests.map((digest) => {
+              const match = digest.current;
+              return (
               <div
                 key={`${match.alert_id}-${match.run_date}`}
                 className="workspace-card-muted"
@@ -259,6 +282,9 @@ export default function AlertsPage() {
                         ? `${runStatusLabel(match.run_status)} on ${match.run_date}`
                         : <><Num>{match.match_count.toLocaleString("en-IN")}</Num> stocks matched on {match.run_date}</>}
                     </div>
+                    <div className="caption" style={{ marginTop: 5, color: "var(--text-secondary)" }}>
+                      {digest.summary}
+                    </div>
                     {match.error_message && (
                       <div className="workspace-card-copy" style={{ marginTop: 5, color: "var(--warning)" }}>
                         {match.error_message}
@@ -267,6 +293,43 @@ export default function AlertsPage() {
                   </div>
                   <DataProvenanceBadge kind="eod" asOf={match.run_date} compact />
                 </div>
+                {(digest.entered.length > 0 || digest.continuing.length > 0 || digest.exited.length > 0) && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 8, marginBottom: 12 }}>
+                    <div>
+                      <div className="label" style={{ marginBottom: 6, color: "var(--gain)" }}>Entered</div>
+                      <div className="workspace-pill-row">
+                        {digest.entered.slice(0, 5).map((symbol) => (
+                          <Link key={symbol.symbol} className="workspace-pill" href={`/charts/${symbol.symbol}`}>
+                            <span className="mono" style={{ color: "var(--text-primary)" }}>{symbol.symbol}</span>
+                          </Link>
+                        ))}
+                        {digest.entered.length === 0 && <span className="caption">No new names</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="label" style={{ marginBottom: 6, color: "var(--accent)" }}>Still matching</div>
+                      <div className="workspace-pill-row">
+                        {digest.continuing.slice(0, 5).map((symbol) => (
+                          <Link key={symbol.symbol} className="workspace-pill" href={`/charts/${symbol.symbol}`}>
+                            <span className="mono" style={{ color: "var(--text-primary)" }}>{symbol.symbol}</span>
+                          </Link>
+                        ))}
+                        {digest.continuing.length === 0 && <span className="caption">First run or no repeats</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="label" style={{ marginBottom: 6, color: "var(--warn)" }}>Exited</div>
+                      <div className="workspace-pill-row">
+                        {digest.exited.slice(0, 5).map((symbol) => (
+                          <span key={symbol} className="workspace-pill">
+                            <span className="mono" style={{ color: "var(--text-secondary)" }}>{symbol}</span>
+                          </span>
+                        ))}
+                        {digest.exited.length === 0 && <span className="caption">No exits</span>}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="workspace-pill-row">
                   {topSymbols(match).map((symbol) => (
                     <div
@@ -322,7 +385,8 @@ export default function AlertsPage() {
                   </Link>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

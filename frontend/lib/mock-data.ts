@@ -16,6 +16,7 @@ import type {
   ScanResponse,
   ScanResult,
   SectorBreadthItem,
+  SectorTaxonomyMetadata,
   SymbolSearchResult,
   Watchlist,
 } from "./api/types";
@@ -206,7 +207,75 @@ export function mockMarketMovers(): MarketMovers {
   };
 }
 
-export function mockSectorBreadth(): { trade_date: string; sectors: SectorBreadthItem[] } {
+function mockSectorTaxonomyMetadata(): SectorTaxonomyMetadata {
+  const sectors = Array.from(new Set(MOCK_STOCKS.map(stock => stock.sector).filter((sector): sector is string => Boolean(sector)))).sort();
+  return {
+    source: "stock_universe.sector",
+    taxonomy_status: "unverified",
+    taxonomy_status_reason: "Mock sector fixtures are workflow QA data, not audited NSE taxonomy evidence.",
+    contract_as_of: "2026-05-30",
+    active_count: MOCK_STOCKS.length,
+    active_count_scope: "mock_active_universe",
+    classified_count: MOCK_STOCKS.length,
+    unmapped_count: 0,
+    unmapped_symbols: [],
+    unmapped_symbols_truncated: false,
+    sector_count: sectors.length,
+    sector_counts: sectors.map(sector => ({
+      sector,
+      active_count: MOCK_STOCKS.filter(stock => stock.sector === sector).length,
+      aliases: [],
+      related_sectoral_indices: [],
+      hidden_by_filter: false,
+    })),
+    reference_coverage: {
+      matched_sector_count: 0,
+      unmatched_sector_count: sectors.length,
+      unmatched_sectors: sectors,
+      description: "Mock sector labels are not NSE sectoral-index audit evidence.",
+    },
+    display_filter: {
+      minimum_active_symbols: 1,
+      hidden_sector_count: 0,
+      description: "All mapped sectors are shown.",
+    },
+    reference: {
+      name: "NSE sectoral indices",
+      url: "https://www.nseindia.com/static/products-services/indices-sectoral",
+      as_of: "2026-03-02",
+      relationship: "reference_only_not_equity_universe_source",
+    },
+    universe_taxonomy: {
+      name: "AlphaVyuh equity universe sectors",
+      source: "stock_universe.sector",
+      relationship: "mock fixtures for workflow QA, not NSE taxonomy evidence",
+    },
+    alias_policy: {
+      source: "NSE sectoral index aliases",
+      description: "Mock sector fixtures do not provide audited NSE aliases.",
+    },
+    audit_scope: {
+      sector_labels: {
+        source: "stock_universe.sector",
+        status: "not_audited",
+        description: "Mock sector labels exercise UI flow only; they are not audited NSE taxonomy evidence.",
+      },
+      sectoral_index_reference: {
+        source: "NSE sectoral indices",
+        status: "reference_only",
+        description: "Mock sector labels are not NSE sectoral-index audit evidence.",
+      },
+      industry_taxonomy: {
+        source: "NSE industry classification",
+        status: "not_audited",
+        description: "Mock fixtures do not audit NSE industry-level classification.",
+      },
+    },
+    sectoral_indices: [],
+  };
+}
+
+export function mockSectorBreadth(): { trade_date: string; sectors: SectorBreadthItem[]; metadata: SectorTaxonomyMetadata } {
   return {
     trade_date: TRADE_DATE,
     sectors: [
@@ -214,6 +283,7 @@ export function mockSectorBreadth(): { trade_date: string; sectors: SectorBreadt
       { sector: "Banks", total: 96, advances: 51, declines: 41, unchanged: 4, ad_ratio: 1.24, above_ema200_pct: 59 },
       { sector: "Chemicals", total: 142, advances: 88, declines: 47, unchanged: 7, ad_ratio: 1.87, above_ema200_pct: 64 },
     ],
+    metadata: mockSectorTaxonomyMetadata(),
   };
 }
 
@@ -444,6 +514,13 @@ export function mockScanAlertMatches(): ScanAlertMatch[] {
     volume_ratio: stock.volume_ratio,
     rsi_14: stock.rsi_14,
   }));
+  const previousSymbols = MOCK_STOCKS.slice(0, 6).map((stock) => ({
+    symbol: stock.symbol,
+    close: stock.close,
+    pct_change: stock.pct_change,
+    volume_ratio: stock.volume_ratio,
+    rsi_14: stock.rsi_14,
+  }));
   return [
     {
       id: "sam1",
@@ -451,6 +528,16 @@ export function mockScanAlertMatches(): ScanAlertMatch[] {
       run_date: TRADE_DATE,
       symbols,
       match_count: symbols.length,
+      run_status: "success",
+      error_message: null,
+      scan_alerts: { name: "Trend Template" },
+    },
+    {
+      id: "sam1-prev",
+      alert_id: "sa1",
+      run_date: "2026-04-23",
+      symbols: previousSymbols,
+      match_count: previousSymbols.length,
       run_status: "success",
       error_message: null,
       scan_alerts: { name: "Trend Template" },

@@ -23,6 +23,7 @@ from app.services.market_breadth_snapshot import (
 )
 from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
+from app.services.sector_taxonomy import NSE_SECTORAL_INDEXES, build_sector_taxonomy_metadata
 from app.services.supabase import get_admin_client
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
@@ -31,20 +32,7 @@ OVERVIEW_CACHE_TTL_SECONDS = 300
 _overview_cache: dict | None = None
 _overview_cache_expires_at = 0.0
 
-SECTOR_INDEXES = [
-    ("NIFTY IT", "IT"),
-    ("NIFTY BANK", "Banks"),
-    ("NIFTY PHARMA", "Pharma"),
-    ("NIFTY AUTO", "Auto"),
-    ("NIFTY FMCG", "FMCG"),
-    ("NIFTY METAL", "Metal"),
-    ("NIFTY REALTY", "Realty"),
-    ("NIFTY ENERGY", "Energy"),
-    ("NIFTY PSU BANK", "PSU banks"),
-    ("NIFTY PVT BANK", "Private banks"),
-    ("NIFTY FIN SERVICE", "Financial services"),
-    ("NIFTY OIL AND GAS", "Oil and gas"),
-]
+SECTOR_INDEXES = [(index["symbol"], index["label"]) for index in NSE_SECTORAL_INDEXES]
 
 
 def _sse(event: str, payload: dict) -> str:
@@ -88,6 +76,7 @@ def _empty_overview(latest_date, indices: list[dict], quote_source: str, indices
         "sector_breadth": [],
         "sector_breadth_basis": "latest_complete_session",
         "sector_breadth_source": "daily_ohlcv",
+        "sector_taxonomy": build_sector_taxonomy_metadata([], active_count=0, hidden_min_active_symbols=1),
         "top_sectors": [],
         "top_gainers": [],
         "top_losers": [],

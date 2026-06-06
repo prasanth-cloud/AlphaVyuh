@@ -33,29 +33,7 @@ export default function LandingPage() {
   }
 
   useEffect(() => {
-    // Custom cursor
-    const cursor = document.getElementById("lp-cursor");
-    const ring = document.getElementById("lp-ring");
-    if (!cursor || !ring) return;
-    let mx = 0, my = 0, rx = 0, ry = 0;
-    const onMove = (e: MouseEvent) => {
-      mx = e.clientX; my = e.clientY;
-      // Arrow tip is top-left of element — no centering offset
-      cursor.style.left = mx + "px"; cursor.style.top = my + "px";
-    };
-    document.addEventListener("mousemove", onMove);
-    let raf: number;
-    const animRing = () => {
-      rx += (mx - rx) * 0.10; ry += (my - ry) * 0.10;
-      // Ring centers on arrow tip
-      ring.style.left = rx + "px"; ring.style.top = ry + "px";
-      raf = requestAnimationFrame(animRing);
-    };
-    animRing();
-    const hoverEls = document.querySelectorAll("a,button,.lp-tab-btn,.lp-faq-q,.lp-tilt");
-    const addH = () => { cursor.classList.add("lp-ch"); ring.classList.add("lp-rh"); };
-    const rmH = () => { cursor.classList.remove("lp-ch"); ring.classList.remove("lp-rh"); };
-    hoverEls.forEach(el => { el.addEventListener("mouseenter", addH); el.addEventListener("mouseleave", rmH); });
+    const cleanups: Array<() => void> = [];
 
     // Nav scroll
     const nav = document.getElementById("lp-nav");
@@ -76,7 +54,7 @@ export default function LandingPage() {
       scanData.forEach((d, i) => {
         const row = document.createElement("div");
         row.className = "lp-srow";
-        row.style.animationDelay = (i * 0.15 + 0.6) + "s";
+        row.style.animationDelay = (i * 0.06) + "s";
         row.innerHTML = `<div><div class="lp-sym">${d.sym}</div><div class="lp-sym-sub">${d.sub}</div></div><div><span class="lp-tag ${d.tagCls}">${d.tag}</span></div><div class="lp-pval">${d.price}</div><div class="lp-rs-mini"><div class="lp-rs-track"><div class="lp-rs-fill" style="width:${d.rs}%"></div></div><span class="lp-rs-num">${d.rs}</span></div>`;
         rc.appendChild(row);
       });
@@ -101,6 +79,7 @@ export default function LandingPage() {
     ];
     const tape = tapeRef.current;
     if (tape) {
+      tape.innerHTML = "";
       [...tickers, ...tickers].forEach(t => {
         const el = document.createElement("div");
         el.className = "lp-tape-item";
@@ -113,7 +92,7 @@ export default function LandingPage() {
     function animateCounter(el: HTMLElement) {
       const target = +(el.dataset.target || 0);
       const suffix = el.dataset.suffix || "";
-      const dur = 1800, start = performance.now();
+      const dur = 900, start = performance.now();
       const step = (now: number) => {
         const p = Math.min((now - start) / dur, 1);
         const ease = 1 - Math.pow(1 - p, 3);
@@ -166,7 +145,7 @@ export default function LandingPage() {
 
     // Tabs
     const tabsHeader = document.getElementById("lp-tabs-header");
-    tabsHeader?.addEventListener("click", (e) => {
+    const onTabClick = (e: Event) => {
       const btn = (e.target as HTMLElement).closest(".lp-tab-btn") as HTMLElement;
       if (!btn) return;
       document.querySelectorAll(".lp-tab-btn").forEach(b => b.classList.remove("lp-tab-active"));
@@ -174,23 +153,27 @@ export default function LandingPage() {
       btn.classList.add("lp-tab-active");
       const panel = document.getElementById("lp-tab-" + btn.dataset.tab);
       if (panel) panel.classList.add("lp-tab-active");
-    });
+    };
+    tabsHeader?.addEventListener("click", onTabClick);
+    if (tabsHeader) cleanups.push(() => tabsHeader.removeEventListener("click", onTabClick));
 
     // FAQ
     document.querySelectorAll(".lp-faq-q").forEach(q => {
-      q.addEventListener("click", () => {
+      const onFaqClick = () => {
         const item = (q as HTMLElement).parentElement!;
         const wasOpen = item.classList.contains("lp-faq-open");
         document.querySelectorAll(".lp-faq-item").forEach(i => i.classList.remove("lp-faq-open"));
         if (!wasOpen) item.classList.add("lp-faq-open");
-      });
+      };
+      q.addEventListener("click", onFaqClick);
+      cleanups.push(() => q.removeEventListener("click", onFaqClick));
     });
 
     // Pricing toggle
     const ptToggle = document.getElementById("lp-billing") as HTMLInputElement;
     const ptM = document.getElementById("lp-ptm");
     const ptA = document.getElementById("lp-pta");
-    ptToggle?.addEventListener("change", () => {
+    const onPricingToggle = () => {
       const annual = ptToggle.checked;
       ptM?.classList.toggle("lp-pt-active", !annual);
       ptA?.classList.toggle("lp-pt-active", annual);
@@ -202,19 +185,27 @@ export default function LandingPage() {
       if (pElite) pElite.textContent = annual ? "3,499" : "4,999";
       if (pProOld) pProOld.style.display = annual ? "" : "none";
       if (pEliteOld) pEliteOld.style.display = annual ? "" : "none";
-    });
+    };
+    ptToggle?.addEventListener("change", onPricingToggle);
+    if (ptToggle) cleanups.push(() => ptToggle.removeEventListener("change", onPricingToggle));
 
     // 3D tilt
     document.querySelectorAll(".lp-tilt").forEach(card => {
-      card.addEventListener("mousemove", (ev) => {
+      const onTiltMove = (ev: Event) => {
         const e = ev as MouseEvent;
         const r = (card as HTMLElement).getBoundingClientRect();
         const x = ((e.clientX - r.left) / r.width - 0.5) * 14;
         const y = ((e.clientY - r.top) / r.height - 0.5) * -14;
         (card as HTMLElement).style.transform = `perspective(600px) rotateY(${x}deg) rotateX(${y}deg) scale(1.02)`;
-      });
-      card.addEventListener("mouseleave", () => {
+      };
+      const onTiltLeave = () => {
         (card as HTMLElement).style.transform = "perspective(600px) rotateX(0) rotateY(0) scale(1)";
+      };
+      card.addEventListener("mousemove", onTiltMove);
+      card.addEventListener("mouseleave", onTiltLeave);
+      cleanups.push(() => {
+        card.removeEventListener("mousemove", onTiltMove);
+        card.removeEventListener("mouseleave", onTiltLeave);
       });
     });
 
@@ -249,9 +240,8 @@ export default function LandingPage() {
     }, 2200);
 
     return () => {
-      document.removeEventListener("mousemove", onMove);
       window.removeEventListener("scroll", onScroll);
-      cancelAnimationFrame(raf);
+      cleanups.forEach(cleanup => cleanup());
       clearInterval(rowInterval);
       clearInterval(afInterval);
       io.disconnect();
@@ -261,8 +251,6 @@ export default function LandingPage() {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
-      <div id="lp-cursor"></div>
-      <div id="lp-ring"></div>
 
       {/* NAV */}
       <nav id="lp-nav">
@@ -294,8 +282,6 @@ export default function LandingPage() {
 
       {/* HERO */}
       <section id="lp-hero">
-        <div className="lp-orb1"></div>
-        <div className="lp-orb2"></div>
         <div className="lp-grid-overlay"></div>
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
@@ -303,10 +289,9 @@ export default function LandingPage() {
               <div className="lp-live-pill"><div className="lp-pulse"></div>Account access · EOD market data</div>
             </div>
             <h1 className="lp-h1">
-              <span className="lp-h1-s1">A focused workflow system for Indian equities.</span>
-              <span className="lp-h1-s2"><span className="lp-h1-muted">A simpler desk for Indian equities.</span></span>
+              <span className="lp-h1-s1">AlphaVyuh</span>
             </h1>
-            <p className="lp-sub">A structured workflow system for scanning markets, building watchlists, planning charts, and journaling trades.</p>
+            <p className="lp-sub">A calmer trading workflow for Indian cash-equity traders: review today, plan the active queue, discover fresh setups, and close the loop in Journal.</p>
             <div className="lp-ctas">
               <Link href="/signup" className="lp-btn-primary">Request access →</Link>
               <a href="#features" className="lp-btn-secondary">
@@ -314,17 +299,11 @@ export default function LandingPage() {
                 See it in action
               </a>
             </div>
-            <div className="lp-proof">
-              <div className="lp-avs">
-                <div className="lp-av" style={{background:"#2D3A2D"}}>RK</div>
-                <div className="lp-av" style={{background:"#2A2D3E"}}>AP</div>
-                <div className="lp-av" style={{background:"#3A2A2A"}}>SM</div>
-                <div className="lp-av" style={{background:"#2A3A38"}}>VR</div>
-              </div>
-              <div>
-                <div className="lp-proof-copy"><strong>Workflow platform</strong> for serious Indian market routines</div>
-                <div className="lp-stars">Scanner · Watchlist · Charts · Journal</div>
-              </div>
+            <div className="lp-trust-row" aria-label="Product scope">
+              <span>EOD market data</span>
+              <span>NSE/BSE cash equity</span>
+              <span>No trade calls</span>
+              <span>Broker import only</span>
             </div>
           </div>
 
@@ -368,10 +347,34 @@ export default function LandingPage() {
       <section id="lp-stats">
         <div className="lp-wrap">
           <div className="lp-stats-grid">
-            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Core screens</div><div className="lp-stat-sub">scanner, watchlist, charts, journal</div></div>
+            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Workflow surfaces</div><div className="lp-stat-sub">Today, journal, watchlist, scanner</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">Symbols tracked</div><div className="lp-stat-sub">latest market snapshot</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="20" data-suffix="+">0</div><div className="lp-stat-label">Scanner filters</div><div className="lp-stat-sub">momentum, volume, RS, trend</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected desk</div><div className="lp-stat-sub">from signal to review</div></div>
+          </div>
+        </div>
+      </section>
+
+      {/* HOW */}
+      <section id="how" style={{padding:"88px 0 96px",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)",borderBottom:"1px solid var(--lp-border)"}}>
+        <div className="lp-wrap" style={{textAlign:"center"}}>
+          <span className="lp-sec-label">Daily loop</span>
+          <h2 className="lp-sec-title">A routine the trader can repeat.</h2>
+          <p className="lp-sec-sub" style={{margin:"0 auto"}}>AlphaVyuh is shaped around one desk flow: decide what needs review, keep context attached, and close the loop after the trade.</p>
+          <div className="lp-steps">
+            {[
+              ["Today", "See review due, active plans, watchlist focus, and data health first."],
+              ["Journal", "Review closed trades and process changes before chasing new setups."],
+              ["Watchlist", "Prioritize symbols already under review with notes and chart context."],
+              ["Scanner", "Discover fresh candidates only when the desk needs new ideas."],
+              ["Chart to Review", "Plan levels, record the thesis, then send context back to the desk."],
+            ].map(([title, body], index) => (
+              <div key={title} className="lp-step" style={{transitionDelay:`${index * 0.08}s`}}>
+                <div className="lp-step-num">{index + 1}</div>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -383,7 +386,7 @@ export default function LandingPage() {
           <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>The AlphaVyuh focus</h2>
           <p className="lp-sec-sub" style={{marginBottom:"40px"}}>Four surfaces. One routine. No feature maze.</p>
           <div className="lp-tabs-wrap" id="lp-tabs-header">
-            {["scanner","watchlist","charts","journal"].map((t,i) => (
+            {["journal","watchlist","scanner","charts"].map((t,i) => (
               <button key={t} className={"lp-tab-btn"+(i===0?" lp-tab-active":"")} data-tab={t}>
                 {t.charAt(0).toUpperCase()+t.slice(1)}
               </button>
@@ -391,7 +394,7 @@ export default function LandingPage() {
           </div>
 
           {/* Scanner */}
-          <div className="lp-tab-panel lp-tab-active" id="lp-tab-scanner">
+          <div className="lp-tab-panel" id="lp-tab-scanner">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Scanner</span>
               <h3 className="lp-tp-h">A scanner for cleaner shortlists</h3>
@@ -480,7 +483,7 @@ export default function LandingPage() {
           </div>
 
           {/* Journal */}
-          <div className="lp-tab-panel" id="lp-tab-journal">
+          <div className="lp-tab-panel lp-tab-active" id="lp-tab-journal">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Journal</span>
               <h3 className="lp-tp-h">A review layer for closed trades</h3>
@@ -507,11 +510,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* SOCIAL */}
+      {/* DESK ACTIVITY */}
       <section id="lp-social" style={{padding:"80px 0",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)",borderBottom:"1px solid var(--lp-border)"}}>
         <div className="lp-wrap" style={{textAlign:"center"}}>
-          <span className="lp-sec-label">Community</span>
-          <h2 className="lp-sec-title">A trading desk that feels alive</h2>
+          <span className="lp-sec-label">Desk activity</span>
+          <h2 className="lp-sec-title">Signals should carry context.</h2>
           <div className="lp-af">
             {[
               {av:"SC",bg:"#2D3A2D",t:<><strong>Scanner</strong> found <span className="lp-hl">VCP Momentum matches</span> for chart review</>,time:"scan"},
@@ -529,11 +532,11 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* TESTIMONIALS */}
-      <section id="testimonials" style={{padding:"100px 0"}}>
+      {/* WORKFLOW EXAMPLES */}
+      <section id="workflow-examples" style={{padding:"100px 0"}}>
         <div className="lp-wrap" style={{textAlign:"center"}}>
-          <span className="lp-sec-label">Reviews</span>
-          <h2 className="lp-sec-title">What the workflow is built to improve</h2>
+          <span className="lp-sec-label">Workflow examples</span>
+          <h2 className="lp-sec-title">Where AlphaVyuh should save time.</h2>
           <div className="lp-tgrid">
             {[
               {av:"SC",bg:"#2D3A2D",c:"var(--gain)",n:"Scanner to watchlist",r:"Discovery workflow",ret:"Less tab switching",q:"The product is designed so a scan result can become a focused watchlist candidate, then move straight into chart review without losing setup context."},
@@ -541,11 +544,11 @@ export default function LandingPage() {
               {av:"JR",bg:"#2A3A38",c:"var(--accent)",n:"Journal to review",r:"Learning workflow",ret:"Mistakes become visible",q:"Every closed trade can carry the setup, exit reason, mistakes, lessons, and review notes needed to improve the next decision."},
             ].map((t,i) => (
               <div key={t.n} className="lp-tcard lp-tilt" style={{transitionDelay:(i*0.1)+"s"}}>
-                <div className="lp-tstars">★★★★★</div>
-                <p className="lp-tquote">&ldquo;{t.q}&rdquo;</p>
+                <div className="lp-tstars">{t.r}</div>
+                <p className="lp-tquote">{t.q}</p>
                 <div className="lp-tauthor">
                   <div className="lp-tav" style={{background:t.bg,color:t.c}}>{t.av}</div>
-                  <div><div className="lp-tname">{t.n}</div><div className="lp-trole">{t.r}</div><div className="lp-tret">{t.ret}</div></div>
+                  <div><div className="lp-tname">{t.n}</div><div className="lp-tret">{t.ret}</div></div>
                 </div>
               </div>
             ))}
@@ -599,10 +602,10 @@ export default function LandingPage() {
             <div className="lp-pcard lp-fade" style={{transitionDelay:".2s"}}>
               <span className="lp-plan-tier">Elite</span>
               <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-elite">4,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-elite-old" style={{display:"none"}}>₹4,999</span></div>
-              <p className="lp-pdesc">For full-time traders who need deeper analytics, expanded markets, and priority support.</p>
+              <p className="lp-pdesc">For full-time traders who need deeper analytics, larger NSE/BSE routines, and priority support.</p>
               <Link href="/signup" className="lp-pcta lp-cta-elite">Request Elite access</Link>
               <div className="lp-pfeats">
-                {[["Everything in Pro",true],["US markets — NASDAQ & NYSE",true],["Deeper journal analytics",true],["Backtest scanner conditions",true],["Priority support & onboarding",true],["Advanced workflow controls",true]].map(f=>(
+                {[["Everything in Pro",true],["Larger NSE/BSE watchlists",true],["Deeper journal analytics",true],["Advanced scanner run history",true],["Priority support & onboarding",true],["Priority workflow controls",true]].map(f=>(
                   <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
                 ))}
               </div>
@@ -637,10 +640,9 @@ export default function LandingPage() {
 
       {/* FINAL CTA */}
       <section style={{padding:"120px 0",textAlign:"center",position:"relative",overflow:"hidden"}}>
-        <div style={{position:"absolute",inset:0,background:"radial-gradient(ellipse at 50% 50%,rgba(214,223,232,.06) 0%,transparent 65%)",pointerEvents:"none"}}></div>
         <div style={{position:"relative",zIndex:1}}>
           <div className="lp-live-pill" style={{display:"inline-flex",marginBottom:28}}><div className="lp-pulse" style={{marginRight:6}}></div>Account access</div>
-          <h2 className="lp-sec-title" style={{fontSize:"clamp(2rem,4vw,3.2rem)",marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
+          <h2 className="lp-sec-title lp-final-title" style={{marginBottom:18}}>Build a cleaner<br/>trading routine.</h2>
           <p className="lp-sec-sub" style={{margin:"0 auto 40px"}}>Run a scan, build a watchlist, plan on the chart, and close the loop in Journal.</p>
           <Link href="/signup" className="lp-btn-cta-big">Request access →</Link>
           <p style={{marginTop:20,fontSize:".8rem",color:"var(--lp-muted)"}}>Account access · EOD market data · Broker import only · No investment advice</p>
@@ -674,68 +676,54 @@ export default function LandingPage() {
 
 const CSS = `
 :root{--lp-bg:var(--surface-0);--lp-surface:var(--surface-1);--lp-surface2:var(--surface-2);--lp-surface3:var(--surface-3);--lp-accent:var(--accent);--lp-accent2:var(--info);--lp-accent-dim:var(--accent-subtle);--lp-accent-glow:var(--accent-glow);--lp-text:var(--text-primary);--lp-text2:var(--text-secondary);--lp-muted:var(--text-tertiary);--lp-border:var(--border-subtle);--lp-green:var(--gain);--lp-red:var(--loss);--lp-yellow:var(--warn);--lp-purple:var(--info);}
-#lp-cursor{position:fixed;width:16px;height:20px;pointer-events:none;z-index:9999;clip-path:polygon(0% 0%,0% 88%,30% 68%,46% 100%,60% 93%,43% 60%,76% 60%);background:var(--lp-accent);transition:opacity .2s,transform .15s;filter:drop-shadow(0 0 4px rgba(214,223,232,.5))}
-#lp-ring{position:fixed;width:36px;height:36px;border:1.5px solid rgba(214,223,232,.3);border-radius:50%;pointer-events:none;z-index:9998;transform:translate(-50%,-50%);transition:width .3s,height .3s,opacity .3s}
-#lp-cursor.lp-ch{transform:scale(1.2);filter:drop-shadow(0 0 8px rgba(214,223,232,.7))}
-#lp-ring.lp-rh{width:48px;height:48px;border-color:rgba(214,223,232,.18)}
-body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-sans),sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-sans),sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--lp-bg)}::-webkit-scrollbar-thumb{background:var(--lp-border);border-radius:2px}
 #lp-nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:20px 0;transition:all .3s}
 #lp-nav.lp-scrolled{background:rgba(13,15,20,.88);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--lp-border);padding:12px 0}
 .lp-nav-wrap{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;align-items:center;justify-content:space-between;gap:40px}
-.lp-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem;letter-spacing:-.02em;color:var(--lp-text);text-decoration:none}
+.lp-logo{display:flex;align-items:center;gap:10px;font-weight:650;font-size:1.05rem;letter-spacing:0;color:var(--lp-text);text-decoration:none}
 .lp-logo-mark{width:34px;height:34px;background:linear-gradient(135deg,var(--lp-accent),var(--lp-accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--text-on-accent)}
 .lp-nav-links{display:flex;align-items:center;gap:28px}
 .lp-nav-links a{font-size:.85rem;font-weight:500;color:var(--lp-text2);text-decoration:none;transition:color .2s}
 .lp-nav-links a:hover{color:var(--lp-text)}
 .lp-nav-right{display:flex;align-items:center;gap:12px}
-.lp-theme-toggle{height:34px;padding:0 12px;border:1px solid var(--lp-border);border-radius:8px;background:var(--lp-surface2);color:var(--lp-text);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .2s}
+.lp-theme-toggle{height:34px;padding:0 12px;border:1px solid var(--lp-border);border-radius:8px;background:var(--lp-surface2);color:var(--lp-text);font-size:.78rem;font-weight:600;cursor:pointer;transition:all .2s}
 .lp-theme-toggle:hover{border-color:var(--lp-accent);background:var(--lp-accent-dim)}
 .lp-btn-ghost{padding:8px 18px;border:1px solid var(--lp-border);border-radius:8px;font-size:.84rem;font-weight:600;color:var(--lp-text2);text-decoration:none;transition:all .2s}
 .lp-btn-ghost:hover{border-color:var(--lp-accent);color:var(--lp-accent)}
-.lp-btn-cta{padding:9px 20px;border-radius:8px;font-size:.84rem;font-weight:700;background:var(--lp-accent);color:var(--text-on-accent);text-decoration:none;transition:all .2s;box-shadow:0 0 20px rgba(214,223,232,.25)}
-.lp-btn-cta:hover{box-shadow:0 0 32px rgba(214,223,232,.4);transform:translateY(-1px)}
-#lp-hero{min-height:100vh;display:flex;align-items:center;padding:120px 0 80px;position:relative;overflow:hidden}
-.lp-orb1{position:absolute;width:700px;height:700px;background:radial-gradient(circle,rgba(214,223,232,.07) 0%,transparent 70%);border-radius:50%;top:-200px;right:-100px;pointer-events:none;animation:lp-orb 8s ease-in-out infinite}
-.lp-orb2{position:absolute;width:500px;height:500px;background:radial-gradient(circle,rgba(167,182,200,.07) 0%,transparent 70%);border-radius:50%;bottom:-100px;left:-50px;pointer-events:none;animation:lp-orb 10s ease-in-out infinite reverse}
-@keyframes lp-orb{0%,100%{transform:translate(0,0)}33%{transform:translate(30px,-20px)}66%{transform:translate(-20px,30px)}}
+.lp-btn-cta{padding:9px 20px;border-radius:8px;font-size:.84rem;font-weight:650;background:var(--lp-accent);color:var(--text-on-accent);text-decoration:none;transition:all .2s;box-shadow:0 8px 22px rgba(0,0,0,.22)}
+.lp-btn-cta:hover{box-shadow:0 12px 28px rgba(0,0,0,.28);transform:translateY(-1px)}
+#lp-hero{display:flex;align-items:center;padding:128px 0 72px;position:relative;overflow:hidden}
 .lp-grid-overlay{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);background-size:40px 40px;mask-image:radial-gradient(ellipse at 50% 50%,black 30%,transparent 80%);-webkit-mask-image:radial-gradient(ellipse at 50% 50%,black 30%,transparent 80%);pointer-events:none}
 .lp-hero-inner{max-width:1200px;margin:0 auto;padding:0 28px;display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;position:relative;z-index:1}
 .lp-eyebrow{display:flex;align-items:center;gap:8px;margin-bottom:24px}
-.lp-live-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(214,223,232,.08);border:1px solid rgba(214,223,232,.2);border-radius:20px;padding:5px 12px;font-size:.72rem;font-weight:700;color:var(--lp-accent);letter-spacing:.08em;text-transform:uppercase}
+.lp-live-pill{display:inline-flex;align-items:center;gap:7px;background:rgba(214,223,232,.08);border:1px solid rgba(214,223,232,.2);border-radius:20px;padding:5px 12px;font-size:.76rem;font-weight:600;color:var(--lp-accent);letter-spacing:0;text-transform:none}
 .lp-pulse{width:7px;height:7px;background:var(--lp-accent);border-radius:50%;animation:lp-pulse 2s ease-in-out infinite;flex-shrink:0}
 @keyframes lp-pulse{0%,100%{box-shadow:0 0 0 0 rgba(214,223,232,.5)}50%{box-shadow:0 0 0 7px rgba(214,223,232,0)}}
-.lp-h1{font-size:clamp(2.4rem,4.2vw,3.8rem);font-weight:900;line-height:1.08;letter-spacing:-.03em;margin-bottom:10px}
+.lp-h1{font-size:3.55rem;font-weight:650;line-height:1.04;letter-spacing:0;margin-bottom:18px}
 .lp-h1-s1{display:block;color:var(--lp-text)}
-.lp-h1-s2{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.lp-h1-s2 span{color:var(--lp-text2)}
-.lp-caret{display:inline-block;width:3px;height:.8em;background:var(--lp-accent);margin-left:3px;animation:lp-blink .8s step-end infinite;border-radius:2px}
-@keyframes lp-blink{0%,100%{opacity:1}50%{opacity:0}}
-#lp-typewriter,#typewriter{color:var(--lp-accent)}
-.lp-sub{font-size:1rem;color:var(--lp-text2);line-height:1.75;margin-bottom:36px;max-width:460px}
+.lp-sub{font-size:1.02rem;color:var(--lp-text2);line-height:1.75;margin-bottom:30px;max-width:540px}
 .lp-ctas{display:flex;align-items:center;gap:14px;margin-bottom:44px;flex-wrap:wrap}
-.lp-btn-primary{display:inline-flex;align-items:center;gap:8px;padding:13px 28px;background:var(--lp-accent);color:var(--text-on-accent);border-radius:9px;font-weight:700;font-size:.95rem;text-decoration:none;box-shadow:0 0 32px rgba(214,223,232,.3),0 4px 16px rgba(0,0,0,.3);transition:all .25s}
-.lp-btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 48px rgba(214,223,232,.4),0 8px 24px rgba(0,0,0,.3)}
+.lp-btn-primary{display:inline-flex;align-items:center;gap:8px;padding:13px 28px;background:var(--lp-accent);color:var(--text-on-accent);border-radius:9px;font-weight:650;font-size:.95rem;text-decoration:none;box-shadow:0 10px 28px rgba(0,0,0,.28);transition:all .25s}
+.lp-btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.32)}
 .lp-btn-secondary{display:inline-flex;align-items:center;gap:8px;padding:13px 24px;border:1.5px solid var(--lp-border);border-radius:9px;font-weight:600;font-size:.92rem;color:var(--lp-text2);text-decoration:none;transition:all .25s}
 .lp-btn-secondary:hover{border-color:var(--lp-accent);color:var(--lp-accent)}
-.lp-proof{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.lp-avs{display:flex}.lp-av{width:30px;height:30px;border-radius:50%;border:2px solid var(--lp-bg);margin-right:-9px;font-size:.62rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.lp-proof-copy{font-size:.8rem;color:var(--lp-text2)}.lp-proof-copy strong{color:var(--lp-text)}
-.lp-stars{color:var(--lp-yellow);font-size:.78rem}.lp-stars span{color:var(--lp-text2);font-size:.74rem}
+.lp-trust-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:560px}
+.lp-trust-row span{padding:6px 10px;border:1px solid var(--lp-border);border-radius:999px;background:var(--lp-surface2);color:var(--lp-text2);font-size:.78rem;line-height:1.2}
 .lp-hero-visual{position:relative}
-.lp-hero-card{background:var(--lp-surface);border:1px solid var(--lp-border);border-radius:16px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,.5),0 0 0 1px rgba(214,223,232,.06);animation:lp-float 6s ease-in-out infinite}
+.lp-hero-card{background:var(--lp-surface);border:1px solid var(--lp-border);border-radius:12px;overflow:hidden;box-shadow:0 24px 58px rgba(0,0,0,.38),0 0 0 1px rgba(214,223,232,.05);animation:lp-float 8s ease-in-out infinite}
 @keyframes lp-float{0%,100%{transform:translateY(0) rotate(.3deg)}50%{transform:translateY(-12px) rotate(-.3deg)}}
 .lp-card-bar{background:var(--lp-surface2);padding:10px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--lp-border)}
 .lp-dot{width:11px;height:11px;border-radius:50%}
 .lp-card-title{margin-left:8px;font-size:.72rem;font-weight:600;color:var(--lp-muted)}
 .lp-card-body{padding:16px}
 .lp-col-header{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;padding:6px 0;margin-bottom:4px}
-.lp-col-h{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--lp-muted)}
+.lp-col-h{font-size:.68rem;font-weight:600;text-transform:none;letter-spacing:0;color:var(--lp-muted)}
 .lp-srow{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);animation:lp-row-in .4s ease both}
 @keyframes lp-row-in{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
 .lp-sym{font-size:.82rem;font-weight:700;font-family:var(--font-mono),monospace}
 .lp-sym-sub{font-size:.62rem;color:var(--lp-muted)}
-.lp-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:700;letter-spacing:.04em}
+.lp-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:600;letter-spacing:0}
 .lp-tag-teal{background:rgba(214,223,232,.1);color:var(--lp-accent);border:1px solid rgba(214,223,232,.2)}
 .lp-tag-green{background:rgba(45,181,116,.1);color:var(--lp-green);border:1px solid rgba(45,181,116,.2)}
 .lp-tag-purple{background:rgba(167,139,250,.1);color:var(--lp-purple);border:1px solid rgba(167,139,250,.2)}
@@ -771,27 +759,27 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:var(--
 .lp-stat:hover{background:var(--lp-surface2)}
 .lp-stat::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--lp-accent),transparent);opacity:0;transition:opacity .3s}
 .lp-stat:hover::after{opacity:1}
-.lp-stat-num{font-size:clamp(1.8rem,3vw,2.6rem);font-weight:900;letter-spacing:-.03em;background:linear-gradient(135deg,var(--lp-text) 60%,var(--lp-accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;margin-bottom:6px}
+.lp-stat-num{font-size:2.25rem;font-weight:650;letter-spacing:0;color:var(--lp-text);line-height:1;margin-bottom:6px}
 .lp-stat-label{font-size:.82rem;color:var(--lp-text2)}
 .lp-stat-sub{font-size:.72rem;color:var(--lp-muted);margin-top:3px}
-.lp-sec-label{font-size:.7rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--lp-accent);display:block;margin-bottom:12px}
-.lp-sec-title{font-size:clamp(1.8rem,3vw,2.6rem);font-weight:800;letter-spacing:-.025em;margin-bottom:16px}
+.lp-sec-label{font-size:.78rem;font-weight:600;letter-spacing:0;text-transform:none;color:var(--lp-accent);display:block;margin-bottom:12px}
+.lp-sec-title{font-size:2.25rem;font-weight:650;letter-spacing:0;margin-bottom:16px}
 .lp-sec-sub{font-size:.95rem;color:var(--lp-text2);line-height:1.7;max-width:520px}
 .lp-steps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin-top:64px;position:relative}
 .lp-steps::before{content:'';position:absolute;top:28px;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--lp-border) 15%,var(--lp-border) 85%,transparent)}
 .lp-step{text-align:center;padding:0 12px;position:relative;z-index:1;opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease}
 .lp-step.lp-visible{opacity:1;transform:none}
-.lp-step-num{width:56px;height:56px;border-radius:50%;border:1.5px solid var(--lp-border);background:var(--lp-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:.8rem;font-weight:800;color:var(--lp-accent);transition:all .3s}
+.lp-step-num{width:56px;height:56px;border-radius:50%;border:1.5px solid var(--lp-border);background:var(--lp-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:.8rem;font-weight:650;color:var(--lp-accent);transition:all .3s}
 .lp-step:hover .lp-step-num{border-color:var(--lp-accent);background:var(--lp-accent-dim);box-shadow:0 0 24px var(--lp-accent-glow)}
 .lp-step h3{font-size:.95rem;font-weight:700;margin-bottom:8px}
 .lp-step p{font-size:.78rem;color:var(--lp-text2);line-height:1.55}
 .lp-tabs-wrap{display:flex;background:var(--lp-surface);border:1px solid var(--lp-border);border-radius:12px;padding:6px;margin-bottom:52px;align-self:flex-start;flex-wrap:wrap;gap:4px;width:fit-content}
-.lp-tab-btn{padding:10px 22px;border-radius:8px;font-size:.85rem;font-weight:600;color:var(--lp-text2);transition:all .2s;white-space:nowrap;background:none;border:none;cursor:none}
+.lp-tab-btn{padding:10px 22px;border-radius:8px;font-size:.85rem;font-weight:600;color:var(--lp-text2);transition:all .2s;white-space:nowrap;background:none;border:none;cursor:pointer}
 .lp-tab-btn.lp-tab-active{background:var(--lp-surface3);color:var(--lp-text);box-shadow:0 2px 8px rgba(0,0,0,.3)}
 .lp-tab-panel{display:none;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
 .lp-tab-panel.lp-tab-active{display:grid}
-.lp-feat-label{font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--lp-accent);display:block;margin-bottom:12px}
-.lp-tp-h{font-size:clamp(1.4rem,2.2vw,1.9rem);font-weight:800;letter-spacing:-.025em;margin-bottom:16px}
+.lp-feat-label{font-size:.78rem;font-weight:600;letter-spacing:0;text-transform:none;color:var(--lp-accent);display:block;margin-bottom:12px}
+.lp-tp-h{font-size:1.75rem;font-weight:650;letter-spacing:0;margin-bottom:16px}
 .lp-tp-p{font-size:.93rem;color:var(--lp-text2);line-height:1.75;margin-bottom:28px}
 .lp-feat-list{display:flex;flex-direction:column;gap:12px;list-style:none;padding:0;margin:0}
 .lp-fi{display:flex;align-items:flex-start;gap:12px;font-size:.87rem;color:var(--lp-text2)}
@@ -812,7 +800,7 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:var(--
 .lp-jrow{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--lp-surface3);border-radius:8px;border:1px solid var(--lp-border);margin-bottom:8px}
 .lp-ai-tag{font-size:.68rem;color:var(--lp-accent);background:var(--lp-accent-dim);border-radius:4px;padding:2px 7px;border:1px solid rgba(214,223,232,.2)}
 .lp-ai-insight{margin-top:14px;padding:12px;background:var(--lp-surface3);border-radius:8px;border:1px solid rgba(214,223,232,.12)}
-.lp-ai-label{font-size:.68rem;font-weight:700;color:var(--lp-accent);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+.lp-ai-label{font-size:.72rem;font-weight:600;color:var(--lp-accent);letter-spacing:0;text-transform:none;margin-bottom:6px}
 .lp-ai-body{font-size:.78rem;color:var(--lp-text2);line-height:1.6}
 .lp-af{max-width:700px;margin:48px auto 0;display:flex;flex-direction:column;gap:12px}
 .lp-af-item{display:flex;align-items:center;gap:14px;background:var(--lp-bg);border:1px solid var(--lp-border);border-radius:10px;padding:12px 16px;opacity:0;transform:translateX(-20px);transition:opacity .5s,transform .5s,box-shadow .3s}
@@ -825,32 +813,32 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:var(--
 .lp-tcard{background:var(--lp-surface);border:1px solid var(--lp-border);border-radius:12px;padding:28px;opacity:0;transform:translateY(24px);transition:opacity .6s,transform .6s,border-color .3s;position:relative;overflow:hidden}
 .lp-tcard.lp-visible{opacity:1;transform:none}
 .lp-tcard:hover{border-color:rgba(214,223,232,.15)}
-.lp-tstars{color:var(--lp-yellow);font-size:.8rem;letter-spacing:2px;margin-bottom:16px}
-.lp-tquote{font-size:.9rem;color:var(--lp-text);line-height:1.75;font-style:italic;margin-bottom:20px}
+.lp-tstars{color:var(--lp-accent);font-size:.78rem;font-weight:600;letter-spacing:0;margin-bottom:16px}
+.lp-tquote{font-size:.9rem;color:var(--lp-text);line-height:1.75;font-style:normal;margin-bottom:20px}
 .lp-tauthor{display:flex;align-items:center;gap:12px}
 .lp-tav{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0}
-.lp-tname{font-size:.87rem;font-weight:700}.lp-trole{font-size:.75rem;color:var(--lp-text2)}.lp-tret{font-size:.75rem;color:var(--lp-green);font-weight:700;margin-top:2px}
+.lp-tname{font-size:.87rem;font-weight:700}.lp-tret{font-size:.75rem;color:var(--lp-green);font-weight:700;margin-top:2px}
 .lp-ptoggle{display:flex;align-items:center;justify-content:center;gap:16px;margin:48px 0}
 .lp-pt-label{font-size:.9rem;color:var(--lp-text2);font-weight:500;transition:color .2s}
 .lp-pt-label.lp-pt-active{color:var(--lp-text);font-weight:700}
-.lp-toggle-pill{position:relative;width:52px;height:28px;cursor:none}
+.lp-toggle-pill{position:relative;width:52px;height:28px;cursor:pointer}
 .lp-toggle-pill input{opacity:0;width:0;height:0;position:absolute}
 .lp-pill-track{position:absolute;inset:0;background:var(--lp-border);border-radius:14px;transition:background .3s}
 .lp-pill-thumb{position:absolute;top:4px;left:4px;width:20px;height:20px;background:var(--lp-text2);border-radius:50%;transition:all .3s}
 .lp-toggle-pill input:checked + .lp-pill-track{background:var(--lp-accent)}
 .lp-toggle-pill input:checked ~ .lp-pill-thumb{transform:translateX(24px);background:#050a08}
-.lp-save-tag{background:rgba(214,223,232,.12);color:var(--lp-accent);border:1px solid rgba(214,223,232,.2);padding:4px 12px;border-radius:20px;font-size:.7rem;font-weight:700;letter-spacing:.04em}
+.lp-save-tag{background:rgba(214,223,232,.12);color:var(--lp-accent);border:1px solid rgba(214,223,232,.2);padding:4px 12px;border-radius:20px;font-size:.72rem;font-weight:600;letter-spacing:0}
 .lp-pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start}
 .lp-pcard{background:var(--lp-bg);border:1px solid var(--lp-border);border-radius:14px;padding:32px;position:relative;transition:all .3s;opacity:0;transform:translateY(24px)}
 .lp-pcard.lp-visible{opacity:1;transform:none}
 .lp-pcard:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,.3)}
 .lp-pcard-featured{background:linear-gradient(145deg,#16202E,var(--lp-surface2));border-color:var(--lp-accent);box-shadow:0 0 48px rgba(214,223,232,.08)}
 .lp-pcard-featured:hover{box-shadow:0 0 64px rgba(214,223,232,.12),0 16px 40px rgba(0,0,0,.3)}
-.lp-featured-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--lp-accent);color:var(--text-on-accent);padding:4px 18px;border-radius:20px;font-size:.68rem;font-weight:800;letter-spacing:.08em;white-space:nowrap}
-.lp-plan-tier{font-size:.72rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--lp-text2);display:block;margin-bottom:10px}
+.lp-featured-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--lp-accent);color:var(--text-on-accent);padding:4px 18px;border-radius:20px;font-size:.72rem;font-weight:650;letter-spacing:0;white-space:nowrap}
+.lp-plan-tier{font-size:.78rem;font-weight:600;letter-spacing:0;text-transform:none;color:var(--lp-text2);display:block;margin-bottom:10px}
 .lp-price-row{display:flex;align-items:baseline;gap:4px;margin-bottom:4px}
 .lp-pcurr{font-size:1.2rem;font-weight:600;line-height:2.2}
-.lp-pval2{font-size:2.6rem;font-weight:900;letter-spacing:-.04em;line-height:1}
+.lp-pval2{font-size:2.45rem;font-weight:650;letter-spacing:0;line-height:1}
 .lp-pper{font-size:.8rem;color:var(--lp-text2);margin-left:2px}
 .lp-pold{font-size:.85rem;color:var(--lp-muted);text-decoration:line-through;margin-left:8px}
 .lp-pdesc{font-size:.83rem;color:var(--lp-text2);margin:12px 0 24px;min-height:36px;line-height:1.6}
@@ -866,17 +854,18 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:var(--
 .lp-pfcheck-off{background:var(--lp-surface2);color:var(--lp-muted);border:1px solid var(--lp-border)}
 .lp-faq-list{max-width:720px;margin:56px auto 0;text-align:left}
 .lp-faq-item{border-bottom:1px solid var(--lp-border);overflow:hidden}
-.lp-faq-q{display:flex;align-items:center;justify-content:space-between;padding:20px 0;cursor:none;gap:20px}
+.lp-faq-q{display:flex;align-items:center;justify-content:space-between;padding:20px 0;cursor:pointer;gap:20px}
 .lp-faq-q span{font-size:.97rem;font-weight:600;color:var(--lp-text);flex:1;line-height:1.4}
 .lp-faq-icon{width:26px;height:26px;border:1.5px solid var(--lp-border);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--lp-text2);font-size:.9rem;transition:all .3s}
 .lp-faq-item.lp-faq-open .lp-faq-icon{border-color:var(--lp-accent);color:var(--lp-accent);background:var(--lp-accent-dim);transform:rotate(45deg)}
 .lp-faq-a{max-height:0;overflow:hidden;transition:max-height .35s ease,padding .35s ease}
 .lp-faq-item.lp-faq-open .lp-faq-a{max-height:200px;padding-bottom:20px}
 .lp-faq-a p{font-size:.88rem;color:var(--lp-text2);line-height:1.75}
-.lp-btn-cta-big{display:inline-flex;align-items:center;gap:10px;padding:16px 40px;background:var(--lp-accent);color:var(--text-on-accent);font-weight:800;font-size:1rem;border-radius:10px;text-decoration:none;box-shadow:0 0 48px rgba(214,223,232,.35),0 8px 32px rgba(0,0,0,.3);transition:all .25s}
-.lp-btn-cta-big:hover{transform:translateY(-3px);box-shadow:0 0 72px rgba(214,223,232,.45),0 12px 40px rgba(0,0,0,.3)}
+.lp-btn-cta-big{display:inline-flex;align-items:center;gap:10px;padding:16px 40px;background:var(--lp-accent);color:var(--text-on-accent);font-weight:650;font-size:1rem;border-radius:10px;text-decoration:none;box-shadow:0 12px 32px rgba(0,0,0,.28);transition:all .25s}
+.lp-btn-cta-big:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.34)}
+.lp-final-title{font-size:3rem}
 .lp-footer-grid{display:grid;grid-template-columns:2.5fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px}
-.lp-fcol h5{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--lp-muted);margin-bottom:18px}
+.lp-fcol h5{font-size:.78rem;font-weight:600;letter-spacing:0;text-transform:none;color:var(--lp-muted);margin-bottom:18px}
 .lp-fcol ul{list-style:none;padding:0;margin:0}
 .lp-fcol li{margin-bottom:12px}
 .lp-fcol a{font-size:.84rem;color:var(--lp-text2);text-decoration:none;transition:color .2s}
@@ -904,7 +893,11 @@ body{cursor:none;background:var(--lp-bg);color:var(--lp-text);font-family:var(--
   .lp-nav-links,.lp-nav-right{display:none}
 }
 @media(max-width:640px){
-  .lp-h1{font-size:2.1rem}
+  .lp-h1{font-size:2.45rem}
+  .lp-sec-title{font-size:1.8rem}
+  .lp-final-title{font-size:2.2rem}
+  .lp-tp-h{font-size:1.45rem}
+  .lp-stat-num{font-size:1.9rem}
   .lp-steps,.lp-pgrid,.lp-tgrid,.lp-footer-grid{grid-template-columns:1fr}
   .lp-steps{gap:32px}
   .lp-steps::before{display:none}

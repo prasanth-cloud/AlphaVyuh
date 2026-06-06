@@ -7,6 +7,7 @@ import {
   formatChartGranularity,
   formatCandleRange,
   getCoverageAvailabilityMessage,
+  getFiveYearHistoryBadge,
   getRangeAvailabilityMessage,
   getWatchlistChartRequest,
   isIntradayTimeframe,
@@ -39,14 +40,14 @@ describe("watchlist chart range mapping", () => {
       limit: 170,
     });
     expect(getWatchlistChartRequest("5Y", NOW)).toMatchObject({
-      timeframe: "W",
+      timeframe: "D",
       from_date: "2021-05-07",
-      limit: 280,
+      limit: 1300,
     });
-    expect(getWatchlistChartRequest("10Y", NOW)).toMatchObject({
+    expect(getWatchlistChartRequest("Max", NOW)).toMatchObject({
       timeframe: "M",
-      from_date: "2016-05-07",
-      limit: 130,
+      from_date: "1900-01-01",
+      limit: 3000,
     });
     expect(formatChartGranularity("D")).toBe("Daily");
     expect(formatChartGranularity("W")).toBe("Weekly");
@@ -77,9 +78,61 @@ describe("watchlist chart range mapping", () => {
       partial: true,
       partial_reason: "history_starts_after_requested_window",
       coverage_pct: 24.4,
+      five_year_contract: { status: "partial" },
     };
 
     expect(formatChartCoverageRange(coverage, [])).toBe("2026-02-01 -> 2026-05-01 · 42 bars");
     expect(getCoverageAvailabilityMessage(coverage, { label: "1Y" })).toBe("History starts at 2026-02-01 for 1Y (24% coverage).");
+  });
+
+  it("labels partial 5Y contract coverage as limited history", () => {
+    const coverage = {
+      available_from: "2024-06-03",
+      available_to: "2026-05-07",
+      returned_candles: 480,
+      partial: true,
+      partial_reason: "five_year_contract_not_met",
+      coverage_pct: 39.2,
+      five_year_contract: { years: 5, status: "partial" },
+    };
+
+    expect(getFiveYearHistoryBadge(coverage, { label: "5Y" })).toEqual({
+      label: "Limited 5Y history",
+      title: "IPO, rename, or short-history symbol; 2024-06-03 -> 2026-05-07 · 480 bars · 39% coverage.",
+      tone: "warn",
+    });
+    expect(getFiveYearHistoryBadge({ ...coverage, five_year_contract: { years: 5, status: "partial" } }, { label: "1Y" })).toBeNull();
+  });
+
+  it("warns when a selected 5Y chart lacks contract metadata", () => {
+    expect(getFiveYearHistoryBadge({
+      available_from: "2021-05-07",
+      available_to: "2026-05-07",
+      returned_candles: 1288,
+      partial: false,
+      coverage_pct: 100,
+    }, { label: "5Y" })).toEqual({
+      label: "5Y contract unverified",
+      title: "Chart response did not include five_year_contract metadata; treat this 5Y view as unverified launch evidence.",
+      tone: "warn",
+    });
+  });
+
+  it("labels met 5Y contract coverage as verified history", () => {
+    const coverage = {
+      available_from: "2021-05-07",
+      available_to: "2026-05-07",
+      returned_candles: 1288,
+      partial: false,
+      partial_reason: null,
+      coverage_pct: 100,
+      five_year_contract: { years: 5, status: "met" },
+    };
+
+    expect(getFiveYearHistoryBadge(coverage, { label: "5Y" })).toEqual({
+      label: "5Y history verified",
+      title: "Daily 5Y chart contract met: 2021-05-07 -> 2026-05-07 · 1288 bars.",
+      tone: "good",
+    });
   });
 });

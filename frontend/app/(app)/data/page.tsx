@@ -9,10 +9,12 @@ import {
   getDataRuns,
   getJournalEntries,
   getJournalStats,
+  getSectorsWithMetadata,
   type AiPatterns,
   type DataHealth,
   type DataRun,
   type JournalStats,
+  type SectorTaxonomyMetadata,
 } from "@/lib/api";
 import { Card, DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { checkApiReachability } from "@/lib/api-reachability";
@@ -20,6 +22,9 @@ import { marketDataHealthPresentation } from "@/lib/data-health-copy";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import type { ApiReachability } from "@/lib/data-mode";
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from "@/lib/account-data-status";
+import { sectorTaxonomyPresentation } from "@/lib/sector-taxonomy-copy";
+import { brokerOrderGatePresentation } from "@/lib/broker-safety";
+import { buildLaunchAgenda, type LaunchAgendaStatus } from "@/lib/launch-agenda";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 
@@ -30,6 +35,8 @@ type CenterState = {
   journalStats: JournalStats | null;
   aiPatterns: AiPatterns | null;
   aiPatternsError: string;
+  sectorTaxonomy: SectorTaxonomyMetadata | null;
+  sectorTaxonomyError: string;
   dataRuns: DataRun[];
   dataRunsError: string;
   closedTrades: number;
@@ -120,6 +127,40 @@ function ActionItem({ title, detail, href }: { title: string; detail: string; hr
   );
 }
 
+function LaunchAgendaCard({
+  item,
+}: {
+  item: ReturnType<typeof buildLaunchAgenda>[number];
+}) {
+  const color = statusColor(item.status);
+  return (
+    <Link
+      href={item.href}
+      data-testid={`launch-agenda-${item.id}`}
+      style={{
+        minWidth: 0,
+        display: "block",
+        padding: "14px 15px",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--border-subtle)",
+        background: "var(--surface-2)",
+        textDecoration: "none",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+        <div className="label">{item.label}</div>
+        <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      </div>
+      <Num style={{ display: "block", fontSize: 13, fontWeight: 800, color, marginBottom: 7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {item.value}
+      </Num>
+      <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)" }}>
+        {item.detail}
+      </div>
+    </Link>
+  );
+}
+
 export default function DataFreshnessPage() {
   const [state, setState] = useState<CenterState>({
     dataHealth: null,
@@ -128,6 +169,8 @@ export default function DataFreshnessPage() {
     journalStats: null,
     aiPatterns: null,
     aiPatternsError: "",
+    sectorTaxonomy: null,
+    sectorTaxonomyError: "",
     dataRuns: [],
     dataRunsError: "",
     closedTrades: 0,
@@ -141,7 +184,7 @@ export default function DataFreshnessPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [apiReachable, dataHealth, dataRunsResult, brokerResult, journalStatsResult, journalResult, aiPatterns] = await Promise.all([
+        const [apiReachable, dataHealth, dataRunsResult, brokerResult, journalStatsResult, journalResult, aiPatterns, sectorsResult] = await Promise.all([
           checkApiReachability(),
           getDataHealth().catch(() => null),
           getDataRuns(5)
@@ -171,6 +214,12 @@ export default function DataFreshnessPage() {
               patterns: null,
               error: error instanceof Error ? error.message : "Trade pattern review is temporarily unavailable.",
             })),
+          getSectorsWithMetadata()
+            .then(response => ({ metadata: response.metadata ?? null, error: "" }))
+            .catch(error => ({
+              metadata: null,
+              error: error instanceof Error ? error.message : "Sector taxonomy metadata is temporarily unavailable.",
+            })),
         ]);
 
         const accountIssues = uniqueAccountIssues([brokerResult.issue, journalStatsResult.issue, journalResult.issue]);
@@ -187,6 +236,8 @@ export default function DataFreshnessPage() {
           journalStats,
           aiPatterns: aiPatterns.patterns,
           aiPatternsError: aiPatterns.error,
+          sectorTaxonomy: sectorsResult.metadata,
+          sectorTaxonomyError: sectorsResult.error,
           dataRuns: dataRunsResult.runs,
           dataRunsError: dataRunsResult.error,
           closedTrades: closed.length,
@@ -215,19 +266,19 @@ export default function DataFreshnessPage() {
     if (state.apiReachable === "down") {
       next.push({
         title: "Restore market data service",
-        detail: "The platform is reachable, but the market data API is down. Scanner, dashboard, and charts need service recovery before data can be trusted.",
+        detail: "The platform is reachable, but the market data API is down. Scanner, Today, and charts need service recovery before data can be trusted.",
         href: "/data",
       });
     } else if (!health) {
       next.push({
         title: "Check market data API",
-        detail: "The freshness endpoint did not return data, so scanner and dashboard confidence cannot be shown.",
+        detail: "The freshness endpoint did not return data, so scanner and Today confidence cannot be shown.",
         href: "/dashboard",
       });
     } else if (health.status !== "healthy") {
       next.push({
         title: health.status === "degraded" ? "Review latest ingest fallback" : "Refresh stale market data",
-        detail: "Scanner, charts, and dashboard may be using the latest available session instead of the newest ingest.",
+        detail: "Scanner, charts, and Today may be using the latest available session instead of the newest ingest.",
         href: "/scanner",
       });
     }
@@ -253,6 +304,27 @@ export default function DataFreshnessPage() {
         title: "Recheck trade review analytics",
         detail: "Pattern readiness cannot be confirmed right now; closed trades are not being counted as insufficient.",
         href: "/journal?tab=ai",
+      });
+    }
+
+    if (state.sectorTaxonomyError || !state.sectorTaxonomy) {
+      next.push({
+        title: "Recheck sector taxonomy metadata",
+        detail: "Sector filters and counts are treated as unverified until the audit source, contract date, and unmapped symbols load.",
+        href: "/data",
+      });
+    } else if (
+      state.sectorTaxonomy.unmapped_count > 0 ||
+      state.sectorTaxonomy.display_filter.hidden_sector_count > 0 ||
+      state.sectorTaxonomy.audit_scope?.industry_taxonomy?.status !== "audited"
+    ) {
+      const industryCopy = state.sectorTaxonomy.audit_scope?.industry_taxonomy?.status !== "audited"
+        ? " NSE industry taxonomy is not audited yet."
+        : "";
+      next.push({
+        title: "Audit sector taxonomy gaps",
+        detail: `${state.sectorTaxonomy.unmapped_count.toLocaleString("en-IN")} unmapped symbols and ${state.sectorTaxonomy.display_filter.hidden_sector_count.toLocaleString("en-IN")} hidden sectors need review before launch.${industryCopy}`,
+        href: "/scanner",
       });
     }
 
@@ -295,12 +367,29 @@ export default function DataFreshnessPage() {
 
   const health = state.dataHealth;
   const marketHealth = marketDataHealthPresentation(health, state.apiReachable);
+  const sectorTaxonomy = sectorTaxonomyPresentation(state.sectorTaxonomy, state.sectorTaxonomyError);
   const broker = state.broker ?? fallbackBroker;
   const coveragePct = health?.symbols_on_latest_date != null && health.universe_active
     ? Math.round((health.symbols_on_latest_date / health.universe_active) * 100)
     : null;
   const missingIndicators = (health?.indicators_missing.rsi_14 ?? 0) + (health?.indicators_missing.ema_200 ?? 0);
   const liveMarket = health?.live_market ?? null;
+  const brokerUnavailable = state.accountIssues.some(issue => issue.id === "broker");
+  const brokerGate = brokerOrderGatePresentation(broker, { unavailable: brokerUnavailable });
+  const launchAgenda = buildLaunchAgenda({
+    apiReachable: state.apiReachable,
+    marketStatus: marketHealth.status as LaunchAgendaStatus,
+    marketDetail: marketHealth.detail,
+    sectorTaxonomy,
+    brokerGate: {
+      value: brokerGate.value,
+      detail: brokerGate.detail,
+      status: brokerGate.status as LaunchAgendaStatus,
+    },
+    closedTrades: state.closedTrades,
+    reviewedTrades: state.reviewedTrades,
+    accountIssueCount: state.accountIssues.length,
+  });
 
   if (loading) {
     return (
@@ -357,13 +446,13 @@ export default function DataFreshnessPage() {
               </div>
             </div>
             <Link href="/dashboard" className="workspace-chip-button" style={{ textDecoration: "none" }}>
-              Dashboard
+              Today
             </Link>
           </div>
         </Card>
       )}
 
-      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+      <div className="data-health-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
         <HealthTile
           label="Market data"
           value={marketHealth.value}
@@ -377,10 +466,28 @@ export default function DataFreshnessPage() {
           status={coveragePct == null ? "bad" : coveragePct >= 95 ? "good" : coveragePct >= 80 ? "warn" : "bad"}
         />
         <HealthTile
+          label="Sector taxonomy"
+          value={sectorTaxonomy.value}
+          detail={sectorTaxonomy.detail}
+          status={sectorTaxonomy.status}
+        />
+        <HealthTile
+          label="Sector source approval"
+          value={sectorTaxonomy.approvalStatus.toUpperCase()}
+          detail={sectorTaxonomy.approvalDetail}
+          status={sectorTaxonomy.status}
+        />
+        <HealthTile
           label="Broker channel"
           value={state.accountIssues.some(issue => issue.id === "broker") ? "UNAVAILABLE" : broker.connected && !broker.token_expired ? "READY" : broker.token_expired ? "TOKEN EXPIRED" : "SIMULATED"}
           detail={state.accountIssues.some(issue => issue.id === "broker") ? "Broker import state cannot be confirmed right now." : broker.connected ? `${broker.broker ?? "Broker"} connected read-only for import.` : "Order capture remains journal-only; broker import is optional."}
           status={state.accountIssues.some(issue => issue.id === "broker") || broker.token_expired ? "bad" : broker.connected ? "good" : "warn"}
+        />
+        <HealthTile
+          label="Broker order gate"
+          value={brokerGate.value}
+          detail={brokerGate.detail}
+          status={brokerGate.status}
         />
         <HealthTile
           label="Kite live feed"
@@ -389,6 +496,25 @@ export default function DataFreshnessPage() {
           status={liveMarket?.access_token_valid && liveMarket.stream_connected ? "good" : liveMarket?.access_token_configured ? "warn" : "bad"}
         />
       </div>
+
+      <Card padding="lg" data-testid="launch-agenda-contract">
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
+          <div>
+            <h2 className="heading-card" style={{ marginBottom: 6 }}>Launch contract</h2>
+            <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)", maxWidth: 760 }}>
+              Operator checklist for the first paid/public release: data must be current, scope stays cash-equity EOD, broker actions stay read-only, and owner-gated decisions remain explicit.
+            </div>
+          </div>
+          <span className="workspace-pill" style={{ color: launchAgenda.some(item => item.status === "bad") ? "var(--loss)" : launchAgenda.some(item => item.status === "warn") ? "var(--warn)" : "var(--gain)" }}>
+            {launchAgenda.filter(item => item.status === "good").length}/{launchAgenda.length} clear
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {launchAgenda.map(item => (
+            <LaunchAgendaCard key={item.id} item={item} />
+          ))}
+        </div>
+      </Card>
 
       <div className="data-detail-grid" style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 16 }}>
         <Card padding="lg">
@@ -399,6 +525,16 @@ export default function DataFreshnessPage() {
               ["Last successful refresh", fmtDate(health?.last_successful_eod_date ?? health?.latest_trade_date)],
               ["Source", formatMarketDataSource(health?.provider?.source_name, "Market data")],
               ["Fallback active", health?.fallback_active ? "Yes" : "No"],
+              ["Sector source", sectorTaxonomy.source],
+              ["Sector source approval", `${sectorTaxonomy.approvalStatus} · ${sectorTaxonomy.approvalDetail}`],
+              ["Sector audit status", sectorTaxonomy.auditStatus],
+              ["Sector contract", sectorTaxonomy.contract],
+              ["Sector NSE reference", sectorTaxonomy.reference],
+              ["Sector reference gaps", sectorTaxonomy.referenceCoverage],
+              ["Sector unmapped", sectorTaxonomy.unmapped],
+              ["Sector display filter", sectorTaxonomy.displayFilter],
+              ["Sector alias policy", sectorTaxonomy.aliasPolicy],
+              ["Sector industry scope", sectorTaxonomy.industryScope],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
               ["Latest exchange file", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],
@@ -407,6 +543,7 @@ export default function DataFreshnessPage() {
               ["Last ingest errors", fmtNumber(health?.last_run.errors)],
               ["Kite app", liveMarket?.api_key_configured ? "Configured" : "Missing"],
               ["Kite access token", liveMarket?.access_token_valid ? "Valid for current session" : liveMarket?.access_token_configured ? "Configured, not validated" : "Missing"],
+              ["Broker order gate", `${brokerGate.value} · ${brokerGate.detail}`],
               ["Open trades", state.accountIssues.some(issue => issue.id === "journal") ? "Unavailable" : fmtNumber(state.journalStats?.open_trades)],
               ["AI pattern readiness", state.accountIssues.some(issue => issue.id === "journal") || state.aiPatternsError ? "Unavailable" : state.aiPatterns?.ready ? "Ready" : "Needs more closed trades"],
             ].map(([label, value]) => (
@@ -493,7 +630,7 @@ export default function DataFreshnessPage() {
           {[
             ["Scanner", "Uses the latest available session and indicator completeness to decide whether presets are trustworthy.", "/scanner"],
             ["Charts", "Shows source and freshness directly in the chart toolbar before planning.", "/charts/RELIANCE"],
-            ["Dashboard", "Shows market pulse, sector participation, and freshness without mixing data sources.", "/dashboard"],
+            ["Today", "Shows review due work, active plans, market pulse, and freshness without mixing data sources.", "/dashboard"],
             ["Broker", "Broker import is read-only/import only; journal capture still records review context.", "/settings/broker"],
           ].map(([title, detail, href]) => (
             <Link key={title} href={href} style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "var(--surface-2)", textDecoration: "none" }}>

@@ -20,6 +20,10 @@ export async function GET() {
     can_import: false,
     sync_status: "idle",
     last_synced_at: null,
+    read_only_smoke_required: true,
+    read_only_smoke_passed: false,
+    read_only_smoke_checked_at: null,
+    read_only_smoke_checks: {},
     live_order_requires_confirmation: true,
     live_order_enabled: false,
   });

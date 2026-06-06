@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-test.describe("Dashboard unavailable market data", () => {
+test.describe("Today unavailable market data", () => {
   test("does not render an unavailable market overview as a healthy market pulse", async ({ page }) => {
     await page.addInitScript(() => window.localStorage.clear());
     await page.route(`${API}/api/v1/market/overview`, (route) =>
@@ -21,7 +21,7 @@ test.describe("Dashboard unavailable market data", () => {
           top_losers: [],
           most_active: [],
           mode: "unavailable",
-          message: "Market summary is temporarily unavailable; dashboard will use the latest known shell data.",
+          message: "Market summary is temporarily unavailable; Today will use the latest known shell data.",
         }),
       })
     );

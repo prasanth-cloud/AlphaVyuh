@@ -52,12 +52,21 @@ if ! command -v railway >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$link_required" == "1" && -n "$RAILWAY_PROJECT_ID" ]]; then
+linked_for_recovery=0
+if [[ -n "$RAILWAY_PROJECT_ID" ]]; then
   echo "Linking Railway project before recovery ..."
-  (
+  if (
     cd "$BACKEND_DIR"
     railway link "${link_args[@]}"
-  )
+  ); then
+    linked_for_recovery=1
+  elif [[ "$link_required" == "0" ]]; then
+    echo "Railway project link failed, but explicit project flags are available; continuing with direct deploy." >&2
+    echo "Railway deployment status wait will be skipped for this run." >&2
+  else
+    echo "Railway project link failed and no explicit token/project deploy path is available." >&2
+    exit 1
+  fi
 fi
 
 if [[ "$link_required" == "1" ]]; then
@@ -82,8 +91,80 @@ if [[ "$link_required" == "1" ]]; then
   fi
 fi
 
+wait_for_railway_deployment() {
+  local deploy_message="$1"
+  local deployment_info=""
+  local deployment_id=""
+  local deployment_status=""
+  local deployment_created_at=""
+  local status_file="/tmp/alphavyuh-railway-deployments.json"
+  local status_err="/tmp/alphavyuh-railway-deployments.err"
+
+  if [[ "$linked_for_recovery" != "1" ]]; then
+    echo "Skipping Railway deployment status wait because no Railway project is linked in this run."
+    return 0
+  fi
+
+  echo "Waiting for Railway deployment to complete ..."
+  for attempt in {1..90}; do
+    if (
+      cd "$BACKEND_DIR"
+      railway deployment list --json --limit 20 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"}
+    ) >"$status_file" 2>"$status_err"; then
+      deployment_info="$(node - "$deploy_message" "$status_file" <<'NODE'
+const [deployMessage, statusFile] = process.argv.slice(2);
+const fs = require("node:fs");
+const deployments = JSON.parse(fs.readFileSync(statusFile, "utf8"));
+const deployment =
+  deployments.find((candidate) => candidate?.meta?.cliMessage === deployMessage) ||
+  deployments[0];
+if (!deployment) process.exit(2);
+process.stdout.write([
+  deployment.id || "",
+  deployment.status || "",
+  deployment.createdAt || "",
+].join("\t"));
+NODE
+)"
+      IFS=$'\t' read -r deployment_id deployment_status deployment_created_at <<<"$deployment_info"
+
+      if [[ -n "$deployment_id" ]]; then
+        echo "Railway deployment $deployment_id status: $deployment_status ($deployment_created_at)"
+      fi
+
+      case "$deployment_status" in
+        SUCCESS)
+          return 0
+          ;;
+        FAILED|CRASHED|REMOVED)
+          echo "Railway deployment $deployment_id failed. Build logs:" >&2
+          (
+            cd "$BACKEND_DIR"
+            railway logs "$deployment_id" --build --lines 120 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+          ) >&2
+          echo "Deployment logs:" >&2
+          (
+            cd "$BACKEND_DIR"
+            railway logs "$deployment_id" --deployment --lines 120 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+          ) >&2
+          return 1
+          ;;
+      esac
+    else
+      cat "$status_err" >&2 || true
+    fi
+
+    echo "Railway deployment not ready yet ($attempt/90)."
+    sleep 10
+  done
+
+  echo "Timed out waiting for Railway deployment to complete." >&2
+  return 1
+}
+
 if [[ "$SKIP_RAILWAY_DEPLOY" != "1" ]]; then
   echo "Deploying backend from $BACKEND_DIR ..."
+  deploy_message="Recover AlphaVyuh backend $(git -C "$ROOT_DIR" rev-parse --short HEAD)"
   (
     cd "$BACKEND_DIR"
     railway up \
@@ -91,8 +172,9 @@ if [[ "$SKIP_RAILWAY_DEPLOY" != "1" ]]; then
       --environment "$RAILWAY_ENVIRONMENT" \
       ${project_args[@]+"${project_args[@]}"} \
       ${service_args[@]+"${service_args[@]}"} \
-      --message "Recover AlphaVyuh backend $(git -C "$ROOT_DIR" rev-parse --short HEAD)"
+      --message "$deploy_message"
   )
+  wait_for_railway_deployment "$deploy_message"
 else
   echo "Skipping Railway deploy because SKIP_RAILWAY_DEPLOY=1."
 fi
@@ -115,6 +197,11 @@ if [[ "$health_ok" != "1" ]]; then
       cd "$BACKEND_DIR"
       railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
     )
+  elif [[ "$linked_for_recovery" == "1" ]]; then
+    (
+      cd "$BACKEND_DIR"
+      railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+    )
   else
     echo "Skipping Railway log fetch because this run used explicit project flags without a linked workspace." >&2
   fi
@@ -131,10 +218,38 @@ else
   echo "Production API smoke will skip authenticated scanner verification. Set PRODUCTION_API_BEARER_TOKEN to verify scanner data."
 fi
 
-(
-  cd "$ROOT_DIR"
-  PRODUCTION_API_URL="$PRODUCTION_API_URL" \
-    PRODUCTION_API_BEARER_TOKEN="${PRODUCTION_API_BEARER_TOKEN:-}" \
-    PRODUCTION_API_AUTH_TOKEN="${PRODUCTION_API_AUTH_TOKEN:-}" \
-    npm run check:production-api
-)
+echo "Waiting for production API contract smoke to pass ..."
+production_smoke_ok=0
+for attempt in {1..30}; do
+  if (
+    cd "$ROOT_DIR"
+    PRODUCTION_API_URL="$PRODUCTION_API_URL" \
+      PRODUCTION_API_BEARER_TOKEN="${PRODUCTION_API_BEARER_TOKEN:-}" \
+      PRODUCTION_API_AUTH_TOKEN="${PRODUCTION_API_AUTH_TOKEN:-}" \
+      npm run check:production-api
+  ); then
+    production_smoke_ok=1
+    break
+  fi
+
+  echo "Production API contract smoke not ready yet ($attempt/30)."
+  sleep 10
+done
+
+if [[ "$production_smoke_ok" != "1" ]]; then
+  echo "Production API contract smoke did not pass after Railway deploy. Latest Railway logs:" >&2
+  if [[ "$link_required" == "1" ]]; then
+    (
+      cd "$BACKEND_DIR"
+      railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+    )
+  elif [[ "$linked_for_recovery" == "1" ]]; then
+    (
+      cd "$BACKEND_DIR"
+      railway logs --latest --lines 80 --environment "$RAILWAY_ENVIRONMENT" ${service_args[@]+"${service_args[@]}"} || true
+    )
+  else
+    echo "Skipping Railway log fetch because this run used explicit project flags without a linked workspace." >&2
+  fi
+  exit 1
+fi

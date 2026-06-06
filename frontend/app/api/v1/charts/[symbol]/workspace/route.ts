@@ -15,13 +15,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ symbol: string }> }) {
-  const { symbol } = await params;
-  const body = await request.json().catch(() => ({}));
+  void request;
+  void params;
   return NextResponse.json({
-    symbol: symbol.toUpperCase(),
-    timeframe: String(body.timeframe || "D").toUpperCase(),
-    indicators: Array.isArray(body.indicators) ? body.indicators : [],
-    drawings: Array.isArray(body.drawings) ? body.drawings : [],
-    recovery_mode: "local_only",
-  });
+    status: "unavailable",
+    mode: "unavailable",
+    detail: "Chart workspace changes are unavailable in read-only recovery mode.",
+  }, { status: 503 });
 }

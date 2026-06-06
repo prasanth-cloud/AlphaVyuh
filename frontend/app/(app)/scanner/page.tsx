@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
@@ -16,12 +16,22 @@ import {
   type SavedScreen,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
+import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
 import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
+import { buildScannerMatchExplanation } from '@/lib/scanner-match-explanation'
+import {
+  appendScannerRunHistory,
+  clearScannerRunHistory,
+  readScannerRunHistory,
+  type ScannerRunHistoryEntry,
+} from '@/lib/scanner-run-history'
+import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
+import { buildScannerSectorStrength } from '@/lib/scanner-sector-strength'
 
 const API = API_BASE_URL
 
@@ -57,6 +67,7 @@ interface ScanResult {
   ema_200_slope_30d?: number | null
   macd_hist: number | null
   atr_14: number | null
+  atr_pct?: number | null
   adx_14: number | null
   week_52_high: number | null
   week_52_low: number | null
@@ -83,6 +94,7 @@ interface ScanResult {
   dividend_yield: number | null
   roe: number | null
   roce: number | null
+  screen_matches?: string[]
 }
 
 type ScanTrust = {
@@ -94,7 +106,46 @@ type ScanTrust = {
   message?: string
 }
 
+type ScannerRunResponse = {
+  results?: ScanResult[]
+  total_matches?: number
+  total_pages?: number
+  page?: number
+  trade_date?: string
+  is_limited?: boolean
+  coverage_pct?: number | null
+  universe_size?: number | null
+  mode?: string
+  status?: string
+  source?: string
+  message?: string
+  detail?: string
+  source_metadata?: {
+    mode?: string
+    source_name?: string
+    as_of?: string | null
+    coverage_pct?: number | null
+    universe_active?: number | null
+    license_notes?: string
+  }
+}
+
 interface Watchlist { id: string; name: string }
+
+function normalizeScanMode(mode: unknown): ScanTrust['mode'] {
+  return mode === 'demo' || mode === 'eod' || mode === 'fallback' || mode === 'live' ? mode : 'unknown'
+}
+
+function trustFromRunResponse(data: ScannerRunResponse, sourceFallback: string, defaultMode: ScanTrust['mode'] = 'unknown'): ScanTrust {
+  return {
+    mode: normalizeScanMode(data.source_metadata?.mode ?? data.mode ?? defaultMode),
+    source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, sourceFallback),
+    asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
+    coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
+    universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
+    message: data.message ?? data.source_metadata?.license_notes,
+  }
+}
 
 type ScannerCacheSnapshot = {
   results: ScanResult[]
@@ -370,22 +421,24 @@ function MetricCell({ label, value, direction }: { label: string; value: string;
   )
 }
 
-function scannerNextAction(r: ScanResult): string {
-  if (r.data_warnings?.length) return 'Check data before planning'
-  if ((r.setup_score ?? 0) >= 80) return 'Open chart and plan risk'
-  if ((r.setup_score ?? 0) >= 65) return 'Review chart structure'
-  if (r.rsi_14 != null && r.rsi_14 > 78) return 'Check extension risk'
-  if (r.week_52_high_pct != null && r.week_52_high_pct > 15) return 'Wait for cleaner base'
-  return 'Shortlist for review'
+function metricToneColor(tone?: 'good' | 'warn' | 'bad') {
+  if (tone === 'good') return 'var(--gain)'
+  if (tone === 'warn') return 'var(--warn)'
+  if (tone === 'bad') return 'var(--loss)'
+  return 'var(--text-secondary)'
 }
 
 // Inline detail expansion for a selected row
-function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
+function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart, presetName, tradeDate, scanTrust }: {
   r: ScanResult
   watchlists: Watchlist[]
   onAddToWatchlist: (symbol: string, wlId: string) => void
   onOpenChart: (symbol: string) => void
+  presetName?: string | null
+  tradeDate?: string | null
+  scanTrust?: ScanTrust | null
 }) {
+  const explanation = buildScannerMatchExplanation(r, { presetName, tradeDate, scanTrust })
   return (
     <tr>
       <td colSpan={10} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -402,31 +455,59 @@ function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart }: {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {(r.match_reasons?.length ? r.match_reasons : ['Matched the active scanner filters']).map(reason => (
-                <span key={reason} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>{reason}</span>
+            <div className="caption" style={{ marginBottom: 8, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+              {explanation.headline}
+            </div>
+            <div data-testid={`scanner-match-context-${r.symbol}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {r.screen_matches?.map(screen => (
+                <span key={`screen-${screen}`} className="workspace-pill" style={{ color: 'var(--accent)' }}>Screen: {screen}</span>
               ))}
-              {r.confidence_reasons?.map(reason => (
-                <span key={`confidence-${reason}`} className="workspace-pill" style={{ color: 'var(--gain)' }}>{reason}</span>
+              {explanation.context.map(item => (
+                <span key={`${item.label}-${item.value}`} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>
+                  {item.label}: {item.value}
+                </span>
               ))}
             </div>
-            {Boolean(r.data_warnings?.length) && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              <div>
+                <div className="label" style={{ marginBottom: 5 }}>Triggered conditions</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {explanation.reasons.map(reason => (
+                    <span key={reason} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>{reason}</span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom: 5 }}>Confirmations</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {explanation.confirmations.map(reason => (
+                    <span key={`confidence-${reason}`} className="workspace-pill" style={{ color: 'var(--gain)' }}>{reason}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {Boolean(explanation.warnings.length) && (
               <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-                {r.data_warnings!.map(warning => (
+                {explanation.warnings.map(warning => (
                   <div key={warning} className="caption" style={{ color: 'var(--warn)' }}>{warning}</div>
                 ))}
               </div>
             )}
-            <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-subtle)' }}>
+            <div data-testid={`scanner-next-action-${r.symbol}`} style={{ marginTop: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-subtle)' }}>
               <div className="label" style={{ marginBottom: 3 }}>Next action</div>
-              <div className="caption" style={{ color: 'var(--text-secondary)' }}>{scannerNextAction(r)}</div>
+              <div className="caption" style={{ color: 'var(--text-secondary)' }}>{explanation.nextAction}</div>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-            <MetricCell label="EMA 200 slope" value={r.ema_200_slope_30d != null ? `${r.ema_200_slope_30d.toFixed(1)}%` : '—'} direction={r.ema_200_slope_30d != null ? (r.ema_200_slope_30d > 0 ? 'above' : 'below') : undefined} />
-            <MetricCell label="6M perf" value={r.price_perf_6m_pct != null ? `${r.price_perf_6m_pct > 0 ? '+' : ''}${r.price_perf_6m_pct.toFixed(1)}%` : '—'} direction={r.price_perf_6m_pct != null ? (r.price_perf_6m_pct > 0 ? 'above' : 'below') : undefined} />
-            <MetricCell label="3W box" value={r.darvas_box_height_pct != null ? `${r.darvas_box_height_pct.toFixed(1)}%` : '—'} />
-            <MetricCell label="NR7" value={r.is_nr7 == null ? '—' : r.is_nr7 ? 'Yes' : 'No'} direction={r.is_nr7 ? 'above' : undefined} />
+          <div>
+            <div className="label" style={{ marginBottom: 8 }}>Latest values behind the match</div>
+            <div data-testid={`scanner-match-metrics-${r.symbol}`} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+              {explanation.metrics.map(metric => (
+                <div key={`${metric.label}-${metric.value}`} style={{ padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border-subtle)', minWidth: 0 }}>
+                  <div className="label" style={{ marginBottom: 4 }}>{metric.label}</div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metricToneColor(metric.tone), overflowWrap: 'anywhere' }}>{metric.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         <div style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
@@ -477,7 +558,7 @@ function ScannerRowActions({
   onReport: (symbol: string) => void
 }) {
   return (
-    <div className="scanner-row-actions">
+    <div className="scanner-row-actions" data-testid={`scanner-primary-actions-${result.symbol}`}>
       <button
         className="scanner-row-action scanner-row-action-primary"
         title={`Shortlist ${result.symbol}`}
@@ -486,13 +567,37 @@ function ScannerRowActions({
       >
         Shortlist
       </button>
+      {watchlists.length > 0 && (
+        <select
+          aria-label={`Add ${result.symbol} to watchlist`}
+          className="scanner-row-select scanner-watchlist-select"
+          onClick={e => e.stopPropagation()}
+          onChange={e => {
+            e.stopPropagation()
+            const watchlistId = e.target.value
+            e.target.value = ''
+            if (watchlistId) onAddToWatchlist(result.symbol, watchlistId)
+          }}
+        >
+          <option value="">Add to watchlist…</option>
+          {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+      )}
       <button
         className="scanner-row-action"
         title={`Open ${result.symbol} chart`}
         onClick={e => { e.stopPropagation(); onOpenChart(result.symbol) }}
         style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
       >
-        Chart
+        Open chart
+      </button>
+      <button
+        className="scanner-row-action"
+        title={`Review ${result.symbol} later`}
+        onClick={e => { e.stopPropagation(); onMark([result.symbol], 'review_later') }}
+        style={{ color: 'var(--warn)', cursor: 'pointer' }}
+      >
+        Review later
       </button>
       <select
         aria-label={`More actions for ${result.symbol}`}
@@ -502,19 +607,15 @@ function ScannerRowActions({
           e.stopPropagation()
           const action = e.target.value
           e.target.value = ''
-          if (action.startsWith('add:')) onAddToWatchlist(result.symbol, action.slice(4))
           if (action === 'ignore') onMark([result.symbol], 'ignored')
-          if (action === 'later') onMark([result.symbol], 'review_later')
           if (action === 'journal') window.location.assign(`/journal?symbol=${encodeURIComponent(result.symbol)}&review=needs-review`)
           if (action === 'report') onReport(result.symbol)
         }}
       >
         <option value="">More</option>
-        {watchlists.map(w => <option key={w.id} value={`add:${w.id}`}>Add to {w.name}</option>)}
+        <option value="journal">Review journal</option>
         <option value="ignore">Ignore</option>
-        <option value="later">Review later</option>
-        <option value="journal">Journal</option>
-        <option value="report">Report</option>
+        <option value="report">Report data</option>
       </select>
     </div>
   )
@@ -552,6 +653,10 @@ export default function ScannerPage() {
   const [alertName, setAlertName] = useState('')
   const [alertSaving, setAlertSaving] = useState(false)
   const [activeScreenName, setActiveScreenName] = useState<string | null>(null)
+  const [activeCompositionName, setActiveCompositionName] = useState<string | null>(null)
+  const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set())
+  const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
+  const [composingScreens, setComposingScreens] = useState(false)
   const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -565,6 +670,7 @@ export default function ScannerPage() {
   const [recoveryMode, setRecoveryMode] = useState(false)
   const [incompleteIndicatorCount, setIncompleteIndicatorCount] = useState(0)
   const [symbolsScanned, setSymbolsScanned] = useState<number | null>(null)
+  const [runHistory, setRunHistory] = useState<ScannerRunHistoryEntry[]>([])
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -580,7 +686,9 @@ export default function ScannerPage() {
       setScanTrust(cached.scanTrust)
       setHasRun(true)
       setHasCachedResults(true)
+      setActiveCompositionName(null)
     }
+    setRunHistory(readScannerRunHistory())
     loadWatchlists()
     loadSavedScreens()
   }, [])
@@ -636,6 +744,100 @@ export default function ScannerPage() {
       setSavedScreens([])
       setSavedScreensError(error instanceof Error ? error.message : 'Saved scanner screens are temporarily unavailable.')
     }
+  }
+
+  const scannerRunLabel = useCallback((eventPreset: string | null | undefined) => {
+    if (eventPreset === 'saved_screen') return activeScreenName ?? 'Saved screen'
+    if (eventPreset && eventPreset !== 'custom') return PRESETS.find(p => p.id === eventPreset)?.name ?? 'Custom scan'
+    return 'Custom scan'
+  }, [activeScreenName])
+
+  const scannerRunPresetId = useCallback((eventPreset: string | null | undefined) => {
+    return eventPreset ?? 'custom'
+  }, [])
+
+  const rememberScannerRun = useCallback((params: {
+    eventPreset: string | null | undefined
+    results: ScanResult[]
+    totalMatches: number
+    totalPages: number
+    currentPage: number
+    tradeDate: string
+    isLimited: boolean
+    scanTrust: ScanTrust
+    filters: Filters
+    sortBy: string
+    sortDesc: boolean
+    pageSize: number
+  }) => {
+    const nextHistory = appendScannerRunHistory({
+      label: scannerRunLabel(params.eventPreset),
+      presetId: scannerRunPresetId(params.eventPreset),
+      totalMatches: params.totalMatches,
+      totalPages: params.totalPages,
+      currentPage: params.currentPage,
+      pageSize: params.pageSize,
+      sortBy: params.sortBy,
+      sortDesc: params.sortDesc,
+      tradeDate: params.tradeDate,
+      isLimited: params.isLimited,
+      dataSource: params.scanTrust.source,
+      dataMode: params.scanTrust.mode,
+      dataAsOf: params.scanTrust.asOf ?? params.tradeDate,
+      coveragePct: params.scanTrust.coveragePct,
+      universeSize: params.scanTrust.universeSize,
+      filters: params.filters,
+      results: params.results,
+    })
+    setRunHistory(nextHistory)
+  }, [scannerRunLabel, scannerRunPresetId])
+
+  function restoreScannerRun(entry: ScannerRunHistoryEntry) {
+    const restoredResults = entry.results as unknown as ScanResult[]
+    const restoredTrust = {
+      mode: (entry.dataMode ?? 'unknown') as ScanTrust['mode'],
+      source: entry.dataSource ?? 'Scanner run history',
+      asOf: entry.dataAsOf ?? entry.tradeDate ?? null,
+      coveragePct: entry.coveragePct,
+      universeSize: entry.universeSize,
+    } satisfies ScanTrust
+    setResults(restoredResults)
+    setSelectedResults(new Set())
+    setTotalMatches(entry.totalMatches)
+    setTotalPages(entry.totalPages)
+    setCurrentPage(entry.currentPage)
+    setPageSize([25, 50, 150, 200].includes(entry.pageSize) ? entry.pageSize as 25 | 50 | 150 | 200 : 25)
+    setTradeDate(entry.tradeDate)
+    setIsLimited(entry.isLimited)
+    setScanTrust(restoredTrust)
+    setSortBy(entry.sortBy)
+    setSortDesc(entry.sortDesc)
+    setFilters({ ...emptyFilters(), ...(entry.filters ?? {}) } as Filters)
+    setActivePreset(entry.presetId === 'custom' ? null : entry.presetId)
+    setActiveScreenName(entry.presetId === 'saved_screen' ? entry.label : null)
+    setHasRun(true)
+    setHasCachedResults(true)
+    setExpandedSymbol(null)
+    setError('')
+    writeScannerSnapshot({
+      results: restoredResults,
+      totalMatches: entry.totalMatches,
+      totalPages: entry.totalPages,
+      currentPage: entry.currentPage,
+      tradeDate: entry.tradeDate,
+      isLimited: entry.isLimited,
+      scanTrust: restoredTrust,
+    })
+    trackEvent('scanner_run_history_restored', {
+      label: entry.label,
+      results: entry.resultCount,
+      mode: entry.dataMode ?? 'unknown',
+    })
+  }
+
+  function clearRecentRuns() {
+    clearScannerRunHistory()
+    setRunHistory([])
   }
 
   const buildPayload = useCallback((f: Filters, sb: string, sd: boolean) => {
@@ -698,25 +900,26 @@ export default function ScannerPage() {
   const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
     const hadResults = results.length > 0
     const scanStartedAt = performance.now()
+    const activeFilters = overrideFilters || filters
     setLoading(true); setError(''); if (!hadResults) setResults([]); setExpandedSymbol(null)
     setScanElapsedMs(null)
     try {
       if (scannerUsesClientMockFallback()) {
         const data = mockRunScan()
-        const nextTrust = {
-          mode: data.source_metadata?.mode ?? 'demo',
-          source: formatMarketDataSource(data.source_metadata?.source_name, 'Demo data'),
-          asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
-          coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
-          universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
-          message: data.source_metadata?.license_notes,
-        } satisfies ScanTrust
-        setResults(data.results as unknown as ScanResult[])
-        setTotalMatches(data.total_matches || 0)
-        setTotalPages(data.total_pages || 1)
-        setCurrentPage(data.page || page)
-        setTradeDate(data.trade_date || '')
-        setIsLimited(data.is_limited || false)
+        const nextResults = data.results as unknown as ScanResult[]
+        const nextTotalMatches = data.total_matches || 0
+        const nextTotalPages = data.total_pages || 1
+        const nextCurrentPage = data.page || page
+        const nextTradeDate = data.trade_date || ''
+        const nextIsLimited = data.is_limited || false
+        const nextTrust = trustFromRunResponse(data as ScannerRunResponse, 'Demo data', 'demo')
+        setResults(nextResults)
+        setActiveCompositionName(null)
+        setTotalMatches(nextTotalMatches)
+        setTotalPages(nextTotalPages)
+        setCurrentPage(nextCurrentPage)
+        setTradeDate(nextTradeDate)
+        setIsLimited(nextIsLimited)
         setScanTrust(nextTrust)
         setRecoveryMode(false)
         setIncompleteIndicatorCount(0)
@@ -724,13 +927,27 @@ export default function ScannerPage() {
         setScanElapsedMs(Math.round(performance.now() - scanStartedAt))
         setHasCachedResults(false)
         writeScannerSnapshot({
-          results: data.results as unknown as ScanResult[],
-          totalMatches: data.total_matches || 0,
-          totalPages: data.total_pages || 1,
-          currentPage: data.page || page,
-          tradeDate: data.trade_date || '',
-          isLimited: data.is_limited || false,
+          results: nextResults,
+          totalMatches: nextTotalMatches,
+          totalPages: nextTotalPages,
+          currentPage: nextCurrentPage,
+          tradeDate: nextTradeDate,
+          isLimited: nextIsLimited,
           scanTrust: nextTrust,
+        })
+        rememberScannerRun({
+          eventPreset,
+          results: nextResults,
+          totalMatches: nextTotalMatches,
+          totalPages: nextTotalPages,
+          currentPage: nextCurrentPage,
+          tradeDate: nextTradeDate,
+          isLimited: nextIsLimited,
+          scanTrust: nextTrust,
+          filters: activeFilters,
+          sortBy: sb,
+          sortDesc: sd,
+          pageSize: size,
         })
         setHasRun(true)
         trackEvent('scanner_run', {
@@ -742,7 +959,7 @@ export default function ScannerPage() {
         return
       }
       const headers = await getAuthHeaders()
-      const payload = buildPayload(overrideFilters || filters, sb, sd)
+      const payload = buildPayload(activeFilters, sb, sd)
       const res = await fetch(`${API}/api/v1/scanner/run`, {
         method: 'POST',
         headers,
@@ -754,21 +971,20 @@ export default function ScannerPage() {
         throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
       }
       const nextResults = data.results || []
-      const nextTrust = {
-        mode: data.source_metadata?.mode ?? data.mode ?? 'eod',
-        source: formatMarketDataSource(data.source_metadata?.source_name ?? data.source, 'Market data'),
-        asOf: data.source_metadata?.as_of ?? data.trade_date ?? null,
-        coveragePct: data.coverage_pct ?? data.source_metadata?.coverage_pct ?? null,
-        universeSize: data.universe_size ?? data.source_metadata?.universe_active ?? null,
-        message: data.message ?? data.source_metadata?.license_notes,
-      } satisfies ScanTrust
+      const nextTotalMatches = data.total_matches || 0
+      const nextTotalPages = data.total_pages || 1
+      const nextCurrentPage = data.page || page
+      const nextTradeDate = data.trade_date || ''
+      const nextIsLimited = data.is_limited || false
+      const nextTrust = trustFromRunResponse(data, 'Market data', 'eod')
       setResults(nextResults)
       setSelectedResults(new Set())
-      setTotalMatches(data.total_matches || 0)
-      setTotalPages(data.total_pages || 1)
-      setCurrentPage(data.page || page)
-      setTradeDate(data.trade_date || '')
-      setIsLimited(data.is_limited || false)
+      setActiveCompositionName(null)
+      setTotalMatches(nextTotalMatches)
+      setTotalPages(nextTotalPages)
+      setCurrentPage(nextCurrentPage)
+      setTradeDate(nextTradeDate)
+      setIsLimited(nextIsLimited)
       setScanTrust(nextTrust)
       setRecoveryMode(data.recovery_mode === 'vercel_readonly' || API_BASE_URL === '')
       setIncompleteIndicatorCount(
@@ -780,12 +996,26 @@ export default function ScannerPage() {
       setHasCachedResults(false)
       writeScannerSnapshot({
         results: nextResults,
-        totalMatches: data.total_matches || 0,
-        totalPages: data.total_pages || 1,
-        currentPage: data.page || page,
-        tradeDate: data.trade_date || '',
-        isLimited: data.is_limited || false,
+        totalMatches: nextTotalMatches,
+        totalPages: nextTotalPages,
+        currentPage: nextCurrentPage,
+        tradeDate: nextTradeDate,
+        isLimited: nextIsLimited,
         scanTrust: nextTrust,
+      })
+      rememberScannerRun({
+        eventPreset,
+        results: nextResults,
+        totalMatches: nextTotalMatches,
+        totalPages: nextTotalPages,
+        currentPage: nextCurrentPage,
+        tradeDate: nextTradeDate,
+        isLimited: nextIsLimited,
+        scanTrust: nextTrust,
+        filters: activeFilters,
+        sortBy: sb,
+        sortDesc: sd,
+        pageSize: size,
       })
       setHasRun(true)
       trackEvent('scanner_run', {
@@ -797,7 +1027,7 @@ export default function ScannerPage() {
     } catch (e: unknown) {
       setError(describeMarketDataError(e))
     } finally { setLoading(false) }
-  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, results.length, sortBy, sortDesc])
+  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, rememberScannerRun, results.length, sortBy, sortDesc])
 
   const applyPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
@@ -816,11 +1046,121 @@ export default function ScannerPage() {
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
-    setFilters(f); setActivePreset('saved_screen'); setActiveScreenName(screen.name); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
+    setFilters(f); setActivePreset('saved_screen'); setActiveScreenName(screen.name); setActiveCompositionName(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
   }
 
   function currentScanName() {
-    return activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom scan' : 'Saved scan')
+    return activeCompositionName ?? activePresetMeta?.name ?? activeScreenName ?? (hasRun ? 'Custom scan' : 'Saved scan')
+  }
+
+  function toggleCompositionScreen(screenId: string, checked: boolean) {
+    setSelectedScreenIds(prev => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(screenId)
+      } else {
+        next.delete(screenId)
+      }
+      return next
+    })
+  }
+
+  async function runSavedScreen(screen: SavedScreen): Promise<{ screen: SavedScreen; results: ScanResult[]; trust: ScanTrust; tradeDate: string; isLimited: boolean }> {
+    if (scannerUsesClientMockFallback()) {
+      const data = mockRunScan() as unknown as ScannerRunResponse
+      return {
+        screen,
+        results: data.results ?? [],
+        trust: trustFromRunResponse(data, 'Demo data', 'demo'),
+        tradeDate: data.trade_date ?? '',
+        isLimited: data.is_limited === true,
+      }
+    }
+
+    const headers = await getAuthHeaders()
+    const res = await fetch(`${API}/api/v1/scanner/run`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        filters: screen.filters,
+        sort_by: sortBy,
+        sort_order: sortDesc ? 'desc' : 'asc',
+        preset_id: null,
+        page: 1,
+        page_size: 200,
+      }),
+    })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
+    const data = await res.json() as ScannerRunResponse
+    if (data.mode === 'unavailable' || data.status === 'unavailable') {
+      throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
+    }
+    return {
+      screen,
+      results: data.results ?? [],
+      trust: trustFromRunResponse(data, 'Market data', 'eod'),
+      tradeDate: data.trade_date ?? '',
+      isLimited: data.is_limited === true,
+    }
+  }
+
+  async function runSavedScreenComposition() {
+    const screens = savedScreens.filter(screen => selectedScreenIds.has(screen.id))
+    if (screens.length < 2) {
+      showToast('Select at least two saved screens')
+      return
+    }
+    setComposingScreens(true)
+    setLoading(true)
+    setError('')
+    setExpandedSymbol(null)
+    try {
+      const runs = await Promise.all(screens.map(screen => runSavedScreen(screen)))
+      const composed = composeScannerResults(
+        runs.map(run => ({ screenId: run.screen.id, screenName: run.screen.name, results: run.results })),
+        compositionMode,
+      )
+      const nextTrust = {
+        ...runs[0].trust,
+        source: 'Saved scan composition',
+        message: `${compositionMode.toUpperCase()} composition across ${screens.length} saved screens.`,
+      } satisfies ScanTrust
+      const label = `${screens.map(screen => screen.name).join(compositionMode === 'and' ? ' + ' : ' / ')}`
+      setResults(composed)
+      setSelectedResults(new Set())
+      setWorkflowMarks({})
+      setTotalMatches(composed.length)
+      setTotalPages(1)
+      setCurrentPage(1)
+      setTradeDate(runs.find(run => run.tradeDate)?.tradeDate ?? '')
+      setIsLimited(runs.some(run => run.isLimited))
+      setScanTrust(nextTrust)
+      setHasCachedResults(false)
+      setHasRun(true)
+      setActivePreset('saved_screen')
+      setActiveScreenName(null)
+      setActiveCompositionName(`${compositionMode.toUpperCase()} · ${label}`)
+      writeScannerSnapshot({
+        results: composed,
+        totalMatches: composed.length,
+        totalPages: 1,
+        currentPage: 1,
+        tradeDate: runs.find(run => run.tradeDate)?.tradeDate ?? '',
+        isLimited: runs.some(run => run.isLimited),
+        scanTrust: nextTrust,
+      })
+      trackEvent('scanner_saved_screen_composition', {
+        mode: compositionMode,
+        screens: screens.length,
+        results: composed.length,
+      })
+      showToast(`${composed.length} ${composed.length === 1 ? 'match' : 'matches'} from ${compositionMode.toUpperCase()} composition`)
+    } catch (e: unknown) {
+      setError(describeMarketDataError(e))
+    } finally {
+      setLoading(false)
+      setComposingScreens(false)
+    }
   }
 
   function openAlertModal() {
@@ -897,7 +1237,7 @@ export default function ScannerPage() {
   function scanContextOptions() {
     return {
       presetId: activePreset,
-      presetName: activePresetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
+      presetName: activeCompositionName ?? activePresetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
       tradeDate,
       dataSource: scanTrust?.source ?? null,
       dataMode: scanTrust?.mode ?? null,
@@ -935,6 +1275,42 @@ export default function ScannerPage() {
       count: symbols.length,
     })
     showToast(`${symbols.length} ${symbols.length === 1 ? 'symbol' : 'symbols'} marked ${label === 'shortlist' ? 'shortlist' : label.replace('_', ' ')}`)
+  }
+
+  function fallbackCopyText(text: string) {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+
+  async function copyTradingViewSymbols(symbols: string[]) {
+    const formatted = tradingViewNseSymbols(symbols)
+    if (!formatted) return
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(formatted)
+      } else {
+        fallbackCopyText(formatted)
+      }
+      trackEvent('scanner_tradingview_symbols_copied', { count: symbols.length })
+      showToast(`Copied ${symbols.length} TradingView ${symbols.length === 1 ? 'symbol' : 'symbols'}`)
+    } catch {
+      showToast('Could not copy TradingView symbols. Try Review charts or copy from the table.')
+    }
+  }
+
+  async function openScannerChart(result: ScanResult) {
+    await bulkUpsertWorkflowStates([
+      scannerWorkflowPatch(result.symbol, 'shortlist', undefined, result, scanContextOptions()),
+    ])
+    trackEvent('scanner_chart_review_opened', { symbol: result.symbol, preset: activePreset ?? 'custom' })
+    router.push(`/charts/${result.symbol}?from=scanner&full=1`)
   }
 
   function selectedSymbols() {
@@ -1058,8 +1434,9 @@ export default function ScannerPage() {
     )
   }
 
-  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setActiveScreenName(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
+  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setActiveScreenName(null); setActiveCompositionName(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
   const activePresetMeta = PRESETS.find(p => p.id === activePreset) ?? null
+  const selectedCompositionCount = savedScreens.filter(screen => selectedScreenIds.has(screen.id)).length
   const pageSizeOptions = [
     { value: 25, label: '25' },
     { value: 50, label: '50' },
@@ -1075,9 +1452,16 @@ export default function ScannerPage() {
     { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => pageWindowStart + idx,
   );
+  const scannerWorkbenchResult = expandedSymbol ? results.find(result => result.symbol === expandedSymbol) ?? null : null;
+  const scannerWorkbenchExplanation = scannerWorkbenchResult ? buildScannerMatchExplanation(scannerWorkbenchResult, {
+    presetName: currentScanName(),
+    tradeDate,
+    scanTrust,
+  }) : null;
+  const sectorStrength = useMemo(() => buildScannerSectorStrength(results).slice(0, 5), [results]);
   return (
     <div className="workspace-page">
-      <div className="workspace-grid" style={{ gridTemplateColumns: '320px minmax(0, 1fr)' }}>
+      <div className="workspace-grid scanner-workspace-grid">
 
       {/* ── LEFT PANEL ── */}
       <div className="workspace-card workspace-card-muted" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1114,10 +1498,17 @@ export default function ScannerPage() {
 
         {/* Saved screens */}
         {savedScreens.length > 0 && (
-          <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 156, overflowY: 'auto', flexShrink: 0 }}>
+          <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 236, overflowY: 'auto', flexShrink: 0 }}>
             <div className="label" style={{ marginBottom: 8 }}>My screens</div>
             {savedScreens.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                <input
+                  type="checkbox"
+                  checked={selectedScreenIds.has(s.id)}
+                  onChange={e => toggleCompositionScreen(s.id, e.target.checked)}
+                  aria-label={`Select saved screen ${s.name}`}
+                  style={{ accentColor: 'var(--accent)', width: 13, height: 13, flex: '0 0 auto' }}
+                />
                 <button onClick={() => loadScreen(s)} style={{
                   flex: 1, textAlign: 'left', padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: 11,
                   background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
@@ -1135,6 +1526,31 @@ export default function ScannerPage() {
                 </button>
               </div>
             ))}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
+              {(['and', 'or'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setCompositionMode(mode)}
+                  className={`workspace-chip-button${compositionMode === mode ? ' active' : ''}`}
+                  style={{ justifyContent: 'center', minHeight: 30 }}
+                >
+                  {mode.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <button
+              className="workspace-chip-button"
+              onClick={runSavedScreenComposition}
+              disabled={selectedCompositionCount < 2 || composingScreens}
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                marginTop: 6,
+                opacity: selectedCompositionCount < 2 || composingScreens ? 0.48 : 1,
+              }}
+            >
+              {composingScreens ? 'Combining…' : `Combine ${selectedCompositionCount || 0} screens`}
+            </button>
           </div>
         )}
         {savedScreensError && (
@@ -1153,6 +1569,50 @@ export default function ScannerPage() {
             <button className="workspace-chip-button" onClick={loadWatchlists}>
               Retry
             </button>
+          </div>
+        )}
+
+        {runHistory.length > 0 && (
+          <div data-testid="scanner-run-history" className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 210, overflowY: 'auto', flexShrink: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div className="label">Recent runs</div>
+              <button className="caption" onClick={clearRecentRuns} style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+                Clear
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {runHistory.slice(0, 5).map(entry => (
+                <button
+                  key={entry.id}
+                  data-testid="scanner-run-history-entry"
+                  onClick={() => restoreScannerRun(entry)}
+                  title={`Restore ${entry.label}`}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '7px 9px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--surface-2)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: 'var(--text-primary)' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
+                    <span style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>{entry.totalMatches.toLocaleString('en-IN')}</span>
+                  </span>
+                  <span className="caption" style={{ display: 'block', marginTop: 3 }}>
+                    {entry.tradeDate || entry.dataAsOf || 'Latest'} · {entry.dataSource ?? 'Source pending'}
+                  </span>
+                  {entry.topSymbols.length > 0 && (
+                    <span className="caption mono" style={{ display: 'block', marginTop: 3, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {entry.topSymbols.slice(0, 4).join(' · ')}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1315,9 +1775,14 @@ export default function ScannerPage() {
                 )}
               </div>
               <div className="workspace-toolbar-group scanner-results-toolbar" data-testid="scanner-data-trust">
+                {activeCompositionName && (
+                  <span className="workspace-pill" style={{ color: 'var(--accent)' }}>
+                    {activeCompositionName}
+                  </span>
+                )}
                 {scanTrust && (
                   <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
-                    {hasCachedResults ? 'Cached results' : scanTrust.source}{scanTrust.coveragePct != null ? ` · ${scanTrust.coveragePct}% coverage` : ''}
+                    {hasCachedResults ? 'Cached results · ' : ''}Source: {scanTrust.source}{scanTrust.coveragePct != null ? ` · Coverage: ${scanTrust.coveragePct}%` : ''}
                   </span>
                 )}
                 {(loading || scanElapsedMs != null) && (
@@ -1389,6 +1854,12 @@ export default function ScannerPage() {
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')}>
                       Shortlist
                     </Button>
+                    <Button size="sm" variant="ghost" onClick={() => router.push(buildMultiChartReviewHref(selectedSymbols(), { source: 'scanner' }))}>
+                      Review charts
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => copyTradingViewSymbols(selectedSymbols())}>
+                      Copy TV symbols
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')}>
                       Review later
                     </Button>
@@ -1415,6 +1886,67 @@ export default function ScannerPage() {
             style={{ margin: '12px 16px', padding: '10px 14px', background: 'var(--warn-subtle)', border: '1px solid rgba(217,119,6,0.24)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--warn)', lineHeight: 1.6 }}
           >
             Read-only recovery is active while the Railway scanner API is unavailable. VCP and multi-day pivot filters need the full API; single-day EOD presets still run against the latest Supabase session.
+          </div>
+        )}
+
+        {sectorStrength.length > 0 && (
+          <div
+            data-testid="scanner-sector-strength"
+            style={{
+              padding: '10px 16px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'grid',
+              gap: 8,
+              background: 'rgba(255,255,255,0.015)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div className="label" style={{ marginBottom: 3 }}>Sector strength</div>
+                <div className="caption" style={{ color: 'var(--text-secondary)' }}>
+                  Sector-only ranking from this scan. Source audit details stay in Data Trust.
+                </div>
+              </div>
+              <span className="workspace-pill">
+                {sectorStrength.length} sector{sectorStrength.length === 1 ? '' : 's'} ranked
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+              {sectorStrength.map((sector) => (
+                <div
+                  key={sector.sector}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid var(--border-subtle)',
+                    background: 'rgba(255,255,255,0.025)',
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
+                    <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {sector.sector}
+                    </div>
+                    <span
+                      className="workspace-pill"
+                      style={{
+                        color: sector.label === 'Leader' ? 'var(--gain)' : sector.label === 'Constructive' ? 'var(--accent)' : sector.label === 'Mixed' ? 'var(--text-secondary)' : 'var(--warn)',
+                      }}
+                    >
+                      {sector.label}
+                    </span>
+                  </div>
+                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+                    {sector.reason}
+                  </div>
+                  <div className="workspace-pill-row" style={{ marginTop: 7 }}>
+                    <span className="workspace-pill">{sector.activeCount} active</span>
+                    {sector.avgRsScore != null && <span className="workspace-pill">RS {Math.round(sector.avgRsScore)}</span>}
+                    {sector.topSymbols.length > 0 && <span className="workspace-pill">{sector.topSymbols.join(', ')}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1468,10 +2000,76 @@ export default function ScannerPage() {
         {/* Results table */}
         {!loading && results.length > 0 && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
+            {scannerWorkbenchResult && scannerWorkbenchExplanation && (
+              <div
+                data-testid="scanner-workbench"
+                style={{
+                  margin: '12px 16px',
+                  padding: 14,
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'rgba(255,255,255,0.025)',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
+                  gap: 12,
+                  alignItems: 'stretch',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div className="label" style={{ marginBottom: 5 }}>Scan results workbench</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                    <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>{scannerWorkbenchResult.symbol}</span>
+                    <span className="caption">{scannerWorkbenchResult.company_name}</span>
+                    <span className="workspace-pill">{scannerWorkbenchExplanation.nextAction}</span>
+                  </div>
+                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 8 }}>
+                    {scannerWorkbenchExplanation.headline}
+                  </div>
+                  <div className="workspace-pill-row">
+                    {scannerWorkbenchExplanation.metrics.slice(0, 5).map(metric => (
+                      <span
+                        key={metric.label}
+                        className="workspace-pill"
+                        style={{ color: metric.tone === 'good' ? 'var(--gain)' : metric.tone === 'warn' ? 'var(--warn)' : metric.tone === 'bad' ? 'var(--loss)' : 'var(--text-secondary)' }}
+                      >
+                        {metric.label}: {metric.value}
+                      </span>
+                    ))}
+                  </div>
+                  {scannerWorkbenchExplanation.warnings.length > 0 && (
+                    <div className="caption" style={{ marginTop: 8, color: 'var(--warn)', lineHeight: 1.5 }}>
+                      {scannerWorkbenchExplanation.warnings.join(' · ')}
+                    </div>
+                  )}
+                </div>
+                <div style={{ minWidth: 0, padding: 10, borderRadius: 12, border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.12)' }}>
+                  <div className="label" style={{ marginBottom: 5 }}>Chart + broker context</div>
+                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 10 }}>
+                    Review chart structure first. Broker action stays journal-only until a plan is confirmed outside the scanner.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className="workspace-chip-button active" onClick={() => markWorkflow([scannerWorkbenchResult.symbol], 'shortlist')}>
+                      Shortlist
+                    </button>
+                    {watchlists[0] && (
+                      <button className="workspace-chip-button" onClick={() => addToWatchlist(scannerWorkbenchResult.symbol, watchlists[0].id)}>
+                        Add to {watchlists[0].name}
+                      </button>
+                    )}
+                    <button className="workspace-chip-button" onClick={() => void openScannerChart(scannerWorkbenchResult)}>
+                      Open chart
+                    </button>
+                    <button className="workspace-chip-button" onClick={() => markWorkflow([scannerWorkbenchResult.symbol], 'review_later')}>
+                      Review later
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <DataTable
               className="scanner-results-table"
               style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}
-              tableStyle={{ minWidth: 860, tableLayout: 'fixed' }}
+              tableStyle={{ minWidth: 980, tableLayout: 'fixed' }}
             >
               <DataTableHead>
                 <Th width={32}>
@@ -1486,7 +2084,7 @@ export default function ScannerPage() {
                 <Th align="right" width={50}>RS</Th>
                 <Th align="right" width={68}>52W H%</Th>
                 <Th align="right" width={66}>Score</Th>
-                <Th width={178}>Action</Th>
+                <Th width={268}>Action</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {
@@ -1498,11 +2096,11 @@ export default function ScannerPage() {
                     <Fragment key={r.symbol}>
                       <Tr
                         onClick={() => setExpandedSymbol(expanded ? null : r.symbol)}
-                        onDoubleClick={() => router.push(`/charts/${r.symbol}`)}
+                        onDoubleClick={() => void openScannerChart(r)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
-                            router.push(`/charts/${r.symbol}`)
+                            void openScannerChart(r)
                           }
                           if (e.key === ' ') {
                             e.preventDefault()
@@ -1520,6 +2118,14 @@ export default function ScannerPage() {
                         <Td>
                           <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
                           <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                          <div className="caption" title={r.match_reasons?.[0] ?? 'Matched the active scanner filters'} style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-tertiary)' }}>
+                            Matched: {r.match_reasons?.[0] ?? 'Active filters'}
+                          </div>
+                          {r.screen_matches?.length ? (
+                            <div className="caption" style={{ color: 'var(--accent)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {r.screen_matches.join(' + ')}
+                            </div>
+                          ) : null}
                           {workflowMarks[r.symbol] && (
                             <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
                               {workflowMarks[r.symbol] === 'shortlist'
@@ -1572,7 +2178,7 @@ export default function ScannerPage() {
                             watchlists={watchlists}
                             onMark={markWorkflow}
                             onAddToWatchlist={addToWatchlist}
-                            onOpenChart={sym => router.push(`/charts/${sym}`)}
+                            onOpenChart={() => void openScannerChart(r)}
                             onReport={reportScannerDataIssue}
                           />
                         </Td>
@@ -1582,7 +2188,10 @@ export default function ScannerPage() {
                           r={r}
                           watchlists={watchlists}
                           onAddToWatchlist={addToWatchlist}
-                          onOpenChart={sym => router.push(`/charts/${sym}`)}
+                          onOpenChart={() => void openScannerChart(r)}
+                          presetName={currentScanName()}
+                          tradeDate={tradeDate}
+                          scanTrust={scanTrust}
                         />
                       )}
                     </Fragment>
@@ -1699,7 +2308,7 @@ export default function ScannerPage() {
             onClick={e => e.stopPropagation()}>
             <div className="heading-card" style={{ marginBottom: 6 }}>Create scan alert</div>
             <div className="caption" style={{ marginBottom: 16, lineHeight: 1.6 }}>
-              AlphaVyuh will check this scan when the next session data is available. Matches appear in Alerts for review.
+              AlphaVyuh checks this cash-equity screen once after each completed EOD session. Use it for entry setup watches or exit/risk reviews; matches appear in Alerts for review.
             </div>
             <input autoFocus value={alertName} onChange={e => setAlertName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && createEodAlert()}

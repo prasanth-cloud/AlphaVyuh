@@ -19,4 +19,16 @@ describe("chart feedback copy", () => {
     expect(source).not.toContain("setWatchlistsError(error instanceof Error ? error.message");
     expect(source).not.toContain("showDrawingPersistenceError(error,");
   });
+
+  it("prefers full candle-window EMA overlays for long-range chart review", () => {
+    expect(source).toContain("function candleIndicatorLine");
+    expect(source).toContain("preferBroaderLine");
+    expect(source).toContain('candleIndicatorLine(candles, "ema_200")');
+    expect(source).toContain("preferBroaderLine(ind.ema200 as LinePoint[] | undefined, ema200FromCandles)");
+  });
+
+  it("opens full chart review on the five-year launch contract range", () => {
+    expect(source).toContain('const initialRangeLabel: WatchlistChartTimeframe = fullChartMode ? "5Y" : "1Y";');
+    expect(source).toContain('setRangeLabel(layout.timeframe === "D" ? initialRangeLabel : layout.timeframe === "W" ? "3Y" : "Max");');
+  });
 });

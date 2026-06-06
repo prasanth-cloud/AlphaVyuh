@@ -112,6 +112,41 @@ class _EmptyClient(_FakeClient):
         return _EmptyTable(self, name)
 
 
+class _RecentMatchTable(_FakeTable):
+    def limit(self, value):
+        self.client.limits.append((self.name, value))
+        return self
+
+    def execute(self):
+        if self.name == "scan_alert_matches":
+            return _FakeResult(self.client.match_rows)
+        return super().execute()
+
+
+class _RecentMatchClient(_FakeClient):
+    def __init__(self, match_rows):
+        super().__init__()
+        self.match_rows = match_rows
+        self.limits = []
+
+    def table(self, name):
+        return _RecentMatchTable(self, name)
+
+
+def _match_row(alert_id: str, run_date: str) -> dict:
+    return {
+        "id": f"{alert_id}-{run_date}",
+        "alert_id": alert_id,
+        "user_id": "user-1",
+        "run_date": run_date,
+        "symbols": [{"symbol": "RELIANCE"}],
+        "match_count": 1,
+        "run_status": "success",
+        "error_message": None,
+        "scan_alerts": {"name": alert_id},
+    }
+
+
 def test_scan_alert_sort_validation_rejects_unknown_sort_key():
     with pytest.raises(HTTPException) as exc_info:
         alerts._validate_sort("unknown_column", "desc")
@@ -169,6 +204,46 @@ async def test_recent_matches_raises_503_when_match_store_fails(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_recent_matches_returns_recent_history_per_alert(monkeypatch):
+    client = _RecentMatchClient([
+        _match_row("alert-1", "2026-05-31"),
+        _match_row("alert-2", "2026-05-31"),
+        _match_row("alert-1", "2026-05-30"),
+        _match_row("alert-2", "2026-05-30"),
+        _match_row("alert-1", "2026-05-29"),
+    ])
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: client)
+
+    result = await alerts.get_recent_matches(user_id="user-1")
+
+    assert [match["id"] for match in result["matches"]] == [
+        "alert-1-2026-05-31",
+        "alert-2-2026-05-31",
+        "alert-1-2026-05-30",
+        "alert-2-2026-05-30",
+    ]
+    assert client.limits == [("scan_alert_matches", 50)]
+
+
+@pytest.mark.anyio
+async def test_recent_matches_can_be_limited_to_latest_run_per_alert(monkeypatch):
+    client = _RecentMatchClient([
+        _match_row("alert-1", "2026-05-31"),
+        _match_row("alert-2", "2026-05-31"),
+        _match_row("alert-1", "2026-05-30"),
+        _match_row("alert-2", "2026-05-30"),
+    ])
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: client)
+
+    result = await alerts.get_recent_matches(runs_per_alert=1, user_id="user-1")
+
+    assert [match["id"] for match in result["matches"]] == [
+        "alert-1-2026-05-31",
+        "alert-2-2026-05-31",
+    ]
+
+
+@pytest.mark.anyio
 async def test_update_alert_preserves_missing_alert_404(monkeypatch):
     monkeypatch.setattr(alerts, "get_admin_client", lambda: _EmptyClient())
 
@@ -205,7 +280,7 @@ def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypa
     fake_client = _FakeClient()
     calls = []
 
-    async def fake_execute_scan(client, body, *, plan, trade_date, enforce_plan_limit):
+    async def fake_execute_scan(client, body, *, plan, trade_date, enforce_plan_limit, score_results, include_diagnostics):
         calls.append({
             "plan": plan,
             "trade_date": str(trade_date),
@@ -213,6 +288,8 @@ def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypa
             "filters": body.filters.model_dump(exclude_none=True),
             "sort_by": body.sort_by,
             "enforce_plan_limit": enforce_plan_limit,
+            "score_results": score_results,
+            "include_diagnostics": include_diagnostics,
         })
         return {
             "total_matches": 2,
@@ -235,10 +312,12 @@ def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypa
     assert calls == [{
         "plan": "pro",
         "trade_date": "2026-05-15",
-        "page_size": 0,
+        "page_size": 50,
         "filters": {"rsi_min": 60.0},
         "sort_by": "volume_ratio",
         "enforce_plan_limit": False,
+        "score_results": False,
+        "include_diagnostics": False,
     }]
     match_upsert = fake_client.upserts[0][1]
     assert match_upsert["match_count"] == 2
