@@ -148,6 +148,11 @@ export function useChartData({
 
   const dataRef = useRef<CandlesResponse | null>(null);
   const lastBaseChartKeyRef = useRef<string | null>(null);
+  const onLegendResetRef = useRef(onLegendReset);
+
+  useEffect(() => {
+    onLegendResetRef.current = onLegendReset;
+  }, [onLegendReset]);
 
   useEffect(() => {
     dataRef.current = data;
@@ -175,7 +180,7 @@ export function useChartData({
     if (freshCached) {
       setData(freshCached.data);
       lastBaseChartKeyRef.current = baseCacheKey;
-      onLegendReset?.();
+      onLegendResetRef.current?.();
       setRangeNote(getCoverageAvailabilityMessage(freshCached.data.coverage, request) ?? getRangeAvailabilityMessage(freshCached.data.candles ?? [], request));
       setIndicatorError(null);
       setIndicatorData(freshCached.indicatorData);
@@ -230,7 +235,7 @@ export function useChartData({
         if (cancelled) return;
         setData(nextData);
         lastBaseChartKeyRef.current = baseCacheKey;
-        onLegendReset?.();
+        onLegendResetRef.current?.();
         setRangeNote(getCoverageAvailabilityMessage(nextData.coverage, request) ?? getRangeAvailabilityMessage(nextData.candles ?? [], request));
         setIndicatorError(indicatorsResp.error);
         const indicatorPayload = usePrecomputedEmas
@@ -264,7 +269,7 @@ export function useChartData({
     return () => {
       cancelled = true;
     };
-  }, [activeIndicators, liveMode, onLegendReset, rangeLabel, refreshNonce, setLiveMode, setTimeframe, symbol, timeframe]);
+  }, [activeIndicators, liveMode, rangeLabel, refreshNonce, setLiveMode, setTimeframe, symbol, timeframe]);
 
   useEffect(() => {
     if (!liveMode) return;
@@ -273,12 +278,12 @@ export function useChartData({
       getCandlesLive(symbol, { limit: Math.min(request.limit, 1000), timeframe: request.timeframe })
         .then((nextData) => {
           setData(nextData);
-          onLegendReset?.();
+          onLegendResetRef.current?.();
         })
         .catch(() => {});
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [liveMode, onLegendReset, rangeLabel, symbol]);
+  }, [liveMode, rangeLabel, symbol]);
 
   return {
     data,
