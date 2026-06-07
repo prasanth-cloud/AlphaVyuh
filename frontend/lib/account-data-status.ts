@@ -1,4 +1,4 @@
-export type AccountDataIssueId = "watchlists" | "journal" | "broker";
+export type AccountDataIssueId = "watchlists" | "journal" | "broker" | "alerts";
 
 export type AccountDataIssue = {
   id: AccountDataIssueId;
@@ -44,4 +44,8 @@ export function uniqueAccountIssues(issues: Array<AccountDataIssue | null | unde
     unique.push(issue);
   }
   return unique;
+}
+
+export function setupBlockingAccountIssues(issues: AccountDataIssue[]): AccountDataIssue[] {
+  return issues.filter((issue) => issue.id !== "alerts");
 }

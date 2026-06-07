@@ -9,16 +9,30 @@ import {
   getJournalStats,
   getMarketSnapshot,
   getMe,
+  getRecentAlertMatches,
+  getWorkflowStates,
+  listAlerts,
   getWatchlists,
   updateMe,
   type AiPatterns,
   type DataHealth,
   type MarketOverview,
+  type ScanAlertMatch,
 } from '@/lib/api'
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
-import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
+import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
+
+const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200;
+
+async function getWorkflowStatesForSymbols(symbols: string[]) {
+  const states: Awaited<ReturnType<typeof getWorkflowStates>> = [];
+  for (let index = 0; index < symbols.length; index += WORKFLOW_STATE_SYMBOL_BATCH_SIZE) {
+    states.push(...await getWorkflowStates({ symbols: symbols.slice(index, index + WORKFLOW_STATE_SYMBOL_BATCH_SIZE) }));
+  }
+  return states;
+}
 
 function safeNumber(value: unknown, fallback = 0): number {
   const numeric = typeof value === 'number' ? value : Number(value)
@@ -288,9 +302,13 @@ type WorkflowState = {
   brokerLastSyncedAt: string | null
   closedTrades: number
   reviewedTrades: number
+  scanAlerts: number
+  alertMatchSymbols: number
+  watchlistReviewDue: number
   onboardingCompleted: boolean
   patterns: AiPatterns | null
   accountIssues: AccountDataIssue[]
+  alertIssues: AccountDataIssue[]
 }
 
 const DASHBOARD_SNAPSHOT_CACHE_KEY = 'alphavyuh-dashboard-snapshot-v1'
@@ -374,7 +392,7 @@ function TodayCockpit({
     : workflow.closedTrades < 3
       ? 'Close 3 trades to make review patterns useful.'
       : reviewDue > 0
-        ? 'Start with notes before adding new ideas.'
+        ? 'Start with review notes before adding new ideas.'
         : 'Closed trades in the current sample have review notes.'
 
   const dataStatus = dataHealth?.status === 'healthy'
@@ -387,70 +405,111 @@ function TodayCockpit({
           ? 'Demo'
           : 'Pending'
 
+  const alertsIssue = workflow.alertIssues.find(issue => issue.id === 'alerts')
+  const brokerIssue = workflow.accountIssues.find(issue => issue.id === 'broker')
+  const brokerValue = brokerIssue
+    ? 'Paused'
+    : workflow.brokerConnected
+      ? 'Ready'
+      : workflow.brokerStatusLabel?.toLowerCase().includes('expired')
+        ? 'Token expired'
+        : 'Not connected'
+
   const cards = [
     {
-      label: 'Review due',
-      value: reviewValue,
-      detail: reviewDetail,
-      href: '/journal?review=needs-review',
-      tone: journalIssue ? 'var(--warn)' : reviewDue > 0 || workflow.closedTrades < 3 ? 'var(--accent)' : 'var(--gain)',
-    },
-    {
-      label: 'Active plans',
-      value: journalIssue ? 'Paused' : workflow.openTrades.toLocaleString('en-IN'),
-      detail: journalIssue ? 'Open trade count waits for Journal recovery.' : workflow.openTrades > 0 ? 'Manage open ideas from Journal and chart context.' : 'No open journal positions in the current sample.',
-      href: '/journal',
-      tone: journalIssue ? 'var(--warn)' : workflow.openTrades > 0 ? 'var(--accent)' : 'var(--text-secondary)',
-    },
-    {
-      label: 'Watchlist focus',
-      value: watchlistIssue ? 'Paused' : `${workflow.trackedSymbols.toLocaleString('en-IN')} symbols`,
-      detail: watchlistIssue ? 'Watchlist counts wait for service recovery.' : workflow.watchlists > 0 ? `${workflow.watchlists} list${workflow.watchlists === 1 ? '' : 's'} feeding the desk.` : 'Create one focused queue before scanning broadly.',
-      href: '/watchlist',
-      tone: watchlistIssue ? 'var(--warn)' : workflow.trackedSymbols > 0 ? 'var(--gain)' : 'var(--accent)',
-    },
-    {
-      label: 'Data health',
+      label: 'Market/data status',
       value: dataStatus,
       detail: data.trade_date ? `Latest market snapshot ${data.trade_date}.` : 'Waiting for market snapshot date.',
       href: '/data',
+      action: 'Open data status',
       tone: dataStatus === 'Ready' ? 'var(--gain)' : dataStatus === 'Stale' || dataStatus === 'Check' ? 'var(--warn)' : 'var(--text-secondary)',
+    },
+    {
+      label: 'Scan alert matches',
+      value: alertsIssue ? 'Paused' : workflow.alertMatchSymbols > 0 ? `${workflow.alertMatchSymbols} symbols` : workflow.scanAlerts > 0 ? 'Waiting EOD' : 'No alerts',
+      detail: alertsIssue
+        ? 'Saved scan matches are not being counted as empty.'
+        : workflow.alertMatchSymbols > 0
+          ? 'Recent saved-scan matches are ready for review.'
+          : workflow.scanAlerts > 0
+            ? `${workflow.scanAlerts} saved scan${workflow.scanAlerts === 1 ? '' : 's'} waiting for the next completed session.`
+            : 'Create a saved scan alert from Scanner.',
+      href: '/alerts',
+      action: 'Open scanner alerts',
+      tone: alertsIssue ? 'var(--warn)' : workflow.alertMatchSymbols > 0 ? 'var(--accent)' : 'var(--text-secondary)',
+    },
+    {
+      label: 'Watchlist review',
+      value: watchlistIssue ? 'Paused' : workflow.watchlistReviewDue > 0 ? `${workflow.watchlistReviewDue} due` : 'Clear',
+      detail: watchlistIssue
+        ? 'Watchlist review counts wait for service recovery.'
+        : workflow.watchlistReviewDue > 0
+          ? 'Symbols without notes or with review-later state need context.'
+          : workflow.trackedSymbols > 0
+            ? 'Watchlist symbols have review context in this sample.'
+            : 'Create one focused queue before scanning broadly.',
+      href: '/watchlist',
+      action: 'Open watchlist queue',
+      tone: watchlistIssue ? 'var(--warn)' : workflow.watchlistReviewDue > 0 ? 'var(--accent)' : 'var(--gain)',
+    },
+    {
+      label: 'Journal review debt',
+      value: reviewValue,
+      detail: reviewDetail,
+      href: '/journal?review=needs-review',
+      action: 'Open journal review',
+      tone: journalIssue ? 'var(--warn)' : reviewDue > 0 || workflow.closedTrades < 3 ? 'var(--accent)' : 'var(--gain)',
+    },
+    {
+      label: 'Broker import status',
+      value: brokerValue,
+      detail: brokerIssue
+        ? 'Broker import state cannot be confirmed right now.'
+        : workflow.brokerConnected
+          ? `${workflow.brokerName ?? 'Broker'} connected read-only for import.`
+          : 'Broker import is optional; journal capture still works.',
+      href: '/settings/broker',
+      action: 'Open broker settings',
+      tone: brokerIssue ? 'var(--warn)' : workflow.brokerConnected ? 'var(--gain)' : 'var(--text-secondary)',
     },
   ]
 
   return (
     <Card padding="md" style={{ marginBottom: 16 }} data-testid="today-cockpit">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h1 className="heading-card" style={{ marginBottom: 4 }}>Today</h1>
-          <div className="caption">Start with review, then plan, then discover.</div>
-        </div>
-        <a href="/journal?review=needs-review" className="workspace-pill" style={{ textDecoration: 'none', color: 'var(--accent)' }}>
-          Review journal
-        </a>
-      </div>
-      <div className="dashboard-today-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-        {cards.map(card => (
-          <a
-            key={card.label}
-            href={card.href}
-            style={{
-              display: 'block',
-              minHeight: 86,
-              padding: '12px 14px',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-subtle)',
-              background: 'var(--surface-2)',
-              textDecoration: 'none',
-            }}
-          >
-            <div style={{ ...humanLabelStyle, marginBottom: 7 }}>{card.label}</div>
-            <Num style={{ display: 'block', fontSize: 15, fontWeight: 700, color: card.tone, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {card.value}
-            </Num>
-            <div className="caption" style={{ marginTop: 5, lineHeight: 1.45 }}>{card.detail}</div>
+      <div data-testid="today-workflow-command-center">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div>
+            <h1 className="heading-card" style={{ marginBottom: 4 }}>Today&apos;s workflow</h1>
+            <div className="caption">Start with trust, review what is due, then work the active queue.</div>
+          </div>
+          <a href="/journal?review=needs-review" className="workspace-pill" style={{ textDecoration: 'none', color: 'var(--accent)' }}>
+            Review journal
           </a>
-        ))}
+        </div>
+        <div className="dashboard-today-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
+          {cards.map(card => (
+            <a
+              key={card.label}
+              href={card.href}
+              style={{
+                display: 'block',
+                minHeight: 86,
+                padding: '12px 14px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-subtle)',
+                background: 'var(--surface-2)',
+                textDecoration: 'none',
+              }}
+            >
+              <div style={{ ...humanLabelStyle, marginBottom: 7 }}>{card.label}</div>
+              <Num style={{ display: 'block', fontSize: 15, fontWeight: 700, color: card.tone, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {card.value}
+              </Num>
+              <div className="caption" style={{ marginTop: 5, lineHeight: 1.45 }}>{card.detail}</div>
+              <div className="caption" style={{ marginTop: 8, color: 'var(--accent)' }}>{card.action}</div>
+            </a>
+          ))}
+        </div>
       </div>
     </Card>
   )
@@ -515,7 +574,7 @@ function WorkflowChecklistCard({
           ? { label: 'Log first trade', href: '/journal' }
           : workflow.closedTrades < 3
             ? { label: 'Build review base', href: '/journal' }
-            : { label: 'Open AI review', href: '/journal?tab=ai' }
+            : { label: 'Open pattern review', href: '/journal?tab=ai' }
 
   if ((dismissed || allComplete) && workflow.accountIssues.length === 0) return null
 
@@ -669,9 +728,13 @@ export default function DashboardPage() {
     brokerLastSyncedAt: null,
     closedTrades: 0,
     reviewedTrades: 0,
+    scanAlerts: 0,
+    alertMatchSymbols: 0,
+    watchlistReviewDue: 0,
     onboardingCompleted: false,
     patterns: null,
     accountIssues: [],
+    alertIssues: [],
   })
   const load = useCallback(async () => {
     setError('')
@@ -742,8 +805,18 @@ export default function DashboardPage() {
           { id: 'broker', label: 'Broker status', href: '/settings/broker' },
           'Broker status is temporarily unavailable.',
         ),
+        captureAccountData(
+          listAlerts(),
+          { id: 'alerts', label: 'Scan alerts', href: '/alerts' },
+          'Scan alerts are temporarily unavailable.',
+        ),
+        captureAccountData(
+          getRecentAlertMatches(),
+          { id: 'alerts', label: 'Scan alert matches', href: '/alerts' },
+          'Recent scan alert matches are temporarily unavailable.',
+        ),
         getMe().catch(() => null),
-      ]).then(async ([watchlistsResult, journalResult, statsResult, brokerResult, me]) => {
+      ]).then(async ([watchlistsResult, journalResult, statsResult, brokerResult, alertsResult, alertMatchesResult, me]) => {
         const watchlists = watchlistsResult.data ?? []
         const journal = journalResult.data ?? { entries: [], total: 0 }
         const stats = statsResult.data
@@ -763,17 +836,43 @@ export default function DashboardPage() {
           sync_status: 'idle' as const,
           last_synced_at: null,
         }
-        const accountIssues = uniqueAccountIssues([
+        const accountIssues = setupBlockingAccountIssues(uniqueAccountIssues([
           watchlistsResult.issue,
           journalResult.issue,
           statsResult.issue,
           brokerResult.issue,
+        ]))
+        const alertIssues = uniqueAccountIssues([
+          alertsResult.issue,
+          alertMatchesResult.issue,
         ])
         const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
+        const trackedSymbolSet = new Set<string>()
+        for (const watchlist of watchlists) {
+          for (const item of watchlist.items ?? []) {
+            if (item.symbol) trackedSymbolSet.add(item.symbol.toUpperCase())
+          }
+        }
+        const workflowStates = trackedSymbolSet.size
+          ? await getWorkflowStatesForSymbols(Array.from(trackedSymbolSet))
+          : []
+        const reviewLaterSymbols = new Set(
+          workflowStates
+            .filter(state => state.review_later || state.lifecycle === 'review_later')
+            .map(state => state.symbol.toUpperCase()),
+        )
+        const watchlistReviewDue = watchlists.reduce((total, watchlist) => (
+          total + (watchlist.items ?? []).filter(item => !item.note?.trim() || reviewLaterSymbols.has(item.symbol.toUpperCase())).length
+        ), 0)
         const closedTradesInSample = journal.entries.filter(entry => entry.status === 'closed').length
         const openTradesInSample = journal.entries.filter(entry => entry.status === 'open').length
         const closedTrades = Math.max(closedTradesInSample, stats?.total_trades ?? 0)
         const reviewedTrades = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
+        const activeScanAlerts = (alertsResult.data ?? []).filter(alert => alert.is_active)
+        const alertSymbolSet = new Set<string>()
+        for (const match of (alertMatchesResult.data ?? []) as ScanAlertMatch[]) {
+          for (const row of match.symbols ?? []) alertSymbolSet.add(row.symbol)
+        }
         const nextWorkflow: WorkflowState = {
           watchlists: watchlists.length,
           trackedSymbols,
@@ -785,9 +884,13 @@ export default function DashboardPage() {
           brokerLastSyncedAt: broker.last_synced_at ?? null,
           closedTrades,
           reviewedTrades,
+          scanAlerts: activeScanAlerts.length,
+          alertMatchSymbols: alertSymbolSet.size,
+          watchlistReviewDue,
           onboardingCompleted: Boolean(me?.onboarding_completed),
           patterns: null,
           accountIssues,
+          alertIssues,
         }
         setWorkflow(nextWorkflow)
 
@@ -844,7 +947,7 @@ export default function DashboardPage() {
         <div>
           <TodayCockpit workflow={workflow} data={data} dataHealth={dataHealth} />
 
-          <AccountDataStatusCard issues={workflow.accountIssues} />
+          <AccountDataStatusCard issues={uniqueAccountIssues([...workflow.accountIssues, ...workflow.alertIssues])} />
 
           <WorkflowChecklistCard
             workflow={workflow}

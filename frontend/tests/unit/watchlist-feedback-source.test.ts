@@ -18,4 +18,9 @@ describe("watchlist feedback copy", () => {
     expect(source).toContain("is already in this watchlist.");
     expect(source).toContain("already in watchlist");
   });
+
+  it("labels unsaved decision records as watchlist sourced", () => {
+    expect(source).toContain('source: "watchlist"');
+    expect(source).toContain("decisionRecordRows({");
+  });
 });

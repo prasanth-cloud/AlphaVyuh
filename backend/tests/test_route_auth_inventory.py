@@ -18,6 +18,7 @@ PUBLIC_ROUTES = {
     ("GET", "/api/v1/options/presets"),
     ("POST", "/api/v1/options/payoff"),
     ("POST", "/api/v1/options/greeks"),
+    ("GET", "/api/v1/stocks/quotes"),
     ("GET", "/api/v1/stocks/{symbol}/quote"),
     ("GET", "/api/v1/stocks/{symbol}/fundamentals"),
     ("GET", "/api/v1/stocks/{symbol}/quote-live"),

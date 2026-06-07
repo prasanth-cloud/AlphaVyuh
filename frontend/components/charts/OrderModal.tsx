@@ -178,7 +178,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
                 executionPath,
                 "No broker submit",
                 "Journal draft",
-                "AI review after close",
+                "Pattern review after close",
               ].map((step, idx) => (
                 <div key={step} className="rounded-[6px] px-1.5 py-2 bg-white border border-[#eeeeea]">
                   <div className="mx-auto mb-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#1c1c1a] text-[9px] text-white">{idx + 1}</div>

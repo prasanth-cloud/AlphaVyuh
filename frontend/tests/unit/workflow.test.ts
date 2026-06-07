@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { workflowPlanStatus } from "@/lib/workflow";
+import { workflowLifecycleFlags, workflowPlanStatus } from "@/lib/workflow";
 import type { WorkflowState } from "@/lib/api";
 
 const validPlan: WorkflowState = {
@@ -51,6 +51,13 @@ describe("workflow plan validation", () => {
       valid: true,
       next: "Ready for order draft.",
     });
+  });
+
+  it("clears review and ignored booleans when lifecycle moves forward", () => {
+    expect(workflowLifecycleFlags("ready")).toEqual({ ignored: false, review_later: false });
+    expect(workflowLifecycleFlags("watch")).toEqual({ ignored: false, review_later: false });
+    expect(workflowLifecycleFlags("review_later")).toEqual({ ignored: false, review_later: true });
+    expect(workflowLifecycleFlags("ignored")).toEqual({ ignored: true, review_later: false });
   });
 });
 
