@@ -1,82 +1,56 @@
-# Release checklist — PR #349 (`feat/performance-trust-pass`)
+# Release checklist — PR #349 merged + post-merge verification
 
-**PR:** https://github.com/prasanth-cloud/AlphaVyuh/pull/349  
-**Latest verified commit:** `a93b4d8` (+ local lint fix pending push)  
-**Date:** 2026-06-06
+**PR:** https://github.com/prasanth-cloud/AlphaVyuh/pull/349 (merged to `main`)  
+**Latest verified commit:** `eccc80c` (`feat(product): clarify trader workflow memory`)  
+**M3-A scanner fix:** `7b60c6a` (`fix(scanner): restore M3-A readiness gate for DB prefilters`)  
+**Date:** 2026-06-09
 
-## Verification matrix (local, 2026-06-06)
+## Verification matrix (2026-06-09)
 
-| Step | Command | Result |
-|------|---------|--------|
-| Typecheck | `cd frontend && npm run typecheck` | ✓ pass |
-| Lint | `cd frontend && npm run lint` | ✓ pass (0 warnings after unused-import fix in `lib/api.ts`) |
-| Unit tests | `cd frontend && npm run test` | ✓ 185/185 |
-| E2E perf | `cd frontend && npm run e2e:perf` | ✓ 2/2 (`performance-smoke.spec.ts`) |
-| Build | `cd frontend && npm run build` | ✓ pass |
-| Backend | `cd backend && python -m pytest tests/test_scan_alerts.py tests/test_scanner_filters.py tests/test_scanner_intelligence.py tests/test_scanner_outage_status.py tests/test_brokers_router.py tests/test_broker_order_safety.py tests/test_daily_refresh_alerts.py -q` | ✓ 83/83 |
+| Step | Command / workflow | Result |
+|------|---------------------|--------|
+| Typecheck + lint + unit | Main Verify CI on `eccc80c` | ✓ pass |
+| Mock e2e | `npm run test:e2e:mock` | ✓ 17/17 |
+| Prod signed-in smoke | [Production Signed-In Smoke #27207003032](https://github.com/prasanth-cloud/AlphaVyuh/actions/runs/27207003032) | ✓ 1/1 passed |
+| Prod API + scanner | Railway recovery preflight | ✓ EOD 2026-06-08, 2 db prefilters, 60.9% query reduction |
+| Railway deploy parity | [Railway Backend Recovery #27207144284](https://github.com/prasanth-cloud/AlphaVyuh/actions/runs/27207144284) | ✓ deployed `eccc80c` (includes M3-A fix) |
+| Health | `curl https://alphavyuh-production.up.railway.app/health` | ✓ `{"status":"ok","version":"0.3.1"}` |
 
-> Note: `bun` was not available in the verify environment; commands ran via `npm run` equivalents.
-
-## CI / preview status
+## CI / production status
 
 | Check | Status |
 |-------|--------|
-| Vercel Preview | ✓ green on `a93b4d8` |
-| Vercel Preview Comments | ✓ pass |
-| GitHub Actions (full matrix) | Not wired on this repo — Vercel-only checks |
-
-**Vercel preview:** https://vercel.com/prasanth-clouds-projects/frontend/9oHXot4gPKVQo2BDG46Di4pv98wa
+| Main Verify (push to `main`) | ✓ green — [run 27093275777](https://github.com/prasanth-cloud/AlphaVyuh/actions/runs/27093275777) |
+| Vercel production | ✓ auto-deploy from `main` (native GitHub integration) |
+| Railway backend | ✓ redeployed 2026-06-09 via recovery workflow |
+| Production Signed-In Smoke | ✓ pass 2026-06-09 |
 
 ## Migration status
 
-| Environment | Migration `20260606120000_journal_broker_import_source.sql` | Status |
-|-------------|--------------------------------------------------------------|--------|
-| Staging | Adds `broker-import` to `trade_journal_source_page_check` | **BLOCKED** — `.env.local` missing; Supabase MCP requires user auth |
-| Production | Same | **NOT APPLIED** (by design — staging first) |
-
-**Owner action (staging):**
-
-```bash
-# After creating .env.local with STAGING_SUPABASE_DB_URL
-bash scripts/deploy-migration.sh staging
-```
-
-Verify constraint includes `broker-import`:
-
-```sql
-SELECT pg_get_constraintdef(oid)
-FROM pg_constraint
-WHERE conname = 'trade_journal_source_page_check';
-```
-
-## Deploy status
-
-| Surface | Branch code live? | Notes |
-|---------|-------------------|-------|
-| Vercel preview | ✓ | Latest commit builds; preview SSO may block signed-in smoke |
-| Vercel production | ✗ | Requires merge to `main` |
-| Railway backend | ✗ | Prod tracks `main`; scanner/alerts/cron changes not live until merge |
+| Environment | Migration `journal_broker_import_source` | Status |
+|-------------|------------------------------------------|--------|
+| Production | Applied as `20260606144647_journal_broker_import_source` | ✓ includes `broker-import` |
+| Staging | `20260606120000_journal_broker_import_source.sql` | **BLOCKED** — staging project `INACTIVE`; free-tier 2-project limit |
 
 ## Blockers (honest)
 
-1. **Signed-in browser smoke** — Vercel preview SSO blocks automated signed-in flows; prod smoke creds invalid in local env.
-2. **Staging migration** — Not applied; broker import with `source_page='broker-import'` will fail CHECK constraint until migration lands on staging.
-3. **PR not merged** — Production frontend and Railway backend unchanged.
-
-## Recommended merge order
-
-1. **Apply migration to staging** → verify `broker-import` in constraint + smoke broker import on staging.
-2. **Merge PR #349 to `main`** → Vercel production deploy + Railway backend picks up Python changes.
-3. **Apply migration to prod** (owner-gated, after staging verified) → `bash scripts/deploy-migration.sh prod`.
-4. **Post-merge smoke** — scanner elapsed/coverage pill, watchlist batch quotes, chart skeleton, recovery banner (manual or credentialed e2e).
-5. **Optional:** Run `scripts/rotate_broker_key.py` dry-run on staging before any prod credential rotation.
+1. **Staging inactive** — Supabase org at free-tier limit (`AlphaVyuh` + `chatembed` active). Cannot restore `alphavyuh-staging` until owner pauses another project or upgrades. See `docs/release-goal-status.md` for exact steps.
+2. **Supplemental refresh degraded** — RS score / yfinance supplement failed on latest run; non-blocking for smoke but affects RS-ranked scanner trust.
+3. **Local QA login** — `pbugga@student.fitchburgstate.edu` invalid in prod Supabase. CI smoke uses GitHub `PLAYWRIGHT_QA_EMAIL` + `prepare-production-smoke-account.mjs`.
 
 ## Owner actions checklist
 
-- [ ] Create `.env.local` with `STAGING_SUPABASE_DB_URL` (and prod URL when ready)
+- [x] Merge PR #349 to `main`
+- [x] Railway backend redeploy from latest `main`
+- [x] Production signed-in smoke (GitHub workflow)
+- [x] Prod migration for `broker-import` source page
+- [ ] Pause `chatembed` or upgrade Supabase org
+- [ ] Restore `alphavyuh-staging` (`nltfedbnbbrclcufoaly`)
 - [ ] `bash scripts/deploy-migration.sh staging`
-- [ ] Confirm constraint on staging includes `broker-import`
-- [ ] Review + merge PR #349
-- [ ] `bash scripts/deploy-migration.sh prod` (after staging verified)
-- [ ] Signed-in smoke on production with valid QA credentials
-- [ ] Confirm Railway deploy from `main` includes alert-cron batching + scanner filter changes
+- [ ] Confirm staging constraint includes `broker-import`
+
+## Recommended next steps
+
+1. Free a Supabase project slot → restore staging → apply staging migration.
+2. Inspect Daily NSE refresh logs for RS/yfinance supplement failures.
+3. Set `GOAL_ACHIEVED=true` in `docs/release-goal-status.md` after staging migration verified.
