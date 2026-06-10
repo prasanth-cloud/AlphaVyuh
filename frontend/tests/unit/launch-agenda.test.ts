@@ -25,6 +25,7 @@ const sectorTaxonomy: SectorTaxonomyPresentation = {
 function agenda(overrides: Partial<Parameters<typeof buildLaunchAgenda>[0]> = {}) {
   return buildLaunchAgenda({
     apiReachable: "ok",
+    eodUsable: true,
     marketStatus: "good",
     marketDetail: "Latest complete trade date 2026-05-29.",
     sectorTaxonomy,
@@ -60,14 +61,24 @@ describe("buildLaunchAgenda", () => {
     expect(items.at(-1)?.detail).toContain("TradingView licensing");
   });
 
-  it("fails data trust closed when the production API is down", () => {
-    const dataTrust = agenda({ apiReachable: "down", marketStatus: "good" }).find((item) => item.id === "data-trust");
+  it("fails data trust closed when the production API is down and EOD health is unavailable", () => {
+    const dataTrust = agenda({ apiReachable: "down", eodUsable: false, marketStatus: "bad" }).find((item) => item.id === "data-trust");
 
     expect(dataTrust).toMatchObject({
       value: "BLOCKED",
       status: "bad",
     });
     expect(dataTrust?.detail).toContain("Market data API is unreachable");
+  });
+
+  it("keeps EOD trust when health responded even if the root health probe failed", () => {
+    const dataTrust = agenda({ apiReachable: "down", eodUsable: true, marketStatus: "good" }).find((item) => item.id === "data-trust");
+
+    expect(dataTrust).toMatchObject({
+      value: "EOD READY",
+      status: "good",
+    });
+    expect(dataTrust?.detail).toContain("2026-05-29");
   });
 
   it("warns until sector taxonomy and journal review coverage are launch ready", () => {

@@ -587,7 +587,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         }
         setPriceAlertsError(PRICE_ALERTS_UNAVAILABLE_MESSAGE);
       });
-  }, [symbol]);
+  }, [symbol, initialRangeLabel]);
 
   useEffect(() => {
     setLiveQuote(null);

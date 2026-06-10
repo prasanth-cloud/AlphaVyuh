@@ -12,6 +12,7 @@ import {
   type ScanAlert,
   type ScanAlertMatch,
 } from "@/lib/api";
+import { withTimeout } from "@/lib/api/client";
 import { DataProvenanceBadge, DataTable, DataTableHead, EmptyState, Num, Td, Th, Tr } from "@/components/ui";
 import { buildScanAlertDigests } from "@/lib/scan-alert-digest";
 import { describeScanAlertCadence, describeScanAlertIntent, type ScanAlertIntent } from "@/lib/scan-alert-semantics";
@@ -33,6 +34,8 @@ function intentColor(tone: ScanAlertIntent["tone"]) {
   return "var(--accent)";
 }
 
+const ALERTS_LOAD_TIMEOUT_MS = 15_000;
+
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<ScanAlert[]>([]);
   const [matches, setMatches] = useState<ScanAlertMatch[]>([]);
@@ -48,13 +51,18 @@ export default function AlertsPage() {
     setLoadError(null);
     try {
       const [activeAlerts, recentMatches] = await Promise.all([
-        listAlerts(),
-        getRecentAlertMatches(),
+        withTimeout(listAlerts(), ALERTS_LOAD_TIMEOUT_MS),
+        withTimeout(getRecentAlertMatches(), ALERTS_LOAD_TIMEOUT_MS),
       ]);
       setAlerts(activeAlerts);
       setMatches(recentMatches);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Scan alerts are temporarily unavailable.");
+      const message = error instanceof Error ? error.message : "Scan alerts are temporarily unavailable.";
+      setLoadError(
+        message === "Request timed out"
+          ? "Scan alerts are temporarily unavailable. Check Data Status, then try again."
+          : message,
+      );
     } finally {
       setLoading(false);
     }
@@ -245,7 +253,15 @@ export default function AlertsPage() {
           <div>
             <div className="workspace-card-title">Latest EOD digest</div>
             <div className="workspace-card-copy">
-              {loadError ? "Latest scan alert digest could not be confirmed." : latestRunDate ? `Most recent scan alert run: ${latestRunDate}` : "Waiting for latest EOD data."}
+              {loadError
+                ? "Latest scan alert digest could not be confirmed."
+                : latestRunDate
+                  ? `Most recent scan alert run: ${latestRunDate}`
+                  : loading
+                    ? "Loading scan alert queue..."
+                    : alerts.length > 0
+                      ? "No EOD scan matches yet for the latest session."
+                      : "Save a scan alert from Scanner to start the EOD match queue."}
             </div>
           </div>
         </div>

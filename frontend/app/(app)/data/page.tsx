@@ -19,6 +19,7 @@ import {
 import { Card, DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { checkApiReachability } from "@/lib/api-reachability";
 import { marketDataHealthPresentation } from "@/lib/data-health-copy";
+import { isEodHealthUsable } from "@/lib/data-mode";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import type { ApiReachability } from "@/lib/data-mode";
 import { captureAccountData, uniqueAccountIssues, type AccountDataIssue } from "@/lib/account-data-status";
@@ -263,7 +264,7 @@ export default function DataFreshnessPage() {
     const journalIssue = state.accountIssues.find(issue => issue.id === "journal");
     const reviewCoverage = state.closedTrades ? Math.round((state.reviewedTrades / state.closedTrades) * 100) : 0;
 
-    if (state.apiReachable === "down") {
+    if (state.apiReachable === "down" && !isEodHealthUsable(health?.status)) {
       next.push({
         title: "Restore market data service",
         detail: "The platform is reachable, but the market data API is down. Scanner, Today, and charts need service recovery before data can be trusted.",
@@ -378,6 +379,7 @@ export default function DataFreshnessPage() {
   const brokerGate = brokerOrderGatePresentation(broker, { unavailable: brokerUnavailable });
   const launchAgenda = buildLaunchAgenda({
     apiReachable: state.apiReachable,
+    eodUsable: isEodHealthUsable(health?.status),
     marketStatus: marketHealth.status as LaunchAgendaStatus,
     marketDetail: marketHealth.detail,
     sectorTaxonomy,

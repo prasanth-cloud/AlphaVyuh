@@ -23,6 +23,7 @@ import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
+import { getMarketPanelEmptyCopy } from '@/lib/data-health-copy'
 
 const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200;
 
@@ -204,15 +205,41 @@ function SectorBar({
   )
 }
 
-function MoversCard({ title, items, variant }: { title: string; items: MarketOverview['top_gainers']; variant: 'gain' | 'loss' }) {
+function MoversCard({
+  title,
+  items,
+  variant,
+  dataHealth,
+  marketError,
+  hasSessionDate,
+}: {
+  title: string
+  items: MarketOverview['top_gainers']
+  variant: 'gain' | 'loss'
+  dataHealth: DataHealth | null
+  marketError: string
+  hasSessionDate: boolean
+}) {
   const color = variant === 'gain' ? 'var(--gain)' : 'var(--loss)'
   const safeItems = Array.isArray(items) ? items : []
+  const emptyCopy = getMarketPanelEmptyCopy({
+    panel: 'movers',
+    dataHealth,
+    marketError,
+    hasSessionDate,
+  })
   return (
     <Card padding="md">
       <h2 className="heading-card" style={{ marginBottom: 12 }}>{title}</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {safeItems.length === 0 ? (
-          <div className="caption" style={{ padding: '8px 0' }}>No movers available yet.</div>
+          <div
+            className="caption"
+            data-testid={emptyCopy.testId}
+            style={{ padding: '8px 0', color: emptyCopy.tone === 'warn' ? 'var(--warn)' : undefined, lineHeight: 1.55 }}
+          >
+            {emptyCopy.message}
+          </div>
         ) : (
           safeItems.slice(0, 5).map(item => {
             const close = safeNumber(item.close, NaN)
@@ -1034,11 +1061,25 @@ export default function DashboardPage() {
                 Advancers · avg chg · above EMA20
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (
+                {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (() => {
+                  const emptyCopy = getMarketPanelEmptyCopy({
+                    panel: 'sector-breadth',
+                    dataHealth,
+                    marketError: error,
+                    hasSessionDate: Boolean(data.trade_date),
+                  })
+                  return (
                   <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                    <div className="caption">No sector data yet — waiting for latest market data.</div>
+                    <div
+                      className="caption"
+                      data-testid={emptyCopy.testId}
+                      style={{ color: emptyCopy.tone === 'warn' ? 'var(--warn)' : undefined, lineHeight: 1.55 }}
+                    >
+                      {emptyCopy.message}
+                    </div>
                   </div>
-                ) : (
+                  )
+                })() : (
                   data.sector_breadth.map(s => (
                     <SectorBar
                       key={s.sector}
@@ -1057,8 +1098,8 @@ export default function DashboardPage() {
             {/* Right: movers + EMA breadth */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <ReviewPulseCard workflow={workflow} />
-              <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" />
-              <MoversCard title="Top losers" items={data.top_losers} variant="loss" />
+              <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
+              <MoversCard title="Top losers" items={data.top_losers} variant="loss" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
               <EmaBreadthCard data={data} />
             </div>
           </div>
