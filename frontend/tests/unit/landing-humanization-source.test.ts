@@ -22,7 +22,8 @@ describe("landing page humanization", () => {
 
   it("does not ship fake social proof or out-of-scope markets", () => {
     expect(landingSource).toContain("Workflow examples");
-    expect(landingSource).toContain("Larger NSE/BSE watchlists");
+    expect(landingSource).toContain("10 watchlists · 200 stocks");
+    expect(landingSource).toContain("599");
 
     expect(landingSource).not.toContain("★★★★★");
     expect(landingSource).not.toContain("Community");
@@ -31,6 +32,7 @@ describe("landing page humanization", () => {
     expect(landingSource).not.toContain("NASDAQ");
     expect(landingSource).not.toContain("NYSE");
     expect(landingSource).not.toContain("expanded markets");
+    expect(landingSource).not.toContain("Larger NSE/BSE watchlists");
   });
 
   it("positions Journal before Scanner in the landing workflow", () => {
