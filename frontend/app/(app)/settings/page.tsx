@@ -61,12 +61,12 @@ const PLAN_PRICES: Record<Currency, Record<BillingPeriod, Record<PlanId, { price
   INR: {
     monthly: {
       free:  { price: "₹0",      period: "" },
-      pro:   { price: "₹1,999",  period: "/month" },
+      pro:   { price: "₹599",   period: "/month" },
       elite: { price: "₹4,999",  period: "/month" },
     },
     annual: {
       free:  { price: "₹0",      period: "" },
-      pro:   { price: "₹19,999", period: "/year", savings: "Save 2 months" },
+      pro:   { price: "₹5,999", period: "/year", savings: "Save 2 months" },
       elite: { price: "₹49,999", period: "/year", savings: "Save 2 months" },
     },
   },
@@ -661,12 +661,17 @@ function SettingsContent() {
                     Billing is not enabled for this account
                   </div>
                   <div className="leading-relaxed">
-                    Checkout remains unavailable until account billing is approved and configured. Account access can still be applied with an approved access code.
+                    Checkout remains unavailable until account billing is approved and configured. Apply an approved access code below, or email support@alphavyuh.com for onboarding help.
                   </div>
                 </div>
-                <div className="rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)" }}>
-                  Checkout blocked
-                </div>
+                <Link
+                  href="mailto:support@alphavyuh.com?subject=AlphaVyuh%20Pro%20access"
+                  className="rounded-full px-3 py-1.5 text-[11px] font-semibold"
+                  data-testid="billing-gated-next-step"
+                  style={{ background: "rgba(244,247,251,0.08)", color: "var(--app-text1)", textDecoration: "none" }}
+                >
+                  Request Pro access
+                </Link>
               </div>
 
               {paymentConfig && (
@@ -713,8 +718,8 @@ function SettingsContent() {
               </div>
 
               {/* Plan cards */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {PLAN_META.map(plan => {
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {PLAN_META.filter(plan => checkoutEnabled || plan.id !== "elite").map(plan => {
                   const isCurrent = currentPlan === plan.id;
                   const isHigher =
                     (currentPlan === "free" && plan.id !== "free") ||

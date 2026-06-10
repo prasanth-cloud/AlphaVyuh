@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getJournalEntries, getJournalStats, getJournalAnalytics,
@@ -552,6 +553,12 @@ export default function JournalPage() {
             >
               {reviewStage.secondaryAction}
             </button>
+            <Link href="/upload" className="workspace-chip-button" data-testid="journal-upload-link" style={{ textDecoration: "none" }}>
+              Upload report
+            </Link>
+            <Link href="/data" className="workspace-chip-button" data-testid="journal-data-status-link" style={{ textDecoration: "none" }}>
+              Data Status
+            </Link>
           </div>
         </div>
 
