@@ -89,6 +89,59 @@ def fallback_source_metadata(message: str, *, as_of: str | None = None) -> dict[
     }
 
 
+_BHAVCOPY_SUCCESS_STATUSES = {"success", "already_done", "partial"}
+
+
+def normalize_bhavcopy_provenance(
+    *,
+    status: str | None,
+    rows_ingested: int | None,
+    error_message: str | None,
+    warning_message: str | None = None,
+) -> dict[str, Any]:
+    """Avoid showing success alongside stale failure text from prior ingest attempts."""
+    normalized_status = status
+    normalized_error = error_message
+    note = warning_message
+
+    if status in _BHAVCOPY_SUCCESS_STATUSES and error_message:
+        if rows_ingested and rows_ingested > 0:
+            normalized_error = None
+        elif "404" in error_message:
+            normalized_status = "failed"
+            note = note or "Latest bhavcopy attempt failed before rows were ingested."
+
+    if status in _BHAVCOPY_SUCCESS_STATUSES and not rows_ingested and not normalized_error:
+        normalized_status = "failed"
+        normalized_error = "Bhavcopy reported success without ingested rows."
+
+    return {
+        "status": normalized_status,
+        "rows_ingested": rows_ingested,
+        "error_message": normalized_error,
+        "warning_message": note,
+    }
+
+
+def indicator_coverage_summary(
+    *,
+    symbols_latest: int | None,
+    null_rsi_latest: int | None,
+    null_ema200_latest: int | None,
+) -> dict[str, Any]:
+    total = max(symbols_latest or 0, 0)
+    rsi_missing = max(null_rsi_latest or 0, 0)
+    ema_missing = max(null_ema200_latest or 0, 0)
+    return {
+        "symbols_on_latest_date": total or None,
+        "rsi_14_missing": rsi_missing,
+        "ema_200_missing": ema_missing,
+        "rsi_14_missing_pct": round((rsi_missing / total) * 100, 1) if total else None,
+        "ema_200_missing_pct": round((ema_missing / total) * 100, 1) if total else None,
+        "has_gaps": rsi_missing > 0 or ema_missing > 0,
+    }
+
+
 def health_status_from_counts(
     *,
     hours_stale: float | None,
@@ -138,6 +191,16 @@ def normalize_health_row(row: dict[str, Any]) -> dict[str, Any]:
         message = "Data freshness could not be established; verify source status before acting."
 
     latest_trade_date = row.get("latest_trade_date")
+    bhavcopy = normalize_bhavcopy_provenance(
+        status=row.get("last_bhavcopy_status"),
+        rows_ingested=row.get("last_bhavcopy_rows"),
+        error_message=row.get("last_bhavcopy_error"),
+    )
+    indicator_coverage = indicator_coverage_summary(
+        symbols_latest=symbols_latest,
+        null_rsi_latest=row.get("null_rsi_latest"),
+        null_ema200_latest=row.get("null_ema200_latest"),
+    )
     return {
         "status": status,
         "mode": mode,
@@ -152,16 +215,18 @@ def normalize_health_row(row: dict[str, Any]) -> dict[str, Any]:
             "rsi_14": row.get("null_rsi_latest"),
             "ema_200": row.get("null_ema200_latest"),
         },
+        "indicator_coverage": indicator_coverage,
         "last_run": {
             "id": row.get("last_run_id"),
             "errors": last_run_errors,
         },
         "last_bhavcopy": {
             "trade_date": row.get("last_bhavcopy_trade_date"),
-            "status": row.get("last_bhavcopy_status"),
-            "rows_ingested": row.get("last_bhavcopy_rows"),
+            "status": bhavcopy["status"],
+            "rows_ingested": bhavcopy["rows_ingested"],
             "source_url": row.get("last_bhavcopy_source_url"),
-            "error_message": row.get("last_bhavcopy_error"),
+            "error_message": bhavcopy["error_message"],
+            "warning_message": bhavcopy["warning_message"],
         },
         "provider": eod_source_metadata(
             as_of=latest_trade_date,
