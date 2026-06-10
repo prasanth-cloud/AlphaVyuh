@@ -57,6 +57,73 @@ export function getMarketPanelEmptyCopy(options: {
   };
 }
 
+export function bhavcopyProvenancePresentation(health: DataHealth | null) {
+  const bhavcopy = health?.last_bhavcopy;
+  if (!bhavcopy?.status) {
+    return { value: "NOT AVAILABLE", detail: "No bhavcopy ingest attempt recorded yet.", status: "bad" as const };
+  }
+
+  const rows = bhavcopy.rows_ingested ?? 0;
+  const status = bhavcopy.status;
+  const error = bhavcopy.error_message?.trim();
+  const warning = bhavcopy.warning_message?.trim();
+
+  if (status === "failed" || (error && rows === 0)) {
+    return {
+      value: "INGEST FAILED",
+      detail: error || warning || "Latest bhavcopy attempt did not produce rows.",
+      status: "bad" as const,
+    };
+  }
+
+  if (status === "partial" || warning) {
+    return {
+      value: "PARTIAL",
+      detail: `${rows.toLocaleString("en-IN")} rows ingested.${warning ? ` ${warning}` : ""}`,
+      status: "warn" as const,
+    };
+  }
+
+  return {
+    value: status.toUpperCase(),
+    detail: `${rows.toLocaleString("en-IN")} rows on ${bhavcopy.trade_date ?? "latest attempt"}.`,
+    status: rows > 0 ? "good" as const : "warn" as const,
+  };
+}
+
+export function indicatorCoveragePresentation(health: DataHealth | null) {
+  const coverage = health?.indicator_coverage;
+  const rsiMissing = coverage?.rsi_14_missing ?? health?.indicators_missing.rsi_14 ?? 0;
+  const emaMissing = coverage?.ema_200_missing ?? health?.indicators_missing.ema_200 ?? 0;
+  const total = coverage?.symbols_on_latest_date ?? health?.symbols_on_latest_date ?? null;
+
+  if (total == null) {
+    return {
+      value: "NOT AVAILABLE",
+      detail: "Indicator completeness cannot be confirmed right now.",
+      status: "bad" as const,
+    };
+  }
+
+  if (emaMissing <= 0 && rsiMissing <= 0) {
+    return {
+      value: "COMPLETE",
+      detail: `RSI 14 and EMA 200 present for all ${total.toLocaleString("en-IN")} symbols on the latest session.`,
+      status: "good" as const,
+    };
+  }
+
+  const parts: string[] = [];
+  if (emaMissing > 0) parts.push(`EMA 200 missing on ${emaMissing.toLocaleString("en-IN")} symbols`);
+  if (rsiMissing > 0) parts.push(`RSI 14 missing on ${rsiMissing.toLocaleString("en-IN")} symbols`);
+
+  return {
+    value: emaMissing > 0 ? "EMA GAPS" : "RSI GAPS",
+    detail: `${parts.join("; ")} on the latest session. Scanner presets using these filters may be narrower until backfill completes.`,
+    status: "warn" as const,
+  };
+}
+
 export function marketDataHealthPresentation(health: MarketHealth | null, apiReachable: ApiReachability) {
   if (health && isEodHealthUsable(health.status)) {
     const liveProbeFailed = apiReachable === "down";

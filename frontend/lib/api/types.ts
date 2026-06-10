@@ -785,6 +785,14 @@ export type DataHealth = {
     rsi_14: number | null;
     ema_200: number | null;
   };
+  indicator_coverage?: {
+    symbols_on_latest_date: number | null;
+    rsi_14_missing: number;
+    ema_200_missing: number;
+    rsi_14_missing_pct: number | null;
+    ema_200_missing_pct: number | null;
+    has_gaps: boolean;
+  };
   last_run: {
     id: string | null;
     errors: number | null;
@@ -795,6 +803,7 @@ export type DataHealth = {
     rows_ingested: number | null;
     source_url?: string | null;
     error_message?: string | null;
+    warning_message?: string | null;
   };
   provider?: SourceMetadata;
   fallback_active?: boolean;
