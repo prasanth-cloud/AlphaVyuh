@@ -1,4 +1,11 @@
-from app.services.market_context import eod_source_metadata, health_status_from_counts, live_source_metadata, normalize_health_row
+from app.services.market_context import (
+    eod_source_metadata,
+    health_status_from_counts,
+    indicator_coverage_summary,
+    live_source_metadata,
+    normalize_bhavcopy_provenance,
+    normalize_health_row,
+)
 
 
 def test_health_status_marks_low_coverage_degraded():
@@ -54,3 +61,60 @@ def test_normalize_health_row_exposes_operator_fields():
     assert health["last_successful_eod_date"] == "2026-04-24"
     assert health["last_bhavcopy"]["status"] == "success"
     assert health["provider"]["source_name"] == "NSE bhavcopy"
+
+
+def test_normalize_bhavcopy_provenance_clears_stale_error_on_success():
+    normalized = normalize_bhavcopy_provenance(
+        status="success",
+        rows_ingested=990,
+        error_message="404 Client Error: Not Found for url: https://example.test/bhavcopy.csv",
+    )
+
+    assert normalized["status"] == "success"
+    assert normalized["error_message"] is None
+
+
+def test_normalize_bhavcopy_provenance_marks_failed_when_success_without_rows():
+    normalized = normalize_bhavcopy_provenance(
+        status="success",
+        rows_ingested=0,
+        error_message=None,
+    )
+
+    assert normalized["status"] == "failed"
+    assert "without ingested rows" in (normalized["error_message"] or "")
+
+
+def test_indicator_coverage_summary_reports_ema_gaps():
+    summary = indicator_coverage_summary(
+        symbols_latest=1000,
+        null_rsi_latest=0,
+        null_ema200_latest=407,
+    )
+
+    assert summary["ema_200_missing"] == 407
+    assert summary["has_gaps"] is True
+    assert summary["ema_200_missing_pct"] == 40.7
+
+
+def test_normalize_health_row_normalizes_conflicting_bhavcopy_fields():
+    row = {
+        "latest_trade_date": "2026-04-24",
+        "symbols_latest": 990,
+        "universe_active": 1000,
+        "hours_since_last_run": 4.2,
+        "null_rsi_latest": 0,
+        "null_ema200_latest": 407,
+        "last_run_id": "run-1",
+        "last_run_errors": 0,
+        "last_successful_bhavcopy_date": "2026-04-24",
+        "last_bhavcopy_trade_date": "2026-04-24",
+        "last_bhavcopy_status": "success",
+        "last_bhavcopy_rows": 990,
+        "last_bhavcopy_error": "404 Client Error: Not Found",
+    }
+
+    health = normalize_health_row(row)
+
+    assert health["last_bhavcopy"]["error_message"] is None
+    assert health["indicator_coverage"]["ema_200_missing"] == 407

@@ -424,6 +424,7 @@ async def download_and_ingest(trade_date: date) -> dict:
             "trade_date": str(trade_date),
             "status": "partial" if partial_ingest else "success",
             "rows_ingested": rows_ingested,
+            "error_message": None,
             "source_name": SOURCE_NAME,
             "source_url": source_url,
             "expected_rows": expected_rows,
