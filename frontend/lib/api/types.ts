@@ -307,6 +307,13 @@ export type ScannerIdeaContext = {
   data_mode?: string | null;
   data_as_of?: string | null;
   captured_at?: string;
+  chart_snapshot?: {
+    chart_url: string;
+    symbol: string;
+    timeframe?: string | null;
+    entry_price?: number | null;
+    captured_at?: string | null;
+  } | null;
 };
 
 export type WorkflowStatePatch = Partial<Omit<WorkflowState, "id" | "user_id" | "created_at" | "updated_at">> & {
@@ -556,6 +563,8 @@ export type JournalAnalytics = {
     win_rate: number;
     total_pnl: number;
     avg_pnl: number;
+    avg_holding_days?: number | null;
+    avg_risk_reward?: number | null;
   }[];
   monthly_pnl: { month: string; pnl: number }[];
   drawdown_curve: { date: string; drawdown: number; drawdown_pct: number }[];
@@ -741,6 +750,7 @@ export type PlaceOrderRequest = {
   scanner_context?: ScannerIdeaContext | null;
   source_page?: "chart" | "watchlist" | "scanner" | "manual";
   source_context?: string;
+  chart_snapshot?: ScannerIdeaContext["chart_snapshot"];
   live_confirmed?: boolean;
   idempotency_key?: string;
 };
@@ -811,6 +821,14 @@ export type AiPatterns = {
   day_of_week?: { day: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
   by_direction?: { direction: string; trades: number; wins: number; win_rate: number; total_pnl: number }[];
   by_holding_period?: { bucket: string; trades: number; wins: number; win_rate: number }[];
+  setup_breakdown?: {
+    setup: string;
+    trades: number;
+    win_rate: number;
+    total_pnl: number;
+    avg_holding_days?: number | null;
+    avg_risk_reward?: number | null;
+  }[];
 };
 
 export type PriceAlert = {

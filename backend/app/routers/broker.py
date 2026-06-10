@@ -68,6 +68,7 @@ class PlaceOrderRequest(BaseModel):
     scanner_context: Optional[dict[str, Any]] = None
     source_page:    Optional[Literal["chart", "watchlist", "scanner", "manual"]] = None
     source_context: Optional[str]   = None
+    chart_snapshot: Optional[dict[str, Any]] = None
     live_confirmed: bool = False
     idempotency_key: Optional[str] = None
 
@@ -815,6 +816,9 @@ async def place_order(
 
     source_context = (body.source_context or "").strip()
     scanner_context = body.scanner_context or workflow_context.get("scanner_context")
+    if body.chart_snapshot:
+        base_context = scanner_context if isinstance(scanner_context, dict) else {}
+        scanner_context = {**base_context, "chart_snapshot": body.chart_snapshot}
     thesis = body.thesis or workflow_context.get("thesis")
     invalidation_rule = body.invalidation_rule or workflow_context.get("invalidation_rule")
     setup_type = body.setup_type or workflow_context.get("setup_type")

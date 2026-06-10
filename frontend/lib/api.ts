@@ -2199,14 +2199,17 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     const symbol = order.symbol.toUpperCase();
     const previousWorkflow = localWorkflow[symbol];
     const ideaContext = order.scanner_context ?? previousWorkflow?.scanner_context;
-    const ideaParts = ideaContext
+    const scannerContext = order.chart_snapshot
+      ? { ...(ideaContext ?? {}), chart_snapshot: order.chart_snapshot }
+      : ideaContext;
+    const ideaParts = scannerContext
       ? [
-          ideaContext.preset_name ? `Scanner: ${ideaContext.preset_name}` : "Scanner idea",
-          ideaContext.setup_grade || ideaContext.setup_score != null
-            ? `Score: ${[ideaContext.setup_grade, ideaContext.setup_score].filter((value) => value != null && value !== "").join(" ")}`
+          scannerContext.preset_name ? `Scanner: ${scannerContext.preset_name}` : "Scanner idea",
+          scannerContext.setup_grade || scannerContext.setup_score != null
+            ? `Score: ${[scannerContext.setup_grade, scannerContext.setup_score].filter((value) => value != null && value !== "").join(" ")}`
             : null,
-          ideaContext.match_reasons?.[0] ? `Matched: ${ideaContext.match_reasons[0]}` : null,
-          ideaContext.data_as_of ? `As of: ${ideaContext.data_as_of}` : null,
+          scannerContext.match_reasons?.[0] ? `Matched: ${scannerContext.match_reasons[0]}` : null,
+          scannerContext.data_as_of ? `As of: ${scannerContext.data_as_of}` : null,
         ].filter(Boolean)
       : [];
     const reasonParts = [
@@ -2227,7 +2230,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
       entry_reason: `${reasonParts.length ? reasonParts.join(" | ") : `${order.side.toUpperCase()} mock order`} [Simulated · ${order.source_page ?? "chart"}${order.source_context ? ` · ${order.source_context}` : ""}]`,
       source_page: order.source_page ?? "chart",
       source_context: order.source_context ?? null,
-      scanner_context: ideaContext ?? null,
+      scanner_context: scannerContext ?? null,
       thesis: order.thesis ?? previousWorkflow?.thesis ?? null,
       invalidation_rule: order.invalidation_rule ?? previousWorkflow?.invalidation_rule ?? null,
     });
@@ -2247,7 +2250,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
         notes: order.notes ?? previousWorkflow?.notes ?? null,
         thesis: order.thesis ?? previousWorkflow?.thesis ?? null,
         invalidation_rule: order.invalidation_rule ?? previousWorkflow?.invalidation_rule ?? null,
-        scanner_context: ideaContext ?? null,
+        scanner_context: scannerContext ?? null,
         journal_id: created.id,
         updated_at: new Date().toISOString(),
       },

@@ -284,7 +284,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
                 <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                      {["Setup", "Trades", "Win rate", "Avg P&L", "Total P&L"].map(h => (
+                      {["Setup", "Trades", "Win rate", "Avg hold", "Avg R:R", "Avg P&L", "Total P&L"].map(h => (
                         <th key={h} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{h}</th>
                       ))}
                     </tr>
@@ -298,6 +298,12 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
                           <td style={{ padding: "10px 16px 10px 0", color: "var(--text-secondary)" }}>{s.trades}</td>
                           <td style={{ padding: "10px 16px 10px 0" }}>
                             <span className="mono" style={{ fontWeight: 600, color: s.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{s.win_rate}%</span>
+                          </td>
+                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-secondary)" }}>
+                            {s.avg_holding_days != null ? `${s.avg_holding_days}d` : "—"}
+                          </td>
+                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-secondary)" }}>
+                            {s.avg_risk_reward != null ? `${s.avg_risk_reward}:1` : "—"}
                           </td>
                           <td style={{ padding: "10px 16px 10px 0" }}>
                             <span className="mono" style={{ color: s.avg_pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>

@@ -94,7 +94,7 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         sb = get_admin_client()
         result = (
             sb.table("trade_journal")
-            .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days")
+            .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days,risk_reward")
             .eq("user_id", user_id)
             .eq("status", "closed")
             .order("exit_date", desc=False)
@@ -122,23 +122,30 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         s = e.get("setup_type") or "Untagged"
         pnl = float(e["pnl"]) if e.get("pnl") is not None else 0.0
         if s not in setup_map:
-            setup_map[s] = {"trades": 0, "wins": 0, "total_pnl": 0.0}
+            setup_map[s] = {"trades": 0, "wins": 0, "total_pnl": 0.0, "holding_days": [], "risk_rewards": []}
         setup_map[s]["trades"] += 1
         if pnl > 0:
             setup_map[s]["wins"] += 1
         setup_map[s]["total_pnl"] += pnl
+        if e.get("holding_days") is not None:
+            setup_map[s]["holding_days"].append(int(e["holding_days"]))
+        if e.get("risk_reward") is not None:
+            setup_map[s]["risk_rewards"].append(float(e["risk_reward"]))
 
-    setup_breakdown = [
-        {
+    setup_breakdown = []
+    for k, v in setup_map.items():
+        holding = v["holding_days"]
+        risk_rewards = v["risk_rewards"]
+        setup_breakdown.append({
             "setup": k,
             "trades": v["trades"],
             "wins": v["wins"],
             "win_rate": round(v["wins"] / v["trades"] * 100, 1) if v["trades"] else 0,
             "total_pnl": round(v["total_pnl"], 2),
             "avg_pnl": round(v["total_pnl"] / v["trades"], 2) if v["trades"] else 0,
-        }
-        for k, v in setup_map.items()
-    ]
+            "avg_holding_days": round(sum(holding) / len(holding), 1) if holding else None,
+            "avg_risk_reward": round(sum(risk_rewards) / len(risk_rewards), 2) if risk_rewards else None,
+        })
     setup_breakdown.sort(key=lambda x: x["total_pnl"], reverse=True)
 
     # ── Monthly P&L ───────────────────────────────────────────────────────────
