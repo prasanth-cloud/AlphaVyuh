@@ -338,6 +338,7 @@ function AccountMenuButton({ theme, onToggleTheme }: { theme: 'dark' | 'light'; 
         }}>
           {[
             { label: 'Settings', href: '/settings' },
+            { label: 'Data Status', href: '/data' },
             { label: 'Upload trade report', href: '/upload' },
             { label: 'Agent mission control', href: '/agents' },
             { label: 'Billing',  href: '/settings/billing' },

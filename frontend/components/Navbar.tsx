@@ -74,14 +74,6 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
-  {
-    href: "/options", label: "Options", prefix: "/options",
-    icon: (active: boolean) => (
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-        <path d="M2 11L5 5L8 8L11 4L14 7" stroke={active ? '#d97706' : '#555'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
-  },
 ];
 
 export default function Navbar() {

@@ -181,7 +181,7 @@ export default function LandingPage() {
       const pElite = document.getElementById("lp-p-elite");
       const pProOld = document.getElementById("lp-p-pro-old");
       const pEliteOld = document.getElementById("lp-p-elite-old");
-      if (pPro) pPro.textContent = annual ? "1,399" : "1,999";
+      if (pPro) pPro.textContent = annual ? "499" : "599";
       if (pElite) pElite.textContent = annual ? "3,499" : "4,999";
       if (pProOld) pProOld.style.display = annual ? "" : "none";
       if (pEliteOld) pEliteOld.style.display = annual ? "" : "none";
@@ -590,7 +590,7 @@ export default function LandingPage() {
             <div className="lp-pcard lp-pcard-featured lp-fade" style={{transitionDelay:".1s"}}>
               <div className="lp-featured-badge">Core workflow</div>
               <span className="lp-plan-tier">Pro</span>
-              <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-pro">1,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-pro-old" style={{display:"none"}}>₹1,999</span></div>
+              <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-pro">599</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-pro-old" style={{display:"none"}}>₹599</span></div>
               <p className="lp-pdesc">For active swing traders who scan daily and keep a structured review routine.</p>
               <Link href="/signup" className="lp-pcta lp-cta-pro">Request Pro access</Link>
               <div className="lp-pfeats">
@@ -599,19 +599,8 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-            <div className="lp-pcard lp-fade" style={{transitionDelay:".2s"}}>
-              <span className="lp-plan-tier">Elite</span>
-              <div className="lp-price-row"><span className="lp-pcurr">₹</span><span className="lp-pval2" id="lp-p-elite">4,999</span><span className="lp-pper">/mo</span><span className="lp-pold" id="lp-p-elite-old" style={{display:"none"}}>₹4,999</span></div>
-              <p className="lp-pdesc">For full-time traders who need deeper analytics, larger NSE/BSE routines, and priority support.</p>
-              <Link href="/signup" className="lp-pcta lp-cta-elite">Request Elite access</Link>
-              <div className="lp-pfeats">
-                {[["Everything in Pro",true],["Larger NSE/BSE watchlists",true],["Deeper journal analytics",true],["Advanced scanner run history",true],["Priority support & onboarding",true],["Priority workflow controls",true]].map(f=>(
-                  <div key={f[0] as string} className="lp-pfi lp-pfi-on"><div className="lp-pfcheck lp-pfcheck-on">✓</div>{f[0]}</div>
-                ))}
-              </div>
-            </div>
           </div>
-          <p style={{marginTop:28,fontSize:".82rem",color:"var(--lp-muted)"}}>Billing is enabled after account approval and payment configuration. No production Razorpay payment is collected until then.</p>
+          <p style={{marginTop:28,fontSize:".82rem",color:"var(--lp-muted)"}}>Pro is shown at the launch band (₹599/mo). Elite remains invite-only until the full tier ships. Billing is enabled after account approval.</p>
         </div>
       </section>
 
