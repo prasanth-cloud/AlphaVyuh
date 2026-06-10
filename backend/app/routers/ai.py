@@ -343,7 +343,7 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
     loss_hold: list[int] = []
     rr_values: list[float] = []
     mistake_notes: list[str] = []
-    setup_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"trades": 0, "wins": 0, "total_pnl": 0.0})
+    setup_stats: dict[str, dict[str, float]] = defaultdict(lambda: {"trades": 0, "wins": 0, "total_pnl": 0.0, "holding_days": [], "risk_rewards": []})
 
     for t in trades:
         pnl = _num(t.get("pnl"))
@@ -353,6 +353,10 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
         setup_stats[setup]["total_pnl"] += pnl
         if win:
             setup_stats[setup]["wins"] += 1
+        if t.get("holding_days") is not None:
+            setup_stats[setup]["holding_days"].append(int(_num(t.get("holding_days"))))
+        if t.get("risk_reward") is not None:
+            setup_stats[setup]["risk_rewards"].append(_num(t.get("risk_reward")))
         if t.get("risk_reward") is not None:
             rr_values.append(_num(t.get("risk_reward")))
         if str(t.get("mistakes") or "").strip():
@@ -422,6 +426,7 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
     ]
 
     best_setup = None
+    setup_breakdown = []
     if setup_stats:
         setup_rows = [
             (
@@ -429,10 +434,26 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
                 int(values["trades"]),
                 round(values["wins"] / values["trades"] * 100, 1) if values["trades"] else 0,
                 round(values["total_pnl"], 2),
+                round(sum(values["holding_days"]) / len(values["holding_days"]), 1) if values["holding_days"] else None,
+                round(sum(values["risk_rewards"]) / len(values["risk_rewards"]), 2) if values["risk_rewards"] else None,
             )
             for setup, values in setup_stats.items()
         ]
-        best_setup = sorted(setup_rows, key=lambda row: (row[3], row[2], row[1]), reverse=True)[0]
+        sorted_rows = sorted(setup_rows, key=lambda item: (item[3], item[2], item[1]), reverse=True)
+        setup_breakdown = [
+            {
+                "setup": row[0],
+                "trades": row[1],
+                "win_rate": row[2],
+                "total_pnl": row[3],
+                "avg_holding_days": row[4],
+                "avg_risk_reward": row[5],
+            }
+            for row in sorted_rows
+        ]
+        best_setup = sorted_rows[0] if sorted_rows else None
+    else:
+        best_setup = None
 
     worst_day = min(day_of_week, key=lambda row: row["total_pnl"], default=None)
     worst_bucket = min(
@@ -521,5 +542,6 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
         "day_of_week":      day_of_week,
         "by_direction":     by_direction,
         "by_holding_period": by_holding,
+        "setup_breakdown": setup_breakdown,
         "coaching_cards": coaching_cards,
     }

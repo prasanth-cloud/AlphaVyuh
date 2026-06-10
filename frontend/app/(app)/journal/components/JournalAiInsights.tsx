@@ -142,6 +142,37 @@ export function JournalAiInsights({
               </div>
             )}
 
+            {(patterns.setup_breakdown?.length ?? 0) > 0 && (
+              <div data-testid="journal-setup-breakdown">
+                <div className="label" style={{ marginBottom: 8 }}>Per-setup stats</div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                        {["Setup", "Trades", "Win rate", "Hold", "R:R", "P&L"].map(h => (
+                          <th key={h} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 12 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {patterns.setup_breakdown!.map(row => (
+                        <tr key={row.setup} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                          <td style={{ padding: "8px 12px 8px 0", fontWeight: 600 }}>{row.setup}</td>
+                          <td style={{ padding: "8px 12px 8px 0" }}>{row.trades}</td>
+                          <td style={{ padding: "8px 12px 8px 0", color: row.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{row.win_rate}%</td>
+                          <td style={{ padding: "8px 12px 8px 0" }}>{row.avg_holding_days != null ? `${row.avg_holding_days}d` : "—"}</td>
+                          <td style={{ padding: "8px 12px 8px 0" }}>{row.avg_risk_reward != null ? `${row.avg_risk_reward}:1` : "—"}</td>
+                          <td style={{ padding: "8px 0", color: row.total_pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                            {row.total_pnl >= 0 ? "+" : ""}₹{Math.abs(row.total_pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Day of week */}
             {(patterns.day_of_week?.length ?? 0) > 0 && (
               <div>

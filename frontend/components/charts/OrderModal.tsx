@@ -7,6 +7,7 @@ import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
 import { DataProvenanceBadge } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { buildChartSnapshotMetadata } from "@/lib/chart-snapshot";
 
 const SETUP_TYPES = [
   { value: "", label: "— Select setup —" },
@@ -113,6 +114,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         order_type: "market",
         source_page: "chart",
         source_context: symbol,
+        chart_snapshot: buildChartSnapshotMetadata(symbol, priceNum),
         live_confirmed: canRouteLive && liveConfirmed,
         ...(slNum  > 0 ? { stop_loss:    slNum  } : {}),
         ...(tgtNum > 0 ? { target_price: tgtNum } : {}),

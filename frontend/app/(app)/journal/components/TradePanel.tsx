@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
@@ -371,6 +372,15 @@ export function TradePanel({
                   <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)" }}>
                     {reviewContext.fallback}
                   </div>
+                )}
+                {selectedEntry.scanner_context?.chart_snapshot?.chart_url && (
+                  <Link
+                    href={selectedEntry.scanner_context.chart_snapshot.chart_url}
+                    data-testid="journal-chart-snapshot-link"
+                    style={{ display: "inline-block", marginTop: 12, fontSize: 12, fontWeight: 600, color: "var(--accent)" }}
+                  >
+                    Open chart at entry
+                  </Link>
                 )}
               </div>
             )}
