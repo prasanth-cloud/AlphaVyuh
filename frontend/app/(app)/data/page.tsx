@@ -18,7 +18,7 @@ import {
 } from "@/lib/api";
 import { Card, DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
 import { checkApiReachability } from "@/lib/api-reachability";
-import { marketDataHealthPresentation } from "@/lib/data-health-copy";
+import { marketDataHealthPresentation, bhavcopyProvenancePresentation, indicatorCoveragePresentation } from "@/lib/data-health-copy";
 import { isEodHealthUsable } from "@/lib/data-mode";
 import { formatMarketDataSource } from "@/lib/data-copy";
 import type { ApiReachability } from "@/lib/data-mode";
@@ -368,12 +368,13 @@ export default function DataFreshnessPage() {
 
   const health = state.dataHealth;
   const marketHealth = marketDataHealthPresentation(health, state.apiReachable);
+  const bhavcopyHealth = bhavcopyProvenancePresentation(health);
+  const indicatorHealth = indicatorCoveragePresentation(health);
   const sectorTaxonomy = sectorTaxonomyPresentation(state.sectorTaxonomy, state.sectorTaxonomyError);
   const broker = state.broker ?? fallbackBroker;
   const coveragePct = health?.symbols_on_latest_date != null && health.universe_active
     ? Math.round((health.symbols_on_latest_date / health.universe_active) * 100)
     : null;
-  const missingIndicators = (health?.indicators_missing.rsi_14 ?? 0) + (health?.indicators_missing.ema_200 ?? 0);
   const liveMarket = health?.live_market ?? null;
   const brokerUnavailable = state.accountIssues.some(issue => issue.id === "broker");
   const brokerGate = brokerOrderGatePresentation(broker, { unavailable: brokerUnavailable });
@@ -468,6 +469,18 @@ export default function DataFreshnessPage() {
           status={coveragePct == null ? "bad" : coveragePct >= 95 ? "good" : coveragePct >= 80 ? "warn" : "bad"}
         />
         <HealthTile
+          label="Indicator coverage"
+          value={indicatorHealth.value}
+          detail={indicatorHealth.detail}
+          status={indicatorHealth.status}
+        />
+        <HealthTile
+          label="Bhavcopy ingest"
+          value={bhavcopyHealth.value}
+          detail={bhavcopyHealth.detail}
+          status={bhavcopyHealth.status}
+        />
+        <HealthTile
           label="Sector taxonomy"
           value={sectorTaxonomy.value}
           detail={sectorTaxonomy.detail}
@@ -539,6 +552,8 @@ export default function DataFreshnessPage() {
               ["Sector industry scope", sectorTaxonomy.industryScope],
               ["Refresh age", health?.hours_since_refresh != null ? `${health.hours_since_refresh.toFixed(1)} hours` : "Not available"],
               ["Latest exchange file", health?.last_bhavcopy?.status ? `${health.last_bhavcopy.status} · ${health.last_bhavcopy.rows_ingested ?? 0} rows` : "Not available"],
+              ["Bhavcopy error", health?.last_bhavcopy?.error_message ?? "None"],
+              ["Bhavcopy warning", health?.last_bhavcopy?.warning_message ?? "None"],
               ["RSI missing", fmtNumber(health?.indicators_missing.rsi_14)],
               ["EMA 200 missing", fmtNumber(health?.indicators_missing.ema_200)],
               ["Last ingest run", health?.last_run.id ?? "Not available"],
@@ -556,11 +571,9 @@ export default function DataFreshnessPage() {
             ))}
           </div>
 
-          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: missingIndicators > 0 ? "var(--warn-subtle)" : "var(--gain-subtle)" }}>
-            <div style={{ fontSize: 12, lineHeight: 1.6, color: missingIndicators > 0 ? "var(--warn)" : "var(--gain)" }}>
-              {missingIndicators > 0
-                ? `${missingIndicators.toLocaleString("en-IN")} indicator values are missing across RSI 14 and EMA 200 checks. Scanner presets may be narrower until the next ingest backfills them.`
-                : "Core scanner indicators are present for the current health snapshot."}
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: indicatorHealth.status !== "good" ? "var(--warn-subtle)" : "var(--gain-subtle)" }} data-testid="data-indicator-coverage">
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: indicatorHealth.status !== "good" ? "var(--warn)" : "var(--gain)" }}>
+              {indicatorHealth.detail}
             </div>
           </div>
         </Card>
