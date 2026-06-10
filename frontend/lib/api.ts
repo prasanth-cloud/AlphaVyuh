@@ -66,6 +66,7 @@ import type {
   ScanAlertMatch,
   ScanFilters,
   ScanPreset,
+  ScannerIdeaContext,
   ScanResponse,
   ScanResult,
   SectorBreadthItem,
@@ -2199,8 +2200,12 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     const symbol = order.symbol.toUpperCase();
     const previousWorkflow = localWorkflow[symbol];
     const ideaContext = order.scanner_context ?? previousWorkflow?.scanner_context;
-    const scannerContext = order.chart_snapshot
-      ? { ...(ideaContext ?? {}), chart_snapshot: order.chart_snapshot }
+    const scannerContext: ScannerIdeaContext | null | undefined = order.chart_snapshot
+      ? {
+          source: ideaContext?.source ?? "scanner",
+          ...(ideaContext ?? {}),
+          chart_snapshot: order.chart_snapshot,
+        }
       : ideaContext;
     const ideaParts = scannerContext
       ? [

@@ -6,6 +6,7 @@ import { placeOrder, getBrokerStatus } from "@/lib/api";
 import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
 import { DataProvenanceBadge } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
+import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { buildChartSnapshotMetadata } from "@/lib/chart-snapshot";
 
 const SETUP_TYPES = [
