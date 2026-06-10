@@ -565,7 +565,7 @@ export async function getQuotes(symbols: string[]): Promise<QuotesBatchResult> {
           }
           return { quotes, as_of: null };
         }
-        return { quotes: {} };
+        throw new Error("Quote data is temporarily unavailable.");
       }
       const data = await res.json();
       const unavailableMessage = unavailablePayloadMessage(data, "Quote data is temporarily unavailable.");
@@ -585,7 +585,7 @@ export async function getQuotes(symbols: string[]): Promise<QuotesBatchResult> {
         return { quotes, as_of: null };
       }
       if (error instanceof Error && error.message.toLowerCase().includes("unavailable")) throw error;
-      return { quotes: {} };
+      throw new Error("Quote data is temporarily unavailable.");
     }
   });
 }

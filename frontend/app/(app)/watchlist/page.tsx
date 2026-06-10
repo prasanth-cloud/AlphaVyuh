@@ -29,7 +29,6 @@ import {
   removeFromWatchlist,
   reorderWatchlist,
   updateWatchlistItemMetadata,
-  getQuote,
   getQuotes,
   searchSymbols,
   getCandles,
@@ -1269,6 +1268,7 @@ function WatchlistContent() {
   const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
   const [queuePage, setQueuePage] = useState(0);
   const [quotesAsOf, setQuotesAsOf] = useState<string | null>(null);
+  const [liveQuotesError, setLiveQuotesError] = useState<string | null>(null);
   const [workflowBySymbol, setWorkflowBySymbol] = useState<Record<string, WorkflowState>>({});
   const [fundamentalsBySymbol, setFundamentalsBySymbol] = useState<Record<string, { loading: boolean; data: Fundamentals | null; error: boolean }>>({});
   const appliedChartDrafts = useRef<Set<string>>(new Set());
@@ -1661,21 +1661,26 @@ function WatchlistContent() {
     let cancelled = false;
 
     async function refreshLiveQuotes() {
-      const { quotes, as_of } = await getQuotes(pageItems.map((item) => item.symbol)).catch(() => ({ quotes: {} as Record<string, ScanResult>, as_of: null }));
-
-      if (cancelled) return;
-      if (as_of) setQuotesAsOf(as_of);
-      setWatchlists(prev => prev.map(w => (
-        w.id !== activeId
-          ? w
-          : {
-              ...w,
-              items: w.items.map(item => {
-                const quote = quotes[item.symbol];
-                return quote ? { ...item, close: quote.close, pct_change: quote.pct_change } : item;
-              }),
-            }
-      )));
+      try {
+        const { quotes, as_of } = await getQuotes(pageItems.map((item) => item.symbol));
+        if (cancelled) return;
+        setLiveQuotesError(null);
+        if (as_of) setQuotesAsOf(as_of);
+        setWatchlists(prev => prev.map(w => (
+          w.id !== activeId
+            ? w
+            : {
+                ...w,
+                items: w.items.map(item => {
+                  const quote = quotes[item.symbol];
+                  return quote ? { ...item, close: quote.close, pct_change: quote.pct_change } : item;
+                }),
+              }
+        )));
+      } catch (error) {
+        if (cancelled) return;
+        setLiveQuotesError(error instanceof Error ? error.message : "Quote refresh is temporarily unavailable.");
+      }
     }
 
     refreshLiveQuotes();
@@ -1861,9 +1866,17 @@ function WatchlistContent() {
         }
       }
 
-      const { quotes, as_of } = addedSymbols.length
-        ? await getQuotes(addedSymbols).catch(() => ({ quotes: {} as Record<string, ScanResult>, as_of: null }))
-        : { quotes: {} as Record<string, ScanResult>, as_of: null };
+      let quotes: Record<string, ScanResult> = {};
+      let as_of: string | null = null;
+      if (addedSymbols.length) {
+        try {
+          const batch = await getQuotes(addedSymbols);
+          quotes = batch.quotes;
+          as_of = batch.as_of ?? null;
+        } catch {
+          showToast(`Starter symbols added, but quote refresh is temporarily unavailable. ${WATCHLIST_RECOVERY_MESSAGE}`);
+        }
+      }
       if (as_of) setQuotesAsOf(as_of);
       const newItems = addedSymbols.map((symbol, index) => {
         const quote = quotes[symbol.toUpperCase()];
@@ -2275,6 +2288,11 @@ function WatchlistContent() {
               {journalLoadError && (
                 <div data-testid="watchlist-journal-status" className="caption" style={{ marginTop: 8, padding: "7px 9px", borderRadius: 10, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--warn)", lineHeight: 1.5 }}>
                   Journal review context is unavailable. {journalLoadError} Watchlist queue, chart review, and planning remain usable.
+                </div>
+              )}
+              {liveQuotesError && (
+                <div data-testid="watchlist-live-quotes-unavailable" className="caption" style={{ marginTop: 8, padding: "7px 9px", borderRadius: 10, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--warn)", lineHeight: 1.5 }}>
+                  Live quote refresh is unavailable. {liveQuotesError} Last known prices remain visible until refresh succeeds.
                 </div>
               )}
               {showSelectedMeta && (

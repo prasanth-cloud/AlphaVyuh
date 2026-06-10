@@ -14,6 +14,7 @@ export type LaunchAgendaItem = {
 
 export type LaunchAgendaInput = {
   apiReachable: ApiReachability;
+  eodUsable: boolean;
   marketStatus: LaunchAgendaStatus;
   marketDetail: string;
   sectorTaxonomy: SectorTaxonomyPresentation;
@@ -64,7 +65,8 @@ function journalAgenda(input: LaunchAgendaInput): LaunchAgendaItem {
 }
 
 export function buildLaunchAgenda(input: LaunchAgendaInput): LaunchAgendaItem[] {
-  const dataStatus: LaunchAgendaStatus = input.apiReachable === "down" ? "bad" : input.marketStatus;
+  const dataBlocked = input.apiReachable === "down" && !input.eodUsable;
+  const dataStatus: LaunchAgendaStatus = dataBlocked ? "bad" : input.marketStatus;
   const dataValue = dataStatus === "good" ? "EOD READY" : dataStatus === "warn" ? "VERIFY" : "BLOCKED";
   const sectorStatus: LaunchAgendaStatus = input.sectorTaxonomy.status === "good" ? "good" : input.sectorTaxonomy.status === "warn" ? "warn" : "bad";
 
@@ -81,7 +83,7 @@ export function buildLaunchAgenda(input: LaunchAgendaInput): LaunchAgendaItem[] 
       id: "data-trust",
       label: "Market data trust",
       value: dataValue,
-      detail: input.apiReachable === "down"
+      detail: dataBlocked
         ? "Market data API is unreachable; do not trust Today, scanner, or chart state until service recovery passes."
         : input.marketDetail,
       status: dataStatus,

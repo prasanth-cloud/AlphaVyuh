@@ -6,7 +6,41 @@ export function isRailwayFallbackResponse(status: number, body: string) {
   return status === 404 && body.toLowerCase().includes("application not found");
 }
 
-export async function checkApiReachability(timeoutMs = 900): Promise<ApiReachability> {
+async function probeBackend(signal?: AbortSignal): Promise<ApiReachability> {
+  try {
+    const response = await fetch(apiUrl("/health"), { cache: "no-store", signal });
+    const text = await response.text().catch(() => "");
+    if (response.ok && !isRailwayFallbackResponse(response.status, text)) {
+      return "ok";
+    }
+
+    const apiResponse = await fetch(apiUrl("/api/v1/data/health"), { cache: "no-store", signal });
+    const apiText = await apiResponse.text().catch(() => "");
+    if (apiResponse.status === 401 || apiResponse.status === 403 || apiResponse.ok) {
+      return "ok";
+    }
+    if (isRailwayFallbackResponse(response.status, text) || isRailwayFallbackResponse(apiResponse.status, apiText)) {
+      return "down";
+    }
+    return response.ok || apiResponse.ok ? "ok" : "unknown";
+  } catch {
+    try {
+      const apiResponse = await fetch(apiUrl("/api/v1/data/health"), { cache: "no-store" });
+      if (apiResponse.status === 401 || apiResponse.status === 403 || apiResponse.ok) {
+        return "ok";
+      }
+      const apiText = await apiResponse.text().catch(() => "");
+      if (isRailwayFallbackResponse(apiResponse.status, apiText)) {
+        return "down";
+      }
+    } catch {
+      // Fall through to down.
+    }
+    return "down";
+  }
+}
+
+export async function checkApiReachability(timeoutMs = 1800): Promise<ApiReachability> {
   if (allowClientMockFallback()) {
     return "ok";
   }
@@ -15,17 +49,7 @@ export async function checkApiReachability(timeoutMs = 900): Promise<ApiReachabi
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(apiUrl("/health"), {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-    const text = await response.text().catch(() => "");
-    if (!response.ok || isRailwayFallbackResponse(response.status, text)) {
-      return "down";
-    }
-    return "ok";
-  } catch {
-    return "down";
+    return await probeBackend(controller.signal);
   } finally {
     window.clearTimeout(timeout);
   }

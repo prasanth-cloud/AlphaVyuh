@@ -96,4 +96,30 @@ describe("quote API", () => {
 
     await expect(getQuoteLive("RELIANCE")).rejects.toThrow("Live quote provider is temporarily unavailable.");
   });
+
+  it("rejects batch quote HTTP failures instead of returning empty quotes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Quote service unavailable" }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getQuotes } = await import("@/lib/api");
+
+    await expect(getQuotes(["RELIANCE", "TCS"])).rejects.toThrow("Quote data is temporarily unavailable.");
+  });
+
+  it("rejects successful unavailable batch quote payloads", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        quotes: {},
+        mode: "unavailable",
+        message: "Quote data is temporarily unavailable.",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getQuotes } = await import("@/lib/api");
+
+    await expect(getQuotes(["RELIANCE"])).rejects.toThrow("Quote data is temporarily unavailable.");
+  });
 });

@@ -23,6 +23,18 @@ describe("market data health presentation", () => {
     expect(presentation.detail).toContain("2026-05-18");
   });
 
+  it("prefers healthy EOD ingest over a failed root health probe", () => {
+    const presentation = marketDataHealthPresentation(
+      { status: "healthy", latest_trade_date: "2026-06-09" },
+      "down",
+    );
+
+    expect(presentation.value).toBe("HEALTHY");
+    expect(presentation.status).toBe("good");
+    expect(presentation.detail).toContain("2026-06-09");
+    expect(presentation.detail).toContain("Live quote probe failed");
+  });
+
   it("recognizes Railway fallback health responses as an API outage", () => {
     expect(isRailwayFallbackResponse(404, '{"message":"Application not found"}')).toBe(true);
     expect(isRailwayFallbackResponse(503, '{"message":"temporarily unavailable"}')).toBe(false);

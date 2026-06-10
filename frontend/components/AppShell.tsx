@@ -3,9 +3,9 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import FeedbackWidget from '@/components/FeedbackWidget'
-import { clearAuthHeaderCache, searchSymbols, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
-import type { SymbolSearchResult } from '@/lib/api'
-import { API_BASE_URL } from '@/lib/api-base'
+import { clearAuthHeaderCache, getDataHealth, searchSymbols, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
+import type { DataHealth, SymbolSearchResult } from '@/lib/api'
+import { checkApiReachability } from '@/lib/api-reachability'
 import { dataModePresentation, type ApiReachability } from '@/lib/data-mode'
 import { markAppTiming } from '@/lib/performance'
 import { allowClientMockFallback } from '@/lib/runtime-mode'
@@ -184,33 +184,41 @@ function DataModePill() {
   const forceLive = process.env.NEXT_PUBLIC_FORCE_LIVE_DATA === 'true'
   const demo = allowClientMockFallback()
   const [apiReachable, setApiReachable] = useState<ApiReachability>(demo ? 'ok' : 'unknown')
+  const [eodHealth, setEodHealth] = useState<DataHealth | null>(null)
 
   useEffect(() => {
     if (demo) return
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 1800)
-    fetch(`${API_BASE_URL}/health`, {
-      cache: 'no-store',
-      signal: controller.signal,
+    let cancelled = false
+
+    checkApiReachability(1800).then((reachability) => {
+      if (!cancelled) setApiReachable(reachability)
     })
-      .then(async (response) => {
-        if (!response.ok) {
-          setApiReachable('down')
-          return
-        }
-        const text = await response.text()
-        setApiReachable(text.toLowerCase().includes('application not found') ? 'down' : 'ok')
+
+    getDataHealth()
+      .then((health) => {
+        if (!cancelled) setEodHealth(health)
       })
-      .catch(() => setApiReachable('down'))
-      .finally(() => window.clearTimeout(timeout))
+      .catch(() => {
+        if (!cancelled) setEodHealth(null)
+      })
 
     return () => {
-      controller.abort()
-      window.clearTimeout(timeout)
+      cancelled = true
     }
   }, [demo])
 
-  const { label, tone, title } = dataModePresentation({ forceLive, demo, apiReachable })
+  const liveMarket = eodHealth?.live_market
+  const liveQuotesUnavailable = Boolean(
+    liveMarket?.access_token_configured && !liveMarket?.access_token_valid,
+  )
+  const { label, tone, title } = dataModePresentation({
+    forceLive,
+    demo,
+    apiReachable,
+    eodStatus: eodHealth?.status,
+    eodAsOf: eodHealth?.latest_trade_date ?? eodHealth?.last_successful_eod_date,
+    liveQuotesUnavailable,
+  })
   const down = tone === 'loss'
   const color = tone === 'loss' ? 'var(--loss)' : tone === 'gain' ? 'var(--gain)' : tone === 'warn' ? 'var(--warn)' : 'var(--text-tertiary)'
 
