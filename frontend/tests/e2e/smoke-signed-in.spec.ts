@@ -131,14 +131,6 @@ async function expectDashboardReady(page: import("@playwright/test").Page) {
   await expect(marketDesk).toBeVisible({ timeout: 15000 });
 }
 
-async function openDashboardWorkflow(page: import("@playwright/test").Page) {
-  const toggle = page.getByTestId("dashboard-workflow-toggle");
-  if (!(await page.getByTestId("dashboard-cockpit").isVisible().catch(() => false))) {
-    await toggle.click();
-  }
-  await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 15000 });
-}
-
 async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
   if (!EXPECT_REAL_DATA || !API_BEARER_TOKEN) return false;
 
@@ -178,13 +170,8 @@ test.describe("Signed-in smoke flow", () => {
     ]);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15000 });
-    await openDashboardWorkflow(page);
-    await expect(page.getByTestId("dashboard-workflow-command-center")).toContainText(/Dashboard/i);
-    // Phase 2D equity snapshot and review coverage bar: covered in layout-smoke.spec.ts
-    await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
-    const discoverSetupsLink = page.getByRole("link", { name: /Discover setups/i });
-    await expect(discoverSetupsLink).toBeVisible();
-    await expectRealDataContext(page, "today", /Latest session|EOD|Market|coverage|NSE universe/i);
+    await expect(page.getByTestId("dashboard-index-tape")).toBeVisible({ timeout: 15000 });
+    await expectRealDataContext(page, "today", /Data updating|As of|Market|coverage|NSE universe/i);
 
     await page.locator(".app-nav").getByRole("link", { name: "Scanner" }).click();
     await expectPathname(page, "/scanner");
@@ -196,10 +183,9 @@ test.describe("Signed-in smoke flow", () => {
       if (await resetScanButton.isVisible().catch(() => false)) {
         await resetScanButton.click();
         if (EXPECT_REAL_DATA) {
-          await expect(page.getByText("Choose a saved filter, then adjust the fields for your scan.")).toBeVisible({
+          await expect(page.getByText(/Select a screener, refine filters below/i)).toBeVisible({
             timeout: 5000,
           });
-          await expect(page.getByText("Scanner queue")).toBeVisible({ timeout: 5000 });
         }
       }
       await runScanButton.click();
@@ -207,7 +193,7 @@ test.describe("Signed-in smoke flow", () => {
         .poll(async () => page.locator("table tbody tr").count(), { timeout: 25000, intervals: [500, 1000, 2000] })
         .toBeGreaterThan(0);
       await expect(page.getByTestId("scanner-data-trust")).toBeVisible({ timeout: 15000 });
-      await expectRealDataContext(page, "scanner", /Latest session|Trade date|coverage|market data|Exchange|NSE/i);
+      await expectRealDataContext(page, "scanner", /As of|coverage|market data|Exchange|NSE|Source/i);
     } else if (await verifyScannerApiFallback(page)) {
       scannerApiFallbackUsed = true;
     } else {

@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { selectPresetAndRunScan } from "./scanner-helpers";
 
 type WorkflowPage = {
   path: string;
@@ -157,7 +158,7 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).not.toContainText("DISCOVERY");
     await expect(page.getByRole("button", { name: /Technicals/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Fundamentals/i })).toBeVisible();
-    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await selectPresetAndRunScan(page);
     const firstRowActions = page.locator(".scanner-row-actions").first();
     await expect(firstRowActions).toBeVisible({ timeout: 20_000 });
     await expect(firstRowActions.getByRole("button", { name: "Shortlist" })).toBeVisible();
@@ -197,7 +198,7 @@ test.describe("Workflow layout smoke", () => {
 
   test("scanner can create a scan alert and the alerts center shows the digest", async ({ page }) => {
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await selectPresetAndRunScan(page);
     await expect(page.getByRole("button", { name: /^Add alert$/i })).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: /^Add alert$/i }).click();
     await expect(page.getByText("Create scan alert")).toBeVisible();
@@ -217,8 +218,7 @@ test.describe("Workflow layout smoke", () => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
-    await page.getByTestId("dashboard-workflow-toggle").click();
-    await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-index-tape")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Dashboard", "Scanner", "Watchlist", "Journal"]);
     await page.keyboard.press("/");
     await page.getByPlaceholder("Search symbol or command...").fill("dashboard");

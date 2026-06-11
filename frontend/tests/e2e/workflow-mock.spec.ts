@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { selectPresetAndRunScan } from "./scanner-helpers";
 
 test.describe("Mock workflow smoke", () => {
   test("signup first-run flow reaches a focused starter watchlist", async ({ page }) => {
@@ -134,14 +135,19 @@ test.describe("Mock workflow smoke", () => {
     for (const route of ["/dashboard", "/scanner", "/watchlist", "/charts/AUBANK?full=1", "/data"]) {
       await page.goto(route, { waitUntil: "domcontentloaded" });
       await expect(page.locator("body")).toContainText(/Demo|Market data|BACKEND DATA|DEMO DATA/i, { timeout: 15_000 });
-      await expect(page.locator("body")).toContainText(/As of|Updated|Data is|Source|Provider|coverage|Data: Demo fixtures/i, { timeout: 15_000 });
+      if (route === "/scanner") {
+        await expect(page.getByRole("button", { name: /^Run scan$/i })).toBeVisible({ timeout: 15_000 });
+      } else {
+        await expect(page.locator("body")).toContainText(/As of|Updated|Data is|Source|Provider|coverage|Data: Demo fixtures/i, { timeout: 15_000 });
+      }
       if (route === "/dashboard") {
-        await expect(page.getByTestId("dashboard-workflow-command-center")).toContainText(/Dashboard|Market\/data status|Scan alert matches|Watchlist review|Journal review debt|Broker import status/i);
+        await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
       }
     }
 
     await page.goto("/scanner");
-    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await selectPresetAndRunScan(page);
     await expect(page.locator("body")).toContainText(/Trade date|coverage|Demo|AlphaVyuh mock fixtures/i, { timeout: 15_000 });
 
     await page.goto("/charts/AUBANK?full=1");
@@ -160,7 +166,7 @@ test.describe("Mock workflow smoke", () => {
     page.on("pageerror", (error) => errors.push(error.message));
 
     await page.goto("/scanner");
-    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await selectPresetAndRunScan(page);
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
 
     const firstSymbol = ((await page.locator("tbody tr").first().locator(".mono").first().textContent()) ?? "").trim();
@@ -512,7 +518,7 @@ test.describe("Mock workflow smoke", () => {
       });
     });
     await page.goto("/scanner");
-    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await selectPresetAndRunScan(page);
     await expect(page.getByRole("button", { name: /Create watchlist/i }).first()).toBeVisible({ timeout: 20_000 });
 
     const resultRows = page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) });
@@ -669,7 +675,7 @@ test.describe("Mock workflow smoke", () => {
     page.on("pageerror", (error) => errors.push(error.message));
 
     await page.goto("/scanner");
-    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await selectPresetAndRunScan(page);
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
 
     const resultRows = page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) });
@@ -717,7 +723,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${shortlistSymbol}` }).first()).toBeVisible({ timeout: 10_000 });
     await page.goto("/scanner");
-    await page.getByRole("button", { name: /^Run scan$/i }).click();
+    await selectPresetAndRunScan(page);
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: /Create watchlist/i }).first().click();

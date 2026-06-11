@@ -20,6 +20,7 @@ import {
   type HighsLowsPeriod,
   type MarketPeriod,
 } from "@/lib/dashboard-market";
+import { LiveIndexTape } from "@/components/dashboard/LiveIndexTape";
 
 const chipStyle = (active: boolean): CSSProperties => ({
   padding: "4px 10px",
@@ -55,47 +56,6 @@ function FilterChipGroup<T extends string>({
           {option.charAt(0).toUpperCase() + option.slice(1)}
         </button>
       ))}
-    </div>
-  );
-}
-
-function IndexTape({ data }: { data: MarketOverview }) {
-  const indices = (data.indices ?? []).filter((idx) =>
-    /nifty|bank/i.test(idx.label) || /nifty|bank/i.test(idx.symbol),
-  ).slice(0, 2);
-
-  if (indices.length === 0) {
-    return (
-      <div className="dashboard-market-tape" data-testid="dashboard-index-tape">
-        <div className="caption" style={{ color: "var(--warn)", lineHeight: 1.5 }}>
-          Index tape is temporarily unavailable. Check Data Status before trading off index levels.
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="dashboard-market-tape" data-testid="dashboard-index-tape">
-      {indices.map((idx) => {
-        const pct = idx.pct_change == null ? null : safeMarketNumber(idx.pct_change, NaN);
-        const close = idx.close == null ? null : safeMarketNumber(idx.close, NaN);
-        const tone = (pct ?? 0) >= 0 ? "var(--gain)" : "var(--loss)";
-        return (
-          <div key={idx.symbol} className="dashboard-market-tape-item">
-            <div className="label" style={{ marginBottom: 4 }}>{idx.label}</div>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-              <Num style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
-                {close != null && Number.isFinite(close)
-                  ? close.toLocaleString("en-IN", { maximumFractionDigits: 2 })
-                  : "—"}
-              </Num>
-              <Num style={{ fontSize: 12, fontWeight: 600, color: pct == null ? "var(--text-tertiary)" : tone }}>
-                {pct != null && Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "—"}
-              </Num>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -376,7 +336,7 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 4 }}>
         <div>
           <h1 className="workspace-title" style={{ fontSize: "clamp(20px, 2.4vw, 28px)", fontWeight: 600, marginBottom: 4 }}>Market overview</h1>
-          <div className="caption">Latest completed session breadth and sector leadership.</div>
+          <div className="caption">Live index quotes with NSE breadth, sector map, and leadership.</div>
         </div>
         <div data-testid="dashboard-data-trust" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {data.source_metadata?.coverage_pct != null && (
@@ -384,15 +344,19 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
               NSE universe · <Num>{safeMarketNumber(data.source_metadata.coverage_pct).toFixed(0)}%</Num>
             </span>
           )}
+          {data.trade_date && (
+            <span className="workspace-pill" title="Breadth and sector stats as of this trade date">
+              As of {data.trade_date}
+            </span>
+          )}
           <DataProvenanceBadge
-            kind={dataHealth?.mode === "demo" ? "demo" : dataHealth?.status === "degraded" || dataHealth?.status === "stale" ? "fallback" : data.is_live ? "live-provider" : "eod"}
-            asOf={data.trade_date}
+            kind={dataHealth?.mode === "demo" ? "demo" : dataHealth?.status === "degraded" || dataHealth?.status === "stale" ? "fallback" : "live-provider"}
             compact
           />
         </div>
       </div>
 
-      <IndexTape data={data} />
+      <LiveIndexTape data={data} />
 
       <div className="dashboard-market-summary-row" data-testid="dashboard-market-pulse">
         <SummaryTile
