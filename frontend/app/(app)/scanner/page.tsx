@@ -19,7 +19,7 @@ import { mockRunScan } from '@/lib/mock-data'
 import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
-import { Button, Badge, EmptyState, DataTable, DataTableHead, Th, Tr, Td, DataProvenanceBadge, Num } from '@/components/ui'
+import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
@@ -32,7 +32,16 @@ import {
 } from '@/lib/scanner-run-history'
 import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
 import { buildScannerSectorStrength } from '@/lib/scanner-sector-strength'
-import { WorkflowDeskHeader } from '@/components/WorkflowDeskHeader'
+import {
+  formatScannerColumnValue,
+  persistScannerVisibleColumns,
+  readScannerVisibleColumns,
+  resolveScannerColumns,
+  SCANNER_COLUMN_DEFS,
+  SCANNER_DEFAULT_COLUMN_IDS,
+  type ScannerColumnId,
+} from '@/lib/scanner-result-columns'
+import { ScannerChartsPanel } from '@/components/scanner/ScannerChartsPanel'
 
 const API = API_BASE_URL
 
@@ -630,7 +639,6 @@ export default function ScannerPage() {
   const router = useRouter()
   const [filters, setFilters] = useState<Filters>(emptyFilters())
   const [activePreset, setActivePreset] = useState<string | null>(null)
-  const [bootstrapped, setBootstrapped] = useState(false)
   const [results, setResults] = useState<ScanResult[]>([])
   const [totalMatches, setTotalMatches] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
@@ -659,8 +667,11 @@ export default function ScannerPage() {
   const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
   const [composingScreens, setComposingScreens] = useState(false)
   const [toast, setToast] = useState('')
-  const [filterTab, setFilterTab] = useState<'technical' | 'fundamental'>('technical')
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [technicalsOpen, setTechnicalsOpen] = useState(true)
+  const [fundamentalsOpen, setFundamentalsOpen] = useState(false)
+  const [resultsView, setResultsView] = useState<'list' | 'charts'>('list')
+  const [visibleColumnIds, setVisibleColumnIds] = useState<ScannerColumnId[]>([...SCANNER_DEFAULT_COLUMN_IDS])
+  const [columnsPickerOpen, setColumnsPickerOpen] = useState(false)
   const [hasCachedResults, setHasCachedResults] = useState(false)
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
@@ -1030,24 +1041,29 @@ export default function ScannerPage() {
     } finally { setLoading(false) }
   }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, rememberScannerRun, results.length, sortBy, sortDesc])
 
-  const applyPreset = useCallback((p: Preset) => {
+  const selectPreset = useCallback((p: Preset) => {
     const normalizedFilters = Object.fromEntries(
       Object.entries(p.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
     )
     const f = { ...emptyFilters(), ...normalizedFilters } as Filters
-    setFilters(f); setActivePreset(p.id); setActiveScreenName(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, p.id)
-  }, [pageSize, runScan, sortBy, sortDesc])
+    setFilters(f)
+    setActivePreset(p.id)
+    setActiveScreenName(null)
+    setActiveCompositionName(null)
+    setCurrentPage(1)
+  }, [])
 
   useEffect(() => {
-    if (bootstrapped) return
-    if (loading || hasRun || savedScreens.length > 0) return
-    setBootstrapped(true)
-    applyPreset(PRESETS[0])
-  }, [applyPreset, bootstrapped, loading, hasRun, savedScreens.length])
+    setVisibleColumnIds(readScannerVisibleColumns())
+  }, [])
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
-    setFilters(f); setActivePreset('saved_screen'); setActiveScreenName(screen.name); setActiveCompositionName(null); setCurrentPage(1); runScan(f, sortBy, sortDesc, 1, pageSize, 'saved_screen')
+    setFilters(f)
+    setActivePreset('saved_screen')
+    setActiveScreenName(screen.name)
+    setActiveCompositionName(null)
+    setCurrentPage(1)
   }
 
   function currentScanName() {
@@ -1460,9 +1476,23 @@ export default function ScannerPage() {
     scanTrust,
   }) : null;
   const sectorStrength = useMemo(() => buildScannerSectorStrength(results).slice(0, 5), [results]);
+  const visibleColumns = useMemo(() => resolveScannerColumns(visibleColumnIds), [visibleColumnIds]);
+
+  function toggleVisibleColumn(id: ScannerColumnId, checked: boolean) {
+    setVisibleColumnIds(prev => {
+      const next = checked ? [...prev, id] : prev.filter(col => col !== id)
+      const resolved = next.length > 0 ? next : [...SCANNER_DEFAULT_COLUMN_IDS]
+      persistScannerVisibleColumns(resolved)
+      return resolved
+    })
+  }
+
   return (
     <div className="workspace-page">
-      <WorkflowDeskHeader pathname="/scanner" />
+      <div className="workspace-desk-header" style={{ marginBottom: 12 }}>
+        <h1 className="workspace-title" style={{ fontSize: 'clamp(20px, 2.4vw, 28px)', fontWeight: 600, marginBottom: 4 }}>Scanner</h1>
+        <div className="caption">Pick a popular screener or build technical and fundamental filters, then run scan.</div>
+      </div>
       <div className="workspace-grid scanner-workspace-grid">
 
       {/* ── LEFT PANEL ── */}
@@ -1470,14 +1500,17 @@ export default function ScannerPage() {
 
         {/* Presets */}
         <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <div className="label" style={{ marginBottom: 8 }}>Presets</div>
+          <div className="label" style={{ marginBottom: 4 }}>Popular screeners</div>
+          <div className="caption" style={{ marginBottom: 8, lineHeight: 1.45 }}>
+            Minervini trend template, VCP, stage-2 breakout, 52-week highs, episodic pivot, and Darvas box — the setups swing traders scan most often.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {PRESETS.map(p => {
               const active = activePreset === p.id
               return (
                 <button
                   key={p.id}
-                  onClick={() => applyPreset(p)}
+                  onClick={() => selectPreset(p)}
                   title={p.description}
                   className={`workspace-chip-button${active ? ' active' : ''}`}
                   style={{
@@ -1494,7 +1527,7 @@ export default function ScannerPage() {
             })}
           </div>
           <div className="caption" style={{ marginTop: 8 }}>
-            {activePresetMeta?.description ?? 'Choose a saved filter, then adjust the fields for your scan.'}
+            {activePresetMeta?.description ?? 'Select a screener, refine filters below, then click Run scan.'}
           </div>
         </div>
 
@@ -1618,42 +1651,32 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {/* Filter groups */}
-        <div className="workspace-section" style={{ paddingTop: 12, paddingBottom: 12, borderBottom: filtersOpen ? '1px solid var(--border-subtle)' : 'none', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-            <button onClick={() => setFiltersOpen(o => !o)} style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11, fontWeight: 700,
-              color: filtersOpen ? 'var(--accent)' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em',
-            }}>
-              Filters {filtersOpen ? '▲' : '▼'}
-            </button>
-            <span className="caption">Technicals and fundamentals stay visible while you scan.</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {([
-              ['technical', 'Technicals', 'Price, trend, RS, volume'],
-              ['fundamental', 'Fundamentals', 'Valuation, ROE, debt'],
-            ] as const).map(([tab, label, detail]) => (
-              <button key={tab} onClick={() => { setFilterTab(tab) }} style={{
-                textAlign: 'left',
-                padding: '8px 9px',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 11,
-                cursor: 'pointer',
-                border: `1px solid ${filterTab === tab ? 'var(--accent)' : 'var(--border-subtle)'}`,
-                background: filterTab === tab ? 'var(--accent-subtle)' : 'rgba(255,255,255,0.02)',
-                color: filterTab === tab ? 'var(--accent)' : 'var(--text-secondary)',
-              }}>
-                <div style={{ fontWeight: 800, marginBottom: 3 }}>{label}</div>
-                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', lineHeight: 1.35 }}>{detail}</div>
-              </button>
-            ))}
-          </div>
+        <div className="workspace-section" style={{ paddingTop: 8, paddingBottom: 8, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setTechnicalsOpen(o => !o)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 700,
+              color: technicalsOpen ? 'var(--accent)' : 'var(--text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}
+          >
+            <span>Technicals</span>
+            <span>{technicalsOpen ? '▲' : '▼'}</span>
+          </button>
         </div>
 
-        {/* Filters scrollable */}
-        <div style={{ flex: filtersOpen ? 1 : 0, overflowY: 'auto', display: filtersOpen ? 'block' : 'none' }}>
-          {filterTab === 'technical' ? (
+        <div style={{ flex: technicalsOpen ? 1 : 0, overflowY: 'auto', display: technicalsOpen ? 'block' : 'none', maxHeight: technicalsOpen ? 320 : 0 }}>
             <>
               <Section title="Price and change">
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
@@ -1710,7 +1733,34 @@ export default function ScannerPage() {
                 {toggleRow('Inside bar', 'is_inside_bar')}
               </Section>
             </>
-          ) : (
+        </div>
+
+        <div className="workspace-section" style={{ paddingTop: 8, paddingBottom: 8, borderBottom: fundamentalsOpen ? '1px solid var(--border-subtle)' : 'none', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setFundamentalsOpen(o => !o)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 700,
+              color: fundamentalsOpen ? 'var(--accent)' : 'var(--text-secondary)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}
+          >
+            <span>Fundamentals</span>
+            <span>{fundamentalsOpen ? '▲' : '▼'}</span>
+          </button>
+        </div>
+
+        <div style={{ flex: fundamentalsOpen ? 1 : 0, overflowY: 'auto', display: fundamentalsOpen ? 'block' : 'none', maxHeight: fundamentalsOpen ? 280 : 0 }}>
             <>
               <Section title="Market cap">
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
@@ -1732,7 +1782,6 @@ export default function ScannerPage() {
                 {numRow('Debt/Equity ≤', 'debt_to_equity_max', 'e.g. 1')}
               </Section>
             </>
-          )}
         </div>
 
         {/* Bottom actions */}
@@ -1763,20 +1812,43 @@ export default function ScannerPage() {
 
         {/* Results header */}
         <div className="workspace-toolbar" style={{ minHeight: 64, alignItems: 'center' }}>
-          {results.length > 0 ? (
+          {hasRun ? (
             <>
               <div>
-                <span className="heading-card">{totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> stocks</> : 'Scanner'}</span>
+                <span className="heading-card">
+                  {totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> matches</> : 'No matches'}
+                </span>
                 {(tradeDate || scanTrust?.asOf) && (
-                  <DataProvenanceBadge
-                    kind={scanTrust?.mode === 'demo' ? 'demo' : scanTrust?.mode === 'fallback' || scanTrust?.mode === 'unknown' ? 'fallback' : 'eod'}
-                    asOf={scanTrust?.asOf ?? tradeDate}
-                    compact
-                    className="ml-2"
-                  />
+                  <span className="caption" style={{ marginLeft: 8 }}>
+                    As of {scanTrust?.asOf ?? tradeDate}
+                  </span>
                 )}
               </div>
               <div className="workspace-toolbar-group scanner-results-toolbar" data-testid="scanner-data-trust">
+                <button
+                  type="button"
+                  className={`workspace-chip-button${resultsView === 'list' ? ' active' : ''}`}
+                  onClick={() => setResultsView('list')}
+                  data-testid="scanner-view-list"
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  className={`workspace-chip-button${resultsView === 'charts' ? ' active' : ''}`}
+                  onClick={() => setResultsView('charts')}
+                  data-testid="scanner-view-charts"
+                >
+                  Charts
+                </button>
+                <button
+                  type="button"
+                  className="workspace-chip-button"
+                  onClick={() => setColumnsPickerOpen(open => !open)}
+                  data-testid="scanner-columns-toggle"
+                >
+                  Columns
+                </button>
                 {activeCompositionName && (
                   <span className="workspace-pill" style={{ color: 'var(--accent)' }}>
                     {activeCompositionName}
@@ -1874,9 +1946,9 @@ export default function ScannerPage() {
             </>
           ) : (
             <div>
-              <div className="workspace-card-title">Scanner</div>
+              <div className="workspace-card-title">Results</div>
               <div className="workspace-card-copy">
-                {loading ? 'Scanning…' : 'Run your first scan or start with a saved filter.'}
+                {loading ? 'Scanning…' : 'Select a screener or filters, then click Run scan.'}
               </div>
             </div>
           )}
@@ -1980,7 +2052,7 @@ export default function ScannerPage() {
             <EmptyState
               title="Run your first scan"
               description="Choose a saved filter or set your own price, volume, trend, and RS conditions."
-              action={{ label: 'Run Trend Template', onClick: () => applyPreset(PRESETS[0]) }}
+              action={{ label: 'Select Trend Template', onClick: () => selectPreset(PRESETS[0]) }}
             />
           </div>
         )}
@@ -1999,8 +2071,52 @@ export default function ScannerPage() {
           </div>
         )}
 
+        {columnsPickerOpen && hasRun && (
+          <div
+            data-testid="scanner-columns-picker"
+            style={{
+              padding: '10px 16px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: 8,
+            }}
+          >
+            {SCANNER_COLUMN_DEFS.map(col => (
+              <label key={col.id} className="caption" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={visibleColumnIds.includes(col.id)}
+                  onChange={(e) => toggleVisibleColumn(col.id, e.target.checked)}
+                  style={{ accentColor: 'var(--accent)' }}
+                />
+                {col.label}
+              </label>
+            ))}
+          </div>
+        )}
+
+        {!loading && results.length > 0 && resultsView === 'charts' && (
+          <ScannerChartsPanel
+            results={results}
+            selected={selectedResults}
+            onToggleSelect={(symbol, checked) => {
+              setSelectedResults(prev => {
+                const next = new Set(prev)
+                if (checked) next.add(symbol)
+                else next.delete(symbol)
+                return next
+              })
+            }}
+            onOpenChart={(row) => {
+              const full = results.find(result => result.symbol === row.symbol)
+              if (full) void openScannerChart(full)
+            }}
+          />
+        )}
+
         {/* Results table */}
-        {!loading && results.length > 0 && (
+        {!loading && results.length > 0 && resultsView === 'list' && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {scannerWorkbenchResult && scannerWorkbenchExplanation && (
               <div
@@ -2078,22 +2194,14 @@ export default function ScannerPage() {
                   <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
                     onChange={e => setSelectedResults(e.target.checked ? new Set(results.map(r => r.symbol)) : new Set())} />
                 </Th>
-                <Th width={166}>Symbol</Th>
-                <Th align="right" width={92}>Price</Th>
-                <Th align="right" width={74}>Change</Th>
-                <Th align="right" width={60}>Vol ×</Th>
-                <Th align="right" width={50}>RSI</Th>
-                <Th align="right" width={50}>RS</Th>
-                <Th align="right" width={68}>52W H%</Th>
-                <Th align="right" width={66}>Score</Th>
+                {visibleColumns.map(col => (
+                  <Th key={col.id} align={col.align ?? 'left'} width={col.width}>{col.label}</Th>
+                ))}
                 <Th width={268}>Action</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {
                   const expanded = expandedSymbol === r.symbol
-                  const rsiBadgeVariant = r.rsi_14 != null
-                    ? (r.rsi_14 > 70 ? 'accent' : r.rsi_14 > 40 ? 'gain' : 'warn')
-                    : 'neutral'
                   return (
                     <Fragment key={r.symbol}>
                       <Tr
@@ -2117,63 +2225,39 @@ export default function ScannerPage() {
                             onChange={e => { e.stopPropagation(); setSelectedResults(s => { const n = new Set(s); if (e.target.checked) { n.add(r.symbol) } else { n.delete(r.symbol) } return n }) }}
                             onClick={e => e.stopPropagation()} />
                         </Td>
-                        <Td>
-                          <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
-                          <div className="caption" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
-                          <div className="caption" title={r.match_reasons?.[0] ?? 'Matched the active scanner filters'} style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-tertiary)' }}>
-                            Matched: {r.match_reasons?.[0] ?? 'Active filters'}
-                          </div>
-                          {r.screen_matches?.length ? (
-                            <div className="caption" style={{ color: 'var(--accent)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {r.screen_matches.join(' + ')}
-                            </div>
-                          ) : null}
-                          {workflowMarks[r.symbol] && (
-                            <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
-                              {workflowMarks[r.symbol] === 'shortlist'
-                                ? 'Shortlisted'
-                                : workflowMarks[r.symbol] === 'review_later'
-                                  ? 'Review later'
-                                  : workflowMarks[r.symbol] === 'watch'
-                                    ? 'Watching'
-                                    : 'Ignored'}
-                            </div>
-                          )}
-                        </Td>
-                        <Td align="right" mono emphasized>₹{r.close?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</Td>
-                        <Td align="right">
-                          <span className="mono" style={{ color: r.pct_change >= 0 ? 'var(--gain)' : 'var(--loss)', fontWeight: 600, fontSize: 12 }}>
-                            {r.pct_change >= 0 ? '+' : ''}{r.pct_change?.toFixed(2)}%
-                          </span>
-                        </Td>
-                        <Td align="right" mono>{r.volume_ratio?.toFixed(1)}×</Td>
-                        <Td align="right">
-                          {r.rsi_14 != null
-                            ? <Badge variant={rsiBadgeVariant as 'accent' | 'gain' | 'warn'} mono>{r.rsi_14.toFixed(0)}</Badge>
-                            : <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
-                          }
-                        </Td>
-                        <Td align="right" mono>
-                          {r.rs_score != null
-                            ? <span style={{ color: r.rs_score >= 70 ? 'var(--accent)' : 'var(--text-secondary)' }}>{r.rs_score}</span>
-                            : <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
-                          }
-                        </Td>
-                        <Td align="right" mono>
-                          {r.week_52_high_pct != null ? `${r.week_52_high_pct.toFixed(1)}%` : '—'}
-                        </Td>
-                        <Td align="right">
-                          {r.setup_score != null ? (
-                            <Badge
-                              variant={r.setup_score >= 80 ? 'gain' : r.setup_score >= 65 ? 'accent' : 'warn'}
-                              mono
-                            >
-                              {r.setup_grade ?? '—'} {r.setup_score}
-                            </Badge>
-                          ) : (
-                            <span style={{ color: 'var(--text-tertiary)', fontSize: 11 }}>—</span>
-                          )}
-                        </Td>
+                        {visibleColumns.map(col => {
+                          const value = formatScannerColumnValue(col.id, r)
+                          const align = col.align ?? 'left'
+                          const isPct = col.id === 'pct_change'
+                          const tone = isPct && r.pct_change != null
+                            ? (r.pct_change >= 0 ? 'var(--gain)' : 'var(--loss)')
+                            : 'var(--text-primary)'
+                          return (
+                            <Td key={col.id} align={align} mono={col.id !== 'company_name' && col.id !== 'sector'} emphasized={col.id === 'close'}>
+                              {col.id === 'symbol' ? (
+                                <div>
+                                  <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
+                                  {r.screen_matches?.length ? (
+                                    <div className="caption" style={{ color: 'var(--accent)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {r.screen_matches.join(' + ')}
+                                    </div>
+                                  ) : null}
+                                  {workflowMarks[r.symbol] && (
+                                    <div className="caption" style={{ color: workflowMarks[r.symbol] === 'ignored' ? 'var(--loss)' : workflowMarks[r.symbol] === 'review_later' ? 'var(--warn)' : 'var(--accent)' }}>
+                                      {workflowMarks[r.symbol] === 'shortlist' ? 'Shortlisted' : workflowMarks[r.symbol] === 'review_later' ? 'Review later' : workflowMarks[r.symbol] === 'watch' ? 'Watching' : 'Ignored'}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : col.id === 'close' ? (
+                                `₹${value}`
+                              ) : (
+                                <span style={{ color: isPct ? tone : undefined, fontWeight: isPct ? 600 : undefined, fontSize: isPct ? 12 : undefined }}>
+                                  {value}
+                                </span>
+                              )}
+                            </Td>
+                          )
+                        })}
                         <Td>
                           <ScannerRowActions
                             result={r}

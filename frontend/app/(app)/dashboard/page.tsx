@@ -23,7 +23,6 @@ import {
   type ScanAlertMatch,
 } from '@/lib/api'
 import { DashboardEquitySnapshotCard } from '@/components/dashboard/DashboardEquitySnapshot'
-import { DashboardWorkflowSection } from '@/components/dashboard/DashboardWorkflowSection'
 import { MarketOverviewDesk } from '@/components/dashboard/MarketOverviewDesk'
 import { Card, EmptyState, Button, Num } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
@@ -592,7 +591,6 @@ export default function DashboardPage() {
   const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [checklistDismissed, setChecklistDismissed] = useState(false)
   const [journalStats, setJournalStats] = useState<JournalStats | null>(null)
   const [journalAnalytics, setJournalAnalytics] = useState<JournalAnalytics | null>(null)
   const [journalEquityUnavailable, setJournalEquityUnavailable] = useState<string | null>(null)
@@ -651,7 +649,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    setChecklistDismissed(window.localStorage.getItem('alphavyuh-onboarding-dismissed') === '1')
     const cached = readDashboardSnapshotCache()
     if (cached) {
       dataRef.current = cached.data
@@ -847,57 +844,11 @@ export default function DashboardPage() {
           ) : !error ? (
             <EmptyState
               title="Market data is not connected"
-              description="Dashboard needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
+              description="Dashboard needs the market data API to load breadth and sector stats. Open Data status or retry after the API is restored."
               action={{ label: 'Retry', onClick: load }}
             />
           ) : null}
 
-          <DashboardWorkflowSection>
-            <DashboardCockpit workflow={workflow} data={data ?? PENDING_MARKET_OVERVIEW} dataHealth={dataHealth} />
-            <AccountDataStatusCard issues={uniqueAccountIssues([...workflow.accountIssues, ...workflow.alertIssues])} />
-            <WorkflowChecklistCard
-              workflow={workflow}
-              dismissed={checklistDismissed}
-              onDismiss={() => {
-                setChecklistDismissed(true)
-                if (typeof window !== 'undefined') window.localStorage.setItem('alphavyuh-onboarding-dismissed', '1')
-              }}
-            />
-            <Card padding="md">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
-                <div>
-                  <h2 className="heading-card" style={{ marginBottom: 4 }}>Next actions</h2>
-                  <div className="caption">Follow the loop: review, plan, discover, then come back to Journal.</div>
-                </div>
-              </div>
-              <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-                {[
-                  { label: 'Open journal review', detail: 'Start with closed trades, lessons, and process drift.', href: '/journal?review=needs-review' },
-                  { label: 'Open watchlist', detail: 'Pick the next symbol and continue the Decision Desk.', href: '/watchlist' },
-                  { label: 'Discover setups', detail: 'Use Scanner when the current queue needs fresh ideas.', href: '/scanner' },
-                  { label: 'Import trades', detail: 'Bring in contract notes or broker reports for review.', href: '/upload' },
-                ].map((item) => (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    style={{
-                      display: 'block',
-                      minHeight: 68,
-                      padding: '12px 14px',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'var(--surface-2)',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>{item.label}</div>
-                    <div className="caption" style={{ lineHeight: 1.5 }}>{item.detail}</div>
-                  </a>
-                ))}
-              </div>
-            </Card>
-            <ReviewPulseCard workflow={workflow} />
-          </DashboardWorkflowSection>
         </div>
       )}
     </div>
