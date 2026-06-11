@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react'
 import {
   getAiPatterns,
   getBrokerStatus,
+  getJournalAnalytics,
   getJournalEntries,
   getJournalStats,
   getMarketSnapshot,
@@ -16,9 +17,12 @@ import {
   updateMe,
   type AiPatterns,
   type DataHealth,
+  type JournalAnalytics,
+  type JournalStats,
   type MarketOverview,
   type ScanAlertMatch,
 } from '@/lib/api'
+import { DashboardEquitySnapshotCard } from '@/components/dashboard/DashboardEquitySnapshot'
 import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
@@ -718,6 +722,7 @@ function ReviewPulseCard({
   const reviewCoverage = workflow.closedTrades > 0
     ? Math.round((workflow.reviewedTrades / workflow.closedTrades) * 100)
     : 0
+  const reviewDue = Math.max(0, workflow.closedTrades - workflow.reviewedTrades)
 
   const strongestDay = workflow.patterns?.day_of_week?.reduce((strongest, current) => {
     if (!strongest || current.win_rate > strongest.win_rate) return current
@@ -764,6 +769,21 @@ function ReviewPulseCard({
         ))}
       </div>
 
+      <div style={{ marginBottom: 14 }} data-testid="dashboard-review-coverage">
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+          <span className="label">Review coverage</span>
+          <span className="mono" style={{ fontSize: 20, fontWeight: 600, color: reviewCoverage >= 70 ? 'var(--gain)' : reviewDue > 0 ? 'var(--warn)' : 'var(--text-secondary)' }}>
+            {reviewCoverage}%
+          </span>
+        </div>
+        <div style={{ height: 8, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden', marginBottom: 6 }}>
+          <div style={{ width: `${reviewCoverage}%`, height: '100%', borderRadius: 999, background: reviewCoverage >= 70 ? 'var(--gain)' : reviewDue > 0 ? 'var(--warn)' : 'var(--accent)' }} />
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          {workflow.reviewedTrades} of {workflow.closedTrades} closed trades reviewed
+        </div>
+      </div>
+
       <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', marginBottom: 14 }}>
         <div className="label" style={{ marginBottom: 4 }}>Journal coverage</div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{nextAction}</div>
@@ -803,6 +823,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [checklistDismissed, setChecklistDismissed] = useState(false)
+  const [journalStats, setJournalStats] = useState<JournalStats | null>(null)
+  const [journalAnalytics, setJournalAnalytics] = useState<JournalAnalytics | null>(null)
+  const [journalEquityUnavailable, setJournalEquityUnavailable] = useState<string | null>(null)
   const [workflow, setWorkflow] = useState<WorkflowState>({
     watchlists: 0,
     trackedSymbols: 0,
@@ -887,6 +910,11 @@ export default function DashboardPage() {
           'Journal stats are temporarily unavailable.',
         ),
         captureAccountData(
+          getJournalAnalytics(),
+          { id: 'journal', label: 'Journal analytics', href: '/journal?tab=analytics' },
+          'Journal analytics are temporarily unavailable.',
+        ),
+        captureAccountData(
           getBrokerStatus(),
           { id: 'broker', label: 'Broker status', href: '/settings/broker' },
           'Broker status is temporarily unavailable.',
@@ -902,10 +930,13 @@ export default function DashboardPage() {
           'Recent scan alert matches are temporarily unavailable.',
         ),
         getMe().catch(() => null),
-      ]).then(async ([watchlistsResult, journalResult, statsResult, brokerResult, alertsResult, alertMatchesResult, me]) => {
+      ]).then(async ([watchlistsResult, journalResult, statsResult, analyticsResult, brokerResult, alertsResult, alertMatchesResult, me]) => {
         const watchlists = watchlistsResult.data ?? []
         const journal = journalResult.data ?? { entries: [], total: 0 }
         const stats = statsResult.data
+        setJournalStats(stats ?? null)
+        setJournalAnalytics(analyticsResult.issue ? null : (analyticsResult.data ?? null))
+        setJournalEquityUnavailable(statsResult.issue?.message ?? null)
         const broker = brokerResult.data ?? {
           connected: false,
           broker: null,
@@ -1079,6 +1110,15 @@ export default function DashboardPage() {
           </Card>
 
           <MarketPulsePanel data={data} dataHealth={dataHealth} />
+
+          <DashboardEquitySnapshotCard
+            stats={journalStats}
+            analytics={journalAnalytics}
+            closedTrades={workflow.closedTrades}
+            openTrades={workflow.openTrades}
+            unavailable={Boolean(journalEquityUnavailable)}
+            unavailableMessage={journalEquityUnavailable ?? undefined}
+          />
 
           {/* Stat cards */}
           <div className="dashboard-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>

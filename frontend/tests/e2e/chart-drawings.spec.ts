@@ -93,6 +93,12 @@ test.describe("Full chart drawings", () => {
     await page.getByRole("button", { name: "5m", exact: true }).click({ force: true });
     await expect(page.getByText(/Intraday data is not available/).first()).toBeVisible();
 
+    await expect(page.getByTestId("chart-timeframe-pill-strip")).toBeVisible();
+    await page.getByTestId("chart-timeframe-pill-3M").click();
+    await expect(page.getByTestId("chart-timeframe-pill-3M")).toHaveClass(/active/);
+    await page.getByTestId("chart-timeframe-pill-5Y").click();
+    await expect(page.getByTestId("chart-timeframe-pill-5Y")).toHaveClass(/active/);
+
     await page.locator(".chart-timeframe-dropdown summary").click();
     await page.getByRole("button", { name: /EMA 20/ }).click();
     await expect(page.getByRole("button", { name: "EMA 200" })).toBeVisible();

@@ -216,6 +216,7 @@ test.describe("Workflow layout smoke", () => {
   test("top search opens workflow commands", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Dashboard", "Scanner", "Watchlist", "Journal"]);
     await page.keyboard.press("/");
     await page.getByPlaceholder("Search symbol or command...").fill("dashboard");

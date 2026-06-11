@@ -21,6 +21,7 @@ import { useChartData } from "@/components/charts/hooks/useChartData";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
+import ChartTimeframePillStrip from "@/components/charts/ChartTimeframePillStrip";
 import { ChartWorkflowHeader } from "@/components/ChartWorkflowHeader";
 import { DataProvenanceBadge, Num } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
@@ -289,6 +290,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [rangeLabel, setRangeLabel] = useState<WatchlistChartTimeframe>(initialRangeLabel);
   const [timeframe, setTimeframe] = useState<"D" | "W" | "M">("D");
   const [timeframeMessage, setTimeframeMessage] = useState("");
+  const handleRangeLabelChange = useCallback((next: WatchlistChartTimeframe) => {
+    const request = getWatchlistChartRequest(next);
+    setRangeLabel(next);
+    setTimeframe(request.timeframe);
+    setTimeframeMessage("");
+  }, []);
   const [liveMode, setLiveMode] = useState(false);
   const [chartType, setChartType] = useState<ChartDisplayType>(() => initialChartType ?? readStoredChartType());
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -1998,12 +2005,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         <div className="workspace-toolbar-group">
           <ChartTimeframeDropdown
             value={rangeLabel}
-            onChange={(next) => {
-              const request = getWatchlistChartRequest(next);
-              setRangeLabel(next);
-              setTimeframe(request.timeframe);
-              setTimeframeMessage("");
-            }}
+            onChange={handleRangeLabelChange}
             onUnavailable={setTimeframeMessage}
           />
 
@@ -2287,6 +2289,12 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           )}
         </div>
       </div>
+
+      <ChartTimeframePillStrip
+        value={rangeLabel}
+        onChange={handleRangeLabelChange}
+        onUnavailable={setTimeframeMessage}
+      />
 
       {/* ── Body: sidebar + chart area ────────────────────────────────── */}
       <div className="chart-workspace-body flex flex-1 min-h-0 overflow-hidden">
