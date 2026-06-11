@@ -12,6 +12,7 @@ const PUBLIC_PREFIXES = [
   "/offline",
   "/blog",
   "/access",
+  "/about",
   "/beta",
   "/careers",
   "/contact",

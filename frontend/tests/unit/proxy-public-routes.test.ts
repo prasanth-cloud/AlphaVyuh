@@ -7,8 +7,12 @@ describe("proxy auth routing", () => {
     vi.unstubAllEnvs();
   });
 
-  it("keeps health checks outside the auth gate", () => {
+  it("keeps health checks and marketing pages outside the auth gate", () => {
     expect(isPublicPath("/health")).toBe(true);
+    expect(isPublicPath("/about")).toBe(true);
+    expect(isPublicPath("/privacy")).toBe(true);
+    expect(isPublicPath("/terms")).toBe(true);
+    expect(isPublicPath("/policies")).toBe(true);
   });
 
   it("keeps protected app routes behind auth", () => {

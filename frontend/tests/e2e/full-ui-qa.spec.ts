@@ -65,13 +65,13 @@ test.setTimeout(60000);
 test("public landing and auth buttons navigate without runtime errors", async ({ page }) => {
   await expectNoRuntimeErrors(page, async () => {
     await page.goto("/");
-    await expect(page.getByRole("link", { name: /Request access/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Get started/i }).first()).toBeVisible();
     await expect(page.getByText("TradingView Lightweight Charts v5.")).toHaveCount(1);
     await expect(page.getByText("TradingView Lightweight Charts v4.")).toHaveCount(0);
     await page.getByRole("link", { name: /Sign in/i }).first().click();
     await expect(page).toHaveURL(/\/login/);
     await page.goto("/");
-    await page.getByRole("link", { name: /Request access/i }).first().click();
+    await page.getByRole("link", { name: /Get started/i }).first().click();
     await expect(page).toHaveURL(/\/signup/);
   });
 });
