@@ -7,7 +7,7 @@ type WorkflowPage = {
 };
 
 const pages: WorkflowPage[] = [
-  { path: "/dashboard", name: "today", marker: (page) => page.getByTestId("today-cockpit") },
+  { path: "/dashboard", name: "dashboard", marker: (page) => page.getByTestId("dashboard-cockpit") },
   { path: "/scanner", name: "scanner", marker: (page) => page.getByRole("button", { name: /^Run scan$/i }) },
   { path: "/watchlist", name: "watchlist", marker: (page) => page.getByText("Decision desk") },
   { path: "/charts/AUBANK?full=1", name: "full chart", marker: (page) => page.getByTestId("chart-drawing-overlay") },
@@ -215,11 +215,11 @@ test.describe("Workflow layout smoke", () => {
 
   test("top search opens workflow commands", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("today-cockpit")).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Today", "Journal", "Watchlist", "Scanner"]);
+    await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Dashboard", "Scanner", "Watchlist", "Journal"]);
     await page.keyboard.press("/");
-    await page.getByPlaceholder("Search symbol or command...").fill("today");
-    await expect(page.locator(".app-float-panel").getByText("Open Today", { exact: true })).toBeVisible();
+    await page.getByPlaceholder("Search symbol or command...").fill("dashboard");
+    await expect(page.locator(".app-float-panel").getByText("Open Dashboard", { exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
 
     await page.keyboard.press("/");
@@ -346,7 +346,7 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).toContainText(/EOD market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).toContainText(/not investment advice/i);
-    await expect(page.locator("body")).toContainText(/Checkout opens|No production Razorpay payment/i);
+    await expect(page.locator("body")).toContainText(/Billing is enabled|Checkout opens|No production Razorpay payment/i);
     await expect(page.locator("body")).not.toContainText(/Professional Access/i);
 
     await page.goto("/access", { waitUntil: "domcontentloaded" });

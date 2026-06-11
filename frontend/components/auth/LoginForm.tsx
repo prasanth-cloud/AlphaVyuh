@@ -7,6 +7,7 @@ import { Button, Input, Label } from "@/components/ui";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 import { markAppTiming } from "@/lib/performance";
 import { trackEvent } from "@/lib/analytics";
+import { resolveAppRouteLabel } from "@/lib/workflow-placement";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -109,7 +110,7 @@ export default function LoginForm() {
               padding: "8px 10px",
             }}
           >
-            After sign-in, you will continue to <span style={{ color: "var(--text-primary)" }}>{nextPath}</span>.
+            After sign-in, you will continue to <span style={{ color: "var(--text-primary)" }}>{resolveAppRouteLabel(nextPath)}</span>.
           </div>
         )}
       </div>

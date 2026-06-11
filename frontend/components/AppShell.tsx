@@ -10,13 +10,7 @@ import { dataModePresentation, type ApiReachability } from '@/lib/data-mode'
 import { markAppTiming } from '@/lib/performance'
 import { allowClientMockFallback } from '@/lib/runtime-mode'
 import { useWorkflowState } from '@/lib/workflow'
-
-const NAV_LINKS = [
-  { href: '/dashboard', label: 'Today' },
-  { href: '/journal',   label: 'Journal' },
-  { href: '/watchlist', label: 'Watchlist' },
-  { href: '/scanner',   label: 'Scanner' },
-]
+import { SIGNED_IN_NAV_LINKS } from '@/lib/workflow-placement'
 
 const IDLE_PREFETCH_ROUTES = [
   '/dashboard',
@@ -29,7 +23,7 @@ type CommandResult = { command: string; label: string; detail: string; href: str
 type SearchResult = SymbolResult | CommandResult
 
 const COMMAND_RESULTS: CommandResult[] = [
-  { command: 'today dashboard', label: 'Open Today', detail: 'Review queue, active plans, watchlist focus, data health', href: '/dashboard' },
+  { command: 'dashboard workflow', label: 'Open Dashboard', detail: 'Daily checkpoint: review due, data health, watchlist focus', href: '/dashboard' },
   { command: 'journal review', label: 'Review Journal', detail: 'Close the learning loop and process notes', href: '/journal?review=needs-review' },
   { command: 'watchlist desk', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
   { command: 'scanner discovery', label: 'Discover Setups', detail: 'Find candidates to feed watchlist and journal review', href: '/scanner' },
@@ -146,7 +140,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           <div className="app-nav">
-            {NAV_LINKS.map(link => {
+            {SIGNED_IN_NAV_LINKS.map(link => {
               const active = pathname.startsWith(link.href)
               return (
                 <Link

@@ -118,17 +118,17 @@ async function expectRealDataContext(
   await expect(body, `${surface} must expose source, freshness, or coverage context`).toContainText(requiredCopy, { timeout: 15000 });
 }
 
-async function expectTodayReady(page: import("@playwright/test").Page) {
-  const todayCockpit = page.getByTestId("today-cockpit");
+async function expectDashboardReady(page: import("@playwright/test").Page) {
+  const dashboardCockpit = page.getByTestId("dashboard-cockpit");
   for (let attempt = 1; attempt <= 4; attempt += 1) {
-    if (await todayCockpit.isVisible().catch(() => false)) return;
+    if (await dashboardCockpit.isVisible().catch(() => false)) return;
     const retry = page.getByRole("button", { name: "Retry" });
     if (await retry.isVisible().catch(() => false)) {
       await retry.click({ force: true, timeout: 3000 }).catch(() => {});
     }
     await page.waitForTimeout(attempt * 1500);
   }
-  await expect(todayCockpit).toBeVisible({ timeout: 15000 });
+  await expect(dashboardCockpit).toBeVisible({ timeout: 15000 });
 }
 
 async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
@@ -157,11 +157,11 @@ async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Signed-in smoke flow", () => {
-  test("Today, scanner, watchlist, full chart, journal, settings, broker, and data load in a usable state", async ({ page }) => {
+  test("Dashboard, scanner, watchlist, full chart, journal, settings, broker, and data load in a usable state", async ({ page }) => {
     test.setTimeout(EXPECT_REAL_DATA ? 90_000 : 30_000);
     await login(page);
 
-    await expectTodayReady(page);
+    await expectDashboardReady(page);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
     const discoverSetupsLink = page.getByRole("link", { name: /Discover setups/i });

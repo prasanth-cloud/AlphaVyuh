@@ -139,7 +139,7 @@ export function marketDataHealthPresentation(health: MarketHealth | null, apiRea
   if (apiReachable === "down") {
     return {
       value: "DATA API DOWN",
-      detail: "Market data API is unreachable. Today, scanner, watchlist charts, and full chart are waiting for service recovery.",
+      detail: "Market data API is unreachable. Dashboard, scanner, watchlist charts, and full chart are waiting for service recovery.",
       status: "bad" as const,
     };
   }

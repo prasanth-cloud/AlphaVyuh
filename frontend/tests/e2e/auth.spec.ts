@@ -107,6 +107,20 @@ test.describe("Open-redirect protection", () => {
     expect(url.searchParams.get("next")).toBe("/dashboard");
     await expect(page.locator("text=Sign in to AlphaVyuh")).toBeVisible();
   });
+
+  const friendlyRedirects = [
+    { next: "/scanner", label: "Scanner" },
+    { next: "/watchlist", label: "Watchlist" },
+    { next: "/journal", label: "Journal" },
+  ];
+
+  for (const { next, label } of friendlyRedirects) {
+    test(`/login?next=${next} shows friendly redirect label (${label})`, async ({ page }) => {
+      await page.goto(`/login?next=${encodeURIComponent(next)}`);
+      await expect(page.getByText(new RegExp(`continue to ${label}`, "i"))).toBeVisible();
+      await expect(page.getByText(next, { exact: true })).not.toBeVisible();
+    });
+  }
 });
 
 // ── /charts/* legacy redirect ─────────────────────────────────────────────────

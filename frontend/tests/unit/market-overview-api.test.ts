@@ -65,7 +65,7 @@ describe("market overview API", () => {
           total: 0,
           market_phase: "Pending",
           mode: "unavailable",
-          message: "Market summary is temporarily unavailable; Today will use the latest known shell data.",
+          message: "Market summary is temporarily unavailable; dashboard will use the latest known shell data.",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ))

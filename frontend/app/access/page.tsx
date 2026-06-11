@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { TRADER_WORKFLOW_STEPS } from "@/lib/workflow-placement";
 
 const supportEmail = "support@alphavyuh.com";
 
@@ -12,13 +13,6 @@ const accessPosture = [
   "Educational workflow and journal tool, not investment advice",
 ];
 
-const workflowSteps = [
-  "Run one scanner preset after reviewing the data freshness badge.",
-  "Move qualified symbols into a focused watchlist.",
-  "Review the chart, indicators, and source context before planning.",
-  "Capture entry, stop, target, thesis, and invalidation in the Decision Desk.",
-  "Record simulated or imported trades in Journal and review the outcome.",
-];
 
 const accessIncludes = [
   "EOD scanner presets for finding actionable names.",
@@ -58,7 +52,7 @@ export default function AccessPage() {
             Operate your EOD trading workflow with one focused system.
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-[#b6c0ce]">
-            AlphaVyuh connects scanner, watchlist, full chart, trade planning, journal capture,
+            AlphaVyuh connects Dashboard, Scanner, Watchlist, chart planning, journal capture,
             and review so every decision keeps its market context. Access is account-managed
             while live broker order placement remains disabled.
           </p>
@@ -75,12 +69,16 @@ export default function AccessPage() {
         <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
           <Panel title="Trading workflow">
             <ol className="space-y-3 text-sm leading-6 text-[#b6c0ce]">
-              {workflowSteps.map((item, index) => (
-                <li key={item} className="flex gap-3">
+              {TRADER_WORKFLOW_STEPS.map((step, index) => (
+                <li key={step.title} className="flex gap-3">
                   <span className="mt-1 h-5 w-5 shrink-0 rounded-full bg-[#c8f7ee] text-center text-[11px] font-bold leading-5 text-[#04120d]">
                     {index + 1}
                   </span>
-                  <span>{item}</span>
+                  <span>
+                    <strong className="text-[#f4f7fb]">{step.title}</strong>
+                    {" — "}
+                    {step.body}
+                  </span>
                 </li>
               ))}
             </ol>
