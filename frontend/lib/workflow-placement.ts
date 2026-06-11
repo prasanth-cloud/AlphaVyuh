@@ -95,6 +95,44 @@ export function resolveAppRouteLabel(path: string): string {
 }
 
 /** Desk page header copy + forward workflow CTA for signed-in surfaces. */
+export type ChartWorkflowLink = {
+  label: string;
+  href: string;
+  active?: boolean;
+};
+
+/** Workflow chip links for chart surfaces (Scanner → Watchlist → Journal → Plan trade). */
+export function getChartWorkflowLinks(options: { planTradeHref?: string } = {}): ChartWorkflowLink[] {
+  const links: ChartWorkflowLink[] = [
+    { label: "Scanner", href: "/scanner" },
+    { label: "Watchlist", href: "/watchlist" },
+    { label: "Journal", href: "/journal" },
+  ];
+  if (options.planTradeHref) {
+    links.push({ label: "Plan trade", href: options.planTradeHref, active: true });
+  }
+  return links;
+}
+
+export function getChartWorkflowNextStep(): { label: string; href: string } {
+  return (
+    getWorkflowDeskMeta("/charts")?.nextStep ?? {
+      label: "Open journal review",
+      href: "/journal?review=needs-review",
+    }
+  );
+}
+
+export function getJournalWorkflowLinks(symbol?: string): ChartWorkflowLink[] {
+  const links: ChartWorkflowLink[] = [
+    { label: "Back to watchlist", href: "/watchlist" },
+  ];
+  if (symbol) {
+    links.push({ label: "Open chart", href: `/charts/${symbol}` });
+  }
+  return links;
+}
+
 export function getWorkflowDeskMeta(pathname: string): WorkflowDeskMeta | null {
   const normalized = pathname.replace(/\/$/, "") || "/";
 

@@ -211,7 +211,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
                 {scoreCards.map((card) => (
                   <div key={card.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
                     <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>{card.label}</div>
-                    <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: card.color }}>{card.value}</div>
+                    <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: card.color }}>{card.value}</div>
                     <div className="caption" style={{ marginTop: 5 }}>{card.detail}</div>
                   </div>
                 ))}
@@ -220,7 +220,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
               <div className="journal-review-grid">
                 <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "rgba(45,181,116,0.08)", border: "1px solid rgba(45,181,116,0.18)" }}>
                   <div className="label" style={{ color: "var(--gain)", marginBottom: 6 }}>Best setup</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{summary.bestSetup?.setup ?? "Not enough closed trades"}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{summary.bestSetup?.setup ?? "Not enough closed trades"}</div>
                   <div className="caption" style={{ marginTop: 5 }}>
                     {summary.bestSetup
                       ? `${summary.bestSetup.trades} trades · ${formatPct(summary.bestSetup.win_rate)} win rate · ${formatCurrency(summary.bestSetup.total_pnl)}`
@@ -229,7 +229,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
                 </div>
                 <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.18)" }}>
                   <div className="label" style={{ color: "var(--warn)", marginBottom: 6 }}>Risk drag</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
                     {analytics?.max_drawdown != null ? formatCurrency(analytics.max_drawdown) : "Drawdown unavailable"}
                   </div>
                   <div className="caption" style={{ marginTop: 5 }}>
@@ -240,7 +240,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
                 </div>
                 <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
                   <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>Largest month</div>
-                  <div className="mono" style={{ fontSize: 13, fontWeight: 700, color: toneForSigned(summary.largestMonth?.pnl) }}>
+                  <div className="mono" style={{ fontSize: 13, fontWeight: 600, color: toneForSigned(summary.largestMonth?.pnl) }}>
                     {summary.largestMonth ? `${summary.largestMonth.month} · ${formatCurrency(summary.largestMonth.pnl)}` : "—"}
                   </div>
                   <div className="caption" style={{ marginTop: 5 }}>Use this month as the benchmark for setup quality and position sizing discipline.</div>

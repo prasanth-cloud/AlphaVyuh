@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Badge } from "@/components/ui";
+import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry } from "./types";
 import { fmtCcy, fmtDate, getTradeFlowMeta } from "./utils";
 
@@ -108,7 +110,7 @@ export function TradeTable({
             ) : unavailableMessage ? (
               <tr>
                 <td colSpan={9} style={{ padding: "48px 24px", textAlign: "center" }}>
-                  <div className="body-secondary" style={{ color: "var(--warn)", fontWeight: 700 }}>Journal data unavailable</div>
+                  <div className="body-secondary" style={{ color: "var(--warn)", fontWeight: 600 }}>Journal data unavailable</div>
                   <div className="caption" style={{ marginTop: 6, maxWidth: 520, marginInline: "auto", lineHeight: 1.6 }}>
                     {unavailableMessage} Existing trades are not being treated as empty.
                   </div>
@@ -173,7 +175,7 @@ export function TradeTable({
                       <span className="caption">Open</span>
                     ) : (
                       <div style={{ display: "grid", gap: 3 }}>
-                        <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: e.pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                        <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: e.pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>
                           {e.pnl >= 0 ? "+" : ""}{fmtCcy(e.pnl)}
                         </span>
                         <span className="caption">
@@ -212,6 +214,16 @@ export function TradeTable({
           </tbody>
         </table>
       </div>
+
+      {symbolFocus && (
+        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }} data-testid="journal-table-workflow-links">
+          {getJournalWorkflowLinks(symbolFocus).map((link) => (
+            <Link key={link.label} href={link.href} className="workspace-chip-button" style={{ textDecoration: "none" }}>
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

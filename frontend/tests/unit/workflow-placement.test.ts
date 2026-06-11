@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   TRADER_WORKFLOW_STEPS,
   WORKFLOW_FLOW_CAPTION,
+  getChartWorkflowLinks,
+  getChartWorkflowNextStep,
+  getJournalWorkflowLinks,
   getWorkflowDeskMeta,
   resolveAppRouteLabel,
   SIGNED_IN_NAV_LINKS,
@@ -38,6 +41,32 @@ describe("workflow placement", () => {
 
   it("exposes a five-step desk flow caption", () => {
     expect(WORKFLOW_FLOW_CAPTION).toBe("Dashboard → Scanner → Watchlist → Chart → Journal");
+  });
+
+  it("exposes chart workflow chip links with optional plan-trade handoff", () => {
+    expect(getChartWorkflowLinks()).toEqual([
+      { label: "Scanner", href: "/scanner" },
+      { label: "Watchlist", href: "/watchlist" },
+      { label: "Journal", href: "/journal" },
+    ]);
+    expect(getChartWorkflowLinks({ planTradeHref: "/watchlist?symbol=RELIANCE&planDraft=chart" })).toEqual([
+      { label: "Scanner", href: "/scanner" },
+      { label: "Watchlist", href: "/watchlist" },
+      { label: "Journal", href: "/journal" },
+      { label: "Plan trade", href: "/watchlist?symbol=RELIANCE&planDraft=chart", active: true },
+    ]);
+    expect(getChartWorkflowNextStep()).toEqual({
+      label: "Open journal review",
+      href: "/journal?review=needs-review",
+    });
+  });
+
+  it("exposes journal workflow footer links when a symbol is in focus", () => {
+    expect(getJournalWorkflowLinks()).toEqual([{ label: "Back to watchlist", href: "/watchlist" }]);
+    expect(getJournalWorkflowLinks("INFY")).toEqual([
+      { label: "Back to watchlist", href: "/watchlist" },
+      { label: "Open chart", href: "/charts/INFY" },
+    ]);
   });
 
   it("maps desk routes to subtitles and forward next-step CTAs", () => {

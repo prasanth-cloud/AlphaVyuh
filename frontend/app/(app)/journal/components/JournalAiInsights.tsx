@@ -76,7 +76,7 @@ export function JournalAiInsights({
           ].map((item) => (
             <div key={item.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
               <div className="label" style={{ marginBottom: 4 }}>{item.label}</div>
-              <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: item.tone }}>{item.value}</div>
+              <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: item.tone }}>{item.value}</div>
             </div>
           ))}
         </div>
@@ -90,7 +90,7 @@ export function JournalAiInsights({
             {patterns.coaching_cards!.map((card) => (
               <div key={card.label} style={{ minWidth: 0, borderRadius: "var(--radius-md)", padding: "12px 14px", border: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
                 <div className="label" style={{ marginBottom: 6 }}>{card.label}</div>
-                <div className="mono" style={{ fontSize: 14, fontWeight: 700, color: toneColor(card.tone), marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.value}</div>
+                <div className="mono" style={{ fontSize: 14, fontWeight: 600, color: toneColor(card.tone), marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.value}</div>
                 <div style={{ fontSize: 11, lineHeight: 1.55, color: "var(--text-secondary)" }}>{card.detail}</div>
               </div>
             ))}
@@ -244,7 +244,7 @@ export function JournalAiInsights({
             </div>
             <button
               onClick={onAnalyse}
-              style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 700, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer" }}
+              style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer" }}
             >
               Run pattern analysis
             </button>
@@ -265,7 +265,7 @@ export function JournalAiInsights({
           <button
             onClick={onAnalyse}
             disabled={aiLoading}
-            style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 700, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
+            style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
           >
             {aiLoading ? "Reviewing…" : aiAnalysis ? "Run review again" : "Review my journal"}
           </button>
@@ -295,10 +295,10 @@ export function JournalAiInsights({
             <div style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-primary)" }}>
               {aiAnalysis.split("\n").map((line, i) => {
                 if (line.startsWith("## ") || line.startsWith("### ")) {
-                  return <div key={i} style={{ fontSize: 13, fontWeight: 700, marginTop: 16, marginBottom: 4, color: "var(--text-primary)" }}>{line.replace(/^#+\s/, "")}</div>;
+                  return <div key={i} style={{ fontSize: 13, fontWeight: 600, marginTop: 16, marginBottom: 4, color: "var(--text-primary)" }}>{line.replace(/^#+\s/, "")}</div>;
                 }
                 if (line.startsWith("**") && line.endsWith("**")) {
-                  return <div key={i} style={{ fontSize: 13, fontWeight: 700, marginTop: 12, marginBottom: 4 }}>{line.replace(/\*\*/g, "")}</div>;
+                  return <div key={i} style={{ fontSize: 13, fontWeight: 600, marginTop: 12, marginBottom: 4 }}>{line.replace(/\*\*/g, "")}</div>;
                 }
                 if (line.startsWith("- ") || line.startsWith("* ")) {
                   return renderReviewLine(line.slice(2), i, true);
