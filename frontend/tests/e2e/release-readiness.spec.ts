@@ -13,7 +13,18 @@ test.describe("Release readiness — public and auth boundary", () => {
     await expect(page.locator(".lp-h1-s1").getByText("A trading workflow journal for Indian swing traders.", { exact: true })).toBeVisible();
     await expect(page.locator("body")).toContainText(/Scan after market close, keep the reason, plan levels/i);
     await expect(page.locator("body")).toContainText(/NSE\/BSE cash equity/i);
-    await expect(page.getByRole("link", { name: /Request access/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Get started/i }).first()).toBeVisible();
+  });
+
+  test("landing footer links resolve to marketing pages", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: "About" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Privacy Policy" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Terms of Service" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Disclaimer" })).toBeVisible();
+    await page.getByRole("link", { name: "About" }).click();
+    await expect(page).toHaveURL(/\/about/);
+    await expect(page.getByRole("heading", { name: /workflow system for Indian swing traders/i })).toBeVisible();
   });
 
   test("access guide exposes feedback loop and limitations", async ({ page }) => {

@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ThemeController from "@/components/ThemeController";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
+const interSans = Inter({
+  subsets: ["latin"],
   variable: "--font-geist-sans",
   display: "swap",
 });
@@ -63,7 +64,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+    <html lang="en" data-theme="dark" className={`${interSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <head>
         <Script
           id="theme-init"

@@ -1,5 +1,11 @@
 <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="32" height="32" rx="7" fill="#0f0f0e"/>
-  <polyline points="4,6 13,24 17,16 28,6" stroke="#5b63f5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <circle cx="28" cy="6" r="2.5" fill="#26a65b"/>
+  <defs>
+    <linearGradient id="avg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D6DFE8"/>
+      <stop offset="1" stop-color="#A7B6C8"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#avg)"/>
+  <path d="M4 24.5L11.5 14L17.5 19.5L25.5 7.5L28 11" stroke="#06080B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="28" cy="11" r="2.6" fill="#06080B"/>
 </svg>
