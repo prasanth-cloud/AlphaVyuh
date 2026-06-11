@@ -57,9 +57,13 @@ describe("landing page humanization", () => {
   it("uses Geist typography and Tradezella-style nav shell on the landing page", () => {
     expect(landingSource).toContain("lp-nav-shell");
     expect(landingSource).toContain("var(--font-geist-sans)");
+    expect(landingSource).toContain("var(--font-geist-mono)");
+    expect(landingSource).toContain("--lp-type-display");
     expect(landingSource).not.toContain("lp-notif1");
-    expect(landingSource).toContain("/favicon.svg");
-    expect(landingSource).toContain("lp-logo-img");
+    expect(landingSource).toContain("lp-logo-mark");
+    expect(landingSource).not.toContain("lp-logo-img");
+    expect(landingSource).not.toContain("/favicon.svg");
+    expect(landingSource).not.toMatch(/font-weight:\s*(650|700|550|800|900)/);
     expect(landingSource).toContain("lp-cta-arrow");
   });
 
