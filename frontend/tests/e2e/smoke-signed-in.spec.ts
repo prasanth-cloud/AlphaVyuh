@@ -162,6 +162,13 @@ test.describe("Signed-in smoke flow", () => {
     await login(page);
 
     await expectDashboardReady(page);
+    await expect(page.locator(".app-nav").getByRole("link")).toHaveText([
+      "Dashboard",
+      "Scanner",
+      "Watchlist",
+      "Journal",
+    ]);
+    await expect(page.getByTestId("dashboard-workflow-command-center")).toContainText(/Dashboard/i);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
     const discoverSetupsLink = page.getByRole("link", { name: /Discover setups/i });
