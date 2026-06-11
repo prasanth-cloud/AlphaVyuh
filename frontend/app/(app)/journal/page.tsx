@@ -492,7 +492,7 @@ export default function JournalPage() {
         <div style={{ minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 18 }}>
           <div>
             <EyebrowLabel>Review queue</EyebrowLabel>
-            <div className="mt-2 text-[24px] font-semibold leading-tight" style={{ color: "var(--text-primary)" }}>
+            <div className="app-page-title" style={{ marginTop: 8 }}>
               {reviewStage.headline}
             </div>
             <div className="mt-2 max-w-2xl text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>

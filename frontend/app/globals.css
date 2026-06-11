@@ -157,7 +157,7 @@ input, textarea, select {
   align-items: center;
   gap: 6px;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: var(--weight-semibold);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent);
@@ -165,7 +165,7 @@ input, textarea, select {
 
 .app-page-title {
   font-size: clamp(18px, 2vw, 24px);
-  font-weight: 700;
+  font-weight: var(--weight-semibold);
   letter-spacing: -0.02em;
   line-height: 1.08;
   color: var(--text-primary);

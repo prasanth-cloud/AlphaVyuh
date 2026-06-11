@@ -67,6 +67,7 @@ import { describeMarketDataError } from "@/lib/data-errors";
 import { decisionRecordRows, decisionLifecycleLabel, type DecisionRecordReviewState } from "@/lib/decision-record";
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { WorkflowDeskHeader } from "@/components/WorkflowDeskHeader";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -2054,6 +2055,7 @@ function WatchlistContent() {
 
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
+      <WorkflowDeskHeader pathname="/watchlist" compact showFlowCaption={false} />
       <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
       {/* Toast */}
       {toast && (

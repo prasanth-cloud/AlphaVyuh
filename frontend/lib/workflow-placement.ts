@@ -31,6 +31,39 @@ export const TRADER_WORKFLOW_STEPS: TraderWorkflowStep[] = [
   },
 ];
 
+/** Short flow caption for desk headers and dashboard copy. */
+export const WORKFLOW_FLOW_CAPTION = "Dashboard → Scanner → Watchlist → Chart → Journal";
+
+export type WorkflowDeskRoute = "/dashboard" | "/scanner" | "/watchlist" | "/journal";
+
+export type WorkflowDeskMeta = {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  nextStep?: { label: string; href: string };
+};
+
+const DESK_ROUTE_INDEX: Record<WorkflowDeskRoute, number> = {
+  "/dashboard": 0,
+  "/scanner": 1,
+  "/watchlist": 2,
+  "/journal": 4,
+};
+
+const DESK_NEXT_STEP: Record<WorkflowDeskRoute, { label: string; href: string }> = {
+  "/dashboard": { label: "Open scanner", href: "/scanner" },
+  "/scanner": { label: "Open watchlist", href: "/watchlist" },
+  "/watchlist": { label: "Plan on chart", href: "/charts" },
+  "/journal": { label: "Back to dashboard", href: "/dashboard" },
+};
+
+const NAV_TITLES: Record<WorkflowDeskRoute, string> = {
+  "/dashboard": "Dashboard",
+  "/scanner": "Scanner",
+  "/watchlist": "Watchlist",
+  "/journal": "Journal",
+};
+
 const APP_ROUTE_LABELS: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/scanner": "Scanner",
@@ -59,4 +92,30 @@ export function resolveAppRouteLabel(path: string): string {
   if (normalized.startsWith("/charts")) return "Chart";
   if (normalized.startsWith("/settings")) return "Settings";
   return normalized;
+}
+
+/** Desk page header copy + forward workflow CTA for signed-in surfaces. */
+export function getWorkflowDeskMeta(pathname: string): WorkflowDeskMeta | null {
+  const normalized = pathname.replace(/\/$/, "") || "/";
+
+  if (normalized.startsWith("/charts")) {
+    return {
+      eyebrow: "Chart",
+      title: "Chart",
+      subtitle: TRADER_WORKFLOW_STEPS[3].body,
+      nextStep: { label: "Open journal review", href: "/journal?review=needs-review" },
+    };
+  }
+
+  if (!(normalized in DESK_ROUTE_INDEX)) return null;
+
+  const route = normalized as WorkflowDeskRoute;
+  const step = TRADER_WORKFLOW_STEPS[DESK_ROUTE_INDEX[route]];
+
+  return {
+    eyebrow: NAV_TITLES[route],
+    title: NAV_TITLES[route],
+    subtitle: step.body,
+    nextStep: DESK_NEXT_STEP[route],
+  };
 }

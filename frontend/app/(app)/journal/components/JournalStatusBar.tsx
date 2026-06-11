@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { EyebrowLabel, Num } from "@/components/ui";
+import { TRADER_WORKFLOW_STEPS } from "@/lib/workflow-placement";
 
 interface JournalStatusBarProps {
   brokerConnected: boolean;
@@ -35,8 +37,18 @@ export function JournalStatusBar({
     <div style={{ minHeight: 56, background: "var(--surface-1)", borderBottom: "1px solid var(--border-subtle)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
-          <EyebrowLabel>Trading journal</EyebrowLabel>
-          <div className="caption" style={{ marginTop: 1 }}>Review trades, imports, and lessons in one loop.</div>
+          <EyebrowLabel>Journal</EyebrowLabel>
+          <div className="caption" style={{ marginTop: 1, maxWidth: 420 }}>
+            {TRADER_WORKFLOW_STEPS[4].body}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <Link href="/scanner" className="workspace-pill" style={{ textDecoration: "none", color: "var(--text-secondary)" }}>
+              Scanner
+            </Link>
+            <Link href="/watchlist" className="workspace-pill" style={{ textDecoration: "none", color: "var(--text-secondary)" }}>
+              Watchlist
+            </Link>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 12, color: brokerUnavailableMessage ? "var(--warn)" : brokerConnected ? "var(--gain)" : "var(--text-tertiary)" }} title={brokerUnavailableMessage ?? undefined}>

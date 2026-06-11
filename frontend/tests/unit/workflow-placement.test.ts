@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   TRADER_WORKFLOW_STEPS,
+  WORKFLOW_FLOW_CAPTION,
+  getWorkflowDeskMeta,
   resolveAppRouteLabel,
   SIGNED_IN_NAV_LINKS,
 } from "@/lib/workflow-placement";
@@ -32,5 +34,25 @@ describe("workflow placement", () => {
       "Watchlist",
       "Journal",
     ]);
+  });
+
+  it("exposes a five-step desk flow caption", () => {
+    expect(WORKFLOW_FLOW_CAPTION).toBe("Dashboard → Scanner → Watchlist → Chart → Journal");
+  });
+
+  it("maps desk routes to subtitles and forward next-step CTAs", () => {
+    expect(getWorkflowDeskMeta("/scanner")).toMatchObject({
+      title: "Scanner",
+      nextStep: { label: "Open watchlist", href: "/watchlist" },
+    });
+    expect(getWorkflowDeskMeta("/watchlist")).toMatchObject({
+      title: "Watchlist",
+      nextStep: { label: "Plan on chart", href: "/charts" },
+    });
+    expect(getWorkflowDeskMeta("/journal")?.title).toBe("Journal");
+    expect(getWorkflowDeskMeta("/charts/RELIANCE")?.nextStep).toEqual({
+      label: "Open journal review",
+      href: "/journal?review=needs-review",
+    });
   });
 });
