@@ -24,6 +24,7 @@ import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
 import { getMarketPanelEmptyCopy } from '@/lib/data-health-copy'
+import { WORKFLOW_FLOW_CAPTION } from '@/lib/workflow-placement'
 
 const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200;
 
@@ -507,10 +508,10 @@ function DashboardCockpit({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
           <div>
             <h1 className="heading-card" style={{ marginBottom: 4 }}>Dashboard</h1>
-            <div className="caption">Daily workflow checkpoint — data health, review due, then Scanner → Watchlist → Journal.</div>
+            <div className="caption">Daily workflow checkpoint — data health, review due, then {WORKFLOW_FLOW_CAPTION}.</div>
           </div>
           <a href="/journal?review=needs-review" className="workspace-pill" style={{ textDecoration: 'none', color: 'var(--accent)' }}>
-            Review journal
+            Open journal review
           </a>
         </div>
         <div className="dashboard-today-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
@@ -994,7 +995,7 @@ export default function DashboardPage() {
             </div>
             <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
               {[
-                { label: 'Review journal', detail: 'Start with closed trades, lessons, and process drift.', href: '/journal?review=needs-review' },
+                { label: 'Open journal review', detail: 'Start with closed trades, lessons, and process drift.', href: '/journal?review=needs-review' },
                 { label: 'Open watchlist', detail: 'Pick the next symbol and continue the Decision Desk.', href: '/watchlist' },
                 { label: 'Discover setups', detail: 'Use Scanner when the current queue needs fresh ideas.', href: '/scanner' },
                 { label: 'Import trades', detail: 'Bring in contract notes or broker reports for review.', href: '/upload' },
@@ -1012,7 +1013,7 @@ export default function DashboardPage() {
                     textDecoration: 'none',
                   }}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6 }}>{item.label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>{item.label}</div>
                   <div className="caption" style={{ lineHeight: 1.5 }}>{item.detail}</div>
                 </a>
               ))}

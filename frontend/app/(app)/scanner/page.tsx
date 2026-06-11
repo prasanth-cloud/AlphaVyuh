@@ -32,6 +32,7 @@ import {
 } from '@/lib/scanner-run-history'
 import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
 import { buildScannerSectorStrength } from '@/lib/scanner-sector-strength'
+import { WorkflowDeskHeader } from '@/components/WorkflowDeskHeader'
 
 const API = API_BASE_URL
 
@@ -1461,6 +1462,7 @@ export default function ScannerPage() {
   const sectorStrength = useMemo(() => buildScannerSectorStrength(results).slice(0, 5), [results]);
   return (
     <div className="workspace-page">
+      <WorkflowDeskHeader pathname="/scanner" />
       <div className="workspace-grid scanner-workspace-grid">
 
       {/* ── LEFT PANEL ── */}
@@ -1872,7 +1874,7 @@ export default function ScannerPage() {
             </>
           ) : (
             <div>
-              <div className="workspace-card-title">Scanner queue</div>
+              <div className="workspace-card-title">Scanner</div>
               <div className="workspace-card-copy">
                 {loading ? 'Scanning…' : 'Run your first scan or start with a saved filter.'}
               </div>
