@@ -537,11 +537,6 @@ input, textarea, select {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: linear-gradient(135deg, #f4f7fb, #8b96a6);
-  box-shadow: 0 10px 28px rgba(244, 247, 251, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
 
 .app-brand-copy {
@@ -953,23 +948,79 @@ input, textarea, select {
   border-right-color: rgba(15, 23, 42, 0.10);
 }
 
+.brand-logo-mark,
+.auth-brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent), var(--info));
+  color: var(--text-on-accent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+}
+
+.brand-logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
 .auth-brand-mark {
   width: 42px;
   height: 42px;
-  display: grid;
-  place-items: center;
   margin-bottom: 18px;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: linear-gradient(180deg, rgba(244, 247, 251, 0.16), rgba(244, 247, 251, 0.04));
-  color: var(--text-primary);
-  font-weight: 800;
-  letter-spacing: -0.04em;
 }
 
+:root[data-theme="light"] .brand-logo-mark,
 :root[data-theme="light"] .auth-brand-mark {
-  border-color: rgba(15, 23, 42, 0.14);
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.03));
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
+}
+
+.auth-aside-title {
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  font-weight: var(--weight-semibold);
+  max-width: 420px;
+}
+
+.auth-aside-lead {
+  margin-top: 14px;
+  max-width: 420px;
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  font-weight: var(--weight-regular);
+  color: var(--text-secondary);
+}
+
+.auth-aside-list {
+  margin-top: 26px;
+  display: grid;
+  gap: 10px;
+  max-width: 380px;
+}
+
+.auth-aside-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-aside-bullet {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 6px rgba(86, 215, 193, 0.10);
+  flex-shrink: 0;
+}
+
+.auth-aside-item-copy {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
 }
 
 .app-auth-panel {

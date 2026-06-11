@@ -529,7 +529,7 @@ function DashboardCockpit({
               }}
             >
               <div style={{ ...humanLabelStyle, marginBottom: 7 }}>{card.label}</div>
-              <Num style={{ display: 'block', fontSize: 15, fontWeight: 700, color: card.tone, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Num style={{ display: 'block', fontSize: 15, fontWeight: 600, color: card.tone, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {card.value}
               </Num>
               <div className="caption" style={{ marginTop: 5, lineHeight: 1.45 }}>{card.detail}</div>
