@@ -7,6 +7,7 @@ import { Button, Input, Label } from "@/components/ui";
 import { isSafeRedirect } from "@/lib/safe-redirect";
 import { markAppTiming } from "@/lib/performance";
 import { trackEvent } from "@/lib/analytics";
+import { resolveAppRouteLabel } from "@/lib/workflow-placement";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -109,7 +110,7 @@ export default function LoginForm() {
               padding: "8px 10px",
             }}
           >
-            After sign-in, you will continue to <span style={{ color: "var(--text-primary)" }}>{nextPath}</span>.
+            After sign-in, you will continue to <span style={{ color: "var(--text-primary)" }}>{resolveAppRouteLabel(nextPath)}</span>.
           </div>
         )}
       </div>
@@ -165,7 +166,7 @@ export default function LoginForm() {
 
       <p style={{ marginTop: 22, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
         Don&apos;t have an account?{" "}
-        <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Create one</Link>
+        <Link href={`/signup?next=${encodeURIComponent(nextPath)}`} style={{ color: "var(--accent)" }}>Request access</Link>
       </p>
       <p style={{ marginTop: 14, textAlign: "center", fontSize: 11, lineHeight: 1.6, color: "var(--text-tertiary)" }}>
         EOD market data · Broker import only

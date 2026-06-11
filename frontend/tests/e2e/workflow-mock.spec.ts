@@ -14,7 +14,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByLabel("Email").fill(`launch-${Date.now()}@alphavyuh.test`);
     await page.getByLabel("Password", { exact: true }).fill("LaunchPass123!");
     await page.getByLabel("Confirm password").fill("LaunchPass123!");
-    await page.getByRole("button", { name: /^Create account$/ }).click();
+    await page.getByRole("button", { name: /^Request access$/ }).click();
 
     await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: /Set up your trading desk/i })).toBeVisible();
@@ -136,7 +136,7 @@ test.describe("Mock workflow smoke", () => {
       await expect(page.locator("body")).toContainText(/Demo|Market data|BACKEND DATA|DEMO DATA/i, { timeout: 15_000 });
       await expect(page.locator("body")).toContainText(/As of|Updated|Data is|Source|Provider|coverage|Data: Demo fixtures/i, { timeout: 15_000 });
       if (route === "/dashboard") {
-        await expect(page.getByTestId("today-workflow-command-center")).toContainText(/Today's workflow|Market\/data status|Scan alert matches|Watchlist review|Journal review debt|Broker import status/i);
+        await expect(page.getByTestId("dashboard-workflow-command-center")).toContainText(/Dashboard|Market\/data status|Scan alert matches|Watchlist review|Journal review debt|Broker import status/i);
       }
     }
 

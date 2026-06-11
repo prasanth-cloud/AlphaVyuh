@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { TRADER_WORKFLOW_STEPS } from "@/lib/workflow-placement";
 
 export default function LandingPage() {
   const scanRowsRef = useRef<HTMLDivElement>(null);
@@ -294,9 +295,9 @@ export default function LandingPage() {
             <p className="lp-sub">Scan after market close, keep the reason, plan levels, and review what your closed trades taught you.</p>
             <div className="lp-ctas">
               <Link href="/signup" className="lp-btn-primary">Request access →</Link>
-              <a href="#features" className="lp-btn-secondary">
+              <a href="#how" className="lp-btn-secondary">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
-                See it in action
+                See workflow
               </a>
             </div>
             <div className="lp-trust-row" aria-label="Product scope">
@@ -338,16 +339,29 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* TICKER */}
-      <div id="lp-ticker">
-        <div className="lp-tape" ref={tapeRef}></div>
-      </div>
+      {/* HOW */}
+      <section id="how" style={{padding:"88px 0 96px",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)",borderBottom:"1px solid var(--lp-border)"}}>
+        <div className="lp-wrap" style={{textAlign:"center"}}>
+          <span className="lp-sec-label">Daily workflow</span>
+          <h2 className="lp-sec-title">One desk flow from open to review.</h2>
+          <p className="lp-sec-sub" style={{margin:"0 auto"}}>Dashboard checkpoint → Scanner discovery → Watchlist analysis → Chart planning → Journal review. Every step keeps scan reason, levels, and outcome attached.</p>
+          <div className="lp-steps">
+            {TRADER_WORKFLOW_STEPS.map((step, index) => (
+              <div key={step.title} className="lp-step" style={{transitionDelay:`${index * 0.08}s`}}>
+                <div className="lp-step-num">{index + 1}</div>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* STATS */}
       <section id="lp-stats">
         <div className="lp-wrap">
           <div className="lp-stats-grid">
-            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Workflow surfaces</div><div className="lp-stat-sub">Today, journal, watchlist, scanner</div></div>
+            <div className="lp-stat lp-fade"><div className="lp-stat-num" data-target="4">0</div><div className="lp-stat-label">Workflow surfaces</div><div className="lp-stat-sub">Dashboard, scanner, watchlist, journal</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".1s"}}><div className="lp-stat-num" data-target="5000" data-suffix="+">0</div><div className="lp-stat-label">Symbols tracked</div><div className="lp-stat-sub">latest market snapshot</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".2s"}}><div className="lp-stat-num" data-target="5">0</div><div className="lp-stat-label">Context handoffs</div><div className="lp-stat-sub">reason, price, levels, notes, outcome</div></div>
             <div className="lp-stat lp-fade" style={{transitionDelay:".3s"}}><div className="lp-stat-num" data-target="1">0</div><div className="lp-stat-label">Connected routine</div><div className="lp-stat-sub">from scan to review</div></div>
@@ -355,46 +369,27 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* HOW */}
-      <section id="how" style={{padding:"88px 0 96px",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)",borderBottom:"1px solid var(--lp-border)"}}>
-        <div className="lp-wrap" style={{textAlign:"center"}}>
-          <span className="lp-sec-label">Daily loop</span>
-          <h2 className="lp-sec-title">A process the product remembers.</h2>
-          <p className="lp-sec-sub" style={{margin:"0 auto"}}>AlphaVyuh is shaped around one desk flow: review the journal, work the active queue, keep context attached, and close the loop after the trade.</p>
-          <div className="lp-steps">
-            {[
-              ["Today", "See review due, active plans, watchlist focus, and data health first."],
-              ["Journal", "Review closed trades and process changes before chasing new setups."],
-              ["Watchlist", "Prioritize symbols already under review with notes and chart context."],
-              ["Scanner", "Discover fresh candidates only when the desk needs new ideas."],
-              ["Chart to Review", "Plan levels, record the thesis, then send context back to the desk."],
-            ].map(([title, body], index) => (
-              <div key={title} className="lp-step" style={{transitionDelay:`${index * 0.08}s`}}>
-                <div className="lp-step-num">{index + 1}</div>
-                <h3>{title}</h3>
-                <p>{body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* TICKER */}
+      <div id="lp-ticker">
+        <div className="lp-tape" ref={tapeRef}></div>
+      </div>
 
       {/* FEATURES */}
       <section id="features" style={{padding:"100px 0"}}>
         <div className="lp-wrap">
           <span className="lp-sec-label">Platform</span>
-          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>The AlphaVyuh focus</h2>
-          <p className="lp-sec-sub" style={{marginBottom:"40px"}}>Four surfaces. One routine. No feature maze.</p>
+          <h2 className="lp-sec-title" style={{marginBottom:"12px"}}>What you do next at each step</h2>
+          <p className="lp-sec-sub" style={{marginBottom:"40px"}}>Scanner discovery, watchlist analysis, chart planning, and journal review — in desk order.</p>
           <div className="lp-tabs-wrap" id="lp-tabs-header">
-            {["journal","watchlist","scanner","charts"].map((t,i) => (
+            {["scanner","watchlist","charts","journal"].map((t,i) => (
               <button key={t} className={"lp-tab-btn"+(i===0?" lp-tab-active":"")} data-tab={t}>
-                {t.charAt(0).toUpperCase()+t.slice(1)}
+                {t === "charts" ? "Charts" : t.charAt(0).toUpperCase()+t.slice(1)}
               </button>
             ))}
           </div>
 
           {/* Scanner */}
-          <div className="lp-tab-panel" id="lp-tab-scanner">
+          <div className="lp-tab-panel lp-tab-active" id="lp-tab-scanner">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Scanner</span>
               <h3 className="lp-tp-h">Discovery that keeps the reason</h3>
@@ -483,7 +478,7 @@ export default function LandingPage() {
           </div>
 
           {/* Journal */}
-          <div className="lp-tab-panel lp-tab-active" id="lp-tab-journal">
+          <div className="lp-tab-panel" id="lp-tab-journal">
             <div className="lp-tp-text">
               <span className="lp-feat-label">Journal</span>
               <h3 className="lp-tp-h">The proof layer for your process</h3>
@@ -897,5 +892,6 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-sans),s
   .lp-stat:first-child{border-top:none}
   .lp-tv{display:none}
   .lp-tab-panel.lp-tab-active{grid-template-columns:1fr}
+  #lp-ticker{display:none}
 }
 `;

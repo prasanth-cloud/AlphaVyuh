@@ -35,9 +35,11 @@ describe("landing page humanization", () => {
     expect(landingSource).not.toContain("Larger NSE/BSE watchlists");
   });
 
-  it("positions Journal before Scanner in the landing workflow", () => {
-    expect(landingSource).toContain("[\"journal\",\"watchlist\",\"scanner\",\"charts\"]");
-    expect(landingSource).toContain("Journal to review");
-    expect(landingSource).toContain("Today, journal, watchlist, scanner");
+  it("positions Scanner before Journal in the landing workflow and uses Dashboard naming", () => {
+    expect(landingSource).toContain("TRADER_WORKFLOW_STEPS");
+    expect(landingSource).toContain("[\"scanner\",\"watchlist\",\"charts\",\"journal\"]");
+    expect(landingSource).toContain("Dashboard, scanner, watchlist, journal");
+    expect(landingSource).toContain("See workflow");
+    expect(landingSource).not.toContain("Today, journal, watchlist, scanner");
   });
 });

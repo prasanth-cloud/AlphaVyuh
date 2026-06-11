@@ -1,10 +1,17 @@
 import { expect, test } from "@playwright/test";
+import { qaCredentials } from "./helpers/qaCredentials";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-test.describe("Today unavailable market data", () => {
+test.describe("Dashboard unavailable market data", () => {
   test("does not render an unavailable market overview as a healthy market pulse", async ({ page }) => {
     await page.addInitScript(() => window.localStorage.clear());
+    const { email, password } = qaCredentials();
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
     await page.route(`${API}/api/v1/market/overview`, (route) =>
       route.fulfill({
         status: 200,
@@ -21,15 +28,15 @@ test.describe("Today unavailable market data", () => {
           top_losers: [],
           most_active: [],
           mode: "unavailable",
-          message: "Market summary is temporarily unavailable; Today will use the latest known shell data.",
+          message: "Market summary is temporarily unavailable; dashboard will use the latest known shell data.",
         }),
       })
     );
 
     await page.goto("/dashboard");
-    if (page.url().includes("/login")) return;
 
-    await expect(page.getByText("Market summary is temporarily unavailable")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-sector-breadth-unavailable")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-sector-breadth-unavailable")).toContainText("Sector breadth is temporarily unavailable");
     await expect(page.getByRole("link", { name: "Data status" })).toBeVisible();
     await expect(page.getByTestId("dashboard-data-trust")).not.toBeVisible();
   });

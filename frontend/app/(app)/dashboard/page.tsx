@@ -377,7 +377,7 @@ function AccountDataStatusCard({ issues }: { issues: AccountDataIssue[] }) {
         <div style={{ minWidth: 0 }}>
           <div className="label" style={{ color: 'var(--warn)', marginBottom: 6 }}>Account data unavailable</div>
           <div className="body-secondary" style={{ marginBottom: 10 }}>
-            Today workflow counts are paused until account data services respond. Existing watchlists, journal entries, and broker state are not being treated as empty.
+            Dashboard workflow counts are paused until account data services respond. Existing watchlists, journal entries, and broker state are not being treated as empty.
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {issues.map((issue) => (
@@ -395,7 +395,7 @@ function AccountDataStatusCard({ issues }: { issues: AccountDataIssue[] }) {
   )
 }
 
-function TodayCockpit({
+function DashboardCockpit({
   workflow,
   data,
   dataHealth,
@@ -502,12 +502,12 @@ function TodayCockpit({
   ]
 
   return (
-    <Card padding="md" style={{ marginBottom: 16 }} data-testid="today-cockpit">
-      <div data-testid="today-workflow-command-center">
+    <Card padding="md" style={{ marginBottom: 16 }} data-testid="dashboard-cockpit">
+      <div data-testid="dashboard-workflow-command-center">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
           <div>
-            <h1 className="heading-card" style={{ marginBottom: 4 }}>Today&apos;s workflow</h1>
-            <div className="caption">Start with trust, review what is due, then work the active queue.</div>
+            <h1 className="heading-card" style={{ marginBottom: 4 }}>Dashboard</h1>
+            <div className="caption">Daily workflow checkpoint — data health, review due, then Scanner → Watchlist → Journal.</div>
           </div>
           <a href="/journal?review=needs-review" className="workspace-pill" style={{ textDecoration: 'none', color: 'var(--accent)' }}>
             Review journal
@@ -972,7 +972,7 @@ export default function DashboardPage() {
 
       {!loading && data && (
         <div>
-          <TodayCockpit workflow={workflow} data={data} dataHealth={dataHealth} />
+          <DashboardCockpit workflow={workflow} data={data} dataHealth={dataHealth} />
 
           <AccountDataStatusCard issues={uniqueAccountIssues([...workflow.accountIssues, ...workflow.alertIssues])} />
 
@@ -1110,7 +1110,7 @@ export default function DashboardPage() {
         <div>
           <EmptyState
             title="Market data is not connected"
-            description="Today needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
+            description="Dashboard needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
             action={{ label: 'Retry', onClick: load }}
           />
         </div>

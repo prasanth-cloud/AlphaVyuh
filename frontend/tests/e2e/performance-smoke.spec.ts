@@ -1,4 +1,14 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { qaCredentials } from "./helpers/qaCredentials";
+
+async function mockLogin(page: Page) {
+  const { email, password } = qaCredentials();
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+}
 
 type PageBudget = {
   path: string;
@@ -10,8 +20,8 @@ type PageBudget = {
 const budgets: PageBudget[] = [
   {
     path: "/dashboard",
-    name: "today",
-    marker: (page) => page.getByTestId("today-cockpit"),
+    name: "dashboard",
+    marker: (page) => page.getByTestId("dashboard-cockpit"),
     maxMs: 8_000,
   },
   {
@@ -41,7 +51,7 @@ const budgets: PageBudget[] = [
 ];
 
 test.describe("Mock workflow performance", () => {
-  test("mock login reaches a usable Today view and records startup timing marks", async ({ page }) => {
+  test("mock login reaches a usable Dashboard view and records startup timing marks", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
     page.on("console", (message) => {
@@ -50,16 +60,11 @@ test.describe("Mock workflow performance", () => {
     page.on("pageerror", (error) => errors.push(error.message));
 
     const started = Date.now();
-    await page.goto("/login");
-    await page.getByLabel("Email").fill("mock.trader@alphavyuh.test");
-    await page.getByLabel("Password").fill("MockPass123!");
-    await page.getByRole("button", { name: "Sign in" }).click();
-
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
-    await expect(page.getByTestId("today-cockpit")).toBeVisible({ timeout: 8_000 });
+    await mockLogin(page);
+    await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 8_000 });
 
     const elapsed = Date.now() - started;
-    expect(elapsed, `mock login to Today usable in ${elapsed}ms`).toBeLessThanOrEqual(8_000);
+    expect(elapsed, `mock login to Dashboard usable in ${elapsed}ms`).toBeLessThanOrEqual(8_000);
 
     const timings = await page.evaluate(() => {
       const win = window as Window & { __alphavyuhTimings?: { name: string; at: number }[] };
@@ -85,6 +90,7 @@ test.describe("Mock workflow performance", () => {
     page.on("pageerror", (error) => errors.push(error.message));
 
     const timings: Record<string, number> = {};
+    await mockLogin(page);
 
     for (const budget of budgets) {
       const started = Date.now();

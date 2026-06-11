@@ -141,11 +141,11 @@ export default function SignupForm() {
   return (
     <Card>
       <CardHeader>
-        <div className="auth-kicker">New Account</div>
+        <div className="auth-kicker">Account access</div>
         <div style={{ marginBottom: 10, fontSize: 30, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
-          Create your account
+          Request access
         </div>
-        <CardDescription>Create an account for scanning, chart planning, and trade review.</CardDescription>
+        <CardDescription>Account access is reviewed before billing. Request access for scanning, chart planning, and trade review.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -180,7 +180,7 @@ export default function SignupForm() {
           {error && <p style={{ fontSize: 13, color: "var(--loss)" }}>{error}</p>}
 
           <Button type="submit" disabled={loading} variant="primary" size="lg" fullWidth>
-            {loading ? "Creating account…" : "Create account"}
+            {loading ? "Submitting request…" : "Request access"}
           </Button>
         </form>
         <p style={{ marginTop: 16, textAlign: "center", fontSize: 13, color: "var(--text-secondary)" }}>
