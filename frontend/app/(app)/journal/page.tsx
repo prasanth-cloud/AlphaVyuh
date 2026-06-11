@@ -514,18 +514,39 @@ export default function JournalPage() {
             ))}
           </div>
 
-          <div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 6 }}>
-              <div className="text-[11px] label" style={{ color: "var(--text-tertiary)" }}>Review unlock progress</div>
-              <Num className="text-[12px]" style={{ color: "var(--text-secondary)" }}>{reviewStage.progressPct}%</Num>
+          <div data-testid="journal-review-coverage">
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+              <div>
+                <div className="text-[11px] label" style={{ color: "var(--text-tertiary)", marginBottom: 4 }}>Review coverage</div>
+                <Num
+                  className="text-[28px] leading-none"
+                  style={{
+                    fontWeight: 600,
+                    color: reviewStage.progressPct >= 70 ? "var(--gain)" : reviewStage.progressPct > 0 ? "var(--warn)" : "var(--text-secondary)",
+                  }}
+                >
+                  {reviewStage.progressPct}%
+                </Num>
+              </div>
+              <div className="text-[12px] text-right" style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                <div>{reviewStage.progressLabel}</div>
+                <div style={{ color: "var(--text-tertiary)" }}>
+                  {reviewStage.status === "build-sample" ? "Sample unlock" : "Closed trades with lessons"}
+                </div>
+              </div>
             </div>
-            <div style={{ height: 7, borderRadius: 999, overflow: "hidden", background: "var(--surface-3)" }}>
+            <div style={{ height: 10, borderRadius: 999, overflow: "hidden", background: "var(--surface-3)", boxShadow: "inset 0 0 0 1px var(--border-subtle)" }}>
               <div
                 style={{
                   width: `${reviewStage.progressPct}%`,
                   height: "100%",
                   borderRadius: 999,
-                  background: reviewStage.status === "ready" ? "var(--gain)" : reviewStage.status === "needs-review" ? "var(--warn)" : "var(--accent)",
+                  background: reviewStage.status === "ready"
+                    ? "linear-gradient(90deg, var(--gain), #6ee7a8)"
+                    : reviewStage.status === "needs-review"
+                      ? "linear-gradient(90deg, var(--warn), #fbbf24)"
+                      : "linear-gradient(90deg, var(--accent), #8ef3e2)",
+                  transition: "width 400ms var(--ease-out)",
                 }}
               />
             </div>
