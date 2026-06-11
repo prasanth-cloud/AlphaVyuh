@@ -14,7 +14,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByLabel("Email").fill(`launch-${Date.now()}@alphavyuh.test`);
     await page.getByLabel("Password", { exact: true }).fill("LaunchPass123!");
     await page.getByLabel("Confirm password").fill("LaunchPass123!");
-    await page.getByRole("button", { name: /^Create account$/ }).click();
+    await page.getByRole("button", { name: /^Request access$/ }).click();
 
     await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
     await expect(page.getByRole("heading", { name: /Set up your trading desk/i })).toBeVisible();
