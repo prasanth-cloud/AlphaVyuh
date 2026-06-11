@@ -170,6 +170,7 @@ test.describe("Signed-in smoke flow", () => {
     ]);
     await expect(page.getByTestId("dashboard-workflow-command-center")).toContainText(/Dashboard/i);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
+    // Phase 2D equity snapshot and review coverage bar: covered in layout-smoke.spec.ts
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
     const discoverSetupsLink = page.getByRole("link", { name: /Discover setups/i });
     await expect(discoverSetupsLink).toBeVisible();
