@@ -25,6 +25,7 @@ import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
 import { getMarketPanelEmptyCopy } from '@/lib/data-health-copy'
 import { WORKFLOW_FLOW_CAPTION } from '@/lib/workflow-placement'
+import { getDashboardSessionFocus } from '@/lib/dashboard-session'
 
 const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200;
 
@@ -502,17 +503,74 @@ function DashboardCockpit({
     },
   ]
 
+  const session = getDashboardSessionFocus({
+    accountIssues: workflow.accountIssues,
+    alertIssues: workflow.alertIssues,
+    closedTrades: workflow.closedTrades,
+    reviewedTrades: workflow.reviewedTrades,
+    watchlistReviewDue: workflow.watchlistReviewDue,
+    alertMatchSymbols: workflow.alertMatchSymbols,
+    scanAlerts: workflow.scanAlerts,
+    trackedSymbols: workflow.trackedSymbols,
+    watchlists: workflow.watchlists,
+  })
+  const streakToneColor = session.streakTone === 'gain'
+    ? 'var(--gain)'
+    : session.streakTone === 'warn'
+      ? 'var(--warn)'
+      : session.streakTone === 'accent'
+        ? 'var(--accent)'
+        : 'var(--text-secondary)'
+
   return (
-    <Card padding="md" style={{ marginBottom: 16 }} data-testid="dashboard-cockpit">
+    <div className="workspace-hero" style={{ marginBottom: 16 }} data-testid="dashboard-cockpit">
       <div data-testid="dashboard-workflow-command-center">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-          <div>
-            <h1 className="heading-card" style={{ marginBottom: 4 }}>Dashboard</h1>
-            <div className="caption">Daily workflow checkpoint — data health, review due, then {WORKFLOW_FLOW_CAPTION}.</div>
+        <div className="workspace-hero-grid" style={{ marginBottom: 16 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="label" style={{ marginBottom: 6, color: 'var(--accent)' }}>Session summary</div>
+            <h1 className="workspace-title" style={{ fontSize: 'clamp(24px, 3vw, 34px)', marginBottom: 8 }} data-testid="dashboard-session-headline">
+              {session.headline}
+            </h1>
+            <p className="workspace-copy" style={{ marginTop: 0, fontSize: 13 }}>{session.detail}</p>
+            <div className="workspace-flow" style={{ marginTop: 14 }}>
+              <span className="flow-chip flow-chip-active">Dashboard</span>
+              <span className="flow-chip">{WORKFLOW_FLOW_CAPTION}</span>
+            </div>
           </div>
-          <a href="/journal?review=needs-review" className="workspace-pill" style={{ textDecoration: 'none', color: 'var(--accent)' }}>
-            Open journal review
-          </a>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
+            <a
+              href={session.primaryHref}
+              data-testid="dashboard-session-cta"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '10px 18px',
+                borderRadius: 999,
+                background: 'var(--accent)',
+                color: 'var(--text-on-accent)',
+                fontSize: 13,
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              {session.primaryLabel}
+            </a>
+            <div
+              data-testid="dashboard-review-streak"
+              style={{
+                minWidth: 168,
+                padding: '10px 14px',
+                borderRadius: 12,
+                border: '1px solid var(--border-subtle)',
+                background: 'rgba(255,255,255,0.03)',
+                textAlign: 'right',
+              }}
+            >
+              <div className="label" style={{ marginBottom: 4 }}>{session.streakLabel}</div>
+              <Num style={{ display: 'block', fontSize: 18, fontWeight: 600, color: streakToneColor }}>{session.streakValue}</Num>
+              <div className="caption" style={{ marginTop: 4, lineHeight: 1.45 }}>{session.streakDetail}</div>
+            </div>
+          </div>
         </div>
         <div className="dashboard-today-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
           {cards.map(card => (
@@ -539,7 +597,7 @@ function DashboardCockpit({
           ))}
         </div>
       </div>
-    </Card>
+    </div>
   )
 }
 

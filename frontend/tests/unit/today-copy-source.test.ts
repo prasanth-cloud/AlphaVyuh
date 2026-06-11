@@ -14,7 +14,9 @@ describe("Dashboard page copy", () => {
   it("uses Dashboard as the user-facing workflow checkpoint label", () => {
     expect(dashboardSource).toContain("Dashboard workflow counts are paused");
     expect(dashboardSource).toContain("Dashboard needs the backend data API");
-    expect(dashboardSource).toContain("Daily workflow checkpoint");
+    expect(dashboardSource).toContain("Session summary");
+    expect(dashboardSource).toContain("getDashboardSessionFocus");
+    expect(dashboardSource).toContain('data-testid="dashboard-session-cta"');
     expect(dashboardSource).toContain("Scan alert matches");
     expect(dashboardSource).toContain("Watchlist review");
     expect(dashboardSource).toContain("Journal review debt");
