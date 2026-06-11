@@ -119,16 +119,24 @@ async function expectRealDataContext(
 }
 
 async function expectDashboardReady(page: import("@playwright/test").Page) {
-  const dashboardCockpit = page.getByTestId("dashboard-cockpit");
+  const marketDesk = page.getByTestId("dashboard-market-desk");
   for (let attempt = 1; attempt <= 4; attempt += 1) {
-    if (await dashboardCockpit.isVisible().catch(() => false)) return;
+    if (await marketDesk.isVisible().catch(() => false)) return;
     const retry = page.getByRole("button", { name: "Retry" });
     if (await retry.isVisible().catch(() => false)) {
       await retry.click({ force: true, timeout: 3000 }).catch(() => {});
     }
     await page.waitForTimeout(attempt * 1500);
   }
-  await expect(dashboardCockpit).toBeVisible({ timeout: 15000 });
+  await expect(marketDesk).toBeVisible({ timeout: 15000 });
+}
+
+async function openDashboardWorkflow(page: import("@playwright/test").Page) {
+  const toggle = page.getByTestId("dashboard-workflow-toggle");
+  if (!(await page.getByTestId("dashboard-cockpit").isVisible().catch(() => false))) {
+    await toggle.click();
+  }
+  await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 15000 });
 }
 
 async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
@@ -168,8 +176,10 @@ test.describe("Signed-in smoke flow", () => {
       "Watchlist",
       "Journal",
     ]);
-    await expect(page.getByTestId("dashboard-workflow-command-center")).toContainText(/Dashboard/i);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15000 });
+    await openDashboardWorkflow(page);
+    await expect(page.getByTestId("dashboard-workflow-command-center")).toContainText(/Dashboard/i);
     // Phase 2D equity snapshot and review coverage bar: covered in layout-smoke.spec.ts
     await expect(page.getByRole("heading", { name: /Next actions/i })).toBeVisible();
     const discoverSetupsLink = page.getByRole("link", { name: /Discover setups/i });
