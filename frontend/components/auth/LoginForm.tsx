@@ -92,7 +92,7 @@ export default function LoginForm() {
       backdropFilter: "blur(14px)",
     }}>
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 26, fontWeight: 650, color: "var(--text-primary)", letterSpacing: "-0.035em", lineHeight: 1.05 }}>
+        <div style={{ fontSize: 26, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.035em", lineHeight: 1.05 }}>
           Sign in to AlphaVyuh
         </div>
         <div style={{ fontSize: 14, color: "var(--text-secondary)", marginTop: 10, lineHeight: 1.6 }}>

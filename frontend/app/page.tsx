@@ -2,23 +2,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { TRADER_WORKFLOW_STEPS } from "@/lib/workflow-placement";
+import { BrandLogoMark } from "@/components/BrandLogoMark";
 import {
   formatTapeChange,
   formatTapePrice,
   topMovers,
   type TapeQuote,
 } from "@/lib/public-market-tape";
-
-function LogoMark() {
-  return (
-    <div className="lp-logo-mark">
-      <svg viewBox="0 0 18 18" fill="none" width="18" height="18" aria-hidden="true">
-        <path d="M2 14L6.5 8L10 11L14.5 4L16 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-        <circle cx="16" cy="6" r="1.5" fill="currentColor"/>
-      </svg>
-    </div>
-  );
-}
 
 export default function LandingPage() {
   const scanRowsRef = useRef<HTMLDivElement>(null);
@@ -262,7 +252,7 @@ export default function LandingPage() {
         <div className="lp-nav-shell">
         <div className="lp-nav-wrap">
           <Link href="/" className="lp-logo">
-            <LogoMark />
+            <BrandLogoMark className="lp-logo-mark brand-logo-mark" />
             AlphaVyuh
           </Link>
           <div className="lp-nav-links">
@@ -671,7 +661,7 @@ export default function LandingPage() {
           <div className="lp-footer-grid">
             <div>
               <div className="lp-logo" style={{marginBottom:14}}>
-                <LogoMark />
+                <BrandLogoMark className="lp-logo-mark brand-logo-mark" />
                 AlphaVyuh
               </div>
               <p style={{fontSize:".84rem",color:"var(--lp-text2)",lineHeight:1.65,maxWidth:240}}>India&apos;s trading workflow system. Scan markets, plan charts, and journal decisions in one focused flow.</p>

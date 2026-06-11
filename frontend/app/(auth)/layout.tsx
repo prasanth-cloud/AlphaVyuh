@@ -1,25 +1,25 @@
+import { BrandLogoMark } from "@/components/BrandLogoMark";
+
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-auth-shell">
       <div className="app-auth-grid">
         <aside className="app-auth-aside">
-          <div className="auth-brand-mark" aria-hidden="true">A</div>
-          <h1 style={{ fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.05, letterSpacing: '-0.035em', maxWidth: 420 }}>
-            AlphaVyuh
-          </h1>
-          <p style={{ marginTop: 14, maxWidth: 420, fontSize: 15, lineHeight: 1.65, color: 'var(--text-secondary)' }}>
+          <BrandLogoMark className="auth-brand-mark" size={42} />
+          <h1 className="auth-aside-title">AlphaVyuh</h1>
+          <p className="auth-aside-lead">
             A focused trading desk for EOD scanning, watchlist planning, chart review, and journal capture.
           </p>
-          <div style={{ marginTop: 26, display: 'grid', gap: 10, maxWidth: 380 }}>
+          <div className="auth-aside-list">
             {[
-              'Account-managed access',
-              'EOD market data with source and freshness',
-              'Broker import only; execution not enabled yet',
-              'Educational workflow tool, not investment advice',
-            ].map(item => (
-              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-primary)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 0 6px rgba(86, 215, 193, 0.10)' }} />
-                <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{item}</span>
+              "Account-managed access",
+              "EOD market data with source and freshness",
+              "Broker import only; execution not enabled yet",
+              "Educational workflow tool, not investment advice",
+            ].map((item) => (
+              <div key={item} className="auth-aside-item">
+                <span className="auth-aside-bullet" />
+                <span className="auth-aside-item-copy">{item}</span>
               </div>
             ))}
           </div>
