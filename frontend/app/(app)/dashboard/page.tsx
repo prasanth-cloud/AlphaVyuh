@@ -346,6 +346,26 @@ type WorkflowState = {
 
 const DASHBOARD_SNAPSHOT_CACHE_KEY = 'alphavyuh-dashboard-snapshot-v1'
 
+const PENDING_MARKET_OVERVIEW: MarketOverview = {
+  trade_date: null,
+  advances: 0,
+  declines: 0,
+  unchanged: 0,
+  total: 0,
+  advance_decline_ratio: 0,
+  new_52w_highs: 0,
+  new_52w_lows: 0,
+  above_ema20_pct: 0,
+  above_ema50_pct: 0,
+  above_ema200_pct: 0,
+  market_phase: 'Pending',
+  market_phase_desc: 'Waiting for the latest market snapshot.',
+  sector_breadth: [],
+  top_gainers: [],
+  top_losers: [],
+  most_active: [],
+}
+
 type DashboardSnapshotCache = {
   data: MarketOverview
   dataHealth: DataHealth | null
@@ -1060,9 +1080,9 @@ export default function DashboardPage() {
 
       {loading && <Skeleton />}
 
-      {!loading && data && (
+      {!loading && (
         <div>
-          <DashboardCockpit workflow={workflow} data={data} dataHealth={dataHealth} />
+          <DashboardCockpit workflow={workflow} data={data ?? PENDING_MARKET_OVERVIEW} dataHealth={dataHealth} />
 
           <AccountDataStatusCard issues={uniqueAccountIssues([...workflow.accountIssues, ...workflow.alertIssues])} />
 
@@ -1109,109 +1129,109 @@ export default function DashboardPage() {
             </div>
           </Card>
 
-          <MarketPulsePanel data={data} dataHealth={dataHealth} />
+          {data ? (
+            <>
+              <MarketPulsePanel data={data} dataHealth={dataHealth} />
 
-          <DashboardEquitySnapshotCard
-            stats={journalStats}
-            analytics={journalAnalytics}
-            closedTrades={workflow.closedTrades}
-            openTrades={workflow.openTrades}
-            unavailable={Boolean(journalEquityUnavailable)}
-            unavailableMessage={journalEquityUnavailable ?? undefined}
-          />
+              <DashboardEquitySnapshotCard
+                stats={journalStats}
+                analytics={journalAnalytics}
+                closedTrades={workflow.closedTrades}
+                openTrades={workflow.openTrades}
+                unavailable={Boolean(journalEquityUnavailable)}
+                unavailableMessage={journalEquityUnavailable ?? undefined}
+              />
 
-          {/* Stat cards */}
-          <div className="dashboard-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-            <StatCard
-              label="Advances"
-              value={safeNumber(data.advances).toLocaleString()}
-              delta={`of ${safeNumber(data.total).toLocaleString()} stocks`}
-              deltaVariant="gain"
-            />
-            <StatCard
-              label="Declines"
-              value={safeNumber(data.declines).toLocaleString()}
-              delta={`A/D ${safeNumber(data.advance_decline_ratio).toFixed(2)}`}
-              deltaVariant="loss"
-            />
-            <StatCard
-              label="New 52W highs"
-              value={String(safeNumber(data.new_52w_highs))}
-              deltaVariant="gain"
-            />
-            <StatCard
-              label="New 52W lows"
-              value={String(safeNumber(data.new_52w_lows))}
-              deltaVariant="loss"
-            />
-          </div>
-
-          {/* Two-column grid */}
-          <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
-            {/* Left: sector breadth */}
-            <Card padding="lg">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-                <h2 className="heading-card">Sector breadth</h2>
-                <a href="/data" className="caption" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>
-                  Data Status
-                </a>
+              {/* Stat cards */}
+              <div className="dashboard-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+                <StatCard
+                  label="Advances"
+                  value={safeNumber(data.advances).toLocaleString()}
+                  delta={`of ${safeNumber(data.total).toLocaleString()} stocks`}
+                  deltaVariant="gain"
+                />
+                <StatCard
+                  label="Declines"
+                  value={safeNumber(data.declines).toLocaleString()}
+                  delta={`A/D ${safeNumber(data.advance_decline_ratio).toFixed(2)}`}
+                  deltaVariant="loss"
+                />
+                <StatCard
+                  label="New 52W highs"
+                  value={String(safeNumber(data.new_52w_highs))}
+                  deltaVariant="gain"
+                />
+                <StatCard
+                  label="New 52W lows"
+                  value={String(safeNumber(data.new_52w_lows))}
+                  deltaVariant="loss"
+                />
               </div>
-              <div className="caption" style={{ marginTop: -10, marginBottom: 14 }}>
-                Advancers · avg chg · above EMA20
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (() => {
-                  const emptyCopy = getMarketPanelEmptyCopy({
-                    panel: 'sector-breadth',
-                    dataHealth,
-                    marketError: error,
-                    hasSessionDate: Boolean(data.trade_date),
-                  })
-                  return (
-                  <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                    <div
-                      className="caption"
-                      data-testid={emptyCopy.testId}
-                      style={{ color: emptyCopy.tone === 'warn' ? 'var(--warn)' : undefined, lineHeight: 1.55 }}
-                    >
-                      {emptyCopy.message}
-                    </div>
+
+              {/* Two-column grid */}
+              <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
+                {/* Left: sector breadth */}
+                <Card padding="lg">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
+                    <h2 className="heading-card">Sector breadth</h2>
+                    <a href="/data" className="caption" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>
+                      Data Status
+                    </a>
                   </div>
-                  )
-                })() : (
-                  data.sector_breadth.map(s => (
-                    <SectorBar
-                      key={s.sector}
-                      sector={s.sector}
-                      advances={s.advances}
-                      total={s.total}
-                      breadth_pct={s.advance_breadth_pct ?? s.breadth_pct}
-                      avg_pct_change={s.avg_pct_change}
-                      above_ema20_pct={s.above_ema20_pct}
-                    />
-                  ))
-                )}
+                  <div className="caption" style={{ marginTop: -10, marginBottom: 14 }}>
+                    Advancers · avg chg · above EMA20
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (() => {
+                      const emptyCopy = getMarketPanelEmptyCopy({
+                        panel: 'sector-breadth',
+                        dataHealth,
+                        marketError: error,
+                        hasSessionDate: Boolean(data.trade_date),
+                      })
+                      return (
+                      <div style={{ padding: '32px 0', textAlign: 'center' }}>
+                        <div
+                          className="caption"
+                          data-testid={emptyCopy.testId}
+                          style={{ color: emptyCopy.tone === 'warn' ? 'var(--warn)' : undefined, lineHeight: 1.55 }}
+                        >
+                          {emptyCopy.message}
+                        </div>
+                      </div>
+                      )
+                    })() : (
+                      data.sector_breadth.map(s => (
+                        <SectorBar
+                          key={s.sector}
+                          sector={s.sector}
+                          advances={s.advances}
+                          total={s.total}
+                          breadth_pct={s.advance_breadth_pct ?? s.breadth_pct}
+                          avg_pct_change={s.avg_pct_change}
+                          above_ema20_pct={s.above_ema20_pct}
+                        />
+                      ))
+                    )}
+                  </div>
+                </Card>
+
+                {/* Right: movers + EMA breadth */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <ReviewPulseCard workflow={workflow} />
+                  <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
+                  <MoversCard title="Top losers" items={data.top_losers} variant="loss" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
+                  <EmaBreadthCard data={data} />
+                </div>
               </div>
-            </Card>
-
-            {/* Right: movers + EMA breadth */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <ReviewPulseCard workflow={workflow} />
-              <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
-              <MoversCard title="Top losers" items={data.top_losers} variant="loss" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
-              <EmaBreadthCard data={data} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {!loading && !data && !error && (
-        <div>
-          <EmptyState
-            title="Market data is not connected"
-            description="Dashboard needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
-            action={{ label: 'Retry', onClick: load }}
-          />
+            </>
+          ) : !error ? (
+            <EmptyState
+              title="Market data is not connected"
+              description="Dashboard needs the backend data API to load the latest EOD snapshot. Open Data status or retry after the API is restored."
+              action={{ label: 'Retry', onClick: load }}
+            />
+          ) : null}
         </div>
       )}
     </div>
