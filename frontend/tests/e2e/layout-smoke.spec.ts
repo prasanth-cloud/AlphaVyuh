@@ -7,7 +7,7 @@ type WorkflowPage = {
 };
 
 const pages: WorkflowPage[] = [
-  { path: "/dashboard", name: "dashboard", marker: (page) => page.getByTestId("dashboard-cockpit") },
+  { path: "/dashboard", name: "dashboard", marker: (page) => page.getByTestId("dashboard-market-desk") },
   { path: "/scanner", name: "scanner", marker: (page) => page.getByRole("button", { name: /^Run scan$/i }) },
   { path: "/watchlist", name: "watchlist", marker: (page) => page.getByText("Decision desk") },
   { path: "/charts/AUBANK?full=1", name: "full chart", marker: (page) => page.getByTestId("chart-drawing-overlay") },
@@ -215,8 +215,10 @@ test.describe("Workflow layout smoke", () => {
 
   test("top search opens workflow commands", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("dashboard-workflow-toggle").click();
+    await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Dashboard", "Scanner", "Watchlist", "Journal"]);
     await page.keyboard.press("/");
     await page.getByPlaceholder("Search symbol or command...").fill("dashboard");

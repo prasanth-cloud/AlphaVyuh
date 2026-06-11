@@ -1301,14 +1301,84 @@ input, textarea, select {
   }
 }
 
+.dashboard-market-desk {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dashboard-market-tape {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-market-tape-item {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.dashboard-market-summary-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dashboard-market-tile {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.dashboard-market-charts-row,
+.dashboard-market-movers-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboard-market-sector-grid {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.dashboard-market-sector-cell {
+  min-width: 0;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  text-align: center;
+}
+
+.dashboard-workflow-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 @media (max-width: 920px) {
   .dashboard-checklist-grid,
   .dashboard-today-grid,
   .dashboard-action-grid,
   .dashboard-stat-grid,
   .dashboard-main-grid,
-  .dashboard-equity-grid {
+  .dashboard-equity-grid,
+  .dashboard-market-summary-row,
+  .dashboard-market-charts-row,
+  .dashboard-market-movers-row,
+  .dashboard-market-tape {
     grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-market-sector-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
   .dashboard-action-grid {
@@ -1324,8 +1394,18 @@ input, textarea, select {
   .dashboard-checklist-grid,
   .dashboard-today-grid,
   .dashboard-action-grid,
-  .dashboard-stat-grid {
+  .dashboard-stat-grid,
+  .dashboard-market-summary-row {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .dashboard-market-sector-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .dashboard-market-charts-row,
+  .dashboard-market-movers-row {
+    grid-template-columns: 1fr !important;
   }
 
   .decision-desk-primary-grid,

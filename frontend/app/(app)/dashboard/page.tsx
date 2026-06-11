@@ -23,11 +23,12 @@ import {
   type ScanAlertMatch,
 } from '@/lib/api'
 import { DashboardEquitySnapshotCard } from '@/components/dashboard/DashboardEquitySnapshot'
-import { Card, StatCard, EmptyState, Button, DataProvenanceBadge, Num } from '@/components/ui'
+import { DashboardWorkflowSection } from '@/components/dashboard/DashboardWorkflowSection'
+import { MarketOverviewDesk } from '@/components/dashboard/MarketOverviewDesk'
+import { Card, EmptyState, Button, Num } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
-import { getMarketPanelEmptyCopy } from '@/lib/data-health-copy'
 import { WORKFLOW_FLOW_CAPTION } from '@/lib/workflow-placement'
 import { getDashboardSessionFocus } from '@/lib/dashboard-session'
 
@@ -41,16 +42,6 @@ async function getWorkflowStatesForSymbols(symbols: string[]) {
   return states;
 }
 
-function safeNumber(value: unknown, fallback = 0): number {
-  const numeric = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(numeric) ? numeric : fallback
-}
-
-function formatPercent(value: unknown, digits = 0): string {
-  const numeric = safeNumber(value, NaN)
-  return Number.isFinite(numeric) ? `${numeric.toFixed(digits)}%` : '—'
-}
-
 const humanLabelStyle: CSSProperties = {
   color: 'var(--text-secondary)',
   fontSize: 11,
@@ -59,270 +50,29 @@ const humanLabelStyle: CSSProperties = {
   textTransform: 'none',
 }
 
-function breadthLabel(phase: string): string {
-  if (phase === 'Bullish') return 'Bullish breadth'
-  if (phase === 'Bearish') return 'Weak breadth'
-  return 'Mixed breadth'
-}
-
-function MarketPulsePanel({ data, dataHealth }: { data: MarketOverview; dataHealth: DataHealth | null }) {
-  const phase = data.market_phase;
-  const phaseColor = phase === 'Bullish' ? 'var(--gain)'
-                   : phase === 'Bearish' ? 'var(--loss)'
-                   : 'var(--warn)';
-  const leadingSector = data.sector_breadth?.[0] ?? null;
-  const breadthTone = data.advances >= data.declines ? 'var(--gain)' : 'var(--loss)';
-  const trendTone = data.above_ema200_pct >= 60 ? 'var(--gain)'
-                  : data.above_ema200_pct <= 40 ? 'var(--loss)'
-                  : 'var(--warn)';
-
-  const cards = [
-    {
-      label: 'Market breadth',
-      value: breadthLabel(phase),
-      detail: data.market_phase_desc,
-      color: phaseColor,
-    },
-    {
-      label: 'Breadth',
-      value: `${safeNumber(data.advances).toLocaleString()} / ${safeNumber(data.declines).toLocaleString()}`,
-      detail: `A/D ${safeNumber(data.advance_decline_ratio).toFixed(2)}`,
-      color: breadthTone,
-    },
-    {
-      label: 'Trend',
-      value: formatPercent(data.above_ema200_pct),
-      detail: 'Stocks above EMA 200',
-      color: trendTone,
-    },
-    {
-      label: 'Leadership',
-      value: leadingSector?.sector ?? 'Pending',
-      detail: leadingSector ? `${safeNumber(leadingSector.breadth_pct).toFixed(0)}% advancing · ${safeNumber(leadingSector.avg_pct_change) >= 0 ? '+' : ''}${safeNumber(leadingSector.avg_pct_change).toFixed(2)}% avg` : 'Waiting for latest market data',
-      color: leadingSector ? (safeNumber(leadingSector.avg_pct_change) >= 0 ? 'var(--gain)' : 'var(--loss)') : 'var(--text-tertiary)',
-    },
-  ];
-
-  return (
-    <Card padding="md" style={{ marginBottom: 16 }} data-testid="dashboard-market-pulse">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div className="label" style={{ marginBottom: 4 }}>Market pulse</div>
-          <div className="caption">One glance summary of the latest market snapshot.</div>
-        </div>
-        <div data-testid="dashboard-data-trust" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {data.source_metadata?.coverage_pct != null && (
-            <span className="workspace-pill" title={`${data.source_metadata.symbols_count ?? data.total} symbols included`}>
-              NSE universe · <Num>{safeNumber(data.source_metadata.coverage_pct).toFixed(0)}%</Num>
-            </span>
-          )}
-          <DataProvenanceBadge
-            kind={dataHealth?.mode === 'demo' ? 'demo' : dataHealth?.status === 'degraded' || dataHealth?.status === 'stale' ? 'fallback' : data.is_live ? 'live-provider' : 'eod'}
-            asOf={data.trade_date}
-            compact
-          />
-        </div>
-      </div>
-      {!!data.indices?.length && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginBottom: 10 }}>
-          {data.indices.map((idx) => {
-            const pct = idx.pct_change == null ? null : safeNumber(idx.pct_change, NaN);
-            const close = idx.close == null ? null : safeNumber(idx.close, NaN);
-            const tone = (pct ?? 0) >= 0 ? 'var(--gain)' : 'var(--loss)';
-            return (
-              <div key={idx.symbol} style={{ minWidth: 0, padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.018)' }}>
-                <div className="label" style={{ marginBottom: 4 }}>{idx.label}</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                  <Num style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {close != null && Number.isFinite(close) ? close.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : 'Pending'}
-                  </Num>
-                  <Num style={{ fontSize: 12, fontWeight: 700, color: idx.pct_change == null ? 'var(--text-tertiary)' : tone }}>
-                    {pct != null && Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '-'}
-                  </Num>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            style={{
-              minWidth: 0,
-              padding: '12px 14px',
-              borderRadius: 12,
-              border: '1px solid var(--border-subtle)',
-              background: 'rgba(255,255,255,0.025)',
-            }}
-          >
-            <div className="label" style={{ marginBottom: 6 }}>{card.label}</div>
-            <Num style={{ fontSize: 15, fontWeight: 700, color: card.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {card.value}
-            </Num>
-            <div className="caption" style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {card.detail}
-            </div>
-          </div>
-        ))}
-      </div>
-    </Card>
-  )
-}
-
-function SectorBar({
-  sector,
-  advances,
-  total,
-  breadth_pct,
-  avg_pct_change,
-  above_ema20_pct,
-}: {
-  sector: string
-  advances?: number
-  total?: number
-  breadth_pct: number
-  avg_pct_change: number
-  above_ema20_pct?: number | null
-}) {
-  const breadth = safeNumber(breadth_pct)
-  const avg = safeNumber(avg_pct_change)
-  const ema20 = above_ema20_pct == null ? null : safeNumber(above_ema20_pct)
-  const color = breadth > 60 ? 'var(--gain)' : breadth > 40 ? 'var(--warn)' : 'var(--loss)'
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <span style={{ flex: '0 0 120px', fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {sector}
-      </span>
-      <div style={{ flex: 1, height: 5, background: 'var(--surface-3)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${Math.min(100, breadth)}%`, background: color, transition: 'width 600ms var(--ease-out)' }} />
-      </div>
-      <span className="mono" title={advances != null && total != null ? `${advances} advancing of ${total}` : undefined} style={{ flex: '0 0 58px', textAlign: 'right', fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
-        {breadth.toFixed(0)}%
-      </span>
-      <span className="mono" style={{ flex: '0 0 52px', textAlign: 'right', fontSize: 11, color: avg >= 0 ? 'var(--gain)' : 'var(--loss)' }}>
-        {avg >= 0 ? '+' : ''}{avg.toFixed(2)}%
-      </span>
-      <span className="mono" style={{ flex: '0 0 44px', textAlign: 'right', fontSize: 11, color: 'var(--text-tertiary)' }}>
-        {ema20 == null ? '—' : `${ema20.toFixed(0)}%`}
-      </span>
-    </div>
-  )
-}
-
-function MoversCard({
-  title,
-  items,
-  variant,
-  dataHealth,
-  marketError,
-  hasSessionDate,
-}: {
-  title: string
-  items: MarketOverview['top_gainers']
-  variant: 'gain' | 'loss'
-  dataHealth: DataHealth | null
-  marketError: string
-  hasSessionDate: boolean
-}) {
-  const color = variant === 'gain' ? 'var(--gain)' : 'var(--loss)'
-  const safeItems = Array.isArray(items) ? items : []
-  const emptyCopy = getMarketPanelEmptyCopy({
-    panel: 'movers',
-    dataHealth,
-    marketError,
-    hasSessionDate,
-  })
-  return (
-    <Card padding="md">
-      <h2 className="heading-card" style={{ marginBottom: 12 }}>{title}</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {safeItems.length === 0 ? (
-          <div
-            className="caption"
-            data-testid={emptyCopy.testId}
-            style={{ padding: '8px 0', color: emptyCopy.tone === 'warn' ? 'var(--warn)' : undefined, lineHeight: 1.55 }}
-          >
-            {emptyCopy.message}
-          </div>
-        ) : (
-          safeItems.slice(0, 5).map(item => {
-            const close = safeNumber(item.close, NaN)
-            const pct = safeNumber(item.pct_change, NaN)
-            return (
-              <a key={item.symbol} href={`/watchlist?symbol=${item.symbol}`}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{item.symbol}</div>
-                  <div className="caption" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{item.company_name}</div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
-                  <div className="mono" style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
-                    {Number.isFinite(close) ? `₹${close.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
-                  </div>
-                  <div className="mono" style={{ fontSize: 11, fontWeight: 600, color }}>
-                    {Number.isFinite(pct) ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—'}
-                  </div>
-                </div>
-              </a>
-            )
-          })
-        )}
-      </div>
-    </Card>
-  )
-}
-
-function EmaBreadthCard({ data }: { data: MarketOverview }) {
-  const items = [
-    { label: 'Above EMA 20', pct: data.above_ema20_pct },
-    { label: 'Above EMA 50', pct: data.above_ema50_pct },
-    { label: 'Above EMA 200', pct: data.above_ema200_pct },
-  ]
-  return (
-    <Card padding="md">
-      <h2 className="heading-card" style={{ marginBottom: 12 }}>EMA breadth</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {items.map(e => {
-          const numericPct = safeNumber(e.pct, NaN)
-          const hasData = Number.isFinite(numericPct)
-          const color = !hasData ? 'var(--text-tertiary)' : numericPct > 60 ? 'var(--gain)' : numericPct > 40 ? 'var(--warn)' : 'var(--loss)'
-          return (
-            <div key={e.label}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{e.label}</span>
-                <span className="mono" style={{ fontSize: 12, fontWeight: 500, color }}>
-                  {hasData ? `${numericPct}%` : '—'}
-                </span>
-              </div>
-              <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: hasData ? `${Math.min(100, numericPct)}%` : '0%', background: color }} />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </Card>
-  )
-}
-
 function Skeleton() {
   return (
-    <div style={{ padding: '20px 32px' }}>
-      <div style={{ height: 56, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)', marginBottom: 20 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-        {[1,2,3,4].map(i => (
-          <div key={i} style={{ height: 80, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+    <div className="dashboard-market-desk" style={{ gap: 10 }}>
+      <div style={{ height: 48, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+        {[1, 2].map((i) => (
+          <div key={i} style={{ height: 64, borderRadius: 12, background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
-        <div style={{ height: 320, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
-        <div style={{ height: 320, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ height: 72, borderRadius: 12, background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+        ))}
       </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        <div style={{ height: 180, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+        <div style={{ height: 180, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
+      </div>
+      <div style={{ height: 120, borderRadius: 'var(--radius-lg)', background: 'var(--surface-1)', border: '1px solid var(--border-subtle)' }} />
     </div>
   )
 }
+
 
 type WorkflowState = {
   watchlists: number
@@ -1082,57 +832,9 @@ export default function DashboardPage() {
 
       {!loading && (
         <div>
-          <DashboardCockpit workflow={workflow} data={data ?? PENDING_MARKET_OVERVIEW} dataHealth={dataHealth} />
-
-          <AccountDataStatusCard issues={uniqueAccountIssues([...workflow.accountIssues, ...workflow.alertIssues])} />
-
-          <WorkflowChecklistCard
-            workflow={workflow}
-            dismissed={checklistDismissed}
-            onDismiss={() => {
-              setChecklistDismissed(true)
-              if (typeof window !== 'undefined') window.localStorage.setItem('alphavyuh-onboarding-dismissed', '1')
-            }}
-          />
-
-          <Card padding="md" style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
-              <div>
-                <h2 className="heading-card" style={{ marginBottom: 4 }}>Next actions</h2>
-                <div className="caption">Follow the loop: review, plan, discover, then come back to Journal.</div>
-              </div>
-            </div>
-            <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-              {[
-                { label: 'Open journal review', detail: 'Start with closed trades, lessons, and process drift.', href: '/journal?review=needs-review' },
-                { label: 'Open watchlist', detail: 'Pick the next symbol and continue the Decision Desk.', href: '/watchlist' },
-                { label: 'Discover setups', detail: 'Use Scanner when the current queue needs fresh ideas.', href: '/scanner' },
-                { label: 'Import trades', detail: 'Bring in contract notes or broker reports for review.', href: '/upload' },
-              ].map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  style={{
-                    display: 'block',
-                    minHeight: 68,
-                    padding: '12px 14px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'var(--surface-2)',
-                    textDecoration: 'none',
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>{item.label}</div>
-                  <div className="caption" style={{ lineHeight: 1.5 }}>{item.detail}</div>
-                </a>
-              ))}
-            </div>
-          </Card>
-
           {data ? (
             <>
-              <MarketPulsePanel data={data} dataHealth={dataHealth} />
-
+              <MarketOverviewDesk data={data} dataHealth={dataHealth} marketError={error} />
               <DashboardEquitySnapshotCard
                 stats={journalStats}
                 analytics={journalAnalytics}
@@ -1141,89 +843,6 @@ export default function DashboardPage() {
                 unavailable={Boolean(journalEquityUnavailable)}
                 unavailableMessage={journalEquityUnavailable ?? undefined}
               />
-
-              {/* Stat cards */}
-              <div className="dashboard-stat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-                <StatCard
-                  label="Advances"
-                  value={safeNumber(data.advances).toLocaleString()}
-                  delta={`of ${safeNumber(data.total).toLocaleString()} stocks`}
-                  deltaVariant="gain"
-                />
-                <StatCard
-                  label="Declines"
-                  value={safeNumber(data.declines).toLocaleString()}
-                  delta={`A/D ${safeNumber(data.advance_decline_ratio).toFixed(2)}`}
-                  deltaVariant="loss"
-                />
-                <StatCard
-                  label="New 52W highs"
-                  value={String(safeNumber(data.new_52w_highs))}
-                  deltaVariant="gain"
-                />
-                <StatCard
-                  label="New 52W lows"
-                  value={String(safeNumber(data.new_52w_lows))}
-                  deltaVariant="loss"
-                />
-              </div>
-
-              {/* Two-column grid */}
-              <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20 }}>
-                {/* Left: sector breadth */}
-                <Card padding="lg">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 16 }}>
-                    <h2 className="heading-card">Sector breadth</h2>
-                    <a href="/data" className="caption" style={{ color: 'var(--text-tertiary)', textDecoration: 'none' }}>
-                      Data Status
-                    </a>
-                  </div>
-                  <div className="caption" style={{ marginTop: -10, marginBottom: 14 }}>
-                    Advancers · avg chg · above EMA20
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {(!Array.isArray(data.sector_breadth) || data.sector_breadth.length === 0) ? (() => {
-                      const emptyCopy = getMarketPanelEmptyCopy({
-                        panel: 'sector-breadth',
-                        dataHealth,
-                        marketError: error,
-                        hasSessionDate: Boolean(data.trade_date),
-                      })
-                      return (
-                      <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                        <div
-                          className="caption"
-                          data-testid={emptyCopy.testId}
-                          style={{ color: emptyCopy.tone === 'warn' ? 'var(--warn)' : undefined, lineHeight: 1.55 }}
-                        >
-                          {emptyCopy.message}
-                        </div>
-                      </div>
-                      )
-                    })() : (
-                      data.sector_breadth.map(s => (
-                        <SectorBar
-                          key={s.sector}
-                          sector={s.sector}
-                          advances={s.advances}
-                          total={s.total}
-                          breadth_pct={s.advance_breadth_pct ?? s.breadth_pct}
-                          avg_pct_change={s.avg_pct_change}
-                          above_ema20_pct={s.above_ema20_pct}
-                        />
-                      ))
-                    )}
-                  </div>
-                </Card>
-
-                {/* Right: movers + EMA breadth */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <ReviewPulseCard workflow={workflow} />
-                  <MoversCard title="Top gainers" items={data.top_gainers} variant="gain" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
-                  <MoversCard title="Top losers" items={data.top_losers} variant="loss" dataHealth={dataHealth} marketError={error} hasSessionDate={Boolean(data.trade_date)} />
-                  <EmaBreadthCard data={data} />
-                </div>
-              </div>
             </>
           ) : !error ? (
             <EmptyState
@@ -1232,6 +851,53 @@ export default function DashboardPage() {
               action={{ label: 'Retry', onClick: load }}
             />
           ) : null}
+
+          <DashboardWorkflowSection>
+            <DashboardCockpit workflow={workflow} data={data ?? PENDING_MARKET_OVERVIEW} dataHealth={dataHealth} />
+            <AccountDataStatusCard issues={uniqueAccountIssues([...workflow.accountIssues, ...workflow.alertIssues])} />
+            <WorkflowChecklistCard
+              workflow={workflow}
+              dismissed={checklistDismissed}
+              onDismiss={() => {
+                setChecklistDismissed(true)
+                if (typeof window !== 'undefined') window.localStorage.setItem('alphavyuh-onboarding-dismissed', '1')
+              }}
+            />
+            <Card padding="md">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, marginBottom: 14 }}>
+                <div>
+                  <h2 className="heading-card" style={{ marginBottom: 4 }}>Next actions</h2>
+                  <div className="caption">Follow the loop: review, plan, discover, then come back to Journal.</div>
+                </div>
+              </div>
+              <div className="dashboard-action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
+                {[
+                  { label: 'Open journal review', detail: 'Start with closed trades, lessons, and process drift.', href: '/journal?review=needs-review' },
+                  { label: 'Open watchlist', detail: 'Pick the next symbol and continue the Decision Desk.', href: '/watchlist' },
+                  { label: 'Discover setups', detail: 'Use Scanner when the current queue needs fresh ideas.', href: '/scanner' },
+                  { label: 'Import trades', detail: 'Bring in contract notes or broker reports for review.', href: '/upload' },
+                ].map((item) => (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    style={{
+                      display: 'block',
+                      minHeight: 68,
+                      padding: '12px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-subtle)',
+                      background: 'var(--surface-2)',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>{item.label}</div>
+                    <div className="caption" style={{ lineHeight: 1.5 }}>{item.detail}</div>
+                  </a>
+                ))}
+              </div>
+            </Card>
+            <ReviewPulseCard workflow={workflow} />
+          </DashboardWorkflowSection>
         </div>
       )}
     </div>
