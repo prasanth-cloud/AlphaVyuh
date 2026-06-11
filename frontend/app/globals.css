@@ -860,6 +860,49 @@ input, textarea, select {
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
 }
 
+.journal-row-win {
+  box-shadow: inset 3px 0 0 var(--gain);
+}
+
+.journal-row-loss {
+  box-shadow: inset 3px 0 0 var(--loss);
+}
+
+.journal-row-open {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.chart-symbol-ticker {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  min-width: 0;
+}
+
+.chart-symbol-ticker-symbol {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.chart-symbol-ticker-price {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-symbol-ticker-change {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .journal-trades-layout {
   display: flex;
   gap: 20px;

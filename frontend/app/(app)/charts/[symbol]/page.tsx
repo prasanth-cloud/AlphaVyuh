@@ -1951,8 +1951,22 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             value={symbol}
             onChange={sym => router.push(buildQueueChartHref(sym, fullChartMode))}
           />
+          <div className="chart-symbol-ticker" data-testid="chart-symbol-ticker">
+            <span className="chart-symbol-ticker-symbol">{symbol}</span>
+            <Num className="chart-symbol-ticker-price">
+              {displayClose != null ? fmtPrice(displayClose, symbolCurrency) : "—"}
+            </Num>
+            {changePct != null && (
+              <Num
+                className="chart-symbol-ticker-change"
+                style={{ color: positive ? "var(--gain)" : "var(--loss)" }}
+              >
+                {positive ? "+" : ""}{changePct.toFixed(2)}%
+              </Num>
+            )}
+          </div>
           {data && (
-            <span className="text-[12px] text-[#aaa] hidden sm:block truncate max-w-[200px]">
+            <span className="text-[12px] text-[#aaa] hidden md:block truncate max-w-[200px]">
               {data.company_name}
             </span>
           )}

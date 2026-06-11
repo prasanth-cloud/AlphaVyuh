@@ -123,11 +123,18 @@ export function TradeTable({
               </tr>
             ) : entries.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: "48px 0", textAlign: "center" }}>
-                  <div className="body-secondary">No trades yet.</div>
-                  <button onClick={onAddTrade} style={{ marginTop: 8, fontSize: 13, color: "var(--accent)", cursor: "pointer" }}>
-                    Log your first trade
-                  </button>
+                <td colSpan={9} style={{ padding: "48px 24px", textAlign: "center" }} data-testid="journal-trades-empty">
+                  <div className="body-secondary" style={{ fontWeight: 500 }}>No trades in this view yet.</div>
+                  <div className="caption" style={{ marginTop: 6, maxWidth: 420, marginInline: "auto", lineHeight: 1.6 }}>
+                    Log a trade manually, import from broker, or upload a contract note to start the review loop.
+                  </div>
+                  <div style={{ marginTop: 14, display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={onAddTrade} className="workspace-chip-button" style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)", cursor: "pointer" }}>
+                      Log first trade
+                    </button>
+                    <Link href="/upload" className="workspace-chip-button" style={{ textDecoration: "none" }}>Upload report</Link>
+                    <Link href="/scanner" className="workspace-chip-button" style={{ textDecoration: "none" }}>Find setups</Link>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -138,9 +145,17 @@ export function TradeTable({
                     ? e.pnl / (Math.abs(e.entry_price - e.stop_loss) * e.quantity)
                     : null
                 );
+                const outcomeClass = e.status === "closed" && e.pnl != null
+                  ? e.pnl >= 0
+                    ? "journal-row-win"
+                    : "journal-row-loss"
+                  : e.status === "open"
+                    ? "journal-row-open"
+                    : "";
                 return (
                 <tr key={e.id}
                   onClick={() => onSelectEntry(e)}
+                  className={outcomeClass}
                   style={{
                     borderBottom: "1px solid var(--border-subtle)",
                     background: selectedEntry?.id === e.id ? "var(--accent-subtle)" : "transparent",

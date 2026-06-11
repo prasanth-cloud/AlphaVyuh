@@ -485,9 +485,9 @@ export default function JournalPage() {
       )}
 
       <div
-        className="workspace-card journal-review-cockpit"
+        className="workspace-hero journal-review-cockpit"
         data-testid="journal-review-queue"
-        style={{ padding: 16, display: "grid", gap: 16, alignItems: "stretch" }}
+        style={{ padding: 20, display: "grid", gap: 16, alignItems: "stretch" }}
       >
         <div style={{ minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 18 }}>
           <div>

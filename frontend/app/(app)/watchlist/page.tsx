@@ -2696,6 +2696,7 @@ function WatchlistContent() {
             <EmptyState
               title="Click any stock to load its chart"
               description="Use the watchlist as your analysis desk. Select a symbol, then open the full chart for price, volume, and indicator context."
+              action={{ label: "Run scanner for ideas", href: "/scanner" }}
             />
           </div>
         )}
