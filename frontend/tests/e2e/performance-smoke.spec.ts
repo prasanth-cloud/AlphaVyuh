@@ -21,7 +21,7 @@ const budgets: PageBudget[] = [
   {
     path: "/dashboard",
     name: "dashboard",
-    marker: (page) => page.getByTestId("dashboard-cockpit"),
+    marker: (page) => page.getByTestId("dashboard-market-desk"),
     maxMs: 8_000,
   },
   {
@@ -61,7 +61,7 @@ test.describe("Mock workflow performance", () => {
 
     const started = Date.now();
     await mockLogin(page);
-    await expect(page.getByTestId("dashboard-cockpit")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 8_000 });
 
     const elapsed = Date.now() - started;
     expect(elapsed, `mock login to Dashboard usable in ${elapsed}ms`).toBeLessThanOrEqual(8_000);
