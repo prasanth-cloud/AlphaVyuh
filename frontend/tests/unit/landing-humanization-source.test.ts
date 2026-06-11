@@ -44,13 +44,23 @@ describe("landing page humanization", () => {
   it("renders the market tape from live quotes with an honest unavailable state", () => {
     expect(landingSource).toContain("/api/public/market-tape");
     expect(landingSource).toContain("temporarily unavailable");
-    expect(landingSource).toContain("Yahoo Finance (delayed)");
+    expect(landingSource).not.toContain("lp-tape-meta");
+    expect(landingSource).not.toContain("Yahoo Finance (delayed)");
     expect(landingSource).toContain(":root[data-theme=\"light\"] #lp-ticker");
     expect(landingSource).toContain("backdrop-filter");
     // No hardcoded tape/hero quote arrays — they must come from the API.
     expect(landingSource).not.toContain('sym: "NIFTY50"');
     expect(landingSource).not.toContain("const tickers");
     expect(landingSource).not.toContain("const scanData");
+  });
+
+  it("uses Geist typography and Tradezella-style nav shell on the landing page", () => {
+    expect(landingSource).toContain("lp-nav-shell");
+    expect(landingSource).toContain("var(--font-geist-sans)");
+    expect(landingSource).not.toContain("lp-notif1");
+    expect(landingSource).toContain("/favicon.svg");
+    expect(landingSource).toContain("lp-logo-img");
+    expect(landingSource).toContain("lp-cta-arrow");
   });
 
   it("positions Scanner before Journal in the landing workflow and uses Dashboard naming", () => {
