@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
+import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
 import { SETUP_TYPES, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
@@ -105,6 +106,8 @@ export function TradePanel({
   const flow = selectedEntry ? getTradeFlowMeta(selectedEntry) : null;
   const reviewContext = selectedEntry ? getReviewContext(selectedEntry) : null;
   const reviewDraft = lessonDraft.trim();
+  const workflowSymbol = selectedEntry?.symbol ?? selectedSymbol;
+  const workflowLinks = getJournalWorkflowLinks(workflowSymbol || undefined);
 
   return (
     <div className="journal-trade-panel">
@@ -214,7 +217,7 @@ export function TradePanel({
             </div>
 
             <button onClick={onAddTrade} disabled={saving}
-              style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
+              style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
               {saving ? "Saving…" : "Save trade"}
             </button>
           </div>
@@ -285,7 +288,7 @@ export function TradePanel({
             </div>
 
             <button onClick={onCloseTrade} disabled={saving}
-              style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
+              style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.5 : 1 }}>
               {saving ? "Saving…" : "Close trade"}
             </button>
           </div>
@@ -444,10 +447,20 @@ export function TradePanel({
 
             {selectedEntry.status === "open" && (
               <button onClick={() => onInitiateClose(selectedEntry)}
-                style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 700, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer" }}>
+                style={{ width: "100%", padding: "9px 0", fontSize: 13, fontWeight: 600, borderRadius: "var(--radius-md)", background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer" }}>
                 Close this trade
               </button>
             )}
+          </div>
+        )}
+
+        {workflowSymbol && (
+          <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }} data-testid="journal-trade-workflow-links">
+            {workflowLinks.map((link) => (
+              <Link key={link.label} href={link.href} className="workspace-chip-button" style={{ textDecoration: "none" }}>
+                {link.label}
+              </Link>
+            ))}
           </div>
         )}
       </Card>

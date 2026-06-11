@@ -507,8 +507,8 @@ export default function JournalPage() {
               { label: "Open plans", value: String(journalQueue.open), detail: journalQueue.open === 1 ? "position" : "positions", tone: journalQueue.open > 0 ? "var(--accent)" : "var(--text-secondary)" },
             ].map((item) => (
               <div key={item.label} style={{ borderRadius: "var(--radius-md)", padding: "11px 12px", background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)", minWidth: 0 }}>
-                <div className="text-[11px] font-semibold" style={{ color: "var(--text-tertiary)" }}>{item.label}</div>
-                <div className="mt-1 text-[16px] font-semibold truncate" style={{ color: item.tone }}>{item.value}</div>
+                <div className="text-[11px] label" style={{ color: "var(--text-tertiary)" }}>{item.label}</div>
+                <div className="mt-1 text-[16px] truncate" style={{ color: item.tone, fontWeight: 600 }}>{item.value}</div>
                 <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{item.detail}</div>
               </div>
             ))}
@@ -516,7 +516,7 @@ export default function JournalPage() {
 
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 6 }}>
-              <div className="text-[11px] font-semibold" style={{ color: "var(--text-tertiary)" }}>Review unlock progress</div>
+              <div className="text-[11px] label" style={{ color: "var(--text-tertiary)" }}>Review unlock progress</div>
               <Num className="text-[12px]" style={{ color: "var(--text-secondary)" }}>{reviewStage.progressPct}%</Num>
             </div>
             <div style={{ height: 7, borderRadius: 999, overflow: "hidden", background: "var(--surface-3)" }}>
@@ -570,15 +570,15 @@ export default function JournalPage() {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[11px] font-semibold uppercase" style={{ color: "var(--text-tertiary)", letterSpacing: 0 }}>
+                <div className="text-[11px] label uppercase" style={{ color: "var(--text-tertiary)", letterSpacing: 0 }}>
                   Decision memory
                 </div>
-                <div className="mt-1 text-[13px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                <div className="mt-1 text-[13px]" style={{ color: "var(--text-primary)", fontWeight: 600 }}>
                   {decisionMemory.headline}
                 </div>
               </div>
               <div className="text-right">
-                <Num className="text-[18px] font-semibold" style={{ color: decisionMemory.status === "ready" ? "var(--gain)" : "var(--accent)" }}>
+                <Num className="text-[18px]" style={{ color: decisionMemory.status === "ready" ? "var(--gain)" : "var(--accent)", fontWeight: 600 }}>
                   {decisionMemory.coveragePct}%
                 </Num>
                 <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>reviewed</div>
@@ -596,7 +596,7 @@ export default function JournalPage() {
             data-testid="journal-process-change"
             style={{ background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)" }}
           >
-            <div className="text-[11px] font-semibold" style={{ color: "var(--text-tertiary)" }}>What changed in my process</div>
+            <div className="text-[11px] label" style={{ color: "var(--text-tertiary)" }}>What changed in my process</div>
             <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-primary)" }}>
               {reviewStage.processChange}
             </div>
@@ -615,7 +615,7 @@ export default function JournalPage() {
                 style={{ background: "rgba(244,247,251,0.05)", border: "1px solid var(--border-subtle)", minWidth: 92 }}
               >
                 <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>{label}</div>
-                <Num className="text-[16px] font-semibold" style={{ color }}>{value}</Num>
+                <Num className="text-[16px]" style={{ color, fontWeight: 600 }}>{value}</Num>
               </div>
             ))}
           </div>

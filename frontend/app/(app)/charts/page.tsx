@@ -33,7 +33,9 @@ import {
   tradingViewNseSymbols,
 } from "@/lib/multi-chart-review";
 import { defaultIndicators } from "@/components/charts/indicators";
-import { EyebrowLabel, Num } from "@/components/ui";
+import { ChartWorkflowHeader } from "@/components/ChartWorkflowHeader";
+import { Num } from "@/components/ui";
+import { TRADER_WORKFLOW_STEPS } from "@/lib/workflow-placement";
 import { scannerReviewContextSummary } from "@/lib/scanner-review-context";
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
@@ -237,31 +239,34 @@ export default function ChartsIndexPage() {
     return null;
   }
 
+  const planTradeHref = symbols[0] ? `/charts/${symbols[0]}${watchlistId ? `?from=watchlist&watchlistId=${watchlistId}${watchlistName ? `&watchlist=${encodeURIComponent(watchlistName)}` : ""}` : ""}` : "/charts";
+
   return (
     <div className="workspace-page" style={{ background: "transparent", minHeight: "100vh" }}>
-      <div className="workspace-card" style={{ padding: "14px 18px" }}>
-        <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 16 }}>
-          <div>
-            <EyebrowLabel>Multi-chart review</EyebrowLabel>
-            <div className="app-page-title" style={{ marginTop: 4 }}>Review board</div>
-            <div className="workspace-card-copy" style={{ maxWidth: 760 }}>
-              Compare up to four scanner or watchlist candidates with the same range, EOD source labels, and quick handoff back into full chart planning.
-            </div>
-          </div>
-          <div className="workspace-pill-row" style={{ justifyContent: "flex-end" }}>
+      <ChartWorkflowHeader
+        planTradeHref={planTradeHref}
+        contextLine={(
+          <>
+            <div className="app-page-title" style={{ marginTop: 8 }}>Review board</div>
+            <p className="caption" style={{ marginTop: 6, maxWidth: 760, lineHeight: 1.55 }}>
+              {TRADER_WORKFLOW_STEPS[3].body} Compare up to four scanner or watchlist candidates with the same range and EOD source labels.
+            </p>
+          </>
+        )}
+        trailing={(
+          <>
             <span className="workspace-pill">{sourceLabel(source, watchlistName)}</span>
             <span className="workspace-pill"><Num>{loadedCount}</Num> / <Num>{symbols.length}</Num> loaded</span>
-          </div>
-        </div>
+          </>
+        )}
+      />
+      <div className="workspace-card" style={{ padding: "14px 18px" }}>
         <div
           data-testid="multi-chart-board-pulse"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
             gap: 10,
-            marginTop: 14,
-            paddingTop: 12,
-            borderTop: "1px solid var(--border-subtle)",
           }}
         >
           {[
@@ -277,7 +282,7 @@ export default function ChartsIndexPage() {
                   display: "block",
                   color: index === 0 || index === 1 ? analysisToneColor(boardPulse.tone) : "var(--text-primary)",
                   fontSize: 13,
-                  fontWeight: 800,
+                  fontWeight: 600,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",

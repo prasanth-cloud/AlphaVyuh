@@ -21,7 +21,8 @@ import { useChartData } from "@/components/charts/hooks/useChartData";
 import SymbolSearch from "@/components/charts/SymbolSearch";
 import OrderModal from "@/components/charts/OrderModal";
 import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
-import { DataProvenanceBadge, EyebrowLabel, Num } from "@/components/ui";
+import { ChartWorkflowHeader } from "@/components/ChartWorkflowHeader";
+import { DataProvenanceBadge, Num } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
 import type { ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 import {
@@ -1762,46 +1763,35 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         : { background: "transparent" }}
     >
       {!fullChartMode && (
-      <div className="workspace-card" style={{ padding: "14px 18px", marginBottom: 16 }}>
-        <div className="workspace-toolbar" style={{ minHeight: "auto", padding: 0, border: "none", gap: 14 }}>
-          <div>
-            <EyebrowLabel>Chart review</EyebrowLabel>
-            <div className="workspace-card-copy">
-              {symbol} chart · inspect structure, levels, volume, indicators, and review context before deciding whether to plan a trade.
+        <ChartWorkflowHeader
+          planTradeHref={buildWatchlistReturnHref(true)}
+          contextLine={sourcePage === "watchlist" && sourceWatchlist ? (
+            <div className="caption" style={{ marginTop: 8 }}>
+              Opened from <Num style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</Num>.
             </div>
-            {sourcePage === "watchlist" && sourceWatchlist && (
-              <div className="caption" style={{ marginTop: 8 }}>
-                Opened from <Num style={{ color: "var(--text-primary)" }}>{sourceWatchlist}</Num>.
-              </div>
-            )}
-          </div>
-          <div className="workspace-pill-row" style={{ gap: 8 }}>
-            {chartSnapshot.map((item) => (
-              <span key={item.label} className="workspace-pill" style={{ color: item.tone }}>
-                {item.label}: <Num>{item.value}</Num>
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="workspace-pill-row" style={{ marginTop: 12, gap: 8 }}>
-          <Link href="/scanner" prefetch={false} className="workspace-chip-button">Scanner</Link>
-          <Link href="/watchlist" prefetch={false} className="workspace-chip-button">Watchlist</Link>
-          <Link href="/journal" prefetch={false} className="workspace-chip-button">Journal</Link>
-          <Link href={buildWatchlistReturnHref(true)} prefetch={false} className="workspace-chip-button active">Plan trade</Link>
-          <button onClick={reportChartDataIssue} className="workspace-chip-button">Report data</button>
-          {!brokerConnected && (
-            <Link href="/settings/broker" prefetch={false} className="workspace-chip-button">
-              {brokerStatusError ? "Check broker status" : brokerStatus?.token_expired ? "Reconnect broker" : "Connect broker"}
-            </Link>
+          ) : undefined}
+          trailing={(
+            <>
+              <button type="button" onClick={reportChartDataIssue} className="workspace-chip-button">Report data</button>
+              {!brokerConnected && (
+                <Link href="/settings/broker" prefetch={false} className="workspace-chip-button">
+                  {brokerStatusError ? "Check broker status" : brokerStatus?.token_expired ? "Reconnect broker" : "Connect broker"}
+                </Link>
+              )}
+              {chartSnapshot.map((item) => (
+                <span key={item.label} className="workspace-pill" style={{ color: item.tone }}>
+                  {item.label}: <Num>{item.value}</Num>
+                </span>
+              ))}
+              {chartContextPills.map((item) => (
+                <span key={item} className="workspace-pill">{item}</span>
+              ))}
+              {liveQuoteUpdatedAt && (
+                <span className="workspace-pill">Quote · {liveQuote?.source ?? "live"} · {liveQuoteUpdatedAt}</span>
+              )}
+            </>
           )}
-          {chartContextPills.map((item) => (
-            <span key={item} className="workspace-pill">{item}</span>
-          ))}
-          {liveQuoteUpdatedAt && (
-            <span className="workspace-pill">Quote · {liveQuote?.source ?? "live"} · {liveQuoteUpdatedAt}</span>
-          )}
-        </div>
-      </div>
+        />
       )}
 
       <div
@@ -1816,31 +1806,31 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-20">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowAlertModal(false)} />
           <div className="relative rounded-[12px] shadow-2xl p-5 w-[340px]"
-            style={{ background: "var(--app-surface)", border: "1px solid var(--app-border)" }}>
+            style={{ background: "var(--surface-1)", border: "1px solid var(--border-subtle)" }}>
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[14px] font-semibold" style={{ color: "var(--app-text1)" }}>Price alert — {symbol}</span>
+              <span className="text-[14px]" style={{ color: "var(--text-primary)", fontWeight: 600 }}>Price alert — {symbol}</span>
               <button onClick={() => setShowAlertModal(false)} className="text-[18px] leading-none transition-colors"
-                style={{ color: "var(--app-text3)" }}>×</button>
+                style={{ color: "var(--text-tertiary)" }}>×</button>
             </div>
 
             {/* Existing alerts */}
             {priceAlertsError && (
               <div className="mb-4 rounded-[7px] px-3 py-2 text-[12px] leading-relaxed"
-                style={{ background: "rgba(217,119,6,0.08)", color: "var(--warn)", border: "1px solid rgba(217,119,6,0.22)" }}>
+                style={{ background: "var(--warn-subtle)", color: "var(--warn)", border: "1px solid var(--border-subtle)" }}>
                 {priceAlertsError}
               </div>
             )}
             {priceAlerts.length > 0 && (
               <div className="mb-4 space-y-1.5">
-                <div className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: "var(--app-text3)" }}>Active alerts</div>
+                <div className="text-[10px] uppercase tracking-wider mb-1 label" style={{ color: "var(--text-tertiary)" }}>Active alerts</div>
                 {priceAlerts.map(a => (
                   <div key={a.id} className="flex items-center justify-between rounded-[6px] px-3 py-2"
-                    style={{ background: "var(--app-surface3)" }}>
-                    <span className="text-[12px]" style={{ color: "var(--app-text1)" }}>
+                    style={{ background: "var(--surface-3)" }}>
+                    <span className="text-[12px]" style={{ color: "var(--text-primary)" }}>
                       {a.condition === "above" ? "↑ Above" : "↓ Below"} ₹{Number(a.target_price).toLocaleString("en-IN")}
                     </span>
-                    <button onClick={() => handleDeleteAlert(a.id)} className="text-[11px] hover:font-semibold"
-                      style={{ color: "var(--app-loss)" }}>Remove</button>
+                    <button onClick={() => handleDeleteAlert(a.id)} className="text-[11px]"
+                      style={{ color: "var(--loss)", fontWeight: 600 }}>Remove</button>
                   </div>
                 ))}
               </div>
@@ -1851,10 +1841,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               <div className="flex gap-2">
                 {(["above", "below"] as const).map(c => (
                   <button key={c} onClick={() => setAlertCondition(c)}
-                    className="flex-1 py-1.5 text-[12px] font-semibold rounded-[6px] transition-colors capitalize"
-                    style={alertCondition === c
-                      ? { background: c === "above" ? "rgba(38,166,91,0.15)" : "rgba(229,56,59,0.15)", color: c === "above" ? "#26a65b" : "#e5383b", border: `1px solid ${c === "above" ? "rgba(38,166,91,0.3)" : "rgba(229,56,59,0.3)"}` }
-                      : { background: "var(--app-surface3)", color: "var(--app-text3)", border: "1px solid var(--app-border)" }}
+                    className="flex-1 py-1.5 text-[12px] rounded-[6px] transition-colors capitalize"
+                    style={{
+                      fontWeight: 600,
+                      ...(alertCondition === c
+                        ? { background: c === "above" ? "var(--gain-subtle)" : "var(--loss-subtle)", color: c === "above" ? "var(--gain)" : "var(--loss)", border: `1px solid var(--border-subtle)` }
+                        : { background: "var(--surface-3)", color: "var(--text-tertiary)", border: "1px solid var(--border-subtle)" }),
+                    }}
                   >
                     {c === "above" ? "↑ Above" : "↓ Below"}
                   </button>
@@ -1866,7 +1859,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 onChange={e => setAlertPrice(e.target.value)}
                 placeholder={`Target price${displayClose ? ` (current ₹${displayClose.toFixed(2)})` : ""}`}
                 className="w-full rounded-[7px] px-3 py-2 text-[13px] outline-none"
-                style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                style={{ background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
               />
               <input
                 type="text"
@@ -1874,16 +1867,16 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 onChange={e => setAlertNote(e.target.value)}
                 placeholder="Note (optional)"
                 className="w-full rounded-[7px] px-3 py-2 text-[13px] outline-none"
-                style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)", color: "var(--app-text1)" }}
+                style={{ background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
               />
               {alertMsg && (
-                <div className="text-[12px] font-medium" style={{ color: alertMsg === "Alert set!" ? "#26a65b" : "#e5383b" }}>{alertMsg}</div>
+                <div className="text-[12px] font-medium" style={{ color: alertMsg === "Alert set!" ? "var(--gain)" : "var(--loss)" }}>{alertMsg}</div>
               )}
               <button
                 onClick={handleCreateAlert}
                 disabled={alertSaving}
-                className="w-full py-2 text-[13px] font-semibold rounded-[8px] hover:opacity-90 disabled:opacity-50 transition-opacity"
-                style={{ background: "var(--app-teal)", color: "#0D0F14" }}
+                className="w-full py-2 text-[13px] rounded-[8px] hover:opacity-90 disabled:opacity-50 transition-opacity"
+                style={{ background: "var(--accent)", color: "var(--text-on-accent)", fontWeight: 600 }}
               >
                 {alertSaving ? "Saving…" : "Set alert"}
               </button>
@@ -2000,16 +1993,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             onUnavailable={setTimeframeMessage}
           />
 
-          <label className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--app-text3)" }}>
+          <label className="flex items-center gap-1 text-[11px] label" style={{ color: "var(--text-tertiary)" }}>
             Chart
             <select
               value={chartType}
               onChange={(event) => setChartType(event.target.value as ChartDisplayType)}
-              className="text-[11px] rounded-[999px] px-3 py-1.5 font-semibold outline-none"
+              className="text-[11px] rounded-[999px] px-3 py-1.5 outline-none"
               style={{
-                background: "var(--app-surface3)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                color: "var(--app-text1)",
+                fontWeight: 600,
+                background: "var(--surface-3)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--text-primary)",
               }}
             >
               <option value="candles">Candles</option>
@@ -2464,40 +2458,40 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </div>
               </div>
 
-              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
+              <div style={{ borderBottom: "1px solid var(--border-subtle)" }}>
                 <div className="px-4 py-3 space-y-2">
                   <div className="flex items-center justify-between gap-3 mb-3">
                     <div>
-                      <div className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Chart playbook</div>
-                      <div className="text-[13px] font-semibold mt-1" style={{ color: "var(--app-text1)" }}>{setupLabel}</div>
+                      <div className="text-[10px] uppercase tracking-[0.5px] label" style={{ color: "var(--text-tertiary)" }}>Chart playbook</div>
+                      <div className="text-[13px] mt-1" style={{ color: "var(--text-primary)", fontWeight: 600 }}>{setupLabel}</div>
                     </div>
-                    <div className="rounded-full px-2.5 py-1 text-[11px] font-bold tabular-nums"
-                      style={{ background: playbookScore >= 80 ? "rgba(38,166,91,0.14)" : playbookScore >= 50 ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.05)", color: playbookScore >= 80 ? "#4ade80" : playbookScore >= 50 ? "#fbbf24" : "var(--app-text2)" }}>
+                    <div className="rounded-full px-2.5 py-1 text-[11px] tabular-nums mono"
+                      style={{ fontWeight: 600, background: playbookScore >= 80 ? "var(--gain-subtle)" : playbookScore >= 50 ? "var(--warn-subtle)" : "var(--surface-3)", color: playbookScore >= 80 ? "var(--gain)" : playbookScore >= 50 ? "var(--warn)" : "var(--text-secondary)" }}>
                       {playbookScore}
                     </div>
                   </div>
-                  <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Setup checks</summary>
+                  <details className="rounded-[10px]" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <summary className="px-3 py-2 text-[11px] cursor-pointer" style={{ color: "var(--text-primary)", fontWeight: 600 }}>Setup checks</summary>
                     <div className="px-3 pb-3 space-y-1.5">
                       {playbookItems.map((item) => (
                         <div key={item.key} className="flex items-center justify-between gap-2 text-[10px]">
-                          <span style={{ color: "var(--app-text2)" }}>{item.label}</span>
-                          <span className="truncate text-right" style={{ color: item.status === "ready" ? "#4ade80" : item.status === "watch" ? "#fbbf24" : "var(--app-text3)", maxWidth: 130 }}>
+                          <span style={{ color: "var(--text-secondary)" }}>{item.label}</span>
+                          <span className="truncate text-right" style={{ color: item.status === "ready" ? "var(--gain)" : item.status === "watch" ? "var(--warn)" : "var(--text-tertiary)", maxWidth: 130 }}>
                             {item.detail}
                           </span>
                         </div>
                       ))}
                     </div>
                   </details>
-                  <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Trade plan</summary>
-                    <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                  <details className="rounded-[10px]" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <summary className="px-3 py-2 text-[11px] cursor-pointer" style={{ color: "var(--text-primary)", fontWeight: 600 }}>Trade plan</summary>
+                    <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--text-tertiary)" }}>
                       Plan levels live in the Watchlist Decision Desk. Full chart keeps the visual review clear.
                     </div>
                   </details>
-                  <details className="rounded-[10px]" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <summary className="px-3 py-2 text-[11px] font-semibold cursor-pointer" style={{ color: "var(--app-text1)" }}>Review context</summary>
-                    <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                  <details className="rounded-[10px]" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <summary className="px-3 py-2 text-[11px] cursor-pointer" style={{ color: "var(--text-primary)", fontWeight: 600 }}>Review context</summary>
+                    <div className="px-3 pb-3 text-[10px] leading-4" style={{ color: "var(--text-tertiary)" }}>
                       {symbolReviewError
                         ? `Unavailable for ${symbol}. Closed trades are not being treated as empty while review context is unavailable.`
                         : symbolReview.closed > 0 ? `${symbolReview.closed} closed · ${symbolReview.reviewed} reviewed` : `No closed trades on ${symbol} yet.`}
@@ -2532,21 +2526,21 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 </div>
               </div>
 
-              <div style={{ borderBottom: "1px solid var(--app-border)" }}>
+              <div style={{ borderBottom: "1px solid var(--border-subtle)" }}>
                 <button
                   onClick={() => setShowReviewPanel((current) => !current)}
                   className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
-                  style={{ color: "var(--app-text2)" }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface2)"}
+                  style={{ color: "var(--text-secondary)" }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--surface-2)"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                 >
-                  <span className="text-[10px] uppercase tracking-[0.5px] font-semibold" style={{ color: "var(--app-text3)" }}>Review context</span>
+                  <span className="text-[10px] uppercase tracking-[0.5px] label" style={{ color: "var(--text-tertiary)" }}>Review context</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px]" style={{ color: symbolReviewError ? "#fbbf24" : symbolReview.reviewed > 0 ? "#4ade80" : symbolReview.closed > 0 ? "#fbbf24" : "var(--app-text3)" }}>
+                    <span className="text-[10px]" style={{ color: symbolReviewError ? "var(--warn)" : symbolReview.reviewed > 0 ? "var(--gain)" : symbolReview.closed > 0 ? "var(--warn)" : "var(--text-tertiary)" }}>
                       {symbolReviewError ? "Unavailable" : symbolReview.reviewed > 0 ? "Reviewed" : symbolReview.closed > 0 ? "Needs review" : "No history"}
                     </span>
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="transition-transform flex-shrink-0" style={{ transform: showReviewPanel ? "rotate(180deg)" : "rotate(0deg)" }}>
-                      <path d="M2 4l4 4 4-4" stroke="var(--app-text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d="M2 4l4 4 4-4" stroke="var(--text-tertiary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
                 </button>
@@ -2556,7 +2550,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       <div
                         data-testid="chart-review-context-unavailable"
                         className="rounded-[8px] px-3 py-2 text-[10px] leading-4"
-                        style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.28)", color: "#fbbf24" }}
+                        style={{ background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--warn)" }}
                       >
                         <strong>Review context unavailable for {symbol}.</strong> {symbolReviewError} Closed trades are not being treated as empty while review context is unavailable.
                       </div>
@@ -2567,13 +2561,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                         { label: "Reviewed", value: symbolReviewError ? "—" : String(symbolReview.reviewed) },
                         { label: "Win rate", value: !symbolReviewError && symbolReview.winRate != null ? `${symbolReview.winRate.toFixed(0)}%` : "—" },
                       ].map((item) => (
-                        <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)" }}>
-                          <div className="text-[9px] uppercase tracking-[0.4px]" style={{ color: "var(--app-text3)" }}>{item.label}</div>
-                          <div className="text-[12px] font-semibold tabular-nums" style={{ color: "var(--app-text1)", marginTop: 2 }}>{item.value}</div>
+                        <div key={item.label} className="rounded-[8px] px-2.5 py-2" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                          <div className="text-[9px] uppercase tracking-[0.4px] label" style={{ color: "var(--text-tertiary)" }}>{item.label}</div>
+                          <div className="text-[12px] tabular-nums mono" style={{ color: "var(--text-primary)", marginTop: 2, fontWeight: 600 }}>{item.value}</div>
                         </div>
                       ))}
                     </div>
-                    <div className="text-[10px] leading-4" style={{ color: "var(--app-text3)" }}>
+                    <div className="text-[10px] leading-4" style={{ color: "var(--text-tertiary)" }}>
                       {symbolReviewError
                         ? `Journal review context for ${symbol} could not be loaded.`
                         : symbolReview.closed > 0
@@ -2582,7 +2576,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       {symbolReview.lastSetup ? ` Last setup: ${symbolReview.lastSetup}.` : ""}
                     </div>
                     {symbolReview.latestLesson && (
-                      <div className="rounded-[8px] px-3 py-2 text-[10px] leading-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--app-border)", color: "var(--app-text2)" }}>
+                      <div className="rounded-[8px] px-3 py-2 text-[10px] leading-4" style={{ background: "var(--surface-2)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
                         Latest lesson: {symbolReview.latestLesson.slice(0, 140)}{symbolReview.latestLesson.length > 140 ? "…" : ""}
                       </div>
                     )}
