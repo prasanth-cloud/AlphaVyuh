@@ -68,8 +68,8 @@ export const SCANNER_COLUMN_DEFS: ScannerColumnDef[] = [
   { id: "pct_change", label: "% Chg", group: "technical", align: "right", width: 74, sortKey: "pct_change" },
   { id: "volume_ratio", label: "Vol ×", group: "technical", align: "right", width: 60, sortKey: "volume_ratio" },
   { id: "rsi_14", label: "RSI", group: "technical", align: "right", width: 50, sortKey: "rsi_14" },
-  { id: "rs_score", label: "RS", group: "technical", align: "right", width: 50, sortKey: "rs_score" },
-  { id: "week_52_high_pct", label: "52W H%", group: "technical", align: "right", width: 68, sortKey: "week_52_high_pct" },
+  { id: "rs_score", label: "RS Score", group: "technical", align: "right", width: 72, sortKey: "rs_score" },
+  { id: "week_52_high_pct", label: "% from 52W high", group: "technical", align: "right", width: 96, sortKey: "week_52_high_pct" },
   { id: "ema_20", label: "EMA 20", group: "technical", align: "right", width: 72 },
   { id: "ema_50", label: "EMA 50", group: "technical", align: "right", width: 72 },
   { id: "ema_200", label: "EMA 200", group: "technical", align: "right", width: 72 },
@@ -91,6 +91,10 @@ export const SCANNER_DEFAULT_COLUMN_IDS: ScannerColumnId[] = [
   "symbol",
   "company_name",
   "close",
+  "pct_change",
+  "rs_score",
+  "week_52_high_pct",
+  "sector",
   "volume",
 ];
 
