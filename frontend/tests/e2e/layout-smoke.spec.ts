@@ -158,6 +158,14 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).not.toContainText("DISCOVERY");
     await expect(page.getByRole("button", { name: /Technicals/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Fundamentals/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
+    await page.getByRole("button", { name: /Fundamentals/i }).click();
+    await expect(page.getByRole("button", { name: "Market cap" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Trend quality" })).toHaveCount(0);
+    await page.getByRole("button", { name: /Technicals/i }).click();
+    await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
     await selectPresetAndRunScan(page);
     const firstRowActions = page.locator(".scanner-row-actions").first();
     await expect(firstRowActions).toBeVisible({ timeout: 20_000 });

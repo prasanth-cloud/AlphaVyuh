@@ -1,6 +1,10 @@
 """
 Precomputed market breadth snapshots for the dashboard.
 
+Data source: NSE bhavcopy ingested into Supabase `daily_ohlcv` (see `app/services/bhavcopy.py`).
+Indices on the tape may use Kite live quotes; breadth, gainers/losers, sectors, and EMA counts
+are always computed from the latest *complete* NSE EQ EOD session, not mock or stale partial ingests.
+
 The dashboard should not recompute all-market breadth during cold page load.
 This service builds the same overview payload from daily_ohlcv after ingest
 and stores it in the existing ingest_runs table under a stable run_id. That
@@ -20,6 +24,7 @@ SNAPSHOT_RUN_ID_PREFIX = "market-breadth-snapshot"
 MAX_SNAPSHOT_UNCHANGED_RATIO = 0.85
 MIN_SNAPSHOT_MOVING_RATIO = 0.08
 MIN_SNAPSHOT_QUALITY_ROWS = 500
+EMA_BREADTH_HISTORY_DAYS = 15
 
 
 def _f(value: Any, default=None):
@@ -62,6 +67,7 @@ def _fetch_daily_rows(client, trade_date: str, *, max_rows: int = 10000) -> list
     select_clause = (
         "symbol,close,prev_close,open,high,low,volume,avg_volume_20d,"
         "week_52_high,week_52_low,rsi_14,ema_20,ema_50,ema_200,atr_14,pct_change,"
+        "is_new_52w_high,is_new_52w_low,"
         "stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,market,is_active)"
     )
     while len(rows) < max_rows:
@@ -80,6 +86,186 @@ def _fetch_daily_rows(client, trade_date: str, *, max_rows: int = 10000) -> list
             break
         offset += page_size
     return rows
+
+
+def _filter_nse_eq_rows(rows: list[dict]) -> list[dict]:
+    return [
+        row for row in rows
+        if (row.get("stock_universe") or {}).get("series") == "EQ"
+        and (row.get("stock_universe") or {}).get("market") == "NSE"
+        and (row.get("stock_universe") or {}).get("is_active", True)
+    ]
+
+
+def _list_recent_trade_dates(client, end_date: str, *, limit: int = 260) -> list[str]:
+    rows: list[dict] = []
+    offset = 0
+    page_size = min(1000, limit)
+    while len(rows) < limit:
+        chunk = (
+            client.table("daily_ohlcv")
+            .select("trade_date")
+            .lte("trade_date", end_date)
+            .order("trade_date", desc=True)
+            .range(offset, offset + page_size - 1)
+            .execute()
+            .data or []
+        )
+        if not chunk:
+            break
+        rows.extend(chunk)
+        if len(chunk) < page_size:
+            break
+        offset += page_size
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for row in rows:
+        trade_date = row.get("trade_date")
+        if not trade_date or trade_date in seen:
+            continue
+        seen.add(trade_date)
+        ordered.append(str(trade_date))
+        if len(ordered) >= limit:
+            break
+    return ordered
+
+
+def _enrich_breadth_rows(rows: list[dict]) -> list[dict]:
+    enriched: list[dict] = []
+    for row in rows:
+        universe_row = row.get("stock_universe") or {}
+        close = _f(row.get("close"), None)
+        prev_close = _f(row.get("prev_close"), None)
+        stored_pct_change = _f(row.get("pct_change"), None)
+        if not close or close <= 0:
+            continue
+
+        volume = int(row.get("volume") or 0)
+        avg_volume = int(row.get("avg_volume_20d") or 0)
+        if prev_close and prev_close > 0:
+            pct_change = round((close - prev_close) / prev_close * 100, 2)
+        elif stored_pct_change is not None:
+            pct_change = round(stored_pct_change, 2)
+        else:
+            continue
+        volume_ratio = round(volume / avg_volume, 2) if avg_volume else None
+        week_52_high = _f(row.get("week_52_high"), None)
+        week_52_low = _f(row.get("week_52_low"), None)
+        week_52_high_pct = round((week_52_high - close) / close * 100, 2) if week_52_high and close else None
+        stored_new_high = row.get("is_new_52w_high")
+        stored_new_low = row.get("is_new_52w_low")
+
+        enriched.append({
+            "symbol": row["symbol"],
+            "company_name": universe_row.get("company_name") or row["symbol"],
+            "sector": universe_row.get("sector"),
+            "close": close,
+            "pct_change": pct_change,
+            "volume": volume,
+            "avg_volume_20d": avg_volume,
+            "volume_ratio": volume_ratio,
+            "ema_20": _f(row.get("ema_20"), None),
+            "ema_50": _f(row.get("ema_50"), None),
+            "ema_200": _f(row.get("ema_200"), None),
+            "week_52_high": week_52_high,
+            "week_52_high_pct": week_52_high_pct,
+            "is_new_52w_high": (
+                bool(stored_new_high)
+                if stored_new_high is not None
+                else bool(week_52_high and close and close >= week_52_high * 0.995)
+            ),
+            "is_new_52w_low": (
+                bool(stored_new_low)
+                if stored_new_low is not None
+                else bool(week_52_low and close and close <= week_52_low * 1.005)
+            ),
+        })
+    return enriched
+
+
+def _ema_breadth_pct(enriched: list[dict]) -> dict[str, float]:
+    valid_ema20 = sum(1 for row in enriched if row["ema_20"])
+    valid_ema50 = sum(1 for row in enriched if row["ema_50"])
+    valid_ema200 = sum(1 for row in enriched if row["ema_200"])
+    above_ema20 = sum(1 for row in enriched if row["ema_20"] and row["close"] > row["ema_20"])
+    above_ema50 = sum(1 for row in enriched if row["ema_50"] and row["close"] > row["ema_50"])
+    above_ema200 = sum(1 for row in enriched if row["ema_200"] and row["close"] > row["ema_200"])
+
+    def pct(count: int, denominator: int) -> float:
+        return round(count / denominator * 100, 1) if denominator else 0
+
+    return {
+        "ema20": pct(above_ema20, valid_ema20),
+        "ema50": pct(above_ema50, valid_ema50),
+        "ema200": pct(above_ema200, valid_ema200),
+    }
+
+
+def _highs_lows_counts(enriched: list[dict]) -> dict[str, int]:
+    new_highs = sum(1 for row in enriched if row["is_new_52w_high"])
+    new_lows = sum(1 for row in enriched if row["is_new_52w_low"])
+    if new_highs == 0:
+        new_highs = sum(
+            1 for row in enriched
+            if row.get("week_52_high_pct") is not None and row["week_52_high_pct"] <= 0.5
+        )
+    return {"highs": new_highs, "lows": new_lows}
+
+
+def _build_ema_breadth_daily_history(
+    client,
+    trade_dates: list[str],
+    *,
+    limit: int = EMA_BREADTH_HISTORY_DAYS,
+) -> list[dict]:
+    history: list[dict] = []
+    for trade_date in trade_dates[:limit]:
+        rows = _filter_nse_eq_rows(_fetch_daily_rows(client, trade_date))
+        enriched = _enrich_breadth_rows(rows)
+        if not enriched:
+            continue
+        breadth = _ema_breadth_pct(enriched)
+        history.append({
+            "trade_date": trade_date,
+            "ema20": breadth["ema20"],
+            "ema50": breadth["ema50"],
+            "ema200": breadth["ema200"],
+        })
+    return history
+
+
+def _build_period_views(client, latest_date: str, daily_enriched: list[dict]) -> tuple[dict, dict, list[dict]]:
+    trade_dates = _list_recent_trade_dates(client, latest_date)
+    period_offsets = {"day": 0, "week": 4, "month": 21, "year": 251}
+    ema_by_period: dict[str, dict[str, float] | None] = {}
+
+    for period, offset in period_offsets.items():
+        if offset >= len(trade_dates):
+            ema_by_period[period] = None
+            continue
+        if period == "day":
+            ema_by_period[period] = _ema_breadth_pct(daily_enriched)
+            continue
+        rows = _filter_nse_eq_rows(_fetch_daily_rows(client, trade_dates[offset]))
+        enriched = _enrich_breadth_rows(rows)
+        ema_by_period[period] = _ema_breadth_pct(enriched) if enriched else None
+
+    daily_counts = _highs_lows_counts(daily_enriched)
+    weekly_highs = 0
+    weekly_lows = 0
+    for trade_date in trade_dates[:5]:
+        rows = _filter_nse_eq_rows(_fetch_daily_rows(client, trade_date))
+        enriched = _enrich_breadth_rows(rows)
+        counts = _highs_lows_counts(enriched)
+        weekly_highs += counts["highs"]
+        weekly_lows += counts["lows"]
+
+    highs_lows_by_period = {
+        "daily": daily_counts,
+        "weekly": {"highs": weekly_highs, "lows": weekly_lows},
+    }
+    ema_breadth_daily_history = _build_ema_breadth_daily_history(client, trade_dates)
+    return ema_by_period, highs_lows_by_period, ema_breadth_daily_history
 
 
 def _snapshot_quality_error(overview: dict) -> str | None:
@@ -116,84 +302,34 @@ def build_market_breadth_snapshot(
 ) -> dict:
     latest_date = str(trade_date)
     universe_active = _active_universe_count(client)
-    rows = _fetch_daily_rows(client, latest_date)
+    rows = _filter_nse_eq_rows(_fetch_daily_rows(client, latest_date))
 
-    rows = [
-        row for row in rows
-        if (row.get("stock_universe") or {}).get("series") == "EQ"
-        and (row.get("stock_universe") or {}).get("market") == "NSE"
-        and (row.get("stock_universe") or {}).get("is_active", True)
-    ]
     raw_quality = analyze_trade_date_quality(rows)
     if raw_quality["is_suspicious"]:
         raise ValueError("; ".join(raw_quality["reasons"]))
 
-    enriched: list[dict] = []
-    for row in rows:
-        universe_row = row.get("stock_universe") or {}
-        close = _f(row.get("close"), None)
-        prev_close = _f(row.get("prev_close"), None)
-        stored_pct_change = _f(row.get("pct_change"), None)
-        if not close or close <= 0:
-            continue
-
-        volume = int(row.get("volume") or 0)
-        avg_volume = int(row.get("avg_volume_20d") or 0)
-        if prev_close and prev_close > 0:
-            pct_change = round((close - prev_close) / prev_close * 100, 2)
-        elif stored_pct_change is not None:
-            pct_change = round(stored_pct_change, 2)
-        else:
-            continue
-        volume_ratio = round(volume / avg_volume, 2) if avg_volume else None
-        week_52_high = _f(row.get("week_52_high"), None)
-        week_52_low = _f(row.get("week_52_low"), None)
-        week_52_high_pct = round((week_52_high - close) / close * 100, 2) if week_52_high and close else None
-
-        enriched.append({
-            "symbol": row["symbol"],
-            "company_name": universe_row.get("company_name") or row["symbol"],
-            "sector": universe_row.get("sector"),
-            "close": close,
-            "pct_change": pct_change,
-            "volume": volume,
-            "avg_volume_20d": avg_volume,
-            "volume_ratio": volume_ratio,
-            "ema_20": _f(row.get("ema_20"), None),
-            "ema_50": _f(row.get("ema_50"), None),
-            "ema_200": _f(row.get("ema_200"), None),
-            "week_52_high": week_52_high,
-            "week_52_high_pct": week_52_high_pct,
-            "is_new_52w_high": bool(week_52_high and close and close >= week_52_high * 0.995),
-            "is_new_52w_low": bool(week_52_low and close and close <= week_52_low * 1.005),
-        })
+    enriched = _enrich_breadth_rows(rows)
 
     total = len(enriched)
     advances = sum(1 for row in enriched if row["pct_change"] > 0.05)
     declines = sum(1 for row in enriched if row["pct_change"] < -0.05)
     unchanged = total - advances - declines
-    new_highs = sum(1 for row in enriched if row["is_new_52w_high"])
-    new_lows = sum(1 for row in enriched if row["is_new_52w_low"])
-    if new_highs == 0:
-        new_highs = sum(
-            1 for row in enriched
-            if row.get("week_52_high_pct") is not None and row["week_52_high_pct"] <= 0.5
-        )
+    daily_counts = _highs_lows_counts(enriched)
+    new_highs = daily_counts["highs"]
+    new_lows = daily_counts["lows"]
     advance_decline_ratio = round(advances / declines, 2) if declines else float(advances)
 
-    valid_ema20 = sum(1 for row in enriched if row["ema_20"])
-    valid_ema50 = sum(1 for row in enriched if row["ema_50"])
-    valid_ema200 = sum(1 for row in enriched if row["ema_200"])
+    ema_breadth = _ema_breadth_pct(enriched)
+    above_ema20_pct = ema_breadth["ema20"]
+    above_ema50_pct = ema_breadth["ema50"]
+    above_ema200_pct = ema_breadth["ema200"]
     above_ema20 = sum(1 for row in enriched if row["ema_20"] and row["close"] > row["ema_20"])
     above_ema50 = sum(1 for row in enriched if row["ema_50"] and row["close"] > row["ema_50"])
     above_ema200 = sum(1 for row in enriched if row["ema_200"] and row["close"] > row["ema_200"])
 
-    def pct(count: int, denominator: int) -> float:
-        return round(count / denominator * 100, 1) if denominator else 0
-
-    above_ema20_pct = pct(above_ema20, valid_ema20)
-    above_ema50_pct = pct(above_ema50, valid_ema50)
-    above_ema200_pct = pct(above_ema200, valid_ema200)
+    ema_breadth_by_period, highs_lows_by_period, ema_breadth_daily_history = _build_period_views(
+        client, latest_date, enriched,
+    )
 
     if above_ema200_pct >= 60:
         market_phase = "Bullish"
@@ -285,6 +421,9 @@ def build_market_breadth_snapshot(
         "above_ema50_pct": above_ema50_pct,
         "above_ema200_count": above_ema200,
         "above_ema200_pct": above_ema200_pct,
+        "ema_breadth_by_period": ema_breadth_by_period,
+        "ema_breadth_daily_history": ema_breadth_daily_history,
+        "highs_lows_by_period": highs_lows_by_period,
         "market_phase": market_phase,
         "market_phase_desc": market_phase_desc,
         "sector_breadth": sector_breadth[:12],
