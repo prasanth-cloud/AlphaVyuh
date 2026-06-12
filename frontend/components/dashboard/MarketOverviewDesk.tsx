@@ -21,6 +21,7 @@ import {
   type MarketPeriod,
 } from "@/lib/dashboard-market";
 import { LiveIndexTape } from "@/components/dashboard/LiveIndexTape";
+import { MarketRegimeStrip } from "@/components/dashboard/MarketRegimeStrip";
 
 const chipStyle = (active: boolean): CSSProperties => ({
   padding: "4px 10px",
@@ -358,6 +359,10 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
 
       <LiveIndexTape data={data} />
 
+      <MarketRegimeStrip data={data} ready={ready} />
+
+      <MajorSectorGrid data={data} ready={ready} dataHealth={dataHealth} marketError={marketError} />
+
       <div className="dashboard-market-summary-row" data-testid="dashboard-market-pulse">
         <SummaryTile
           label="Market breadth"
@@ -387,8 +392,6 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
         <HighsLowsBarChart data={data} ready={ready} />
         <EmaBreadthPanel data={data} ready={ready} />
       </div>
-
-      <MajorSectorGrid data={data} ready={ready} dataHealth={dataHealth} marketError={marketError} />
 
       <div className="dashboard-market-movers-row">
         <MoversList title="Top gainers" items={data.top_gainers} variant="gain" dataHealth={dataHealth} marketError={marketError} hasSessionDate={Boolean(data.trade_date)} />

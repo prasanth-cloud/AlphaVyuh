@@ -23,7 +23,6 @@ import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
-import { buildScannerMatchExplanation } from '@/lib/scanner-match-explanation'
 import {
   appendScannerRunHistory,
   clearScannerRunHistory,
@@ -31,7 +30,6 @@ import {
   type ScannerRunHistoryEntry,
 } from '@/lib/scanner-run-history'
 import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
-import { buildScannerSectorStrength } from '@/lib/scanner-sector-strength'
 import {
   formatScannerColumnValue,
   persistScannerVisibleColumns,
@@ -303,6 +301,10 @@ const PRESETS = [
   },
 ] as const
 
+const PRIMARY_PRESET_IDS = new Set(['trend_template', 'vcp_breakout', 'high_52w_breakout'])
+const PRIMARY_PRESETS = PRESETS.filter((p) => PRIMARY_PRESET_IDS.has(p.id))
+const MORE_PRESETS = PRESETS.filter((p) => !PRIMARY_PRESET_IDS.has(p.id))
+
 type Preset = (typeof PRESETS)[number]
 type WorkflowMark = 'shortlist' | 'ignored' | 'review_later' | 'watch'
 
@@ -421,137 +423,6 @@ function Section({ title, children, open: def = false }: { title: string; childr
   )
 }
 
-function MetricCell({ label, value, direction }: { label: string; value: string; direction?: 'above' | 'below' }) {
-  const color = direction === 'above' ? 'var(--gain)' : direction === 'below' ? 'var(--loss)' : 'var(--text-secondary)'
-  return (
-    <div>
-      <div className="label" style={{ marginBottom: 4 }}>{label}</div>
-      <div className="mono" style={{ fontSize: 13, fontWeight: 500, color }}>{value}</div>
-    </div>
-  )
-}
-
-function metricToneColor(tone?: 'good' | 'warn' | 'bad') {
-  if (tone === 'good') return 'var(--gain)'
-  if (tone === 'warn') return 'var(--warn)'
-  if (tone === 'bad') return 'var(--loss)'
-  return 'var(--text-secondary)'
-}
-
-// Inline detail expansion for a selected row
-function RowExpansion({ r, watchlists, onAddToWatchlist, onOpenChart, presetName, tradeDate, scanTrust }: {
-  r: ScanResult
-  watchlists: Watchlist[]
-  onAddToWatchlist: (symbol: string, wlId: string) => void
-  onOpenChart: (symbol: string) => void
-  presetName?: string | null
-  tradeDate?: string | null
-  scanTrust?: ScanTrust | null
-}) {
-  const explanation = buildScannerMatchExplanation(r, { presetName, tradeDate, scanTrust })
-  return (
-    <tr>
-      <td colSpan={10} style={{ padding: 0, background: 'var(--surface-2)', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ padding: '16px 20px 8px', display: 'grid', gridTemplateColumns: 'minmax(220px,1.15fr) minmax(220px,1fr)', gap: 16 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-              <div className="label">Why this matched</div>
-              {r.setup_score != null && (
-                <div className="workspace-pill" style={{
-                  color: r.setup_score >= 80 ? 'var(--gain)' : r.setup_score >= 65 ? 'var(--text-primary)' : 'var(--warn)',
-                  borderColor: r.setup_score >= 80 ? 'rgba(38,166,91,0.28)' : r.setup_score >= 65 ? 'var(--border-subtle)' : 'rgba(217,119,6,0.28)',
-                }}>
-                  {r.confidence_label || 'Setup score'} · {r.setup_grade || '—'} · {r.setup_score}
-                </div>
-              )}
-            </div>
-            <div className="caption" style={{ marginBottom: 8, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-              {explanation.headline}
-            </div>
-            <div data-testid={`scanner-match-context-${r.symbol}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-              {r.screen_matches?.map(screen => (
-                <span key={`screen-${screen}`} className="workspace-pill" style={{ color: 'var(--accent)' }}>Screen: {screen}</span>
-              ))}
-              {explanation.context.map(item => (
-                <span key={`${item.label}-${item.value}`} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>
-                  {item.label}: {item.value}
-                </span>
-              ))}
-            </div>
-            <div style={{ display: 'grid', gap: 8 }}>
-              <div>
-                <div className="label" style={{ marginBottom: 5 }}>Triggered conditions</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {explanation.reasons.map(reason => (
-                    <span key={reason} className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>{reason}</span>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="label" style={{ marginBottom: 5 }}>Confirmations</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {explanation.confirmations.map(reason => (
-                    <span key={`confidence-${reason}`} className="workspace-pill" style={{ color: 'var(--gain)' }}>{reason}</span>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {Boolean(explanation.warnings.length) && (
-              <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-                {explanation.warnings.map(warning => (
-                  <div key={warning} className="caption" style={{ color: 'var(--warn)' }}>{warning}</div>
-                ))}
-              </div>
-            )}
-            <div data-testid={`scanner-next-action-${r.symbol}`} style={{ marginTop: 10, padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.035)', border: '1px solid var(--border-subtle)' }}>
-              <div className="label" style={{ marginBottom: 3 }}>Next action</div>
-              <div className="caption" style={{ color: 'var(--text-secondary)' }}>{explanation.nextAction}</div>
-            </div>
-          </div>
-          <div>
-            <div className="label" style={{ marginBottom: 8 }}>Latest values behind the match</div>
-            <div data-testid={`scanner-match-metrics-${r.symbol}`} style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-              {explanation.metrics.map(metric => (
-                <div key={`${metric.label}-${metric.value}`} style={{ padding: '8px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border-subtle)', minWidth: 0 }}>
-                  <div className="label" style={{ marginBottom: 4 }}>{metric.label}</div>
-                  <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: metricToneColor(metric.tone), overflowWrap: 'anywhere' }}>{metric.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div style={{ padding: '10px 20px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 4 }}>
-          <MetricCell label="EMA 20" value={r.ema_20 ? `₹${r.ema_20.toFixed(0)}` : '—'} direction={r.ema_20 ? (r.close > r.ema_20 ? 'above' : 'below') : undefined} />
-          <MetricCell label="EMA 50" value={r.ema_50 ? `₹${r.ema_50.toFixed(0)}` : '—'} direction={r.ema_50 ? (r.close > r.ema_50 ? 'above' : 'below') : undefined} />
-          <MetricCell label="EMA 150" value={r.ema_150 ? `₹${r.ema_150.toFixed(0)}` : '—'} direction={r.ema_150 ? (r.close > r.ema_150 ? 'above' : 'below') : undefined} />
-          <MetricCell label="EMA 200" value={r.ema_200 ? `₹${r.ema_200.toFixed(0)}` : '—'} direction={r.ema_200 ? (r.close > r.ema_200 ? 'above' : 'below') : undefined} />
-          <MetricCell label="Sector" value={r.sector || '—'} />
-          <MetricCell label="P/E" value={r.pe_ratio?.toFixed(1) ?? '—'} />
-          <MetricCell label="ROE" value={r.roe ? `${r.roe.toFixed(1)}%` : '—'} />
-          <MetricCell label="ADX 14" value={r.adx_14?.toFixed(1) ?? '—'} />
-        </div>
-        <div style={{ display: 'flex', gap: 8, padding: '0 20px 14px' }}>
-          <Button size="sm" variant="primary" onClick={() => onOpenChart(r.symbol)}>
-            Open chart
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => window.location.assign(`/journal?symbol=${encodeURIComponent(r.symbol)}&review=needs-review`)}>
-            Review journal
-          </Button>
-          {watchlists.length > 0 && (
-            <select
-              onChange={e => { if (e.target.value) { onAddToWatchlist(r.symbol, e.target.value); e.target.value = '' } }}
-              style={{ fontSize: 12, padding: '4px 8px', background: 'var(--surface-3)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)', cursor: 'pointer' }}
-            >
-              <option value="">Add to watchlist…</option>
-              {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-          )}
-        </div>
-      </td>
-    </tr>
-  )
-}
-
 function ScannerRowActions({
   result,
   watchlists,
@@ -568,72 +439,49 @@ function ScannerRowActions({
   onReport: (symbol: string) => void
 }) {
   return (
-    <div className="scanner-row-actions" data-testid={`scanner-primary-actions-${result.symbol}`}>
+    <div
+      className="scanner-row-actions"
+      data-testid={`scanner-primary-actions-${result.symbol}`}
+      style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}
+    >
       <button
+        type="button"
         className="scanner-row-action scanner-row-action-primary"
         title={`Shortlist ${result.symbol}`}
-        onClick={e => { e.stopPropagation(); onMark([result.symbol], 'shortlist') }}
-        style={{ color: 'var(--accent)', cursor: 'pointer' }}
+        onClick={(e) => { e.stopPropagation(); onMark([result.symbol], 'shortlist') }}
+        style={{ color: 'var(--accent)', cursor: 'pointer', fontSize: 11, padding: '2px 6px' }}
       >
         Shortlist
       </button>
-      {watchlists.length > 0 && (
-        <select
-          aria-label={`Add ${result.symbol} to watchlist`}
-          className="scanner-row-select scanner-watchlist-select"
-          onClick={e => e.stopPropagation()}
-          onChange={e => {
-            e.stopPropagation()
-            const watchlistId = e.target.value
-            e.target.value = ''
-            if (watchlistId) onAddToWatchlist(result.symbol, watchlistId)
-          }}
-        >
-          <option value="">Add to watchlist…</option>
-          {watchlists.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-        </select>
-      )}
-      <button
-        className="scanner-row-action"
-        title={`Open ${result.symbol} chart`}
-        onClick={e => { e.stopPropagation(); onOpenChart(result.symbol) }}
-        style={{ color: 'var(--text-secondary)', cursor: 'pointer' }}
-      >
-        Open chart
-      </button>
-      <button
-        className="scanner-row-action"
-        title={`Review ${result.symbol} later`}
-        onClick={e => { e.stopPropagation(); onMark([result.symbol], 'review_later') }}
-        style={{ color: 'var(--warn)', cursor: 'pointer' }}
-      >
-        Review later
-      </button>
       <select
         aria-label={`More actions for ${result.symbol}`}
-        className="scanner-row-select scanner-more-select"
-        onClick={e => e.stopPropagation()}
-        onChange={e => {
+        className="scanner-row-menu scanner-more-select"
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => {
           e.stopPropagation()
           const action = e.target.value
           e.target.value = ''
+          if (action === 'chart') onOpenChart(result.symbol)
+          if (action === 'review_later') onMark([result.symbol], 'review_later')
           if (action === 'ignore') onMark([result.symbol], 'ignored')
           if (action === 'journal') window.location.assign(`/journal?symbol=${encodeURIComponent(result.symbol)}&review=needs-review`)
           if (action === 'report') onReport(result.symbol)
+          if (action.startsWith('wl:')) onAddToWatchlist(result.symbol, action.slice(3))
         }}
       >
-        <option value="">More</option>
-        <option value="journal">Review journal</option>
+        <option value="">⋯</option>
+        <option value="chart">Open chart</option>
+        {watchlists.map((w) => (
+          <option key={w.id} value={`wl:${w.id}`}>Add to {w.name}</option>
+        ))}
+        <option value="review_later">Review later</option>
         <option value="ignore">Ignore</option>
+        <option value="journal">Review journal</option>
         <option value="report">Report data</option>
       </select>
     </div>
   )
 }
-
-const SORT_COLS = [
-  ['volume_ratio', 'Vol ×'], ['pct_change', '% Chg'], ['rsi_14', 'RSI'], ['close', 'Price'],
-] as const
 
 export default function ScannerPage() {
   const router = useRouter()
@@ -647,7 +495,6 @@ export default function ScannerPage() {
   const [tradeDate, setTradeDate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState('volume_ratio')
   const [sortDesc, setSortDesc] = useState(true)
   const [watchlists, setWatchlists] = useState<Watchlist[]>([])
@@ -667,8 +514,10 @@ export default function ScannerPage() {
   const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
   const [composingScreens, setComposingScreens] = useState(false)
   const [toast, setToast] = useState('')
-  const [technicalsOpen, setTechnicalsOpen] = useState(true)
+  const [technicalsOpen, setTechnicalsOpen] = useState(false)
   const [fundamentalsOpen, setFundamentalsOpen] = useState(false)
+  const [showMorePresets, setShowMorePresets] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [resultsView, setResultsView] = useState<'list' | 'charts'>('list')
   const [visibleColumnIds, setVisibleColumnIds] = useState<ScannerColumnId[]>([...SCANNER_DEFAULT_COLUMN_IDS])
   const [columnsPickerOpen, setColumnsPickerOpen] = useState(false)
@@ -829,7 +678,6 @@ export default function ScannerPage() {
     setActiveScreenName(entry.presetId === 'saved_screen' ? entry.label : null)
     setHasRun(true)
     setHasCachedResults(true)
-    setExpandedSymbol(null)
     setError('')
     writeScannerSnapshot({
       results: restoredResults,
@@ -913,7 +761,7 @@ export default function ScannerPage() {
     const hadResults = results.length > 0
     const scanStartedAt = performance.now()
     const activeFilters = overrideFilters || filters
-    setLoading(true); setError(''); if (!hadResults) setResults([]); setExpandedSymbol(null)
+    setLoading(true); setError(''); if (!hadResults) setResults([])
     setScanElapsedMs(null)
     try {
       if (scannerUsesClientMockFallback()) {
@@ -1130,7 +978,6 @@ export default function ScannerPage() {
     setComposingScreens(true)
     setLoading(true)
     setError('')
-    setExpandedSymbol(null)
     try {
       const runs = await Promise.all(screens.map(screen => runSavedScreen(screen)))
       const composed = composeScannerResults(
@@ -1469,14 +1316,15 @@ export default function ScannerPage() {
     { length: Math.max(0, pageWindowEnd - pageWindowStart + 1) },
     (_, idx) => pageWindowStart + idx,
   );
-  const scannerWorkbenchResult = expandedSymbol ? results.find(result => result.symbol === expandedSymbol) ?? null : null;
-  const scannerWorkbenchExplanation = scannerWorkbenchResult ? buildScannerMatchExplanation(scannerWorkbenchResult, {
-    presetName: currentScanName(),
-    tradeDate,
-    scanTrust,
-  }) : null;
-  const sectorStrength = useMemo(() => buildScannerSectorStrength(results).slice(0, 5), [results]);
   const visibleColumns = useMemo(() => resolveScannerColumns(visibleColumnIds), [visibleColumnIds]);
+
+  function handleColumnSort(sortKey: string) {
+    const newDesc = sortKey === sortBy ? !sortDesc : true
+    setSortBy(sortKey)
+    setSortDesc(newDesc)
+    setCurrentPage(1)
+    if (hasRun) runScan(undefined, sortKey, newDesc, 1, pageSize)
+  }
 
   function toggleVisibleColumn(id: ScannerColumnId, checked: boolean) {
     setVisibleColumnIds(prev => {
@@ -1489,9 +1337,9 @@ export default function ScannerPage() {
 
   return (
     <div className="workspace-page">
-      <div className="workspace-desk-header" style={{ marginBottom: 12 }}>
-        <h1 className="workspace-title" style={{ fontSize: 'clamp(20px, 2.4vw, 28px)', fontWeight: 600, marginBottom: 4 }}>Scanner</h1>
-        <div className="caption">Pick a popular screener or build technical and fundamental filters, then run scan.</div>
+      <div className="workspace-desk-header calm-desk-header" style={{ marginBottom: 12 }}>
+        <h1 className="calm-page-title">Scanner</h1>
+        <p className="calm-page-copy">Choose a screener, refine filters if needed, then run scan when you are ready.</p>
       </div>
       <div className="workspace-grid scanner-workspace-grid">
 
@@ -1500,12 +1348,9 @@ export default function ScannerPage() {
 
         {/* Presets */}
         <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <div className="label" style={{ marginBottom: 4 }}>Popular screeners</div>
-          <div className="caption" style={{ marginBottom: 8, lineHeight: 1.45 }}>
-            Minervini trend template, VCP, stage-2 breakout, 52-week highs, episodic pivot, and Darvas box — the setups swing traders scan most often.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {PRESETS.map(p => {
+          <div className="label" style={{ marginBottom: 8 }}>Screeners</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+            {PRIMARY_PRESETS.map(p => {
               const active = activePreset === p.id
               return (
                 <button
@@ -1525,9 +1370,37 @@ export default function ScannerPage() {
                 </button>
               )
             })}
-          </div>
-          <div className="caption" style={{ marginTop: 8 }}>
-            {activePresetMeta?.description ?? 'Select a screener, refine filters below, then click Run scan.'}
+            {MORE_PRESETS.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowMorePresets(o => !o)}
+                className="workspace-chip-button"
+                style={{ justifyContent: 'center', minHeight: 30, color: 'var(--text-tertiary)' }}
+                data-testid="scanner-more-presets-toggle"
+              >
+                {showMorePresets ? 'Fewer screeners' : 'More screeners'}
+              </button>
+            )}
+            {showMorePresets && MORE_PRESETS.map(p => {
+              const active = activePreset === p.id
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => selectPreset(p)}
+                  title={p.description}
+                  className={`workspace-chip-button${active ? ' active' : ''}`}
+                  style={{
+                    justifyContent: 'center',
+                    minHeight: 34,
+                    padding: '7px 10px',
+                    borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
+                    color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                  }}
+                >
+                  {p.name}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -1604,50 +1477,6 @@ export default function ScannerPage() {
             <button className="workspace-chip-button" onClick={loadWatchlists}>
               Retry
             </button>
-          </div>
-        )}
-
-        {runHistory.length > 0 && (
-          <div data-testid="scanner-run-history" className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', maxHeight: 210, overflowY: 'auto', flexShrink: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <div className="label">Recent runs</div>
-              <button className="caption" onClick={clearRecentRuns} style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}>
-                Clear
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {runHistory.slice(0, 5).map(entry => (
-                <button
-                  key={entry.id}
-                  data-testid="scanner-run-history-entry"
-                  onClick={() => restoreScannerRun(entry)}
-                  title={`Restore ${entry.label}`}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '7px 9px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: 'var(--text-primary)' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
-                    <span style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>{entry.totalMatches.toLocaleString('en-IN')}</span>
-                  </span>
-                  <span className="caption" style={{ display: 'block', marginTop: 3 }}>
-                    {entry.tradeDate || entry.dataAsOf || 'Latest'} · {entry.dataSource ?? 'Source pending'}
-                  </span>
-                  {entry.topSymbols.length > 0 && (
-                    <span className="caption mono" style={{ display: 'block', marginTop: 3, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {entry.topSymbols.slice(0, 4).join(' · ')}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
           </div>
         )}
 
@@ -1818,11 +1647,6 @@ export default function ScannerPage() {
                 <span className="heading-card">
                   {totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> matches</> : 'No matches'}
                 </span>
-                {(tradeDate || scanTrust?.asOf) && (
-                  <span className="caption" style={{ marginLeft: 8 }}>
-                    As of {scanTrust?.asOf ?? tradeDate}
-                  </span>
-                )}
               </div>
               <div className="workspace-toolbar-group scanner-results-toolbar" data-testid="scanner-data-trust">
                 <button
@@ -1849,6 +1673,16 @@ export default function ScannerPage() {
                 >
                   Columns
                 </button>
+                {runHistory.length > 0 && (
+                  <button
+                    type="button"
+                    className={`workspace-chip-button${historyOpen ? ' active' : ''}`}
+                    onClick={() => setHistoryOpen(o => !o)}
+                    data-testid="scanner-history-toggle"
+                  >
+                    History
+                  </button>
+                )}
                 {activeCompositionName && (
                   <span className="workspace-pill" style={{ color: 'var(--accent)' }}>
                     {activeCompositionName}
@@ -1893,17 +1727,6 @@ export default function ScannerPage() {
                     <Num>{selectedResults.size}</Num> selected · bulk actions enabled
                   </span>
                 )}
-                {SORT_COLS.map(([col, lbl]) => {
-                  const active = sortBy === col
-                  return (
-                    <button key={col} className={`workspace-chip-button${active ? ' active' : ''}`} onClick={() => {
-                      const newDesc = col === sortBy ? !sortDesc : true
-                      setSortBy(col); setSortDesc(newDesc); setCurrentPage(1); runScan(undefined, col, newDesc, 1, pageSize)
-                    }}>
-                      {lbl}{active ? (sortDesc ? ' ↓' : ' ↑') : ''}
-                    </button>
-                  )
-                })}
                 <select
                   value={String(pageSize)}
                   onChange={e => {
@@ -1945,11 +1768,23 @@ export default function ScannerPage() {
               </div>
             </>
           ) : (
-            <div>
-              <div className="workspace-card-title">Results</div>
-              <div className="workspace-card-copy">
-                {loading ? 'Scanning…' : 'Select a screener or filters, then click Run scan.'}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', width: '100%' }}>
+              <div>
+                <div className="workspace-card-title">Results</div>
+                <div className="workspace-card-copy">
+                  {loading ? 'Scanning…' : 'Select a screener or filters, then click Run scan.'}
+                </div>
               </div>
+              {runHistory.length > 0 && (
+                <button
+                  type="button"
+                  className={`workspace-chip-button${historyOpen ? ' active' : ''}`}
+                  onClick={() => setHistoryOpen(o => !o)}
+                  data-testid="scanner-history-toggle"
+                >
+                  History
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1963,62 +1798,52 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {sectorStrength.length > 0 && (
+        {historyOpen && runHistory.length > 0 && (
           <div
-            data-testid="scanner-sector-strength"
+            data-testid="scanner-run-history"
             style={{
               padding: '10px 16px',
               borderBottom: '1px solid var(--border-subtle)',
-              display: 'grid',
-              gap: 8,
               background: 'rgba(255,255,255,0.015)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <div>
-                <div className="label" style={{ marginBottom: 3 }}>Sector strength</div>
-                <div className="caption" style={{ color: 'var(--text-secondary)' }}>
-                  Sector-only ranking from this scan. Source audit details stay in Data Trust.
-                </div>
-              </div>
-              <span className="workspace-pill">
-                {sectorStrength.length} sector{sectorStrength.length === 1 ? '' : 's'} ranked
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div className="label">Run history</div>
+              <button className="caption" onClick={clearRecentRuns} style={{ color: 'var(--text-tertiary)', cursor: 'pointer' }}>
+                Clear
+              </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-              {sectorStrength.map((sector) => (
-                <div
-                  key={sector.sector}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+              {runHistory.slice(0, 8).map(entry => (
+                <button
+                  key={entry.id}
+                  data-testid="scanner-run-history-entry"
+                  onClick={() => restoreScannerRun(entry)}
+                  title={`Restore ${entry.label}`}
                   style={{
-                    padding: '8px 10px',
-                    borderRadius: 10,
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '7px 9px',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--surface-2)',
                     border: '1px solid var(--border-subtle)',
-                    background: 'rgba(255,255,255,0.025)',
-                    minWidth: 0,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
-                    <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {sector.sector}
-                    </div>
-                    <span
-                      className="workspace-pill"
-                      style={{
-                        color: sector.label === 'Leader' ? 'var(--gain)' : sector.label === 'Constructive' ? 'var(--accent)' : sector.label === 'Mixed' ? 'var(--text-secondary)' : 'var(--warn)',
-                      }}
-                    >
-                      {sector.label}
+                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: 'var(--text-primary)' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
+                    <span style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>{entry.totalMatches.toLocaleString('en-IN')}</span>
+                  </span>
+                  <span className="caption" style={{ display: 'block', marginTop: 3 }}>
+                    {entry.tradeDate || entry.dataAsOf || 'Latest'} · {entry.dataSource ?? 'Source pending'}
+                  </span>
+                  {entry.topSymbols.length > 0 && (
+                    <span className="caption mono" style={{ display: 'block', marginTop: 3, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {entry.topSymbols.slice(0, 4).join(' · ')}
                     </span>
-                  </div>
-                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
-                    {sector.reason}
-                  </div>
-                  <div className="workspace-pill-row" style={{ marginTop: 7 }}>
-                    <span className="workspace-pill">{sector.activeCount} active</span>
-                    {sector.avgRsScore != null && <span className="workspace-pill">RS {Math.round(sector.avgRsScore)}</span>}
-                    {sector.topSymbols.length > 0 && <span className="workspace-pill">{sector.topSymbols.join(', ')}</span>}
-                  </div>
-                </div>
+                  )}
+                </button>
               ))}
             </div>
           </div>
@@ -2117,108 +1942,58 @@ export default function ScannerPage() {
 
         {/* Results table */}
         {!loading && results.length > 0 && resultsView === 'list' && (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {scannerWorkbenchResult && scannerWorkbenchExplanation && (
-              <div
-                data-testid="scanner-workbench"
-                style={{
-                  margin: '12px 16px',
-                  padding: 14,
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'rgba(255,255,255,0.025)',
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
-                  gap: 12,
-                  alignItems: 'stretch',
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div className="label" style={{ marginBottom: 5 }}>Scan results workbench</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                    <span className="mono" style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>{scannerWorkbenchResult.symbol}</span>
-                    <span className="caption">{scannerWorkbenchResult.company_name}</span>
-                    <span className="workspace-pill">{scannerWorkbenchExplanation.nextAction}</span>
-                  </div>
-                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 8 }}>
-                    {scannerWorkbenchExplanation.headline}
-                  </div>
-                  <div className="workspace-pill-row">
-                    {scannerWorkbenchExplanation.metrics.slice(0, 5).map(metric => (
-                      <span
-                        key={metric.label}
-                        className="workspace-pill"
-                        style={{ color: metric.tone === 'good' ? 'var(--gain)' : metric.tone === 'warn' ? 'var(--warn)' : metric.tone === 'bad' ? 'var(--loss)' : 'var(--text-secondary)' }}
-                      >
-                        {metric.label}: {metric.value}
-                      </span>
-                    ))}
-                  </div>
-                  {scannerWorkbenchExplanation.warnings.length > 0 && (
-                    <div className="caption" style={{ marginTop: 8, color: 'var(--warn)', lineHeight: 1.5 }}>
-                      {scannerWorkbenchExplanation.warnings.join(' · ')}
-                    </div>
-                  )}
-                </div>
-                <div style={{ minWidth: 0, padding: 10, borderRadius: 12, border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.12)' }}>
-                  <div className="label" style={{ marginBottom: 5 }}>Chart + broker context</div>
-                  <div className="caption" style={{ color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 10 }}>
-                    Review chart structure first. Broker action stays journal-only until a plan is confirmed outside the scanner.
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button className="workspace-chip-button active" onClick={() => markWorkflow([scannerWorkbenchResult.symbol], 'shortlist')}>
-                      Shortlist
-                    </button>
-                    {watchlists[0] && (
-                      <button className="workspace-chip-button" onClick={() => addToWatchlist(scannerWorkbenchResult.symbol, watchlists[0].id)}>
-                        Add to {watchlists[0].name}
-                      </button>
-                    )}
-                    <button className="workspace-chip-button" onClick={() => void openScannerChart(scannerWorkbenchResult)}>
-                      Open chart
-                    </button>
-                    <button className="workspace-chip-button" onClick={() => markWorkflow([scannerWorkbenchResult.symbol], 'review_later')}>
-                      Review later
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="scanner-results-scroll">
             <DataTable
-              className="scanner-results-table"
+              className="scanner-results-table scanner-results-table-tv"
               style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}
-              tableStyle={{ minWidth: 980, tableLayout: 'fixed' }}
+              tableStyle={{ minWidth: 720, tableLayout: 'fixed' }}
             >
               <DataTableHead>
                 <Th width={32}>
                   <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
                     onChange={e => setSelectedResults(e.target.checked ? new Set(results.map(r => r.symbol)) : new Set())} />
                 </Th>
-                {visibleColumns.map(col => (
-                  <Th key={col.id} align={col.align ?? 'left'} width={col.width}>{col.label}</Th>
-                ))}
-                <Th width={268}>Action</Th>
+                {visibleColumns.map(col => {
+                  const sortable = col.sortKey != null
+                  const active = sortable && sortBy === col.sortKey
+                  return (
+                    <Th key={col.id} align={col.align ?? 'left'} width={col.width} className={sortable ? 'scanner-sortable' : undefined}>
+                      {sortable ? (
+                        <button
+                          type="button"
+                          className="scanner-col-sort"
+                          onClick={() => handleColumnSort(col.sortKey!)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            color: active ? 'var(--accent)' : 'inherit',
+                            font: 'inherit',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {col.label}{active ? (sortDesc ? ' ↓' : ' ↑') : ''}
+                        </button>
+                      ) : col.label}
+                    </Th>
+                  )
+                })}
+                <Th width={88} align="right">{'\u00A0'}</Th>
               </DataTableHead>
               <tbody>
                 {results.map(r => {
-                  const expanded = expandedSymbol === r.symbol
                   return (
                     <Fragment key={r.symbol}>
                       <Tr
-                        onClick={() => setExpandedSymbol(expanded ? null : r.symbol)}
-                        onDoubleClick={() => void openScannerChart(r)}
+                        onClick={() => void openScannerChart(r)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
                             void openScannerChart(r)
                           }
-                          if (e.key === ' ') {
-                            e.preventDefault()
-                            setExpandedSymbol(expanded ? null : r.symbol)
-                          }
                         }}
                         tabIndex={0}
-                        selected={expanded}
                       >
                         <Td>
                           <input type="checkbox" checked={selectedResults.has(r.symbol)} style={{ accentColor: 'var(--accent)' }}
@@ -2258,7 +2033,7 @@ export default function ScannerPage() {
                             </Td>
                           )
                         })}
-                        <Td>
+                        <Td align="right">
                           <ScannerRowActions
                             result={r}
                             watchlists={watchlists}
@@ -2269,17 +2044,6 @@ export default function ScannerPage() {
                           />
                         </Td>
                       </Tr>
-                      {expanded && (
-                        <RowExpansion
-                          r={r}
-                          watchlists={watchlists}
-                          onAddToWatchlist={addToWatchlist}
-                          onOpenChart={() => void openScannerChart(r)}
-                          presetName={currentScanName()}
-                          tradeDate={tradeDate}
-                          scanTrust={scanTrust}
-                        />
-                      )}
                     </Fragment>
                   )
                 })}

@@ -18,10 +18,25 @@ type TapePayload = {
   source: string;
 };
 
+const INDEX_ORDER = ["NIFTY 50", "BANKNIFTY", "SENSEX"];
+
+function sortIndexQuotes(quotes: TapeQuote[]) {
+  const rank = (label: string) => {
+    const normalized = label.toUpperCase();
+    const idx = INDEX_ORDER.findIndex((name) => normalized.includes(name.replace(" ", "")) || normalized.includes(name));
+    return idx === -1 ? INDEX_ORDER.length : idx;
+  };
+  return [...quotes].sort((a, b) => rank(a.label) - rank(b.label));
+}
+
 function fallbackIndices(data: MarketOverview) {
-  return (data.indices ?? []).filter(
-    (idx) => /nifty|bank/i.test(idx.label) || /nifty|bank/i.test(idx.symbol),
-  ).slice(0, 2);
+  const indices = (data.indices ?? []).filter(
+    (idx) => /nifty|bank|sensex/i.test(idx.label) || /nifty|bank|sensex/i.test(idx.symbol),
+  );
+  const nifty = indices.find((idx) => /nifty 50|^nifty$/i.test(idx.label) || /nifty/i.test(idx.symbol) && !/bank/i.test(idx.label));
+  const bank = indices.find((idx) => /bank/i.test(idx.label) || /bank/i.test(idx.symbol));
+  const sensex = indices.find((idx) => /sensex/i.test(idx.label) || /sensex/i.test(idx.symbol));
+  return [nifty, bank, sensex].filter((idx): idx is NonNullable<typeof nifty> => idx != null);
 }
 
 export function LiveIndexTape({ data }: { data: MarketOverview }) {
@@ -41,7 +56,7 @@ export function LiveIndexTape({ data }: { data: MarketOverview }) {
         setTapeError(true);
         return;
       }
-      setTape({ ...payload, quotes: indices });
+      setTape({ ...payload, quotes: sortIndexQuotes(indices) });
       setTapeError(false);
     } catch {
       setTapeError(true);
@@ -75,9 +90,6 @@ export function LiveIndexTape({ data }: { data: MarketOverview }) {
             </div>
           );
         })}
-        <div className="caption" style={{ marginTop: 6, color: "var(--text-tertiary)" }}>
-          Index quotes refresh from Yahoo Finance · verify levels before trading
-        </div>
       </div>
     );
   }

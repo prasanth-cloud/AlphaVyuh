@@ -457,6 +457,8 @@ input, textarea, select {
 }
 
 .workspace-chip-button {
+  font-size: var(--text-xs);
+  font-weight: 500;
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -1301,6 +1303,27 @@ input, textarea, select {
   }
 }
 
+/* Calm desk typography — dashboard, scanner, watchlist headers */
+.calm-page-title {
+  font-size: clamp(22px, 2.4vw, 26px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.calm-page-copy {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 42rem;
+}
+
+.calm-desk-header {
+  margin-bottom: 14px;
+}
+
 .dashboard-market-desk {
   display: flex;
   flex-direction: column;
@@ -1310,8 +1333,84 @@ input, textarea, select {
 
 .dashboard-market-tape {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.dashboard-regime-strip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dashboard-regime-chip {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dashboard-regime-chip .label,
+.dashboard-market-tape-item .label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  margin-bottom: 5px;
+}
+
+.scanner-results-table.scanner-results-table-tv tbody tr {
+  cursor: pointer;
+}
+
+.scanner-results-table.scanner-results-table-tv tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.scanner-results-table.scanner-results-table-tv td {
+  font-size: var(--text-sm);
+  padding: 7px 8px;
+}
+
+.scanner-results-table.scanner-results-table-tv th {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-1);
+  box-shadow: 0 1px 0 var(--border-subtle);
+}
+
+.scanner-results-table.scanner-results-table-tv thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.scanner-results-table.scanner-results-table-tv th.scanner-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.scanner-results-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.scanner-row-menu {
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  max-width: 40px;
 }
 
 .dashboard-market-tape-item {
@@ -1373,7 +1472,8 @@ input, textarea, select {
   .dashboard-market-summary-row,
   .dashboard-market-charts-row,
   .dashboard-market-movers-row,
-  .dashboard-market-tape {
+  .dashboard-market-tape,
+  .dashboard-regime-strip {
     grid-template-columns: 1fr !important;
   }
 

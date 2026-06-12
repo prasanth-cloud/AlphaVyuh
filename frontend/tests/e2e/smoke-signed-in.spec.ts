@@ -193,7 +193,7 @@ test.describe("Signed-in smoke flow", () => {
         .poll(async () => page.locator("table tbody tr").count(), { timeout: 25000, intervals: [500, 1000, 2000] })
         .toBeGreaterThan(0);
       await expect(page.getByTestId("scanner-data-trust")).toBeVisible({ timeout: 15000 });
-      await expectRealDataContext(page, "scanner", /As of|coverage|market data|Exchange|NSE|Source/i);
+      await expectRealDataContext(page, "scanner", /coverage|market data|Exchange|NSE|Source|symbols|Scanned in/i);
     } else if (await verifyScannerApiFallback(page)) {
       scannerApiFallbackUsed = true;
     } else {

@@ -28,13 +28,13 @@ describe("scanner watchlist feedback", () => {
     expect(scannerPageSource).not.toContain("getSectorsWithMetadata");
     expect(scannerPageSource).not.toContain("sectorTaxonomyPresentation");
     expect(scannerPageSource).not.toContain('data-testid="scanner-sector-taxonomy"');
-    expect(scannerPageSource).toContain("Source audit details stay in Data Trust.");
+    expect(scannerPageSource).not.toContain('data-testid="scanner-sector-strength"');
   });
 
-  it("keeps the selected scan result workbench review-only with handoff actions", () => {
-    expect(scannerPageSource).toContain('data-testid="scanner-workbench"');
-    expect(scannerPageSource).toContain("Scan results workbench");
-    expect(scannerPageSource).toContain("Chart + broker context");
-    expect(scannerPageSource).toContain("Broker action stays journal-only until a plan is confirmed outside the scanner.");
+  it("routes row review through chart navigation instead of inline workbench expansion", () => {
+    expect(scannerPageSource).not.toContain('data-testid="scanner-workbench"');
+    expect(scannerPageSource).not.toContain("Why this matched");
+    expect(scannerPageSource).toContain("scanner-results-table-tv");
+    expect(scannerPageSource).toContain("scanner-history-toggle");
   });
 });
