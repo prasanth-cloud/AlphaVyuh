@@ -15,6 +15,7 @@
     "e2e:perf": "playwright test --config=playwright.mock.config.ts tests/e2e/performance-smoke.spec.ts",
     "e2e:layout": "playwright test --config=playwright.mock.config.ts tests/e2e/layout-smoke.spec.ts",
     "e2e:scanner-tv": "playwright test --config=playwright.mock.config.ts tests/e2e/scanner-tv-table.spec.ts",
+    "e2e:scanner-keyboard": "playwright test --config=playwright.mock.config.ts tests/e2e/scanner-keyboard-nav.spec.ts",
     "e2e:qa-video": "playwright test --config=playwright.qa-video.config.ts tests/e2e/product-walkthrough-video.spec.ts",
     "e2e:qa-video:prod": "PLAYWRIGHT_BASE_URL=https://www.alphavyuh.com playwright test --config=playwright.local.config.ts tests/e2e/product-walkthrough-video.spec.ts",
     "e2e:smoke": "playwright test --config=playwright.mock.config.ts tests/e2e/smoke-signed-in.spec.ts",

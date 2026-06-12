@@ -531,7 +531,7 @@ test.describe("Mock workflow smoke", () => {
     const symbol = ((await resultRows.first().locator(".mono").first().textContent()) ?? "RELIANCE").trim();
 
     await resultRows.first().locator("input[type=checkbox]").check({ force: true });
-    await expect(page.getByText("1 selected")).toBeVisible();
+    await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
     await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Copy TV symbols$/i }).click();
     await expect(page.getByTestId("scanner-toast")).toContainText("Copied 1 TradingView symbol", { timeout: 10_000 });
     await expect.poll(() => page.evaluate(() => localStorage.getItem("alphavyuh-test-clipboard"))).toBe(`NSE:${symbol}`);
@@ -694,7 +694,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(resultRows.nth(1).getByText("Ignored")).toBeVisible();
 
     await resultRows.nth(2).locator("input[type=checkbox]").check({ force: true });
-    await expect(page.getByText("1 selected")).toBeVisible();
+    await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
     await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Review later$/i }).click();
     await expect(resultRows.nth(2).locator(".caption").filter({ hasText: /^Review later$/ })).toBeVisible();
 

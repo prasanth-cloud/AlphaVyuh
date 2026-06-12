@@ -60,20 +60,23 @@ export function Th({ children, align = 'left', width, className }: {
   )
 }
 
-export function Tr({ children, onClick, onDoubleClick, onKeyDown, tabIndex, selected }: {
+export function Tr({ children, onClick, onDoubleClick, onKeyDown, tabIndex, selected, className, ...rest }: {
   children: React.ReactNode
   onClick?: () => void
   onDoubleClick?: () => void
   onKeyDown?: React.KeyboardEventHandler<HTMLTableRowElement>
   tabIndex?: number
   selected?: boolean
-}) {
+  className?: string
+} & React.HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
+      className={className}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
       tabIndex={tabIndex}
+      {...rest}
       style={{
         borderBottom: '1px solid var(--border-subtle)',
         background: selected ? 'var(--accent-subtle)' : 'transparent',
@@ -92,14 +95,15 @@ export function Tr({ children, onClick, onDoubleClick, onKeyDown, tabIndex, sele
   )
 }
 
-export function Td({ children, align = 'left', mono, emphasized }: {
+export function Td({ children, align = 'left', mono, emphasized, className }: {
   children: React.ReactNode
   align?: 'left' | 'right' | 'center'
   mono?: boolean
   emphasized?: boolean
+  className?: string
 }) {
   return (
-    <td style={{
+    <td className={className} style={{
       padding: '11px 14px',
       fontSize: 13,
       color: emphasized ? 'var(--text-primary)' : 'var(--text-secondary)',

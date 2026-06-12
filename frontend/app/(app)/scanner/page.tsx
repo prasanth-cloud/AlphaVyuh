@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo, Fragment } from 'react'
+import { useState, useEffect, useCallback, useMemo, Fragment, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
@@ -31,16 +31,40 @@ import {
 } from '@/lib/scanner-run-history'
 import { buildMultiChartReviewHref, tradingViewNseSymbols } from '@/lib/multi-chart-review'
 import {
+  columnsForPreset,
+  detectColumnPreset,
   formatScannerColumnValue,
   persistScannerVisibleColumns,
+  persistScreenColumnBundle,
   readScannerVisibleColumns,
+  resolveInitialScannerColumns,
   resolveScannerColumns,
   SCANNER_COLUMN_DEFS,
+  SCANNER_COLUMN_PRESETS,
   SCANNER_DEFAULT_COLUMN_IDS,
   type ScannerColumnId,
+  type ScannerColumnPresetId,
 } from '@/lib/scanner-result-columns'
+import {
+  clampFilterRailWidth,
+  persistFilterRailPreferences,
+  persistScannerHeatmapEnabled,
+  persistScannerRowDensity,
+  persistScannerViewPreferences,
+  readFilterRailPreferences,
+  readScannerHeatmapEnabled,
+  readScannerRowDensity,
+  readScannerViewPreferences,
+  type ScannerChartsLayout,
+  type ScannerResultsView,
+  type ScannerRowDensity,
+} from '@/lib/scanner-ui-preferences'
 import { ScannerChartsPanel } from '@/components/scanner/ScannerChartsPanel'
 import { ScannerFilterChips } from '@/components/scanner/ScannerFilterChips'
+import { ScannerScreenTabs } from '@/components/scanner/ScannerScreenTabs'
+import { ScannerSectorHeatmap } from '@/components/scanner/ScannerSectorHeatmap'
+import { ScannerSelectionPanel } from '@/components/scanner/ScannerSelectionPanel'
+import { ScannerTrustBanner } from '@/components/scanner/ScannerTrustBanner'
 import type { ScannerFilterState } from '@/lib/scanner-active-filters'
 
 const API = API_BASE_URL
@@ -506,6 +530,7 @@ export default function ScannerPage() {
   const [alertName, setAlertName] = useState('')
   const [alertSaving, setAlertSaving] = useState(false)
   const [activeScreenName, setActiveScreenName] = useState<string | null>(null)
+  const [activeScreenId, setActiveScreenId] = useState<string | null>(null)
   const [activeCompositionName, setActiveCompositionName] = useState<string | null>(null)
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set())
   const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
@@ -513,12 +538,20 @@ export default function ScannerPage() {
   const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technicals' | 'fundamentals'>('technicals')
   const [resultSymbolFilter, setResultSymbolFilter] = useState('')
-  const [chartsLayout, setChartsLayout] = useState<'2-up' | '4-up'>('2-up')
+  const [chartsLayout, setChartsLayout] = useState<ScannerChartsLayout>('2-up')
   const [showMorePresets, setShowMorePresets] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [resultsView, setResultsView] = useState<'list' | 'charts'>('list')
+  const [resultsView, setResultsView] = useState<ScannerResultsView>('list')
   const [visibleColumnIds, setVisibleColumnIds] = useState<ScannerColumnId[]>([...SCANNER_DEFAULT_COLUMN_IDS])
+  const [activeColumnPreset, setActiveColumnPreset] = useState<ScannerColumnPresetId | 'custom'>('custom')
+  const [rowDensity, setRowDensity] = useState<ScannerRowDensity>('comfortable')
+  const [heatmapEnabled, setHeatmapEnabled] = useState(false)
+  const [filterRailWidth, setFilterRailWidth] = useState(300)
+  const [filterRailCollapsed, setFilterRailCollapsed] = useState(false)
+  const [focusedRowIndex, setFocusedRowIndex] = useState(-1)
   const [columnsPickerOpen, setColumnsPickerOpen] = useState(false)
+  const symbolFilterRef = useRef<HTMLInputElement>(null)
+  const resultsScrollRef = useRef<HTMLDivElement>(null)
   const [hasCachedResults, setHasCachedResults] = useState(false)
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
@@ -896,21 +929,81 @@ export default function ScannerPage() {
     setFilters(f)
     setActivePreset(p.id)
     setActiveScreenName(null)
+    setActiveScreenId(null)
     setActiveCompositionName(null)
     setCurrentPage(1)
+    const columns = readScannerVisibleColumns()
+    setVisibleColumnIds(columns)
+    setActiveColumnPreset(detectColumnPreset(columns))
   }, [])
 
   useEffect(() => {
-    setVisibleColumnIds(readScannerVisibleColumns())
+    const viewPrefs = readScannerViewPreferences()
+    setResultsView(viewPrefs.resultsView)
+    setChartsLayout(viewPrefs.chartsLayout)
+    setRowDensity(readScannerRowDensity())
+    setHeatmapEnabled(readScannerHeatmapEnabled())
+    const railPrefs = readFilterRailPreferences()
+    setFilterRailWidth(railPrefs.width)
+    setFilterRailCollapsed(railPrefs.collapsed)
+    const columns = readScannerVisibleColumns()
+    setVisibleColumnIds(columns)
+    setActiveColumnPreset(detectColumnPreset(columns))
   }, [])
+
+  useEffect(() => {
+    persistScannerViewPreferences({ resultsView, chartsLayout })
+  }, [resultsView, chartsLayout])
+
+  useEffect(() => {
+    persistScannerRowDensity(rowDensity)
+  }, [rowDensity])
+
+  useEffect(() => {
+    persistScannerHeatmapEnabled(heatmapEnabled)
+  }, [heatmapEnabled])
+
+  useEffect(() => {
+    persistFilterRailPreferences({ width: filterRailWidth, collapsed: filterRailCollapsed })
+  }, [filterRailWidth, filterRailCollapsed])
+
+  function applyColumnPreset(presetId: ScannerColumnPresetId) {
+    const columns = columnsForPreset(presetId)
+    setVisibleColumnIds(columns)
+    setActiveColumnPreset(presetId)
+    persistScannerVisibleColumns(columns)
+    if (activeScreenId) {
+      persistScreenColumnBundle(activeScreenId, presetId, columns)
+    }
+  }
 
   function loadScreen(screen: SavedScreen) {
     const f = { ...emptyFilters(), ...screen.filters } as Filters
     setFilters(f)
     setActivePreset('saved_screen')
     setActiveScreenName(screen.name)
+    setActiveScreenId(screen.id)
     setActiveCompositionName(null)
     setCurrentPage(1)
+    const columns = resolveInitialScannerColumns(screen.id)
+    setVisibleColumnIds(columns)
+    setActiveColumnPreset(detectColumnPreset(columns))
+  }
+
+  function startFilterRailResize(event: React.MouseEvent<HTMLDivElement>) {
+    if (filterRailCollapsed) return
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = filterRailWidth
+    function onMove(moveEvent: MouseEvent) {
+      setFilterRailWidth(clampFilterRailWidth(startWidth + moveEvent.clientX - startX))
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
   }
 
   function currentScanName() {
@@ -1318,18 +1411,31 @@ export default function ScannerPage() {
     )
   }
 
-  const resetFilters = () => { setFilters(emptyFilters()); setActivePreset(null); setActiveScreenName(null); setActiveCompositionName(null); setResults([]); setError(''); setHasRun(false); setCurrentPage(1); setTotalPages(1) }
+  const resetFilters = () => {
+    setFilters(emptyFilters())
+    setActivePreset(null)
+    setActiveScreenName(null)
+    setActiveScreenId(null)
+    setActiveCompositionName(null)
+    setResults([])
+    setError('')
+    setHasRun(false)
+    setCurrentPage(1)
+    setTotalPages(1)
+  }
 
   function dismissFilterChip(patch: Partial<ScannerFilterState>, clearPreset = false) {
     if (clearPreset) {
       setActivePreset(null)
       setActiveScreenName(null)
+      setActiveScreenId(null)
       setFilters(emptyFilters())
       return
     }
     setFilters(prev => ({ ...prev, ...patch }))
     setActivePreset(null)
     setActiveScreenName(null)
+    setActiveScreenId(null)
   }
 
   const activePresetMeta = PRESETS.find(p => p.id === activePreset) ?? null
@@ -1360,6 +1466,62 @@ export default function ScannerPage() {
     )
   }, [resultSymbolFilter, results])
 
+  useEffect(() => {
+    setFocusedRowIndex(-1)
+  }, [filteredResults.length, resultSymbolFilter, currentPage, resultsView])
+
+  useEffect(() => {
+    if (resultsView !== 'list' || filteredResults.length === 0) return
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) {
+        if (event.key === 'Escape') {
+          (target as HTMLElement).blur()
+        }
+        return
+      }
+      if (event.key === '/') {
+        event.preventDefault()
+        symbolFilterRef.current?.focus()
+        return
+      }
+      if (event.key === 'j' || event.key === 'k') {
+        event.preventDefault()
+        setFocusedRowIndex(prev => {
+          if (filteredResults.length === 0) return -1
+          if (prev < 0) return event.key === 'j' ? 0 : filteredResults.length - 1
+          const next = event.key === 'j' ? prev + 1 : prev - 1
+          return Math.max(0, Math.min(filteredResults.length - 1, next))
+        })
+        return
+      }
+      if (focusedRowIndex < 0 || focusedRowIndex >= filteredResults.length) return
+      const row = filteredResults[focusedRowIndex]
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        void openScannerChart(row)
+      }
+      if (event.key === ' ') {
+        event.preventDefault()
+        setSelectedResults(prev => {
+          const next = new Set(prev)
+          if (next.has(row.symbol)) next.delete(row.symbol)
+          else next.add(row.symbol)
+          return next
+        })
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [filteredResults, focusedRowIndex, resultsView, openScannerChart])
+
+  useEffect(() => {
+    if (focusedRowIndex < 0) return
+    const row = resultsScrollRef.current?.querySelector(`[data-scanner-row-index="${focusedRowIndex}"]`)
+    row?.scrollIntoView({ block: 'nearest' })
+  }, [focusedRowIndex])
+
   function handleColumnSort(sortKey: string) {
     const newDesc = sortKey === sortBy ? !sortDesc : true
     setSortBy(sortKey)
@@ -1372,7 +1534,11 @@ export default function ScannerPage() {
     setVisibleColumnIds(prev => {
       const next = checked ? [...prev, id] : prev.filter(col => col !== id)
       const resolved = next.length > 0 ? next : [...SCANNER_DEFAULT_COLUMN_IDS]
+      setActiveColumnPreset(detectColumnPreset(resolved))
       persistScannerVisibleColumns(resolved)
+      if (activeScreenId) {
+        persistScreenColumnBundle(activeScreenId, detectColumnPreset(resolved), resolved)
+      }
       return resolved
     })
   }
@@ -1383,7 +1549,14 @@ export default function ScannerPage() {
         <h1 className="calm-page-title">Scanner</h1>
         <p className="calm-page-copy">Choose a screener, refine filters if needed, then run scan when you are ready.</p>
       </div>
-      <div className="workspace-grid scanner-workspace-grid">
+      <div
+        className={`workspace-grid scanner-workspace-grid${filterRailCollapsed ? ' scanner-filter-rail-collapsed' : ''}`}
+        style={{
+          gridTemplateColumns: filterRailCollapsed
+            ? '48px minmax(0, 1fr)'
+            : `${filterRailWidth}px minmax(0, 1fr)`,
+        }}
+      >
 
       {filterDrawerOpen && (
         <button
@@ -1396,21 +1569,33 @@ export default function ScannerPage() {
 
       {/* ── LEFT PANEL ── */}
       <div
-        className={`workspace-card workspace-card-muted scanner-filter-rail${filterDrawerOpen ? ' scanner-filter-drawer-open' : ''}`}
+        className={`workspace-card workspace-card-muted scanner-filter-rail${filterDrawerOpen ? ' scanner-filter-drawer-open' : ''}${filterRailCollapsed ? ' scanner-filter-rail-icons' : ''}`}
         style={{ display: 'flex', flexDirection: 'column' }}
       >
         <div className="scanner-filter-drawer-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 0', flexShrink: 0 }}>
-          <div className="label">Filters</div>
-          <button
-            type="button"
-            className="scanner-filter-drawer-close"
-            aria-label="Close filters"
-            onClick={() => setFilterDrawerOpen(false)}
-          >
-            ×
-          </button>
+          {!filterRailCollapsed && <div className="label">Filters</div>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+            <button
+              type="button"
+              className="workspace-chip-button scanner-filter-rail-toggle"
+              aria-label={filterRailCollapsed ? 'Expand filters' : 'Collapse filters'}
+              data-testid="scanner-filter-rail-toggle"
+              onClick={() => setFilterRailCollapsed(collapsed => !collapsed)}
+            >
+              {filterRailCollapsed ? '▸' : '◂'}
+            </button>
+            <button
+              type="button"
+              className="scanner-filter-drawer-close"
+              aria-label="Close filters"
+              onClick={() => setFilterDrawerOpen(false)}
+            >
+              ×
+            </button>
+          </div>
         </div>
 
+        <div className="scanner-filter-rail-body">
         {/* Presets */}
         <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <div className="label" style={{ marginBottom: 8 }}>Screeners</div>
@@ -1685,6 +1870,17 @@ export default function ScannerPage() {
             </Button>
           </div>
         </div>
+        </div>
+        {!filterRailCollapsed && (
+          <div
+            className="scanner-filter-resize-handle"
+            data-testid="scanner-filter-resize-handle"
+            onMouseDown={startFilterRailResize}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize filter panel"
+          />
+        )}
       </div>
 
       {/* ── CENTER: Results ── */}
@@ -1738,13 +1934,42 @@ export default function ScannerPage() {
                   </>
                 )}
                 <input
+                  ref={symbolFilterRef}
                   value={resultSymbolFilter}
                   onChange={(e) => setResultSymbolFilter(e.target.value)}
-                  placeholder="Filter symbols"
+                  placeholder="Filter symbols (/)"
                   className="scanner-symbol-filter"
                   data-testid="scanner-result-symbol-filter"
                   aria-label="Filter scan results by symbol or company name"
                 />
+                {SCANNER_COLUMN_PRESETS.map(preset => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={`workspace-chip-button${activeColumnPreset === preset.id ? ' active' : ''}`}
+                    onClick={() => applyColumnPreset(preset.id)}
+                    data-testid={`scanner-column-preset-${preset.id}`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`workspace-chip-button${rowDensity === 'compact' ? ' active' : ''}`}
+                  onClick={() => setRowDensity(density => density === 'compact' ? 'comfortable' : 'compact')}
+                  data-testid="scanner-row-density-toggle"
+                  title="Toggle compact row density"
+                >
+                  {rowDensity === 'compact' ? 'Compact' : 'Comfort'}
+                </button>
+                <button
+                  type="button"
+                  className={`workspace-chip-button${heatmapEnabled ? ' active' : ''}`}
+                  onClick={() => setHeatmapEnabled(enabled => !enabled)}
+                  data-testid="scanner-heatmap-toggle"
+                >
+                  Heatmap
+                </button>
                 <button
                   type="button"
                   className="workspace-chip-button"
@@ -1916,6 +2141,33 @@ export default function ScannerPage() {
           />
         )}
 
+        {savedScreens.length > 0 && (
+          <ScannerScreenTabs
+            screens={savedScreens}
+            activeScreenId={activeScreenId}
+            onSelect={loadScreen}
+          />
+        )}
+
+        {scanTrust && (scanTrust.mode === 'live' || scanTrust.mode === 'eod' || scanTrust.mode === 'demo') && (
+          <ScannerTrustBanner mode={scanTrust.mode} asOf={scanTrust.asOf} source={scanTrust.source} />
+        )}
+
+        {selectedResults.size > 0 && (
+          <ScannerSelectionPanel
+            symbols={selectedSymbols()}
+            watchlists={watchlists}
+            onClear={() => setSelectedResults(new Set())}
+            onAddToWatchlist={async (watchlistId) => {
+              for (const symbol of selectedSymbols()) {
+                await addToWatchlist(symbol, watchlistId)
+              }
+              showToast(`${selectedResults.size} symbols added to watchlist`)
+            }}
+            onReviewCharts={() => router.push(buildMultiChartReviewHref(selectedSymbols(), { source: 'scanner' }))}
+          />
+        )}
+
         {recoveryMode && hasRun && !error && (
           <div
             data-testid="scanner-recovery-banner"
@@ -2055,6 +2307,10 @@ export default function ScannerPage() {
           </div>
         )}
 
+        {!loading && results.length > 0 && heatmapEnabled && (
+          <ScannerSectorHeatmap results={filteredResults} />
+        )}
+
         {!loading && results.length > 0 && resultsView === 'charts' && (
           <ScannerChartsPanel
             results={filteredResults}
@@ -2081,22 +2337,27 @@ export default function ScannerPage() {
 
         {/* Results table */}
         {!loading && results.length > 0 && resultsView === 'list' && (
-          <div className="scanner-results-scroll">
+          <div
+            ref={resultsScrollRef}
+            className={`scanner-results-scroll scanner-results-scroll-x${rowDensity === 'compact' ? ' scanner-results-density-compact' : ''}`}
+          >
             <DataTable
               className="scanner-results-table scanner-results-table-tv"
               style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}
               tableStyle={{ minWidth: 720, tableLayout: 'fixed' }}
             >
               <DataTableHead>
-                <Th width={32}>
+                <Th width={32} className="scanner-sticky-col scanner-sticky-col-check">
                   <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
                     onChange={e => setSelectedResults(e.target.checked ? new Set(results.map(r => r.symbol)) : new Set())} />
                 </Th>
                 {visibleColumns.map(col => {
                   const sortable = col.sortKey != null
                   const active = sortable && sortBy === col.sortKey
+                  const stickyClass = col.id === 'symbol' || col.id === 'pct_change' ? ' scanner-sticky-col' : ''
+                  const stickyOffsetClass = col.id === 'symbol' ? ' scanner-sticky-col-symbol' : col.id === 'pct_change' ? ' scanner-sticky-col-change' : ''
                   return (
-                    <Th key={col.id} align={col.align ?? 'left'} width={col.width} className={sortable ? 'scanner-sortable' : undefined}>
+                    <Th key={col.id} align={col.align ?? 'left'} width={col.width} className={`${sortable ? 'scanner-sortable' : ''}${stickyClass}${stickyOffsetClass}`.trim()}>
                       {sortable ? (
                         <button
                           type="button"
@@ -2121,10 +2382,14 @@ export default function ScannerPage() {
                 <Th width={88} align="right">{'\u00A0'}</Th>
               </DataTableHead>
               <tbody>
-                {filteredResults.map(r => {
+                {filteredResults.map((r, rowIndex) => {
+                  const focused = focusedRowIndex === rowIndex
                   return (
                     <Fragment key={r.symbol}>
                       <Tr
+                        data-testid="scanner-result-row"
+                        data-scanner-row-index={rowIndex}
+                        className={focused ? 'scanner-row-focused' : undefined}
                         onClick={() => void openScannerChart(r)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
@@ -2132,9 +2397,9 @@ export default function ScannerPage() {
                             void openScannerChart(r)
                           }
                         }}
-                        tabIndex={0}
+                        tabIndex={focused ? 0 : -1}
                       >
-                        <Td>
+                        <Td className="scanner-sticky-col scanner-sticky-col-check">
                           <input type="checkbox" checked={selectedResults.has(r.symbol)} style={{ accentColor: 'var(--accent)' }}
                             onChange={e => { e.stopPropagation(); setSelectedResults(s => { const n = new Set(s); if (e.target.checked) { n.add(r.symbol) } else { n.delete(r.symbol) } return n }) }}
                             onClick={e => e.stopPropagation()} />
@@ -2146,12 +2411,15 @@ export default function ScannerPage() {
                           const tone = isPct && r.pct_change != null
                             ? (r.pct_change >= 0 ? 'var(--gain)' : 'var(--loss)')
                             : 'var(--text-primary)'
+                          const stickyClass = col.id === 'symbol' || col.id === 'pct_change' ? ' scanner-sticky-col' : ''
+                          const stickyOffsetClass = col.id === 'symbol' ? ' scanner-sticky-col-symbol' : col.id === 'pct_change' ? ' scanner-sticky-col-change' : ''
                           return (
                             <Td
                               key={col.id}
                               align={align}
                               mono={col.id !== 'company_name' && col.id !== 'sector'}
                               emphasized={col.id === 'close' || col.id === 'rs_score'}
+                              className={`${stickyClass}${stickyOffsetClass}`.trim() || undefined}
                             >
                               {col.id === 'symbol' ? (
                                 <div>
