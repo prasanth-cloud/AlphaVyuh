@@ -751,8 +751,27 @@ input, textarea, select {
   padding-right: 8px;
 }
 
+.scanner-filter-seg-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  row-gap: 10px;
+}
+
+.scanner-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scanner-meta-pill {
+  opacity: 0.82;
+  font-size: 9px;
+}
+
 .scanner-results-toolbar {
-  row-gap: 8px;
+  row-gap: 10px;
 }
 
 .scanner-results-toolbar .workspace-chip-button.active {

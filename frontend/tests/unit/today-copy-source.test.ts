@@ -16,7 +16,7 @@ describe("Dashboard page copy", () => {
   it("focuses the dashboard on market overview and equity snapshot without session workflow chrome", () => {
     expect(dashboardSource).toContain("MarketOverviewDesk");
     expect(dashboardSource).toContain("DashboardEquitySnapshotCard");
-    expect(dashboardSource).toContain("Dashboard needs the market data API");
+    expect(dashboardSource).toContain("Market overview is temporarily unavailable");
     expect(dashboardSource).not.toContain("DashboardWorkflowSection");
     expect(dashboardSource).not.toContain("dashboard-workflow-toggle");
     expect(marketDeskSource).toContain("Live index quotes");
