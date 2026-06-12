@@ -1292,7 +1292,7 @@ export default function ScannerPage() {
     return (
       <div style={{ marginBottom: 8 }}>
         <div className="label" style={{ marginBottom: 4 }}>{label}</div>
-        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+        <div className="scanner-filter-seg-options">
           {opts.map(o => {
             const active = filters[k] === o.value
             return (
@@ -1722,13 +1722,13 @@ export default function ScannerPage() {
                   </span>
                 )}
                 {scanTrust && (
-                  <span className="workspace-pill" title={scanTrust.message ?? scanTrust.source}>
+                  <span className="workspace-pill scanner-meta-pill" title={scanTrust.message ?? scanTrust.source}>
                     {hasCachedResults ? 'Cached results · ' : ''}Source: {scanTrust.source}{scanTrust.coveragePct != null ? ` · Coverage: ${scanTrust.coveragePct}%` : ''}
                   </span>
                 )}
                 {(loading || scanElapsedMs != null) && (
                   <span
-                    className="workspace-pill"
+                    className="workspace-pill scanner-meta-pill"
                     style={{ color: loading ? 'var(--text-secondary)' : (scanElapsedMs != null && scanElapsedMs > 3000 ? 'var(--warn)' : 'var(--text-secondary)') }}
                     data-testid="scanner-scan-time"
                   >
@@ -1736,7 +1736,7 @@ export default function ScannerPage() {
                   </span>
                 )}
                 {scanTrust?.universeSize != null && symbolsScanned != null && (
-                  <span className="workspace-pill" data-testid="scanner-coverage-pill">
+                  <span className="workspace-pill scanner-meta-pill" data-testid="scanner-coverage-pill">
                     <Num>{symbolsScanned.toLocaleString('en-IN')}</Num> / <Num>{scanTrust.universeSize.toLocaleString('en-IN')}</Num> symbols
                   </span>
                 )}
@@ -1776,25 +1776,27 @@ export default function ScannerPage() {
                     </option>
                   ))}
                 </select>
-                <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
-                  Create watchlist
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => copyTradingViewSymbols(selectedResults.size > 0 ? selectedSymbols() : filteredResults.map(r => r.symbol))}
-                  data-testid="scanner-copy-tv-symbols"
-                >
-                  Copy TV symbols
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => exportScannerCsv(filteredResults)}
-                  data-testid="scanner-export-csv"
-                >
-                  Export CSV
-                </Button>
+                <div className="scanner-toolbar-actions">
+                  <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
+                    Create watchlist
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => copyTradingViewSymbols(selectedResults.size > 0 ? selectedSymbols() : filteredResults.map(r => r.symbol))}
+                    data-testid="scanner-copy-tv-symbols"
+                  >
+                    Copy TV symbols
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => exportScannerCsv(filteredResults)}
+                    data-testid="scanner-export-csv"
+                  >
+                    Export CSV
+                  </Button>
+                </div>
                 {selectedResults.size > 0 && (
                   <>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')}>

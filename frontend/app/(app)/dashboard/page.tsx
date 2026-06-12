@@ -143,33 +143,17 @@ export default function DashboardPage() {
   })
   const load = useCallback(async () => {
     setError('')
-    const pendingSnapshot = getMarketSnapshot()
     try {
-      const snapshot = await Promise.race([
-        pendingSnapshot,
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), dataRef.current ? 1800 : 900)),
-      ])
-      if (!snapshot) {
-        if (!dataRef.current) {
-          setLoading(false)
-        }
-        pendingSnapshot
-          .then((lateSnapshot) => {
-            dataRef.current = lateSnapshot.overview
-            setData(lateSnapshot.overview)
-            setDataHealth(lateSnapshot.health)
-            writeDashboardSnapshotCache(lateSnapshot.overview, lateSnapshot.health)
-          })
-          .catch(() => {})
-        return
-      }
+      const snapshot = await getMarketSnapshot()
       dataRef.current = snapshot.overview
       setData(snapshot.overview)
       setDataHealth(snapshot.health)
       markAppTiming('market-overview-loaded')
       writeDashboardSnapshotCache(snapshot.overview, snapshot.health)
     } catch (e) {
-      setError(describeMarketDataError(e))
+      if (!dataRef.current) {
+        setError(describeMarketDataError(e))
+      }
     } finally {
       setLoading(false)
     }
@@ -371,8 +355,8 @@ export default function DashboardPage() {
             </>
           ) : !error ? (
             <EmptyState
-              title="Market data is not connected"
-              description="Dashboard needs the market data API to load breadth and sector stats. Open Data status or retry after the API is restored."
+              title="Market overview is temporarily unavailable"
+              description="Market overview is temporarily unavailable. Check Data Status before planning trades, or retry after the market data API is restored."
               action={{ label: 'Retry', onClick: load }}
             />
           ) : null}
