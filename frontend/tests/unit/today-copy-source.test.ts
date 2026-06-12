@@ -9,7 +9,8 @@ describe("Dashboard page copy", () => {
     expect(dashboardSource).not.toContain("sectorTaxonomyPresentation");
     expect(dashboardSource).not.toContain("dashboard-sector-taxonomy");
     expect(dashboardSource).not.toContain("Taxonomy");
-    expect(dashboardSource).toContain("Data Status");
+    expect(marketDeskSource).toContain("Data Status");
+    expect(dashboardSource).toMatch(/Data status/i);
   });
 
   it("focuses the dashboard on market overview and equity snapshot without session workflow chrome", () => {
