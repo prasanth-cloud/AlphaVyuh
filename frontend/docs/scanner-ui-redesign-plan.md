@@ -2,7 +2,7 @@
 
 Phased roadmap to evolve AlphaVyuh's scanner from a functional filter form into a professional terminal-grade screener — inspired by TradingView Screener, Bloomberg EQS, and TC2000 — without copying their clutter or neon overload.
 
-**Status:** Phase 0 merged (PR #370). Phase 1 shipped in `feat/scanner-phase1-ui` (June 2026).
+**Status:** Phase 0 merged (PR #370). Phase 1 merged (PR #371). Phase 2 and Phase 3 shipped in `feat/scanner-phase2-3-ui` (June 2026).
 
 ---
 
@@ -98,29 +98,29 @@ Phased roadmap to evolve AlphaVyuh's scanner from a functional filter form into 
 
 **Goal:** Power-user density and keyboard flow.
 
-| Item | Recommendation | PR estimate |
-|------|----------------|-------------|
-| Column presets | "Trader", "VCP", "Fundamentals" presets; persist per saved screen | 1 PR |
-| Sticky results header | Symbol + Change % sticky; horizontal scroll for other columns | 1 PR |
-| Keyboard nav | `j/k` row focus, `Enter` open chart, `Space` toggle select, `/` focus symbol filter | 1 PR |
-| Row density toggle | Compact / comfortable row height (like Bloomberg compact mode) | 0.5 PR |
-| Chart grid default | Remember last view (list vs charts) and layout (2-up vs 4-up) in session | 0.5 PR |
+| Item | Recommendation | Status |
+|------|----------------|--------|
+| Column presets | "Trader", "VCP", "Fundamentals" presets; persist per saved screen | [x] `scanner-result-columns.ts`, toolbar preset chips |
+| Sticky results header | Symbol + Change % sticky; horizontal scroll for other columns | [x] `.scanner-sticky-col-*`, horizontal scroll container |
+| Keyboard nav | `j/k` row focus, `Enter` open chart, `Space` toggle select, `/` focus symbol filter | [x] `scanner-keyboard-nav.spec.ts` |
+| Row density toggle | Compact / comfortable row height (like Bloomberg compact mode) | [x] `scanner-ui-preferences.ts`, density toggle |
+| Chart grid default | Remember last view (list vs charts) and layout (2-up vs 4-up) in session | [x] sessionStorage in `scanner-ui-preferences.ts` |
 
-**Acceptance:** New e2e `scanner-keyboard-nav.spec.ts`; unit tests for column preset persistence.
+**Acceptance:** New e2e `scanner-keyboard-nav.spec.ts`; unit tests for column preset persistence (`scanner-column-presets.test.ts`).
 
 ---
 
-### Phase 3 — Terminal parity (future)
+### Phase 3 — Terminal parity
 
 **Goal:** Competitive with TV Screener for swing-trader daily workflow.
 
-- Left filter rail resizable (drag handle); optional collapse to icon strip
-- Multi-screen tab bar (saved screens as tabs, not only composition modal)
-- Heatmap column optional (sector × change) using sector from results
-- Real-time trust banner when `mode: live` vs `eod` (reuse `data-mode.ts` patterns)
-- Scanner → watchlist handoff panel (selected symbols preview before bulk add)
-
-**Not in scope until:** M4 live data posture is clear and scanner p95 latency budget confirmed (ADR 005/006).
+| Item | Status |
+|------|--------|
+| Left filter rail resizable (drag handle); optional collapse to icon strip | [x] `scanner-filter-resize-handle`, collapse toggle |
+| Multi-screen tab bar (saved screens as tabs, not only composition modal) | [x] `ScannerScreenTabs.tsx` |
+| Heatmap column optional (sector × change) using sector from results | [x] `ScannerSectorHeatmap.tsx` toggle |
+| Real-time trust banner when `mode: live` vs `eod` (reuse `data-mode.ts` patterns) | [x] `ScannerTrustBanner.tsx` |
+| Scanner → watchlist handoff panel (selected symbols preview before bulk add) | [x] `ScannerSelectionPanel.tsx` |
 
 ---
 

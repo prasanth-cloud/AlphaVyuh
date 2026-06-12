@@ -98,7 +98,62 @@ export const SCANNER_DEFAULT_COLUMN_IDS: ScannerColumnId[] = [
   "volume",
 ];
 
+export type ScannerColumnPresetId = "trader" | "vcp" | "fundamentals";
+
+export type ScannerColumnPreset = {
+  id: ScannerColumnPresetId;
+  label: string;
+  columns: ScannerColumnId[];
+};
+
+export const SCANNER_COLUMN_PRESETS: ScannerColumnPreset[] = [
+  {
+    id: "trader",
+    label: "Trader",
+    columns: [
+      "symbol",
+      "close",
+      "pct_change",
+      "rs_score",
+      "week_52_high_pct",
+      "volume_ratio",
+      "sector",
+    ],
+  },
+  {
+    id: "vcp",
+    label: "VCP",
+    columns: [
+      "symbol",
+      "close",
+      "pct_change",
+      "volume_ratio",
+      "week_52_high_pct",
+      "rs_score",
+      "atr_pct",
+      "setup_score",
+    ],
+  },
+  {
+    id: "fundamentals",
+    label: "Fundamentals",
+    columns: [
+      "symbol",
+      "company_name",
+      "close",
+      "pct_change",
+      "market_cap_cr",
+      "pe_ratio",
+      "pb_ratio",
+      "roe",
+      "roce",
+      "sector",
+    ],
+  },
+];
+
 const STORAGE_KEY = "alphavyuh-scanner-columns-v1";
+const SCREEN_PRESET_STORAGE_KEY = "alphavyuh-scanner-screen-columns-v1";
 
 function isColumnId(value: string): value is ScannerColumnId {
   return SCANNER_COLUMN_DEFS.some((col) => col.id === value);
@@ -120,6 +175,81 @@ export function readScannerVisibleColumns(): ScannerColumnId[] {
 export function persistScannerVisibleColumns(columns: ScannerColumnId[]): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(columns));
+}
+
+type ScreenColumnBundle = {
+  presetId: ScannerColumnPresetId | "custom";
+  columns: ScannerColumnId[];
+};
+
+function readScreenColumnBundles(): Record<string, ScreenColumnBundle> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(SCREEN_PRESET_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, ScreenColumnBundle>;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeScreenColumnBundles(bundles: Record<string, ScreenColumnBundle>): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(SCREEN_PRESET_STORAGE_KEY, JSON.stringify(bundles));
+}
+
+export function readScreenColumnBundle(screenId: string | null): ScreenColumnBundle | null {
+  if (!screenId) return null;
+  const bundle = readScreenColumnBundles()[screenId];
+  if (!bundle || !Array.isArray(bundle.columns)) return null;
+  const columns = bundle.columns.filter(isColumnId);
+  if (columns.length === 0) return null;
+  return {
+    presetId:
+      bundle.presetId === "trader" ||
+      bundle.presetId === "vcp" ||
+      bundle.presetId === "fundamentals" ||
+      bundle.presetId === "custom"
+        ? bundle.presetId
+        : "custom",
+    columns,
+  };
+}
+
+export function persistScreenColumnBundle(
+  screenId: string,
+  presetId: ScannerColumnPresetId | "custom",
+  columns: ScannerColumnId[],
+): void {
+  const valid = columns.filter(isColumnId);
+  if (valid.length === 0) return;
+  const bundles = readScreenColumnBundles();
+  bundles[screenId] = { presetId, columns: valid };
+  writeScreenColumnBundles(bundles);
+}
+
+export function columnsForPreset(presetId: ScannerColumnPresetId): ScannerColumnId[] {
+  const preset = SCANNER_COLUMN_PRESETS.find((item) => item.id === presetId);
+  return preset ? [...preset.columns] : [...SCANNER_DEFAULT_COLUMN_IDS];
+}
+
+export function detectColumnPreset(columns: ScannerColumnId[]): ScannerColumnPresetId | "custom" {
+  for (const preset of SCANNER_COLUMN_PRESETS) {
+    if (
+      preset.columns.length === columns.length &&
+      preset.columns.every((col, index) => col === columns[index])
+    ) {
+      return preset.id;
+    }
+  }
+  return "custom";
+}
+
+export function resolveInitialScannerColumns(screenId: string | null): ScannerColumnId[] {
+  const screenBundle = readScreenColumnBundle(screenId);
+  if (screenBundle) return [...screenBundle.columns];
+  return readScannerVisibleColumns();
 }
 
 function fmtNum(value: number | null | undefined, digits = 2): string {
