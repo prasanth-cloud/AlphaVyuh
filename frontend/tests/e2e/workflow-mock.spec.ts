@@ -170,11 +170,16 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator(".scanner-row-actions").first()).toBeVisible({ timeout: 20_000 });
 
     const firstSymbol = ((await page.locator("tbody tr").first().locator(".mono").first().textContent()) ?? "").trim();
+    await expect(page.getByTestId("scanner-history-toggle")).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId("scanner-history-toggle").click();
     await expect(page.getByTestId("scanner-run-history")).toContainText(/Trend Template|Custom scan/, { timeout: 10_000 });
     await expect(page.getByTestId("scanner-run-history")).toContainText(/AlphaVyuh mock fixtures|Demo/i);
 
     await page.evaluate(() => sessionStorage.removeItem("alphavyuh-scanner-last-results-v1"));
     await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByLabel("Select saved screen Trend Template")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("scanner-history-toggle")).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId("scanner-history-toggle").click();
     await expect(page.getByTestId("scanner-run-history")).toBeVisible({ timeout: 15_000 });
     await page.getByTestId("scanner-run-history-entry").first().click();
 
@@ -659,9 +664,8 @@ test.describe("Mock workflow smoke", () => {
     const resultRows = page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) });
     await expect(resultRows.first()).toBeVisible({ timeout: 10_000 });
     await expect(resultRows.first()).toContainText("Trend Template + VCP Breakout");
-    await resultRows.first().click();
-    await expect(page.locator("tbody")).toContainText("Screen: Trend Template");
-    await expect(page.locator("tbody")).toContainText("Screen: VCP Breakout");
+    await expect(resultRows.first()).toContainText("Trend Template");
+    await expect(resultRows.first()).toContainText("VCP Breakout");
 
     expect(errors).toEqual([]);
   });
@@ -699,7 +703,8 @@ test.describe("Mock workflow smoke", () => {
     expect(workflowMarks[ignoredSymbol]).toMatchObject({ lifecycle: "ignored", ignored: true, source: "scanner" });
     expect(workflowMarks[reviewSymbol]).toMatchObject({ lifecycle: "review_later", review_later: true, source: "scanner" });
 
-    await resultRows.nth(0).getByLabel(new RegExp(`Add ${shortlistSymbol} to watchlist`)).selectOption({ label: "Leaders" });
+    await resultRows.nth(0).getByLabel(new RegExp(`More actions for ${shortlistSymbol}`)).locator("option", { hasText: "Add to Leaders" }).waitFor({ state: "attached", timeout: 10_000 });
+    await resultRows.nth(0).getByLabel(new RegExp(`More actions for ${shortlistSymbol}`)).selectOption({ label: "Add to Leaders" });
     await expect(page.getByText(`${shortlistSymbol} added`)).toBeVisible({ timeout: 10_000 });
     await expect(resultRows.nth(0).getByText("Watching")).toBeVisible({ timeout: 10_000 });
     const leadersWatchlist = await page.evaluate(() => {

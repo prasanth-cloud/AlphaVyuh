@@ -162,22 +162,11 @@ test.describe("Workflow layout smoke", () => {
     const firstRowActions = page.locator(".scanner-row-actions").first();
     await expect(firstRowActions).toBeVisible({ timeout: 20_000 });
     await expect(firstRowActions.getByRole("button", { name: "Shortlist" })).toBeVisible();
-    await expect(firstRowActions.getByRole("combobox", { name: /Add .* to watchlist/i })).toBeVisible();
-    await expect(firstRowActions.getByRole("button", { name: "Open chart" })).toBeVisible();
-    await expect(firstRowActions.getByRole("button", { name: "Review later" })).toBeVisible();
     await expect(firstRowActions.getByRole("combobox", { name: /More actions/i })).toBeVisible();
-    await expect(firstRowActions.getByRole("button")).toHaveCount(3);
-    const primaryActionOrder = await firstRowActions.locator("button, select").evaluateAll((controls) =>
-      controls.slice(0, 4).map((control) => {
-        if (control instanceof HTMLSelectElement) return control.options[control.selectedIndex]?.textContent?.trim();
-        return control.textContent?.trim();
-      })
-    );
-    expect(primaryActionOrder).toEqual(["Shortlist", "Add to watchlist…", "Open chart", "Review later"]);
-    await expect(page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first()).toContainText(/A|B|C|D|\d{2,3}/);
-    await page.locator("tbody tr").filter({ has: page.getByRole("button", { name: /^Shortlist$/ }) }).first().click();
-    await expect(page.getByText("Why this matched")).toBeVisible();
-    await expect(page.getByText("Next action")).toBeVisible();
+    await expect(firstRowActions.getByRole("button")).toHaveCount(1);
+    const firstSymbol = ((await page.locator("tbody tr").first().locator(".mono").first().textContent()) ?? "").trim();
+    await page.locator("tbody tr").first().click();
+    await expect(page).toHaveURL(new RegExp(`/charts/${firstSymbol}`), { timeout: 15_000 });
 
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
     await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
