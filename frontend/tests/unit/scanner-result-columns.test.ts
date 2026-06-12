@@ -48,7 +48,16 @@ const sampleRow: ScanResult = {
 describe("scanner-result-columns", () => {
   it("keeps default columns in order", () => {
     const cols = resolveScannerColumns(SCANNER_DEFAULT_COLUMN_IDS);
-    expect(cols.map((c) => c.id)).toEqual(["symbol", "company_name", "close", "volume"]);
+    expect(cols.map((c) => c.id)).toEqual([
+      "symbol",
+      "company_name",
+      "close",
+      "pct_change",
+      "rs_score",
+      "week_52_high_pct",
+      "sector",
+      "volume",
+    ]);
   });
 
   it("formats price and change columns", () => {

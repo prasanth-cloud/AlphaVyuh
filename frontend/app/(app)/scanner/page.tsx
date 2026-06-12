@@ -514,8 +514,9 @@ export default function ScannerPage() {
   const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
   const [composingScreens, setComposingScreens] = useState(false)
   const [toast, setToast] = useState('')
-  const [technicalsOpen, setTechnicalsOpen] = useState(false)
-  const [fundamentalsOpen, setFundamentalsOpen] = useState(false)
+  const [filterTab, setFilterTab] = useState<'technicals' | 'fundamentals'>('technicals')
+  const [resultSymbolFilter, setResultSymbolFilter] = useState('')
+  const [chartsLayout, setChartsLayout] = useState<'2-up' | '4-up'>('2-up')
   const [showMorePresets, setShowMorePresets] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [resultsView, setResultsView] = useState<'list' | 'charts'>('list')
@@ -1169,6 +1170,27 @@ export default function ScannerPage() {
     }
   }
 
+  function exportScannerCsv(rows: ScanResult[]) {
+    if (rows.length === 0) return
+    const headers = visibleColumns.map(col => col.label)
+    const lines = [
+      headers.join(','),
+      ...rows.map(row => visibleColumns.map(col => {
+        const raw = formatScannerColumnValue(col.id, row)
+        const escaped = raw.includes(',') || raw.includes('"') ? `"${raw.replace(/"/g, '""')}"` : raw
+        return escaped
+      }).join(',')),
+    ]
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `alphavyuh-scanner-${tradeDate || 'results'}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    showToast(`Exported ${rows.length} rows to CSV`)
+  }
+
   async function openScannerChart(result: ScanResult) {
     await bulkUpsertWorkflowStates([
       scannerWorkflowPatch(result.symbol, 'shortlist', undefined, result, scanContextOptions()),
@@ -1317,6 +1339,14 @@ export default function ScannerPage() {
     (_, idx) => pageWindowStart + idx,
   );
   const visibleColumns = useMemo(() => resolveScannerColumns(visibleColumnIds), [visibleColumnIds]);
+  const filteredResults = useMemo(() => {
+    const query = resultSymbolFilter.trim().toUpperCase()
+    if (!query) return results
+    return results.filter(row =>
+      row.symbol.toUpperCase().includes(query) ||
+      row.company_name.toUpperCase().includes(query),
+    )
+  }, [resultSymbolFilter, results])
 
   function handleColumnSort(sortKey: string) {
     const newDesc = sortKey === sortBy ? !sortDesc : true
@@ -1377,30 +1407,46 @@ export default function ScannerPage() {
                 className="workspace-chip-button"
                 style={{ justifyContent: 'center', minHeight: 30, color: 'var(--text-tertiary)' }}
                 data-testid="scanner-more-presets-toggle"
+                aria-expanded={showMorePresets}
               >
-                {showMorePresets ? 'Fewer screeners' : 'More screeners'}
+                {showMorePresets ? 'Hide catalog' : `More screeners (${MORE_PRESETS.length})`}
               </button>
             )}
-            {showMorePresets && MORE_PRESETS.map(p => {
-              const active = activePreset === p.id
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => selectPreset(p)}
-                  title={p.description}
-                  className={`workspace-chip-button${active ? ' active' : ''}`}
-                  style={{
-                    justifyContent: 'center',
-                    minHeight: 34,
-                    padding: '7px 10px',
-                    borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
-                    color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                  }}
-                >
-                  {p.name}
-                </button>
-              )
-            })}
+            {showMorePresets && (
+              <div className="scanner-more-presets-panel" data-testid="scanner-more-presets-panel">
+                <div className="caption" style={{ marginBottom: 8, lineHeight: 1.5 }}>
+                  Additional swing-trader presets. Pick one to load filters, then run scan.
+                </div>
+                <div className="scanner-more-presets-grid">
+                  {MORE_PRESETS.map(p => {
+                    const active = activePreset === p.id
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => selectPreset(p)}
+                        title={p.description}
+                        className={`workspace-chip-button${active ? ' active' : ''}`}
+                        style={{
+                          justifyContent: 'flex-start',
+                          minHeight: 38,
+                          padding: '8px 10px',
+                          borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
+                          color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <span style={{ display: 'grid', gap: 2 }}>
+                          <span>{p.name}</span>
+                          <span className="caption" style={{ color: 'var(--text-tertiary)', fontWeight: 400, lineHeight: 1.4 }}>
+                            {p.description}
+                          </span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1480,32 +1526,21 @@ export default function ScannerPage() {
           </div>
         )}
 
-        <div className="workspace-section" style={{ paddingTop: 8, paddingBottom: 8, borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={() => setTechnicalsOpen(o => !o)}
-            style={{
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 700,
-              color: technicalsOpen ? 'var(--accent)' : 'var(--text-secondary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}
-          >
-            <span>Technicals</span>
-            <span>{technicalsOpen ? '▲' : '▼'}</span>
-          </button>
+        <div className="scanner-filter-tabs" data-testid="scanner-filter-tabs">
+          {(['technicals', 'fundamentals'] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              className={`scanner-filter-tab${filterTab === tab ? ' active' : ''}`}
+              onClick={() => setFilterTab(tab)}
+              data-testid={`scanner-filter-tab-${tab}`}
+            >
+              {tab === 'technicals' ? 'Technicals' : 'Fundamentals'}
+            </button>
+          ))}
         </div>
 
-        <div style={{ flex: technicalsOpen ? 1 : 0, overflowY: 'auto', display: technicalsOpen ? 'block' : 'none', maxHeight: technicalsOpen ? 320 : 0 }}>
+        <div style={{ flex: 1, overflowY: 'auto', display: filterTab === 'technicals' ? 'block' : 'none', maxHeight: 360 }}>
             <>
               <Section title="Price and change">
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
@@ -1564,32 +1599,7 @@ export default function ScannerPage() {
             </>
         </div>
 
-        <div className="workspace-section" style={{ paddingTop: 8, paddingBottom: 8, borderBottom: fundamentalsOpen ? '1px solid var(--border-subtle)' : 'none', flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={() => setFundamentalsOpen(o => !o)}
-            style={{
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'none',
-              border: 'none',
-              padding: 0,
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 700,
-              color: fundamentalsOpen ? 'var(--accent)' : 'var(--text-secondary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}
-          >
-            <span>Fundamentals</span>
-            <span>{fundamentalsOpen ? '▲' : '▼'}</span>
-          </button>
-        </div>
-
-        <div style={{ flex: fundamentalsOpen ? 1 : 0, overflowY: 'auto', display: fundamentalsOpen ? 'block' : 'none', maxHeight: fundamentalsOpen ? 280 : 0 }}>
+        <div style={{ flex: 1, overflowY: 'auto', display: filterTab === 'fundamentals' ? 'block' : 'none', maxHeight: 280 }}>
             <>
               <Section title="Market cap">
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
@@ -1665,6 +1675,29 @@ export default function ScannerPage() {
                 >
                   Charts
                 </button>
+                {resultsView === 'charts' && (
+                  <>
+                    {(['2-up', '4-up'] as const).map(option => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={`workspace-chip-button${chartsLayout === option ? ' active' : ''}`}
+                        onClick={() => setChartsLayout(option)}
+                        data-testid={`scanner-charts-layout-${option}`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </>
+                )}
+                <input
+                  value={resultSymbolFilter}
+                  onChange={(e) => setResultSymbolFilter(e.target.value)}
+                  placeholder="Filter symbols"
+                  className="scanner-symbol-filter"
+                  data-testid="scanner-result-symbol-filter"
+                  aria-label="Filter scan results by symbol or company name"
+                />
                 <button
                   type="button"
                   className="workspace-chip-button"
@@ -1746,6 +1779,22 @@ export default function ScannerPage() {
                 <Button size="sm" variant="secondary" onClick={() => setShowWlModal(true)}>
                   Create watchlist
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => copyTradingViewSymbols(selectedResults.size > 0 ? selectedSymbols() : filteredResults.map(r => r.symbol))}
+                  data-testid="scanner-copy-tv-symbols"
+                >
+                  Copy TV symbols
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => exportScannerCsv(filteredResults)}
+                  data-testid="scanner-export-csv"
+                >
+                  Export CSV
+                </Button>
                 {selectedResults.size > 0 && (
                   <>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')}>
@@ -1753,9 +1802,6 @@ export default function ScannerPage() {
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => router.push(buildMultiChartReviewHref(selectedSymbols(), { source: 'scanner' }))}>
                       Review charts
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => copyTradingViewSymbols(selectedSymbols())}>
-                      Copy TV symbols
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'review_later')}>
                       Review later
@@ -1923,8 +1969,9 @@ export default function ScannerPage() {
 
         {!loading && results.length > 0 && resultsView === 'charts' && (
           <ScannerChartsPanel
-            results={results}
+            results={filteredResults}
             selected={selectedResults}
+            layout={chartsLayout}
             onToggleSelect={(symbol, checked) => {
               setSelectedResults(prev => {
                 const next = new Set(prev)
@@ -1937,6 +1984,10 @@ export default function ScannerPage() {
               const full = results.find(result => result.symbol === row.symbol)
               if (full) void openScannerChart(full)
             }}
+            onMark={markWorkflow}
+            watchlists={watchlists}
+            onAddToWatchlist={addToWatchlist}
+            onReport={reportScannerDataIssue}
           />
         )}
 
@@ -1982,7 +2033,7 @@ export default function ScannerPage() {
                 <Th width={88} align="right">{'\u00A0'}</Th>
               </DataTableHead>
               <tbody>
-                {results.map(r => {
+                {filteredResults.map(r => {
                   return (
                     <Fragment key={r.symbol}>
                       <Tr
@@ -2008,7 +2059,12 @@ export default function ScannerPage() {
                             ? (r.pct_change >= 0 ? 'var(--gain)' : 'var(--loss)')
                             : 'var(--text-primary)'
                           return (
-                            <Td key={col.id} align={align} mono={col.id !== 'company_name' && col.id !== 'sector'} emphasized={col.id === 'close'}>
+                            <Td
+                              key={col.id}
+                              align={align}
+                              mono={col.id !== 'company_name' && col.id !== 'sector'}
+                              emphasized={col.id === 'close' || col.id === 'rs_score'}
+                            >
                               {col.id === 'symbol' ? (
                                 <div>
                                   <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{r.symbol}</div>
@@ -2025,6 +2081,8 @@ export default function ScannerPage() {
                                 </div>
                               ) : col.id === 'close' ? (
                                 `₹${value}`
+                              ) : col.id === 'rs_score' ? (
+                                <span className="scanner-rs-cell">{value}</span>
                               ) : (
                                 <span style={{ color: isPct ? tone : undefined, fontWeight: isPct ? 600 : undefined, fontSize: isPct ? 12 : undefined }}>
                                   {value}
@@ -2049,9 +2107,10 @@ export default function ScannerPage() {
                 })}
               </tbody>
             </DataTable>
-            <div className="workspace-toolbar" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', borderBottom: 'none' }}>
+            <div className="workspace-toolbar scanner-pagination-footer">
               <div className="workspace-card-copy">
-                Showing <Num>{visibleStart}</Num>-<Num>{visibleEnd}</Num> of <Num>{totalMatches.toLocaleString('en-IN')}</Num> matches.
+                Showing <Num>{filteredResults.length === 0 ? 0 : visibleStart}</Num>-<Num>{filteredResults.length === 0 ? 0 : Math.min(visibleEnd, visibleStart + filteredResults.length - 1)}</Num> of <Num>{totalMatches.toLocaleString('en-IN')}</Num> matches
+                {resultSymbolFilter.trim() ? ` · ${filteredResults.length} filtered on page` : ''}.
               </div>
               <div className="workspace-toolbar-group">
                 <button
