@@ -42,11 +42,10 @@ npm run e2e:mock           → 17 passed
 npm run e2e:qa-video       → 1 passed (video recorded)
 ```
 
-## Remaining / not in this branch
+## Remaining gaps (post-completion pass)
 
-- Production deploy video: run `e2e:qa-video:prod` after merge + Vercel deploy with QA credentials.
-- Dashboard `page.tsx` dead cockpit components (lint warnings) — cleanup deferred.
-- Layout e2e intermittent server crash on long suite (port 3002); scanner-specific cases pass when server stays up.
+- Production walkthrough: `npm run e2e:qa-video:prod` after merge + Vercel production deploy (signed-in QA session).
+- VIX/FII dashboard strip — intentionally deferred per product choice.
 
 ## Calm typography changes
 

@@ -1377,11 +1377,29 @@ input, textarea, select {
   font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-1);
+  box-shadow: 0 1px 0 var(--border-subtle);
+}
+
+.scanner-results-table.scanner-results-table-tv thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
 .scanner-results-table.scanner-results-table-tv th.scanner-sortable {
   cursor: pointer;
   user-select: none;
+}
+
+.scanner-results-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .scanner-row-menu {

@@ -1942,7 +1942,7 @@ export default function ScannerPage() {
 
         {/* Results table */}
         {!loading && results.length > 0 && resultsView === 'list' && (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="scanner-results-scroll">
             <DataTable
               className="scanner-results-table scanner-results-table-tv"
               style={{ borderRadius: 0, border: 'none', borderBottom: '1px solid var(--border-subtle)', background: 'transparent' }}
@@ -1957,7 +1957,7 @@ export default function ScannerPage() {
                   const sortable = col.sortKey != null
                   const active = sortable && sortBy === col.sortKey
                   return (
-                    <Th key={col.id} align={col.align ?? 'left'} width={col.width}>
+                    <Th key={col.id} align={col.align ?? 'left'} width={col.width} className={sortable ? 'scanner-sortable' : undefined}>
                       {sortable ? (
                         <button
                           type="button"

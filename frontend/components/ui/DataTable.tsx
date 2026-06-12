@@ -39,13 +39,14 @@ export function DataTableHead({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function Th({ children, align = 'left', width }: {
+export function Th({ children, align = 'left', width, className }: {
   children: React.ReactNode
   align?: 'left' | 'right' | 'center'
   width?: number | string
+  className?: string
 }) {
   return (
-    <th style={{
+    <th className={className} style={{
       padding: '10px 14px',
       fontSize: 10, fontWeight: 600,
       letterSpacing: '0.1em', textTransform: 'uppercase',
