@@ -2,7 +2,7 @@
 
 Phased roadmap to evolve AlphaVyuh's scanner from a functional filter form into a professional terminal-grade screener — inspired by TradingView Screener, Bloomberg EQS, and TC2000 — without copying their clutter or neon overload.
 
-**Status:** Planning doc (June 2026). Quick wins in `feat/scanner-ui-polish` address spacing and toolbar polish; full redesign is sliced below.
+**Status:** Phase 0 merged (PR #370). Phase 1 shipped in `feat/scanner-phase1-ui` (June 2026).
 
 ---
 
@@ -82,13 +82,13 @@ Phased roadmap to evolve AlphaVyuh's scanner from a functional filter form into 
 
 **Goal:** Scanner feels intentional and calm; matches ChartMaze/TV parity report gaps.
 
-| Item | Recommendation | PR estimate |
-|------|----------------|-------------|
-| Active filter summary | Chip row above results: "EMA20 above · RS ≥ 70 · VCP" with clear dismiss | 1 PR |
-| Toolbar hierarchy | Primary: Run / match count / view toggle. Secondary: export, watchlist. Tertiary: meta trust | Included in layout PR |
-| Section spacing | Uniform `scanner-filter-section` padding; default-open Price + Trend sections | 0.5 PR |
-| Mobile filter drawer | Bottom sheet or full-screen filter on `<820px` | 1 PR |
-| Empty / error states | Align copy with trust invariants; link Data Status | 0.5 PR |
+| Item | Recommendation | Status |
+|------|----------------|--------|
+| Active filter summary | Chip row above results: "EMA20 above · RS ≥ 70 · VCP" with clear dismiss | [x] `ScannerFilterChips.tsx`, `scanner-active-filters.ts` |
+| Toolbar hierarchy | Primary: match count / view toggle / run context. Secondary: export, watchlist, History. Tertiary: meta trust | [x] `scanner-toolbar-primary/secondary/tertiary` |
+| Section spacing | Uniform `scanner-filter-section` padding; default-open Price + Trend sections | [x] CSS + `Section` component |
+| Mobile filter drawer | Bottom sheet or full-screen filter on `<820px` | [x] `scanner-filter-rail` drawer at 820px |
+| Empty / error states | Align copy with trust invariants; link Data Status | [x] zero-result + pre-run copy |
 
 **Acceptance:** Playwright `scanner-tv-table.spec.ts` and `workflow-mock.spec.ts` green; no regression in scan latency display.
 
