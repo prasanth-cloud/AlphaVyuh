@@ -2581,6 +2581,16 @@ function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined
     above_ema20_pct: numberOr(data.above_ema20_pct),
     above_ema50_pct: numberOr(data.above_ema50_pct),
     above_ema200_pct: numberOr(data.above_ema200_pct),
+    ema_breadth_by_period: data.ema_breadth_by_period ?? undefined,
+    ema_breadth_daily_history: Array.isArray(data.ema_breadth_daily_history)
+      ? data.ema_breadth_daily_history.map((row) => ({
+          trade_date: String(row.trade_date),
+          ema20: numberOr(row.ema20),
+          ema50: numberOr(row.ema50),
+          ema200: numberOr(row.ema200),
+        }))
+      : undefined,
+    highs_lows_by_period: data.highs_lows_by_period ?? undefined,
     market_phase: data.market_phase ?? "Pending",
     market_phase_desc: data.market_phase_desc ?? "Market breadth will appear after the latest complete trading day is available.",
     indices: Array.isArray(data.indices) ? data.indices.map((idx) => ({

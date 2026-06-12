@@ -83,10 +83,22 @@ export function resolveHighsLowsView(
   period: HighsLowsPeriod,
   data: MarketOverview,
 ): PeriodView<{ highs: number; lows: number }> {
+  const byPeriod = data.highs_lows_by_period;
+  const key = period === "weekly" ? "weekly" : "daily";
+  const bucket = byPeriod?.[key];
+  if (bucket && Number.isFinite(bucket.highs) && Number.isFinite(bucket.lows)) {
+    return {
+      status: "ready",
+      data: {
+        highs: safeMarketNumber(bucket.highs),
+        lows: safeMarketNumber(bucket.lows),
+      },
+    };
+  }
   if (period !== "daily") {
     return {
       status: "unavailable",
-      message: "Weekly highs vs lows are not available yet. Only the latest session is stored.",
+      message: "Weekly highs vs lows are not available yet. Check Data Status before reading rolling 52-week counts.",
     };
   }
   return {
@@ -104,6 +116,27 @@ export type EmaBreadthSeries = {
   ema200: number;
 };
 
+export type EmaBreadthHistoryRow = {
+  trade_date: string;
+  ema20: number;
+  ema50: number;
+  ema200: number;
+};
+
+/** Short label for EMA breadth history rows, e.g. `12th Jun'26`. */
+export function formatEmaBreadthTradeDate(tradeDate: string): string {
+  const parsed = new Date(`${tradeDate}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return tradeDate;
+  const day = parsed.getDate();
+  const suffix = day % 10 === 1 && day !== 11 ? "st"
+    : day % 10 === 2 && day !== 12 ? "nd"
+    : day % 10 === 3 && day !== 13 ? "rd"
+    : "th";
+  const month = parsed.toLocaleString("en-IN", { month: "short" });
+  const year = String(parsed.getFullYear()).slice(-2);
+  return `${day}${suffix} ${month}'${year}`;
+}
+
 const EMA_PERIOD_LABELS: Record<MarketPeriod, string> = {
   day: "Day",
   week: "Week",
@@ -116,10 +149,21 @@ export function emaPeriodLabel(period: MarketPeriod): string {
 }
 
 export function resolveEmaBreadthView(period: MarketPeriod, data: MarketOverview): PeriodView<EmaBreadthSeries> {
+  const bucket = data.ema_breadth_by_period?.[period];
+  if (bucket && Number.isFinite(bucket.ema20)) {
+    return {
+      status: "ready",
+      data: {
+        ema20: safeMarketNumber(bucket.ema20),
+        ema50: safeMarketNumber(bucket.ema50),
+        ema200: safeMarketNumber(bucket.ema200),
+      },
+    };
+  }
   if (period !== "day") {
     return {
       status: "unavailable",
-      message: `${emaPeriodLabel(period)}ly EMA breadth history is not available yet. Only the latest session is stored.`,
+      message: `${emaPeriodLabel(period)}ly EMA breadth history is not available yet. Check Data Status before reading trend participation.`,
     };
   }
   return {
@@ -130,6 +174,13 @@ export function resolveEmaBreadthView(period: MarketPeriod, data: MarketOverview
       ema200: safeMarketNumber(data.above_ema200_pct),
     },
   };
+}
+
+export function sectorBreadthCaption(basis?: string | null): string {
+  if (basis === "advancing_constituents") {
+    return "Large % = more stocks closed up vs prior session in that sector. Second line is average session % change.";
+  }
+  return "Large % = share of sector stocks that advanced on the latest EOD session. Second line is average session % change.";
 }
 
 export function sectorHeatColor(breadthPct: number): string {

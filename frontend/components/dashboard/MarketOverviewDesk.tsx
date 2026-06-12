@@ -9,12 +9,14 @@ import {
   breadthPhaseColor,
   breadthPhaseLabel,
   emaPeriodLabel,
+  formatEmaBreadthTradeDate,
   filterMajorSectorBreadth,
   formatMarketPercent,
   isMarketOverviewReady,
   resolveEmaBreadthView,
   resolveHighsLowsView,
   safeMarketNumber,
+  sectorBreadthCaption,
   sectorHeatBackground,
   sectorHeatColor,
   type HighsLowsPeriod,
@@ -153,10 +155,48 @@ function EmaAreaChart({ label, value, color }: { label: string; value: number; c
   );
 }
 
+function EmaBreadthHistoryTable({ rows }: { rows: MarketOverview["ema_breadth_daily_history"] }) {
+  const history = Array.isArray(rows) ? rows : [];
+  if (!history.length) return null;
+
+  return (
+    <div className="dashboard-ema-history-wrap" data-testid="dashboard-ema-breadth-history">
+      <div className="dashboard-ema-history-title">% stocks above EMA</div>
+      <table className="dashboard-ema-history-table">
+        <thead>
+          <tr>
+            <th className="dashboard-ema-history-date">Date</th>
+            <th className="dashboard-ema-history-col dashboard-ema-history-col-20">Abv EMA20</th>
+            <th className="dashboard-ema-history-col dashboard-ema-history-col-50">Abv EMA50</th>
+            <th className="dashboard-ema-history-col dashboard-ema-history-col-200">Abv EMA200</th>
+          </tr>
+        </thead>
+        <tbody>
+          {history.map((row) => (
+            <tr key={row.trade_date}>
+              <td className="dashboard-ema-history-date">{formatEmaBreadthTradeDate(row.trade_date)}</td>
+              <td className="dashboard-ema-history-col dashboard-ema-history-col-20">
+                <Num className="mono">{formatMarketPercent(row.ema20, 2)}</Num>
+              </td>
+              <td className="dashboard-ema-history-col dashboard-ema-history-col-50">
+                <Num className="mono">{formatMarketPercent(row.ema50, 2)}</Num>
+              </td>
+              <td className="dashboard-ema-history-col dashboard-ema-history-col-200">
+                <Num className="mono">{formatMarketPercent(row.ema200, 2)}</Num>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function EmaBreadthPanel({ data, ready }: { data: MarketOverview; ready: boolean }) {
   const [period, setPeriod] = useState<MarketPeriod>("day");
   const view = resolveEmaBreadthView(period, data);
   const periods: MarketPeriod[] = ["day", "week", "month", "year"];
+  const showHistory = period === "day" && ready && Array.isArray(data.ema_breadth_daily_history) && data.ema_breadth_daily_history.length > 0;
 
   return (
     <Card padding="md" data-testid="dashboard-ema-breadth">
@@ -175,10 +215,13 @@ function EmaBreadthPanel({ data, ready }: { data: MarketOverview; ready: boolean
       ) : view.status === "unavailable" ? (
         <MarketUnavailableNote message={view.message} />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <EmaAreaChart label="Stocks above EMA20" value={view.data.ema20} color={view.data.ema20 > 60 ? "var(--gain)" : view.data.ema20 > 40 ? "var(--warn)" : "var(--loss)"} />
-          <EmaAreaChart label="Stocks above EMA50" value={view.data.ema50} color={view.data.ema50 > 60 ? "var(--gain)" : view.data.ema50 > 40 ? "var(--warn)" : "var(--loss)"} />
-          <EmaAreaChart label="Stocks above EMA200" value={view.data.ema200} color={view.data.ema200 > 60 ? "var(--gain)" : view.data.ema200 > 40 ? "var(--warn)" : "var(--loss)"} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <EmaAreaChart label="Stocks above EMA20" value={view.data.ema20} color={view.data.ema20 > 60 ? "var(--gain)" : view.data.ema20 > 40 ? "var(--warn)" : "var(--loss)"} />
+            <EmaAreaChart label="Stocks above EMA50" value={view.data.ema50} color={view.data.ema50 > 60 ? "var(--gain)" : view.data.ema50 > 40 ? "var(--warn)" : "var(--loss)"} />
+            <EmaAreaChart label="Stocks above EMA200" value={view.data.ema200} color={view.data.ema200 > 60 ? "var(--gain)" : view.data.ema200 > 40 ? "var(--warn)" : "var(--loss)"} />
+          </div>
+          {showHistory ? <EmaBreadthHistoryTable rows={data.ema_breadth_daily_history} /> : null}
         </div>
       )}
     </Card>
@@ -204,7 +247,9 @@ function MajorSectorGrid({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
         <div>
           <h2 className="heading-card" style={{ fontWeight: 600, marginBottom: 4 }}>Major sectors</h2>
-          <div className="caption">Eleven NSE-aligned sectors · advancers and avg change</div>
+          <div className="caption" title={sectorBreadthCaption(data.sector_breadth_basis)}>
+            {sectorBreadthCaption(data.sector_breadth_basis)}
+          </div>
         </div>
         <a href="/data" className="caption" style={{ color: "var(--text-tertiary)", textDecoration: "none" }}>Data Status</a>
       </div>
@@ -239,7 +284,7 @@ function MajorSectorGrid({
                   background: missing ? "var(--surface-2)" : sectorHeatBackground(breadth),
                   borderColor: missing ? "var(--border-subtle)" : "transparent",
                 }}
-                title={missing ? `${cell.label} breadth not returned for this session` : undefined}
+                title={missing ? `${cell.label} breadth not returned for this session` : `${cell.label}: ${formatMarketPercent(breadth, 0)} of stocks advanced vs prior close`}
               >
                 <div className="label" style={{ marginBottom: 6, fontSize: 10 }}>{cell.label}</div>
                 {missing ? (

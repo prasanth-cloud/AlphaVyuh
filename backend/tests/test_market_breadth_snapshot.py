@@ -31,6 +31,9 @@ class _Query:
             self.rows = [row for row in self.rows if row.get("run_id") == value]
         return self
 
+    def lte(self, *_args, **_kwargs):
+        return self
+
     def like(self, *_args, **_kwargs):
         return self
 

@@ -3,6 +3,7 @@ import {
   MAJOR_SECTOR_DEFINITIONS,
   filterMajorSectorBreadth,
   isMarketOverviewReady,
+  formatEmaBreadthTradeDate,
   resolveEmaBreadthView,
   resolveHighsLowsView,
 } from "@/lib/dashboard-market";
@@ -20,8 +21,19 @@ const sampleOverview: MarketOverview = {
   above_ema20_pct: 62,
   above_ema50_pct: 54,
   above_ema200_pct: 48,
+  ema_breadth_by_period: {
+    day: { ema20: 62, ema50: 54, ema200: 48 },
+    week: { ema20: 58, ema50: 51, ema200: 45 },
+    month: null,
+    year: null,
+  },
+  highs_lows_by_period: {
+    daily: { highs: 42, lows: 18 },
+    weekly: { highs: 180, lows: 95 },
+  },
   market_phase: "Bullish",
   market_phase_desc: "Constructive breadth",
+  sector_breadth_basis: "advancing_constituents",
   sector_breadth: [
     { sector: "IT Services", total: 10, advances: 7, declines: 3, avg_pct_change: 1.2, breadth_pct: 70 },
     { sector: "Banks", total: 8, advances: 4, declines: 4, avg_pct_change: 0.1, breadth_pct: 50 },
@@ -48,21 +60,31 @@ describe("dashboard-market helpers", () => {
     expect(isMarketOverviewReady(sampleOverview, "Market overview is temporarily unavailable.")).toBe(false);
   });
 
-  it("returns daily highs and lows but not weekly history", () => {
+  it("returns daily and weekly highs and lows when period buckets exist", () => {
     expect(resolveHighsLowsView("daily", sampleOverview)).toEqual({
       status: "ready",
       data: { highs: 42, lows: 18 },
     });
-    expect(resolveHighsLowsView("weekly", sampleOverview).status).toBe("unavailable");
+    expect(resolveHighsLowsView("weekly", sampleOverview)).toEqual({
+      status: "ready",
+      data: { highs: 180, lows: 95 },
+    });
   });
 
-  it("returns day EMA breadth only for the latest session", () => {
+  it("returns day and week EMA breadth when period buckets exist", () => {
     expect(resolveEmaBreadthView("day", sampleOverview)).toEqual({
       status: "ready",
       data: { ema20: 62, ema50: 54, ema200: 48 },
     });
-    expect(resolveEmaBreadthView("week", sampleOverview).status).toBe("unavailable");
+    expect(resolveEmaBreadthView("week", sampleOverview)).toEqual({
+      status: "ready",
+      data: { ema20: 58, ema50: 51, ema200: 45 },
+    });
     expect(resolveEmaBreadthView("month", sampleOverview).status).toBe("unavailable");
     expect(resolveEmaBreadthView("year", sampleOverview).status).toBe("unavailable");
+  });
+
+  it("formats EMA breadth history dates with spaced day label", () => {
+    expect(formatEmaBreadthTradeDate("2026-06-12")).toBe("12th Jun'26");
   });
 });

@@ -920,6 +920,9 @@ export interface MarketOverview {
   above_ema20_pct: number;
   above_ema50_pct: number;
   above_ema200_pct: number;
+  ema_breadth_by_period?: Partial<Record<"day" | "week" | "month" | "year", { ema20: number; ema50: number; ema200: number } | null>>;
+  ema_breadth_daily_history?: { trade_date: string; ema20: number; ema50: number; ema200: number }[];
+  highs_lows_by_period?: Partial<Record<"daily" | "weekly", { highs: number; lows: number }>>;
   market_phase: string;
   market_phase_desc: string;
   indices?: { symbol: string; label: string; close: number | null; pct_change: number | null; prev_close: number | null; source: string; error?: string }[];

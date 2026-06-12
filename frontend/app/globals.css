@@ -1786,9 +1786,85 @@ input, textarea, select {
 
 .dashboard-regime-strip {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.dashboard-regime-ema-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-regime-ema-chip {
+  min-width: 0;
+}
+
+.dashboard-ema-history-wrap {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+
+.dashboard-ema-history-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.dashboard-ema-history-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+
+.dashboard-ema-history-table th,
+.dashboard-ema-history-table td {
+  padding: 8px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dashboard-ema-history-date {
+  text-align: left;
+  min-width: 7.5rem;
+  padding-right: 16px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.dashboard-ema-history-col {
+  min-width: 4.75rem;
+}
+
+.dashboard-ema-history-table thead th.dashboard-ema-history-col-20 {
+  background: rgba(217, 119, 6, 0.22);
+  color: var(--text-primary);
+}
+
+.dashboard-ema-history-table thead th.dashboard-ema-history-col-50 {
+  background: rgba(45, 181, 116, 0.2);
+  color: var(--text-primary);
+}
+
+.dashboard-ema-history-table thead th.dashboard-ema-history-col-200 {
+  background: rgba(59, 130, 246, 0.22);
+  color: var(--text-primary);
+}
+
+.dashboard-ema-history-table tbody tr:nth-child(even) td.dashboard-ema-history-col-20 {
+  background: rgba(217, 119, 6, 0.06);
+}
+
+.dashboard-ema-history-table tbody tr:nth-child(even) td.dashboard-ema-history-col-50 {
+  background: rgba(45, 181, 116, 0.06);
+}
+
+.dashboard-ema-history-table tbody tr:nth-child(even) td.dashboard-ema-history-col-200 {
+  background: rgba(59, 130, 246, 0.06);
 }
 
 .dashboard-regime-chip {

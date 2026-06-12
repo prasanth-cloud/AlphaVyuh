@@ -1760,7 +1760,8 @@ export default function ScannerPage() {
           ))}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', display: filterTab === 'technicals' ? 'block' : 'none', maxHeight: 360 }}>
+        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
+        {filterTab === 'technicals' ? (
             <>
               <Section title="Price and change" open>
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
@@ -1817,9 +1818,7 @@ export default function ScannerPage() {
                 {toggleRow('Inside bar', 'is_inside_bar')}
               </Section>
             </>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', display: filterTab === 'fundamentals' ? 'block' : 'none', maxHeight: 280 }}>
+        ) : (
             <>
               <Section title="Market cap">
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
@@ -1841,6 +1840,7 @@ export default function ScannerPage() {
                 {numRow('Debt/Equity ≤', 'debt_to_equity_max', 'e.g. 1')}
               </Section>
             </>
+        )}
         </div>
 
         {/* Bottom actions */}
