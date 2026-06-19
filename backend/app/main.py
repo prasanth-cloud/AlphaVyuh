@@ -170,5 +170,6 @@ async def stop_scheduler():
 
 
 @app.get("/health")
+@app.get("/healthz")
 async def health():
     return {"status": "ok", "version": "0.3.1"}

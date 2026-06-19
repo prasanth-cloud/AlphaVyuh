@@ -10,14 +10,40 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Ping Railway health endpoint
+      - name: Ping Railway healthz endpoint
         run: |
-          start=$(date +%s%N)
-          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://alphavyuh-production.up.railway.app/health)
-          end=$(date +%s%N)
-          elapsed=$(( (end - start) / 1000000 ))
-          echo "Status: $status | Response time: ${elapsed}ms"
+          response=$(curl -s -o /dev/null -w "%{http_code} %{time_total} %{time_starttransfer}" --max-time 10 https://alphavyuh-production.up.railway.app/healthz)
+          status=$(echo "$response" | awk '{print $1}')
+          total=$(echo "$response" | awk '{print $2}')
+          ttfb=$(echo "$response" | awk '{print $3}')
+          echo "Status: $status | TTFB: ${ttfb}s | Total: ${total}s"
           if [ "$status" -ne 200 ]; then
             echo "::warning::Health check returned $status"
             exit 1
           fi
+          ttfb_ms=$(echo "$ttfb" | awk '{printf "%d", $1 * 1000}')
+          if [ "$ttfb_ms" -gt 1000 ]; then
+            echo "::warning::TTFB ${ttfb_ms}ms exceeds 1s cold-start target"
+          else
+            echo "✓ TTFB ${ttfb_ms}ms is under 1s target"
+          fi
+
+  cold-start-check:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Measure cold-start (3 sequential pings)
+        run: |
+          echo "=== Cold-start measurement ==="
+          for i in 1 2 3; do
+            response=$(curl -s -o /dev/null -w "%{http_code} %{time_total} %{time_starttransfer}" --max-time 15 https://alphavyuh-production.up.railway.app/healthz)
+            status=$(echo "$response" | awk '{print $1}')
+            total=$(echo "$response" | awk '{print $2}')
+            ttfb=$(echo "$response" | awk '{print $3}')
+            echo "Ping $i — Status: $status | TTFB: ${ttfb}s | Total: ${total}s"
+            sleep 2
+          done
+          echo ""
+          echo "If all TTFB values are under 1.0s, cold-start target is met."
+          echo "The keep-alive cron (every 4 min) prevents Railway from sleeping the container."
