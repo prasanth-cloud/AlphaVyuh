@@ -2,9 +2,14 @@
 """Re-encrypt broker_credentials rows from key_version 1 to 2.
 
 See scripts/rotate_broker_key.py.TODO for the full runbook.
+
+Usage:
+  python scripts/rotate_broker_key.py              # live rotation with confirmation
+  python scripts/rotate_broker_key.py --dry-run    # decrypt-verify only, no writes
 """
 from __future__ import annotations
 
+import argparse
 import os
 import secrets
 import sys
@@ -13,7 +18,6 @@ from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from supabase import create_client
 
 BATCH_SIZE = 100
 BACKUP_SUFFIX = ".broker-creds-backup.bin"
@@ -32,6 +36,27 @@ def _encrypt(plaintext: str, key: bytes, user_id: str, broker: str, key_name: st
     iv = secrets.token_bytes(12)
     ct = AESGCM(key).encrypt(iv, plaintext.encode(), _aad(user_id, broker, key_name))
     return iv + ct
+
+
+def rotate_row(row: dict, old_key: bytes, new_key: bytes) -> dict | None:
+    """Decrypt with old_key, re-encrypt with new_key. Returns new row dict or None on failure.
+
+    Pure crypto — no DB calls. Raises InvalidTag if old_key is wrong.
+    """
+    raw = row["key_value"]
+    blob = bytes.fromhex(raw) if isinstance(raw, str) else bytes(raw)
+    plaintext = _decrypt(blob, old_key, row["user_id"], row["broker"], row["key_name"])
+    new_blob = _encrypt(plaintext, new_key, row["user_id"], row["broker"], row["key_name"])
+    plaintext = ""
+    return {"id": row["id"], "key_value": new_blob.hex(), "key_version": 2}
+
+
+def verify_row(row: dict, key: bytes) -> bool:
+    """Verify a row can be decrypted. Returns True on success."""
+    raw = row["key_value"]
+    blob = bytes.fromhex(raw) if isinstance(raw, str) else bytes(raw)
+    _decrypt(blob, key, row["user_id"], row["broker"], row["key_name"])
+    return True
 
 
 def _require_env(name: str) -> str:
@@ -79,6 +104,13 @@ def _count_v1(client) -> int:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Rotate broker credential encryption key")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Verify all rows decrypt with old key and trial-encrypt with new key, but write nothing to DB")
+    args = parser.parse_args()
+
+    from supabase import create_client
+
     supabase_url = _require_env("SUPABASE_URL")
     service_key = _require_env("SUPABASE_SERVICE_ROLE_KEY")
     old_key_hex = _require_env("BROKER_CREDS_KEY")
@@ -93,21 +125,26 @@ def main() -> int:
 
     client = create_client(supabase_url, service_key)
     pending = _count_v1(client)
-    print(f"Will re-encrypt {pending} rows. Continue? [y/N]")
-    if input().strip().lower() != "y":
-        print("Aborted.")
-        return 1
 
-    snapshot = (
-        client.table("broker_credentials")
-        .select("id,user_id,broker,key_name,key_value")
-        .eq("key_version", 1)
-        .order("id")
-        .execute()
-        .data or []
-    )
-    backup_path = Path.cwd() / f"broker-credentials-{int(time.time())}{BACKUP_SUFFIX}"
-    _write_backup(backup_path, snapshot)
+    if args.dry_run:
+        print(f"[DRY RUN] Verifying {pending} rows can be decrypted and re-encrypted...")
+    else:
+        print(f"Will re-encrypt {pending} rows. Continue? [y/N]")
+        if input().strip().lower() != "y":
+            print("Aborted.")
+            return 1
+
+    if not args.dry_run:
+        snapshot = (
+            client.table("broker_credentials")
+            .select("id,user_id,broker,key_name,key_value")
+            .eq("key_version", 1)
+            .order("id")
+            .execute()
+            .data or []
+        )
+        backup_path = Path.cwd() / f"broker-credentials-{int(time.time())}{BACKUP_SUFFIX}"
+        _write_backup(backup_path, snapshot)
 
     rotated = 0
     skipped = 0
@@ -131,12 +168,9 @@ def main() -> int:
         for row in batch:
             row_id = row["id"]
             last_id = row_id
-            user_id = row["user_id"]
-            broker = row["broker"]
-            key_name = row["key_name"]
+
             try:
-                blob = bytes.fromhex(row["key_value"]) if isinstance(row["key_value"], str) else bytes(row["key_value"])
-                plaintext = _decrypt(blob, old_key, user_id, broker, key_name)
+                result = rotate_row(row, old_key, new_key)
             except InvalidTag:
                 print(f"Row {row_id} failed to decrypt — skipping")
                 skipped += 1
@@ -146,12 +180,22 @@ def main() -> int:
                 failed += 1
                 continue
 
+            if args.dry_run:
+                try:
+                    verify_row(
+                        {**row, "key_value": result["key_value"]},
+                        new_key,
+                    )
+                    rotated += 1
+                except Exception as exc:
+                    print(f"Row {row_id} re-encryption verification failed: {exc}")
+                    failed += 1
+                continue
+
             try:
-                new_blob = _encrypt(plaintext, new_key, user_id, broker, key_name)
-                plaintext = ""
                 (
                     client.table("broker_credentials")
-                    .update({"key_value": new_blob.hex(), "key_version": 2})
+                    .update({"key_value": result["key_value"], "key_version": 2})
                     .eq("id", row_id)
                     .eq("key_version", 1)
                     .execute()
@@ -162,7 +206,16 @@ def main() -> int:
                 failed += 1
 
         print(f"Progress: rotated={rotated} skipped={skipped} failed={failed}")
-        time.sleep(0.1)
+        if not args.dry_run:
+            time.sleep(0.1)
+
+    if args.dry_run:
+        print(f"[DRY RUN] Summary: verified={rotated} skipped={skipped} failed={failed}")
+        if failed > 0:
+            print("Some rows failed verification. Investigate before running live rotation.")
+            return 1
+        print("All rows verified successfully. Safe to run without --dry-run.")
+        return 0
 
     remaining = _count_v1(client)
     print(f"Summary: rotated={rotated} skipped={skipped} failed={failed} remaining_v1={remaining}")
