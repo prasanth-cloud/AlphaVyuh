@@ -5,9 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 import yfinance as yf
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.plans import get_effective_user_plan
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, get_user_client
 from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
@@ -89,9 +89,9 @@ def _clean_context(value: dict[str, Any] | None) -> dict[str, Any] | None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/analytics")
-async def get_analytics(user_id: str = Depends(get_current_user_id)):
+async def get_analytics(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
         result = (
             sb.table("trade_journal")
             .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days,risk_reward")
@@ -224,8 +224,8 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/stats")
-async def get_stats(user_id: str = Depends(get_current_user_id)):
-    sb = get_admin_client()
+async def get_stats(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    sb = get_user_client(token)
     result = (
         sb.table("trade_journal")
         .select("pnl,pnl_pct,status,trade_type,setup_type,holding_days")
@@ -277,8 +277,9 @@ async def list_entries(
     status: Optional[str] = None,
     symbol: Optional[str] = None,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    sb = get_admin_client()
+    sb = get_user_client(token)
     plan = _get_user_plan(user_id)
 
     q = (
@@ -309,8 +310,9 @@ async def list_entries(
 async def create_entry(
     body: JournalEntry,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    sb = get_admin_client()
+    sb = get_user_client(token)
 
     stock = (
         sb.table("stock_universe")
@@ -375,8 +377,9 @@ async def update_entry(
     entry_id: str,
     body: JournalUpdate,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    sb = get_admin_client()
+    sb = get_user_client(token)
 
     existing = (
         sb.table("trade_journal")
@@ -441,9 +444,10 @@ async def update_entry(
 async def generate_lessons(
     entry_id: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """Generate a local lesson for a specific closed trade on demand."""
-    sb = get_admin_client()
+    sb = get_user_client(token)
     r = sb.table("trade_journal").select("*").eq("id", entry_id).eq("user_id", user_id).maybe_single().execute()
     if not r.data:
         raise HTTPException(status_code=404, detail="Entry not found")
@@ -467,20 +471,21 @@ async def generate_lessons(
 async def delete_entry(
     entry_id: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    sb = get_admin_client()
+    sb = get_user_client(token)
     sb.table("trade_journal").delete().eq("id", entry_id).eq("user_id", user_id).execute()
     return {"message": "Deleted"}
 
 
 @router.get("/portfolio")
-async def get_portfolio(user_id: str = Depends(get_current_user_id)):
+async def get_portfolio(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """
     Returns all open positions with current price from daily_ohlcv,
     unrealised P&L, and sector breakdown.
     """
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
         result = (
             sb.table("trade_journal")
             .select("id,symbol,company_name,trade_type,entry_date,entry_price,quantity,stop_loss,target_price,setup_type")

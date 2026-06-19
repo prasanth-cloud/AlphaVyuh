@@ -14,9 +14,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.rate_limit import ai_limiter
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_user_client
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +264,7 @@ def generate_journal_analysis(trades: list[dict]) -> str:
 
 
 @router.post("/analyse")
-async def analyse_journal(user_id: str = Depends(get_current_user_id)):
+async def analyse_journal(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     if not ai_limiter.is_allowed(user_id):
         retry_after = ai_limiter.retry_after(user_id)
         raise HTTPException(
@@ -273,7 +273,7 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
             headers={"Retry-After": str(retry_after)},
         )
 
-    sb = get_admin_client()
+    sb = get_user_client(token)
     result = (
         sb.table("trade_journal")
         .select(
@@ -302,13 +302,13 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/patterns")
-async def get_patterns(user_id: str = Depends(get_current_user_id)):
+async def get_patterns(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """
     Compute statistical patterns from closed trades.
     Returns win rates by day of week, direction, holding period bucket, and time-in-trade stats.
     """
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
         result = (
             sb.table("trade_journal")
             .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,holding_days,risk_reward,mistakes")

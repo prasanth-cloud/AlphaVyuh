@@ -33,8 +33,8 @@ from app.brokers.oauth_state import (
     create_broker_oauth_state,
     verify_broker_oauth_state,
 )
-from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.services.supabase import get_admin_client, get_user_client
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +171,7 @@ def _mark_broker_disconnected(user_id: str, broker: BrokerId) -> None:
 async def connect_start(
     broker: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """Return the OAuth redirect URL for the user to open in their browser."""
     _require_broker_plan(user_id)
@@ -195,6 +196,7 @@ async def connect_callback(
     code: str | None = Query(default=None),
     state: str = Query(default=""),
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """Exchange the OAuth request_token, store encrypted credentials, redirect to UI."""
     _require_broker_plan(user_id)
@@ -254,6 +256,7 @@ async def connect_callback(
 async def get_broker_profile(
     broker: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)
@@ -272,6 +275,7 @@ async def get_broker_profile(
 async def get_broker_holdings(
     broker: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)
@@ -309,6 +313,7 @@ def _smoke_error(exc: Exception) -> str:
 async def broker_read_only_smoke(
     broker: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """
     Run adapter-backed read-only account checks and return sanitized counts only.
@@ -414,6 +419,7 @@ async def broker_read_only_smoke(
 async def disconnect_broker(
     broker: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)

@@ -13,7 +13,7 @@ from time import monotonic
 from fastapi import APIRouter, Depends, Query
 from starlette.responses import StreamingResponse
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.kite_stream import KiteStreamError, kite_live_ticker
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, _kite_access_token, _kite_api_key, get_market_data_provider
 from app.services.market_breadth_snapshot import (
@@ -24,7 +24,7 @@ from app.services.market_breadth_snapshot import (
 from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.sector_taxonomy import NSE_SECTORAL_INDEXES, build_sector_taxonomy_metadata
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, get_user_client
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
 
@@ -186,7 +186,7 @@ def _kite_market_status() -> dict:
 
 
 @router.get("/overview")
-async def market_overview(user_id: str = Depends(get_current_user_id)):
+async def market_overview(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     global _overview_cache, _overview_cache_expires_at
 
     now = monotonic()
@@ -198,7 +198,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
     indices, quote_source, indices_live = _index_quotes()
 
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
     except Exception:
         overview = _unavailable_overview(None, indices, quote_source, indices_live)
         _overview_cache = deepcopy(overview)
@@ -247,12 +247,12 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/live/status")
-async def live_market_status(user_id: str = Depends(get_current_user_id)):
+async def live_market_status(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     return _kite_market_status()
 
 
 @router.get("/live/sectors")
-async def live_sector_indices(user_id: str = Depends(get_current_user_id)):
+async def live_sector_indices(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     sectors, source, is_live = await _sector_index_quotes()
     return {
         "basis": "live_sector_indices",
@@ -268,6 +268,7 @@ async def live_market_stream(
     symbols: str = Query(..., min_length=1, description="Comma-separated NSE symbols"),
     mode: str | None = Query(None, pattern="^(ltp|quote|full)$"),
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     requested = [symbol.strip().upper() for symbol in symbols.split(",") if symbol.strip()]
     stream_mode = mode or os.getenv("KITE_STREAM_MODE", "quote").strip().lower() or "quote"

@@ -11,9 +11,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.plans import get_effective_user_plan
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, get_user_client
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +49,9 @@ def _price_alerts_unavailable() -> HTTPException:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("")
-async def list_price_alerts(user_id: str = Depends(get_current_user_id)):
+async def list_price_alerts(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
         res = (
             sb.table("price_alerts")
             .select("*")
@@ -68,6 +68,7 @@ async def list_price_alerts(user_id: str = Depends(get_current_user_id)):
 async def create_price_alert(
     body: CreateAlertRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     if body.condition not in ("above", "below"):
         raise HTTPException(status_code=400, detail="condition must be 'above' or 'below'")
@@ -75,7 +76,7 @@ async def create_price_alert(
         raise HTTPException(status_code=400, detail="target_price must be positive")
 
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
         plan  = _get_user_plan(user_id)
         limit = FREE_LIMIT if plan == "free" else PRO_LIMIT
         count = (
@@ -114,9 +115,10 @@ async def create_price_alert(
 async def delete_price_alert(
     alert_id: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
         sb.table("price_alerts").delete().eq("id", alert_id).eq("user_id", user_id).execute()
     except Exception:
         raise _price_alerts_unavailable()

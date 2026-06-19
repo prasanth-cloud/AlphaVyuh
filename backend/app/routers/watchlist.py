@@ -4,11 +4,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.plans import get_effective_user_plan
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, get_user_client
 
 router = APIRouter(prefix="/api/v1/watchlists", tags=["watchlists"])
 
@@ -78,10 +78,11 @@ def _enrich_items(client, items: list) -> list:
 async def get_watchlists(
     lite: bool = Query(False, description="Return watchlist structure without OHLCV enrichment for fast shell loads."),
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     # 1 – all watchlists
     try:
-        client = get_admin_client()
+        client = get_user_client(token)
         wl_res = client.table("watchlists") \
             .select("id, name, sort_order, created_at") \
             .eq("user_id", user_id) \
@@ -200,8 +201,8 @@ class CreateWatchlistRequest(BaseModel):
 
 
 @router.post("")
-async def create_watchlist(body: CreateWatchlistRequest, user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
+async def create_watchlist(body: CreateWatchlistRequest, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    client = get_user_client(token)
     plan = _get_user_plan(user_id)
     limit = FREE_WATCHLIST_LIMIT if plan == "free" else PRO_WATCHLIST_LIMIT
 
@@ -225,8 +226,9 @@ async def add_item(
     watchlist_id: UUID,
     body: AddItemRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(token)
     _verify_watchlist_ownership(client, str(watchlist_id), user_id)
 
     plan = _get_user_plan(user_id)
@@ -260,8 +262,9 @@ async def add_item(
 async def delete_watchlist(
     watchlist_id: UUID,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(token)
     _verify_watchlist_ownership(client, str(watchlist_id), user_id)
     client.table("watchlist_items").delete().eq("watchlist_id", str(watchlist_id)).execute()
     client.table("watchlists").delete().eq("id", str(watchlist_id)).execute()
@@ -273,8 +276,9 @@ async def remove_item(
     watchlist_id: UUID,
     symbol: str,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(token)
     _verify_watchlist_ownership(client, str(watchlist_id), user_id)
     client.table("watchlist_items") \
         .delete() \
@@ -298,8 +302,9 @@ async def reorder_items(
     watchlist_id: UUID,
     body: ReorderRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(token)
     _verify_watchlist_ownership(client, str(watchlist_id), user_id)
     for item in body.items:
         client.table("watchlist_items") \
@@ -322,8 +327,9 @@ async def update_item_metadata(
     symbol: str,
     body: UpdateItemMetadataRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(token)
     _verify_watchlist_ownership(client, str(watchlist_id), user_id)
 
     existing = client.table("watchlist_items") \

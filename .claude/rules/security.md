@@ -9,9 +9,12 @@
 
 ## Row Level Security
 - All user-owned tables have RLS enabled and policies scoped to `auth.uid() = user_id`
-- Backend uses **service-role key** which bypasses RLS — that's intentional and correct
+- User-facing routers use `get_user_client(token)` which respects RLS via the user's JWT
+- Service-role (`get_admin_client()`) is restricted to: ingest jobs, admin scripts, auth middleware, broker credential operations, and payment plan activation
+- `get_current_user_token` dependency provides the raw JWT for creating user-scoped clients
 - New tables must have RLS enabled before launch: `alter table ... enable row level security`
 - Add both `select` and write policies explicitly — don't rely on "default deny"
+- CI check (`scripts/check-service-role-usage.sh`) fails if new routers use `get_admin_client`
 
 ## Entitlements — never trust the frontend
 - Plan checks happen exclusively on the backend in each router

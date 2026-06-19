@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.services.supabase import get_user_client
 
 router = APIRouter(prefix="/api/v1", tags=["users"])
 
@@ -68,8 +68,8 @@ def _sanitize_user_response(row: dict) -> dict:
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
+async def get_me(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    client = get_user_client(token)
     result = (
         client.table("users")
         .select(_SELECT)
@@ -86,8 +86,9 @@ async def get_me(user_id: str = Depends(get_current_user_id)):
 async def update_me(
     body: UpdateUserRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(token)
     updates: dict = {}
     if body.full_name is not None:
         updates["full_name"] = body.full_name
@@ -130,8 +131,8 @@ async def update_me(
 
 
 @router.get("/referral-code")
-async def get_referral_code(user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
+async def get_referral_code(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    client = get_user_client(token)
     r = client.table("users").select("referral_code").eq("id", user_id).single().execute()
     code = r.data.get("referral_code") if r.data else None
     if not code:
@@ -147,11 +148,11 @@ async def get_referral_code(user_id: str = Depends(get_current_user_id)):
 
 
 @router.post("/referral/apply")
-async def apply_referral(body: dict, user_id: str = Depends(get_current_user_id)):
+async def apply_referral(body: dict, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     code = (body.get("referral_code") or "").strip().upper()
     if not code:
         raise HTTPException(400, "No referral code provided")
-    client = get_admin_client()
+    client = get_user_client(token)
     # Find referrer
     ref = client.table("users").select("id, plan, plan_expires_at").eq("referral_code", code).execute()
     if not ref.data:

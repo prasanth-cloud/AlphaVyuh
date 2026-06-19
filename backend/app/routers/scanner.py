@@ -17,12 +17,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, get_user_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 logger = logging.getLogger(__name__)
@@ -1550,6 +1550,7 @@ async def execute_scan(
 async def run_scanner(
     body: ScanRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     if not scanner_limiter.is_allowed(user_id):
         retry_after = scanner_limiter.retry_after(user_id)
@@ -1560,7 +1561,7 @@ async def run_scanner(
         )
 
     try:
-        client = get_admin_client()
+        client = get_user_client(token)
         plan = _get_user_plan(user_id)
     except Exception:
         raise HTTPException(
@@ -1572,9 +1573,9 @@ async def run_scanner(
 
 
 @router.get("/screens")
-async def list_screens(user_id: str = Depends(get_current_user_id)):
+async def list_screens(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     try:
-        client = get_admin_client()
+        client = get_user_client(token)
         r = client.table("saved_screens").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     except Exception:
         raise HTTPException(
@@ -1585,8 +1586,8 @@ async def list_screens(user_id: str = Depends(get_current_user_id)):
 
 
 @router.post("/screens")
-async def save_screen(body: SaveScreenRequest, user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
+async def save_screen(body: SaveScreenRequest, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    client = get_user_client(token)
     plan   = _get_user_plan(user_id)
     if plan == "free":
         cnt = client.table("saved_screens").select("id", count="exact").eq("user_id", user_id).execute()
@@ -1602,8 +1603,8 @@ async def save_screen(body: SaveScreenRequest, user_id: str = Depends(get_curren
 
 
 @router.delete("/screens/{screen_id}")
-async def delete_screen(screen_id: UUID, user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
+async def delete_screen(screen_id: UUID, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    client = get_user_client(token)
     ex = client.table("saved_screens").select("id").eq("id", str(screen_id)).eq("user_id", user_id).execute()
     if not ex.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Screen not found")
