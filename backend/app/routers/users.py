@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/v1", tags=["users"])
 
 _SELECT = (
     "id, email, full_name, avatar_url, plan, plan_expires_at, "
-    "onboarding_completed, telegram_chat_id, "
+    "onboarding_completed, onboarding_dismissed, telegram_chat_id, "
     "broker_type, broker_connected_at, "
     "billing_region, billing_currency, billing_period, "
     "referral_code, referred_by, created_at"
@@ -29,6 +29,7 @@ class UserResponse(BaseModel):
     plan: str
     plan_expires_at: str | None
     onboarding_completed: bool
+    onboarding_dismissed: bool = False
     telegram_chat_id: str | None = None
     broker_type: str | None = None
     broker_connected_at: str | None = None
@@ -43,6 +44,7 @@ class UserResponse(BaseModel):
 class UpdateUserRequest(BaseModel):
     full_name: str | None = None
     onboarding_completed: bool | None = None
+    onboarding_dismissed: bool | None = None
     telegram_chat_id: str | None = None
     # Broker setup — set during onboarding or settings
     broker_type: str | None = None          # "zerodha" | "upstox" | "angel" | "fyers" | "none"
@@ -94,6 +96,8 @@ async def update_me(
         updates["full_name"] = body.full_name
     if body.onboarding_completed is not None:
         updates["onboarding_completed"] = body.onboarding_completed
+    if body.onboarding_dismissed is not None:
+        updates["onboarding_dismissed"] = body.onboarding_dismissed
     if body.telegram_chat_id is not None:
         updates["telegram_chat_id"] = body.telegram_chat_id or None
     broker = body.broker_type if body.broker_type != "none" else None

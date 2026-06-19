@@ -307,6 +307,10 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   }, [fullChartMode, symbol, timeframe]);
 
   useEffect(() => {
+    try { localStorage.setItem("alphavyuh-chart-visited", "1"); } catch {}
+  }, []);
+
+  useEffect(() => {
     const nextType = normalizeChartType(searchParams.get("type"));
     if (nextType && nextType !== chartType) setChartType(nextType);
   }, [chartType, searchParams]);

@@ -21,6 +21,7 @@ import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, s
 import { trackEvent } from '@/lib/analytics'
 import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
 import { DataHealthBadge } from '@/components/DataHealthBadge'
+import { FirstRunBanner } from '@/components/FirstRunBanner'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
@@ -1553,6 +1554,7 @@ export default function ScannerPage() {
         </div>
         <p className="calm-page-copy">Choose a screener, refine filters if needed, then run scan when you are ready.</p>
       </div>
+      <FirstRunBanner />
       <div
         className={`workspace-grid scanner-workspace-grid${filterRailCollapsed ? ' scanner-filter-rail-collapsed' : ''}`}
         style={{

@@ -1824,6 +1824,7 @@ export async function getMe(): Promise<UserProfile> {
 export async function updateMe(updates: {
   full_name?: string;
   onboarding_completed?: boolean;
+  onboarding_dismissed?: boolean;
   telegram_chat_id?: string;
   broker_type?: string;
   billing_region?: string;
