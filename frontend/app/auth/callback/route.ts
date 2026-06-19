@@ -9,37 +9,35 @@ export async function GET(request: Request) {
   const requestedNext = requestUrl.searchParams.get("next");
   const next = isSafeRedirect(requestedNext) ? requestedNext : "/dashboard";
 
-  if (code) {
-    const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin));
-    redirectResponse.headers.set("Server-Timing", 'alphavyuh_auth_callback;desc="session_set"');
-
-    // Write session cookies directly onto the redirect response so the browser
-    // receives Set-Cookie headers. Using cookieStore.set() alone (the previous
-    // approach) writes to the Next.js internal store but not onto an explicitly
-    // returned NextResponse object, meaning cookies were dropped.
-    const cookieStore = await cookies();
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              redirectResponse.cookies.set(name, value, options ?? {});
-            });
-          },
-        },
-      }
-    );
-
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error) {
-      return redirectResponse;
-    }
+  if (!code) {
+    return NextResponse.redirect(new URL("/auth/error?reason=missing_code", requestUrl.origin));
   }
 
-  return NextResponse.redirect(new URL("/login?error=auth_callback_failed", requestUrl.origin));
+  const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin));
+  redirectResponse.headers.set("Server-Timing", 'alphavyuh_auth_callback;desc="session_set"');
+
+  const cookieStore = cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            redirectResponse.cookies.set(name, value, options ?? {});
+          });
+        },
+      },
+    }
+  );
+
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  if (!error) {
+    return redirectResponse;
+  }
+
+  return NextResponse.redirect(new URL("/auth/error?reason=exchange_failed", requestUrl.origin));
 }
