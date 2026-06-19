@@ -1,0 +1,23 @@
+name: Keep Railway Alive
+
+on:
+  schedule:
+    - cron: "*/4 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Ping Railway health endpoint
+        run: |
+          start=$(date +%s%N)
+          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://alphavyuh-production.up.railway.app/health)
+          end=$(date +%s%N)
+          elapsed=$(( (end - start) / 1000000 ))
+          echo "Status: $status | Response time: ${elapsed}ms"
+          if [ "$status" -ne 200 ]; then
+            echo "::warning::Health check returned $status"
+            exit 1
+          fi
