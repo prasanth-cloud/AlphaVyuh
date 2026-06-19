@@ -14,8 +14,8 @@ router = APIRouter(prefix="/api/v1", tags=["users"])
 
 _SELECT = (
     "id, email, full_name, avatar_url, plan, plan_expires_at, "
-    "onboarding_completed, onboarding_dismissed, telegram_chat_id, "
-    "broker_type, broker_connected_at, "
+    "onboarding_completed, onboarding_dismissed, first_scan_at, "
+    "telegram_chat_id, broker_type, broker_connected_at, "
     "billing_region, billing_currency, billing_period, "
     "referral_code, referred_by, created_at"
 )
@@ -30,6 +30,7 @@ class UserResponse(BaseModel):
     plan_expires_at: str | None
     onboarding_completed: bool
     onboarding_dismissed: bool = False
+    first_scan_at: str | None = None
     telegram_chat_id: str | None = None
     broker_type: str | None = None
     broker_connected_at: str | None = None

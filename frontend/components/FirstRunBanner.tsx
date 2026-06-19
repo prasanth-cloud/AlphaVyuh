@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { getMe, updateMe, getWatchlists } from "@/lib/api";
-import { readScannerRunHistory } from "@/lib/scanner-run-history";
 
 type StepState = { done: boolean; label: string };
 
@@ -37,8 +36,7 @@ export function FirstRunBanner() {
         if (cancelled) return;
         if (profile.onboarding_dismissed) return;
 
-        const scanHistory = readScannerRunHistory();
-        const hasScan = scanHistory.length > 0;
+        const hasScan = !!profile.first_scan_at;
 
         let hasWatchlistItem = false;
         try {
@@ -50,8 +48,7 @@ export function FirstRunBanner() {
           }
         } catch { /* watchlists may not be loaded yet */ }
 
-        const chartKey = "alphavyuh-chart-visited";
-        const hasChart = typeof window !== "undefined" && localStorage.getItem(chartKey) === "1";
+        const hasChart = typeof window !== "undefined" && localStorage.getItem("alphavyuh-chart-visited") === "1";
 
         if (cancelled) return;
 

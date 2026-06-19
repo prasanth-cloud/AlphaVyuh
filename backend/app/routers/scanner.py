@@ -1569,7 +1569,18 @@ async def run_scanner(
             detail="Scanner data is temporarily unavailable.",
         )
 
-    return await execute_scan(client, body, plan=plan)
+    result = await execute_scan(client, body, plan=plan)
+
+    try:
+        client.table("users") \
+            .update({"first_scan_at": "now()"}) \
+            .eq("id", user_id) \
+            .is_("first_scan_at", "null") \
+            .execute()
+    except Exception:
+        pass
+
+    return result
 
 
 @router.get("/screens")
