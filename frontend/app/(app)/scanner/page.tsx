@@ -20,6 +20,7 @@ import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanne
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
 import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
+import { DataHealthBadge } from '@/components/DataHealthBadge'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
@@ -1546,7 +1547,10 @@ export default function ScannerPage() {
   return (
     <div className="workspace-page">
       <div className="workspace-desk-header calm-desk-header" style={{ marginBottom: 12 }}>
-        <h1 className="calm-page-title">Scanner</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <h1 className="calm-page-title">Scanner</h1>
+          <DataHealthBadge compact />
+        </div>
         <p className="calm-page-copy">Choose a screener, refine filters if needed, then run scan when you are ready.</p>
       </div>
       <div

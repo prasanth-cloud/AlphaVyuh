@@ -24,6 +24,7 @@ import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import ChartTimeframePillStrip from "@/components/charts/ChartTimeframePillStrip";
 import { ChartWorkflowHeader } from "@/components/ChartWorkflowHeader";
 import { DataProvenanceBadge, Num } from "@/components/ui";
+import { DataHealthBadge } from "@/components/DataHealthBadge";
 import { trackEvent } from "@/lib/analytics";
 import type { ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 import {
@@ -2233,7 +2234,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             title="Charts use the latest available market snapshot unless a provider source is shown."
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
-            <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
+            <DataHealthBadge compact />
           </button>
 
           {/* Price alert bell */}
@@ -3215,7 +3216,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 title="Charts use the latest available market snapshot unless a provider source is shown."
               >
                 <Activity size={12} />
-                <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
+                <DataHealthBadge compact />
               </button>
             </div>
           </div>
