@@ -1,3 +1,6 @@
+# ── Claude Code worktrees (temporary, never commit) ─────────────────────────
+.claude/worktrees/
+
 # ── Environment — NEVER commit these ─────────────────────────────────────────
 .env
 .env.local
