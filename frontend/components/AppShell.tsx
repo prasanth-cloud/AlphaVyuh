@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { BrandLogoMark } from '@/components/BrandLogoMark'
 import FeedbackWidget from '@/components/FeedbackWidget'
+import KiteTokenBanner from '@/components/KiteTokenBanner'
 import { clearAuthHeaderCache, getDataHealth, searchSymbols, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
 import type { DataHealth, SymbolSearchResult } from '@/lib/api'
 import { checkApiReachability } from '@/lib/api-reachability'
@@ -157,6 +158,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
       )}
 
+      <KiteTokenBanner />
       <main className={fullChart ? 'app-content app-content-full-chart' : 'app-content'}>{children}</main>
       {!fullChart && <FeedbackWidget />}
     </div>

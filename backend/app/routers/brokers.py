@@ -428,6 +428,104 @@ async def disconnect_broker(
     return {"disconnected": broker_id}
 
 
+# ─── Kite token health ────────────────────────────────────────────────────────
+
+
+@router.get("/kite/token-health")
+async def kite_token_health(
+    user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
+):
+    """Return Kite token age, expiry countdown, and validity status."""
+    _require_broker_plan(user_id)
+
+    access_token = None
+    try:
+        access_token = get_broker_credential(user_id, "zerodha", "access_token")
+    except Exception:
+        pass
+
+    if not access_token:
+        return {
+            "connected": False,
+            "token_valid": False,
+            "token_age_seconds": None,
+            "expires_in_seconds": None,
+            "connected_at": None,
+            "expires_at": None,
+            "needs_reconnect": True,
+        }
+
+    expires_raw = None
+    try:
+        expires_raw = get_broker_credential(user_id, "zerodha", "expires_at")
+    except Exception:
+        pass
+
+    connected_at_raw = None
+    try:
+        row = (
+            get_admin_client()
+            .table("broker_connections")
+            .select("created_at,token_expires_at")
+            .eq("user_id", user_id)
+            .eq("broker", "zerodha")
+            .maybe_single()
+            .execute()
+        ).data
+        if row:
+            connected_at_raw = row.get("created_at")
+            if not expires_raw:
+                expires_raw = row.get("token_expires_at")
+    except Exception:
+        pass
+
+    now = datetime.now(timezone.utc)
+    expires_at = None
+    expires_in = None
+    token_valid = True
+
+    if expires_raw:
+        try:
+            expires_at = datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            expires_in = int((expires_at - now).total_seconds())
+            token_valid = expires_in > 0
+        except Exception:
+            pass
+
+    token_age = None
+    if connected_at_raw:
+        try:
+            connected_dt = datetime.fromisoformat(str(connected_at_raw).replace("Z", "+00:00"))
+            if connected_dt.tzinfo is None:
+                connected_dt = connected_dt.replace(tzinfo=timezone.utc)
+            token_age = int((now - connected_dt).total_seconds())
+        except Exception:
+            pass
+
+    profile_ok = False
+    if token_valid and access_token:
+        try:
+            from app.brokers.kite.api import get_profile
+            get_profile(access_token)
+            profile_ok = True
+        except Exception:
+            token_valid = False
+
+    return {
+        "connected": True,
+        "token_valid": token_valid,
+        "profile_check_passed": profile_ok,
+        "token_age_seconds": token_age,
+        "expires_in_seconds": expires_in,
+        "connected_at": connected_at_raw,
+        "expires_at": expires_at.isoformat() if expires_at else None,
+        "needs_reconnect": not token_valid,
+    }
+
+
 # ─── Error helper ─────────────────────────────────────────────────────────────
 
 

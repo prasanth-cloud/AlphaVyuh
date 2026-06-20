@@ -156,9 +156,16 @@ async def start_scheduler():
         id="price_alert_check",
         replace_existing=True,
     )
+    from app.services.kite_token_refresh import refresh_kite_tokens
+    _scheduler.add_job(
+        refresh_kite_tokens,
+        CronTrigger(hour=6, minute=30, timezone=ist),
+        id="kite_token_refresh",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info(
-        "APScheduler started — bhavcopy 16:00, yfinance refresh %s, price alerts every 5 min",
+        "APScheduler started — bhavcopy 16:00, yfinance refresh %s, price alerts every 5 min, kite token check 06:30",
         "enabled at 16:15" if settings.enable_yfinance_refresh else "disabled",
     )
 
