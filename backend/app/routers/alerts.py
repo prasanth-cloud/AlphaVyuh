@@ -218,6 +218,7 @@ async def get_alert_matches(
         res = client.table("scan_alert_matches") \
             .select("*") \
             .eq("alert_id", alert_id) \
+            .eq("user_id", user_id) \
             .order("run_date", desc=True) \
             .limit(max(1, min(limit, 30))) \
             .execute()
