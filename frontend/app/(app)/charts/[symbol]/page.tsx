@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Share2, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -1781,6 +1781,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
           trailing={(
             <>
               <button type="button" onClick={reportChartDataIssue} className="workspace-chip-button">Report data</button>
+              <button type="button" onClick={() => {
+                const url = `https://alphavyuh.com/charts/${symbol}`;
+                navigator.clipboard.writeText(url).then(
+                  () => setOrderToast({ message: "Link copied to clipboard", journalId: null, broker: "simulated" }),
+                  () => setOrderToast({ message: "Could not copy — try manually", journalId: null, broker: "simulated" }),
+                );
+              }} className="workspace-chip-button"><Share2 size={14} style={{ marginRight: 4 }} />Share</button>
               {!brokerConnected && (
                 <Link href="/settings/broker" prefetch={false} className="workspace-chip-button">
                   {brokerStatusError ? "Check broker status" : brokerStatus?.token_expired ? "Reconnect broker" : "Connect broker"}
