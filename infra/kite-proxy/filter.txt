@@ -1,0 +1,2 @@
+^api\.kite\.trade$
+^kite\.zerodha\.com$

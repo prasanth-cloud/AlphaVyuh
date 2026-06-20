@@ -1,14 +1,20 @@
 """
 Thin httpx wrapper for Kite Connect v3.
 No business logic — only auth headers, timeouts, and transient-5xx retry.
+
+Order paths (/orders/*) are routed through KITE_PROXY_URL when set,
+so Kite sees a stable IP registered in the app settings.
 """
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.kite.trade"
 LOGIN_URL = "https://kite.zerodha.com/connect/login"
@@ -16,6 +22,12 @@ SESSION_URL = f"{BASE_URL}/session/token"
 
 _RETRY_STATUSES = {500, 502, 503, 504}
 _TIMEOUT = httpx.Timeout(10.0, read=30.0)
+
+_ORDER_PATH_PREFIXES = ("/orders",)
+
+
+def _proxy_url() -> str | None:
+    return os.environ.get("KITE_PROXY_URL")
 
 
 def _api_key(api_key: str | None = None) -> str:
@@ -184,6 +196,10 @@ def _delete(path: str, access_token: str) -> dict[str, Any]:
     return _request("DELETE", path, access_token=access_token)
 
 
+def _needs_proxy(path: str) -> bool:
+    return any(path.startswith(prefix) for prefix in _ORDER_PATH_PREFIXES)
+
+
 def _request(
     method: str,
     path: str,
@@ -195,9 +211,14 @@ def _request(
     url = f"{BASE_URL}{path}"
     headers = _headers(access_token, api_key=api_key)
 
+    proxy = _proxy_url() if _needs_proxy(path) else None
+    client_kwargs: dict[str, Any] = {"timeout": _TIMEOUT}
+    if proxy:
+        client_kwargs["proxy"] = proxy
+
     for attempt in range(3):
         try:
-            with httpx.Client(timeout=_TIMEOUT) as client:
+            with httpx.Client(**client_kwargs) as client:
                 resp = client.request(method, url, headers=headers, data=data, params=params)
         except httpx.RequestError as exc:
             if attempt < 2:

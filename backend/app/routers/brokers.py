@@ -528,6 +528,38 @@ async def kite_token_health(
     }
 
 
+# ─── Proxy IP verification ────────────────────────────────────────────────────
+
+
+@router.get("/kite/proxy-ip-check")
+async def kite_proxy_ip_check():
+    """Verify that order-path requests exit through the registered proxy IP."""
+    import httpx as _httpx
+
+    proxy_url = os.environ.get("KITE_PROXY_URL")
+    expected_ip = os.environ.get("KITE_PROXY_IP")
+
+    if not proxy_url:
+        return {"ok": False, "error": "KITE_PROXY_URL not configured", "proxy_ip": None, "expected_ip": expected_ip}
+
+    try:
+        client_kwargs: dict = {"timeout": _httpx.Timeout(10.0)}
+        client_kwargs["proxy"] = proxy_url
+        with _httpx.Client(**client_kwargs) as client:
+            resp = client.get("https://api.ipify.org?format=json")
+            actual_ip = resp.json().get("ip")
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "proxy_ip": None, "expected_ip": expected_ip}
+
+    matches = actual_ip == expected_ip if expected_ip else None
+    return {
+        "ok": matches is True or matches is None,
+        "proxy_ip": actual_ip,
+        "expected_ip": expected_ip,
+        "matches": matches,
+    }
+
+
 # ─── Error helper ─────────────────────────────────────────────────────────────
 
 
