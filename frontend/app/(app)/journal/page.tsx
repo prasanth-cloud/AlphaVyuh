@@ -144,6 +144,12 @@ export default function JournalPage() {
       if (paramDate) prefill.entry_date = paramDate;
       const paramPrice = searchParams.get("entry_price");
       if (paramPrice) prefill.entry_price = parseFloat(paramPrice);
+      const noteParts: string[] = [];
+      const ema50 = searchParams.get("ema_50");
+      if (ema50) noteParts.push(`EMA50: ${ema50}`);
+      const rsi14 = searchParams.get("rsi_14");
+      if (rsi14) noteParts.push(`RSI: ${rsi14}`);
+      if (noteParts.length > 0) prefill.entry_reason = noteParts.join(" | ");
       setAddForm(prev => ({ ...prev, ...prefill }));
       setPanelMode("add");
     }
@@ -152,37 +158,6 @@ export default function JournalPage() {
       setReviewFocus(requestedReview);
     } else {
       setReviewFocus("all");
-    }
-
-    if (searchParams.get("prefill") === "1") {
-      const sym = searchParams.get("symbol")?.toUpperCase() ?? "";
-      const entryPrice = parseFloat(searchParams.get("entry_price") ?? "");
-      const entryDate = searchParams.get("entry_date") ?? new Date().toISOString().split("T")[0];
-      const ema20 = searchParams.get("ema20");
-      const ema50 = searchParams.get("ema50");
-      const ema200 = searchParams.get("ema200");
-      const rsi = searchParams.get("rsi");
-
-      const contextParts: string[] = [];
-      if (ema20) contextParts.push(`EMA 20: ${ema20}`);
-      if (ema50) contextParts.push(`EMA 50: ${ema50}`);
-      if (ema200) contextParts.push(`EMA 200: ${ema200}`);
-      if (rsi) contextParts.push(`RSI 14: ${rsi}`);
-      const sourceContext = contextParts.length ? contextParts.join(" · ") : null;
-
-      if (sym) {
-        setSelectedSymbol(sym);
-        setSymbolQ(sym);
-      }
-      setAddForm({
-        trade_type: "long",
-        entry_date: entryDate,
-        ...(Number.isFinite(entryPrice) ? { entry_price: entryPrice } : {}),
-        source_page: "chart",
-        source_context: sourceContext,
-      });
-      setPanelMode("add");
-      setSelectedEntry(null);
     }
   }, [searchParams]);
 
@@ -250,6 +225,29 @@ export default function JournalPage() {
       })()
     : null;
 
+  const riskPerShare = addForm.entry_price && addForm.stop_loss
+    ? Math.abs(addForm.entry_price - addForm.stop_loss) : null;
+  const addFormRMultiple = addForm.entry_price && addForm.stop_loss && (addForm as Record<string, unknown>).exit_price
+    ? (() => {
+        const exitP = (addForm as Record<string, unknown>).exit_price as number;
+        const risk = addForm.trade_type === "long"
+          ? addForm.entry_price! - addForm.stop_loss!
+          : addForm.stop_loss! - addForm.entry_price!;
+        const reward = addForm.trade_type === "long"
+          ? exitP - addForm.entry_price!
+          : addForm.entry_price! - exitP;
+        return risk > 0 ? reward / risk : null;
+      })()
+    : null;
+  const addFormPnl = addForm.entry_price && addForm.quantity && (addForm as Record<string, unknown>).exit_price
+    ? (() => {
+        const exitP = (addForm as Record<string, unknown>).exit_price as number;
+        return addForm.trade_type === "long"
+          ? (exitP - addForm.entry_price!) * addForm.quantity!
+          : (addForm.entry_price! - exitP) * addForm.quantity!;
+      })()
+    : null;
+
   const pnlPreview = selectedEntry && closeForm.exit_price
     ? (() => {
         const ep = selectedEntry.entry_price;
@@ -287,6 +285,42 @@ export default function JournalPage() {
     const open = entries.filter((entry) => entry.status === "open").length;
     return { needsReview, reviewed, imported, chartOrders, manual, open };
   }, [entries]);
+
+  const setupBreakdown = useMemo(() => {
+    const closed = entries.filter(e => e.status === "closed");
+    const bySetup = new Map<string, { trades: number; wins: number; totalPnl: number }>();
+    for (const e of closed) {
+      const tag = e.setup_type?.trim() || "Untagged";
+      const prev = bySetup.get(tag) || { trades: 0, wins: 0, totalPnl: 0 };
+      prev.trades++;
+      if (e.pnl != null && e.pnl > 0) prev.wins++;
+      prev.totalPnl += e.pnl ?? 0;
+      bySetup.set(tag, prev);
+    }
+    return Array.from(bySetup.entries())
+      .map(([setup, d]) => ({ setup, ...d, winPct: d.trades > 0 ? (d.wins / d.trades) * 100 : 0, avgPnl: d.trades > 0 ? d.totalPnl / d.trades : 0 }))
+      .sort((a, b) => b.trades - a.trades);
+  }, [entries]);
+
+  const avgRMultiple = useMemo(() => {
+    const valid = entries.filter(e => e.status === "closed" && e.entry_price && e.exit_price && e.stop_loss);
+    if (valid.length === 0) return null;
+    let totalR = 0;
+    for (const e of valid) {
+      const risk = e.trade_type === "long" ? e.entry_price - (e.stop_loss ?? e.entry_price) : (e.stop_loss ?? e.entry_price) - e.entry_price;
+      if (risk <= 0) continue;
+      const reward = e.trade_type === "long" ? (e.exit_price ?? e.entry_price) - e.entry_price : e.entry_price - (e.exit_price ?? e.entry_price);
+      totalR += reward / risk;
+    }
+    return valid.length > 0 ? totalR / valid.length : null;
+  }, [entries]);
+
+  const bestSetup = useMemo(() => {
+    const qualifying = setupBreakdown.filter(s => s.trades >= 3 && s.setup !== "Untagged");
+    if (qualifying.length === 0) return null;
+    return qualifying.reduce((best, s) => s.avgPnl > best.avgPnl ? s : best, qualifying[0]).setup;
+  }, [setupBreakdown]);
+
   const reviewStage = useMemo(() => (
     getJournalReviewStage(entries, {
       totalTrades,
@@ -685,13 +719,60 @@ export default function JournalPage() {
         </div>
       </div>
 
-      {/* Stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-        <StatCard label="Total P&L" value={stats ? fmtCcy(stats.total_pnl) : journalStatsError ? "Unavailable" : "—"} deltaVariant={stats ? (stats.total_pnl >= 0 ? "gain" : "loss") : "neutral"} />
-        <StatCard label="Win rate" value={stats ? `${stats.win_rate}%` : journalStatsError ? "Unavailable" : "—"} deltaVariant={stats ? (stats.win_rate >= 50 ? "gain" : "loss") : "neutral"} />
-        <StatCard label="Closed trades" value={journalLoadError ? "—" : String(closedTrades)} />
-        <StatCard label="Open trades" value={journalLoadError ? "—" : String(stats?.open_trades ?? journalQueue.open)} />
+      {/* Stats strip */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 12 }}>
+        {[
+          { label: "Total trades", value: journalLoadError ? "—" : String(totalTrades) },
+          { label: "Win rate", value: stats ? `${stats.win_rate.toFixed(1)}%` : journalStatsError ? "—" : "—" },
+          { label: "Avg R-multiple", value: avgRMultiple != null ? `${avgRMultiple.toFixed(2)}R` : "–" },
+          { label: "Best setup", value: bestSetup ?? "–" },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ background: "#12161D", borderRadius: 8, padding: 12 }}>
+            <div style={{ fontSize: 11, color: "#6A6A6A", marginBottom: 4 }}>{label}</div>
+            <div className="mono" style={{ fontSize: 18, color: "#F1EFE8", fontWeight: 600 }}>{value}</div>
+          </div>
+        ))}
+        <div style={{ background: "#12161D", borderRadius: 8, padding: 12 }}>
+          <div style={{ fontSize: 11, color: "#6A6A6A", marginBottom: 4 }}>Total P&L</div>
+          <div className="mono" style={{
+            fontSize: 18,
+            fontWeight: 600,
+            color: stats ? (stats.total_pnl >= 0 ? "#2DB574" : "#E15560") : "#F1EFE8",
+          }}>
+            {stats ? `₹${stats.total_pnl.toLocaleString("en-IN")}` : journalStatsError ? "—" : "—"}
+          </div>
+        </div>
       </div>
+
+      {/* Setup breakdown */}
+      {setupBreakdown.length > 0 && (
+        <div style={{ background: "#12161D", borderRadius: 8, padding: 12 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+            <thead>
+              <tr>
+                {["Setup", "Trades", "Win%", "Avg P&L"].map(h => (
+                  <th key={h} style={{ textAlign: h === "Setup" ? "left" : "right", padding: "6px 8px", fontSize: 11, color: "#6A6A6A", fontWeight: 600, borderBottom: "1px solid var(--border-subtle)" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {setupBreakdown.slice(0, 5).map(s => (
+                <tr key={s.setup}>
+                  <td style={{ padding: "6px 8px", color: "#F1EFE8" }}>{s.setup}</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#F1EFE8" }}>{s.trades}</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: "#F1EFE8" }}>{s.winPct.toFixed(1)}%</td>
+                  <td className="mono" style={{ padding: "6px 8px", textAlign: "right", color: s.avgPnl >= 0 ? "#2DB574" : "#E15560" }}>₹{s.avgPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {setupBreakdown.length > 5 && (
+            <button onClick={() => setTab("analytics")} style={{ marginTop: 8, fontSize: 12, color: "var(--accent)", cursor: "pointer", background: "none", border: "none" }}>
+              View all
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Tab bar */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -772,6 +853,9 @@ export default function JournalPage() {
             tradeValue={tradeValue}
             riskRupees={riskRupees}
             rrRatio={rrRatio}
+            riskPerShare={riskPerShare}
+            rMultiple={addFormRMultiple}
+            addFormPnl={addFormPnl}
             onAddTrade={handleAddTrade}
             closeForm={closeForm}
             onCloseFormChange={setCloseForm}
@@ -784,7 +868,6 @@ export default function JournalPage() {
             onSaveReviewLesson={handleSaveReviewLesson}
             onInitiateClose={openClosePanel}
             reviewSaving={reviewSaving}
-            chartPrefilled={Boolean(searchParams.get("symbol") && searchParams.get("entry_price"))}
           />
         </div>
       )}
