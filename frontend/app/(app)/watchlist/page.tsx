@@ -52,6 +52,7 @@ import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 import { workflowLifecycleFlags, workflowPlanStatus } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
+import { toast as sonnerToast } from "@/lib/toast";
 import {
   formatCandleRange,
   formatChartCoverageRange,
@@ -1365,6 +1366,7 @@ function WatchlistContent() {
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 3500);
+    sonnerToast.success(msg);
   }
 
   function watchlistUnavailableMessage(): string {

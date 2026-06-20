@@ -1,7 +1,7 @@
 {
-  "name": "AlphaVyuh — Indian Equity Workflow Software",
+  "name": "AlphaVyuh",
   "short_name": "AlphaVyuh",
-  "description": "Scan, organize, execute, review. A unified trading platform for NSE and BSE traders.",
+  "description": "Scan, chart, trade, and journal in one connected platform for Indian equity traders.",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#0A0E13",
@@ -21,6 +21,5 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["finance", "utilities"],
-  "screenshots": []
+  "categories": ["finance", "utilities"]
 }

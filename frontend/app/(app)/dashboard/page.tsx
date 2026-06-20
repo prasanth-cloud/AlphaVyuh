@@ -22,12 +22,12 @@ import {
   type ScanAlertMatch,
 } from '@/lib/api'
 import { DashboardEquitySnapshotCard } from '@/components/dashboard/DashboardEquitySnapshot'
-import { QuickLaunchTiles } from '@/components/dashboard/QuickLaunchTiles'
 import { MarketOverviewDesk } from '@/components/dashboard/MarketOverviewDesk'
 import { EmptyState } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
+import { FirstRunBanner } from '@/components/FirstRunBanner'
 
 const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200;
 
@@ -344,8 +344,7 @@ export default function DashboardPage() {
         <div>
           {data ? (
             <>
-              <QuickLaunchTiles hasData={workflow.watchlists > 0 || workflow.totalTrades > 0} />
-              <div style={{ height: 12 }} />
+              <FirstRunBanner />
               <MarketOverviewDesk data={data} dataHealth={dataHealth} marketError={error} />
               <DashboardEquitySnapshotCard
                 stats={journalStats}

@@ -21,6 +21,7 @@ import type { PanelMode, Tab } from "./components/types";
 import { useWorkflowState } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { toast as sonnerToast } from "@/lib/toast";
 
 const JOURNAL_RECOVERY_MESSAGE = "Check Journal or Data Status, then try again.";
 const JOURNAL_TRADE_SAVE_FAILED_MESSAGE = `Trade could not be saved. ${JOURNAL_RECOVERY_MESSAGE}`;
@@ -84,7 +85,7 @@ export default function JournalPage() {
   const [symbolFocus, setSymbolFocus] = useState("");
   const [reviewFocus, setReviewFocus] = useState<"all" | "needs-review" | "reviewed">("all");
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); sonnerToast.success(msg); };
 
   const load = useCallback(async () => {
     setLoading(true);
