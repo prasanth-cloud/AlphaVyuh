@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, BookOpen, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, BookOpen, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Share2, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -888,6 +888,20 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
       setLayoutMsg(CHART_LAYOUT_SAVE_FAILED_MESSAGE);
       setTimeout(() => setLayoutMsg(""), 5000);
     }
+  }
+
+  const [shareMsg, setShareMsg] = useState("");
+
+  function handleShareChart() {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://alphavyuh.com";
+    const url = `${origin}/charts/${symbol.toUpperCase()}?snapshot=true`;
+    navigator.clipboard.writeText(url).then(() => {
+      setShareMsg("Copied!");
+      setTimeout(() => setShareMsg(""), 2000);
+    }).catch(() => {
+      setShareMsg("Failed");
+      setTimeout(() => setShareMsg(""), 2000);
+    });
   }
 
   async function handleAddWatchlist(force = false) {
@@ -2327,6 +2341,13 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
             title="Use this timeframe and indicator set for new charts"
           >
             <Save size={11} /> Preset
+          </button>
+          <button
+            onClick={handleShareChart}
+            className="workspace-chip-button flex items-center gap-1.5"
+            title="Copy shareable link with chart preview"
+          >
+            <Share2 size={11} /> {shareMsg || "Share"}
           </button>
           {layoutMsg && (
             <span className="caption" style={{ color: /unavailable|could not|failed/i.test(layoutMsg) ? "var(--warn)" : "var(--gain)" }}>{layoutMsg}</span>

@@ -1,6 +1,43 @@
+import type { Metadata } from "next";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { CandleBar } from "@/lib/api/types";
 import ChartPageClient from "./ChartPageClient";
+
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://alphavyuh.com";
+
+export async function generateMetadata({ params, searchParams }: {
+  params: Promise<{ symbol: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
+}): Promise<Metadata> {
+  const { symbol } = await params;
+  const sp = await searchParams;
+  const sym = symbol.toUpperCase();
+  const title = `${sym} Chart — AlphaVyuh`;
+  const description = `Live candlestick chart for ${sym} on AlphaVyuh. Scan, organize, execute, review.`;
+
+  if (sp.snapshot !== "true") {
+    return { title, description };
+  }
+
+  const ogUrl = `${BASE_URL}/api/og/chart?symbol=${encodeURIComponent(sym)}`;
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      url: `${BASE_URL}/charts/${sym}?snapshot=true`,
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: `${sym} candlestick chart` }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [ogUrl],
+    },
+  };
+}
 
 async function fetchDailyCandles(symbol: string): Promise<CandleBar[]> {
   try {
