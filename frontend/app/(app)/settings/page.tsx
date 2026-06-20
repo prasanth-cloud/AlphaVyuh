@@ -3,12 +3,12 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Check, Zap, Sparkles, Crown, Copy, Gift } from "lucide-react";
+import { Check, Zap, Sparkles, Crown, Copy, Gift, AlertTriangle, RefreshCw, Shield, ShieldAlert } from "lucide-react";
 import {
   getMe, updateMe,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
-  getPaymentConfig, applyAccessPlan,
-  type UserProfile, type PlanStatus, type PaymentConfig,
+  getPaymentConfig, applyAccessPlan, getKiteTokenHealth,
+  type UserProfile, type PlanStatus, type PaymentConfig, type KiteTokenHealth,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { trackEvent } from "@/lib/analytics";
@@ -89,7 +89,7 @@ const PLAN_META: { id: PlanId; label: string; color: string; accentBg: string; f
     id: "free", label: "Free", color: "var(--app-text3)", accentBg: "var(--app-surface3)",
     features: [
       "Scanner — up to 50 results",
-      "5 saved screens",
+      "3 saved presets",
       "1 watchlist",
       "Basic charts (EMA + RSI)",
       "3-month journal history",
@@ -121,6 +121,14 @@ const PLAN_META: { id: PlanId; label: string; color: string; accentBg: string; f
     ],
   },
 ];
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 // ── Input style helper ────────────────────────────────────────────────────────
 
@@ -191,12 +199,32 @@ function SettingsContent() {
   // ── Broker state ─────────────────────────────────────────────────────────
   const [brokerType, setBrokerType] = useState("");
   const [savingBroker, setSavingBroker] = useState(false);
+  const [kiteHealth, setKiteHealth] = useState<KiteTokenHealth | null>(null);
+  const [kiteHealthLoading, setKiteHealthLoading] = useState(false);
 
   useEffect(() => {
     if (profile) {
       setBrokerType(profile.broker_type ?? "");
     }
   }, [profile]);
+
+  const fetchKiteHealth = useCallback(async () => {
+    setKiteHealthLoading(true);
+    try {
+      const h = await getKiteTokenHealth();
+      setKiteHealth(h);
+    } catch {
+      setKiteHealth(null);
+    } finally {
+      setKiteHealthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "broker" && brokerType === "zerodha") {
+      fetchKiteHealth();
+    }
+  }, [tab, brokerType, fetchKiteHealth]);
 
   async function saveBroker() {
     setSavingBroker(true);
@@ -340,7 +368,7 @@ function SettingsContent() {
   }
 
   const currentPlan = planStatus?.plan ?? "free";
-  const checkoutEnabled = false;
+  const checkoutEnabled = !!RAZORPAY_KEY && !!paymentConfig?.configured;
   const expiresAt = planStatus?.expires_at
     ? new Date(planStatus.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : null;
@@ -514,9 +542,85 @@ function SettingsContent() {
                 </div>
 
                 {brokerType === "zerodha" && (
-                  <div className="text-[12px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
-                    Zerodha connects through AlphaVyuh&apos;s Kite app. You will sign in with Zerodha from the broker hub; AlphaVyuh never asks traders for developer API keys, API secrets, or broker passwords.
-                  </div>
+                  <>
+                    <div className="text-[12px] rounded-[8px] px-3 py-2.5 leading-relaxed" style={{ background: "var(--app-surface3)", color: "var(--app-text3)" }}>
+                      Zerodha connects through AlphaVyuh&apos;s Kite app. You will sign in with Zerodha from the broker hub; AlphaVyuh never asks traders for developer API keys, API secrets, or broker passwords.
+                    </div>
+
+                    {/* Kite token health */}
+                    <div className="rounded-[8px] p-3 space-y-2" style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)" }} data-testid="kite-token-health">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[12px] font-semibold" style={{ color: "var(--app-text2)" }}>Kite token status</span>
+                        <button
+                          onClick={fetchKiteHealth}
+                          disabled={kiteHealthLoading}
+                          className="text-[11px] flex items-center gap-1 disabled:opacity-50"
+                          style={{ color: "var(--accent)" }}
+                        >
+                          <RefreshCw size={10} className={kiteHealthLoading ? "animate-spin" : ""} /> Refresh
+                        </button>
+                      </div>
+
+                      {kiteHealthLoading && !kiteHealth && (
+                        <div className="text-[11px] py-2" style={{ color: "var(--app-text3)" }}>Checking token…</div>
+                      )}
+
+                      {kiteHealth && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            {kiteHealth.token_valid ? (
+                              <Shield size={13} style={{ color: "var(--gain)" }} />
+                            ) : (
+                              <ShieldAlert size={13} style={{ color: "var(--loss)" }} />
+                            )}
+                            <span className="text-[12px] font-medium" style={{ color: kiteHealth.token_valid ? "var(--gain)" : "var(--loss)" }}>
+                              {kiteHealth.token_valid ? "Token valid" : "Token expired — reconnect required"}
+                            </span>
+                          </div>
+
+                          {kiteHealth.connected && (
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]" style={{ color: "var(--app-text3)" }}>
+                              {kiteHealth.token_age_seconds != null && (
+                                <>
+                                  <span>Token age</span>
+                                  <span className="font-mono text-right">{formatDuration(kiteHealth.token_age_seconds)}</span>
+                                </>
+                              )}
+                              {kiteHealth.expires_in_seconds != null && (
+                                <>
+                                  <span>Expires in</span>
+                                  <span className="font-mono text-right" style={{ color: kiteHealth.expires_in_seconds < 3600 ? "var(--loss)" : undefined }}>
+                                    {kiteHealth.expires_in_seconds > 0 ? formatDuration(kiteHealth.expires_in_seconds) : "Expired"}
+                                  </span>
+                                </>
+                              )}
+                              {kiteHealth.connected_at && (
+                                <>
+                                  <span>Connected at</span>
+                                  <span className="text-right">{new Date(kiteHealth.connected_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          {kiteHealth.needs_reconnect && (
+                            <Link
+                              href="/settings/broker"
+                              className="block w-full py-2 rounded-[6px] text-[12px] font-semibold text-center mt-1"
+                              style={{ background: "var(--loss)", color: "white" }}
+                              data-testid="kite-reconnect-button"
+                            >
+                              Reconnect Zerodha
+                            </Link>
+                          )}
+                        </>
+                      )}
+
+                      {!kiteHealth && !kiteHealthLoading && (
+                        <div className="text-[11px]" style={{ color: "var(--app-text3)" }}>No Kite connection found. Connect via the broker hub.</div>
+                      )}
+                    </div>
+                  </>
                 )}
 
                 {brokerType && brokerType !== "zerodha" && (
@@ -585,7 +689,7 @@ function SettingsContent() {
                       )}
                     </div>
                     {expiresAt ? (
-                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>Renews {expiresAt}</div>
+                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }} data-testid="billing-next-date">Next billing date: {expiresAt}</div>
                     ) : currentPlan === "free" ? (
                       <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>Upgrade to unlock all features</div>
                     ) : null}
@@ -784,6 +888,30 @@ function SettingsContent() {
                   );
                 })}
               </div>
+
+              {/* Cancel plan */}
+              {currentPlan !== "free" && expiresAt && (
+                <div className="mt-6 p-4 rounded-[12px]" style={cardStyle} data-testid="billing-cancel-section">
+                  <div className="flex items-center justify-between gap-4 mb-3">
+                    <div>
+                      <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>Manage subscription</div>
+                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>
+                        Your {currentPlan} plan is active until {expiresAt}. Plans do not auto-renew.
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      showToast("Your plan will expire on " + expiresAt + ". No further charges will be made.", true);
+                    }}
+                    className="px-4 py-2 rounded-[8px] text-[12px] font-semibold transition-opacity"
+                    style={{ background: "rgba(229,56,59,0.1)", border: "1px solid rgba(229,56,59,0.2)", color: "var(--loss)" }}
+                    data-testid="billing-cancel-button"
+                  >
+                    Cancel plan
+                  </button>
+                </div>
+              )}
 
               {/* Referral code */}
               {referralCode && (

@@ -142,6 +142,37 @@ export default function JournalPage() {
     } else {
       setReviewFocus("all");
     }
+
+    if (searchParams.get("prefill") === "1") {
+      const sym = searchParams.get("symbol")?.toUpperCase() ?? "";
+      const entryPrice = parseFloat(searchParams.get("entry_price") ?? "");
+      const entryDate = searchParams.get("entry_date") ?? new Date().toISOString().split("T")[0];
+      const ema20 = searchParams.get("ema20");
+      const ema50 = searchParams.get("ema50");
+      const ema200 = searchParams.get("ema200");
+      const rsi = searchParams.get("rsi");
+
+      const contextParts: string[] = [];
+      if (ema20) contextParts.push(`EMA 20: ${ema20}`);
+      if (ema50) contextParts.push(`EMA 50: ${ema50}`);
+      if (ema200) contextParts.push(`EMA 200: ${ema200}`);
+      if (rsi) contextParts.push(`RSI 14: ${rsi}`);
+      const sourceContext = contextParts.length ? contextParts.join(" · ") : null;
+
+      if (sym) {
+        setSelectedSymbol(sym);
+        setSymbolQ(sym);
+      }
+      setAddForm({
+        trade_type: "long",
+        entry_date: entryDate,
+        ...(Number.isFinite(entryPrice) ? { entry_price: entryPrice } : {}),
+        source_page: "chart",
+        source_context: sourceContext,
+      });
+      setPanelMode("add");
+      setSelectedEntry(null);
+    }
   }, [searchParams]);
 
   const refreshBrokerStatus = useCallback(() => {

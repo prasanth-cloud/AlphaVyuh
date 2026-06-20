@@ -17,12 +17,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
-from app.services.supabase import get_admin_client
+from app.services.redis_cache import get_cached_rows, set_cached_rows
+from app.services.supabase import get_admin_client, get_user_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 logger = logging.getLogger(__name__)
@@ -1390,54 +1391,66 @@ async def execute_scan(
     applied_prefilter_ops = db_prefilter_ops
     used_fallback_query = False
     fallback_stage = "none"
+    cache_hit = False
     query_started = time.perf_counter()
-    try:
-        rows = _build_scan_query(SCANNER_INTELLIGENCE_SELECT).limit(SCAN_ROW_CAP).execute().data or []
-    except Exception as primary_error:
-        used_fallback_query = True
-        if compatibility_prefilter_ops and compatibility_prefilter_ops != db_prefilter_ops:
-            logger.warning(
-                "Scanner full prefilter query failed; retrying with compatibility prefilters.",
-                exc_info=True,
-            )
-            try:
-                rows = (
-                    _build_scan_query(SCANNER_INTELLIGENCE_SELECT, compatibility_prefilter_ops)
-                    .limit(SCAN_ROW_CAP)
-                    .execute()
-                    .data
-                    or []
-                )
-                fallback_stage = "compatibility_prefilter"
-                applied_prefilter_ops = compatibility_prefilter_ops
-            except Exception:
+
+    cached = get_cached_rows(latest_date)
+    if cached is not None:
+        rows = cached
+        cache_hit = True
+        applied_prefilter_ops = []
+    else:
+        try:
+            rows = _build_scan_query(SCANNER_INTELLIGENCE_SELECT).limit(SCAN_ROW_CAP).execute().data or []
+        except Exception as primary_error:
+            used_fallback_query = True
+            if compatibility_prefilter_ops and compatibility_prefilter_ops != db_prefilter_ops:
                 logger.warning(
-                    "Scanner compatibility prefilter query failed; falling back to base query.",
+                    "Scanner full prefilter query failed; retrying with compatibility prefilters.",
                     exc_info=True,
                 )
-                rows = None
-        else:
-            logger.warning("Scanner full prefilter query failed; falling back to base query.", exc_info=True)
-            rows = None
-
-        if rows is None:
-            fallback_stage = "base_query"
-            applied_prefilter_ops = []
-            try:
-                rows = (
-                    _push_single_day_db_filters(
-                        client.table("daily_ohlcv").select(SCANNER_BASE_SELECT).eq("trade_date", latest_date),
-                        f,
+                try:
+                    rows = (
+                        _build_scan_query(SCANNER_INTELLIGENCE_SELECT, compatibility_prefilter_ops)
+                        .limit(SCAN_ROW_CAP)
+                        .execute()
+                        .data
+                        or []
                     )
-                    .limit(SCAN_ROW_CAP)
-                    .execute()
-                    .data or []
-                )
-            except Exception:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Scanner query could not complete; try a narrower preset.",
-                ) from primary_error
+                    fallback_stage = "compatibility_prefilter"
+                    applied_prefilter_ops = compatibility_prefilter_ops
+                except Exception:
+                    logger.warning(
+                        "Scanner compatibility prefilter query failed; falling back to base query.",
+                        exc_info=True,
+                    )
+                    rows = None
+            else:
+                logger.warning("Scanner full prefilter query failed; falling back to base query.", exc_info=True)
+                rows = None
+
+            if rows is None:
+                fallback_stage = "base_query"
+                applied_prefilter_ops = []
+                try:
+                    rows = (
+                        _push_single_day_db_filters(
+                            client.table("daily_ohlcv").select(SCANNER_BASE_SELECT).eq("trade_date", latest_date),
+                            f,
+                        )
+                        .limit(SCAN_ROW_CAP)
+                        .execute()
+                        .data or []
+                    )
+                except Exception:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Scanner query could not complete; try a narrower preset.",
+                    ) from primary_error
+
+        if not cache_hit and rows:
+            set_cached_rows(latest_date, rows)
+
     query_elapsed_ms = round((time.perf_counter() - query_started) * 1000)
 
     # Python-side filter for computed columns
@@ -1501,6 +1514,7 @@ async def execute_scan(
         "m3a_columns_ready": m3a_columns_ready,
         "fallback_query": used_fallback_query,
         "fallback_stage": fallback_stage,
+        "cache_hit": cache_hit,
         "timing_ms": {
             "date_lookup": date_lookup_elapsed_ms,
             "m3a_ready": m3a_ready_elapsed_ms,
@@ -1550,6 +1564,7 @@ async def execute_scan(
 async def run_scanner(
     body: ScanRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     if not scanner_limiter.is_allowed(user_id):
         retry_after = scanner_limiter.retry_after(user_id)
@@ -1560,7 +1575,7 @@ async def run_scanner(
         )
 
     try:
-        client = get_admin_client()
+        client = get_user_client(token)
         plan = _get_user_plan(user_id)
     except Exception:
         raise HTTPException(
@@ -1568,13 +1583,24 @@ async def run_scanner(
             detail="Scanner data is temporarily unavailable.",
         )
 
-    return await execute_scan(client, body, plan=plan)
+    result = await execute_scan(client, body, plan=plan)
+
+    try:
+        client.table("users") \
+            .update({"first_scan_at": "now()"}) \
+            .eq("id", user_id) \
+            .is_("first_scan_at", "null") \
+            .execute()
+    except Exception:
+        pass
+
+    return result
 
 
 @router.get("/screens")
-async def list_screens(user_id: str = Depends(get_current_user_id)):
+async def list_screens(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     try:
-        client = get_admin_client()
+        client = get_user_client(token)
         r = client.table("saved_screens").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     except Exception:
         raise HTTPException(
@@ -1585,13 +1611,13 @@ async def list_screens(user_id: str = Depends(get_current_user_id)):
 
 
 @router.post("/screens")
-async def save_screen(body: SaveScreenRequest, user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
+async def save_screen(body: SaveScreenRequest, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    client = get_user_client(token)
     plan   = _get_user_plan(user_id)
     if plan == "free":
         cnt = client.table("saved_screens").select("id", count="exact").eq("user_id", user_id).execute()
-        if (cnt.count or 0) >= 5:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Free plan limit: 5 saved screens")
+        if (cnt.count or 0) >= 3:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Free plan limit: 3 saved presets. Upgrade to Pro for unlimited.")
     r = client.table("saved_screens").insert({
         "user_id":    user_id,
         "name":       body.name,
@@ -1602,8 +1628,8 @@ async def save_screen(body: SaveScreenRequest, user_id: str = Depends(get_curren
 
 
 @router.delete("/screens/{screen_id}")
-async def delete_screen(screen_id: UUID, user_id: str = Depends(get_current_user_id)):
-    client = get_admin_client()
+async def delete_screen(screen_id: UUID, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+    client = get_user_client(token)
     ex = client.table("saved_screens").select("id").eq("id", str(screen_id)).eq("user_id", user_id).execute()
     if not ex.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Screen not found")

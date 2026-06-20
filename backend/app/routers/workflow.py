@@ -7,8 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.services.supabase import get_user_client
 
 router = APIRouter(prefix="/api/v1/workflow", tags=["workflow"])
 
@@ -82,8 +82,9 @@ async def list_states(
     symbols: str | None = Query(None, description="Comma separated symbols to limit the response."),
     watchlist_id: UUID | None = Query(None),
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
-    sb = get_admin_client()
+    sb = get_user_client(token)
     q = sb.table("workflow_states").select("*").eq("user_id", user_id)
     if watchlist_id:
         q = q.eq("watchlist_id", str(watchlist_id))
@@ -103,6 +104,7 @@ async def upsert_state(
     symbol: str,
     body: WorkflowStatePatch,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     if symbol.upper() != body.symbol.upper():
         raise HTTPException(status_code=400, detail="Symbol mismatch")
@@ -110,7 +112,7 @@ async def upsert_state(
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         res = (
-            get_admin_client()
+            get_user_client(token)
             .table("workflow_states")
             .upsert(payload, on_conflict="user_id,symbol")
             .execute()
@@ -126,6 +128,7 @@ async def upsert_state(
 async def bulk_upsert_states(
     body: list[WorkflowStatePatch],
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     if len(body) > 200:
         raise HTTPException(status_code=400, detail="Bulk workflow update is limited to 200 symbols")
@@ -135,7 +138,7 @@ async def bulk_upsert_states(
         row["updated_at"] = now
     try:
         res = (
-            get_admin_client()
+            get_user_client(token)
             .table("workflow_states")
             .upsert(rows, on_conflict="user_id,symbol")
             .execute()

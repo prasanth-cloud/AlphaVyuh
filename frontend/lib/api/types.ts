@@ -657,6 +657,8 @@ export type UserProfile = {
   plan: string;
   plan_expires_at: string | null;
   onboarding_completed: boolean;
+  onboarding_dismissed?: boolean;
+  first_scan_at?: string | null;
   telegram_chat_id: string | null;
   broker_type: string | null;
   broker_connected_at: string | null;

@@ -52,17 +52,17 @@ def _user_id_from_local_jwt(token: str) -> str | None:
     return str(subject) if subject else None
 
 
-async def get_current_user_id(
+async def _validate_token(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> str:
-    """Validate Supabase JWT by calling Supabase Auth API — works for all token formats."""
+) -> tuple[str, str]:
+    """Validate Supabase JWT. Returns (user_id, raw_token)."""
     token = credentials.credentials
     if not token or token in {"null", "undefined"}:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No token provided")
 
     user_id = _user_id_from_local_jwt(token)
     if user_id:
-        return user_id
+        return user_id, token
 
     try:
         client = get_admin_client()
@@ -70,7 +70,7 @@ async def get_current_user_id(
         user = response.user
         if not user or not user.id:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        return str(user.id)
+        return str(user.id), token
     except HTTPException:
         raise
     except Exception:
@@ -78,3 +78,17 @@ async def get_current_user_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed",
         )
+
+
+async def get_current_user_id(
+    result: tuple[str, str] = Depends(_validate_token),
+) -> str:
+    """Returns the authenticated user's ID."""
+    return result[0]
+
+
+async def get_current_user_token(
+    result: tuple[str, str] = Depends(_validate_token),
+) -> str:
+    """Returns the raw JWT token for creating RLS-scoped Supabase clients."""
+    return result[1]

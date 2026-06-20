@@ -101,7 +101,7 @@ export {
   withTimeout,
 } from './api/client'
 
-const API = API_BASE_URL;
+export const API = API_BASE_URL;
 
 // Public endpoints don't need auth — just JSON content-type
 const publicHeaders: HeadersInit = { "Content-Type": "application/json" };
@@ -1824,6 +1824,7 @@ export async function getMe(): Promise<UserProfile> {
 export async function updateMe(updates: {
   full_name?: string;
   onboarding_completed?: boolean;
+  onboarding_dismissed?: boolean;
   telegram_chat_id?: string;
   broker_type?: string;
   billing_region?: string;
@@ -1990,6 +1991,39 @@ export async function runBrokerReadOnlySmoke(broker: "zerodha" | "upstox" = "zer
 }
 
 export const runZerodhaReadOnlySmoke = () => runBrokerReadOnlySmoke("zerodha");
+
+export interface KiteTokenHealth {
+  connected: boolean;
+  token_valid: boolean;
+  profile_check_passed?: boolean;
+  token_age_seconds: number | null;
+  expires_in_seconds: number | null;
+  connected_at: string | null;
+  expires_at: string | null;
+  needs_reconnect: boolean;
+}
+
+export async function getKiteTokenHealth(): Promise<KiteTokenHealth> {
+  if (shouldUseMockFallback()) {
+    return {
+      connected: true,
+      token_valid: true,
+      profile_check_passed: true,
+      token_age_seconds: 3600,
+      expires_in_seconds: 28800,
+      connected_at: new Date(Date.now() - 3600_000).toISOString(),
+      expires_at: new Date(Date.now() + 28800_000).toISOString(),
+      needs_reconnect: false,
+    };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/kite/token-health`, { headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Token health check failed");
+  }
+  return res.json();
+}
 
 export async function getBrokerStatus(): Promise<{
   connected: boolean;

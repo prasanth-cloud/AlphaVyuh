@@ -1,0 +1,19 @@
+name: Check Service-Role Usage
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/routers/**"
+  push:
+    branches: [main]
+    paths:
+      - "backend/app/routers/**"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify no new service-role usage in routers
+        run: bash scripts/check-service-role-usage.sh

@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.brokers.adapter import (
     BrokerCredentials,
     BrokerError,
@@ -40,7 +40,7 @@ from app.brokers.oauth_state import (
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
-from app.services.supabase import get_admin_client, settings
+from app.services.supabase import get_admin_client, get_user_client, settings
 from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
@@ -655,12 +655,13 @@ def _status_payload(
 async def place_order(
     body: PlaceOrderRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """
     Place an order. Auto-creates an open journal entry.
     Routes through Zerodha if user has connected broker credentials.
     """
-    sb = get_admin_client()
+    sb = get_user_client(token)
     sym = body.symbol.strip().upper()
     plan, plan_expires_at = _get_user_plan(user_id)
     plan_allows_broker = _plan_allows_broker(plan, plan_expires_at)
@@ -956,9 +957,10 @@ async def place_order(
 async def close_position(
     body: ClosePositionRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """Close an open trade, compute P&L, and generate a local trade lesson."""
-    sb = get_admin_client()
+    sb = get_user_client(token)
 
     r = sb.table("trade_journal").select("*") \
         .eq("id", body.journal_id).eq("user_id", user_id).maybe_single().execute()
@@ -1018,9 +1020,9 @@ async def close_position(
 
 
 @router.get("/orders")
-async def list_open_positions(user_id: str = Depends(get_current_user_id)):
+async def list_open_positions(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """Returns open trades from the journal."""
-    sb = get_admin_client()
+    sb = get_user_client(token)
     r = sb.table("trade_journal").select("*") \
         .eq("user_id", user_id).eq("status", "open") \
         .order("entry_date", desc=True).limit(50).execute()
@@ -1030,9 +1032,9 @@ async def list_open_positions(user_id: str = Depends(get_current_user_id)):
 # ── Zerodha OAuth flow ────────────────────────────────────────────────────────
 
 @router.get("/broker/status")
-async def broker_status(user_id: str = Depends(get_current_user_id)):
+async def broker_status(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """Returns broker connection status for the current user."""
-    sb = get_admin_client()
+    sb = get_admin_client()  # admin: reads credentials and broker_connections
     plan, plan_expires_at = _get_user_plan(user_id)
     plan_allows_broker = _plan_allows_broker(plan, plan_expires_at)
     u = sb.table("users").select(
@@ -1110,14 +1112,14 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/broker/zerodha/login")
-async def zerodha_login(user_id: str = Depends(get_current_user_id)):
+async def zerodha_login(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """
     Returns the Zerodha Kite login URL for AlphaVyuh's platform Kite app.
     Frontend opens this URL in a new tab; user logs in and is redirected
     to /broker/zerodha/callback with request_token.
     """
     _require_broker_plan(user_id)
-    sb = get_admin_client()
+    sb = get_admin_client()  # admin: reads broker credentials
     creds = _get_user_broker_credentials(user_id, "zerodha")
     api_key = creds.get("api_key")
     if not api_key:
@@ -1129,7 +1131,7 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/broker/zerodha/read-only-smoke")
-async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
+async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """
     Run read-only Kite checks and return sanitized status/counts only.
     This endpoint never places, modifies, or cancels broker orders.
@@ -1234,14 +1236,14 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
 
 
 @router.post("/broker/zerodha/import")
-async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
+async def import_zerodha_trades(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """
     Import today's filled orders from Zerodha into the trade journal.
     Skips orders already recorded using a deterministic broker import marker.
     Requires a valid daily access token set via /broker/zerodha/callback.
     """
     _require_broker_plan(user_id)
-    sb = get_admin_client()
+    sb = get_user_client(token)
     creds = _get_user_broker_credentials(user_id, "zerodha")
     if not creds.get("api_key") or not creds.get("access_token"):
         raise HTTPException(status_code=400, detail="Zerodha not connected. Complete the OAuth login first.")
@@ -1342,13 +1344,14 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
 async def import_broker_trades(
     broker_name: Literal["zerodha", "upstox"],
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """Import filled broker orders into Journal. Zerodha keeps its legacy route for compatibility."""
     if broker_name == "zerodha":
-        return await import_zerodha_trades(user_id=user_id)
+        return await import_zerodha_trades(user_id=user_id, token=token)
 
     _require_broker_plan(user_id)
-    sb = get_admin_client()
+    sb = get_user_client(token)
     creds_raw = _get_user_broker_credentials(user_id, broker_name)
     if not creds_raw.get("access_token"):
         raise HTTPException(status_code=400, detail=f"{broker_name.capitalize()} not connected. Complete OAuth first.")
@@ -1443,6 +1446,7 @@ async def zerodha_callback(
     request_token: str = Query(...),
     state: str = Query(...),
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """
     Exchange Zerodha request_token for a session access_token.
@@ -1450,7 +1454,7 @@ async def zerodha_callback(
     """
     _require_broker_plan(user_id)
     _require_valid_broker_state(state, user_id=user_id, broker="zerodha")
-    sb = get_admin_client()
+    sb = get_admin_client()  # admin: writes credentials and user broker columns
     creds = _get_user_broker_credentials(user_id, "zerodha")
     if not creds.get("api_key"):
         raise HTTPException(status_code=503, detail="Zerodha connect is temporarily unavailable. AlphaVyuh broker app credentials are not configured.")
@@ -1508,6 +1512,7 @@ async def broker_oauth_callback(
     broker_name: Literal["zerodha", "upstox"],
     body: BrokerCallbackRequest,
     user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
 ):
     """
     JSON callback endpoint for frontend-hosted OAuth returns.
@@ -1515,7 +1520,7 @@ async def broker_oauth_callback(
     """
     _require_broker_plan(user_id)
     _require_valid_broker_state(body.state, user_id=user_id, broker=broker_name)
-    sb = get_admin_client()
+    sb = get_admin_client()  # admin: writes credentials and user broker columns
     adapter = get_adapter(broker_name)
     try:
         creds = await adapter.exchange_code(body.code_or_token)

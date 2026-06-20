@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import type { DataHealth, MarketOverview } from "@/lib/api/types";
 import { Card, DataProvenanceBadge, Num } from "@/components/ui";
+import { DataHealthBadge } from "@/components/DataHealthBadge";
 import { getMarketPanelEmptyCopy } from "@/lib/data-health-copy";
 import {
   breadthPhaseColor,
@@ -395,10 +396,7 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
               As of {data.trade_date}
             </span>
           )}
-          <DataProvenanceBadge
-            kind={dataHealth?.mode === "demo" ? "demo" : dataHealth?.status === "degraded" || dataHealth?.status === "stale" ? "fallback" : "live-provider"}
-            compact
-          />
+          <DataHealthBadge compact />
         </div>
       </div>
 

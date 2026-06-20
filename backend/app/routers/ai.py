@@ -1,22 +1,22 @@
 """
 Trade analysis routes.
 
-These endpoints analyse the user's closed trade journal locally. No journal data
-is sent to a third-party AI provider.
+Local statistical analysis and Claude-powered deep pattern recognition.
 """
 from __future__ import annotations
 
 import datetime
 import logging
+import os
 from collections import defaultdict
 from statistics import mean
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.rate_limit import ai_limiter
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_user_client
 
 logger = logging.getLogger(__name__)
 
@@ -264,7 +264,7 @@ def generate_journal_analysis(trades: list[dict]) -> str:
 
 
 @router.post("/analyse")
-async def analyse_journal(user_id: str = Depends(get_current_user_id)):
+async def analyse_journal(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     if not ai_limiter.is_allowed(user_id):
         retry_after = ai_limiter.retry_after(user_id)
         raise HTTPException(
@@ -273,7 +273,7 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
             headers={"Retry-After": str(retry_after)},
         )
 
-    sb = get_admin_client()
+    sb = get_user_client(token)
     result = (
         sb.table("trade_journal")
         .select(
@@ -302,13 +302,13 @@ async def analyse_journal(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/patterns")
-async def get_patterns(user_id: str = Depends(get_current_user_id)):
+async def get_patterns(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
     """
     Compute statistical patterns from closed trades.
     Returns win rates by day of week, direction, holding period bucket, and time-in-trade stats.
     """
     try:
-        sb = get_admin_client()
+        sb = get_user_client(token)
         result = (
             sb.table("trade_journal")
             .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,holding_days,risk_reward,mistakes")
@@ -544,4 +544,136 @@ async def get_patterns(user_id: str = Depends(get_current_user_id)):
         "by_holding_period": by_holding,
         "setup_breakdown": setup_breakdown,
         "coaching_cards": coaching_cards,
+    }
+
+
+def _format_trade_row(t: dict) -> str:
+    sym = t.get("symbol", "?")
+    direction = (t.get("trade_type") or "long").upper()
+    setup = t.get("setup_type") or "untagged"
+    entry = _num(t.get("entry_price"))
+    exit_p = _num(t.get("exit_price"))
+    qty = int(_num(t.get("quantity"), 1))
+    stop = _num(t.get("stop_loss"))
+    target = _num(t.get("target_price"))
+    pnl = _num(t.get("pnl"))
+    pnl_pct = _num(t.get("pnl_pct"))
+    hold = int(_num(t.get("holding_days")))
+    rr = t.get("risk_reward")
+    entry_d = t.get("entry_date", "?")
+    exit_d = t.get("exit_date", "?")
+    risk_per_share = abs(entry - stop) if stop else 0
+    r_multiple = round(pnl / (risk_per_share * qty), 2) if risk_per_share and qty else None
+
+    parts = [
+        f"{sym} {direction} | setup={setup}",
+        f"entry={entry:.2f} on {entry_d} | exit={exit_p:.2f} on {exit_d}",
+        f"qty={qty} | stop={stop:.2f}" if stop else f"qty={qty} | stop=none",
+        f"target={target:.2f}" if target else "target=none",
+        f"P&L={pnl:+.2f} ({pnl_pct:+.1f}%) | hold={hold}d",
+        f"R-multiple={r_multiple:+.2f}" if r_multiple is not None else "R-multiple=n/a",
+    ]
+    return " | ".join(parts)
+
+
+DEEP_ANALYSIS_SYSTEM = """You are a trading journal analyst. You receive a list of closed trades from an Indian equity swing trader.
+
+Your job: identify patterns in the DATA ONLY. Return observations in exactly 3 sections.
+
+RULES:
+- Observations only. Never write "you should", "consider", "try", or any advisory language.
+- Never recommend specific stocks, setups, or position sizes.
+- Every observation must reference specific trades or measurable patterns from the data.
+- Use past tense only — describe what happened, not what to do.
+- Keep each bullet to 1-2 sentences.
+- If data is insufficient for a category, say "Insufficient data for pattern detection."
+
+FORMAT (return valid JSON):
+{
+  "winning_setups": ["observation 1", "observation 2", ...],
+  "mistake_patterns": ["observation 1", "observation 2", ...],
+  "sizing_behaviour": ["observation 1", "observation 2", ...]
+}
+
+winning_setups: Which setups, holding periods, or entry conditions preceded profitable trades.
+mistake_patterns: Repeated behaviors that preceded losses — blown stops, missing invalidation, holding losers too long, etc.
+sizing_behaviour: Position size consistency, whether larger positions correlated with wins or losses, risk per trade patterns."""
+
+
+@router.post("/deep-analysis")
+async def deep_analysis(
+    user_id: str = Depends(get_current_user_id),
+    token: str = Depends(get_current_user_token),
+):
+    if not ai_limiter.is_allowed(user_id):
+        retry_after = ai_limiter.retry_after(user_id)
+        raise HTTPException(
+            429,
+            f"Too many analysis requests — try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "AI analysis is not configured on this server.")
+
+    sb = get_user_client(token)
+    result = (
+        sb.table("trade_journal")
+        .select(
+            "symbol,trade_type,setup_type,entry_date,entry_price,"
+            "exit_date,exit_price,quantity,stop_loss,target_price,"
+            "pnl,pnl_pct,holding_days,risk_reward,"
+            "entry_reason,exit_reason,mistakes"
+        )
+        .eq("user_id", user_id)
+        .eq("status", "closed")
+        .order("exit_date", desc=True)
+        .limit(30)
+        .execute()
+    )
+    trades = result.data or []
+
+    if len(trades) < MIN_TRADES:
+        raise HTTPException(
+            400,
+            f"Need at least {MIN_TRADES} closed trades for deep analysis. You have {len(trades)}.",
+        )
+
+    trade_block = "\n".join(_format_trade_row(t) for t in trades)
+    user_prompt = f"Analyse these {len(trades)} closed trades:\n\n{trade_block}"
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=DEEP_ANALYSIS_SYSTEM,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw = message.content[0].text
+    except Exception as exc:
+        logger.error("Claude API call failed: %s", exc)
+        raise HTTPException(503, "AI analysis temporarily unavailable.")
+
+    import json as _json
+
+    try:
+        parsed = _json.loads(raw)
+    except _json.JSONDecodeError:
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start >= 0 and end > start:
+            parsed = _json.loads(raw[start:end])
+        else:
+            raise HTTPException(502, "AI returned an unparseable response.")
+
+    return {
+        "winning_setups": parsed.get("winning_setups", []),
+        "mistake_patterns": parsed.get("mistake_patterns", []),
+        "sizing_behaviour": parsed.get("sizing_behaviour", []),
+        "trades_analysed": len(trades),
+        "disclaimer": _DISCLAIMER,
     }

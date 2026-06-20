@@ -1,13 +1,15 @@
 import logging
+import os
 from datetime import date
 
 import pytz
+import sentry_sdk
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import alerts, backtest as backtest_router, broker, brokers as brokers_router, charts, community as community_router, data_health as data_health_router, feedback as feedback_router, ingest, journal, market as market_router, options, price_alerts as price_alerts_router, scanner, stocks, users, waitlist, watchlist, workflow
+from app.routers import admin as admin_router, alerts, backtest as backtest_router, broker, brokers as brokers_router, charts, community as community_router, data_health as data_health_router, email_digest as email_digest_router, feedback as feedback_router, ingest, journal, market as market_router, options, price_alerts as price_alerts_router, scanner, stocks, users, waitlist, watchlist, workflow
 
 try:
     from app.routers import payments as payments_router
@@ -23,6 +25,15 @@ except ImportError:
 from app.services.supabase import settings
 
 logger = logging.getLogger(__name__)
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=os.environ.get("RAILWAY_ENVIRONMENT", "development"),
+        traces_sample_rate=0.1 if os.environ.get("RAILWAY_ENVIRONMENT") == "production" else 1.0,
+        send_default_pii=False,
+        enable_tracing=True,
+    )
 
 app = FastAPI(title="AlphaVyuh API", version="0.3.0")
 
@@ -48,6 +59,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(admin_router.router)
 app.include_router(users.router)
 app.include_router(waitlist.router)
 app.include_router(backtest_router.router)
@@ -67,6 +79,7 @@ app.include_router(journal.router)
 app.include_router(price_alerts_router.router)
 app.include_router(data_health_router.router)
 app.include_router(feedback_router.router)
+app.include_router(email_digest_router.router)
 if _payments_available:
     app.include_router(payments_router.router)
 if _ai_available:
@@ -156,9 +169,30 @@ async def start_scheduler():
         id="price_alert_check",
         replace_existing=True,
     )
+    from app.services.kite_token_refresh import refresh_kite_tokens
+    _scheduler.add_job(
+        refresh_kite_tokens,
+        CronTrigger(hour=6, minute=30, timezone=ist),
+        id="kite_token_refresh",
+        replace_existing=True,
+    )
+    from app.services.email_digest import send_daily_digests
+    _scheduler.add_job(
+        send_daily_digests,
+        CronTrigger(hour=18, minute=30, day_of_week="mon-fri", timezone=ist),
+        id="daily_email_digest",
+        replace_existing=True,
+    )
+    from app.services.broker_key_rotation import quarterly_rotation_check
+    _scheduler.add_job(
+        quarterly_rotation_check,
+        CronTrigger(month="1,4,7,10", day=1, hour=2, minute=0, timezone=ist),
+        id="quarterly_broker_key_rotation",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info(
-        "APScheduler started — bhavcopy 16:00, yfinance refresh %s, price alerts every 5 min",
+        "APScheduler started — bhavcopy 16:00, yfinance refresh %s, email digest 18:30, price alerts every 5 min, kite token 06:30, broker key rotation quarterly",
         "enabled at 16:15" if settings.enable_yfinance_refresh else "disabled",
     )
 
@@ -170,5 +204,6 @@ async def stop_scheduler():
 
 
 @app.get("/health")
+@app.get("/healthz")
 async def health():
     return {"status": "ok", "version": "0.3.1"}

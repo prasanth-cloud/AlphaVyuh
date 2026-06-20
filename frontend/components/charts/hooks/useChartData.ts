@@ -121,6 +121,7 @@ export type UseChartDataOptions = {
   liveMode: boolean;
   setLiveMode: (live: boolean) => void;
   activeIndicators: string[];
+  initialCandles?: CandleBar[];
   onLegendReset?: () => void;
 };
 
@@ -132,10 +133,21 @@ export function useChartData({
   liveMode,
   setLiveMode,
   activeIndicators,
+  initialCandles,
   onLegendReset,
 }: UseChartDataOptions) {
-  const [data, setData] = useState<CandlesResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<CandlesResponse | null>(() => {
+    if (!initialCandles?.length) return null;
+    return {
+      symbol,
+      company_name: null,
+      sector: null,
+      timeframe: "D",
+      candles: initialCandles,
+      latest: null,
+    };
+  });
+  const [loading, setLoading] = useState(!initialCandles?.length);
   const [error, setError] = useState("");
   const [indicatorData, setIndicatorData] = useState<IndicatorData>({});
   const [indicatorError, setIndicatorError] = useState<string | null>(null);

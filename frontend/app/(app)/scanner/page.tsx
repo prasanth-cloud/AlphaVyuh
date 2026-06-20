@@ -19,7 +19,10 @@ import { mockRunScan } from '@/lib/mock-data'
 import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
+import { Search, SlidersHorizontal } from 'lucide-react'
 import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
+import { DataHealthBadge } from '@/components/DataHealthBadge'
+import { FirstRunBanner } from '@/components/FirstRunBanner'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
@@ -420,6 +423,23 @@ const emptyFilters = (): Filters => ({
   roce_min: '',
 })
 
+function countActiveFilters(f: Filters): number {
+  const defaults = emptyFilters()
+  let count = 0
+  for (const key of Object.keys(defaults) as (keyof Filters)[]) {
+    const val = f[key]
+    const def = defaults[key]
+    if (Array.isArray(val)) {
+      if (JSON.stringify(val) !== JSON.stringify(def)) count++
+    } else if (typeof val === 'boolean') {
+      if (val !== def) count++
+    } else if (typeof val === 'string') {
+      if (val !== '' && val !== def) count++
+    }
+  }
+  return count
+}
+
 const inputStyle: React.CSSProperties = {
   padding: '5px 8px',
   background: 'var(--surface-2)',
@@ -564,6 +584,9 @@ export default function ScannerPage() {
   const [symbolsScanned, setSymbolsScanned] = useState<number | null>(null)
   const [runHistory, setRunHistory] = useState<ScannerRunHistoryEntry[]>([])
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
+  const [showSaveInline, setShowSaveInline] = useState(false)
+
+  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters])
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -1546,9 +1569,13 @@ export default function ScannerPage() {
   return (
     <div className="workspace-page">
       <div className="workspace-desk-header calm-desk-header" style={{ marginBottom: 12 }}>
-        <h1 className="calm-page-title">Scanner</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <h1 className="calm-page-title">Scanner</h1>
+          <DataHealthBadge compact />
+        </div>
         <p className="calm-page-copy">Choose a screener, refine filters if needed, then run scan when you are ready.</p>
       </div>
+      <FirstRunBanner />
       <div
         className={`workspace-grid scanner-workspace-grid${filterRailCollapsed ? ' scanner-filter-rail-collapsed' : ''}`}
         style={{
@@ -1899,9 +1926,66 @@ export default function ScannerPage() {
                 >
                   Filters
                 </button>
+                {activeFilterCount > 0 && (
+                  <span
+                    data-testid="scanner-filter-count-badge"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '2px 8px', borderRadius: 999,
+                      background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+                      fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                  </span>
+                )}
                 <span className="heading-card">
                   {totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> matches</> : 'No matches'}
                 </span>
+                {hasRun && !showSaveInline && (
+                  <button
+                    type="button"
+                    className="workspace-chip-button"
+                    onClick={() => { setShowSaveInline(true); setNewScreenName('') }}
+                    data-testid="scanner-save-preset-trigger"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Save preset
+                  </button>
+                )}
+                {showSaveInline && (
+                  <span data-testid="scanner-save-preset-inline" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <input
+                      autoFocus
+                      value={newScreenName}
+                      onChange={e => setNewScreenName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { void saveCurrentScreen(); setShowSaveInline(false) }
+                        if (e.key === 'Escape') setShowSaveInline(false)
+                      }}
+                      placeholder="Preset name…"
+                      data-testid="scanner-save-preset-name-input"
+                      style={{ padding: '3px 8px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, width: 140 }}
+                    />
+                    <button
+                      type="button"
+                      className="workspace-chip-button"
+                      disabled={!newScreenName.trim()}
+                      onClick={() => { void saveCurrentScreen(); setShowSaveInline(false) }}
+                      data-testid="scanner-save-preset-confirm"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="workspace-chip-button"
+                      onClick={() => setShowSaveInline(false)}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
                 <button
                   type="button"
                   className={`workspace-chip-button${resultsView === 'list' ? ' active' : ''}`}
@@ -2254,9 +2338,11 @@ export default function ScannerPage() {
         {!loading && !hasRun && !error && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
-              title="Run your first scan"
-              description="Choose a saved filter or set your own price, volume, trend, and RS conditions. If market data looks stale, check Data Status before running."
+              icon={Search}
+              title="No scan results yet"
+              description="Select a preset or configure filters, then run the scan. Results appear here."
               action={{ label: 'Select Trend Template', onClick: () => selectPreset(PRESETS[0]) }}
+              testId="scanner-empty-no-run"
             />
           </div>
         )}
@@ -2265,11 +2351,13 @@ export default function ScannerPage() {
         {!loading && hasRun && results.length === 0 && !error && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <EmptyState
+              icon={SlidersHorizontal}
               title="No stocks matched"
               description={tradeDate
-                ? `No matches for ${tradeDate} with the current filters. Widen RSI/volume filters or start from a preset. If this looks like missing market data, check Data Status before reporting.`
-                : 'No matches with the current filters. Try a broader preset. If this looks like missing market data, check Data Status before reporting.'}
+                ? `Zero matches for ${tradeDate} with the current filters. Wider RSI or volume ranges may produce results.`
+                : 'Zero matches with the current filters. A broader preset or wider ranges may produce results.'}
               action={{ label: 'Reset filters', onClick: resetFilters }}
+              testId="scanner-empty-no-match"
             />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
               <a className="workspace-chip-button" href="/data" style={{ textDecoration: 'none' }}>
