@@ -17,4 +17,5 @@ pytz==2024.2
 yfinance==0.2.54
 razorpay==2.0.1
 redis==5.2.1
+anthropic==0.111.0
 pytest==9.0.3
