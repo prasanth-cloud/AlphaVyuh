@@ -9,6 +9,7 @@ import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
 } from "@/lib/api";
+import UpgradePrompt from "@/components/UpgradePrompt";
 import {
   getCandles, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
@@ -449,6 +450,8 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
   const [userPlan, setUserPlan] = useState<string>("free");
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+  const [upgradeFeature, setUpgradeFeature] = useState("");
   const FREE_INDICATORS = INDICATOR_CONFIG.map((indicator) => indicator.id);
 
   // Toolbar dropdowns
@@ -838,8 +841,8 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
   function toggleIndicator(id: string) {
     const isPro = !FREE_INDICATORS.includes(id);
     if (isPro && userPlan === "free" && !activeIndicators.includes(id)) {
-      setPlanUpgradeToast("Upgrade to Pro to use BB, VWAP, MACD, Stoch, ATR and Ichimoku");
-      setTimeout(() => setPlanUpgradeToast(""), 3000);
+      setUpgradeFeature("Pro indicators (BB, VWAP, MACD, Stoch, ATR, Ichimoku)");
+      setShowUpgradePrompt(true);
       return;
     }
     setActiveIndicators(prev =>
@@ -1915,12 +1918,12 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
         </div>
       )}
 
-      {planUpgradeToast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg pointer-events-none flex items-center gap-2">
-          <span>{planUpgradeToast}</span>
-          <a href="/settings/billing" className="underline text-[#a5aaff] text-[12px] pointer-events-auto">Upgrade →</a>
-        </div>
-      )}
+      <UpgradePrompt
+        open={showUpgradePrompt}
+        onClose={() => setShowUpgradePrompt(false)}
+        feature={upgradeFeature}
+        onSuccess={() => { setUserPlan("pro"); setShowUpgradePrompt(false); }}
+      />
 
       {/* Stale data banner */}
       {showStaleWarning && (

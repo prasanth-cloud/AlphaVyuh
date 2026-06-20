@@ -368,7 +368,7 @@ function SettingsContent() {
   }
 
   const currentPlan = planStatus?.plan ?? "free";
-  const checkoutEnabled = false;
+  const checkoutEnabled = !!RAZORPAY_KEY && !!paymentConfig?.configured;
   const expiresAt = planStatus?.expires_at
     ? new Date(planStatus.expires_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : null;
@@ -888,6 +888,21 @@ function SettingsContent() {
                   );
                 })}
               </div>
+
+              {/* Cancel plan */}
+              {currentPlan !== "free" && expiresAt && (
+                <div className="mt-6 p-4 rounded-[12px] flex items-center justify-between gap-4" style={cardStyle} data-testid="billing-cancel-section">
+                  <div>
+                    <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>Cancel plan</div>
+                    <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>
+                      Your {currentPlan} plan is active until {expiresAt}. It will not auto-renew — no action needed to cancel.
+                    </div>
+                  </div>
+                  <div className="text-[11px] font-semibold px-3 py-1.5 rounded-full shrink-0" style={{ background: "rgba(38,166,91,0.1)", color: "var(--gain)" }}>
+                    No auto-renew
+                  </div>
+                </div>
+              )}
 
               {/* Referral code */}
               {referralCode && (

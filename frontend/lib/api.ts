@@ -101,7 +101,7 @@ export {
   withTimeout,
 } from './api/client'
 
-const API = API_BASE_URL;
+export const API = API_BASE_URL;
 
 // Public endpoints don't need auth — just JSON content-type
 const publicHeaders: HeadersInit = { "Content-Type": "application/json" };
