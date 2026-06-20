@@ -49,24 +49,51 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          INPUT_DATE: ${{ github.event.inputs.date || '' }}
+          INPUT_YFINANCE_ONLY: ${{ github.event.inputs.yfinance_only || 'false' }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           YFINANCE_LIMIT: ${{ github.event.inputs.yfinance_limit || '60' }}
           YFINANCE_TIME_BUDGET_S: ${{ github.event.inputs.yfinance_time_budget_s || '180' }}
         run: |
+          set -euo pipefail
           cd backend
-          ARGS="--yfinance-limit ${YFINANCE_LIMIT:-60} --yfinance-time-budget-s ${YFINANCE_TIME_BUDGET_S:-180}"
-          if [ -n "${{ github.event.inputs.date }}" ]; then
-            ARGS="$ARGS --date ${{ github.event.inputs.date }}"
+
+          case "$INPUT_YFINANCE_ONLY" in
+            true|false) ;;
+            *) echo "Invalid yfinance_only input: $INPUT_YFINANCE_ONLY"; exit 64 ;;
+          esac
+          case "$INPUT_DRY_RUN" in
+            true|false) ;;
+            *) echo "Invalid dry_run input: $INPUT_DRY_RUN"; exit 64 ;;
+          esac
+          if [ -n "$INPUT_DATE" ] && [[ ! "$INPUT_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Invalid date input: $INPUT_DATE"
+            exit 64
           fi
-          if [ "${{ github.event.inputs.yfinance_only }}" = "true" ]; then
-            ARGS="$ARGS --yfinance-only"
+          if [[ ! "${YFINANCE_LIMIT:-60}" =~ ^[0-9]+$ ]]; then
+            echo "Invalid yfinance_limit input: ${YFINANCE_LIMIT:-}"
+            exit 64
           fi
-          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            ARGS="$ARGS --dry-run --force"
+          if [[ ! "${YFINANCE_TIME_BUDGET_S:-180}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            echo "Invalid yfinance_time_budget_s input: ${YFINANCE_TIME_BUDGET_S:-}"
+            exit 64
           fi
-          python scripts/daily_refresh.py $ARGS
+
+          ARGS=(--yfinance-limit "${YFINANCE_LIMIT:-60}" --yfinance-time-budget-s "${YFINANCE_TIME_BUDGET_S:-180}")
+          if [ -n "$INPUT_DATE" ]; then
+            ARGS+=(--date "$INPUT_DATE")
+          fi
+          if [ "$INPUT_YFINANCE_ONLY" = "true" ]; then
+            ARGS+=(--yfinance-only)
+          fi
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
+            ARGS+=(--dry-run --force)
+          fi
+
+          python scripts/daily_refresh.py "${ARGS[@]}"
           {
             echo "### Daily refresh guardrails"
-            echo "- dry run: ${{ github.event.inputs.dry_run || 'false' }}"
+            echo "- dry run: ${INPUT_DRY_RUN:-false}"
             echo "- yfinance supplement limit: ${YFINANCE_LIMIT:-60}"
             echo "- yfinance supplement time budget: ${YFINANCE_TIME_BUDGET_S:-180}s"
             echo "- trusted core path runs before yfinance supplement: bhavcopy, breadth snapshot, scan alerts"
