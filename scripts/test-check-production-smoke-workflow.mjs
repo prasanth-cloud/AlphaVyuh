@@ -42,11 +42,19 @@ steps:
   - uses: actions/setup-node@v6
     with:
       node-version: 22
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Install Playwright Chromium
-    run: npm --prefix frontend exec playwright install --with-deps chromium
-  - name: Prepare production smoke account
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Install Vercel CLI
+	    run: npm install -g vercel@54.7.1
+	  - name: Install Playwright Chromium
+	    run: npm --prefix frontend exec playwright install --with-deps chromium
+	  - name: Validate trusted production targets
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	      LIVE_URL_INPUT: \${{ github.event.inputs.live_url }}
+	      REQUIRE_LIVE_URL: "1"
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production smoke account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -66,11 +74,10 @@ steps:
       PLAYWRIGHT_QA_PASSWORD: from-github-env
       PLAYWRIGHT_SUPABASE_AUTH_COOKIES: from-github-env
     run: npm run check:data-recovery
-  - name: Strict signed-in production browser smoke
-    env:
-      PLAYWRIGHT_BASE_URL: \${{ github.event.inputs.live_url }}
-      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
-    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
+	  - name: Strict signed-in production browser smoke
+	    env:
+	      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
+	    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
 `);
 
 writeFileSync(staleWithDeploy, `
@@ -86,11 +93,19 @@ steps:
   - uses: actions/setup-node@v6
     with:
       node-version: 22
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Install Playwright Chromium
-    run: npm --prefix frontend exec playwright install --with-deps chromium
-  - name: Prepare production smoke account
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Install Vercel CLI
+	    run: npm install -g vercel@54.7.1
+	  - name: Install Playwright Chromium
+	    run: npm --prefix frontend exec playwright install --with-deps chromium
+	  - name: Validate trusted production targets
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	      LIVE_URL_INPUT: \${{ github.event.inputs.live_url }}
+	      REQUIRE_LIVE_URL: "1"
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production smoke account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -114,11 +129,10 @@ steps:
       PLAYWRIGHT_QA_PASSWORD: from-github-env
       PLAYWRIGHT_SUPABASE_AUTH_COOKIES: from-github-env
     run: npm run check:data-recovery
-  - name: Strict signed-in production browser smoke
-    env:
-      PLAYWRIGHT_BASE_URL: \${{ github.event.inputs.live_url }}
-      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
-    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
+	  - name: Strict signed-in production browser smoke
+	    env:
+	      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
+	    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
 `);
 
 writeFileSync(staleWithoutBrowserSmoke, `
@@ -134,11 +148,19 @@ steps:
   - uses: actions/setup-node@v6
     with:
       node-version: 22
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Install Playwright Chromium
-    run: npm --prefix frontend exec playwright install --with-deps chromium
-  - name: Prepare production smoke account
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Install Vercel CLI
+	    run: npm install -g vercel@54.7.1
+	  - name: Install Playwright Chromium
+	    run: npm --prefix frontend exec playwright install --with-deps chromium
+	  - name: Validate trusted production targets
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	      LIVE_URL_INPUT: \${{ github.event.inputs.live_url }}
+	      REQUIRE_LIVE_URL: "1"
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production smoke account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

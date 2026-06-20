@@ -1,10 +1,19 @@
 import asyncio
 import os
+from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import stocks  # noqa: E402
+
+
+class _FakeRequest:
+    def __init__(self, host="127.0.0.1"):
+        self.client = SimpleNamespace(host=host)
 
 
 class _FailingTicker:
@@ -13,12 +22,53 @@ class _FailingTicker:
         raise RuntimeError("provider down")
 
 
+class _Ticker:
+    @property
+    def info(self):
+        return {
+            "marketCap": 1_000_000_000,
+            "trailingPE": 22.4,
+            "dividendYield": 0.01,
+        }
+
+
+def test_fundamentals_rejects_invalid_symbols_before_provider_call(monkeypatch):
+    stocks._fund_cache.clear()
+    provider_calls = {"count": 0}
+
+    def _ticker(_symbol):
+        provider_calls["count"] += 1
+        return _Ticker()
+
+    monkeypatch.setattr(stocks.yf, "Ticker", _ticker)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(stocks.get_fundamentals("../RELIANCE", _FakeRequest()))
+
+    assert exc.value.status_code == 400
+    assert provider_calls["count"] == 0
+
+
+def test_fundamentals_cache_is_bounded(monkeypatch):
+    stocks._fund_cache.clear()
+    monkeypatch.setattr(stocks, "_lookup_fundamentals_market", lambda _symbol: ("NSE", "INR"))
+    monkeypatch.setattr(stocks.yf, "Ticker", lambda _ticker: _Ticker())
+
+    for index in range(stocks._FUND_CACHE_MAX + 1):
+        asyncio.run(stocks.get_fundamentals(f"SYM{index}", _FakeRequest(host=f"198.51.100.{index % 20}")))
+
+    assert len(stocks._fund_cache) == stocks._FUND_CACHE_MAX
+    assert "SYM0" not in stocks._fund_cache
+    assert f"SYM{stocks._FUND_CACHE_MAX}" in stocks._fund_cache
+
+
 def test_fundamentals_returns_unavailable_payload_when_provider_fails(monkeypatch):
     stocks._fund_cache.clear()
+    monkeypatch.setattr(stocks, "_lookup_fundamentals_market", lambda _symbol: ("NSE", "INR"))
     monkeypatch.setattr(stocks, "_lookup_market", lambda _symbol: ("NSE", "INR"))
     monkeypatch.setattr(stocks.yf, "Ticker", lambda _ticker: _FailingTicker())
 
-    result = asyncio.run(stocks.get_fundamentals("reliance"))
+    result = asyncio.run(stocks.get_fundamentals("reliance", _FakeRequest()))
 
     assert result["symbol"] == "RELIANCE"
     assert result["data_status"] == "unavailable"
@@ -49,10 +99,10 @@ def test_fundamentals_returns_stale_cache_when_refresh_fails(monkeypatch):
             "shares_outstanding": None,
         },
     )
-    monkeypatch.setattr(stocks, "_lookup_market", lambda _symbol: ("NSE", "INR"))
+    monkeypatch.setattr(stocks, "_lookup_fundamentals_market", lambda _symbol: ("NSE", "INR"))
     monkeypatch.setattr(stocks.yf, "Ticker", lambda _ticker: _FailingTicker())
 
-    result = asyncio.run(stocks.get_fundamentals("tcs"))
+    result = asyncio.run(stocks.get_fundamentals("tcs", _FakeRequest()))
 
     assert result["symbol"] == "TCS"
     assert result["trailing_pe"] == 28.4

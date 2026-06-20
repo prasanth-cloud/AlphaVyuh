@@ -28,13 +28,25 @@ const root = mkdtempSync(join(tmpdir(), "alphavyuh-railway-workflow-"));
 const clean = join(root, "clean.yml");
 const stale = join(root, "stale.yml");
 
-writeFileSync(clean, `
-steps:
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Install Playwright Chromium
-    run: npm --prefix frontend exec playwright install --with-deps chromium
-  - name: Prepare production smoke account
+	writeFileSync(clean, `
+	if: github.ref == 'refs/heads/main'
+	environment: production
+	steps:
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Install Railway CLI
+	    run: npm install -g @railway/cli@4.66.1
+	  - name: Install Vercel CLI
+	    run: npm install -g vercel@54.7.1
+	  - name: Install Playwright Chromium
+	    run: npm --prefix frontend exec playwright install --with-deps chromium
+	  - name: Validate trusted production targets
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	      LIVE_URL_INPUT: \${{ github.event.inputs.live_url }}
+	      REQUIRE_LIVE_URL: "1"
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production smoke account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -44,8 +56,12 @@ steps:
     run: node scripts/prepare-production-smoke-account.mjs
   - name: Validate full recovery smoke credentials
     run: npm run check:production-smoke-env
-  - name: Recover backend
-    run: npm run recover:railway-backend
+	  - name: Recover backend
+	    env:
+	      RAILWAY_PROJECT_ID: \${{ secrets.RAILWAY_PROJECT_ID }}
+	      RAILWAY_ENVIRONMENT: production
+	      RAILWAY_SERVICE: \${{ secrets.RAILWAY_SERVICE }}
+	    run: npm run recover:railway-backend
   - name: Strict production data recovery preflight
     env:
       VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}
@@ -53,21 +69,36 @@ steps:
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       REQUIRE_AUTHENTICATED_SMOKE: "1"
     run: npm run check:data-recovery
-  - name: Strict signed-in production browser smoke
-    env:
-      PLAYWRIGHT_BASE_URL: \${{ github.event.inputs.live_url }}
-      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
-    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
+	  - name: Strict signed-in production browser smoke
+	    env:
+	      PLAYWRIGHT_EXPECT_REAL_DATA: "true"
+	    run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts
 `);
 
-writeFileSync(stale, `
-steps:
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Install Playwright Chromium
-    run: npm --prefix frontend exec playwright install --with-deps chromium
-  - name: Recover backend
-    run: npm run recover:railway-backend
+	writeFileSync(stale, `
+	if: github.ref == 'refs/heads/main'
+	environment: production
+	steps:
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Install Railway CLI
+	    run: npm install -g @railway/cli@4.66.1
+	  - name: Install Vercel CLI
+	    run: npm install -g vercel@54.7.1
+	  - name: Install Playwright Chromium
+	    run: npm --prefix frontend exec playwright install --with-deps chromium
+	  - name: Validate trusted production targets
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	      LIVE_URL_INPUT: \${{ github.event.inputs.live_url }}
+	      REQUIRE_LIVE_URL: "1"
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Recover backend
+	    env:
+	      RAILWAY_PROJECT_ID: \${{ secrets.RAILWAY_PROJECT_ID }}
+	      RAILWAY_ENVIRONMENT: production
+	      RAILWAY_SERVICE: \${{ secrets.RAILWAY_SERVICE }}
+	    run: npm run recover:railway-backend
   - name: Strict production data recovery preflight
     env:
       REQUIRE_AUTHENTICATED_SMOKE: "1"
@@ -95,13 +126,25 @@ steps:
 
 {
   const staleWithoutBrowserSmoke = join(root, "stale-without-browser-smoke.yml");
-  writeFileSync(staleWithoutBrowserSmoke, `
-steps:
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Install Playwright Chromium
-    run: npm --prefix frontend exec playwright install --with-deps chromium
-  - name: Prepare production smoke account
+	writeFileSync(staleWithoutBrowserSmoke, `
+	if: github.ref == 'refs/heads/main'
+	environment: production
+	steps:
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Install Railway CLI
+	    run: npm install -g @railway/cli@4.66.1
+	  - name: Install Vercel CLI
+	    run: npm install -g vercel@54.7.1
+	  - name: Install Playwright Chromium
+	    run: npm --prefix frontend exec playwright install --with-deps chromium
+	  - name: Validate trusted production targets
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	      LIVE_URL_INPUT: \${{ github.event.inputs.live_url }}
+	      REQUIRE_LIVE_URL: "1"
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production smoke account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -111,8 +154,12 @@ steps:
     run: node scripts/prepare-production-smoke-account.mjs
   - name: Validate full recovery smoke credentials
     run: npm run check:production-smoke-env
-  - name: Recover backend
-    run: npm run recover:railway-backend
+	  - name: Recover backend
+	    env:
+	      RAILWAY_PROJECT_ID: \${{ secrets.RAILWAY_PROJECT_ID }}
+	      RAILWAY_ENVIRONMENT: production
+	      RAILWAY_SERVICE: \${{ secrets.RAILWAY_SERVICE }}
+	    run: npm run recover:railway-backend
   - name: Strict production data recovery preflight
     env:
       VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}

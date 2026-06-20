@@ -10,7 +10,7 @@ import json
 import os
 from time import monotonic
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import StreamingResponse
 
 from app.middleware.auth import get_current_user_id
@@ -24,13 +24,20 @@ from app.services.market_breadth_snapshot import (
 from app.services.market_context import eod_source_metadata, fallback_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.sector_taxonomy import NSE_SECTORAL_INDEXES, build_sector_taxonomy_metadata
-from app.services.supabase import get_admin_client  # SERVICE_ROLE: permitted — no user context
+from app.services.supabase import get_admin_client
+from app.services.rate_limit import market_live_limiter
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
 
 OVERVIEW_CACHE_TTL_SECONDS = 300
 _overview_cache: dict | None = None
 _overview_cache_expires_at = 0.0
+LIVE_MARKET_STATUS_CACHE_TTL_SECONDS = 30
+LIVE_SECTOR_INDEX_CACHE_TTL_SECONDS = 30
+_live_status_cache: dict | None = None
+_live_status_cache_expires_at = 0.0
+_live_sector_cache: dict | None = None
+_live_sector_cache_expires_at = 0.0
 
 SECTOR_INDEXES = [(index["symbol"], index["label"]) for index in NSE_SECTORAL_INDEXES]
 
@@ -123,37 +130,43 @@ def _index_quotes() -> tuple[list[dict], str, bool]:
     return quotes, "kite_ws" if live_ticks else "latest_complete_session", bool(live_ticks)
 
 
-def _sector_index_quote(provider, symbol: str, label: str) -> tuple[dict, bool]:
-    try:
-        q = provider.live_quote(symbol, MarketIdentity(market="NSE", currency="INR"))
-        return ({
-            "symbol": symbol,
-            "label": label,
-            "close": _finite_float(q.get("close")),
-            "pct_change": _finite_float(q.get("pct_change")),
-            "prev_close": _finite_float(q.get("prev_close")),
-            "source": q.get("source") or provider.name,
-        }, True)
-    except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
-        return ({
-            "symbol": symbol,
-            "label": label,
-            "close": None,
-            "pct_change": None,
-            "prev_close": None,
-            "source": provider.name,
-            "error": str(exc),
-        }, False)
+def _enforce_live_market_limit(user_id: str, scope: str) -> None:
+    key = f"{scope}:{user_id}"
+    if not market_live_limiter.is_allowed(key):
+        retry_after = market_live_limiter.retry_after(key)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many live market data requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
 
 
-async def _sector_index_quotes() -> tuple[list[dict], str, bool]:
+def _sector_index_quotes() -> tuple[list[dict], str, bool]:
     provider = get_market_data_provider()
-    results = await asyncio.gather(*[
-        asyncio.to_thread(_sector_index_quote, provider, symbol, label)
-        for symbol, label in SECTOR_INDEXES
-    ])
-    quotes = [quote for quote, _ in results]
-    live = all(ok for _, ok in results)
+    quotes: list[dict] = []
+    live = True
+    for symbol, label in SECTOR_INDEXES:
+        try:
+            q = provider.live_quote(symbol, MarketIdentity(market="NSE", currency="INR"))
+            quotes.append({
+                "symbol": symbol,
+                "label": label,
+                "close": _finite_float(q.get("close")),
+                "pct_change": _finite_float(q.get("pct_change")),
+                "prev_close": _finite_float(q.get("prev_close")),
+                "source": q.get("source") or provider.name,
+            })
+        except (ProviderNotConfiguredError, MarketDataError, Exception) as exc:
+            live = False
+            quotes.append({
+                "symbol": symbol,
+                "label": label,
+                "close": None,
+                "pct_change": None,
+                "prev_close": None,
+                "source": provider.name,
+                "error": str(exc),
+            })
     return quotes, provider.name, live
 
 
@@ -248,19 +261,41 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
 @router.get("/live/status")
 async def live_market_status(user_id: str = Depends(get_current_user_id)):
-    return _kite_market_status()
+    global _live_status_cache, _live_status_cache_expires_at
+    now = monotonic()
+    if _live_status_cache and _live_status_cache_expires_at > now:
+        cached = deepcopy(_live_status_cache)
+        cached["cache_status"] = "hit"
+        return cached
+    _enforce_live_market_limit(user_id, "live-status")
+    payload = _kite_market_status()
+    payload["cache_status"] = "miss"
+    _live_status_cache = deepcopy(payload)
+    _live_status_cache_expires_at = monotonic() + LIVE_MARKET_STATUS_CACHE_TTL_SECONDS
+    return payload
 
 
 @router.get("/live/sectors")
 async def live_sector_indices(user_id: str = Depends(get_current_user_id)):
-    sectors, source, is_live = await _sector_index_quotes()
-    return {
+    global _live_sector_cache, _live_sector_cache_expires_at
+    now = monotonic()
+    if _live_sector_cache and _live_sector_cache_expires_at > now:
+        cached = deepcopy(_live_sector_cache)
+        cached["cache_status"] = "hit"
+        return cached
+    _enforce_live_market_limit(user_id, "live-sectors")
+    sectors, source, is_live = _sector_index_quotes()
+    payload = {
         "basis": "live_sector_indices",
         "source": source,
         "is_live": is_live,
         "as_of": datetime.now(timezone.utc).isoformat(),
         "sectors": sectors,
+        "cache_status": "miss",
     }
+    _live_sector_cache = deepcopy(payload)
+    _live_sector_cache_expires_at = monotonic() + LIVE_SECTOR_INDEX_CACHE_TTL_SECONDS
+    return payload
 
 
 @router.get("/live/stream")
@@ -277,7 +312,7 @@ async def live_market_stream(
     async def events():
         subscriber = None
         try:
-            subscriber = await kite_live_ticker.subscribe(requested, mode=stream_mode)
+            subscriber = await kite_live_ticker.subscribe(requested, mode=stream_mode, user_id=user_id)
             yield _sse("ready", {"provider": "kite_ws", "symbols": requested, "mode": stream_mode})
             while True:
                 try:

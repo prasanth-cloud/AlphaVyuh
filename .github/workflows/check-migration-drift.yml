@@ -7,7 +7,8 @@ name: Migration Drift Check
 #   1. Apply to staging → 2. Apply to prod → 3. Document in PR description
 #
 # To PASS this check after applying migrations:
-#   Add  <!-- migration-applied-to-prod -->  anywhere in the PR description.
+#   1. Supabase API must show the added migration versions applied to prod.
+#   2. Add  <!-- migration-applied-to-prod -->  anywhere in the PR description.
 #
 # Required repo setup (one-time, by repo admin):
 #   1. Add SUPABASE_ACCESS_TOKEN to repo secrets:
@@ -91,6 +92,11 @@ jobs:
             if [ "$HTTP_CODE" = "200" ]; then
               REMOTE=$(jq 'length' /tmp/migrations_resp.json 2>/dev/null || echo "parse-error")
               echo "remote_count=$REMOTE" >> $GITHUB_OUTPUT
+              {
+                echo "remote_versions<<HEREDOC"
+                jq -r '.[] | (.version // .name // .migration_version // .id // empty)' /tmp/migrations_resp.json 2>/dev/null || true
+                echo "HEREDOC"
+              } >> $GITHUB_OUTPUT
               echo "Prod applied: $REMOTE | Local files (excl. stubs): $LOCAL"
             elif [ "$HTTP_CODE" = "401" ]; then
               echo "remote_count=auth-error (check SUPABASE_ACCESS_TOKEN value)" >> $GITHUB_OUTPUT
@@ -175,7 +181,7 @@ jobs:
               `- [ ] Schema verified on prod via Supabase MCP or dashboard`,
               ``,
               `---`,
-              `**To pass this check:** add the following marker to the PR description (not a comment):`,
+              `**To pass this check:** apply the listed migration versions to prod, then add the following marker to the PR description (not a comment):`,
               `\`<!-- migration-applied-to-prod -->\``,
             ].join('\n');
 
@@ -200,13 +206,58 @@ jobs:
         if: steps.detect.outputs.has_new == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ADDED_FILES: ${{ steps.detect.outputs.added_files }}
+          LOCAL_COUNT: ${{ steps.counts.outputs.local_count }}
+          REMOTE_COUNT: ${{ steps.counts.outputs.remote_count }}
+          REMOTE_VERSIONS: ${{ steps.counts.outputs.remote_versions }}
         run: |
           PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} \
             --json body -q .body 2>/dev/null || echo "")
 
-          if echo "$PR_BODY" | grep -q "migration-applied-to-prod"; then
-            echo "✓ Migration evidence marker found — check passes."
-          else
+          if ! [[ "$LOCAL_COUNT" =~ ^[0-9]+$ && "$REMOTE_COUNT" =~ ^[0-9]+$ ]]; then
+            echo ""
+            echo "✗ Migration check failed."
+            echo ""
+            echo "  Could not verify production migration state through the Supabase API."
+            echo "  Local count:  ${LOCAL_COUNT:-unknown}"
+            echo "  Remote count: ${REMOTE_COUNT:-unknown}"
+            echo "  Configure SUPABASE_ACCESS_TOKEN and rerun after applying migrations."
+            echo ""
+            exit 1
+          fi
+
+          if [ "$REMOTE_COUNT" -lt "$LOCAL_COUNT" ]; then
+            echo ""
+            echo "✗ Migration check failed."
+            echo ""
+            echo "  Production has fewer applied migrations than this branch."
+            echo "  Prod applied: $REMOTE_COUNT"
+            echo "  Local files:  $LOCAL_COUNT"
+            echo ""
+            exit 1
+          fi
+
+          missing_versions=""
+          for file in $ADDED_FILES; do
+            version="${file%%_*}"
+            name="${file%.sql}"
+            if ! printf '%s\n' "$REMOTE_VERSIONS" | grep -Fxq "$version" \
+              && ! printf '%s\n' "$REMOTE_VERSIONS" | grep -Fxq "$name"; then
+              missing_versions="${missing_versions}${file} "
+            fi
+          done
+
+          if [ -n "$missing_versions" ]; then
+            echo ""
+            echo "✗ Migration check failed."
+            echo ""
+            echo "  Added migration versions were not found in production Supabase migration history:"
+            echo "  $missing_versions"
+            echo ""
+            exit 1
+          fi
+
+          if ! echo "$PR_BODY" | grep -q "migration-applied-to-prod"; then
             echo ""
             echo "✗ Migration check failed."
             echo ""
@@ -214,8 +265,11 @@ jobs:
             echo "  Steps:"
             echo "    1. Apply to staging:  bun run db:push:staging"
             echo "    2. Apply to prod:     supabase db push --linked"
-            echo "    3. Add to PR description: <!-- migration-applied-to-prod -->"
-            echo "    4. Re-run this check (push a new commit or re-run the workflow)"
+            echo "    3. Confirm the added versions are listed by Supabase migration history"
+            echo "    4. Add to PR description: <!-- migration-applied-to-prod -->"
+            echo "    5. Re-run this check (push a new commit or re-run the workflow)"
             echo ""
             exit 1
           fi
+
+          echo "✓ Production migration versions and PR evidence marker found — check passes."

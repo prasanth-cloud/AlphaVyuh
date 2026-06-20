@@ -29,6 +29,11 @@ class _Subscriber:
     loop: asyncio.AbstractEventLoop
     queue: asyncio.Queue[dict[str, Any]]
     symbols: frozenset[str]
+    user_id: str
+
+
+MAX_KITE_STREAM_SUBSCRIBERS_PER_USER = 3
+MAX_KITE_STREAM_SUBSCRIBERS_TOTAL = 25
 
 
 class KiteLiveTicker:
@@ -67,11 +72,12 @@ class KiteLiveTicker:
         with self._lock:
             return [tick for symbol, tick in self._latest.items() if symbol in requested]
 
-    async def subscribe(self, symbols: list[str], mode: str = "quote") -> _Subscriber:
+    async def subscribe(self, symbols: list[str], mode: str = "quote", *, user_id: str | None = None) -> _Subscriber:
         clean_symbols = sorted({s.strip().upper() for s in symbols if s.strip()})[:200]
         if not clean_symbols:
             raise KiteStreamError("At least one symbol is required")
 
+        owner = (user_id or "unknown").strip() or "unknown"
         tokens = self._resolve_tokens(clean_symbols)
         if not tokens:
             raise KiteStreamError("No Kite instrument tokens found for requested symbols")
@@ -80,8 +86,14 @@ class KiteLiveTicker:
             loop=asyncio.get_running_loop(),
             queue=asyncio.Queue(maxsize=128),
             symbols=frozenset(clean_symbols),
+            user_id=owner,
         )
         with self._lock:
+            user_count = sum(1 for item in self._subscribers if item.user_id == owner)
+            if user_count >= MAX_KITE_STREAM_SUBSCRIBERS_PER_USER:
+                raise KiteStreamError("Too many live market streams for this account")
+            if len(self._subscribers) >= MAX_KITE_STREAM_SUBSCRIBERS_TOTAL:
+                raise KiteStreamError("Live market stream capacity is temporarily full")
             self._subscribers.add(subscriber)
 
         self._ensure_ticker()

@@ -1,4 +1,5 @@
 import json
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +10,23 @@ from app.routers.waitlist import _require_admin
 from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
+
+SENSITIVE_FEEDBACK_KEYS = {
+    "code",
+    "request_token",
+    "state",
+    "signature",
+    "razorpay_signature",
+}
+SENSITIVE_FEEDBACK_KEY_FRAGMENTS = (
+    "token",
+    "secret",
+    "password",
+    "authorization",
+    "api_key",
+    "apikey",
+    "signature",
+)
 
 
 class FeedbackCreateRequest(BaseModel):
@@ -44,6 +62,41 @@ def _use_waitlist_feedback() -> bool:
     return _feedback_storage_mode() == "waitlist"
 
 
+def _is_sensitive_feedback_key(key: object) -> bool:
+    normalized = str(key).strip().lower()
+    return normalized in SENSITIVE_FEEDBACK_KEYS or any(fragment in normalized for fragment in SENSITIVE_FEEDBACK_KEY_FRAGMENTS)
+
+
+def _redact_feedback_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if not parsed.query:
+        return value
+    query = []
+    redacted = False
+    for key, item in parse_qsl(parsed.query, keep_blank_values=True):
+        if _is_sensitive_feedback_key(key):
+            query.append((key, "[redacted]"))
+            redacted = True
+        else:
+            query.append((key, item))
+    if not redacted:
+        return value
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment))
+
+
+def _sanitize_feedback_context(value):
+    if isinstance(value, dict):
+        return {
+            key: "[redacted]" if _is_sensitive_feedback_key(key) else _sanitize_feedback_context(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_feedback_context(item) for item in value]
+    if isinstance(value, str):
+        return _redact_feedback_url(value)
+    return value
+
+
 def _waitlist_feedback_row(row: dict) -> dict:
     source = row.get("source") or "feedback-general"
     category = source.replace("feedback-", "", 1) if source.startswith("feedback-") else "general"
@@ -55,7 +108,7 @@ def _waitlist_feedback_row(row: dict) -> dict:
         try:
             parsed_context = json.loads(raw_context)
             if isinstance(parsed_context, dict):
-                context.update(parsed_context)
+                context.update(_sanitize_feedback_context(parsed_context))
         except json.JSONDecodeError:
             pass
     status_map = {
@@ -97,13 +150,14 @@ def _feedback_to_waitlist_status(feedback_status: str) -> str:
 
 def _create_waitlist_feedback(client, body: FeedbackCreateRequest, user_id: str) -> dict:
     user_email = _fallback_email(client, user_id)
+    clean_context = _sanitize_feedback_context(body.context)
     fallback_context = {
         "user_id": user_id,
         "user_email": user_email,
         "page": body.page,
         "symbol": body.symbol.upper() if body.symbol else None,
         "severity": body.severity,
-        "client": body.context,
+        "client": clean_context,
     }
     fallback = {
         "email": _feedback_fallback_email(user_email),
@@ -134,6 +188,7 @@ def _list_waitlist_feedback(client, status_filter: str | None = None) -> list[di
 @router.post("")
 async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(get_current_user_id)):
     client = get_admin_client()
+    clean_context = _sanitize_feedback_context(body.context)
     if _use_waitlist_feedback():
         return {"feedback": _create_waitlist_feedback(client, body, user_id)}
 
@@ -144,7 +199,7 @@ async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(ge
         "symbol": body.symbol.upper() if body.symbol else None,
         "severity": body.severity,
         "message": body.message.strip(),
-        "context": body.context,
+        "context": clean_context,
     }
     try:
         result = client.table("feedback_reports").insert(payload).execute()

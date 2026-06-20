@@ -7,19 +7,6 @@ on:
         description: Production API base URL to verify
         required: true
         default: https://alphavyuh-production.up.railway.app
-      railway_project_id:
-        description: Railway project ID to deploy in CI. Optional when RAILWAY_PROJECT_ID secret is set.
-        required: false
-      railway_environment:
-        description: Railway environment
-        required: true
-        default: production
-      railway_service:
-        description: Railway backend service name or ID. Optional when RAILWAY_SERVICE secret is set.
-        required: false
-      railway_workspace:
-        description: Railway workspace/team ID or slug. Optional when RAILWAY_WORKSPACE secret is set.
-        required: false
       production_api_chart_symbols:
         description: Comma-separated chart symbols for recovery smoke. Optional when PRODUCTION_API_CHART_SYMBOLS secret is set.
         required: false
@@ -35,6 +22,8 @@ jobs:
   recover:
     name: Recover Railway backend and verify production API
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
     timeout-minutes: 35
 
     steps:
@@ -52,13 +41,20 @@ jobs:
         run: npm --prefix frontend ci
 
       - name: Install Railway CLI
-        run: npm install -g @railway/cli@latest
+        run: npm install -g @railway/cli@4.66.1
 
       - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+        run: npm install -g vercel@54.7.1
 
       - name: Install Playwright Chromium
         run: npm --prefix frontend exec playwright install --with-deps chromium
+
+      - name: Validate trusted production targets
+        env:
+          PRODUCTION_API_URL_INPUT: ${{ github.event.inputs.production_api_url }}
+          LIVE_URL_INPUT: ${{ github.event.inputs.live_url }}
+          REQUIRE_LIVE_URL: "1"
+        run: node scripts/validate-production-workflow-targets.mjs
 
       - name: Prepare production smoke account
         env:
@@ -85,11 +81,10 @@ jobs:
       - name: Recover backend
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ github.event.inputs.railway_project_id || secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT: ${{ github.event.inputs.railway_environment }}
-          RAILWAY_SERVICE: ${{ github.event.inputs.railway_service || secrets.RAILWAY_SERVICE }}
-          RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
-          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT: production
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_WORKSPACE: ${{ secrets.RAILWAY_WORKSPACE }}
           PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
         run: npm run recover:railway-backend
 
@@ -98,11 +93,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ github.event.inputs.railway_project_id || secrets.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT: ${{ github.event.inputs.railway_environment }}
-          RAILWAY_SERVICE: ${{ github.event.inputs.railway_service || secrets.RAILWAY_SERVICE }}
-          RAILWAY_WORKSPACE: ${{ github.event.inputs.railway_workspace || secrets.RAILWAY_WORKSPACE }}
-          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+          RAILWAY_ENVIRONMENT: production
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_WORKSPACE: ${{ secrets.RAILWAY_WORKSPACE }}
           PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -111,7 +105,6 @@ jobs:
 
       - name: Strict signed-in production browser smoke
         env:
-          PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.live_url }}
           PLAYWRIGHT_EXPECT_REAL_DATA: "true"
           PLAYWRIGHT_SMOKE_SYMBOL: RELIANCE
         run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts

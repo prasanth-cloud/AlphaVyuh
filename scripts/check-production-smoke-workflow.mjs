@@ -14,8 +14,12 @@ const requiredSnippets = [
   "node-version: 22",
   "Install frontend dependencies",
   "npm --prefix frontend ci",
+  "Install Vercel CLI",
+  "vercel@54.7.1",
   "Install Playwright Chromium",
   "npm --prefix frontend exec playwright install --with-deps chromium",
+  "Validate trusted production targets",
+  "node scripts/validate-production-workflow-targets.mjs",
   "Prepare production smoke account",
   "node scripts/prepare-production-smoke-account.mjs",
   "Validate full production smoke credentials",
@@ -24,7 +28,8 @@ const requiredSnippets = [
   "npm run check:data-recovery",
   'REQUIRE_AUTHENTICATED_SMOKE: "1"',
   "Strict signed-in production browser smoke",
-  "PLAYWRIGHT_BASE_URL",
+  "LIVE_URL_INPUT",
+  'REQUIRE_LIVE_URL: "1"',
   'PLAYWRIGHT_EXPECT_REAL_DATA: "true"',
   "npm --prefix frontend exec -- playwright test",
   "frontend/tests/e2e/smoke-signed-in.spec.ts",
@@ -43,6 +48,9 @@ const forbiddenSnippets = [
   "RAILWAY_PROJECT_ID",
   "RAILWAY_SERVICE",
   "@railway/cli",
+  "@latest",
+  "PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.live_url }}",
+  "PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}",
 ];
 
 function assert(condition, message) {
@@ -62,9 +70,14 @@ try {
   }
 
   const prepareAccountIndex = body.indexOf("Prepare production smoke account");
+  const targetValidationIndex = body.indexOf("Validate trusted production targets");
   const credentialIndex = body.indexOf("Validate full production smoke credentials");
   const strictPreflightIndex = body.indexOf("Strict authenticated production data preflight");
   const browserSmokeIndex = body.indexOf("Strict signed-in production browser smoke");
+  assert(
+    targetValidationIndex < prepareAccountIndex,
+    "Production smoke workflow must validate production targets before preparing credentials.",
+  );
   assert(
     prepareAccountIndex < credentialIndex,
     "Production smoke workflow must prepare runtime smoke credentials before validating them.",
