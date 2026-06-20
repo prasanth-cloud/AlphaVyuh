@@ -507,20 +507,33 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
     setTimeout(() => setLayoutMsg(""), 5000);
   }, []);
 
+  const drawingDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingDrawingRef = useRef<Record<string, ChartDrawing>>({});
+
   const persistEditedDrawing = useCallback(async (drawing: ChartDrawing) => {
-    try {
-      const saved = await updateDrawing(symbol, drawing.id, {
-        tool_type: getDrawingToolType(drawing.tool),
-        points: getPersistedDrawingPoints(drawing),
-        style: { color: drawing.color, text: drawing.text ?? null, locked: drawing.locked ?? false, hidden: drawing.hidden ?? false },
-        timeframe,
-      });
-      setDrawings((prev) => prev.map((item) => item.id === drawing.id ? saved : item));
-      setDrawnLines((prev) => prev.map((item) => item.id === drawing.id ? { ...item, id: saved.id } : item));
-      setSelectedDrawingId(saved.id);
-    } catch {
-      showDrawingPersistenceError();
+    pendingDrawingRef.current[drawing.id] = drawing;
+    if (drawingDebounceRef.current[drawing.id]) {
+      clearTimeout(drawingDebounceRef.current[drawing.id]);
     }
+    drawingDebounceRef.current[drawing.id] = setTimeout(async () => {
+      const latest = pendingDrawingRef.current[drawing.id];
+      delete pendingDrawingRef.current[drawing.id];
+      delete drawingDebounceRef.current[drawing.id];
+      if (!latest) return;
+      try {
+        const saved = await updateDrawing(symbol, latest.id, {
+          tool_type: getDrawingToolType(latest.tool),
+          points: getPersistedDrawingPoints(latest),
+          style: { color: latest.color, text: latest.text ?? null, locked: latest.locked ?? false, hidden: latest.hidden ?? false },
+          timeframe,
+        });
+        setDrawings((prev) => prev.map((item) => item.id === latest.id ? saved : item));
+        setDrawnLines((prev) => prev.map((item) => item.id === latest.id ? { ...item, id: saved.id } : item));
+        setSelectedDrawingId(saved.id);
+      } catch {
+        showDrawingPersistenceError();
+      }
+    }, 500);
   }, [showDrawingPersistenceError, symbol, timeframe]);
 
   const getSnappedPrice = useCallback((time: string, price: number) => {

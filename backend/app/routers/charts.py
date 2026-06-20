@@ -267,7 +267,16 @@ def _drawing_row_to_workspace(row: dict[str, Any]) -> dict[str, Any] | None:
         return {"id": row["id"], "kind": "hline", "price": price, "color": color, "width": width, "label": style.get("label")}
     if len(points) < 2:
         return None
-    return {"id": row["id"], "kind": "trendline", "p1": points[0], "p2": points[1], "color": color, "width": width}
+    if tool in {"trendline", ""}:
+        return {"id": row["id"], "kind": "trendline", "p1": points[0], "p2": points[1], "color": color, "width": width}
+    return {
+        "id": row["id"],
+        "tool_type": row.get("tool_type") or "trendline",
+        "points": points,
+        "style": style,
+        "timeframe": row.get("timeframe") or "",
+        "created_at": row.get("created_at") or "",
+    }
 
 
 def _workspace_drawing_to_row(drawing: dict[str, Any], timeframe: str) -> dict[str, Any]:
