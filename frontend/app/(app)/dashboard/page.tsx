@@ -22,6 +22,7 @@ import {
   type ScanAlertMatch,
 } from '@/lib/api'
 import { DashboardEquitySnapshotCard } from '@/components/dashboard/DashboardEquitySnapshot'
+import { QuickLaunchTiles } from '@/components/dashboard/QuickLaunchTiles'
 import { MarketOverviewDesk } from '@/components/dashboard/MarketOverviewDesk'
 import { EmptyState } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
@@ -343,6 +344,8 @@ export default function DashboardPage() {
         <div>
           {data ? (
             <>
+              <QuickLaunchTiles hasData={workflow.watchlists > 0 || workflow.totalTrades > 0} />
+              <div style={{ height: 12 }} />
               <MarketOverviewDesk data={data} dataHealth={dataHealth} marketError={error} />
               <DashboardEquitySnapshotCard
                 stats={journalStats}
