@@ -8,13 +8,13 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.middleware.auth import get_current_user_id
 from app.services import indicators as ta
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, get_market_data_provider
 from app.services.market_context import eod_source_metadata, live_source_metadata
 from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import client_rate_key, public_market_limiter
-from app.services.supabase import get_admin_client, get_user_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
 
@@ -267,16 +267,7 @@ def _drawing_row_to_workspace(row: dict[str, Any]) -> dict[str, Any] | None:
         return {"id": row["id"], "kind": "hline", "price": price, "color": color, "width": width, "label": style.get("label")}
     if len(points) < 2:
         return None
-    if tool in {"trendline", ""}:
-        return {"id": row["id"], "kind": "trendline", "p1": points[0], "p2": points[1], "color": color, "width": width}
-    return {
-        "id": row["id"],
-        "tool_type": row.get("tool_type") or "trendline",
-        "points": points,
-        "style": style,
-        "timeframe": row.get("timeframe") or "",
-        "created_at": row.get("created_at") or "",
-    }
+    return {"id": row["id"], "kind": "trendline", "p1": points[0], "p2": points[1], "color": color, "width": width}
 
 
 def _workspace_drawing_to_row(drawing: dict[str, Any], timeframe: str) -> dict[str, Any]:
@@ -332,10 +323,9 @@ def _old_drawing_to_workspace(drawing_id: str, body: DrawingCreate | DrawingUpda
     }
 
 
-def _get_workspace_row(symbol: str, timeframe: str, user_id: str, sb=None) -> dict[str, Any]:
+def _get_workspace_row(symbol: str, timeframe: str, user_id: str) -> dict[str, Any]:
     try:
-        if sb is None:
-            sb = get_admin_client()
+        sb = get_admin_client()
         r = (
             sb.table("chart_workspaces")
             .select("*")
@@ -353,7 +343,7 @@ def _get_workspace_row(symbol: str, timeframe: str, user_id: str, sb=None) -> di
         )
 
 
-def _save_workspace_row(symbol: str, timeframe: str, indicators: list[Any], drawings: list[Any], user_id: str, sb=None) -> dict[str, Any]:
+def _save_workspace_row(symbol: str, timeframe: str, indicators: list[Any], drawings: list[Any], user_id: str) -> dict[str, Any]:
     payload = {
         "user_id": user_id,
         "symbol": symbol.upper(),
@@ -362,8 +352,7 @@ def _save_workspace_row(symbol: str, timeframe: str, indicators: list[Any], draw
         "drawings": drawings,
     }
     try:
-        if sb is None:
-            sb = get_admin_client()
+        sb = get_admin_client()
         r = sb.table("chart_workspaces").upsert(payload, on_conflict="user_id,symbol,timeframe").execute()
     except Exception:
         raise HTTPException(
@@ -853,10 +842,8 @@ async def get_workspace(
     symbol: str,
     timeframe: str = Query("D"),
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    sb = get_user_client(token)
-    row = _get_workspace_row(symbol, timeframe, user_id, sb=sb)
+    row = _get_workspace_row(symbol, timeframe, user_id)
     return {
         "symbol": symbol.upper(),
         "timeframe": timeframe,
@@ -870,10 +857,8 @@ async def save_workspace(
     symbol: str,
     body: WorkspaceSave,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    sb = get_user_client(token)
-    row = _save_workspace_row(symbol, body.timeframe, body.indicators, body.drawings, user_id, sb=sb)
+    row = _save_workspace_row(symbol, body.timeframe, body.indicators, body.drawings, user_id)
     return {
         "symbol": symbol.upper(),
         "timeframe": body.timeframe,
@@ -887,10 +872,8 @@ async def get_drawings(
     symbol: str,
     timeframe: str = Query("D"),
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    sb = get_user_client(token)
-    row = _get_workspace_row(symbol, timeframe, user_id, sb=sb)
+    row = _get_workspace_row(symbol, timeframe, user_id)
     return [
         {**_workspace_drawing_to_row(item, timeframe), "user_id": user_id, "symbol": symbol.upper()}
         for item in row.get("drawings") or []
@@ -902,16 +885,14 @@ async def create_drawing(
     symbol: str,
     body: DrawingCreate,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    sb = get_user_client(token)
     drawing_id = str(uuid4())
     next_drawing = _old_drawing_to_workspace(drawing_id, body)
     if next_drawing is None:
         raise HTTPException(status_code=400, detail="Invalid drawing")
-    row = _get_workspace_row(symbol, body.timeframe, user_id, sb=sb)
+    row = _get_workspace_row(symbol, body.timeframe, user_id)
     drawings = [*(row.get("drawings") or []), next_drawing]
-    _save_workspace_row(symbol, body.timeframe, row.get("indicators") or [], drawings, user_id, sb=sb)
+    _save_workspace_row(symbol, body.timeframe, row.get("indicators") or [], drawings, user_id)
     return {**_workspace_drawing_to_row(next_drawing, body.timeframe), "user_id": user_id, "symbol": symbol.upper()}
 
 
@@ -921,10 +902,8 @@ async def update_drawing(
     drawing_id: str,
     body: DrawingUpdate,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    sb = get_user_client(token)
-    row = _get_workspace_row(symbol, body.timeframe, user_id, sb=sb)
+    row = _get_workspace_row(symbol, body.timeframe, user_id)
     drawings = row.get("drawings") or []
     if not any(isinstance(item, dict) and str(item.get("id")) == drawing_id for item in drawings):
         raise HTTPException(status_code=404, detail="Drawing not found")
@@ -935,7 +914,7 @@ async def update_drawing(
         next_drawing if isinstance(item, dict) and str(item.get("id")) == drawing_id else item
         for item in drawings
     ]
-    _save_workspace_row(symbol, body.timeframe, row.get("indicators") or [], next_drawings, user_id, sb=sb)
+    _save_workspace_row(symbol, body.timeframe, row.get("indicators") or [], next_drawings, user_id)
     return {**_workspace_drawing_to_row(next_drawing, body.timeframe), "user_id": user_id, "symbol": symbol.upper()}
 
 
@@ -944,10 +923,9 @@ async def delete_drawing(
     symbol: str,
     drawing_id: str,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     try:
-        sb = get_user_client(token)
+        sb = get_admin_client()
         rows = (
             sb.table("chart_workspaces")
             .select("*")
@@ -966,7 +944,7 @@ async def delete_drawing(
         next_drawings = [item for item in drawings if not (isinstance(item, dict) and str(item.get("id")) == drawing_id)]
         if len(next_drawings) != len(drawings):
             changed = True
-            _save_workspace_row(symbol, row.get("timeframe") or "D", row.get("indicators") or [], next_drawings, user_id, sb=sb)
+            _save_workspace_row(symbol, row.get("timeframe") or "D", row.get("indicators") or [], next_drawings, user_id)
     if not changed:
         raise HTTPException(status_code=404, detail="Drawing not found")
     return {"message": "Deleted"}
@@ -978,10 +956,8 @@ async def delete_drawing(
 async def get_layout(
     symbol: str,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    sb = get_user_client(token)
-    row = _get_workspace_row(symbol, "D", user_id, sb=sb)
+    row = _get_workspace_row(symbol, "D", user_id)
     return {
         "symbol": symbol.upper(),
         "timeframe": row.get("timeframe") or "D",
@@ -995,11 +971,9 @@ async def save_layout(
     symbol: str,
     body: LayoutSave,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    sb = get_user_client(token)
-    row = _get_workspace_row(symbol, body.timeframe, user_id, sb=sb)
-    saved = _save_workspace_row(symbol, body.timeframe, body.indicators, row.get("drawings") or [], user_id, sb=sb)
+    row = _get_workspace_row(symbol, body.timeframe, user_id)
+    saved = _save_workspace_row(symbol, body.timeframe, body.indicators, row.get("drawings") or [], user_id)
     return {
         "symbol": symbol.upper(),
         "timeframe": body.timeframe,

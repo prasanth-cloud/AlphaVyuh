@@ -15,9 +15,9 @@ import razorpay
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.middleware.auth import get_current_user_id
 from app.services.plans import effective_plan_from_record
-from app.services.supabase import get_admin_client, get_user_client, settings
+from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,6 @@ async def payment_config():
 async def create_order(
     body: CreateOrderRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     _ensure_checkout_enabled()
     currency = (body.currency or "INR").upper()
@@ -187,7 +186,6 @@ class AccessCodeApplyRequest(BaseModel):
 async def _apply_access_code_plan(
     body: AccessCodeApplyRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     code = (body.code or "").strip().upper()
     if not code or code not in _enabled_access_codes():
@@ -222,19 +220,17 @@ async def _apply_access_code_plan(
 async def apply_access_code_plan(
     body: AccessCodeApplyRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    return await _apply_access_code_plan(body, user_id, token)
+    return await _apply_access_code_plan(body, user_id)
 
 
 @router.post("/founder/apply")
 async def apply_founder_plan(
     body: AccessCodeApplyRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     """Compatibility route for older clients. New clients should use /access/apply."""
-    return await _apply_access_code_plan(body, user_id, token)
+    return await _apply_access_code_plan(body, user_id)
 
 
 @router.post("/verify")

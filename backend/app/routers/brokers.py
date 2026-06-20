@@ -33,8 +33,8 @@ from app.brokers.oauth_state import (
     create_broker_oauth_state,
     verify_broker_oauth_state,
 )
-from app.middleware.auth import get_current_user_id, get_current_user_token
-from app.services.supabase import get_admin_client, get_user_client
+from app.middleware.auth import get_current_user_id
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +171,6 @@ def _mark_broker_disconnected(user_id: str, broker: BrokerId) -> None:
 async def connect_start(
     broker: str,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     """Return the OAuth redirect URL for the user to open in their browser."""
     _require_broker_plan(user_id)
@@ -196,7 +195,6 @@ async def connect_callback(
     code: str | None = Query(default=None),
     state: str = Query(default=""),
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     """Exchange the OAuth request_token, store encrypted credentials, redirect to UI."""
     _require_broker_plan(user_id)
@@ -223,8 +221,6 @@ async def connect_callback(
     upsert_broker_credential(
         user_id, broker_id, "expires_at", creds.expires_at.isoformat()
     )
-    if auth_code and broker_id == "zerodha":
-        upsert_broker_credential(user_id, broker_id, "request_token", auth_code)
     if creds.refresh_token:
         upsert_broker_credential(user_id, broker_id, "refresh_token", creds.refresh_token)
     try:
@@ -258,7 +254,6 @@ async def connect_callback(
 async def get_broker_profile(
     broker: str,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)
@@ -277,7 +272,6 @@ async def get_broker_profile(
 async def get_broker_holdings(
     broker: str,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)
@@ -315,7 +309,6 @@ def _smoke_error(exc: Exception) -> str:
 async def broker_read_only_smoke(
     broker: str,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     """
     Run adapter-backed read-only account checks and return sanitized counts only.
@@ -421,143 +414,12 @@ async def broker_read_only_smoke(
 async def disconnect_broker(
     broker: str,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     _require_broker_plan(user_id)
     broker_id = _validate_broker(broker)
     delete_broker_credentials(user_id, broker_id)
     _mark_broker_disconnected(user_id, broker_id)
     return {"disconnected": broker_id}
-
-
-# ─── Kite token health ────────────────────────────────────────────────────────
-
-
-@router.get("/kite/token-health")
-async def kite_token_health(
-    user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
-):
-    """Return Kite token age, expiry countdown, and validity status."""
-    _require_broker_plan(user_id)
-
-    access_token = None
-    try:
-        access_token = get_broker_credential(user_id, "zerodha", "access_token")
-    except Exception:
-        pass
-
-    if not access_token:
-        return {
-            "connected": False,
-            "token_valid": False,
-            "token_age_seconds": None,
-            "expires_in_seconds": None,
-            "connected_at": None,
-            "expires_at": None,
-            "needs_reconnect": True,
-        }
-
-    expires_raw = None
-    try:
-        expires_raw = get_broker_credential(user_id, "zerodha", "expires_at")
-    except Exception:
-        pass
-
-    connected_at_raw = None
-    try:
-        row = (
-            get_admin_client()
-            .table("broker_connections")
-            .select("created_at,token_expires_at")
-            .eq("user_id", user_id)
-            .eq("broker", "zerodha")
-            .maybe_single()
-            .execute()
-        ).data
-        if row:
-            connected_at_raw = row.get("created_at")
-            if not expires_raw:
-                expires_raw = row.get("token_expires_at")
-    except Exception:
-        pass
-
-    now = datetime.now(timezone.utc)
-    expires_at = None
-    expires_in = None
-    token_valid = True
-
-    if expires_raw:
-        try:
-            expires_at = datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            expires_in = int((expires_at - now).total_seconds())
-            token_valid = expires_in > 0
-        except Exception:
-            pass
-
-    token_age = None
-    if connected_at_raw:
-        try:
-            connected_dt = datetime.fromisoformat(str(connected_at_raw).replace("Z", "+00:00"))
-            if connected_dt.tzinfo is None:
-                connected_dt = connected_dt.replace(tzinfo=timezone.utc)
-            token_age = int((now - connected_dt).total_seconds())
-        except Exception:
-            pass
-
-    profile_ok = False
-    if token_valid and access_token:
-        try:
-            from app.brokers.kite.api import get_profile
-            get_profile(access_token)
-            profile_ok = True
-        except Exception:
-            token_valid = False
-
-    return {
-        "connected": True,
-        "token_valid": token_valid,
-        "profile_check_passed": profile_ok,
-        "token_age_seconds": token_age,
-        "expires_in_seconds": expires_in,
-        "connected_at": connected_at_raw,
-        "expires_at": expires_at.isoformat() if expires_at else None,
-        "needs_reconnect": not token_valid,
-    }
-
-
-# ─── Proxy IP verification ────────────────────────────────────────────────────
-
-
-@router.get("/kite/proxy-ip-check")
-async def kite_proxy_ip_check():
-    """Verify that order-path requests exit through the registered proxy IP."""
-    import httpx as _httpx
-
-    proxy_url = os.environ.get("KITE_PROXY_URL")
-    expected_ip = os.environ.get("KITE_PROXY_IP")
-
-    if not proxy_url:
-        return {"ok": False, "error": "KITE_PROXY_URL not configured", "proxy_ip": None, "expected_ip": expected_ip}
-
-    try:
-        client_kwargs: dict = {"timeout": _httpx.Timeout(10.0)}
-        client_kwargs["proxy"] = proxy_url
-        with _httpx.Client(**client_kwargs) as client:
-            resp = client.get("https://api.ipify.org?format=json")
-            actual_ip = resp.json().get("ip")
-    except Exception as exc:
-        return {"ok": False, "error": str(exc), "proxy_ip": None, "expected_ip": expected_ip}
-
-    matches = actual_ip == expected_ip if expected_ip else None
-    return {
-        "ok": matches is True or matches is None,
-        "proxy_ip": actual_ip,
-        "expected_ip": expected_ip,
-        "matches": matches,
-    }
 
 
 # ─── Error helper ─────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ from app.services.market_data import (
 )
 from app.services.rate_limit import client_rate_key, public_market_limiter
 from app.services.sector_taxonomy import build_sector_taxonomy_metadata
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: permitted — no user context
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
 
