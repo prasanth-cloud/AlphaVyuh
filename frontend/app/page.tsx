@@ -306,18 +306,15 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
             <div className="lp-eyebrow">
-              <div className="lp-live-pill"><div className="lp-pulse"></div>Account access · EOD market data</div>
+              <div className="lp-live-pill" style={{color:"#00D9A7",fontSize:11,fontWeight:600,letterSpacing:"0.14em",textTransform:"uppercase" as const}}>Professional access</div>
             </div>
             <h1 className="lp-h1">
-              <span className="lp-h1-s1">A trading workflow journal for Indian swing traders.</span>
+              <span className="lp-h1-s1">India&apos;s trading OS</span>
             </h1>
-            <p className="lp-sub">Scan after market close, keep the reason, plan levels, and review what your closed trades taught you.</p>
+            <p className="lp-sub">Scan markets. Build watchlists. Analyze charts. Review your trades. All in one place for NSE swing traders.</p>
             <div className="lp-ctas">
-              <Link href="/signup" className="lp-btn-primary">Get started →</Link>
-              <a href="#how" className="lp-btn-secondary">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
-                See workflow
-              </a>
+              <Link href="/signup" className="lp-btn-primary">Get early access</Link>
+              <a href="#how" className="lp-btn-secondary">See how it works</a>
             </div>
             <div className="lp-trust-row" aria-label="Product scope">
               <span>EOD market data</span>

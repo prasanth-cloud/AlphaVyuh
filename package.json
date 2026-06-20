@@ -60,5 +60,8 @@
     "db:push:staging": "scripts/db-push-staging.sh",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000"
+  },
+  "dependencies": {
+    "next-sitemap": "^4.2.3"
   }
 }
