@@ -31,6 +31,12 @@ try:
     _ai_available = True
 except ImportError:
     _ai_available = False
+
+try:
+    from app.routers import ai_review as ai_review_router
+    _ai_review_available = True
+except ImportError:
+    _ai_review_available = False
 from app.services.supabase import settings
 
 logger = logging.getLogger(__name__)
@@ -93,6 +99,8 @@ if _payments_available:
     app.include_router(payments_router.router)
 if _ai_available:
     app.include_router(ai_router.router)
+if _ai_review_available:
+    app.include_router(ai_review_router.router)
 
 _scheduler: AsyncIOScheduler | None = None
 
