@@ -55,3 +55,4 @@ Thumbs.db
 .claude/settings.local.json
 .claude/worktrees/
 .vercel
+.claude/worktrees/
