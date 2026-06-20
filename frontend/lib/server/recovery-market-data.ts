@@ -770,7 +770,7 @@ function percent(rows: DailyRow[], predicate: (row: DailyRow) => boolean): numbe
   return Number(((rows.filter(predicate).length / rows.length) * 100).toFixed(1));
 }
 
-function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {
+export function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {
   const result = scanResultFromRow(row);
   const checks: Array<[string, (value: number) => boolean]> = [
     ["price_min", (value) => result.close >= value],

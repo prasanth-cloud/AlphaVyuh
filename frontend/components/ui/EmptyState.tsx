@@ -5,14 +5,16 @@ export function EmptyState({
   title,
   description,
   action,
+  testId,
 }: {
   icon?: LucideIcon
   title: string
   description?: string
   action?: { label: string; onClick: () => void } | { label: string; href: string }
+  testId?: string
 }) {
   return (
-    <div style={{
+    <div data-testid={testId} style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       padding: '64px 24px', textAlign: 'center', minHeight: 280,
     }}>
