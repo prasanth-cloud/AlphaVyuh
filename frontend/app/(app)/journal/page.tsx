@@ -136,6 +136,17 @@ export default function JournalPage() {
     }
     const requestedSymbol = searchParams.get("symbol");
     setSymbolFocus(requestedSymbol?.toUpperCase() ?? "");
+    if (requestedSymbol) {
+      setSelectedSymbol(requestedSymbol.toUpperCase());
+      setSymbolQ(requestedSymbol.toUpperCase());
+      const prefill: Partial<CreateJournalEntry> = { trade_type: "long" };
+      const paramDate = searchParams.get("date");
+      if (paramDate) prefill.entry_date = paramDate;
+      const paramPrice = searchParams.get("entry_price");
+      if (paramPrice) prefill.entry_price = parseFloat(paramPrice);
+      setAddForm(prev => ({ ...prev, ...prefill }));
+      setPanelMode("add");
+    }
     const requestedReview = searchParams.get("review");
     if (requestedReview === "needs-review" || requestedReview === "reviewed") {
       setReviewFocus(requestedReview);
@@ -773,6 +784,7 @@ export default function JournalPage() {
             onSaveReviewLesson={handleSaveReviewLesson}
             onInitiateClose={openClosePanel}
             reviewSaving={reviewSaving}
+            chartPrefilled={Boolean(searchParams.get("symbol") && searchParams.get("entry_price"))}
           />
         </div>
       )}
