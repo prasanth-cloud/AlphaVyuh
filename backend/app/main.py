@@ -8,6 +8,15 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN"),
+    traces_sample_rate=0.1,
+    environment=os.getenv("RAILWAY_ENVIRONMENT", "development"),
+    integrations=[FastApiIntegration(), StarletteIntegration()],
+)
 
 from app.routers import admin as admin_router, alerts, backtest as backtest_router, broker, brokers as brokers_router, charts, community as community_router, data_health as data_health_router, email_digest as email_digest_router, feedback as feedback_router, ingest, journal, market as market_router, options, price_alerts as price_alerts_router, scanner, stocks, users, waitlist, watchlist, workflow
 
@@ -207,3 +216,8 @@ async def stop_scheduler():
 @app.get("/healthz")
 async def health():
     return {"status": "ok", "version": "0.3.1"}
+
+
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok"}
