@@ -1,27 +1,31 @@
 """
 Background Kite token renewal at 06:30 IST.
 
-Kite access tokens expire daily. This job iterates all active Zerodha connections
-and attempts to validate + refresh each token. On failure it logs an error for
-Sentry capture and marks the connection as needing reconnect.
+Kite access tokens expire daily (~06:00 IST). This job runs at 06:30 and for
+each active Zerodha connection:
 
-Note: Kite Connect does not support silent token refresh — a new request_token
-requires user interaction via the OAuth login page. This job validates existing
-tokens and marks stale ones so the UI can prompt the user to reconnect.
+1. Retrieves the stored request_token (cached from the user's last OAuth login)
+2. Attempts Kite login flow: exchange_code(request_token) → new access_token
+3. Stores the new access_token encrypted in broker_credentials
+4. Updates broker_connections with the new expiry
+
+If the request_token is missing or exchange fails (token already used / expired),
+falls back to validating the existing access_token via get_profile(). On failure,
+marks the connection as needs_reconnect and logs an error for Sentry capture.
 """
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
 
+from app.brokers.credentials import get_broker_credential, upsert_broker_credential
 from app.services.supabase import get_admin_client
-from app.brokers.credentials import get_broker_credential
 
 logger = logging.getLogger(__name__)
 
 
 async def refresh_kite_tokens() -> dict:
-    """Check all active Zerodha connections and mark expired ones."""
+    """Attempt Kite login flow for all active Zerodha connections."""
     sb = get_admin_client()
     result = sb.table("broker_connections").select(
         "user_id,broker,token_expires_at,is_active"
@@ -29,6 +33,7 @@ async def refresh_kite_tokens() -> dict:
 
     connections = result.data or []
     checked = 0
+    renewed = 0
     valid = 0
     expired = 0
 
@@ -36,30 +41,21 @@ async def refresh_kite_tokens() -> dict:
         user_id = conn["user_id"]
         checked += 1
 
+        # Step 1: Attempt token renewal via stored request_token
+        if _attempt_token_renewal(sb, user_id):
+            renewed += 1
+            continue
+
+        # Step 2: Fallback — validate existing access_token
         try:
             access_token = get_broker_credential(user_id, "zerodha", "access_token")
             if not access_token:
-                raise ValueError("No access token found")
+                raise ValueError("No access token")
         except Exception:
-            logger.warning("Kite token missing for user %s", user_id)
+            logger.error("Kite token missing for user %s — no request_token available for renewal", user_id)
             _mark_needs_reconnect(sb, user_id)
             expired += 1
             continue
-
-        now = datetime.now(timezone.utc)
-        expires_raw = conn.get("token_expires_at")
-        if expires_raw:
-            try:
-                expires_at = datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
-                if expires_at.tzinfo is None:
-                    expires_at = expires_at.replace(tzinfo=timezone.utc)
-                if expires_at <= now:
-                    logger.warning("Kite token expired for user %s (expired %s)", user_id, expires_at)
-                    _mark_needs_reconnect(sb, user_id)
-                    expired += 1
-                    continue
-            except Exception:
-                pass
 
         try:
             from app.brokers.kite.api import get_profile
@@ -67,7 +63,7 @@ async def refresh_kite_tokens() -> dict:
             valid += 1
         except Exception as exc:
             logger.error(
-                "Kite token validation failed for user %s: %s",
+                "Kite token invalid for user %s and renewal failed: %s",
                 user_id,
                 exc,
                 exc_info=True,
@@ -75,17 +71,73 @@ async def refresh_kite_tokens() -> dict:
             _mark_needs_reconnect(sb, user_id)
             expired += 1
 
-    summary = {"checked": checked, "valid": valid, "expired": expired}
+    summary = {"checked": checked, "renewed": renewed, "valid": valid, "expired": expired}
     if expired > 0:
         logger.error(
-            "Kite token refresh: %d/%d tokens expired or invalid — users need to reconnect",
-            expired,
-            checked,
+            "Kite token refresh: %d/%d tokens expired/invalid, %d renewed, %d still valid",
+            expired, checked, renewed, valid,
         )
     else:
-        logger.info("Kite token refresh: all %d tokens valid", checked)
+        logger.info("Kite token refresh: %d renewed, %d valid out of %d", renewed, valid, checked)
 
     return summary
+
+
+def _attempt_token_renewal(sb, user_id: str) -> bool:
+    """Try to exchange a stored request_token for a fresh access_token.
+
+    Returns True if renewal succeeded and new credentials were stored.
+    """
+    try:
+        request_token = get_broker_credential(user_id, "zerodha", "request_token")
+        if not request_token:
+            return False
+    except Exception:
+        return False
+
+    try:
+        from app.brokers.kite.api import exchange_code, get_profile
+
+        session_data = exchange_code(request_token)
+        new_access_token = session_data["access_token"]
+
+        get_profile(new_access_token)
+
+        upsert_broker_credential(user_id, "zerodha", "access_token", new_access_token)
+
+        expires_at = datetime.now(timezone.utc).replace(
+            hour=0, minute=30, second=0, microsecond=0
+        )
+        from datetime import timedelta
+        expires_at += timedelta(days=1)
+        upsert_broker_credential(user_id, "zerodha", "expires_at", expires_at.isoformat())
+
+        try:
+            sb.table("broker_connections").update({
+                "token_expires_at": expires_at.isoformat(),
+                "connection_status": "connected_read_only",
+                "last_synced_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("user_id", user_id).eq("broker", "zerodha").execute()
+        except Exception:
+            logger.debug("Could not update broker_connections after renewal for %s", user_id)
+
+        try:
+            sb.table("users").update({
+                "broker_token_expires_at": expires_at.isoformat(),
+            }).eq("id", user_id).execute()
+        except Exception:
+            pass
+
+        logger.info("Kite token renewed for user %s", user_id)
+        return True
+
+    except Exception as exc:
+        logger.warning(
+            "Kite token renewal via request_token failed for user %s: %s",
+            user_id,
+            exc,
+        )
+        return False
 
 
 def _mark_needs_reconnect(sb, user_id: str) -> None:

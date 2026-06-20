@@ -223,6 +223,8 @@ async def connect_callback(
     upsert_broker_credential(
         user_id, broker_id, "expires_at", creds.expires_at.isoformat()
     )
+    if auth_code and broker_id == "zerodha":
+        upsert_broker_credential(user_id, broker_id, "request_token", auth_code)
     if creds.refresh_token:
         upsert_broker_credential(user_id, broker_id, "refresh_token", creds.refresh_token)
     try:
