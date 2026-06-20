@@ -2087,6 +2087,18 @@ export async function getBrokerStatus(): Promise<{
 
 
 
+export async function getKiteTokenHealth(): Promise<{
+  connected: boolean;
+  token_age_hours?: number | null;
+  expires_at?: string | null;
+  status?: "valid" | "expiring_soon" | "expired";
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API_BASE_URL}/api/v1/brokers/kite/token-health`, { headers });
+  if (!res.ok) return { connected: false };
+  return res.json();
+}
+
 let dataHealthCache: { value: DataHealth | null; expiresAt: number } | null = null;
 let dataHealthPromise: Promise<DataHealth | null> | null = null;
 
