@@ -1,3 +1,4 @@
+// IMPORTANT: add https://alphavyuh.com/auth/callback to Supabase Dashboard → Authentication → URL Configuration
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
