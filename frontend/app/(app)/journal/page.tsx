@@ -745,6 +745,9 @@ export default function JournalPage() {
             onSaveReviewLesson={handleSaveReviewLesson}
             onInitiateClose={openClosePanel}
             reviewSaving={reviewSaving}
+            riskPerShare={addForm.entry_price && addForm.stop_loss ? Math.abs(addForm.entry_price - addForm.stop_loss) : null}
+            rMultiple={null}
+            addFormPnl={null}
           />
         </div>
       )}
