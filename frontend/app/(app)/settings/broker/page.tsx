@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { CheckCircle2, Clock3, LockKeyhole, PlugZap, ShieldCheck, ServerCog } from "lucide-react";
 import {
   getBrokerStatus,
+  getKiteTokenHealth,
   getZerodhaLoginUrl,
   importBrokerTrades,
   runBrokerReadOnlySmoke,
@@ -68,6 +69,20 @@ function BrokerSettingsContent() {
   const [error, setError] = useState("");
   const [statusError, setStatusError] = useState<string | null>(null);
   const [toast, setToast] = useState("");
+  const [tokenHealth, setTokenHealth] = useState<{
+    connected: boolean;
+    token_age_hours?: number | null;
+    expires_at?: string | null;
+    status?: "valid" | "expiring_soon" | "expired";
+  } | null>(null);
+
+  useEffect(() => {
+    getKiteTokenHealth().then(setTokenHealth).catch(() => null);
+    const interval = setInterval(() => {
+      getKiteTokenHealth().then(setTokenHealth).catch(() => null);
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function loadStatus() {
     setLoading(true);
@@ -247,6 +262,20 @@ function BrokerSettingsContent() {
             Connect one broker at a time for account checks and filled-trade import. Tokens stay encrypted on the backend. Broker execution stays in your broker terminal.
           </div>
         </div>
+
+        {tokenHealth?.status === "expiring_soon" && (
+          <div style={{ background: "rgba(217,119,6,0.12)", border: "1px solid rgba(217,119,6,0.3)", borderRadius: 6, padding: "8px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+            <Clock3 size={16} style={{ color: "var(--warn)" }} />
+            <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>Token expires in less than 2 hours — reconnect to stay live</span>
+          </div>
+        )}
+
+        {tokenHealth?.status === "expired" && (
+          <div style={{ background: "rgba(225,85,96,0.12)", border: "1px solid rgba(225,85,96,0.3)", borderRadius: 6, padding: "8px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
+            <Clock3 size={16} style={{ color: "var(--loss)" }} />
+            <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>Token expired — reconnect to restore live data</span>
+          </div>
+        )}
 
         {statusError && (
           <div
