@@ -7,6 +7,7 @@ import pandas as pd
 import requests
 
 from app.services import indicators as ta
+from app.services.redis_cache import invalidate_scanner_cache
 from app.services.supabase import get_admin_client
 
 logger = logging.getLogger(__name__)
@@ -433,6 +434,8 @@ async def download_and_ingest(trade_date: date) -> dict:
             "warning_message": warning_message,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
+
+        invalidate_scanner_cache(str(trade_date))
 
         return {
             "status": "partial" if partial_ingest else "success",
