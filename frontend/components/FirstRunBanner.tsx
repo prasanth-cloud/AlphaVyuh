@@ -1,150 +1,120 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getMe, updateMe, getWatchlists } from "@/lib/api";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { X, Check } from "lucide-react";
+import { authHeaders } from "@/lib/api/client";
+import { API_BASE_URL } from "@/lib/api-base";
 
-type StepState = { done: boolean; label: string };
+type StepKey = "scan" | "watchlist" | "chart";
 
-const CHECK = (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-    <circle cx="7" cy="7" r="7" fill="var(--gain)" />
-    <path d="M4 7.2L6.2 9.4L10 5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const CIRCLE = (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
-    <circle cx="7" cy="7" r="6" stroke="var(--text-tertiary)" strokeWidth="1.2" strokeDasharray="3 2" />
-  </svg>
-);
+const STEPS: { key: StepKey; label: string; href: string }[] = [
+  { key: "scan", label: "Run a scan", href: "/scanner" },
+  { key: "watchlist", label: "Add to watchlist", href: "/watchlist" },
+  { key: "chart", label: "Open a chart", href: "/scanner" },
+];
 
 export function FirstRunBanner() {
-  const [visible, setVisible] = useState(false);
-  const [steps, setSteps] = useState<StepState[]>([
-    { done: false, label: "Run a scan to explore the market" },
-    { done: false, label: "Save a symbol to your watchlist" },
-    { done: false, label: "Open a chart to dig deeper" },
-  ]);
-  const [dismissing, setDismissing] = useState(false);
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+  const [completedSteps, setCompletedSteps] = useState<Set<StepKey>>(new Set());
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function check() {
+    (async () => {
       try {
-        const profile = await getMe();
-        if (cancelled) return;
-        if (profile.onboarding_dismissed) return;
+        const headers = await authHeaders();
+        const res = await fetch(`${API_BASE_URL}/api/v1/me`, { headers });
+        if (!res.ok) return;
+        const user = await res.json();
+        if (user.onboarding_dismissed) {
+          setDismissed(true);
+          return;
+        }
+        setDismissed(false);
 
-        const hasScan = !!profile.first_scan_at;
-
-        let hasWatchlistItem = false;
+        const completed = new Set<StepKey>();
         try {
-          const watchlists = await getWatchlists();
-          if (!cancelled) {
-            hasWatchlistItem = (watchlists ?? []).some(
-              (w: { items?: unknown[] }) => (w.items?.length ?? 0) > 0
-            );
+          const wlRes = await fetch(`${API_BASE_URL}/api/v1/watchlists`, { headers });
+          if (wlRes.ok) {
+            const wls = await wlRes.json();
+            if (Array.isArray(wls) && wls.some((w: { items?: unknown[] }) => w.items && w.items.length > 0)) {
+              completed.add("watchlist");
+            }
           }
-        } catch { /* watchlists may not be loaded yet */ }
-
-        const hasChart = typeof window !== "undefined" && localStorage.getItem("alphavyuh-chart-visited") === "1";
-
-        if (cancelled) return;
-
-        if (hasScan && hasWatchlistItem && hasChart) return;
-
-        setSteps([
-          { done: hasScan, label: "Run a scan to explore the market" },
-          { done: hasWatchlistItem, label: "Save a symbol to your watchlist" },
-          { done: hasChart, label: "Open a chart to dig deeper" },
-        ]);
-        setVisible(true);
-      } catch { /* silent — banner is non-critical */ }
-    }
-
-    check();
-    return () => { cancelled = true; };
+        } catch { /* ignore */ }
+        setCompletedSteps(completed);
+      } catch { /* ignore */ }
+    })();
   }, []);
 
-  async function dismiss() {
-    setDismissing(true);
-    try {
-      await updateMe({ onboarding_dismissed: true });
-    } catch { /* best-effort */ }
-    setVisible(false);
-  }
+  if (dismissed === null || dismissed) return null;
 
-  if (!visible) return null;
+  const handleDismiss = async () => {
+    setDismissed(true);
+    try {
+      const headers = await authHeaders();
+      await fetch(`${API_BASE_URL}/api/v1/me`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ onboarding_dismissed: true }),
+      });
+    } catch { /* best-effort */ }
+  };
 
   return (
     <div
       style={{
+        background: "#12161D",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 8,
+        padding: "16px 20px",
+        marginBottom: 16,
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
         gap: 16,
-        padding: "10px 14px",
-        borderRadius: "var(--radius-lg, 8px)",
-        border: "1px solid var(--border-default)",
-        background: "var(--surface-1)",
-        marginBottom: 12,
       }}
     >
-      <span
-        style={{
-          color: "var(--text-secondary)",
-          fontSize: 13,
-          fontWeight: 600,
-          whiteSpace: "nowrap",
-          flexShrink: 0,
-        }}
-      >
-        Getting started
-      </span>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        {steps.map((step) => (
-          <span
-            key={step.label}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "4px 10px",
-              borderRadius: 999,
-              border: `1px solid ${step.done ? "var(--gain)" : "var(--border-subtle, var(--border-default))"}`,
-              background: step.done ? "rgba(38,166,91,0.06)" : "var(--surface-2)",
-              color: step.done ? "var(--gain)" : "var(--text-secondary)",
-              fontSize: 11,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-              lineHeight: 1,
-            }}
-          >
-            {step.done ? CHECK : CIRCLE}
-            {step.label}
-          </span>
-        ))}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 13, color: "#A8A29E" }}>Get started:</span>
+        {STEPS.map((step) => {
+          const done = completedSteps.has(step.key);
+          return (
+            <Link
+              key={step.key}
+              href={step.href}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "6px 14px",
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 500,
+                background: done ? "rgba(0,217,167,0.12)" : "rgba(255,255,255,0.04)",
+                color: done ? "#00D9A7" : "#F1EFE8",
+                textDecoration: "none",
+                border: done ? "1px solid rgba(0,217,167,0.3)" : "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {done && <Check size={12} />}
+              {step.label}
+            </Link>
+          );
+        })}
       </div>
-
       <button
-        type="button"
-        onClick={dismiss}
-        disabled={dismissing}
-        aria-label="Dismiss getting started guide"
+        onClick={handleDismiss}
         style={{
-          marginLeft: "auto",
-          flexShrink: 0,
           background: "none",
           border: "none",
+          color: "#A8A29E",
           cursor: "pointer",
-          color: "var(--text-tertiary)",
-          fontSize: 16,
-          lineHeight: 1,
           padding: 4,
+          flexShrink: 0,
         }}
+        aria-label="Dismiss onboarding"
       >
-        ✕
+        <X size={16} />
       </button>
     </div>
   );

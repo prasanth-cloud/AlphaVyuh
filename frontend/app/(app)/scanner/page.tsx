@@ -20,6 +20,7 @@ import { mockRunScan } from '@/lib/mock-data'
 import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
+import { toast as sonnerToast } from '@/lib/toast'
 import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
@@ -615,6 +616,7 @@ export default function ScannerPage() {
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(''), 3000)
+    sonnerToast.success(msg)
   }
 
   async function loadWatchlists() {
