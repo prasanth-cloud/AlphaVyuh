@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.middleware.auth import get_current_user_id
 from app.routers.scanner import (
     SCANNER_BASE_SELECT,
     SCANNER_INTELLIGENCE_SELECT,
@@ -18,7 +18,7 @@ from app.routers.scanner import (
     _m3a_columns_ready,
     _push_db_prefilters,
 )
-from app.services.supabase import get_user_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
 
@@ -120,14 +120,13 @@ def _daily_rows_for_backtest(client, trade_date: str, filters: ScanFilters) -> l
 async def run_backtest(
     body: BacktestRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     plan = _get_user_plan(user_id)
     if plan == "free":
         raise HTTPException(403, "Backtest requires Pro or Elite plan")
 
     days = min(max(1, body.days), MAX_DAYS)
-    client = get_user_client(token)
+    client = get_admin_client()
 
     dates = _recent_trade_dates(client, days)
 

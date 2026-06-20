@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
 
 from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: permitted — no user context
 from app.services.supabase import settings
 
 router = APIRouter(prefix="/api/v1", tags=["waitlist"])

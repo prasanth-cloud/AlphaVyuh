@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.middleware.auth import get_current_user_id
 from app.brokers.kite import api as kite_api
 from app.services.kite_stream import kite_live_ticker
 from app.services.market_data import _kite_access_token, _kite_api_key
 from app.services.market_context import fallback_source_metadata, normalize_health_row
-from app.services.supabase import get_admin_client, get_user_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: permitted — no user context
 
 router = APIRouter(prefix="/api/v1/data", tags=["data-health"])
 
@@ -65,10 +65,10 @@ def _kite_market_status() -> dict:
 
 
 @router.get("/health")
-async def data_health(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+async def data_health(user_id: str = Depends(get_current_user_id)):
     """Returns overall data freshness for signed-in workspace users."""
     try:
-        sb = get_user_client(token)
+        sb = get_admin_client()
         health_res = sb.from_("data_health").select("*").limit(1).execute()
         h = health_res.data[0] if health_res.data else {}
     except Exception:
@@ -81,10 +81,10 @@ async def data_health(user_id: str = Depends(get_current_user_id), token: str = 
 
 
 @router.get("/runs")
-async def list_recent_runs(limit: int = 10, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+async def list_recent_runs(limit: int = 10, user_id: str = Depends(get_current_user_id)):
     """Recent refresh runs for signed-in workspace diagnostics."""
     try:
-        sb = get_user_client(token)
+        sb = get_admin_client()
         res = sb.table("ingest_runs") \
             .select("run_id, started_at, duration_s, event_count, error_count") \
             .order("started_at", desc=True) \

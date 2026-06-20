@@ -15,10 +15,10 @@ from pydantic import BaseModel
 
 import httpx
 
-from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.middleware.auth import get_current_user_id
 from app.routers.scanner import ScanFilters, ScanRequest, SORT_KEYS, execute_scan
 from app.services.plans import effective_plan_from_record, get_effective_user_plan
-from app.services.supabase import get_admin_client, get_user_client, settings
+from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 logger = logging.getLogger(__name__)
 
@@ -70,9 +70,9 @@ def _scan_alerts_unavailable() -> HTTPException:
 # ── CRUD endpoints ────────────────────────────────────────────────────────────
 
 @router.get("")
-async def list_alerts(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+async def list_alerts(user_id: str = Depends(get_current_user_id)):
     try:
-        client = get_user_client(token)
+        client = get_admin_client()
         res = client.table("scan_alerts") \
             .select("*") \
             .eq("user_id", user_id) \
@@ -84,10 +84,10 @@ async def list_alerts(user_id: str = Depends(get_current_user_id), token: str = 
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_alert(body: CreateAlertRequest, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+async def create_alert(body: CreateAlertRequest, user_id: str = Depends(get_current_user_id)):
     # Enforce plan limits
     try:
-        client = get_user_client(token)
+        client = get_admin_client()
         plan  = _get_user_plan(user_id)
         limit = FREE_ALERT_LIMIT if plan == "free" else PRO_ALERT_LIMIT
         count_res = client.table("scan_alerts").select("id", count="exact") \
@@ -124,11 +124,10 @@ async def update_alert(
     alert_id: str,
     body: UpdateAlertRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     # Verify ownership
     try:
-        client = get_user_client(token)
+        client = get_admin_client()
         existing = client.table("scan_alerts").select("id") \
             .eq("id", alert_id).eq("user_id", user_id).execute()
     except Exception:
@@ -154,9 +153,9 @@ async def update_alert(
 
 
 @router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_alert(alert_id: str, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+async def delete_alert(alert_id: str, user_id: str = Depends(get_current_user_id)):
     try:
-        client = get_user_client(token)
+        client = get_admin_client()
         existing = client.table("scan_alerts").select("id") \
             .eq("id", alert_id).eq("user_id", user_id).execute()
     except Exception:
@@ -173,11 +172,10 @@ async def delete_alert(alert_id: str, user_id: str = Depends(get_current_user_id
 async def get_recent_matches(
     runs_per_alert: Annotated[int, Query(ge=1, le=MAX_RECENT_MATCH_RUNS_PER_ALERT)] = 2,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     """Return recent match history per alert so clients can compare entries and exits."""
     try:
-        client = get_user_client(token)
+        client = get_admin_client()
         res = client.table("scan_alert_matches") \
             .select("*, scan_alerts(name)") \
             .eq("user_id", user_id) \
@@ -205,11 +203,10 @@ async def get_alert_matches(
     alert_id: str,
     limit: int = 10,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     """Return the last N run results for an alert."""
     try:
-        client = get_user_client(token)
+        client = get_admin_client()
         existing = client.table("scan_alerts").select("id") \
             .eq("id", alert_id).eq("user_id", user_id).execute()
     except Exception:

@@ -4,9 +4,9 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.middleware.auth import get_current_user_id
 from app.routers.waitlist import _require_admin
-from app.services.supabase import get_admin_client, get_user_client, settings
+from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
 
@@ -132,8 +132,8 @@ def _list_waitlist_feedback(client, status_filter: str | None = None) -> list[di
 
 
 @router.post("")
-async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
-    client = get_user_client(token)
+async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(get_current_user_id)):
+    client = get_admin_client()
     if _use_waitlist_feedback():
         return {"feedback": _create_waitlist_feedback(client, body, user_id)}
 
@@ -158,7 +158,7 @@ async def create_feedback(body: FeedbackCreateRequest, user_id: str = Depends(ge
 
 
 @router.get("/admin")
-async def list_feedback(status_filter: str | None = None, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+async def list_feedback(status_filter: str | None = None, user_id: str = Depends(get_current_user_id)):
     _require_admin(user_id)
     client = get_admin_client()
     if _use_waitlist_feedback():
@@ -185,7 +185,6 @@ async def update_feedback_status(
     feedback_id: str,
     body: FeedbackStatusRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
     _require_admin(user_id)
     client = get_admin_client()

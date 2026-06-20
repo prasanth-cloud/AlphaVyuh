@@ -1,11 +1,11 @@
-from supabase import create_client, Client, ClientOptions
+from supabase import create_client, Client
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
-    supabase_anon_key: str = ""  # required for user-scoped RLS clients
+    supabase_anon_key: str = ""  # needed for user-scoped RLS clients
     supabase_jwt_secret: str = ""  # not needed for service-role calls; optional for bench/scripts
     frontend_url: str = "http://localhost:3000"
     ingest_service_key: str = ""
@@ -21,8 +21,6 @@ class Settings(BaseSettings):
     feedback_storage_mode: str = "auto"  # auto, table, or waitlist
     enable_yfinance_refresh: bool = False  # optional fallback; official EOD ingest is primary
     broker_live_orders_enabled: bool = False  # Professional Access keeps broker read-only/import-only by default
-    sentry_dsn: str = ""
-    resend_api_key: str = ""
 
     class Config:
         env_file = ".env"
@@ -35,8 +33,8 @@ _admin_client: Client | None = None
 
 
 def get_admin_client() -> Client:
-    """Service-role client — bypasses RLS. Only for ingest jobs, admin scripts,
-    and auth middleware. Routers serving user requests should use get_user_client()."""
+    """Service-role client — bypasses RLS. Use only for ingest, admin tasks, and
+    routes that already scope queries by the JWT-validated user_id."""
     global _admin_client
     if _admin_client is None:
         _admin_client = create_client(
@@ -46,11 +44,12 @@ def get_admin_client() -> Client:
     return _admin_client
 
 
-def get_user_client(user_jwt: str) -> Client:
-    """RLS-respecting client scoped to the authenticated user's JWT.
-    Use this in routers that act on behalf of a user."""
+def get_user_client(jwt: str) -> Client:
+    """Per-request client scoped to the user's JWT — RLS enforced.
+    Prefer this in new user-facing routes."""
+    from supabase.lib.client_options import SyncClientOptions
     return create_client(
         settings.supabase_url,
         settings.supabase_anon_key,
-        options=ClientOptions(headers={"Authorization": f"Bearer {user_jwt}"}),
+        options=SyncClientOptions(headers={"Authorization": f"Bearer {jwt}"}),
     )

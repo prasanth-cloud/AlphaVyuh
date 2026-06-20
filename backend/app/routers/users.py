@@ -7,15 +7,15 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id, get_current_user_token
-from app.services.supabase import get_user_client
+from app.middleware.auth import get_current_user_id
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1", tags=["users"])
 
 _SELECT = (
     "id, email, full_name, avatar_url, plan, plan_expires_at, "
-    "onboarding_completed, onboarding_dismissed, first_scan_at, "
-    "telegram_chat_id, broker_type, broker_connected_at, "
+    "onboarding_completed, telegram_chat_id, "
+    "broker_type, broker_connected_at, "
     "billing_region, billing_currency, billing_period, "
     "referral_code, referred_by, created_at"
 )
@@ -29,8 +29,6 @@ class UserResponse(BaseModel):
     plan: str
     plan_expires_at: str | None
     onboarding_completed: bool
-    onboarding_dismissed: bool = False
-    first_scan_at: str | None = None
     telegram_chat_id: str | None = None
     broker_type: str | None = None
     broker_connected_at: str | None = None
@@ -45,7 +43,6 @@ class UserResponse(BaseModel):
 class UpdateUserRequest(BaseModel):
     full_name: str | None = None
     onboarding_completed: bool | None = None
-    onboarding_dismissed: bool | None = None
     telegram_chat_id: str | None = None
     # Broker setup — set during onboarding or settings
     broker_type: str | None = None          # "zerodha" | "upstox" | "angel" | "fyers" | "none"
@@ -71,8 +68,8 @@ def _sanitize_user_response(row: dict) -> dict:
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
-    client = get_user_client(token)
+async def get_me(user_id: str = Depends(get_current_user_id)):
+    client = get_admin_client()
     result = (
         client.table("users")
         .select(_SELECT)
@@ -89,16 +86,13 @@ async def get_me(user_id: str = Depends(get_current_user_id), token: str = Depen
 async def update_me(
     body: UpdateUserRequest,
     user_id: str = Depends(get_current_user_id),
-    token: str = Depends(get_current_user_token),
 ):
-    client = get_user_client(token)
+    client = get_admin_client()
     updates: dict = {}
     if body.full_name is not None:
         updates["full_name"] = body.full_name
     if body.onboarding_completed is not None:
         updates["onboarding_completed"] = body.onboarding_completed
-    if body.onboarding_dismissed is not None:
-        updates["onboarding_dismissed"] = body.onboarding_dismissed
     if body.telegram_chat_id is not None:
         updates["telegram_chat_id"] = body.telegram_chat_id or None
     broker = body.broker_type if body.broker_type != "none" else None
@@ -136,8 +130,8 @@ async def update_me(
 
 
 @router.get("/referral-code")
-async def get_referral_code(user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
-    client = get_user_client(token)
+async def get_referral_code(user_id: str = Depends(get_current_user_id)):
+    client = get_admin_client()
     r = client.table("users").select("referral_code").eq("id", user_id).single().execute()
     code = r.data.get("referral_code") if r.data else None
     if not code:
@@ -153,11 +147,11 @@ async def get_referral_code(user_id: str = Depends(get_current_user_id), token: 
 
 
 @router.post("/referral/apply")
-async def apply_referral(body: dict, user_id: str = Depends(get_current_user_id), token: str = Depends(get_current_user_token)):
+async def apply_referral(body: dict, user_id: str = Depends(get_current_user_id)):
     code = (body.get("referral_code") or "").strip().upper()
     if not code:
         raise HTTPException(400, "No referral code provided")
-    client = get_user_client(token)
+    client = get_admin_client()
     # Find referrer
     ref = client.table("users").select("id, plan, plan_expires_at").eq("referral_code", code).execute()
     if not ref.data:
