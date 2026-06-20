@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     enable_yfinance_refresh: bool = False  # optional fallback; official EOD ingest is primary
     broker_live_orders_enabled: bool = False  # Professional Access keeps broker read-only/import-only by default
     sentry_dsn: str = ""
+    resend_api_key: str = ""
 
     class Config:
         env_file = ".env"

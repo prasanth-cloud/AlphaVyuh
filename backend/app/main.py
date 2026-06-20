@@ -9,7 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import admin as admin_router, alerts, backtest as backtest_router, broker, brokers as brokers_router, charts, community as community_router, data_health as data_health_router, feedback as feedback_router, ingest, journal, market as market_router, options, price_alerts as price_alerts_router, scanner, stocks, users, waitlist, watchlist, workflow
+from app.routers import admin as admin_router, alerts, backtest as backtest_router, broker, brokers as brokers_router, charts, community as community_router, data_health as data_health_router, email_digest as email_digest_router, feedback as feedback_router, ingest, journal, market as market_router, options, price_alerts as price_alerts_router, scanner, stocks, users, waitlist, watchlist, workflow
 
 try:
     from app.routers import payments as payments_router
@@ -79,6 +79,7 @@ app.include_router(journal.router)
 app.include_router(price_alerts_router.router)
 app.include_router(data_health_router.router)
 app.include_router(feedback_router.router)
+app.include_router(email_digest_router.router)
 if _payments_available:
     app.include_router(payments_router.router)
 if _ai_available:
@@ -175,6 +176,13 @@ async def start_scheduler():
         id="kite_token_refresh",
         replace_existing=True,
     )
+    from app.services.email_digest import send_daily_digests
+    _scheduler.add_job(
+        send_daily_digests,
+        CronTrigger(hour=18, minute=30, day_of_week="mon-fri", timezone=ist),
+        id="daily_email_digest",
+        replace_existing=True,
+    )
     from app.services.broker_key_rotation import quarterly_rotation_check
     _scheduler.add_job(
         quarterly_rotation_check,
@@ -184,7 +192,7 @@ async def start_scheduler():
     )
     _scheduler.start()
     logger.info(
-        "APScheduler started — bhavcopy 16:00, yfinance refresh %s, price alerts every 5 min, kite token 06:30, broker key rotation quarterly",
+        "APScheduler started — bhavcopy 16:00, yfinance refresh %s, email digest 18:30, price alerts every 5 min, kite token 06:30, broker key rotation quarterly",
         "enabled at 16:15" if settings.enable_yfinance_refresh else "disabled",
     )
 

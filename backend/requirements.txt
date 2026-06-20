@@ -19,4 +19,5 @@ razorpay==2.0.1
 redis==5.2.1
 anthropic==0.111.0
 sentry-sdk[fastapi]==2.30.0
+resend==2.32.2
 pytest==9.0.3
