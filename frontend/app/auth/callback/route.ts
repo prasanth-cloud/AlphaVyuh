@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const redirectResponse = NextResponse.redirect(new URL(next, requestUrl.origin));
   redirectResponse.headers.set("Server-Timing", 'alphavyuh_auth_callback;desc="session_set"');
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
