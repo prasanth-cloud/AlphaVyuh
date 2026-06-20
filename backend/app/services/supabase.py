@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     feedback_storage_mode: str = "auto"  # auto, table, or waitlist
     enable_yfinance_refresh: bool = False  # optional fallback; official EOD ingest is primary
     broker_live_orders_enabled: bool = False  # Professional Access keeps broker read-only/import-only by default
+    sentry_dsn: str = ""
 
     class Config:
         env_file = ".env"

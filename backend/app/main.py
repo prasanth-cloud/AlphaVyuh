@@ -1,7 +1,9 @@
 import logging
+import os
 from datetime import date
 
 import pytz
+import sentry_sdk
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
@@ -23,6 +25,15 @@ except ImportError:
 from app.services.supabase import settings
 
 logger = logging.getLogger(__name__)
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=os.environ.get("RAILWAY_ENVIRONMENT", "development"),
+        traces_sample_rate=0.1 if os.environ.get("RAILWAY_ENVIRONMENT") == "production" else 1.0,
+        send_default_pii=False,
+        enable_tracing=True,
+    )
 
 app = FastAPI(title="AlphaVyuh API", version="0.3.0")
 
