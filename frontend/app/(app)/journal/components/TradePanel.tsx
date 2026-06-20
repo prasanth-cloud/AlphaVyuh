@@ -63,6 +63,7 @@ interface TradePanelProps {
   onSaveReviewLesson: (e: JournalEntry, lesson: string) => void;
   onInitiateClose: (e: JournalEntry) => void;
   reviewSaving: boolean;
+  chartPrefilled?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -95,6 +96,7 @@ export function TradePanel({
   onSaveReviewLesson,
   onInitiateClose,
   reviewSaving,
+  chartPrefilled,
 }: TradePanelProps) {
   const [lessonDraft, setLessonDraft] = useState("");
 
@@ -114,8 +116,15 @@ export function TradePanel({
       <Card padding="lg" style={{ borderRadius: "var(--radius-lg)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div className="heading-card">
-            {mode === "add" ? "Log trade" : mode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="heading-card">
+              {mode === "add" ? "Log trade" : mode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
+            </span>
+            {mode === "add" && chartPrefilled && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: "rgba(0,217,167,0.10)", color: "#00D9A7" }}>
+                Pre-filled from chart
+              </span>
+            )}
           </div>
           <button onClick={onClose} style={{ fontSize: 18, lineHeight: 1, color: "var(--text-tertiary)" }}>×</button>
         </div>

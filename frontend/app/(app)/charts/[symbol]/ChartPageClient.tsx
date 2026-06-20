@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { use, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, BookOpen, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Share2, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, NotebookPen, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
 } from "@/lib/api";
-import UpgradePrompt from "@/components/UpgradePrompt";
 import {
   getCandles, getDrawings, saveDrawing,
   getChartLayout, saveChartLayout, saveDefaultChartLayout, getWatchlists, addToWatchlist,
@@ -25,7 +24,6 @@ import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import ChartTimeframePillStrip from "@/components/charts/ChartTimeframePillStrip";
 import { ChartWorkflowHeader } from "@/components/ChartWorkflowHeader";
 import { DataProvenanceBadge, Num } from "@/components/ui";
-import { DataHealthBadge } from "@/components/DataHealthBadge";
 import { trackEvent } from "@/lib/analytics";
 import type { ChartDisplayType, ChartHandle } from "@/components/charts/CandlestickChart";
 import {
@@ -276,13 +274,18 @@ function constrainDrawingPoint(
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type ChartPageClientProps = {
-  symbol: string;
-  initialCandles?: CandleBar[];
+export type InitialCandle = {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 };
 
-export default function ChartPageClient({ symbol: symbolProp, initialCandles }: ChartPageClientProps) {
-  const symbol = symbolProp.toUpperCase();
+export default function ChartPage({ params, initialCandles }: { params: Promise<{ symbol: string }>; initialCandles?: InitialCandle[] }) {
+  const { symbol: routeSymbol } = use(params);
+  const symbol = routeSymbol.toUpperCase();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sourcePage = searchParams.get("from");
@@ -310,10 +313,6 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
     if (!fullChartMode) return;
     trackEvent("full_chart_opened", { symbol, timeframe });
   }, [fullChartMode, symbol, timeframe]);
-
-  useEffect(() => {
-    try { localStorage.setItem("alphavyuh-chart-visited", "1"); } catch {}
-  }, []);
 
   useEffect(() => {
     const nextType = normalizeChartType(searchParams.get("type"));
@@ -394,7 +393,6 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
     liveMode,
     setLiveMode,
     activeIndicators,
-    initialCandles,
     onLegendReset: () => setLegendBar(null),
   });
 
@@ -450,8 +448,6 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
   const [userPlan, setUserPlan] = useState<string>("free");
   const [symbolCurrency, setSymbolCurrency] = useState<string>("INR");
   const [planUpgradeToast, setPlanUpgradeToast] = useState("");
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
-  const [upgradeFeature, setUpgradeFeature] = useState("");
   const FREE_INDICATORS = INDICATOR_CONFIG.map((indicator) => indicator.id);
 
   // Toolbar dropdowns
@@ -515,33 +511,20 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
     setTimeout(() => setLayoutMsg(""), 5000);
   }, []);
 
-  const drawingDebounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const pendingDrawingRef = useRef<Record<string, ChartDrawing>>({});
-
   const persistEditedDrawing = useCallback(async (drawing: ChartDrawing) => {
-    pendingDrawingRef.current[drawing.id] = drawing;
-    if (drawingDebounceRef.current[drawing.id]) {
-      clearTimeout(drawingDebounceRef.current[drawing.id]);
+    try {
+      const saved = await updateDrawing(symbol, drawing.id, {
+        tool_type: getDrawingToolType(drawing.tool),
+        points: getPersistedDrawingPoints(drawing),
+        style: { color: drawing.color, text: drawing.text ?? null, locked: drawing.locked ?? false, hidden: drawing.hidden ?? false },
+        timeframe,
+      });
+      setDrawings((prev) => prev.map((item) => item.id === drawing.id ? saved : item));
+      setDrawnLines((prev) => prev.map((item) => item.id === drawing.id ? { ...item, id: saved.id } : item));
+      setSelectedDrawingId(saved.id);
+    } catch {
+      showDrawingPersistenceError();
     }
-    drawingDebounceRef.current[drawing.id] = setTimeout(async () => {
-      const latest = pendingDrawingRef.current[drawing.id];
-      delete pendingDrawingRef.current[drawing.id];
-      delete drawingDebounceRef.current[drawing.id];
-      if (!latest) return;
-      try {
-        const saved = await updateDrawing(symbol, latest.id, {
-          tool_type: getDrawingToolType(latest.tool),
-          points: getPersistedDrawingPoints(latest),
-          style: { color: latest.color, text: latest.text ?? null, locked: latest.locked ?? false, hidden: latest.hidden ?? false },
-          timeframe,
-        });
-        setDrawings((prev) => prev.map((item) => item.id === latest.id ? saved : item));
-        setDrawnLines((prev) => prev.map((item) => item.id === latest.id ? { ...item, id: saved.id } : item));
-        setSelectedDrawingId(saved.id);
-      } catch {
-        showDrawingPersistenceError();
-      }
-    }, 500);
   }, [showDrawingPersistenceError, symbol, timeframe]);
 
   const getSnappedPrice = useCallback((time: string, price: number) => {
@@ -841,8 +824,8 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
   function toggleIndicator(id: string) {
     const isPro = !FREE_INDICATORS.includes(id);
     if (isPro && userPlan === "free" && !activeIndicators.includes(id)) {
-      setUpgradeFeature("Pro indicators (BB, VWAP, MACD, Stoch, ATR, Ichimoku)");
-      setShowUpgradePrompt(true);
+      setPlanUpgradeToast("Upgrade to Pro to use BB, VWAP, MACD, Stoch, ATR and Ichimoku");
+      setTimeout(() => setPlanUpgradeToast(""), 3000);
       return;
     }
     setActiveIndicators(prev =>
@@ -888,20 +871,6 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
       setLayoutMsg(CHART_LAYOUT_SAVE_FAILED_MESSAGE);
       setTimeout(() => setLayoutMsg(""), 5000);
     }
-  }
-
-  const [shareMsg, setShareMsg] = useState("");
-
-  function handleShareChart() {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://alphavyuh.com";
-    const url = `${origin}/charts/${symbol.toUpperCase()}?snapshot=true`;
-    navigator.clipboard.writeText(url).then(() => {
-      setShareMsg("Copied!");
-      setTimeout(() => setShareMsg(""), 2000);
-    }).catch(() => {
-      setShareMsg("Failed");
-      setTimeout(() => setShareMsg(""), 2000);
-    });
   }
 
   async function handleAddWatchlist(force = false) {
@@ -1932,12 +1901,12 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
         </div>
       )}
 
-      <UpgradePrompt
-        open={showUpgradePrompt}
-        onClose={() => setShowUpgradePrompt(false)}
-        feature={upgradeFeature}
-        onSuccess={() => { setUserPlan("pro"); setShowUpgradePrompt(false); }}
-      />
+      {planUpgradeToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#1c1c1a] text-white text-[13px] px-4 py-2 rounded-lg shadow-lg pointer-events-none flex items-center gap-2">
+          <span>{planUpgradeToast}</span>
+          <a href="/settings/billing" className="underline text-[#a5aaff] text-[12px] pointer-events-auto">Upgrade →</a>
+        </div>
+      )}
 
       {/* Stale data banner */}
       {showStaleWarning && (
@@ -2273,7 +2242,7 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
             title="Charts use the latest available market snapshot unless a provider source is shown."
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--app-text3)" }} />
-            <DataHealthBadge compact />
+            <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
           </button>
 
           {/* Price alert bell */}
@@ -2310,24 +2279,6 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
             </button>
           )}
 
-          {/* Log trade */}
-          <button
-            onClick={() => {
-              const params = new URLSearchParams({ prefill: "1", symbol, source: "chart" });
-              if (displayClose != null) params.set("entry_price", displayClose.toFixed(2));
-              params.set("entry_date", new Date().toISOString().split("T")[0]);
-              if (ema20Latest != null) params.set("ema20", ema20Latest.toFixed(2));
-              if (ema50Latest != null) params.set("ema50", ema50Latest.toFixed(2));
-              if (latest?.ema_200 != null) params.set("ema200", latest.ema_200.toFixed(2));
-              if (rsiLatest != null) params.set("rsi", rsiLatest.toFixed(1));
-              router.push(`/journal?${params.toString()}`);
-            }}
-            className="workspace-chip-button flex items-center gap-1.5"
-            data-testid="chart-log-trade-button"
-          >
-            <BookOpen size={11} /> Log trade
-          </button>
-
           {/* Save layout */}
           <button
             onClick={handleSaveLayout}
@@ -2343,11 +2294,21 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
             <Save size={11} /> Preset
           </button>
           <button
-            onClick={handleShareChart}
+            onClick={() => {
+              const lastCandle = data?.candles?.[data.candles.length - 1];
+              const params = new URLSearchParams();
+              params.set("symbol", symbol);
+              const today = new Date();
+              const istOffset = 5.5 * 60 * 60 * 1000;
+              const ist = new Date(today.getTime() + istOffset);
+              params.set("date", ist.toISOString().slice(0, 10));
+              if (lastCandle?.close != null) params.set("entry_price", String(lastCandle.close));
+              router.push(`/journal?${params.toString()}`);
+            }}
             className="workspace-chip-button flex items-center gap-1.5"
-            title="Copy shareable link with chart preview"
+            title="Log a trade for this symbol"
           >
-            <Share2 size={11} /> {shareMsg || "Share"}
+            <NotebookPen size={13} /> Log trade
           </button>
           {layoutMsg && (
             <span className="caption" style={{ color: /unavailable|could not|failed/i.test(layoutMsg) ? "var(--warn)" : "var(--gain)" }}>{layoutMsg}</span>
@@ -2355,11 +2316,34 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
         </div>
       </div>
 
-      <ChartTimeframePillStrip
-        value={rangeLabel}
-        onChange={handleRangeLabelChange}
-        onUnavailable={setTimeframeMessage}
-      />
+      <div style={{ display: "flex", alignItems: "center", gap: 0, borderBottom: "1px solid var(--border-subtle)", background: "var(--surface-1)", flexShrink: 0 }}>
+        <ChartTimeframePillStrip
+          value={rangeLabel}
+          onChange={handleRangeLabelChange}
+          onUnavailable={setTimeframeMessage}
+        />
+        <div style={{ display: "flex", gap: 2, padding: "6px 12px", borderLeft: "1px solid var(--border-subtle)" }}>
+          {(["D", "W", "M"] as const).map(tf => (
+            <button
+              key={tf}
+              type="button"
+              onClick={() => setTimeframe(tf)}
+              style={{
+                padding: "4px 10px",
+                fontSize: 11,
+                fontWeight: 600,
+                borderRadius: 4,
+                cursor: "pointer",
+                background: timeframe === tf ? "var(--accent)" : "transparent",
+                color: timeframe === tf ? "#0A0E13" : "var(--text-secondary)",
+                border: "none",
+              }}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* ── Body: sidebar + chart area ────────────────────────────────── */}
       <div className="chart-workspace-body flex flex-1 min-h-0 overflow-hidden">
@@ -3280,7 +3264,7 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
                 title="Charts use the latest available market snapshot unless a provider source is shown."
               >
                 <Activity size={12} />
-                <DataHealthBadge compact />
+                <DataProvenanceBadge kind={isMockMode ? "demo" : data?.source_metadata?.mode === "fallback" ? "fallback" : "eod"} asOf={data?.source_metadata?.as_of ?? lastCandleDate} compact />
               </button>
             </div>
           </div>
@@ -3905,7 +3889,6 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
 
             {/* Main chart */}
             {data && (
-              <div data-testid="chart-candle-series" data-candle-count={data.candles.length}>
               <CandlestickChart
                 key={`${symbol}-${rangeLabel}-${timeframe}-${chartType}-${theme}-${liveMode ? "live" : "eod"}`}
                 candles={data.candles}
@@ -3917,7 +3900,6 @@ onMouseDown={(e) => { e.stopPropagation(); beginPointDrag(e, line, "p2"); }}
                 onRangeChange={handleRangeChange}
                 onReady={handle => { chartHandleRef.current = handle; }}
               />
-              </div>
             )}
 
             {/* Compare overlay: price-normalised SVG chart */}
