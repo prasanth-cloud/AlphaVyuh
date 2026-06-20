@@ -151,18 +151,18 @@ Adding an admin path later is an explicit design decision requiring a new ADR en
 
 ## Q3 — Rotation plan
 
-> ⚠️ **KEY ROTATION IS NOT YET IMPLEMENTED.**
+> ✅ **KEY ROTATION IS IMPLEMENTED.**
 >
-> A rotation script and runbook must be built and tested before the first real broker
-> credential is stored in production. This is a **hard pre-production blocker** — see
-> `CLAUDE.md §8 Known gaps` and `scripts/rotate_broker_key.py.TODO`.
->
-> The section below is the spec for that future script, left here as a design commitment.
+> Script: `scripts/rotate_broker_key.py`
+> Admin API: `POST /api/admin/rotate-broker-keys`
+> Quarterly cron: APScheduler job `quarterly_broker_key_rotation` (1st Jan/Apr/Jul/Oct, 02:00 IST)
+> Alerting: `logger.error()` on failure — captured by Sentry once SDK is added
 
 **Daily access token refresh (Zerodha):**
 Zerodha issues a new access token each OAuth login. Expires 06:00 IST next day.
 - On callback: `encrypt_credential(new_token, user_id, 'zerodha', 'access_token')` → upsert.
 - `broker_token_expires_at` updated to next 06:00 IST.
+- Background job at 06:30 IST attempts renewal via stored `request_token`.
 - Order placement checks `broker_token_expires_at < now()` before using the token. Expired
   tokens trigger a `BrokerError(AUTH_EXPIRED)` → frontend redirects to reconnect flow.
 
@@ -172,17 +172,90 @@ Zerodha issues a new access token each OAuth login. Expires 06:00 IST next day.
 
 **Broker-initiated revocation:**
 - Detected lazily: broker API returns 403 → adapter throws `BrokerError(AUTH_EXPIRED)`.
-- No background polling for token health. The next order attempt detects the stale token.
+- Background token health check at 06:30 IST validates all active connections.
 
-**`BROKER_CREDS_KEY` rotation (emergency — UNIMPLEMENTED):**
-See `scripts/rotate_broker_key.py.TODO` for the full spec. Summary:
-1. Generate a new 32-byte key as `BROKER_CREDS_KEY_NEW` in Railway.
-2. Run the rotation script: fetches rows with `key_version = 1`, decrypts with old key,
-   re-encrypts with new key using same AAD, updates row and sets `key_version = 2`.
-3. After script reports 0 remaining `key_version = 1` rows: swap `BROKER_CREDS_KEY` to the
-   new value, remove `BROKER_CREDS_KEY_NEW`, restart the backend service.
-4. The `key_version` column allows identifying un-rotated rows without decrypting them.
-5. The script must be run outside market hours (09:15–15:30 IST) with a DB backup first.
+### `BROKER_CREDS_KEY` rotation runbook
+
+#### Triggers
+- **Scheduled:** Quarterly (Jan 1, Apr 1, Jul 1, Oct 1). The cron job runs a dry-run
+  automatically and logs results. Operator reviews and executes live rotation.
+- **Emergency:** If `BROKER_CREDS_KEY` is believed compromised. Follow steps immediately.
+
+#### Pre-flight (both scheduled and emergency)
+1. **Timing:** Run outside market hours (before 09:15 or after 15:30 IST on trading days).
+2. **DB backup:** Take a Supabase backup or run `pg_dump` of `broker_credentials`.
+3. **Generate new key:** `python -c "import secrets; print(secrets.token_hex(32))"`.
+4. **Stage the key:** Set `BROKER_CREDS_KEY_NEW=<new-key>` in Railway env vars.
+   Do NOT restart the backend yet — the old key must remain active.
+
+#### Execution
+
+**Option A: Admin API (recommended)**
+
+```bash
+# Step 1: Dry run — verify all rows can be re-encrypted
+curl -X POST "https://alphavyuh-production.up.railway.app/api/admin/rotate-broker-keys?dry_run=true" \
+  -H "x-service-key: $INGEST_SERVICE_KEY"
+
+# Verify: "status": "complete" or all rows verified, 0 failed
+
+# Step 2: Live rotation
+curl -X POST "https://alphavyuh-production.up.railway.app/api/admin/rotate-broker-keys?dry_run=false" \
+  -H "x-service-key: $INGEST_SERVICE_KEY"
+
+# Verify: "remaining_v1": 0
+# If remaining_v1 > 0: re-run (rows written during rotation)
+```
+
+**Option B: CLI script (for local/staging)**
+
+```bash
+cd backend
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+BROKER_CREDS_KEY=<old> BROKER_CREDS_KEY_NEW=<new> \
+python scripts/rotate_broker_key.py --dry-run
+
+# If dry run passes:
+python scripts/rotate_broker_key.py
+```
+
+#### Post-rotation
+1. Verify: `remaining_v1 = 0` (re-run if needed for concurrent writes).
+2. **Swap env var:** Set `BROKER_CREDS_KEY=<new-key>` in Railway.
+3. **Set previous key:** Set `BROKER_CREDS_KEY_PREVIOUS=<old-key>` (fallback decryption).
+4. **Remove staging key:** Delete `BROKER_CREDS_KEY_NEW` from Railway.
+5. **Restart backend:** Railway auto-restarts on env var change.
+6. **Verify:** Hit any broker endpoint (e.g. `/api/brokers/zerodha/profile`) to confirm
+   decryption works with the new key.
+7. **Clean up:** After 24h with no errors, remove `BROKER_CREDS_KEY_PREVIOUS`.
+8. **Delete backup:** Remove local backup file created by the CLI script.
+
+#### Rollback (if rotation fails partway)
+- Rows with `key_version = 1`: decrypt with old `BROKER_CREDS_KEY`.
+- Rows with `key_version = 2`: decrypt with `BROKER_CREDS_KEY_NEW`.
+- If the backend has NOT been restarted with the new key, v1 rows still work.
+- To rollback: re-run the script with keys swapped, targeting `key_version = 2`.
+  Then discard `BROKER_CREDS_KEY_NEW` and do not restart.
+- `decrypt_credential()` tries `BROKER_CREDS_KEY` first, then `BROKER_CREDS_KEY_PREVIOUS`,
+  so both key versions can be decrypted during the transition window.
+
+#### Quarterly cron behavior
+The APScheduler job `quarterly_broker_key_rotation` runs at 02:00 IST on the 1st of
+Jan/Apr/Jul/Oct:
+- If `BROKER_CREDS_KEY_NEW` is **not set**: logs an info message reminding the operator
+  to stage a rotation. No action taken.
+- If `BROKER_CREDS_KEY_NEW` **is set**: runs a dry-run verification of all v1 rows.
+  On success: logs that rows are ready, operator should execute via admin API.
+  On failure: logs at ERROR level → Sentry alert (once SDK is added).
+
+#### Alerting
+All rotation failures are logged at `logger.error()` level:
+- Quarterly dry-run verification failures
+- Live rotation row failures
+- Missing or invalid keys
+
+Once Sentry is added to the backend (`sentry_sdk.init()` in `main.py`), these errors
+are automatically captured as Sentry alerts. Until then, they appear in Railway logs.
 
 **Blast radius of a compromised `BROKER_CREDS_KEY`:**
 - An attacker with both the service-role key AND `BROKER_CREDS_KEY` can decrypt every
@@ -277,3 +350,4 @@ are worse than application-layer decryption with an env-var key.
 |---|---|
 | v1 | Initial draft — used pgsodium.key (failed: table not available) |
 | v2 | Switched to AES-256-GCM (app-layer). BLOCKER 1: rotation marked unimplemented, scripts/rotate_broker_key.py.TODO created. BLOCKER 2: audit CASCADE added, GDPR tradeoff documented. AAD added to encrypt/decrypt. InvalidTag sanitized in except block. |
+| v3 | Rotation implemented: `scripts/rotate_broker_key.py` (CLI), `POST /api/admin/rotate-broker-keys` (API), quarterly APScheduler cron with dry-run verification. Full runbook added to Q3. Sentry alerting via `logger.error()`. BLOCKER 1 resolved. |
