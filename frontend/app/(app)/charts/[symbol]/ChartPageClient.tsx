@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
+import { Activity, Bell, BookmarkPlus, BookOpen, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
   CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
@@ -2292,6 +2292,24 @@ export default function ChartPageClient({ symbol: symbolProp, initialCandles }: 
               Full chart
             </button>
           )}
+
+          {/* Log trade */}
+          <button
+            onClick={() => {
+              const params = new URLSearchParams({ prefill: "1", symbol, source: "chart" });
+              if (displayClose != null) params.set("entry_price", displayClose.toFixed(2));
+              params.set("entry_date", new Date().toISOString().split("T")[0]);
+              if (ema20Latest != null) params.set("ema20", ema20Latest.toFixed(2));
+              if (ema50Latest != null) params.set("ema50", ema50Latest.toFixed(2));
+              if (latest?.ema_200 != null) params.set("ema200", latest.ema_200.toFixed(2));
+              if (rsiLatest != null) params.set("rsi", rsiLatest.toFixed(1));
+              router.push(`/journal?${params.toString()}`);
+            }}
+            className="workspace-chip-button flex items-center gap-1.5"
+            data-testid="chart-log-trade-button"
+          >
+            <BookOpen size={11} /> Log trade
+          </button>
 
           {/* Save layout */}
           <button
