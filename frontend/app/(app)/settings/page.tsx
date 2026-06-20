@@ -689,7 +689,7 @@ function SettingsContent() {
                       )}
                     </div>
                     {expiresAt ? (
-                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>Renews {expiresAt}</div>
+                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }} data-testid="billing-next-date">Next billing date: {expiresAt}</div>
                     ) : currentPlan === "free" ? (
                       <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>Upgrade to unlock all features</div>
                     ) : null}
@@ -891,16 +891,25 @@ function SettingsContent() {
 
               {/* Cancel plan */}
               {currentPlan !== "free" && expiresAt && (
-                <div className="mt-6 p-4 rounded-[12px] flex items-center justify-between gap-4" style={cardStyle} data-testid="billing-cancel-section">
-                  <div>
-                    <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>Cancel plan</div>
-                    <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>
-                      Your {currentPlan} plan is active until {expiresAt}. It will not auto-renew — no action needed to cancel.
+                <div className="mt-6 p-4 rounded-[12px]" style={cardStyle} data-testid="billing-cancel-section">
+                  <div className="flex items-center justify-between gap-4 mb-3">
+                    <div>
+                      <div className="text-[13px] font-semibold" style={{ color: "var(--app-text1)" }}>Manage subscription</div>
+                      <div className="text-[12px] mt-0.5" style={{ color: "var(--app-text3)" }}>
+                        Your {currentPlan} plan is active until {expiresAt}. Plans do not auto-renew.
+                      </div>
                     </div>
                   </div>
-                  <div className="text-[11px] font-semibold px-3 py-1.5 rounded-full shrink-0" style={{ background: "rgba(38,166,91,0.1)", color: "var(--gain)" }}>
-                    No auto-renew
-                  </div>
+                  <button
+                    onClick={() => {
+                      showToast("Your plan will expire on " + expiresAt + ". No further charges will be made.", true);
+                    }}
+                    className="px-4 py-2 rounded-[8px] text-[12px] font-semibold transition-opacity"
+                    style={{ background: "rgba(229,56,59,0.1)", border: "1px solid rgba(229,56,59,0.2)", color: "var(--loss)" }}
+                    data-testid="billing-cancel-button"
+                  >
+                    Cancel plan
+                  </button>
                 </div>
               )}
 

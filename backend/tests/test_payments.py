@@ -296,3 +296,72 @@ async def test_plan_reconcile_explicitly_downgrades_expired_paid_rows(monkeypatc
 
     assert result == {"plan": "free", "expires_at": expired, "active": False, "reconciled": True}
     assert client.updates == [("users", {"plan": "free"})]
+
+
+class TestWebhookPlanUpdate:
+    """Verify that webhook extracts plan from notes and updates users table."""
+
+    def _webhook_payload(self, user_id: str, plan: str = "pro", currency: str = "INR", billing: str = "monthly"):
+        return {
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": "pay_test123",
+                        "currency": currency,
+                        "notes": {
+                            "user_id": user_id,
+                            "plan": plan,
+                            "currency": currency,
+                            "billing": billing,
+                        },
+                    }
+                }
+            },
+        }
+
+    @pytest.mark.anyio
+    async def test_webhook_updates_user_plan_in_db(self, monkeypatch):
+        client = _FakeClient(None)
+        monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+        monkeypatch.setattr(payments.settings, "razorpay_webhook_secret", "webhook_secret")
+        monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+
+        payload = self._webhook_payload("user-abc", plan="pro", currency="INR", billing="monthly")
+        import json
+        body = json.dumps(payload).encode()
+        sig = hmac.new(b"webhook_secret", body, hashlib.sha256).hexdigest()
+
+        class FakeRequest:
+            headers = {"X-Razorpay-Signature": sig}
+            async def body(self):
+                return body
+            async def json(self):
+                return payload
+
+        result = await payments.razorpay_webhook(FakeRequest())
+
+        assert result == {"status": "ok"}
+        assert len(client.updates) == 1
+        table, update_payload = client.updates[0]
+        assert table == "users"
+        assert update_payload["plan"] == "pro"
+        assert update_payload["billing_currency"] == "INR"
+        assert update_payload["billing_period"] == "monthly"
+        assert "plan_expires_at" in update_payload
+
+    @pytest.mark.anyio
+    async def test_webhook_rejects_invalid_signature(self, monkeypatch):
+        monkeypatch.setattr(payments.settings, "razorpay_webhook_secret", "webhook_secret")
+        monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+
+        class FakeRequest:
+            headers = {"X-Razorpay-Signature": "invalid"}
+            async def body(self):
+                return b'{"event":"payment.captured"}'
+            async def json(self):
+                return {"event": "payment.captured"}
+
+        with pytest.raises(HTTPException) as exc:
+            await payments.razorpay_webhook(FakeRequest())
+        assert exc.value.status_code == 400
