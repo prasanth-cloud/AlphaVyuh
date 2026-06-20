@@ -41,7 +41,7 @@ Any change to prices requires updating `backend/app/routers/payments.py` AND `ba
 | Feature | Free | Pro/Elite |
 |---|---|---|
 | Scanner results | 50 | 500 |
-| Saved screens | 5 | unlimited |
+| Saved screens | 3 | unlimited |
 | Watchlists | 1 | 10 |
 | Watchlist items | 20 | 200 |
 | Scan alerts | 2 | 20 |

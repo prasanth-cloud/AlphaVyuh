@@ -89,7 +89,7 @@ const PLAN_META: { id: PlanId; label: string; color: string; accentBg: string; f
     id: "free", label: "Free", color: "var(--app-text3)", accentBg: "var(--app-surface3)",
     features: [
       "Scanner — up to 50 results",
-      "5 saved screens",
+      "3 saved presets",
       "1 watchlist",
       "Basic charts (EMA + RSI)",
       "3-month journal history",

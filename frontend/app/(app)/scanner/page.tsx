@@ -423,6 +423,23 @@ const emptyFilters = (): Filters => ({
   roce_min: '',
 })
 
+function countActiveFilters(f: Filters): number {
+  const defaults = emptyFilters()
+  let count = 0
+  for (const key of Object.keys(defaults) as (keyof Filters)[]) {
+    const val = f[key]
+    const def = defaults[key]
+    if (Array.isArray(val)) {
+      if (JSON.stringify(val) !== JSON.stringify(def)) count++
+    } else if (typeof val === 'boolean') {
+      if (val !== def) count++
+    } else if (typeof val === 'string') {
+      if (val !== '' && val !== def) count++
+    }
+  }
+  return count
+}
+
 const inputStyle: React.CSSProperties = {
   padding: '5px 8px',
   background: 'var(--surface-2)',
@@ -567,6 +584,9 @@ export default function ScannerPage() {
   const [symbolsScanned, setSymbolsScanned] = useState<number | null>(null)
   const [runHistory, setRunHistory] = useState<ScannerRunHistoryEntry[]>([])
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
+  const [showSaveInline, setShowSaveInline] = useState(false)
+
+  const activeFilterCount = useMemo(() => countActiveFilters(filters), [filters])
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
@@ -1906,9 +1926,66 @@ export default function ScannerPage() {
                 >
                   Filters
                 </button>
+                {activeFilterCount > 0 && (
+                  <span
+                    data-testid="scanner-filter-count-badge"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '2px 8px', borderRadius: 999,
+                      background: 'var(--surface-2)', border: '1px solid var(--border-subtle)',
+                      fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                  </span>
+                )}
                 <span className="heading-card">
                   {totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> matches</> : 'No matches'}
                 </span>
+                {hasRun && !showSaveInline && (
+                  <button
+                    type="button"
+                    className="workspace-chip-button"
+                    onClick={() => { setShowSaveInline(true); setNewScreenName('') }}
+                    data-testid="scanner-save-preset-trigger"
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Save preset
+                  </button>
+                )}
+                {showSaveInline && (
+                  <span data-testid="scanner-save-preset-inline" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <input
+                      autoFocus
+                      value={newScreenName}
+                      onChange={e => setNewScreenName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { void saveCurrentScreen(); setShowSaveInline(false) }
+                        if (e.key === 'Escape') setShowSaveInline(false)
+                      }}
+                      placeholder="Preset name…"
+                      data-testid="scanner-save-preset-name-input"
+                      style={{ padding: '3px 8px', background: 'var(--surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, width: 140 }}
+                    />
+                    <button
+                      type="button"
+                      className="workspace-chip-button"
+                      disabled={!newScreenName.trim()}
+                      onClick={() => { void saveCurrentScreen(); setShowSaveInline(false) }}
+                      data-testid="scanner-save-preset-confirm"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="workspace-chip-button"
+                      onClick={() => setShowSaveInline(false)}
+                    >
+                      ✕
+                    </button>
+                  </span>
+                )}
                 <button
                   type="button"
                   className={`workspace-chip-button${resultsView === 'list' ? ' active' : ''}`}

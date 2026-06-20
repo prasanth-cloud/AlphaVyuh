@@ -1616,8 +1616,8 @@ async def save_screen(body: SaveScreenRequest, user_id: str = Depends(get_curren
     plan   = _get_user_plan(user_id)
     if plan == "free":
         cnt = client.table("saved_screens").select("id", count="exact").eq("user_id", user_id).execute()
-        if (cnt.count or 0) >= 5:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Free plan limit: 5 saved screens")
+        if (cnt.count or 0) >= 3:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Free plan limit: 3 saved presets. Upgrade to Pro for unlimited.")
     r = client.table("saved_screens").insert({
         "user_id":    user_id,
         "name":       body.name,
