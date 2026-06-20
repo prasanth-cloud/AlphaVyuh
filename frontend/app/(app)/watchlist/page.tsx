@@ -17,7 +17,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag } from "lucide-react";
+import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag, List, Eye, Filter } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals, ScanResult } from "@/lib/api";
 import {
@@ -2544,23 +2544,34 @@ function WatchlistContent() {
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {watchlistError ? (
             <EmptyState
+              icon={List}
               title="Watchlist data unavailable"
-              description={`${watchlistError} Your saved lists are not being treated as empty. Open Data Status before changing this queue.`}
+              description={`${watchlistError} Saved lists are not being treated as empty. Check Data Status for details.`}
               action={{ label: "Open Data Status", onClick: () => router.push("/data") }}
+              testId="watchlist-empty-error"
             />
           ) : !activeWl ? (
-            <EmptyState title="No watchlist selected" description="Create or select a watchlist from the sidebar, then use it as the bridge from scanner ideas to chart review." />
+            <EmptyState
+              icon={Eye}
+              title="No watchlist selected"
+              description="Create or select a watchlist from the sidebar to see symbols here."
+              testId="watchlist-empty-none-selected"
+            />
           ) : activeWl.items.length === 0 ? (
             <EmptyState
-              title="No stocks yet"
-              description="Start with a liquid sample queue, then replace it with your own names as your scanner finds better setups."
+              icon={List}
+              title="This watchlist is empty"
+              description="Add symbols from the scanner or search to start building this list."
               action={{ label: adding ? "Adding..." : "Add starter queue", onClick: () => void addStarterSymbols() }}
+              testId="watchlist-empty-no-items"
             />
           ) : visibleItems.length === 0 ? (
             <EmptyState
-              title="No names in this view"
-              description="The current watchlist filter is too narrow. Reset the desk view or clear your search to bring the full queue back."
+              icon={Filter}
+              title="No symbols match the current filter"
+              description="The active filter excludes all symbols. Reset or widen it to see the full list."
               action={{ label: "Reset view", onClick: () => { setDeskFilter("all"); setListQuery(""); } }}
+              testId="watchlist-empty-filtered"
             />
           ) : (
             canReorder ? (

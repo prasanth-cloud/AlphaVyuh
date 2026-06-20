@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Badge } from "@/components/ui";
+import { BookOpen } from "lucide-react";
+import { Badge, EmptyState } from "@/components/ui";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry } from "./types";
 import { fmtCcy, fmtDate, getTradeFlowMeta } from "./utils";
@@ -123,18 +124,14 @@ export function TradeTable({
               </tr>
             ) : entries.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: "48px 24px", textAlign: "center" }} data-testid="journal-trades-empty">
-                  <div className="body-secondary" style={{ fontWeight: 500 }}>No trades in this view yet.</div>
-                  <div className="caption" style={{ marginTop: 6, maxWidth: 420, marginInline: "auto", lineHeight: 1.6 }}>
-                    Log a trade manually, import from broker, or upload a contract note to start the review loop.
-                  </div>
-                  <div style={{ marginTop: 14, display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-                    <button onClick={onAddTrade} className="workspace-chip-button" style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)", cursor: "pointer" }}>
-                      Log first trade
-                    </button>
-                    <Link href="/upload" className="workspace-chip-button" style={{ textDecoration: "none" }}>Upload report</Link>
-                    <Link href="/scanner" className="workspace-chip-button" style={{ textDecoration: "none" }}>Find setups</Link>
-                  </div>
+                <td colSpan={9}>
+                  <EmptyState
+                    icon={BookOpen}
+                    title="No trades in this view"
+                    description="Trades logged manually, imported from a broker, or uploaded via contract note appear here."
+                    action={{ label: "Log first trade", onClick: onAddTrade }}
+                    testId="journal-trades-empty"
+                  />
                 </td>
               </tr>
             ) : (

@@ -19,6 +19,7 @@ import { mockRunScan } from '@/lib/mock-data'
 import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
+import { Search, SlidersHorizontal } from 'lucide-react'
 import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
 import { DataHealthBadge } from '@/components/DataHealthBadge'
 import { FirstRunBanner } from '@/components/FirstRunBanner'
@@ -2260,9 +2261,11 @@ export default function ScannerPage() {
         {!loading && !hasRun && !error && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <EmptyState
-              title="Run your first scan"
-              description="Choose a saved filter or set your own price, volume, trend, and RS conditions. If market data looks stale, check Data Status before running."
+              icon={Search}
+              title="No scan results yet"
+              description="Select a preset or configure filters, then run the scan. Results appear here."
               action={{ label: 'Select Trend Template', onClick: () => selectPreset(PRESETS[0]) }}
+              testId="scanner-empty-no-run"
             />
           </div>
         )}
@@ -2271,11 +2274,13 @@ export default function ScannerPage() {
         {!loading && hasRun && results.length === 0 && !error && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
             <EmptyState
+              icon={SlidersHorizontal}
               title="No stocks matched"
               description={tradeDate
-                ? `No matches for ${tradeDate} with the current filters. Widen RSI/volume filters or start from a preset. If this looks like missing market data, check Data Status before reporting.`
-                : 'No matches with the current filters. Try a broader preset. If this looks like missing market data, check Data Status before reporting.'}
+                ? `Zero matches for ${tradeDate} with the current filters. Wider RSI or volume ranges may produce results.`
+                : 'Zero matches with the current filters. A broader preset or wider ranges may produce results.'}
               action={{ label: 'Reset filters', onClick: resetFilters }}
+              testId="scanner-empty-no-match"
             />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
               <a className="workspace-chip-button" href="/data" style={{ textDecoration: 'none' }}>
