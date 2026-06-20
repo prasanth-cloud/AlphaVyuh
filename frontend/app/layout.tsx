@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { Toaster } from "sonner";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
@@ -76,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <Toaster position="bottom-right" theme="dark" />
         <ServiceWorkerRegistrar />
+        <Analytics />
       </body>
     </html>
   );
