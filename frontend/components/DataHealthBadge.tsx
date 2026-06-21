@@ -24,16 +24,27 @@ type Props = {
 };
 
 export function DataHealthBadge({ compact = false, className }: Props) {
-  const { data: health } = useSWR<DataHealth | null>("data-health", () => getDataHealth(), {
+  const isDemo = process.env.NEXT_PUBLIC_DATA_MODE === "mock";
+  const { data } = useSWR<DataHealth | null>(isDemo ? null : "data-health", () => getDataHealth(), {
     refreshInterval: REVALIDATE_MS,
     revalidateOnFocus: false,
     dedupingInterval: 60_000,
   });
+  const health: DataHealth | null | undefined = isDemo ? {
+    status: "healthy",
+    latest_trade_date: null,
+    hours_since_refresh: null,
+    symbols_on_latest_date: null,
+    universe_active: null,
+    mode: "demo",
+    message: "Deterministic demo fixtures",
+    indicators_missing: { rsi_14: null, ema_200: null },
+    last_run: { id: null, errors: null },
+  } : data;
 
   const colors = statusColor(health);
   const date = formatDate(health?.latest_trade_date);
-  const isDemo = health?.mode === "demo";
-  const label = isDemo ? `Demo · ${date}` : `EOD · NSE Bhavcopy · ${date}`;
+  const label = health?.mode === "demo" ? `Demo · ${date}` : `EOD · NSE Bhavcopy · ${date}`;
   const title = health?.message || (health?.status === "healthy" ? "Data is up to date" : "Data may be stale or incomplete");
 
   return (

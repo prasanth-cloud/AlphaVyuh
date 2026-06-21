@@ -77,7 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <Toaster position="bottom-right" theme="dark" />
         <ServiceWorkerRegistrar />
-        <Analytics />
+        {process.env.NEXT_PUBLIC_DATA_MODE !== "mock" && <Analytics />}
       </body>
     </html>
   );

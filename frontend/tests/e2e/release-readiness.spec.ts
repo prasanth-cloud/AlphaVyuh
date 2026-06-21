@@ -10,7 +10,7 @@ test.describe("Release readiness — public and auth boundary", () => {
 
     expect(response?.ok()).toBeTruthy();
     await expect(page).toHaveTitle(/AlphaVyuh/);
-    await expect(page.locator(".lp-h1-s1").getByText("A trading workflow journal for Indian swing traders.", { exact: true })).toBeVisible();
+    await expect(page.locator(".lp-h1-s1").getByText("India's trading OS", { exact: true })).toBeVisible();
     await expect(page.locator("body")).toContainText(/Scan after market close, keep the reason, plan levels/i);
     await expect(page.locator("body")).toContainText(/NSE\/BSE cash equity/i);
     await expect(page.getByRole("link", { name: /Get started/i }).first()).toBeVisible();

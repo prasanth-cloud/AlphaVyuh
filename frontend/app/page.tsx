@@ -306,14 +306,14 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
             <div className="lp-eyebrow">
-              <div className="lp-live-pill" style={{color:"#00D9A7",fontSize:11,fontWeight:600,letterSpacing:"0.14em",textTransform:"uppercase" as const}}>Professional access</div>
+               <div className="lp-live-pill" style={{color:"#00D9A7",fontSize:11,fontWeight:600,letterSpacing:"0.14em",textTransform:"uppercase" as const}}>EOD trading workflow</div>
             </div>
             <h1 className="lp-h1">
               <span className="lp-h1-s1">India&apos;s trading OS</span>
             </h1>
             <p className="lp-sub">Scan markets. Build watchlists. Analyze charts. Review your trades. All in one place for NSE swing traders.</p>
             <div className="lp-ctas">
-              <Link href="/signup" className="lp-btn-primary">Get early access</Link>
+              <Link href="/signup" className="lp-btn-primary">Get started</Link>
               <a href="#how" className="lp-btn-secondary">See how it works</a>
             </div>
             <div className="lp-trust-row" aria-label="Product scope">

@@ -156,14 +156,26 @@ test.describe("Workflow layout smoke", () => {
   test("scanner actions and watchlist chart header remain usable", async ({ page }) => {
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
     await expect(page.locator("body")).not.toContainText("DISCOVERY");
-    await expect(page.getByRole("button", { name: /Technicals/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Fundamentals/i })).toBeVisible();
+    const technicalsTab = page.getByTestId("scanner-filter-tab-technicals");
+    const fundamentalsTab = page.getByTestId("scanner-filter-tab-fundamentals");
+    await expect(technicalsTab).toBeVisible();
+    await expect(fundamentalsTab).toBeVisible();
     await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
-    await page.getByRole("button", { name: /Fundamentals/i }).click();
+    await expect.poll(async () => {
+      if (!(await fundamentalsTab.getAttribute("class"))?.includes("active")) {
+        await fundamentalsTab.click();
+      }
+      return (await fundamentalsTab.getAttribute("class"))?.includes("active");
+    }).toBe(true);
     await expect(page.getByRole("button", { name: "Market cap" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Trend quality" })).toHaveCount(0);
-    await page.getByRole("button", { name: /Technicals/i }).click();
+    await expect.poll(async () => {
+      if (!(await technicalsTab.getAttribute("class"))?.includes("active")) {
+        await technicalsTab.click();
+      }
+      return (await technicalsTab.getAttribute("class"))?.includes("active");
+    }).toBe(true);
     await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
     await selectPresetAndRunScan(page);

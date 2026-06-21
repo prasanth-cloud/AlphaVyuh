@@ -17,8 +17,13 @@ const STEPS: { key: StepKey; label: string; href: string }[] = [
 export function FirstRunBanner() {
   const [dismissed, setDismissed] = useState<boolean | null>(null);
   const [completedSteps, setCompletedSteps] = useState<Set<StepKey>>(new Set());
+  const isDemo = process.env.NEXT_PUBLIC_DATA_MODE === "mock";
 
   useEffect(() => {
+    if (isDemo) {
+      setDismissed(false);
+      return;
+    }
     (async () => {
       try {
         const headers = await authHeaders();
@@ -44,12 +49,13 @@ export function FirstRunBanner() {
         setCompletedSteps(completed);
       } catch { /* ignore */ }
     })();
-  }, []);
+  }, [isDemo]);
 
   if (dismissed === null || dismissed) return null;
 
   const handleDismiss = async () => {
     setDismissed(true);
+    if (isDemo) return;
     try {
       const headers = await authHeaders();
       await fetch(`${API_BASE_URL}/api/v1/me`, {
