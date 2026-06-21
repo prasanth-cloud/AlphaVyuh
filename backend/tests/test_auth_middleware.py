@@ -51,12 +51,13 @@ def test_get_current_user_id_validates_local_supabase_jwt(monkeypatch):
 
     monkeypatch.setattr(auth.settings, "supabase_jwt_secret", secret)
 
-    assert asyncio.run(auth.get_current_user_id(_credentials(token))) == user_id
+    result = asyncio.run(auth._validate_token(_credentials(token)))
+    assert asyncio.run(auth.get_current_user_id(result)) == user_id
 
 
 def test_get_current_user_id_rejects_empty_bearer_tokens():
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(auth.get_current_user_id(_credentials("null")))
+        asyncio.run(auth._validate_token(_credentials("null")))
 
     assert exc.value.status_code == 401
     assert exc.value.detail == "No token provided"
@@ -73,7 +74,8 @@ def test_get_current_user_id_falls_back_to_supabase_auth(monkeypatch):
     monkeypatch.setattr(auth.settings, "supabase_jwt_secret", "")
     monkeypatch.setattr(auth, "get_admin_client", lambda: SimpleNamespace(auth=FakeAuth()))
 
-    assert asyncio.run(auth.get_current_user_id(_credentials("opaque-token"))) == user_id
+    result = asyncio.run(auth._validate_token(_credentials("opaque-token")))
+    assert asyncio.run(auth.get_current_user_id(result)) == user_id
 
 
 def test_get_current_user_id_hides_provider_errors(monkeypatch):
@@ -85,7 +87,7 @@ def test_get_current_user_id_hides_provider_errors(monkeypatch):
     monkeypatch.setattr(auth, "get_admin_client", lambda: SimpleNamespace(auth=FakeAuth()))
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(auth.get_current_user_id(_credentials("opaque-token")))
+        asyncio.run(auth._validate_token(_credentials("opaque-token")))
 
     assert exc.value.status_code == 401
     assert exc.value.detail == "Authentication failed"
