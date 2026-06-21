@@ -42,6 +42,9 @@ type DailyRow = {
   volume_ratio?: number | null;
   w52h_pct?: number | null;
   w52l_pct?: number | null;
+  sma_50?: number | null;
+  sma_150?: number | null;
+  sma_200?: number | null;
   stock_universe?: UniverseRow | UniverseRow[] | null;
 };
 
@@ -107,6 +110,9 @@ const DAILY_SELECT = [
   "volume_ratio",
   "w52h_pct",
   "w52l_pct",
+  "sma_50",
+  "sma_150",
+  "sma_200",
 ].join(",");
 
 const DAILY_WITH_UNIVERSE_SELECT = `${DAILY_SELECT},stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)`;
@@ -772,6 +778,16 @@ function percent(rows: DailyRow[], predicate: (row: DailyRow) => boolean): numbe
 
 export function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {
   const result = scanResultFromRow(row);
+  const close = numberValue(row.close);
+  const ema50 = numberValue(row.ema_50);
+  const ema150 = numberValue(row.ema_150);
+  const ema200 = numberValue(row.ema_200);
+  const ema200Slope = numberValue(row.ema_200_slope_30d);
+  const sma50 = numberValue(row.sma_50);
+  const sma150 = numberValue(row.sma_150);
+  const sma200 = numberValue(row.sma_200);
+  const avgVolume50d = numberValue(row.avg_volume_50d);
+  const pricePerf6m = numberValue(row.price_perf_6m_pct);
   const checks: Array<[string, (value: number) => boolean]> = [
     ["price_min", (value) => result.close >= value],
     ["price_max", (value) => result.close <= value],
@@ -791,6 +807,10 @@ export function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean 
     ["week_52_high_pct_max", (value) => (result.week_52_high_pct ?? Infinity) <= value],
     ["w52l_pct_min", (value) => (result.week_52_low_pct ?? -Infinity) >= value],
     ["rs_score_min", (value) => (result.rs_score ?? -Infinity) >= value],
+    ["rs_score_max", (value) => (result.rs_score ?? Infinity) <= value],
+    ["price_perf_6m_min", (value) => (pricePerf6m ?? -Infinity) >= value],
+    ["avg_volume_50d_min", (value) => (avgVolume50d ?? -Infinity) >= value],
+    ["atr_pct_max", (value) => (result.atr_pct ?? Infinity) <= value],
   ];
   for (const [key, check] of checks) {
     const value = numberValue(filters[key]);
@@ -800,10 +820,34 @@ export function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean 
   if (filters.above_ema50 === true && !(result.ema_50 != null && result.close >= result.ema_50)) return false;
   if (filters.above_ema200 === true && !(result.ema_200 != null && result.close >= result.ema_200)) return false;
   if (filters.ema20_above_ema50 === true && !(result.ema_20 != null && result.ema_50 != null && result.ema_20 >= result.ema_50)) return false;
+  if (filters.ema50_above_ema150 === true && !(ema50 != null && ema150 != null && ema50 > ema150)) return false;
+  if (filters.ema150_above_ema200 === true && !(ema150 != null && ema200 != null && ema150 > ema200)) return false;
+  if (filters.ema_200_trending_up === true && !(ema200Slope != null && ema200Slope > 0)) return false;
+  if (filters.all_smas_bullish === true && (
+    sma50 == null || sma150 == null || sma200 == null || close == null
+    || close <= sma50 || !(sma50 > sma150 && sma150 > sma200)
+  )) return false;
+  if (filters.price_vs_sma50 === "above" && !(sma50 != null && close != null && close > sma50)) return false;
+  if (filters.price_vs_sma50 === "below" && !(sma50 != null && close != null && close < sma50)) return false;
+  if (filters.price_vs_sma150 === "above" && !(sma150 != null && close != null && close > sma150)) return false;
+  if (filters.price_vs_sma150 === "below" && !(sma150 != null && close != null && close < sma150)) return false;
+  if (filters.price_vs_sma200 === "above" && !(sma200 != null && close != null && close > sma200)) return false;
+  if (filters.price_vs_sma200 === "below" && !(sma200 != null && close != null && close < sma200)) return false;
+  if (filters.price_vs_ema50 === "above" && !(ema50 != null && close != null && close > ema50)) return false;
+  if (filters.price_vs_ema50 === "below" && !(ema50 != null && close != null && close < ema50)) return false;
+  if (filters.price_vs_ema150 === "above" && !(ema150 != null && close != null && close > ema150)) return false;
+  if (filters.price_vs_ema150 === "below" && !(ema150 != null && close != null && close < ema150)) return false;
+  if (filters.price_vs_ema200 === "above" && !(ema200 != null && close != null && close > ema200)) return false;
+  if (filters.price_vs_ema200 === "below" && !(ema200 != null && close != null && close < ema200)) return false;
   if (filters.new_52w_high === true && !result.is_new_52w_high) return false;
   const series = Array.isArray(filters.series) ? filters.series.map(String) : [];
   if (series.length && !series.includes(result.series)) return false;
-  const sectors = Array.isArray(filters.sectors) ? filters.sectors.map(String) : [];
+  const sectorFilter = filters.sector;
+  const sectors = Array.isArray(sectorFilter)
+    ? sectorFilter.map(String)
+    : typeof sectorFilter === "string" && sectorFilter
+      ? [sectorFilter]
+      : [];
   if (sectors.length && (!result.sector || !sectors.includes(result.sector))) return false;
   return true;
 }

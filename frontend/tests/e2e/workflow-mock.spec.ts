@@ -533,7 +533,7 @@ test.describe("Mock workflow smoke", () => {
     await resultRows.first().locator("input[type=checkbox]").check({ force: true });
     await expect(page.getByText("1 selected", { exact: true })).toBeVisible();
     await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Copy TV symbols$/i }).click();
-    await expect(page.getByTestId("scanner-toast")).toContainText("Copied 1 TradingView symbol", { timeout: 10_000 });
+    await expect(page.getByLabel("Notifications alt+T").getByText("Copied 1 TradingView symbol")).toBeVisible({ timeout: 10_000 });
     await expect.poll(() => page.evaluate(() => localStorage.getItem("alphavyuh-test-clipboard"))).toBe(`NSE:${symbol}`);
     await page.locator(".scanner-results-toolbar").getByRole("button", { name: /^Shortlist$/i }).click();
     await expect(resultRows.first().getByText("Shortlisted")).toBeVisible();
@@ -961,10 +961,6 @@ test.describe("Mock workflow smoke", () => {
     await page.goto("/charts/AUBANK?full=1");
     const overlay = page.getByTestId("chart-drawing-overlay");
     await expect(overlay).toBeVisible({ timeout: 20_000 });
-    const box = await overlay.boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) return;
-
     const drawSegment = async (
       buttonName: string,
       armedText: RegExp,
@@ -977,6 +973,9 @@ test.describe("Mock workflow smoke", () => {
       await page.getByRole("button", { name: "Open chart drawing tools", exact: true }).click();
       await page.getByRole("button", { name: buttonName, exact: true }).click();
       await expect(page.getByText(armedText)).toBeVisible({ timeout: 10_000 });
+      const box = await overlay.boundingBox();
+      expect(box).not.toBeNull();
+      if (!box) return;
       await page.mouse.move(box.x + box.width * startX, box.y + box.height * startY);
       await page.mouse.down();
       await page.mouse.move(box.x + box.width * endX, box.y + box.height * endY);
@@ -992,7 +991,10 @@ test.describe("Mock workflow smoke", () => {
     await page.getByRole("button", { name: "Open chart drawing tools", exact: true }).click();
     await page.getByRole("button", { name: "Text note N", exact: true }).click();
     await expect(page.getByText(/Text note armed/i)).toBeVisible({ timeout: 10_000 });
-    await page.mouse.move(box.x + box.width * 0.52, box.y + box.height * 0.55);
+    const textBox = await overlay.boundingBox();
+    expect(textBox).not.toBeNull();
+    if (!textBox) return;
+    await page.mouse.move(textBox.x + textBox.width * 0.52, textBox.y + textBox.height * 0.55);
     await page.mouse.down();
     await page.mouse.up();
     await expect(page.getByText(/Text Note/)).toBeVisible({ timeout: 10_000 });

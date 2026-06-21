@@ -17,6 +17,7 @@ __pycache__/
 .Python
 venv/
 .venv/
+.venv-*/
 env/
 *.egg-info/
 dist/
@@ -31,6 +32,13 @@ out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+frontend/public/sw.js
+frontend/public/sw.js.map
+frontend/public/workbox-*.js
+frontend/public/workbox-*.js.map
+frontend/public/fallback-*.js
+frontend/test-results/
+frontend/playwright-report/
 
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store

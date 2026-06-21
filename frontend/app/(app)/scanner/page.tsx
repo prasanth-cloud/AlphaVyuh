@@ -562,7 +562,6 @@ export default function ScannerPage() {
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set())
   const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
   const [composingScreens, setComposingScreens] = useState(false)
-  const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technicals' | 'fundamentals'>('technicals')
   const [resultSymbolFilter, setResultSymbolFilter] = useState('')
   const [chartsLayout, setChartsLayout] = useState<ScannerChartsLayout>('2-up')
@@ -614,8 +613,6 @@ export default function ScannerPage() {
   }, [])
 
   function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3000)
     sonnerToast.success(msg)
   }
 
@@ -2593,13 +2590,6 @@ export default function ScannerPage() {
           </div>
         )}
       </div>
-
-      {/* Toast */}
-      {toast && (
-        <div data-testid="scanner-toast" style={{ position: 'fixed', top: 88, right: 28, zIndex: 999, padding: '10px 16px', background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-primary)', boxShadow: 'var(--shadow-dropdown)' }}>
-          {toast}
-        </div>
-      )}
 
       {/* Save screen modal */}
       {showSaveModal && (

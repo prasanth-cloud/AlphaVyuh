@@ -16,6 +16,11 @@ const config = [
     ignores: [
       ".next/**",
       "node_modules/**",
+      "public/sw.js",
+      "public/sw.js.map",
+      "public/workbox-*.js",
+      "public/workbox-*.js.map",
+      "public/fallback-*.js",
       "test-results/**",
       "playwright-report/**",
     ],

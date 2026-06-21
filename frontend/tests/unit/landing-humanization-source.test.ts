@@ -5,8 +5,8 @@ const landingSource = readFileSync("app/page.tsx", "utf8");
 
 describe("landing page humanization", () => {
   it("keeps the public hero calm and product-scoped", () => {
-    expect(landingSource).toContain("A trading workflow journal for Indian swing traders.");
-    expect(landingSource).toContain("Scan after market close, keep the reason, plan levels, and review what your closed trades taught you.");
+    expect(landingSource).toContain("India&apos;s trading OS");
+    expect(landingSource).toContain("Scan markets. Build watchlists. Analyze charts. Review your trades.");
     expect(landingSource).toContain("NSE/BSE cash equity");
     expect(landingSource).toContain("No trade calls");
 
@@ -71,7 +71,7 @@ describe("landing page humanization", () => {
     expect(landingSource).toContain("TRADER_WORKFLOW_STEPS");
     expect(landingSource).toContain("[\"scanner\",\"watchlist\",\"charts\",\"journal\"]");
     expect(landingSource).toContain("Dashboard, scanner, watchlist, journal");
-    expect(landingSource).toContain("See workflow");
+    expect(landingSource).toContain("See how it works");
     expect(landingSource).not.toContain("Today, journal, watchlist, scanner");
   });
 });

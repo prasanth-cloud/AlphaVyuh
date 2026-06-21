@@ -1244,7 +1244,6 @@ function WatchlistContent() {
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
   const [newWlName, setNewWlName] = useState("");
   const [showNewWl, setShowNewWl] = useState(false);
-  const [toast, setToast] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
@@ -1364,8 +1363,6 @@ function WatchlistContent() {
   }
 
   function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 3500);
     sonnerToast.success(msg);
   }
 
@@ -2059,13 +2056,6 @@ function WatchlistContent() {
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
       <WorkflowDeskHeader pathname="/watchlist" compact showFlowCaption={false} />
       <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
-      {/* Toast */}
-      {toast && (
-        <div data-testid="watchlist-toast" style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
-          {toast}
-        </div>
-      )}
-
       {/* ── Watchlist tabs sidebar ─── */}
       {sidebarCollapsed ? (
         <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
