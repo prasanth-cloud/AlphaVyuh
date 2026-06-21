@@ -23,7 +23,7 @@ import {
 } from '@/lib/api'
 import { DashboardEquitySnapshotCard } from '@/components/dashboard/DashboardEquitySnapshot'
 import { MarketOverviewDesk } from '@/components/dashboard/MarketOverviewDesk'
-import { EmptyState } from '@/components/ui'
+import { EmptyState, DataProvenanceBadge } from '@/components/ui'
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
@@ -345,6 +345,7 @@ export default function DashboardPage() {
           {data ? (
             <>
               <FirstRunBanner />
+              <DataProvenanceBadge kind={dataHealth?.latest_trade_date ? "eod" : "fallback"} asOf={dataHealth?.latest_trade_date ?? null} compact />
               <MarketOverviewDesk data={data} dataHealth={dataHealth} marketError={error} />
               <DashboardEquitySnapshotCard
                 stats={journalStats}

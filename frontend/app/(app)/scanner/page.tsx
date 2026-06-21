@@ -21,7 +21,7 @@ import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanne
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
 import { toast as sonnerToast } from '@/lib/toast'
-import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
+import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num, DataProvenanceBadge } from '@/components/ui'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
 import { describeMarketDataError } from '@/lib/data-errors'
@@ -1603,6 +1603,7 @@ export default function ScannerPage() {
           )}
         </div>
         <p className="calm-page-copy">Choose a screener, refine filters if needed, then run scan when you are ready.</p>
+        <DataProvenanceBadge kind="eod" asOf={null} compact />
       </div>
       <div
         className={`workspace-grid scanner-workspace-grid${filterRailCollapsed ? ' scanner-filter-rail-collapsed' : ''}`}

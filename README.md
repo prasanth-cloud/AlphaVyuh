@@ -1,17 +1,19 @@
 # AlphaVyuh
 
-Professional trading workflow software for Indian NSE/BSE traders. Scan -> analyse -> plan -> journal -> review.
+[![Live](https://img.shields.io/badge/live-alphavyuh.com-00D9A7)](https://alphavyuh.com)
+
+Professional trading workflow software for Indian NSE/BSE traders. Scan → analyse → plan → journal → review.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14 + TypeScript + Tailwind CSS |
+| Frontend | Next.js + TypeScript + Tailwind CSS |
 | Backend | FastAPI (Python 3.12) |
 | Database | Supabase (PostgreSQL + Auth) |
 | Charts | TradingView Lightweight Charts v5 |
 | Data | NSE/BSE EOD market data pipeline, with live/delayed providers enabled only when licensed |
-| Payments | Razorpay (Phase 4) |
+| Payments | Razorpay |
 
 ## Features
 
@@ -19,25 +21,29 @@ Professional trading workflow software for Indian NSE/BSE traders. Scan -> analy
 - **Watchlist** — Multiple watchlists, drag-to-reorder, and visible data provenance.
 - **Charts** — Interactive candlestick charts with EMA 20/50/200, RSI, MACD, Bollinger Bands, VWAP, drawing tools, and EOD/provider data badges.
 - **Dashboard** — Market breadth strip (A/D ratio, 52W highs/lows, % above EMA).
-- **Auth** — Supabase Auth (email + Google OAuth), free/pro plans.
+- **Journal** — Trade journal with auto-calculated P&L, risk, R-multiple, and performance stats.
+- **AI Review** — AI-powered journal analysis for Pro plan users — identifies patterns across trades.
+- **Broker Connect** — Zerodha Kite Connect integration for trade import and order placement.
+- **PWA** — Installable progressive web app with offline fallback.
+- **Auth** — Supabase Auth (email + Google OAuth), free/pro/elite plans.
 
 ## Project Structure
 
 ```
-frontend/    Next.js 14 app — all UI screens
+frontend/    Next.js app — all UI screens
 backend/     FastAPI — all APIs, data ingestion, business logic
-supabase/    SQL migrations — run in Supabase SQL editor in order 001 → 011
+supabase/    SQL migrations — run in Supabase SQL editor in order 001 → 047
 ```
 
 ## Setup
 
 ### Prerequisites
-- Node.js 18+
+- Bun (package manager)
 - Python 3.11+
 - Supabase project (free tier works for dev)
 
 ### 1. Database — run migrations
-Go to Supabase SQL editor and run each file in `supabase/migrations/` in order: `001_users.sql` → `011_drawings.sql`
+Go to Supabase SQL editor and run each file in `supabase/migrations/` in order: `001_users.sql` → latest.
 
 ### 2. Backend
 ```bash
@@ -59,9 +65,9 @@ This downloads ~300 days of NSE Bhavcopy data and computes all indicators. Takes
 ### 4. Frontend
 ```bash
 cd frontend
-npm install
+bun install
 cp .env.local.example .env.local    # fill in your values
-npm run dev
+bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
@@ -104,8 +110,8 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## Phases
 
-- Phase 1 — Auth + User profiles + Subscriptions
-- Phase 2 — NSE Scanner + Watchlist + Bhavcopy pipeline
-- Phase 3 — Charts (Lightweight Charts v5, drawings, layouts)
-- Phase 4 — Broker connect (Zerodha Kite) + Trade journal
+- ~~Phase 1 — Auth + User profiles + Subscriptions~~ ✓
+- ~~Phase 2 — NSE Scanner + Watchlist + Bhavcopy pipeline~~ ✓
+- ~~Phase 3 — Charts (Lightweight Charts v5, drawings, layouts)~~ ✓
+- ~~Phase 4 — Broker connect (Zerodha Kite) + Trade journal~~ ✓
 - Phase 5 — Trade review engine + Alerts + Mobile app
