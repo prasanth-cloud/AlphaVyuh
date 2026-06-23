@@ -18,7 +18,7 @@ from app.routers.scanner import (
     _m3a_columns_ready,
     _push_db_prefilters,
 )
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/backtest", tags=["backtest"])
 

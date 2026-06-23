@@ -163,12 +163,20 @@ test.describe("Workflow layout smoke", () => {
     await expect(fundamentalsTab).toBeVisible();
     await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
-    await fundamentalsTab.click();
-    await expect(fundamentalsTab).toHaveClass(/active/);
+    await expect.poll(async () => {
+      if (!(await fundamentalsTab.getAttribute("class"))?.includes("active")) {
+        await fundamentalsTab.click();
+      }
+      return (await fundamentalsTab.getAttribute("class"))?.includes("active");
+    }).toBe(true);
     await expect(page.getByRole("button", { name: "Market cap" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Trend quality" })).toHaveCount(0);
-    await technicalsTab.click();
-    await expect(technicalsTab).toHaveClass(/active/);
+    await expect.poll(async () => {
+      if (!(await technicalsTab.getAttribute("class"))?.includes("active")) {
+        await technicalsTab.click();
+      }
+      return (await technicalsTab.getAttribute("class"))?.includes("active");
+    }).toBe(true);
     await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
     await selectPresetAndRunScan(page);

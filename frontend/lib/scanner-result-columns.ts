@@ -68,7 +68,7 @@ export const SCANNER_COLUMN_DEFS: ScannerColumnDef[] = [
   { id: "pct_change", label: "% Chg", group: "technical", align: "right", width: 74, sortKey: "pct_change" },
   { id: "volume_ratio", label: "Vol ×", group: "technical", align: "right", width: 60, sortKey: "volume_ratio" },
   { id: "rsi_14", label: "RSI", group: "technical", align: "right", width: 50, sortKey: "rsi_14" },
-  { id: "rs_score", label: "RS Score", group: "technical", align: "right", width: 72, sortKey: "rs_score" },
+  { id: "rs_score", label: "RS", group: "technical", align: "right", width: 52, sortKey: "rs_score" },
   { id: "week_52_high_pct", label: "% from 52W high", group: "technical", align: "right", width: 96, sortKey: "week_52_high_pct" },
   { id: "ema_20", label: "EMA 20", group: "technical", align: "right", width: 72 },
   { id: "ema_50", label: "EMA 50", group: "technical", align: "right", width: 72 },

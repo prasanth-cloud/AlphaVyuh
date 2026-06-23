@@ -477,34 +477,40 @@ export type Database = {
       payment_logs: {
         Row: {
           amount: number
+          billing: string | null
           created_at: string
           currency: string
           id: string
           plan: string
-          razorpay_order_id: string | null
-          razorpay_payment_id: string | null
+          plan_expires_at: string | null
+          razorpay_order_id: string
+          razorpay_payment_id: string
           status: string
           user_id: string
         }
         Insert: {
-          amount: number
+          amount?: number
+          billing?: string | null
           created_at?: string
           currency?: string
           id?: string
           plan: string
-          razorpay_order_id?: string | null
-          razorpay_payment_id?: string | null
+          plan_expires_at?: string | null
+          razorpay_order_id: string
+          razorpay_payment_id: string
           status?: string
           user_id: string
         }
         Update: {
           amount?: number
+          billing?: string | null
           created_at?: string
           currency?: string
           id?: string
           plan?: string
-          razorpay_order_id?: string | null
-          razorpay_payment_id?: string | null
+          plan_expires_at?: string | null
+          razorpay_order_id?: string
+          razorpay_payment_id?: string
           status?: string
           user_id?: string
         }
@@ -1229,6 +1235,26 @@ export type Database = {
       }
     }
     Functions: {
+      activate_razorpay_payment: {
+        Args: {
+          p_amount: number
+          p_billing: string
+          p_currency: string
+          p_plan: string
+          p_plan_days: number
+          p_razorpay_order_id: string
+          p_razorpay_payment_id: string
+          p_user_id: string
+        }
+        Returns: {
+          billing: string
+          currency: string
+          expires_at: string
+          plan: string
+          replayed: boolean
+          status: string
+        }[]
+      }
       delete_broker_credentials: {
         Args: { p_broker: string; p_user_id: string }
         Returns: undefined

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { BrandLogoMark } from '@/components/BrandLogoMark'
 import FeedbackWidget from '@/components/FeedbackWidget'
+import KiteTokenBanner from '@/components/KiteTokenBanner'
 import { clearAuthHeaderCache, getDataHealth, searchSymbols, warmCoreMarketData, warmSecondaryWorkflowData } from '@/lib/api'
 import type { DataHealth, SymbolSearchResult } from '@/lib/api'
 import { checkApiReachability } from '@/lib/api-reachability'
@@ -43,6 +44,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const fullChart = pathname.startsWith('/charts/') && searchParams.get('full') === '1'
+  const hideFeedback = fullChart || pathname.startsWith('/broker/callback')
   const router = useRouter()
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
@@ -158,8 +160,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </nav>
       )}
 
+      <KiteTokenBanner />
       <main className={fullChart ? 'app-content app-content-full-chart' : 'app-content'}>{children}</main>
-      {!fullChart && <FeedbackWidget />}
+      {!hideFeedback && <FeedbackWidget />}
     </div>
   )
 }

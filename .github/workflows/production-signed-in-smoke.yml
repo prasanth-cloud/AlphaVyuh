@@ -14,9 +14,6 @@ on:
         description: Public frontend URL for signed-in browser smoke
         required: true
         default: https://www.alphavyuh.com
-      playwright_access_url:
-        description: Optional Vercel share URL when live_url has deployment protection (preview deploys)
-        required: false
 
 permissions:
   contents: read
@@ -42,10 +39,17 @@ jobs:
         run: npm --prefix frontend ci
 
       - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+        run: npm install -g vercel@54.7.1
 
       - name: Install Playwright Chromium
         run: npm --prefix frontend exec playwright install --with-deps chromium
+
+      - name: Validate trusted production targets
+        env:
+          PRODUCTION_API_URL_INPUT: ${{ github.event.inputs.production_api_url }}
+          LIVE_URL_INPUT: ${{ github.event.inputs.live_url }}
+          REQUIRE_LIVE_URL: "1"
+        run: node scripts/validate-production-workflow-targets.mjs
 
       - name: Prepare production smoke account
         env:
@@ -59,21 +63,10 @@ jobs:
       - name: Validate full production smoke credentials
         run: npm run check:production-smoke-env
 
-      - name: Validate preview deployment protection prerequisites
-        if: contains(github.event.inputs.live_url, 'vercel.app')
-        env:
-          PLAYWRIGHT_ACCESS_URL: ${{ github.event.inputs.playwright_access_url || secrets.PLAYWRIGHT_ACCESS_URL }}
-        run: |
-          if [ -z "$PLAYWRIGHT_ACCESS_URL" ]; then
-            echo "::error::Preview signed-in smoke requires playwright_access_url input or PLAYWRIGHT_ACCESS_URL secret to bypass Vercel deployment protection."
-            exit 1
-          fi
-
       - name: Strict authenticated production data preflight
         env:
           GH_TOKEN: ${{ github.token }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
           PRODUCTION_API_CHART_SYMBOLS: ${{ github.event.inputs.production_api_chart_symbols || secrets.PRODUCTION_API_CHART_SYMBOLS || 'RELIANCE,ITC,AUBANK' }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -82,9 +75,6 @@ jobs:
 
       - name: Strict signed-in production browser smoke
         env:
-          PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.live_url }}
-          PLAYWRIGHT_ACCESS_URL: ${{ github.event.inputs.playwright_access_url || secrets.PLAYWRIGHT_ACCESS_URL }}
           PLAYWRIGHT_EXPECT_REAL_DATA: "true"
           PLAYWRIGHT_SMOKE_SYMBOL: RELIANCE
-          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
         run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.local.config.ts frontend/tests/e2e/smoke-signed-in.spec.ts

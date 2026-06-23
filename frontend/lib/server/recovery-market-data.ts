@@ -115,102 +115,54 @@ const DAILY_SELECT = [
   "sma_200",
 ].join(",");
 
-const RECOVERY_SCAN_ROW_CAP = 5000;
-const UNCHANGED_MOVE_THRESHOLD_PCT = 0.05;
-
-type FilterableQuery = {
-  gte(column: string, value: number | string): FilterableQuery;
-  lte(column: string, value: number | string): FilterableQuery;
-  gt(column: string, value: number | string): FilterableQuery;
-  lt(column: string, value: number | string): FilterableQuery;
-  eq(column: string, value: boolean | number | string): FilterableQuery;
-  in(column: string, values: string[]): FilterableQuery;
-};
-
-function filterBool(filters: ScanFilters, key: string): boolean | null {
-  const value = filters[key];
-  return value === true ? true : value === false ? false : null;
-}
-
-export function applyRecoveryDbFilters(query: FilterableQuery, filters: ScanFilters): FilterableQuery {
-  let q: FilterableQuery = query;
-  const num = (key: string) => numberValue(filters[key]);
-
-  const priceMin = num("price_min");
-  if (priceMin != null) q = q.gte("close", priceMin);
-  const priceMax = num("price_max");
-  if (priceMax != null) q = q.lte("close", priceMax);
-  const highMin = num("high_min");
-  if (highMin != null) q = q.gte("high", highMin);
-  const lowMax = num("low_max");
-  if (lowMax != null) q = q.lte("low", lowMax);
-  const volumeMin = num("volume_min");
-  if (volumeMin != null) q = q.gte("volume", volumeMin);
-  const volumeMax = num("volume_max");
-  if (volumeMax != null) q = q.lte("volume", volumeMax);
-  const rsiMin = num("rsi_min");
-  if (rsiMin != null) q = q.gte("rsi_14", rsiMin);
-  const rsiMax = num("rsi_max");
-  if (rsiMax != null) q = q.lte("rsi_14", rsiMax);
-  const atrMin = num("atr_min");
-  if (atrMin != null) q = q.gte("atr_14", atrMin);
-  const atrMax = num("atr_max");
-  if (atrMax != null) q = q.lte("atr_14", atrMax);
-  const turnoverMin = num("turnover_min");
-  if (turnoverMin != null) q = q.gte("turnover", turnoverMin);
-  const turnoverMax = num("turnover_max");
-  if (turnoverMax != null) q = q.lte("turnover", turnoverMax);
-  const turnoverMinCr = num("turnover_min_cr");
-  if (turnoverMinCr != null) q = q.gte("turnover", turnoverMinCr * 10_000_000);
-  const pctChangeMin = num("pct_change_min");
-  if (pctChangeMin != null) q = q.gte("pct_change", pctChangeMin);
-  const pctChangeMax = num("pct_change_max");
-  if (pctChangeMax != null) q = q.lte("pct_change", pctChangeMax);
-  const gapPctMin = num("gap_pct_min");
-  if (gapPctMin != null) q = q.gte("gap_pct", gapPctMin);
-  const gapPctMax = num("gap_pct_max");
-  if (gapPctMax != null) q = q.lte("gap_pct", gapPctMax);
-  const adxMin = num("adx_min");
-  if (adxMin != null) q = q.gte("adx_14", adxMin);
-  const adxMax = num("adx_max");
-  if (adxMax != null) q = q.lte("adx_14", adxMax);
-  const volumeRatioMin = num("volume_ratio_min");
-  if (volumeRatioMin != null) q = q.gte("volume_ratio", volumeRatioMin);
-  const volumeRatioMax = num("volume_ratio_max");
-  if (volumeRatioMax != null) q = q.lte("volume_ratio", volumeRatioMax);
-  const rsScoreMin = num("rs_score_min");
-  if (rsScoreMin != null) q = q.gte("rs_score", rsScoreMin);
-  const rsScoreMax = num("rs_score_max");
-  if (rsScoreMax != null) q = q.lte("rs_score", rsScoreMax);
-  const w52hMax = num("w52h_pct_max") ?? num("week_52_high_pct_max");
-  if (w52hMax != null) q = q.lte("w52h_pct", w52hMax);
-  const w52lMin = num("w52l_pct_min");
-  if (w52lMin != null) q = q.gte("w52l_pct", w52lMin);
-  const avgVolume50dMin = num("avg_volume_50d_min");
-  if (avgVolume50dMin != null) q = q.gte("avg_volume_50d", avgVolume50dMin);
-  const avgVolume50dMax = num("avg_volume_50d_max");
-  if (avgVolume50dMax != null) q = q.lte("avg_volume_50d", avgVolume50dMax);
-  const pricePerf6mMin = num("price_perf_6m_min");
-  if (pricePerf6mMin != null) q = q.gte("price_perf_6m_pct", pricePerf6mMin);
-  const pricePerf6mMax = num("price_perf_6m_max");
-  if (pricePerf6mMax != null) q = q.lte("price_perf_6m_pct", pricePerf6mMax);
-  const ema200SlopeMin = num("ema_200_slope_30d_min");
-  if (ema200SlopeMin != null) q = q.gte("ema_200_slope_30d", ema200SlopeMin);
-  const ema200SlopeMax = num("ema_200_slope_30d_max");
-  if (ema200SlopeMax != null) q = q.lte("ema_200_slope_30d", ema200SlopeMax);
-  if (filterBool(filters, "ema_200_trending_up") === true) q = q.gt("ema_200_slope_30d", 0);
-  if (filterBool(filters, "is_inside_bar") === true) q = q.eq("is_inside_bar", true);
-  if (filterBool(filters, "is_outside_bar") === true) q = q.eq("is_outside_bar", true);
-  if (filterBool(filters, "macd_hist_positive") === true) q = q.gt("macd_hist", 0);
-  if (filterBool(filters, "macd_hist_positive") === false) q = q.lt("macd_hist", 0);
-
-  const series = Array.isArray(filters.series) ? filters.series.map(String) : [];
-  if (series.length) q = q.in("stock_universe.series", series);
-
-  return q;
-}
-
 const DAILY_WITH_UNIVERSE_SELECT = `${DAILY_SELECT},stock_universe!daily_ohlcv_symbol_fkey!inner(symbol,company_name,series,sector,is_active,market,currency,market_cap_cr,pe_ratio,pb_ratio,eps,dividend_yield,debt_to_equity,roe,roce)`;
+const RECOVERY_ROWS_PAGE_SIZE = 1000;
+const RECOVERY_ROWS_MAX = 4000;
+const RECOVERY_ROWS_CACHE_TTL_MS = 30_000;
+const RECOVERY_SCANNER_MAX_PAGE = 20;
+const RECOVERY_SCANNER_ARRAY_FILTER_LIMIT = 10;
+const RECOVERY_SCANNER_NUMERIC_FILTERS = new Set([
+  "price_min",
+  "price_max",
+  "pct_change_min",
+  "pct_change_max",
+  "volume_min",
+  "volume_max",
+  "volume_ratio_min",
+  "volume_ratio_max",
+  "turnover_min",
+  "turnover_min_cr",
+  "rsi_min",
+  "rsi_max",
+  "atr_min",
+  "atr_max",
+  "w52h_pct_max",
+  "week_52_high_pct_max",
+  "w52l_pct_min",
+  "rs_score_min",
+]);
+const RECOVERY_SCANNER_BOOLEAN_FILTERS = new Set([
+  "above_ema20",
+  "above_ema50",
+  "above_ema200",
+  "ema20_above_ema50",
+  "new_52w_high",
+]);
+const RECOVERY_SCANNER_ARRAY_FILTERS = new Set(["series", "sectors"]);
+const RECOVERY_SCANNER_SORT_KEYS = new Set([
+  "volume_ratio",
+  "pct_change",
+  "turnover",
+  "turnover_cr",
+  "rsi_14",
+  "atr_14",
+  "week_52_high_pct",
+  "week_52_low_pct",
+  "rs_score",
+]);
+const RECOVERY_SCANNER_PAGE_SIZES = new Set([0, 25, 50, 150, 200]);
+
+let latestRowsCache: { tradeDate: string; expiresAt: number; rows: DailyRow[] } | null = null;
 
 function cleanEnv(value?: string | null): string {
   return String(value ?? "").trim().replace(/^['"`]|['"`]$/g, "");
@@ -263,6 +215,52 @@ function numberValue(value: unknown): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
+function stringArrayFilter(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => String(item).trim())
+    .filter((item) => item.length > 0 && item.length <= 64)
+    .slice(0, RECOVERY_SCANNER_ARRAY_FILTER_LIMIT);
+}
+
+export function normalizeRecoveryScannerRequest(body: {
+  filters?: ScanFilters;
+  sort_by?: string;
+  sort_order?: string;
+  page?: number;
+  page_size?: number;
+}) {
+  const inputFilters = body.filters && typeof body.filters === "object" && !Array.isArray(body.filters)
+    ? body.filters
+    : {};
+  const filters: ScanFilters = {};
+
+  for (const key of RECOVERY_SCANNER_NUMERIC_FILTERS) {
+    const value = numberValue(inputFilters[key]);
+    if (value != null) filters[key] = value;
+  }
+  for (const key of RECOVERY_SCANNER_BOOLEAN_FILTERS) {
+    if (inputFilters[key] === true) filters[key] = true;
+  }
+  for (const key of RECOVERY_SCANNER_ARRAY_FILTERS) {
+    const value = stringArrayFilter(inputFilters[key]);
+    if (value.length) filters[key] = value;
+  }
+
+  const sortBy = RECOVERY_SCANNER_SORT_KEYS.has(String(body.sort_by || "")) ? String(body.sort_by) : "volume_ratio";
+  const rawPageSize = Number(body.page_size);
+  const pageSize = RECOVERY_SCANNER_PAGE_SIZES.has(rawPageSize) ? rawPageSize : 25;
+  const page = Math.min(Math.max(Number(body.page) || 1, 1), RECOVERY_SCANNER_MAX_PAGE);
+
+  return {
+    filters,
+    sort_by: sortBy,
+    sort_order: body.sort_order === "asc" ? "asc" : "desc",
+    page,
+    page_size: pageSize,
+  };
+}
+
 function pctChange(row: DailyRow): number | null {
   const explicit = numberValue(row.pct_change);
   if (explicit != null) return explicit;
@@ -311,29 +309,6 @@ function candleFromRow(row: DailyRow) {
     ema_50: numberValue(row.ema_50),
     ema_200: numberValue(row.ema_200),
   };
-}
-
-function intelligenceDataWarnings(row: DailyRow): string[] {
-  const warnings: string[] = [];
-  if (numberValue(row.ema_150) == null) {
-    warnings.push("EMA 150 is unavailable until the scanner intelligence migration is applied/backfilled.");
-  }
-  if (numberValue(row.ema_200_slope_30d) == null) {
-    warnings.push("EMA 200 slope is unavailable until the scanner intelligence migration is applied/backfilled.");
-  }
-  if (numberValue(row.avg_volume_50d) == null) {
-    warnings.push("50-day average volume is unavailable.");
-  }
-  if (numberValue(row.price_perf_6m_pct) == null) {
-    warnings.push("6-month price performance is unavailable until the scanner intelligence migration is applied/backfilled.");
-  }
-  if (numberValue(row.high_3w) == null || numberValue(row.low_3w) == null) {
-    warnings.push("3-week box height is unavailable until the scanner intelligence migration is applied/backfilled.");
-  }
-  if (row.is_nr7 == null) {
-    warnings.push("NR7 range flag is unavailable.");
-  }
-  return warnings;
 }
 
 function scanResultFromRow(row: DailyRow) {
@@ -398,7 +373,6 @@ function scanResultFromRow(row: DailyRow) {
     roe: numberValue(meta.roe),
     roce: numberValue(meta.roce),
     match_reasons: recoveryMatchReasons(row),
-    data_warnings: intelligenceDataWarnings(row),
   };
 }
 
@@ -420,130 +394,6 @@ export async function getLatestTradeDate(client = getRecoverySupabaseClient()): 
     .limit(1);
   if (error) throw error;
   return data?.[0]?.trade_date ?? null;
-}
-
-function isActiveNseEqRow(row: DailyRow): boolean {
-  const meta = firstUniverse(row);
-  return meta.series === "EQ" && meta.market === "NSE" && meta.is_active !== false;
-}
-
-function sessionPctChange(row: DailyRow): number | null {
-  const explicit = pctChange(row);
-  if (explicit == null) return null;
-  return explicit;
-}
-
-function isAdvance(pct: number | null): boolean {
-  return pct != null && pct > UNCHANGED_MOVE_THRESHOLD_PCT;
-}
-
-function isDecline(pct: number | null): boolean {
-  return pct != null && pct < -UNCHANGED_MOVE_THRESHOLD_PCT;
-}
-
-function emaBreadthPct(rows: DailyRow[]): { ema20: number; ema50: number; ema200: number } {
-  const eligible = rows.filter((row) => numberValue(row.close) != null);
-  const ema20Valid = eligible.filter((row) => numberValue(row.ema_20) != null);
-  const ema50Valid = eligible.filter((row) => numberValue(row.ema_50) != null);
-  const ema200Valid = eligible.filter((row) => numberValue(row.ema_200) != null);
-  const above = (target: DailyRow[], emaKey: "ema_20" | "ema_50" | "ema_200") =>
-    target.filter((row) => {
-      const close = numberValue(row.close);
-      const ema = numberValue(row[emaKey]);
-      return close != null && ema != null && close >= ema;
-    }).length;
-  return {
-    ema20: ema20Valid.length ? Number(((above(ema20Valid, "ema_20") / ema20Valid.length) * 100).toFixed(1)) : 0,
-    ema50: ema50Valid.length ? Number(((above(ema50Valid, "ema_50") / ema50Valid.length) * 100).toFixed(1)) : 0,
-    ema200: ema200Valid.length ? Number(((above(ema200Valid, "ema_200") / ema200Valid.length) * 100).toFixed(1)) : 0,
-  };
-}
-
-function highsLowsCounts(rows: DailyRow[]): { highs: number; lows: number } {
-  let highs = rows.filter((row) => row.is_new_52w_high).length;
-  let lows = rows.filter((row) => row.is_new_52w_low).length;
-  if (highs === 0) {
-    highs = rows.filter((row) => {
-      const close = numberValue(row.close);
-      const high = numberValue(row.week_52_high);
-      return close != null && high != null && close >= high * 0.995;
-    }).length;
-  }
-  if (lows === 0) {
-    lows = rows.filter((row) => {
-      const close = numberValue(row.close);
-      const low = numberValue(row.week_52_low);
-      return close != null && low != null && close <= low * 1.005;
-    }).length;
-  }
-  return { highs, lows };
-}
-
-function moverFromRow(row: DailyRow) {
-  const meta = firstUniverse(row);
-  return {
-    symbol: row.symbol,
-    company_name: meta.company_name || row.symbol,
-    close: numberValue(row.close) ?? 0,
-    pct_change: pctChange(row) ?? 0,
-    volume_ratio: volumeRatio(row),
-  };
-}
-
-async function listRecentTradeDates(client: SupabaseClient, endDate: string, limit = 260): Promise<string[]> {
-  const { data, error } = await client
-    .from("daily_ohlcv")
-    .select("trade_date")
-    .lte("trade_date", endDate)
-    .order("trade_date", { ascending: false })
-    .limit(limit * 20);
-  if (error) throw error;
-  const seen = new Set<string>();
-  const ordered: string[] = [];
-  for (const row of data ?? []) {
-    const tradeDate = row.trade_date as string | undefined;
-    if (!tradeDate || seen.has(tradeDate)) continue;
-    seen.add(tradeDate);
-    ordered.push(tradeDate);
-    if (ordered.length >= limit) break;
-  }
-  return ordered;
-}
-
-export async function getLatestCompleteTradeDate(client = getRecoverySupabaseClient()): Promise<string | null> {
-  const universeActive = await getUniverseCount(client);
-  const requiredRows = universeActive ? Math.max(1000, Math.floor(universeActive * 0.75)) : 1000;
-  const { data, error } = await client
-    .from("daily_ohlcv")
-    .select("trade_date,symbol,close,prev_close,pct_change,stock_universe!daily_ohlcv_symbol_fkey!inner(series,market,is_active)")
-    .order("trade_date", { ascending: false })
-    .limit(20000);
-  if (error) throw error;
-  const dateRows = new Map<string, DailyRow[]>();
-  for (const row of (data ?? []) as unknown as DailyRow[]) {
-    const meta = firstUniverse(row);
-    if (meta.series !== "EQ" || meta.market !== "NSE" || meta.is_active === false) continue;
-    const close = numberValue(row.close);
-    if (close == null || close <= 0) continue;
-    const prev = numberValue(row.prev_close);
-    if ((prev == null || prev <= 0) && row.pct_change == null) continue;
-    const bucket = dateRows.get(row.trade_date) ?? [];
-    bucket.push(row);
-    dateRows.set(row.trade_date, bucket);
-  }
-  const sortedDates = [...dateRows.keys()].sort((a, b) => b.localeCompare(a));
-  for (const tradeDate of sortedDates) {
-    const rows = dateRows.get(tradeDate) ?? [];
-    if (rows.length < requiredRows) continue;
-    const advances = rows.filter((row) => isAdvance(sessionPctChange(row))).length;
-    const declines = rows.filter((row) => isDecline(sessionPctChange(row))).length;
-    const unchanged = Math.max(rows.length - advances - declines, 0);
-    const movingRatio = (advances + declines) / rows.length;
-    const unchangedRatio = unchanged / rows.length;
-    if (unchangedRatio >= 0.85 && movingRatio < 0.08) continue;
-    return tradeDate;
-  }
-  return sortedDates[0] ?? null;
 }
 
 export async function getUniverseCount(client = getRecoverySupabaseClient()): Promise<number | null> {
@@ -769,36 +619,22 @@ function rsi(values: number[], period: number, candles: Array<{ time: string }>)
 
 export async function getRecoveryMarketOverview() {
   const client = getRecoverySupabaseClient();
-  const latest = await getLatestCompleteTradeDate(client);
+  const latest = await getLatestTradeDate(client);
   if (!latest) return unavailable("Market summary is temporarily unavailable.", 503);
   const rows = await latestRows(client, latest);
-  if (!rows.length) return unavailable("Market summary is temporarily unavailable.", 503);
   const universeActive = await getUniverseCount(client);
   const metadata = sourceMetadata(latest, rows.length, universeActive);
-  const advances = rows.filter((row) => isAdvance(sessionPctChange(row))).length;
-  const declines = rows.filter((row) => isDecline(sessionPctChange(row))).length;
+  const advances = rows.filter((row) => (pctChange(row) ?? 0) > 0).length;
+  const declines = rows.filter((row) => (pctChange(row) ?? 0) < 0).length;
   const unchanged = Math.max(rows.length - advances - declines, 0);
-  const dailyCounts = highsLowsCounts(rows);
   const sectorMap = new Map<string, DailyRow[]>();
   for (const row of rows) {
     const sector = firstUniverse(row).sector || "Unclassified";
     sectorMap.set(sector, [...(sectorMap.get(sector) ?? []), row]);
   }
   const sector_breadth = Array.from(sectorMap.entries()).map(([sector, sectorRows]) => {
-    const sectorAdvances = sectorRows.filter((row) => isAdvance(sessionPctChange(row))).length;
-    const sectorDeclines = sectorRows.filter((row) => isDecline(sessionPctChange(row))).length;
-    const advanceBreadth = sectorRows.length
-      ? Number(((sectorAdvances / sectorRows.length) * 100).toFixed(1))
-      : 0;
-    const avgPct = sectorRows.length
-      ? Number((sectorRows.reduce((sum, row) => sum + (sessionPctChange(row) ?? 0), 0) / sectorRows.length).toFixed(2))
-      : 0;
-    const ema20Valid = sectorRows.filter((row) => numberValue(row.ema_20) != null);
-    const aboveEma20 = ema20Valid.filter((row) => {
-      const close = numberValue(row.close);
-      const ema = numberValue(row.ema_20);
-      return close != null && ema != null && close >= ema;
-    }).length;
+    const sectorAdvances = sectorRows.filter((row) => (pctChange(row) ?? 0) > 0).length;
+    const sectorDeclines = sectorRows.filter((row) => (pctChange(row) ?? 0) < 0).length;
     return {
       sector,
       total: sectorRows.length,
@@ -806,91 +642,16 @@ export async function getRecoveryMarketOverview() {
       declines: sectorDeclines,
       unchanged: Math.max(sectorRows.length - sectorAdvances - sectorDeclines, 0),
       ad_ratio: sectorDeclines > 0 ? Number((sectorAdvances / sectorDeclines).toFixed(2)) : sectorAdvances,
-      avg_pct_change: avgPct,
-      breadth_pct: advanceBreadth,
-      advance_breadth_pct: advanceBreadth,
-      above_ema20_pct: ema20Valid.length ? Number(((aboveEma20 / ema20Valid.length) * 100).toFixed(1)) : null,
-      basis: "advancing_constituents",
+      above_ema200_pct: percent(sectorRows, (row) => numberValue(row.close) != null && numberValue(row.ema_200) != null && numberValue(row.close)! >= numberValue(row.ema_200)!),
     };
-  }).sort((a, b) => b.avg_pct_change - a.avg_pct_change);
-  const withPct = rows.filter((row) => sessionPctChange(row) != null);
-  const top_gainers = [...withPct]
-    .sort((a, b) => (sessionPctChange(b) ?? -999) - (sessionPctChange(a) ?? -999))
-    .slice(0, 5)
-    .map(moverFromRow);
-  const top_losers = [...withPct]
-    .sort((a, b) => (sessionPctChange(a) ?? 999) - (sessionPctChange(b) ?? 999))
-    .slice(0, 5)
-    .map(moverFromRow);
-  const most_active = [...rows]
-    .sort((a, b) => (numberValue(b.volume) ?? 0) - (numberValue(a.volume) ?? 0))
-    .slice(0, 5)
-    .map(moverFromRow);
-  const emaDay = emaBreadthPct(rows);
-  const tradeDates = await listRecentTradeDates(client, latest);
-  const periodOffsets: Record<"week" | "month" | "year", number> = {
-    week: 4,
-    month: 21,
-    year: 251,
-  };
-  const ema_breadth_by_period: Record<string, { ema20: number; ema50: number; ema200: number } | null> = {
-    day: emaDay,
-  };
-  for (const period of ["week", "month", "year"] as const) {
-    const tradeDate = tradeDates[periodOffsets[period]];
-    if (!tradeDate) {
-      ema_breadth_by_period[period] = null;
-      continue;
-    }
-    const periodRows = await latestRows(client, tradeDate);
-    ema_breadth_by_period[period] = periodRows.length ? emaBreadthPct(periodRows) : null;
-  }
-  let weeklyHighs = 0;
-  let weeklyLows = 0;
-  for (const tradeDate of tradeDates.slice(0, 5)) {
-    const periodRows = await latestRows(client, tradeDate);
-    const counts = highsLowsCounts(periodRows);
-    weeklyHighs += counts.highs;
-    weeklyLows += counts.lows;
-  }
-  const ema_breadth_daily_history: { trade_date: string; ema20: number; ema50: number; ema200: number }[] = [];
-  for (const tradeDate of tradeDates.slice(0, 15)) {
-    const periodRows = await latestRows(client, tradeDate);
-    if (!periodRows.length) continue;
-    const breadth = emaBreadthPct(periodRows);
-    ema_breadth_daily_history.push({
-      trade_date: tradeDate,
-      ema20: breadth.ema20,
-      ema50: breadth.ema50,
-      ema200: breadth.ema200,
-    });
-  }
-  const lookbackSteps: Record<"day" | "week" | "month" | "year", { count: number; step: number }> = {
-    day: { count: 7, step: 1 },
-    week: { count: 7, step: 5 },
-    month: { count: 7, step: 21 },
-    year: { count: 7, step: 251 },
-  };
-  const ema_breadth_lookback: Record<string, { trade_date: string; ema20: number; ema50: number; ema200: number }[]> = {};
-  for (const [granularity, config] of Object.entries(lookbackSteps)) {
-    const points: { trade_date: string; ema20: number; ema50: number; ema200: number }[] = [];
-    for (let index = 0; index < config.count; index += 1) {
-      const offset = index * config.step;
-      const tradeDate = tradeDates[offset];
-      if (!tradeDate) break;
-      const periodRows = await latestRows(client, tradeDate);
-      if (!periodRows.length) continue;
-      const breadth = emaBreadthPct(periodRows);
-      points.push({
-        trade_date: tradeDate,
-        ema20: breadth.ema20,
-        ema50: breadth.ema50,
-        ema200: breadth.ema200,
-      });
-    }
-    ema_breadth_lookback[granularity] = points;
-  }
-  const ema200Pct = emaDay.ema200;
+  }).sort((a, b) => b.total - a.total);
+  const movers = [...rows].sort((a, b) => (pctChange(b) ?? -999) - (pctChange(a) ?? -999)).slice(0, 8).map(scanResultFromRow);
+  const losers = [...rows].sort((a, b) => (pctChange(a) ?? 999) - (pctChange(b) ?? 999)).slice(0, 8).map(scanResultFromRow);
+  const active = [...rows].sort((a, b) => (numberValue(b.volume) ?? 0) - (numberValue(a.volume) ?? 0)).slice(0, 8).map(scanResultFromRow);
+  const aboveEma20 = rows.filter((row) => numberValue(row.close) != null && numberValue(row.ema_20) != null && numberValue(row.close)! >= numberValue(row.ema_20)!).length;
+  const aboveEma50 = rows.filter((row) => numberValue(row.close) != null && numberValue(row.ema_50) != null && numberValue(row.close)! >= numberValue(row.ema_50)!).length;
+  const aboveEma200 = rows.filter((row) => numberValue(row.close) != null && numberValue(row.ema_200) != null && numberValue(row.close)! >= numberValue(row.ema_200)!).length;
+  const ema200Pct = percent(rows, (row) => numberValue(row.close) != null && numberValue(row.ema_200) != null && numberValue(row.close)! >= numberValue(row.ema_200)!);
   return {
     trade_date: latest,
     advances,
@@ -898,42 +659,23 @@ export async function getRecoveryMarketOverview() {
     unchanged,
     total: rows.length,
     advance_decline_ratio: declines > 0 ? Number((advances / declines).toFixed(2)) : advances,
-    new_52w_highs: dailyCounts.highs,
-    new_52w_lows: dailyCounts.lows,
-    above_ema20_count: rows.filter((row) => {
-      const close = numberValue(row.close);
-      const ema = numberValue(row.ema_20);
-      return close != null && ema != null && close >= ema;
-    }).length,
-    above_ema20_pct: emaDay.ema20,
-    above_ema50_count: rows.filter((row) => {
-      const close = numberValue(row.close);
-      const ema = numberValue(row.ema_50);
-      return close != null && ema != null && close >= ema;
-    }).length,
-    above_ema50_pct: emaDay.ema50,
-    above_ema200_count: rows.filter((row) => {
-      const close = numberValue(row.close);
-      const ema = numberValue(row.ema_200);
-      return close != null && ema != null && close >= ema;
-    }).length,
+    new_52w_highs: rows.filter((row) => row.is_new_52w_high).length,
+    new_52w_lows: rows.filter((row) => row.is_new_52w_low).length,
+    above_ema20_count: aboveEma20,
+    above_ema20_pct: percent(rows, (row) => numberValue(row.close) != null && numberValue(row.ema_20) != null && numberValue(row.close)! >= numberValue(row.ema_20)!),
+    above_ema50_count: aboveEma50,
+    above_ema50_pct: percent(rows, (row) => numberValue(row.close) != null && numberValue(row.ema_50) != null && numberValue(row.close)! >= numberValue(row.ema_50)!),
+    above_ema200_count: aboveEma200,
     above_ema200_pct: ema200Pct,
-    ema_breadth_by_period,
-    ema_breadth_daily_history,
-    ema_breadth_lookback,
-    highs_lows_by_period: {
-      daily: dailyCounts,
-      weekly: { highs: weeklyHighs, lows: weeklyLows },
-    },
     market_phase: ema200Pct >= 60 ? "Bullish" : ema200Pct <= 40 ? "Bearish" : "Neutral",
-    market_phase_desc: "Computed from latest complete NSE EQ EOD breadth (NSE bhavcopy via Supabase).",
+    market_phase_desc: "Computed from latest complete EOD breadth during Vercel read-only recovery.",
     sector_breadth,
-    sector_breadth_basis: "advancing_constituents",
+    sector_breadth_basis: "latest_complete_session",
     sector_breadth_source: "daily_ohlcv",
     top_sectors: sector_breadth.slice(0, 5),
-    top_gainers,
-    top_losers,
-    most_active,
+    top_gainers: movers,
+    top_losers: losers,
+    most_active: active,
     indices: [],
     market_data_source: "vercel_readonly_recovery",
     is_live: false,
@@ -967,29 +709,21 @@ export async function getRecoveryMarketSummary() {
 }
 
 export async function runRecoveryScanner(body: { filters?: ScanFilters; sort_by?: string; sort_order?: string; page?: number; page_size?: number }) {
-  const filters = body.filters ?? {};
-  if (filters.vcp_contraction === true) {
-    return unavailable(
-      "VCP contraction scans require the full scanner API with multi-day pivot analysis. Recovery mode only supports single-day EOD filters.",
-      422,
-    );
-  }
+  const request = normalizeRecoveryScannerRequest(body);
   const client = getRecoverySupabaseClient();
-  const latest = await getLatestCompleteTradeDate(client);
+  const latest = await getLatestTradeDate(client);
   if (!latest) return unavailable("No complete trade date is available for scanner.", 503);
-  const rows = await latestRows(client, latest, filters);
-  const filtered = rows.filter((row) => rowMatchesFilters(row, filters));
-  const sortKey = String(body.sort_by || "volume_ratio");
-  const direction = body.sort_order === "asc" ? 1 : -1;
+  const rows = await latestRows(client, latest);
+  const filtered = rows.filter((row) => rowMatchesFilters(row, request.filters));
+  const sortKey = request.sort_by;
+  const direction = request.sort_order === "asc" ? 1 : -1;
   filtered.sort((a, b) => direction * ((scanSortValue(a, sortKey) ?? -Infinity) - (scanSortValue(b, sortKey) ?? -Infinity)));
-  const pageSize = [0, 25, 50, 150, 200].includes(Number(body.page_size)) ? Number(body.page_size) : 25;
-  const page = Math.max(Number(body.page) || 1, 1);
+  const pageSize = request.page_size;
+  const page = request.page;
   const capped = filtered.slice(0, 200);
   const paged = pageSize === 0 ? capped : capped.slice((page - 1) * pageSize, page * pageSize);
   const coverage = await getLatestCoverage(client, latest);
   const metadata = sourceMetadata(latest, coverage.symbols_count, coverage.universe_active);
-  const scanResults = paged.map(scanResultFromRow);
-  const incomplete_indicator_count = scanResults.filter((result) => (result.data_warnings?.length ?? 0) > 0).length;
   return {
     trade_date: latest,
     total_matches: filtered.length,
@@ -1000,36 +734,46 @@ export async function runRecoveryScanner(body: { filters?: ScanFilters; sort_by?
     page_size: pageSize,
     total_pages: pageSize === 0 ? 1 : Math.max(1, Math.ceil(capped.length / pageSize)),
     visible_count: paged.length,
-    results: scanResults,
+    results: paged.map(scanResultFromRow),
     source_metadata: metadata,
     mode: metadata.mode,
     source: metadata.source_name,
     coverage_pct: metadata.coverage_pct,
     universe_size: coverage.universe_active,
-    incomplete_indicator_count,
     recovery_mode: "vercel_readonly",
   };
 }
 
-async function latestRows(client: SupabaseClient, latest: string, filters: ScanFilters = {}) {
+export function clearRecoveryMarketDataCache() {
+  latestRowsCache = null;
+}
+
+export async function latestRows(client: SupabaseClient, latest: string) {
+  const now = Date.now();
+  if (latestRowsCache && latestRowsCache.tradeDate === latest && latestRowsCache.expiresAt > now) {
+    return latestRowsCache.rows;
+  }
+
   const rows: DailyRow[] = [];
-  const pageSize = 1000;
-  for (let offset = 0; offset < RECOVERY_SCAN_ROW_CAP; offset += pageSize) {
-    const baseQuery = client
+  for (let offset = 0; offset < RECOVERY_ROWS_MAX; offset += RECOVERY_ROWS_PAGE_SIZE) {
+    const end = Math.min(offset + RECOVERY_ROWS_PAGE_SIZE - 1, RECOVERY_ROWS_MAX - 1);
+    const { data, error } = await client
       .from("daily_ohlcv")
       .select(DAILY_WITH_UNIVERSE_SELECT)
       .eq("trade_date", latest)
-      .eq("stock_universe.series", "EQ")
-      .eq("stock_universe.market", "NSE")
-      .eq("stock_universe.is_active", true);
-    const filteredQuery = applyRecoveryDbFilters(baseQuery as unknown as FilterableQuery, filters);
-    const { data, error } = await (filteredQuery as unknown as typeof baseQuery).range(offset, offset + pageSize - 1);
+      .range(offset, end);
     if (error) throw error;
     const page = (data ?? []) as unknown as DailyRow[];
-    rows.push(...page.filter(isActiveNseEqRow));
-    if (page.length < pageSize) break;
+    rows.push(...page);
+    if (page.length < RECOVERY_ROWS_PAGE_SIZE) break;
   }
+  latestRowsCache = { tradeDate: latest, rows, expiresAt: now + RECOVERY_ROWS_CACHE_TTL_MS };
   return rows;
+}
+
+function percent(rows: DailyRow[], predicate: (row: DailyRow) => boolean): number {
+  if (!rows.length) return 0;
+  return Number(((rows.filter(predicate).length / rows.length) * 100).toFixed(1));
 }
 
 export function rowMatchesFilters(row: DailyRow, filters: ScanFilters): boolean {

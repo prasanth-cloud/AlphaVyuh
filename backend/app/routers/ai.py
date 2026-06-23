@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.middleware.auth import get_current_user_id
 from app.services.rate_limit import ai_limiter
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 logger = logging.getLogger(__name__)
 

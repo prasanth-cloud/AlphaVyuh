@@ -47,6 +47,7 @@ import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
 import { getWatchlistChartRequest } from '@/lib/watchlist-chart-range'
+import { FirstRunBanner } from '@/components/FirstRunBanner'
 
 const DashboardDataConfidence = dynamic(() => import('@/components/dashboard/DashboardDataConfidence').then(module => module.DashboardDataConfidence))
 const DashboardWorkflowFunnel = dynamic(() => import('@/components/dashboard/DashboardWorkflowFunnel').then(module => module.DashboardWorkflowFunnel))
@@ -540,6 +541,7 @@ export default function DashboardPage() {
         <div>
           {data ? (
             <>
+              <FirstRunBanner />
               <MarketOverviewDesk data={data} dataHealth={dataHealth} marketError={error} />
               <DashboardWorkspaceSwitcher value={dashboardView} onChange={handleDashboardViewChange} />
               {visibleDashboardSections.has('data') && <DashboardDataConfidence

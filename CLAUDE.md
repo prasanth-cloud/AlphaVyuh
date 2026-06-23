@@ -254,24 +254,40 @@ If any of these go out of date, updating them is part of the task that broke the
 
 ## 8. Current status (update this file when things change)
 
-- **Phase:** Scaffolding → MVP
-- **Live:** Landing page at alphavyuh.com
-- **Next milestones:** (1) Auth + onboarding, (2) Kite adapter + paper-trading mode, (3) EOD scanner (Momentum preset live), (4) Chart with order placement UI
+- **Phase:** MVP complete (Goals 01–13 merged 2026-06-20)
+- **Live:** Landing page + public `/screener` at alphavyuh.com
+- **What shipped in Goals 01–13:**
+  - Auth callback route for email confirmation / OAuth (Goal 01)
+  - JWT hardening — service-role annotations + `get_user_client()` (Goal 02)
+  - Railway keep-alive cron + Sentry on frontend & backend (Goal 03)
+  - Dashboard quick-launch tiles + scanner data provenance badge (Goal 04)
+  - Scanner saved presets + active filter count chip + RS score column (Goal 05)
+  - Chart SSR preload + drawing persistence + W/M timeframes + log trade button (Goal 06)
+  - Journal trade form with auto-calculated P&L, risk, R-multiple + stats panel (Goal 07)
+  - AI journal review for Pro plan users (Goal 08)
+  - Toast system (sonner) + onboarding banner + empty states + PWA manifest (Goal 09)
+  - Kite token health UI + broker failure banner + Razorpay upgrade prompt (Goal 10)
+  - EOD email digest via Resend + share chart OG image (Goal 11)
+  - Landing page hero + public `/screener` for SEO + next-sitemap (Goal 12)
+  - Core workflow E2E test + verify-live.sh script (Goal 13)
+  - Security hardening: RLS boundaries, workflow input validation, launch gates (Codex PRs #345–347)
+  - Vercel Web Analytics (#376)
+- **Next milestones:** (1) Apply pending migrations to staging/prod, (2) Kite adapter + paper-trading mode, (3) RS score calibration, (4) Broker credential key rotation script
 - **Staging:** `alphavyuh-staging` Supabase project live (`nltfedbnbbrclcufoaly`, `us-east-2`). Push migrations with `bun run db:push:staging`. See `docs/environments.md` for the full promotion flow.
 - **Known gaps:**
-  - **Schema provenance drift (001–031):** Prod was built through mixed paths (local files, Supabase MCP, and dashboard SQL), producing 26 timestamp-based migration history entries with no local file equivalents. On 2026-04-23: repaired history via `migration repair` (marked 001–031 applied, 26 timestamps reverted), then pushed 032 cleanly. Schema objects on prod are correct and functional. **Object equivalence between prod and what a fresh `supabase db reset` would produce has NOT been verified** — see `docs/decisions/010-schema-provenance-drift.md` for the full risk list (RLS policy names, trigger names, function signatures) and the `pg_dump` diff procedure. **Deadline: 2026-05-31**, or before any migration that alters objects from 001–031, whichever comes first.
-  - No production monitoring yet (Sentry to be added)
+  - **Pending migrations:** Goals 08–11 added migrations 043–047. Codex PRs added 4 timestamp-based security migrations. These must be applied to staging then prod before features are live.
+  - **Schema provenance drift (001–031):** Prod was built through mixed paths (local files, Supabase MCP, and dashboard SQL). See `docs/decisions/010-schema-provenance-drift.md`. **Deadline: overdue (was 2026-05-31)** — verify before next migration that alters objects from 001–031.
+  - **Sentry wired for both frontend and backend.** Set `SENTRY_DSN` on Railway and `NEXT_PUBLIC_SENTRY_DSN` + `SENTRY_AUTH_TOKEN` + `SENTRY_ORG` + `SENTRY_PROJECT` on Vercel to activate.
   - Broker adapter interface not finalized
-  - **Email confirmation is OFF** in Supabase. Before enabling it (or adding magic links / OAuth), a `/auth/callback` Route Handler must be built to exchange the code for a session and set cookies. Without it, confirmation links will 404 and the user will not get a session.
-  - **Broker credential key rotation is NOT implemented.** `scripts/rotate_broker_key.py.TODO` describes the spec. A rotation script and runbook MUST land before the first real broker credential is stored in production. This is a **hard blocker on exiting MVP** — see `docs/decisions/002-broker-credentials.md §Q3`.
-  - **All-NSE VCP latency resolved.** `asyncio.gather` (concurrency cap 4) brought p95 from 5,327ms (marginal) to 3,059–3,655ms (+1,345–1,941ms headroom). See `docs/benchmarks/m3-production-env.md §8`.
-  - **Fundamentals deferred to post-MVP.** PE and market cap refresh daily in bhavcopy; quarterly metrics (ROE, ROCE, PB, D/E) shown with "as of [date]". No external data source (FMP/XBRL) in M3. See ADR 006 §Decision 2.
-  - **RS Score is alpha-version pending calibration.** (Field names: `rs_score_min/max` — not "RS Rating" to avoid IBD association.) Score distribution must be validated before public launch; see ADR 006 §Decision 5 for acceptance criteria.
-  - **Historical volume_ratio, w52h_pct, w52l_pct are NULL for ~414k older rows** where the underlying `week_52_high`, `week_52_low`, `avg_volume_20d` columns were never populated by the ingest job. Migration 032 only backfills rows where those underlying columns exist. Scanner is unaffected (queries `latest_date` only, which is fully populated). Full historical backfill would require a separate migration to first populate the underlying columns across all rows. Not blocking for MVP.
-  - **[M4 TODO] Verify Kite order webhook delivery mechanism.** ADR 011 assumes Kite delivers order status events via server-to-server webhook (POST to a FastAPI endpoint). Kite Connect may use postback URLs only (client-side redirect) rather than server-side webhooks. If postback-only, the order-events flow in ADR 011 needs rework before M4 implementation. Verify in Kite Connect docs / sandbox before building `broker_order_events` ingest.
-  - **[M4 TODO] Verify Railway 15-min timeout applies to WS upgrades.** ADR 011 §Hard constraints notes this is empirical. During M4 integration testing, hold a WS connection open for 16+ minutes with no heartbeat and confirm whether Railway drops it. If WS connections are exempt from the HTTP idle timeout, the 25s heartbeat can be relaxed (but should remain for ALB resilience).
-  - **[M4 TODO] Define Kite subscribe-error handling for persistent failures.** Current ADR 011 reconnect spec covers transient drops with exponential backoff. Persistent rejection (3 consecutive reconnect failures, or Kite returning an error code indicating invalid token / instrument not found) must surface a user-facing error message and stop retrying — not retry forever silently. Define the exact error codes and UI copy before M4 ships.
-  - **`scripts/deploy-migration.sh` is ready.** Run `bash scripts/deploy-migration.sh staging` then `bash scripts/deploy-migration.sh prod`. One-shot connection test with specific error messages for auth failures, IP bans, and bad hostnames. No retries — prevents the ban-through-retry loop that hit migration 033.
+  - **Auth callback route exists.** Email confirmation can now be enabled in Supabase — configure redirect URL to `https://alphavyuh.com/auth/callback`.
+  - **Broker credential key rotation is NOT implemented.** Hard blocker on exiting MVP — see `docs/decisions/002-broker-credentials.md §Q3`.
+  - **RS Score is alpha-version pending calibration.** Run `backend/scripts/verify_rs_score_distribution.py` against staging to validate. See ADR 006 §Decision 5.
+  - **Fundamentals deferred to post-MVP.** See ADR 006 §Decision 2.
+  - **Historical volume_ratio, w52h_pct, w52l_pct are NULL for ~414k older rows.** Not blocking for MVP.
+  - **[M4 TODO] Verify Kite order webhook delivery mechanism.** See ADR 011.
+  - **[M4 TODO] Verify Railway 15-min timeout applies to WS upgrades.** See ADR 011.
+  - **[M4 TODO] Define Kite subscribe-error handling for persistent failures.** See ADR 011.
+  - **`scripts/deploy-migration.sh` is ready.** Run `bash scripts/deploy-migration.sh staging` then `bash scripts/deploy-migration.sh prod`.
 
 ---
 

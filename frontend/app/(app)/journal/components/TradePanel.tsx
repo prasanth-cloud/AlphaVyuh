@@ -49,6 +49,9 @@ interface TradePanelProps {
   tradeValue: number | null;
   riskRupees: number | null;
   rrRatio: string | null;
+  riskPerShare: number | null;
+  rMultiple: number | null;
+  addFormPnl: number | null;
   onAddTrade: () => void;
   // Close form
   closeForm: Partial<UpdateJournalEntry>;
@@ -63,6 +66,7 @@ interface TradePanelProps {
   onSaveReviewLesson: (e: JournalEntry, lesson: string) => void;
   onInitiateClose: (e: JournalEntry) => void;
   reviewSaving: boolean;
+  chartPrefilled?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -83,6 +87,9 @@ export function TradePanel({
   tradeValue,
   riskRupees,
   rrRatio,
+  riskPerShare,
+  rMultiple,
+  addFormPnl,
   onAddTrade,
   closeForm,
   onCloseFormChange,
@@ -95,6 +102,7 @@ export function TradePanel({
   onSaveReviewLesson,
   onInitiateClose,
   reviewSaving,
+  chartPrefilled,
 }: TradePanelProps) {
   const [lessonDraft, setLessonDraft] = useState("");
 
@@ -114,8 +122,15 @@ export function TradePanel({
       <Card padding="lg" style={{ borderRadius: "var(--radius-lg)" }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div className="heading-card">
-            {mode === "add" ? "Log trade" : mode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="heading-card">
+              {mode === "add" ? "Log trade" : mode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
+            </span>
+            {mode === "add" && chartPrefilled && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: "rgba(0,217,167,0.10)", color: "#00D9A7" }}>
+                Pre-filled from chart
+              </span>
+            )}
           </div>
           <button onClick={onClose} style={{ fontSize: 18, lineHeight: 1, color: "var(--text-tertiary)" }}>×</button>
         </div>
@@ -206,14 +221,50 @@ export function TradePanel({
               </div>
             )}
 
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>Exit date</div>
+                <input type="date" value={(addForm as Record<string, unknown>).exit_date as string || ""} onChange={ev => onAddFormChange({ ...addForm, exit_date: ev.target.value } as typeof addForm)} style={inputStyle} />
+              </div>
+              <div>
+                <div className="label" style={{ marginBottom: 6 }}>Exit price ₹</div>
+                <input type="number" value={(addForm as Record<string, unknown>).exit_price as number || ""} onChange={ev => onAddFormChange({ ...addForm, exit_price: parseFloat(ev.target.value) || undefined } as typeof addForm)} placeholder="optional" style={inputStyle} />
+              </div>
+            </div>
+
+            {(riskPerShare != null || rMultiple != null || addFormPnl != null) && (
+              <div style={{ display: "flex", gap: 16, padding: "8px 10px", background: "var(--surface-2)", borderRadius: "var(--radius-sm)", fontSize: 12 }}>
+                {riskPerShare != null && (
+                  <div>
+                    <div className="caption" style={{ marginBottom: 2 }}>Risk/share</div>
+                    <div className="mono" style={{ fontWeight: 600 }}>₹{riskPerShare.toFixed(2)}</div>
+                  </div>
+                )}
+                {rMultiple != null && (
+                  <div>
+                    <div className="caption" style={{ marginBottom: 2 }}>R-multiple</div>
+                    <div className="mono" style={{ fontWeight: 600 }}>{rMultiple.toFixed(2)}R</div>
+                  </div>
+                )}
+                {addFormPnl != null && (
+                  <div>
+                    <div className="caption" style={{ marginBottom: 2 }}>P&L</div>
+                    <div className="mono" style={{ fontWeight: 600, color: addFormPnl >= 0 ? "#2DB574" : "#E15560" }}>
+                      {addFormPnl >= 0 ? "+" : ""}₹{addFormPnl.toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <div className="label" style={{ marginBottom: 8 }}>Setup</div>
               <SetupChips value={addForm.setup_type || ""} onChange={v => onAddFormChange({ ...addForm, setup_type: v || undefined })} />
             </div>
 
             <div>
-              <div className="label" style={{ marginBottom: 6 }}>Why are you entering?</div>
-              <textarea value={addForm.entry_reason || ""} onChange={ev => onAddFormChange({ ...addForm, entry_reason: ev.target.value })} rows={3} placeholder="EMA alignment, volume surge, breakout of resistance…" style={{ ...inputStyle, resize: "none" }} />
+              <div className="label" style={{ marginBottom: 6 }}>Notes</div>
+              <textarea value={addForm.entry_reason || ""} onChange={ev => onAddFormChange({ ...addForm, entry_reason: ev.target.value })} rows={4} placeholder="EMA alignment, volume surge, breakout of resistance…" style={{ ...inputStyle, resize: "none" }} />
             </div>
 
             <button onClick={onAddTrade} disabled={saving}

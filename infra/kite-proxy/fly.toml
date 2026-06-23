@@ -1,0 +1,40 @@
+# Fly.io config for AlphaVyuh's Kite order proxy.
+#
+# This runs a tinyproxy instance that provides a stable outbound IP
+# for Kite Connect order API calls. Only api.kite.trade is allowed.
+#
+# Deploy:
+#   cd infra/kite-proxy
+#   fly launch --name alphavyuh-kite-proxy --region bom --no-deploy
+#   fly deploy
+#   fly ips list   # note the IPv4 — register it in Kite app settings
+#
+# The proxy listens on port 8888 internally, exposed as port 443 externally.
+# Backend connects via KITE_PROXY_URL=http://alphavyuh-kite-proxy.fly.dev:8888
+
+app = "alphavyuh-kite-proxy"
+primary_region = "bom"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  TINYPROXY_PORT = "8888"
+
+[[services]]
+  internal_port = 8888
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8888
+
+[http_service]
+  internal_port = 8888
+  force_https = false
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = 256

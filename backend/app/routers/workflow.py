@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/workflow", tags=["workflow"])
 

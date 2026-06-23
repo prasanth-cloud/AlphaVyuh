@@ -34,7 +34,7 @@ from app.brokers.oauth_state import (
     verify_broker_oauth_state,
 )
 from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
 
 logger = logging.getLogger(__name__)
 

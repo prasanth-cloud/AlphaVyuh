@@ -8,8 +8,10 @@ import math
 from typing import Literal
 
 import numpy as np
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
+
+from app.services.rate_limit import client_rate_key, public_options_limiter
 
 router = APIRouter(prefix="/api/v1/options", tags=["options"])
 
@@ -68,28 +70,28 @@ def _bs_greeks(S: float, K: float, T: float, r: float, sigma: float, opt: str) -
 class OptionLeg(BaseModel):
     type:     Literal["call", "put"]
     action:   Literal["buy", "sell"]
-    strike:   float
-    premium:  float          # price paid/received per unit
-    quantity: int = 1        # number of lots (positive)
-    lot_size: int = 1        # NSE lot size for this symbol (default 1 for calcs)
+    strike:   float = Field(gt=0, le=10_000_000, allow_inf_nan=False)
+    premium:  float = Field(ge=0, le=1_000_000, allow_inf_nan=False)  # price paid/received per unit
+    quantity: int = Field(default=1, ge=1, le=100)        # number of lots (positive)
+    lot_size: int = Field(default=1, ge=1, le=10_000)        # NSE lot size for this symbol (default 1 for calcs)
 
 
 class PayoffRequest(BaseModel):
-    legs:          list[OptionLeg]
-    spot:          float              # current underlying price
-    iv:            float = 20.0       # implied volatility % (for Greeks)
-    days_to_expiry: int = 30
-    risk_free_rate: float = 6.5       # % per year
-    price_range_pct: float = 20.0     # ± % around spot to calculate payoff
+    legs:          list[OptionLeg] = Field(min_length=1, max_length=8)
+    spot:          float = Field(gt=0, le=10_000_000, allow_inf_nan=False)              # current underlying price
+    iv:            float = Field(default=20.0, gt=0, le=500, allow_inf_nan=False)       # implied volatility % (for Greeks)
+    days_to_expiry: int = Field(default=30, ge=0, le=3650)
+    risk_free_rate: float = Field(default=6.5, ge=-20, le=100, allow_inf_nan=False)       # % per year
+    price_range_pct: float = Field(default=20.0, ge=1, le=100, allow_inf_nan=False)     # ± % around spot to calculate payoff
 
 
 class GreeksRequest(BaseModel):
-    spot:          float
-    strike:        float
-    iv:            float      # %
-    days_to_expiry: int
+    spot:          float = Field(gt=0, le=10_000_000, allow_inf_nan=False)
+    strike:        float = Field(gt=0, le=10_000_000, allow_inf_nan=False)
+    iv:            float = Field(gt=0, le=500, allow_inf_nan=False)      # %
+    days_to_expiry: int = Field(ge=0, le=3650)
     option_type:   Literal["call", "put"]
-    risk_free_rate: float = 6.5
+    risk_free_rate: float = Field(default=6.5, ge=-20, le=100, allow_inf_nan=False)
 
 
 # ── Presets ───────────────────────────────────────────────────────────────────
@@ -157,19 +159,29 @@ PRESETS = {
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+def _enforce_public_options_limit(request: Request, scope: str) -> None:
+    key = client_rate_key(request, scope)
+    if not public_options_limiter.is_allowed(key):
+        retry_after = public_options_limiter.retry_after(key)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many options calculator requests - try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 @router.get("/presets")
 async def get_presets():
     return {"presets": PRESETS}
 
 
 @router.post("/payoff")
-async def calculate_payoff(body: PayoffRequest):
+async def calculate_payoff(request: Request, body: PayoffRequest):
     """
     Returns at-expiry P&L curve + combined Greeks at current spot.
     P&L is per-share (multiply by lot_size × quantity for actual ₹).
     """
-    if not body.legs:
-        return {"payoff": [], "greeks": {}, "max_profit": None, "max_loss": None, "breakevens": []}
+    _enforce_public_options_limit(request, "options-payoff")
 
     spot    = body.spot
     pct     = body.price_range_pct / 100
@@ -241,7 +253,8 @@ async def calculate_payoff(body: PayoffRequest):
 
 
 @router.post("/greeks")
-async def calculate_greeks(body: GreeksRequest):
+async def calculate_greeks(request: Request, body: GreeksRequest):
+    _enforce_public_options_limit(request, "options-greeks")
     T     = body.days_to_expiry / 365
     r     = body.risk_free_rate / 100
     sigma = body.iv / 100

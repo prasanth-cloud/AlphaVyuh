@@ -133,6 +133,28 @@ class _RecentMatchClient(_FakeClient):
         return _RecentMatchTable(self, name)
 
 
+class _AlertMatchFilterTable(_FakeTable):
+    def eq(self, column, value):
+        self.client.filters.append((self.name, column, value))
+        return self
+
+    def execute(self):
+        if self.name == "scan_alerts" and self.operation == "select":
+            return _FakeResult([{"id": "alert-1"}])
+        if self.name == "scan_alert_matches" and self.operation == "select":
+            return _FakeResult([_match_row("alert-1", "2026-05-31")])
+        return super().execute()
+
+
+class _AlertMatchFilterClient(_FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.filters = []
+
+    def table(self, name):
+        return _AlertMatchFilterTable(self, name)
+
+
 def _match_row(alert_id: str, run_date: str) -> dict:
     return {
         "id": f"{alert_id}-{run_date}",
@@ -244,6 +266,20 @@ async def test_recent_matches_can_be_limited_to_latest_run_per_alert(monkeypatch
 
 
 @pytest.mark.anyio
+async def test_alert_match_history_filters_matches_by_user_after_parent_check(monkeypatch):
+    client = _AlertMatchFilterClient()
+    monkeypatch.setattr(alerts, "get_admin_client", lambda: client)
+
+    result = await alerts.get_alert_matches("alert-1", user_id="user-1")
+
+    assert result["matches"][0]["id"] == "alert-1-2026-05-31"
+    assert ("scan_alerts", "id", "alert-1") in client.filters
+    assert ("scan_alerts", "user_id", "user-1") in client.filters
+    assert ("scan_alert_matches", "alert_id", "alert-1") in client.filters
+    assert ("scan_alert_matches", "user_id", "user-1") in client.filters
+
+
+@pytest.mark.anyio
 async def test_update_alert_preserves_missing_alert_404(monkeypatch):
     monkeypatch.setattr(alerts, "get_admin_client", lambda: _EmptyClient())
 
@@ -274,6 +310,21 @@ def test_scan_alerts_migration_defines_rls_and_unique_snapshot_constraint():
     assert "alter table public.scan_alerts enable row level security" in sql
     assert "alter table public.scan_alert_matches enable row level security" in sql
     assert "auth.uid() = user_id" in sql
+
+
+def test_scan_alert_matches_rls_requires_owned_parent_alert():
+    sql = " ".join(
+        (REPO_ROOT / "supabase/migrations/20260603140800_enforce_scan_alert_match_parent_rls.sql")
+        .read_text()
+        .lower()
+        .split()
+    )
+
+    assert 'drop policy if exists "users manage own scan_alert_matches" on public.scan_alert_matches' in sql
+    assert 'create policy "users manage own scan_alert_matches" on public.scan_alert_matches for all' in sql
+    assert "auth.uid() = user_id and exists" in sql
+    assert "from public.scan_alerts a where a.id = scan_alert_matches.alert_id and a.user_id = auth.uid()" in sql
+    assert sql.count("from public.scan_alerts a where a.id = scan_alert_matches.alert_id") == 2
 
 
 def test_run_all_alerts_uses_scanner_core_and_persists_current_snapshot(monkeypatch):

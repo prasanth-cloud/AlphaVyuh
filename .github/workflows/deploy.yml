@@ -19,6 +19,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
     steps:
       - uses: actions/checkout@v6
 
@@ -30,7 +32,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Vercel CLI
-        run: npm install -g vercel@latest
+        run: npm install -g vercel@54.7.1
 
       # Pull env into frontend/ (where .vercel/project.json lives)
       - name: Pull Vercel env

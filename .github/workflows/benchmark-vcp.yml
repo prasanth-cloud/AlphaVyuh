@@ -48,17 +48,34 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RUN_LABEL: ${{ github.event.inputs.run_label || 'run1' }}
+          BENCHMARK_ITERATIONS: ${{ github.event.inputs.iterations || '50' }}
+          TRADE_DATE: ${{ github.event.inputs.trade_date || '' }}
         run: |
-          set -e
-          OUT=/tmp/bench-${{ github.event.inputs.run_label }}.txt
+          set -euo pipefail
+
+          if [[ ! "$RUN_LABEL" =~ ^[A-Za-z0-9._-]{1,40}$ ]]; then
+            echo "Invalid run_label. Use 1-40 letters, numbers, dots, underscores, or hyphens." >&2
+            exit 1
+          fi
+          if [[ ! "$BENCHMARK_ITERATIONS" =~ ^[0-9]+$ ]] || [ "$BENCHMARK_ITERATIONS" -lt 1 ] || [ "$BENCHMARK_ITERATIONS" -gt 200 ]; then
+            echo "Invalid iterations. Use an integer between 1 and 200." >&2
+            exit 1
+          fi
+          if [ -n "$TRADE_DATE" ] && [[ ! "$TRADE_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Invalid trade_date. Use YYYY-MM-DD." >&2
+            exit 1
+          fi
+
+          OUT="/tmp/bench-${GITHUB_RUN_ID:-manual}.txt"
 
           # Header
           tee "$OUT" <<HEADER
-          === VCP Latency Benchmark — ${{ github.event.inputs.run_label }} ===
+          === VCP Latency Benchmark — $RUN_LABEL ===
           Run ID    : ${{ github.run_id }}
           Runner OS : $(uname -srm)
           UTC time  : $(date -u)
-          Iterations: ${{ github.event.inputs.iterations }}
+          Iterations: $BENCHMARK_ITERATIONS
           HEADER
 
           # Network probe — measure RTT from runner to Supabase
@@ -84,16 +101,13 @@ jobs:
             echo "--- Benchmark ---"
           } | tee -a "$OUT"
 
-          TRADE_DATE_ARG=""
-          if [ -n "${{ github.event.inputs.trade_date }}" ]; then
-            TRADE_DATE_ARG="--trade-date ${{ github.event.inputs.trade_date }}"
+          args=(--iterations "$BENCHMARK_ITERATIONS")
+          if [ -n "$TRADE_DATE" ]; then
+            args+=(--trade-date "$TRADE_DATE")
           fi
 
           cd backend
-          python scripts/bench_scanner.py \
-            --iterations ${{ github.event.inputs.iterations }} \
-            $TRADE_DATE_ARG \
-            2>&1 | tee -a "$OUT"
+          python scripts/bench_scanner.py "${args[@]}" 2>&1 | tee -a "$OUT"
 
           echo "" | tee -a "$OUT"
           echo "Finished: $(date -u)" | tee -a "$OUT"
@@ -102,6 +116,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: bench-${{ github.event.inputs.run_label }}-${{ github.run_id }}
-          path: /tmp/bench-${{ github.event.inputs.run_label }}.txt
+          name: bench-${{ github.run_id }}
+          path: /tmp/bench-${{ github.run_id }}.txt
           retention-days: 30

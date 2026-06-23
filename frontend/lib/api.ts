@@ -103,7 +103,7 @@ export {
   withTimeout,
 } from './api/client'
 
-const API = API_BASE_URL;
+export const API = API_BASE_URL;
 
 // Public endpoints don't need auth — just JSON content-type
 const publicHeaders: HeadersInit = { "Content-Type": "application/json" };
@@ -513,7 +513,8 @@ export async function bulkUpsertWorkflowStates(patches: WorkflowStatePatch[]): P
 export async function getMarketSummary(): Promise<MarketSummary | null> {
   if (shouldUseMockFallback()) return mockMarketSummary();
   try {
-    const res = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/market/summary`, { headers });
     if (!res.ok) return shouldUseMockFallback() ? mockMarketSummary() : null;
     const data = await res.json();
     const unavailableMessage = unavailablePayloadMessage(data, "Market summary is temporarily unavailable.");
@@ -808,7 +809,8 @@ export async function getCandles(
   if (shouldUseMockFallback()) return cachedClientRequest(cacheKey, 60_000, async () => mockCandles(sym, params?.timeframe, params?.limit));
   return cachedClientRequest(cacheKey, 60_000, async () => {
     try {
-      const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers: publicHeaders });
+      const headers = await authHeaders();
+      const res = await fetch(`${API}/api/v1/charts/${sym}/candles?${query}`, { headers });
       if (!res.ok) {
         if (shouldUseMockFallback()) return mockCandles(sym, params?.timeframe, params?.limit);
         const text = await res.text().catch(() => "");
@@ -843,9 +845,10 @@ export async function getIndicators(
   if (shouldUseMockFallback()) return cachedClientRequest(cacheKey, 60_000, async () => mockIndicators(sym));
   return cachedClientRequest(cacheKey, 60_000, async () => {
     try {
+      const headers = await authHeaders();
       const res = await fetch(
         `${API}/api/v1/charts/${sym}/indicators?indicators=${cleanIndicators.join(",")}&timeframe=${timeframe}`,
-        { headers: publicHeaders }
+        { headers }
       );
       if (!res.ok) {
         if (shouldUseMockFallback()) return mockIndicators(sym);
@@ -1839,6 +1842,7 @@ export async function getMe(): Promise<UserProfile> {
 export async function updateMe(updates: {
   full_name?: string;
   onboarding_completed?: boolean;
+  onboarding_dismissed?: boolean;
   telegram_chat_id?: string;
   broker_type?: string;
   billing_region?: string;
@@ -2006,6 +2010,39 @@ export async function runBrokerReadOnlySmoke(broker: "zerodha" | "upstox" = "zer
 
 export const runZerodhaReadOnlySmoke = () => runBrokerReadOnlySmoke("zerodha");
 
+export interface KiteTokenHealth {
+  connected: boolean;
+  token_valid: boolean;
+  profile_check_passed?: boolean;
+  token_age_seconds: number | null;
+  expires_in_seconds: number | null;
+  connected_at: string | null;
+  expires_at: string | null;
+  needs_reconnect: boolean;
+}
+
+export async function getKiteTokenHealth(): Promise<KiteTokenHealth> {
+  if (shouldUseMockFallback()) {
+    return {
+      connected: true,
+      token_valid: true,
+      profile_check_passed: true,
+      token_age_seconds: 3600,
+      expires_in_seconds: 28800,
+      connected_at: new Date(Date.now() - 3600_000).toISOString(),
+      expires_at: new Date(Date.now() + 28800_000).toISOString(),
+      needs_reconnect: false,
+    };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/kite/token-health`, { headers });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Token health check failed");
+  }
+  return res.json();
+}
+
 export async function getBrokerStatus(): Promise<{
   connected: boolean;
   broker: string | null;
@@ -2065,8 +2102,6 @@ export async function getBrokerStatus(): Promise<{
     return res.json();
   });
 }
-
-
 
 let dataHealthCache: { value: DataHealth | null; expiresAt: number } | null = null;
 let dataHealthPromise: Promise<DataHealth | null> | null = null;
@@ -2734,7 +2769,7 @@ export async function getMarketOverview(): Promise<MarketOverview> {
 
     // Legacy fallback: compose from public endpoints so dashboard still renders
     // sector and EMA breadth if the authenticated overview endpoint is blocked.
-    const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers: publicHeaders });
+    const legacyRes = await fetch(`${API}/api/v1/market/summary`, { headers });
     if (!legacyRes.ok) throw new Error("Failed to fetch market overview");
     const s: MarketSummary = await legacyRes.json();
     const unavailableMessage = unavailablePayloadMessage(s, "Market summary is temporarily unavailable.");

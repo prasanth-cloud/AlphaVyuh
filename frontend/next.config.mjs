@@ -1,8 +1,17 @@
 import { withSentryConfig } from "@sentry/nextjs";
+import withPWAInit from "next-pwa";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const withPWA = withPWAInit({
+  dest: "public",
+  disable: process.env.NODE_ENV === "development",
+  register: true,
+  skipWaiting: true,
+  fallbacks: { document: "/offline" },
+});
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -44,7 +53,7 @@ const nextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+export default withSentryConfig(withPWA(nextConfig), {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   silent: true,

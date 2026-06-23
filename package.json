@@ -21,6 +21,8 @@
     "test:production-smoke-env-check": "node scripts/test-check-production-smoke-env.mjs",
     "test:production-smoke-workflow-check": "node scripts/test-check-production-smoke-workflow.mjs",
     "test:railway-recovery-workflow-check": "node scripts/test-check-railway-recovery-workflow.mjs",
+    "test:manual-workflow-shell-safety": "node scripts/test-check-manual-workflow-shell-safety.mjs",
+    "test:production-workflow-targets": "node scripts/test-validate-production-workflow-targets.mjs",
     "test:railway-recovery-script": "node scripts/test-recover-railway-backend-script.mjs",
     "test:recovery-handoff-credentials-check": "node scripts/test-check-recovery-handoff-credentials.mjs",
     "test:signed-in-copy-posture-check": "node scripts/test-check-signed-in-copy-posture.mjs",
@@ -32,6 +34,7 @@
     "test:broker-readonly-check": "bash scripts/test-broker-readonly-contract.sh",
     "test:railway-secret-prep": "node scripts/test-prepare-railway-recovery-secrets.mjs",
     "test:ci-action-runtime-check": "node scripts/test-check-ci-action-runtime.mjs",
+    "test:daily-refresh-workflow-safety": "node scripts/test-check-daily-refresh-workflow-safety.mjs",
     "check:public-posture": "node scripts/check-public-posture.mjs",
     "check:recovery-handoff-credentials": "node scripts/check-recovery-handoff-credentials.mjs",
     "check:signed-in-copy-posture": "node scripts/check-signed-in-copy-posture.mjs",
@@ -44,8 +47,11 @@
     "check:production-smoke-env": "node scripts/check-production-smoke-env.mjs",
     "check:production-smoke-workflow": "node scripts/check-production-smoke-workflow.mjs",
     "check:railway-recovery-workflow": "node scripts/check-railway-recovery-workflow.mjs",
+    "check:manual-workflow-shell-safety": "node scripts/check-manual-workflow-shell-safety.mjs",
+    "check:production-workflow-targets": "node scripts/validate-production-workflow-targets.mjs",
     "check:data-recovery": "node scripts/check-data-recovery-readiness.mjs",
     "check:ci-action-runtime": "node scripts/check-ci-action-runtime.mjs",
+    "check:daily-refresh-workflow-safety": "node scripts/check-daily-refresh-workflow-safety.mjs",
     "check:sector-taxonomy": "node scripts/check-sector-taxonomy-contract.mjs",
     "check:sector-taxonomy:railway": "PRODUCTION_API_URL=https://alphavyuh-production.up.railway.app node scripts/check-sector-taxonomy-contract.mjs",
     "prepare:railway-recovery-secrets": "node scripts/prepare-railway-recovery-secrets.mjs",
@@ -60,5 +66,14 @@
     "db:push:staging": "scripts/db-push-staging.sh",
     "dev:frontend": "npm --prefix frontend run dev",
     "dev:backend": "cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000"
+  },
+  "dependencies": {
+    "next-sitemap": "^4.2.3"
+  },
+  "devDependencies": {
+    "@types/minimatch": "^6.0.0"
+  },
+  "overrides": {
+    "postcss": "8.5.10"
   }
 }

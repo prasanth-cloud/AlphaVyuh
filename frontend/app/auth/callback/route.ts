@@ -1,3 +1,4 @@
+// IMPORTANT: add https://alphavyuh.com/auth/callback to Supabase Dashboard → Authentication → URL Configuration
 import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createRouteHandlerClient } from "@/lib/supabase/server";

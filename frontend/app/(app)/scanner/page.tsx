@@ -14,12 +14,14 @@ import {
   prefetchCandles,
   saveScreen as saveSavedScreen,
   shouldUseMockFallback as scannerUsesClientMockFallback,
+  getPlanStatus,
   type SavedScreen,
 } from '@/lib/api'
 import { mockRunScan } from '@/lib/mock-data'
 import { composeScannerResults, type ScannerCompositionMode } from '@/lib/scanner-composition'
 import { scannerWatchlistPatch, scannerWatchlistPatches, scannerWorkflowPatch, selectedScannerSymbols } from '@/lib/scanner-workflow'
 import { trackEvent } from '@/lib/analytics'
+import { toast as sonnerToast } from '@/lib/toast'
 import { Button, EmptyState, DataTable, DataTableHead, Th, Tr, Td, Num } from '@/components/ui'
 import { formatMarketDataSource } from '@/lib/data-copy'
 import { API_BASE_URL } from '@/lib/api-base'
@@ -516,6 +518,31 @@ const emptyFilters = (): Filters => ({
   roce_min: '',
 })
 
+const EMPTY_FILTERS = emptyFilters()
+
+function countActiveFilters(f: Filters): number {
+  let count = 0
+  for (const key of Object.keys(EMPTY_FILTERS) as (keyof Filters)[]) {
+    const current = f[key]
+    const empty = EMPTY_FILTERS[key]
+    if (typeof current === 'boolean') {
+      if (current !== empty) count++
+    } else if (Array.isArray(current)) {
+      if (JSON.stringify(current) !== JSON.stringify(empty)) count++
+    } else {
+      if (current !== empty) count++
+    }
+  }
+  return count
+}
+
+function rsScoreColor(score: number | null | undefined): string {
+  if (score == null) return 'var(--text-primary)'
+  if (score >= 80) return '#00D9A7'
+  if (score >= 60) return '#F1EFE8'
+  return '#A8A29E'
+}
+
 const inputStyle: React.CSSProperties = {
   padding: '5px 8px',
   background: 'var(--surface-2)',
@@ -632,7 +659,6 @@ export default function ScannerPage() {
   const [selectedScreenIds, setSelectedScreenIds] = useState<Set<string>>(new Set())
   const [compositionMode, setCompositionMode] = useState<ScannerCompositionMode>('and')
   const [composingScreens, setComposingScreens] = useState(false)
-  const [toast, setToast] = useState('')
   const [filterTab, setFilterTab] = useState<'technicals' | 'fundamentals'>('technicals')
   const [resultSymbolFilter, setResultSymbolFilter] = useState('')
   const [chartsLayout, setChartsLayout] = useState<ScannerChartsLayout>('2-up')
@@ -697,8 +723,7 @@ export default function ScannerPage() {
   }, [])
 
   function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3000)
+    sonnerToast.success(msg)
   }
 
   async function loadWatchlists() {
@@ -1272,6 +1297,18 @@ export default function ScannerPage() {
   async function saveCurrentScreen() {
     const screenName = newScreenName.trim()
     if (!screenName) return
+    if (screenName.toLowerCase() === 'recommended') {
+      showToast('"Recommended" cannot be used as a preset name')
+      return
+    }
+    try {
+      const status = await getPlanStatus()
+      if (status.plan === 'free' && savedScreens.length >= 3) {
+        showToast('Free plan allows up to 3 saved presets. Upgrade to save more.')
+        setShowSaveModal(false)
+        return
+      }
+    } catch { /* proceed if plan check fails */ }
     if (scannerUsesClientMockFallback()) {
       setSavedScreens(prev => [
         ...prev,
@@ -1705,7 +1742,22 @@ export default function ScannerPage() {
   return (
     <div className="workspace-page">
       <div className="workspace-desk-header calm-desk-header" style={{ marginBottom: 12 }}>
-        <h1 className="calm-page-title">Scanner</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 className="calm-page-title">Scanner</h1>
+          {countActiveFilters(filters) > 0 && (
+            <span style={{
+              background: 'rgba(0,217,167,0.10)',
+              color: '#00D9A7',
+              fontSize: 11,
+              borderRadius: 20,
+              padding: '2px 8px',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}>
+              {countActiveFilters(filters)} filter{countActiveFilters(filters) !== 1 ? 's' : ''} active
+            </span>
+          )}
+        </div>
         <p className="calm-page-copy">Choose a screener, refine filters if needed, then run scan when you are ready.</p>
       </div>
       <div
@@ -2536,9 +2588,9 @@ export default function ScannerPage() {
                             fontWeight: 600,
                           }}
                         >
-                          {col.label}{active ? (sortDesc ? ' ↓' : ' ↑') : ''}
+                          {col.id === 'rs_score' ? (<span title="Relative strength score (alpha — being calibrated)">RS<sup style={{ fontSize: 8 }}>α</sup></span>) : col.label}{active ? (sortDesc ? ' ↓' : ' ↑') : ''}
                         </button>
-                      ) : col.label}
+                      ) : col.id === 'rs_score' ? (<span title="Relative strength score (alpha — being calibrated)">RS<sup style={{ fontSize: 8 }}>α</sup></span>) : col.label}
                     </Th>
                   )
                 })}
@@ -2603,7 +2655,7 @@ export default function ScannerPage() {
                               ) : col.id === 'close' ? (
                                 `₹${value}`
                               ) : col.id === 'rs_score' ? (
-                                <span className="scanner-rs-cell">{value}</span>
+                                <span className="scanner-rs-cell" style={{ color: rsScoreColor(r.rs_score) }}>{value}</span>
                               ) : (
                                 <span style={{ color: isPct ? tone : undefined, fontWeight: isPct ? 600 : undefined, fontSize: isPct ? 12 : undefined }}>
                                   {value}
@@ -2713,13 +2765,6 @@ export default function ScannerPage() {
           </div>
         )}
       </div>
-
-      {/* Toast */}
-      {toast && (
-        <div data-testid="scanner-toast" style={{ position: 'fixed', top: 88, right: 28, zIndex: 999, padding: '10px 16px', background: 'var(--surface-float)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-primary)', boxShadow: 'var(--shadow-dropdown)' }}>
-          {toast}
-        </div>
-      )}
 
       {/* Save screen modal */}
       {showSaveModal && (

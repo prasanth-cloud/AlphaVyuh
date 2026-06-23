@@ -21,6 +21,7 @@ import type { PanelMode, Tab } from "./components/types";
 import { useWorkflowState } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { BrokerFailureBanner } from "@/components/BrokerFailureBanner";
 
 const JOURNAL_RECOVERY_MESSAGE = "Check Journal or Data Status, then try again.";
 const JOURNAL_TRADE_SAVE_FAILED_MESSAGE = `Trade could not be saved. ${JOURNAL_RECOVERY_MESSAGE}`;
@@ -443,6 +444,8 @@ export default function JournalPage() {
         </div>
       )}
 
+      <BrokerFailureBanner />
+
       {/* Status bar */}
       <JournalStatusBar
         brokerConnected={brokerConnected}
@@ -742,6 +745,9 @@ export default function JournalPage() {
             onSaveReviewLesson={handleSaveReviewLesson}
             onInitiateClose={openClosePanel}
             reviewSaving={reviewSaving}
+            riskPerShare={addForm.entry_price && addForm.stop_loss ? Math.abs(addForm.entry_price - addForm.stop_loss) : null}
+            rMultiple={null}
+            addFormPnl={null}
           />
         </div>
       )}

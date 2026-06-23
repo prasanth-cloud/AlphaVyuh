@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from typing import Optional
 from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/community", tags=["community"])
 
@@ -15,10 +16,15 @@ class ShareScreenRequest(BaseModel):
 
 
 @router.get("/screens")
-async def list_shared_screens(limit: int = 50, featured: bool = False):
+async def list_shared_screens(limit: Annotated[int, Query(ge=1, le=100)] = 50, featured: bool = False):
     try:
         sb = get_admin_client()
-        query = sb.table("shared_screens").select("*").order("upvotes", desc=True).limit(limit)
+        query = (
+            sb.table("shared_screens")
+            .select("id,screen_id,title,description,tags,upvotes,is_featured,created_at")
+            .order("upvotes", desc=True)
+            .limit(limit)
+        )
         if featured:
             query = query.eq("is_featured", True)
         res = query.execute()

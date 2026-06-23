@@ -671,7 +671,7 @@ export default function LandingPage() {
               <p className="lp-pdesc">Enough to try everything. No credit card needed.</p>
               <Link href="/signup" className="lp-pcta lp-cta-free">Get started <span className="lp-cta-arrow" aria-hidden="true">→</span></Link>
               <div className="lp-pfeats">
-                {[["50 scanner results per scan",true],["5 saved screens",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal review",false],["Broker import",false]].map(f=>(
+                {[["50 scanner results per scan",true],["3 saved presets",true],["1 watchlist · 20 stocks",true],["Full charting",true],["3 months journal history",true],["Scan alerts",false],["Journal review",false],["Broker import",false]].map(f=>(
                   <div key={f[0] as string} className={"lp-pfi"+(f[1]?" lp-pfi-on":"")}>
                     <div className={"lp-pfcheck"+(f[1]?" lp-pfcheck-on":" lp-pfcheck-off")}>{f[1]?"✓":"–"}</div>
                     {f[0]}

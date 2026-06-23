@@ -18,7 +18,7 @@ import httpx
 from app.middleware.auth import get_current_user_id
 from app.routers.scanner import ScanFilters, ScanRequest, SORT_KEYS, execute_scan
 from app.services.plans import effective_plan_from_record, get_effective_user_plan
-from app.services.supabase import get_admin_client, settings
+from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +218,7 @@ async def get_alert_matches(
         res = client.table("scan_alert_matches") \
             .select("*") \
             .eq("alert_id", alert_id) \
+            .eq("user_id", user_id) \
             .order("run_date", desc=True) \
             .limit(max(1, min(limit, 30))) \
             .execute()

@@ -48,9 +48,13 @@ steps:
     with:
       node-version: 22
       cache-dependency-path: frontend/package-lock.json
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Prepare production benchmark account
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Validate trusted production target
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production benchmark account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -59,10 +63,9 @@ steps:
     run: node scripts/prepare-production-smoke-account.mjs
   - name: Validate production benchmark credentials
     run: npm run check:production-smoke-env
-  - name: Run authenticated scanner benchmark
-    env:
-      PRODUCTION_API_URL: \${{ github.event.inputs.production_api_url }}
-      SCANNER_BENCHMARK_RUNS: \${{ github.event.inputs.runs }}
+	  - name: Run authenticated scanner benchmark
+	    env:
+	      SCANNER_BENCHMARK_RUNS: \${{ github.event.inputs.runs }}
       SCANNER_BENCHMARK_WARMUP_RUNS: \${{ github.event.inputs.warmup_runs }}
       SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: \${{ github.event.inputs.min_query_reduction_pct }}
       SCANNER_BENCHMARK_MIN_SPEEDUP: \${{ github.event.inputs.min_speedup }}
@@ -94,9 +97,13 @@ steps:
     with:
       node-version: 22
       cache-dependency-path: frontend/package-lock.json
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Prepare production benchmark account
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Validate trusted production target
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production benchmark account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -105,10 +112,9 @@ steps:
     run: node scripts/prepare-production-smoke-account.mjs
   - name: Validate production benchmark credentials
     run: npm run check:production-smoke-env
-  - name: Run authenticated scanner benchmark
-    env:
-      PRODUCTION_API_URL: \${{ github.event.inputs.production_api_url }}
-      VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}
+	  - name: Run authenticated scanner benchmark
+	    env:
+	      VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}
       SCANNER_BENCHMARK_RUNS: \${{ github.event.inputs.runs }}
       SCANNER_BENCHMARK_WARMUP_RUNS: \${{ github.event.inputs.warmup_runs }}
       SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: \${{ github.event.inputs.min_query_reduction_pct }}
@@ -141,9 +147,13 @@ steps:
     with:
       node-version: 22
       cache-dependency-path: frontend/package-lock.json
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Prepare production benchmark account
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Validate trusted production target
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production benchmark account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -152,10 +162,9 @@ steps:
     run: node scripts/prepare-production-smoke-account.mjs
   - name: Validate production benchmark credentials
     run: npm run check:production-smoke-env
-  - name: Run authenticated scanner benchmark
-    env:
-      PRODUCTION_API_URL: \${{ github.event.inputs.production_api_url }}
-      SCANNER_BENCHMARK_RUNS: \${{ github.event.inputs.runs }}
+	  - name: Run authenticated scanner benchmark
+	    env:
+	      SCANNER_BENCHMARK_RUNS: \${{ github.event.inputs.runs }}
       SCANNER_BENCHMARK_WARMUP_RUNS: \${{ github.event.inputs.warmup_runs }}
       SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: \${{ github.event.inputs.min_query_reduction_pct }}
       SCANNER_BENCHMARK_MIN_SPEEDUP: \${{ github.event.inputs.min_speedup }}
@@ -182,9 +191,13 @@ steps:
     with:
       node-version: 22
       cache-dependency-path: frontend/package-lock.json
-  - name: Install frontend dependencies
-    run: npm --prefix frontend ci
-  - name: Prepare production benchmark account
+	  - name: Install frontend dependencies
+	    run: npm --prefix frontend ci
+	  - name: Validate trusted production target
+	    env:
+	      PRODUCTION_API_URL_INPUT: \${{ github.event.inputs.production_api_url }}
+	    run: node scripts/validate-production-workflow-targets.mjs
+	  - name: Prepare production benchmark account
     env:
       SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: \${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -193,10 +206,9 @@ steps:
     run: node scripts/prepare-production-smoke-account.mjs
   - name: Validate production benchmark credentials
     run: npm run check:production-smoke-env
-  - name: Run authenticated scanner benchmark
-    env:
-      PRODUCTION_API_URL: \${{ github.event.inputs.production_api_url }}
-      PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
+	  - name: Run authenticated scanner benchmark
+	    env:
+	      PRODUCTION_API_BEARER_TOKEN: \${{ secrets.PRODUCTION_API_BEARER_TOKEN }}
       SCANNER_BENCHMARK_RUNS: \${{ github.event.inputs.runs }}
       SCANNER_BENCHMARK_WARMUP_RUNS: \${{ github.event.inputs.warmup_runs }}
       SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: \${{ github.event.inputs.min_query_reduction_pct }}

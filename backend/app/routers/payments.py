@@ -9,6 +9,7 @@ Flow:
 import hashlib
 import hmac
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 
 import razorpay
@@ -17,7 +18,7 @@ from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
 from app.services.plans import effective_plan_from_record
-from app.services.supabase import get_admin_client, settings
+from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
 
 logger = logging.getLogger(__name__)
 
@@ -66,20 +67,102 @@ def _ensure_checkout_enabled() -> None:
         raise HTTPException(403, "Payment checkout is unavailable for this account")
 
 
+def _as_dict(value: object) -> dict:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _amount_value(value: object, detail: str) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(400, detail)
+
+
 def _validated_order_context(order: dict, *, expected_user_id: str) -> tuple[str, str, str]:
-    notes = order.get("notes") or {}
+    notes = _as_dict(order.get("notes"))
     plan = str(notes.get("plan") or "").lower()
     currency = str(notes.get("currency") or order.get("currency") or "").upper()
     billing = str(notes.get("billing") or "").lower()
     user_id = str(notes.get("user_id") or "")
+    order_currency = str(order.get("currency") or "").upper()
     key = (plan, currency, billing)
-    if user_id != expected_user_id:
+    if not expected_user_id or user_id != expected_user_id:
         raise HTTPException(400, "Payment order does not belong to this user")
     if key not in PLAN_PRICES:
         raise HTTPException(400, "Payment order metadata is invalid")
-    if int(order.get("amount") or 0) != int(PLAN_PRICES[key]["amount"]):
+    if order_currency != currency:
+        raise HTTPException(400, "Payment order currency does not match plan")
+    expected_amount = int(PLAN_PRICES[key]["amount"])
+    if _amount_value(order.get("amount"), "Payment order amount is invalid") != expected_amount:
         raise HTTPException(400, "Payment order amount does not match plan")
     return plan, currency, billing
+
+
+def _validated_captured_payment_context(payment: dict, order: dict) -> tuple[str, str, str, str, str]:
+    order_notes = _as_dict(order.get("notes"))
+    user_id = str(order_notes.get("user_id") or "")
+    plan, currency, billing = _validated_order_context(order, expected_user_id=user_id)
+    order_id = str(order.get("id") or "")
+    payment_id = str(payment.get("id") or "")
+
+    if not payment_id:
+        raise HTTPException(400, "Payment id is missing")
+    if not order_id or str(payment.get("order_id") or "") != order_id:
+        raise HTTPException(400, "Payment does not match order")
+    if str(payment.get("status") or "").lower() != "captured":
+        raise HTTPException(400, "Payment has not been captured")
+    if str(payment.get("currency") or "").upper() != currency:
+        raise HTTPException(400, "Payment currency does not match order")
+    expected_amount = int(PLAN_PRICES[(plan, currency, billing)]["amount"])
+    if _amount_value(payment.get("amount"), "Payment amount is invalid") != expected_amount:
+        raise HTTPException(400, "Payment amount does not match order")
+
+    return user_id, plan, currency, billing, payment_id
+
+
+def _activate_paid_plan(
+    *,
+    user_id: str,
+    plan: str,
+    currency: str,
+    billing: str,
+    razorpay_order_id: str,
+    razorpay_payment_id: str,
+) -> dict:
+    meta = PLAN_PRICES[(plan, currency, billing)]
+
+    sb = get_admin_client()
+    try:
+        result = sb.rpc("activate_razorpay_payment", {
+            "p_user_id": user_id,
+            "p_plan": plan,
+            "p_currency": currency,
+            "p_billing": billing,
+            "p_razorpay_order_id": razorpay_order_id,
+            "p_razorpay_payment_id": razorpay_payment_id,
+            "p_amount": meta["amount"],
+            "p_plan_days": meta["days"],
+        }).execute()
+    except Exception as exc:
+        logger.error("Razorpay payment activation RPC failed: %s", exc)
+        raise HTTPException(500, "Payment activation is temporarily unavailable") from exc
+
+    data = result.data
+    row = data[0] if isinstance(data, list) and data else data if isinstance(data, dict) else None
+    if not row:
+        raise HTTPException(500, "Payment activation is temporarily unavailable")
+
+    expires_at = row.get("expires_at") or row.get("plan_expires_at")
+    if hasattr(expires_at, "isoformat"):
+        expires_at = expires_at.isoformat()
+    return {
+        "status": row.get("status") or "success",
+        "plan": row.get("plan") or plan,
+        "expires_at": expires_at,
+        "currency": row.get("currency") or currency,
+        "billing": row.get("billing") or billing,
+        "replayed": bool(row.get("replayed")),
+    }
 
 
 # ── Create Order ──────────────────────────────────────────────────────────────
@@ -253,39 +336,26 @@ async def verify_payment(
         raise HTTPException(400, "Invalid payment signature")
 
     try:
-        order = _rzp_client().order.fetch(body.razorpay_order_id)
+        client = _rzp_client()
+        order = client.order.fetch(body.razorpay_order_id)
+        payment = client.payment.fetch(body.razorpay_payment_id)
     except Exception as e:
-        logger.warning("Razorpay order fetch failed during verification: %s", e)
-        raise HTTPException(400, "Payment order could not be verified")
+        logger.warning("Razorpay fetch failed during verification: %s", e)
+        raise HTTPException(400, "Payment could not be verified")
 
-    plan, currency, billing = _validated_order_context(order, expected_user_id=user_id)
-
-    # Activate plan
-    key = (plan, currency, billing)
-    meta = PLAN_PRICES[key]
-    expires_at = (datetime.now(timezone.utc) + timedelta(days=meta["days"])).isoformat()
-
-    sb = get_admin_client()
-    sb.table("users").update({
-        "plan": plan,
-        "plan_expires_at": expires_at,
-        "billing_currency": currency,
-        "billing_period": billing,
-    }).eq("id", user_id).execute()
-
-    # Log the payment
-    sb.table("payment_logs").insert({
-        "user_id": user_id,
-        "razorpay_order_id": body.razorpay_order_id,
-        "razorpay_payment_id": body.razorpay_payment_id,
-        "plan": plan,
-        "amount": meta["amount"],
-        "currency": currency,
-        "status": "success",
-    }).execute()
+    order_user_id, plan, currency, billing, payment_id = _validated_captured_payment_context(payment, order)
+    if order_user_id != user_id or payment_id != body.razorpay_payment_id:
+        raise HTTPException(400, "Payment does not belong to this user")
 
     logger.info(f"Payment verified: user={user_id} plan={plan} currency={currency} billing={billing}")
-    return {"status": "success", "plan": plan, "expires_at": expires_at, "currency": currency, "billing": billing}
+    return _activate_paid_plan(
+        user_id=user_id,
+        plan=plan,
+        currency=currency,
+        billing=billing,
+        razorpay_order_id=body.razorpay_order_id,
+        razorpay_payment_id=body.razorpay_payment_id,
+    )
 
 
 # ── Webhook (server-side confirmation from Razorpay) ─────────────────────────
@@ -312,25 +382,29 @@ async def razorpay_webhook(request: Request):
     event = payload.get("event", "")
 
     if event == "payment.captured":
-        payment = payload["payload"]["payment"]["entity"]
-        notes = payment.get("notes", {})
-        user_id  = notes.get("user_id")
-        plan     = notes.get("plan", "pro")
-        currency = (notes.get("currency") or payment.get("currency") or "INR").upper()
-        billing  = (notes.get("billing") or "monthly").lower()
+        event_payload = _as_dict(payload.get("payload"))
+        payment_payload = _as_dict(event_payload.get("payment"))
+        payment = _as_dict(payment_payload.get("entity"))
+        order_id = str(payment.get("order_id") or "")
+        if not order_id:
+            raise HTTPException(400, "Webhook payment order id is missing")
 
-        key = (plan, currency, billing)
-        if user_id and key in PLAN_PRICES:
-            days = PLAN_PRICES[key]["days"]
-            expires_at = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
-            sb = get_admin_client()
-            sb.table("users").update({
-                "plan": plan,
-                "plan_expires_at": expires_at,
-                "billing_currency": currency,
-                "billing_period": billing,
-            }).eq("id", user_id).execute()
-            logger.info(f"Webhook: plan activated user={user_id} plan={plan} currency={currency} billing={billing}")
+        try:
+            order = _rzp_client().order.fetch(order_id)
+        except Exception as e:
+            logger.warning("Razorpay order fetch failed during webhook verification: %s", e)
+            raise HTTPException(400, "Webhook payment order could not be verified")
+
+        user_id, plan, currency, billing, payment_id = _validated_captured_payment_context(payment, order)
+        _activate_paid_plan(
+            user_id=user_id,
+            plan=plan,
+            currency=currency,
+            billing=billing,
+            razorpay_order_id=order_id,
+            razorpay_payment_id=payment_id,
+        )
+        logger.info(f"Webhook: plan activated user={user_id} plan={plan} currency={currency} billing={billing}")
 
     return {"status": "ok"}
 

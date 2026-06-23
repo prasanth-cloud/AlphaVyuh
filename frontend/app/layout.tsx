@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
+import { Toaster } from "sonner";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ThemeController from "@/components/ThemeController";
 
@@ -44,7 +46,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1c1c1a",
+  themeColor: "#0A0E13",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -73,7 +75,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${GeistSans.className} font-sans antialiased`}>
         <ThemeController />
         {children}
+        <Toaster position="bottom-right" theme="dark" />
         <ServiceWorkerRegistrar />
+        {process.env.NEXT_PUBLIC_DATA_MODE !== "mock" && <Analytics />}
       </body>
     </html>
   );

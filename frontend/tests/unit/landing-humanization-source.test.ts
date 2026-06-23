@@ -106,7 +106,7 @@ describe("landing page humanization", () => {
     expect(landingSource).toContain("TRADER_WORKFLOW_STEPS");
     expect(landingSource).toContain("[\"scanner\",\"watchlist\",\"charts\",\"journal\"]");
     expect(landingSource).toContain("Dashboard, scanner, watchlist, journal");
-    expect(landingSource).toContain("See workflow");
+    expect(landingSource).toContain("See how it works");
     expect(landingSource).not.toContain("Today, journal, watchlist, scanner");
   });
 });

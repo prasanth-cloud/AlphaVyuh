@@ -14,7 +14,7 @@ from app.services.market_data import MarketDataError, MarketIdentity, ProviderNo
 from app.services.market_context import eod_source_metadata, live_source_metadata
 from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import client_rate_key, public_market_limiter
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/charts", tags=["charts"])
 

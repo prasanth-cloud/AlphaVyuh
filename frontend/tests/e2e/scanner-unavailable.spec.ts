@@ -191,7 +191,7 @@ test.describe("Scanner unavailable payloads", () => {
     await expect(page.getByRole("button", { name: "VCP Rotation", exact: true })).toBeVisible({ timeout: 15_000 });
     await page.getByTestId("scanner-screen-delete-screen-vcp").click();
 
-    await expect(page.getByTestId("scanner-toast")).toContainText("Saved scanner screen could not be deleted.");
+    await expect(page.getByLabel("Notifications alt+T")).toContainText("Saved scanner screen could not be deleted.");
     await expect(page.getByRole("button", { name: "VCP Rotation", exact: true })).toBeVisible();
     expect(deleteRequests).toBe(1);
   });
@@ -298,7 +298,7 @@ test.describe("Scanner unavailable payloads", () => {
     await page.getByPlaceholder("Watchlist name…").fill("Scanner queue");
     await page.getByRole("button", { name: "Create", exact: true }).click();
 
-    await expect(page.getByTestId("scanner-toast")).toContainText('1/1 symbols could not be added to "Scanner queue". Check Watchlist or Data Status, then try again.', { timeout: 15_000 });
+    await expect(page.getByLabel("Notifications alt+T")).toContainText('1/1 symbols could not be added to "Scanner queue". Check Watchlist or Data Status, then try again.', { timeout: 15_000 });
     await expect(page).toHaveURL(/\/scanner/);
     expect(itemAddRequests).toBe(1);
   });

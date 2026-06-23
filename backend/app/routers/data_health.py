@@ -4,7 +4,7 @@ from app.brokers.kite import api as kite_api
 from app.services.kite_stream import kite_live_ticker
 from app.services.market_data import _kite_access_token, _kite_api_key
 from app.services.market_context import fallback_source_metadata, normalize_health_row
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: permitted — no user context
 
 router = APIRouter(prefix="/api/v1/data", tags=["data-health"])
 

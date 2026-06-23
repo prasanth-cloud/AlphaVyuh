@@ -17,7 +17,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag } from "lucide-react";
+import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag, List, Eye, Filter } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals, ScanResult } from "@/lib/api";
 import {
@@ -52,6 +52,7 @@ import ChartTimeframeDropdown from "@/components/charts/ChartTimeframeDropdown";
 import { useChartWorkspace } from "@/components/charts/hooks/useChartWorkspace";
 import { workflowLifecycleFlags, workflowPlanStatus } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
+import { toast as sonnerToast } from "@/lib/toast";
 import {
   formatCandleRange,
   formatChartCoverageRange,
@@ -1363,7 +1364,6 @@ function WatchlistContent() {
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
   const [newWlName, setNewWlName] = useState("");
   const [showNewWl, setShowNewWl] = useState(false);
-  const [toast, setToast] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
@@ -1484,8 +1484,7 @@ function WatchlistContent() {
   }
 
   function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(""), 3500);
+    sonnerToast.success(msg);
   }
 
   const openOrderDraft = useCallback((symbol: string) => {
@@ -2198,12 +2197,6 @@ function WatchlistContent() {
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
       <WorkflowDeskHeader pathname="/watchlist" compact showFlowCaption={false} />
       <div className="workspace-grid watchlist-workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
-      {/* Toast */}
-      {toast && (
-        <div data-testid="watchlist-toast" style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
-          {toast}
-        </div>
-      )}
 
       {/* ── Watchlist tabs sidebar ─── */}
       {sidebarCollapsed ? (
@@ -2694,23 +2687,34 @@ function WatchlistContent() {
         <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
           {watchlistError ? (
             <EmptyState
+              icon={List}
               title="Watchlist data unavailable"
-              description={`${watchlistError} Your saved lists are not being treated as empty. Open Data Status before changing this queue.`}
+              description={`${watchlistError} Saved lists are not being treated as empty. Check Data Status for details.`}
               action={{ label: "Open Data Status", onClick: () => router.push("/data") }}
+              testId="watchlist-empty-error"
             />
           ) : !activeWl ? (
-            <EmptyState title="No watchlist selected" description="Create or select a watchlist from the sidebar, then use it as the bridge from scanner ideas to chart review." />
+            <EmptyState
+              icon={Eye}
+              title="No watchlist selected"
+              description="Create or select a watchlist from the sidebar to see symbols here."
+              testId="watchlist-empty-none-selected"
+            />
           ) : activeWl.items.length === 0 ? (
             <EmptyState
-              title="No stocks yet"
-              description="Start with a liquid sample queue, then replace it with your own names as your scanner finds better setups."
+              icon={List}
+              title="This watchlist is empty"
+              description="Add symbols from the scanner or search to start building this list."
               action={{ label: adding ? "Adding..." : "Add starter queue", onClick: () => void addStarterSymbols() }}
+              testId="watchlist-empty-no-items"
             />
           ) : visibleItems.length === 0 ? (
             <EmptyState
-              title="No names in this view"
-              description="The current watchlist filter is too narrow. Reset the desk view or clear your search to bring the full queue back."
+              icon={Filter}
+              title="No symbols match the current filter"
+              description="The active filter excludes all symbols. Reset or widen it to see the full list."
               action={{ label: "Reset view", onClick: () => { setDeskFilter("all"); setListQuery(""); } }}
+              testId="watchlist-empty-filtered"
             />
           ) : (
             canReorder ? (

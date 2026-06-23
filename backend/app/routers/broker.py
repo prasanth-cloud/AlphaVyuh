@@ -45,7 +45,7 @@ from app.brokers.oauth_state import (
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
-from app.services.supabase import get_admin_client, settings
+from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
 from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
@@ -1581,6 +1581,56 @@ async def broker_status(user_id: str = Depends(get_current_user_id)):
         read_only_smoke_checked_at=read_only_smoke["checked_at"],
         read_only_smoke_checks=read_only_smoke["checks"],
     )
+
+
+@router.get("/brokers/kite/token-health")
+async def kite_token_health(user_id: str = Depends(get_current_user_id)):
+    """Returns Kite token health: connected, age, expiry, status."""
+    sb = get_admin_client()
+    u = sb.table("users").select(
+        "broker_type, broker_connected_at, broker_token_expires_at"
+    ).eq("id", user_id).maybe_single().execute()
+
+    if not u.data or u.data.get("broker_type") not in ("zerodha", None):
+        return {"connected": False}
+
+    tok = _get_stored_credential(user_id, "zerodha", "access_token")
+    if not tok:
+        return {"connected": False}
+
+    connected_at = u.data.get("broker_connected_at")
+    expires_at = _get_stored_credential(user_id, "zerodha", "expires_at") or u.data.get("broker_token_expires_at")
+
+    token_age_hours: float | None = None
+    if connected_at:
+        try:
+            ca = datetime.fromisoformat(str(connected_at).replace("Z", "+00:00"))
+            if ca.tzinfo is None:
+                ca = ca.replace(tzinfo=timezone.utc)
+            token_age_hours = round((datetime.now(timezone.utc) - ca).total_seconds() / 3600, 1)
+        except Exception:
+            pass
+
+    token_status = "valid"
+    if expires_at:
+        try:
+            expiry = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                expiry = expiry.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            if expiry <= now:
+                token_status = "expired"
+            elif (expiry - now).total_seconds() < 7200:
+                token_status = "expiring_soon"
+        except Exception:
+            pass
+
+    return {
+        "connected": True,
+        "token_age_hours": token_age_hours,
+        "expires_at": str(expires_at) if expires_at else None,
+        "status": token_status,
+    }
 
 
 @router.get("/broker/zerodha/login")

@@ -1,3 +1,4 @@
+import re
 import time
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -15,15 +16,31 @@ from app.services.market_data import (
 )
 from app.services.rate_limit import client_rate_key, public_market_limiter
 from app.services.sector_taxonomy import build_sector_taxonomy_metadata
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: permitted — no user context
 
 router = APIRouter(prefix="/api/v1", tags=["stocks"])
 
 # ── Fundamentals cache (in-memory, 6-hour TTL) ────────────────────────────────
 _fund_cache: dict[str, tuple[float, dict]] = {}
 _FUND_TTL = 6 * 3600  # seconds
+_FUND_CACHE_MAX = 256
 _market_summary_cache: tuple[float, dict] | None = None
 _MARKET_SUMMARY_TTL = 5 * 60  # seconds
+_PUBLIC_SYMBOL_RE = re.compile(r"^[A-Z0-9._-]{1,24}$")
+
+
+def _normalize_public_symbol(symbol: str) -> str:
+    sym = symbol.strip().upper()
+    if not _PUBLIC_SYMBOL_RE.fullmatch(sym):
+        raise HTTPException(status_code=400, detail="Invalid symbol")
+    return sym
+
+
+def _store_fundamentals_cache(sym: str, payload: dict) -> None:
+    if sym not in _fund_cache and len(_fund_cache) >= _FUND_CACHE_MAX:
+        oldest = min(_fund_cache.items(), key=lambda item: item[1][0])[0]
+        _fund_cache.pop(oldest, None)
+    _fund_cache[sym] = (time.time(), payload)
 
 
 def _lookup_market(sym: str) -> tuple[str, str]:
@@ -36,6 +53,21 @@ def _lookup_market(sym: str) -> tuple[str, str]:
     except Exception:
         pass
     return ("NSE", "INR")
+
+
+def _lookup_fundamentals_market(sym: str) -> tuple[str, str]:
+    """Return market metadata only for known active symbols before provider calls."""
+    try:
+        r = get_admin_client().table("stock_universe") \
+            .select("market,currency").eq("symbol", sym).eq("is_active", True).maybe_single().execute()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Fundamentals are temporarily unavailable.",
+        )
+    if not r or not r.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Symbol not found")
+    return (r.data.get("market") or "NSE", r.data.get("currency") or "INR")
 
 
 def _yf_ticker_symbol(sym: str, market: str) -> str:
@@ -518,17 +550,18 @@ async def get_sector_breadth():
 
 
 @router.get("/stocks/{symbol}/fundamentals")
-async def get_fundamentals(symbol: str):
+async def get_fundamentals(symbol: str, request: Request):
     """Basic fundamentals from Yahoo Finance: PE, market cap, P/B, dividend yield, EPS etc."""
-    sym = symbol.upper()
+    sym = _normalize_public_symbol(symbol)
     now = time.time()
     # Return cached data if fresh
     if sym in _fund_cache:
         cached_at, cached_data = _fund_cache[sym]
         if now - cached_at < _FUND_TTL:
             return cached_data
+    _enforce_public_market_limit(request, "fundamentals")
     try:
-        market, currency = _lookup_market(sym)
+        market, currency = _lookup_fundamentals_market(sym)
         ticker = yf.Ticker(_yf_ticker_symbol(sym, market))
         info = ticker.info
 
@@ -573,7 +606,7 @@ async def get_fundamentals(symbol: str):
             "market_cap_str": mc_str,
             "shares_outstanding": info.get("sharesOutstanding"),
         }
-        _fund_cache[sym] = (time.time(), result)
+        _store_fundamentals_cache(sym, result)
         return result
     except Exception:
         if sym in _fund_cache:

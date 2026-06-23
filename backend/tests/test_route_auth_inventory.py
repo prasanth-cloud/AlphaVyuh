@@ -35,6 +35,8 @@ PUBLIC_ROUTES = {
     ("GET", "/api/v1/payments/config"),
     ("GET", "/api/v1/payments/plans"),
     ("POST", "/api/v1/payments/webhook"),
+    ("POST", "/api/admin/rotate-broker-keys"),
+    ("GET", "/api/v1/email/unsubscribe"),
 }
 
 SECRET_GATED_PUBLIC_ROUTES = {
@@ -42,6 +44,8 @@ SECRET_GATED_PUBLIC_ROUTES = {
     ("POST", "/api/v1/ingest/refresh-today"),
     ("POST", "/api/v1/alerts/telegram/webhook"),
     ("POST", "/api/v1/payments/webhook"),
+    ("POST", "/api/admin/rotate-broker-keys"),
+    ("GET", "/api/v1/email/unsubscribe"),
 }
 
 

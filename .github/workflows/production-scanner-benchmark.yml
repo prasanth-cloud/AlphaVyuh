@@ -55,6 +55,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm --prefix frontend ci
 
+      - name: Validate trusted production target
+        env:
+          PRODUCTION_API_URL_INPUT: ${{ github.event.inputs.production_api_url }}
+        run: node scripts/validate-production-workflow-targets.mjs
+
       - name: Prepare production benchmark account
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -69,7 +74,6 @@ jobs:
 
       - name: Run authenticated scanner benchmark
         env:
-          PRODUCTION_API_URL: ${{ github.event.inputs.production_api_url }}
           SCANNER_BENCHMARK_RUNS: ${{ github.event.inputs.runs }}
           SCANNER_BENCHMARK_WARMUP_RUNS: ${{ github.event.inputs.warmup_runs }}
           SCANNER_BENCHMARK_MIN_QUERY_REDUCTION_PCT: ${{ github.event.inputs.min_query_reduction_pct }}

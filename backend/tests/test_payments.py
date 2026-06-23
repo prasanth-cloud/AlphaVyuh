@@ -1,6 +1,8 @@
 """Tests for payment plan pricing and signature verification."""
+import asyncio
 import hashlib
 import hmac
+import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -203,6 +205,74 @@ def test_payment_verify_uses_order_metadata_not_client_plan():
     assert exc.value.status_code == 400
 
 
+def _razorpay_order(
+    *,
+    user_id: str = "user-123",
+    plan: str = "pro",
+    currency: str = "INR",
+    billing: str = "monthly",
+    order_id: str = "order_paid",
+    amount: int | None = None,
+):
+    return {
+        "id": order_id,
+        "amount": amount if amount is not None else payments.PLAN_PRICES[(plan, currency, billing)]["amount"],
+        "currency": currency,
+        "notes": {
+            "user_id": user_id,
+            "plan": plan,
+            "currency": currency,
+            "billing": billing,
+        },
+    }
+
+
+def test_payment_context_uses_order_metadata_not_payment_notes():
+    order = _razorpay_order(user_id="user-123", plan="pro", currency="INR", billing="monthly")
+    payment = {
+        "id": "pay_123",
+        "order_id": order["id"],
+        "amount": payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "status": "captured",
+        "notes": {
+            "user_id": "attacker",
+            "plan": "elite",
+            "currency": "USD",
+            "billing": "annual",
+        },
+    }
+
+    assert payments._validated_captured_payment_context(payment, order) == (
+        "user-123",
+        "pro",
+        "INR",
+        "monthly",
+        "pay_123",
+    )
+
+
+def test_payment_context_rejects_amount_or_currency_mismatch():
+    order = _razorpay_order(user_id="user-123", plan="pro", currency="INR", billing="monthly")
+    payment = {
+        "id": "pay_123",
+        "order_id": order["id"],
+        "amount": payments.PLAN_PRICES[("elite", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "status": "captured",
+    }
+
+    with pytest.raises(HTTPException) as exc:
+        payments._validated_captured_payment_context(payment, order)
+    assert exc.value.status_code == 400
+
+    payment["amount"] = payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"]
+    payment["currency"] = "USD"
+    with pytest.raises(HTTPException) as exc:
+        payments._validated_captured_payment_context(payment, order)
+    assert exc.value.status_code == 400
+
+
 class _FakeResult:
     def __init__(self, data=None):
         self.data = data
@@ -247,6 +317,218 @@ class _FakeClient:
 
     def table(self, table_name: str):
         return _FakeQuery(self, table_name)
+
+
+class _ActivationQuery:
+    def __init__(self, client, table_name: str):
+        self.client = client
+        self.table_name = table_name
+        self.operation = None
+        self.payload = None
+        self.eq_args = None
+
+    def update(self, payload):
+        self.operation = "update"
+        self.payload = payload
+        return self
+
+    def insert(self, payload):
+        self.operation = "insert"
+        self.payload = payload
+        return self
+
+    def eq(self, *args):
+        self.eq_args = args
+        return self
+
+    def execute(self):
+        if self.operation == "update":
+            self.client.updates.append((self.table_name, self.payload, self.eq_args))
+        elif self.operation == "insert":
+            self.client.inserts.append((self.table_name, self.payload))
+        return _FakeResult({"ok": True})
+
+
+class _ActivationClient:
+    def __init__(self):
+        self.updates = []
+        self.inserts = []
+
+    def table(self, table_name: str):
+        return _ActivationQuery(self, table_name)
+
+
+class _ActivationRpcQuery:
+    def __init__(self, client, name: str, params: dict):
+        self.client = client
+        self.name = name
+        self.params = params
+
+    def execute(self):
+        assert self.name == "activate_razorpay_payment"
+        self.client.rpc_calls.append((self.name, self.params))
+        payment_id = self.params["p_razorpay_payment_id"]
+        if payment_id in self.client.payment_rows:
+            row = dict(self.client.payment_rows[payment_id])
+            row["replayed"] = True
+            return _FakeResult([row])
+
+        self.client.activations += 1
+        row = {
+            "status": "success",
+            "plan": self.params["p_plan"],
+            "expires_at": f"expires-{self.client.activations}",
+            "currency": self.params["p_currency"],
+            "billing": self.params["p_billing"],
+            "replayed": False,
+        }
+        self.client.payment_rows[payment_id] = dict(row)
+        return _FakeResult([row])
+
+
+class _ActivationRpcClient:
+    def __init__(self):
+        self.rpc_calls = []
+        self.payment_rows = {}
+        self.activations = 0
+
+    def rpc(self, name: str, params: dict):
+        return _ActivationRpcQuery(self, name, params)
+
+
+class _OrderApi:
+    def __init__(self, order):
+        self.order = order
+
+    def fetch(self, order_id):
+        assert order_id == self.order["id"]
+        return self.order
+
+
+class _PaymentApi:
+    def __init__(self, payment):
+        self.payment = payment
+
+    def fetch(self, payment_id):
+        assert payment_id == self.payment["id"]
+        return self.payment
+
+
+class _RazorpayClient:
+    def __init__(self, order, payment=None):
+        self.order = _OrderApi(order)
+        self.payment = _PaymentApi(payment or {})
+
+
+class _WebhookRequest:
+    def __init__(self, body: bytes, signature: str):
+        self._body = body
+        self.headers = {"X-Razorpay-Signature": signature}
+
+    async def body(self):
+        return self._body
+
+    async def json(self):
+        return json.loads(self._body)
+
+
+def test_webhook_activates_from_fetched_order_not_payment_notes(monkeypatch):
+    order = _razorpay_order(user_id="user-123", plan="pro", currency="INR", billing="monthly")
+    payment = {
+        "id": "pay_123",
+        "order_id": order["id"],
+        "amount": payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "status": "captured",
+        "notes": {
+            "user_id": "attacker",
+            "plan": "elite",
+            "currency": "USD",
+            "billing": "annual",
+        },
+    }
+    payload = {"event": "payment.captured", "payload": {"payment": {"entity": payment}}}
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    secret = "webhook-secret"
+    signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    client = _ActivationRpcClient()
+
+    monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+    monkeypatch.setattr(payments.settings, "razorpay_webhook_secret", secret)
+    monkeypatch.setattr(payments, "_rzp_client", lambda: _RazorpayClient(order))
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    result = asyncio.run(payments.razorpay_webhook(_WebhookRequest(body, signature)))
+
+    assert result == {"status": "ok"}
+    assert client.activations == 1
+    assert client.rpc_calls[0][1]["p_user_id"] == "user-123"
+    assert client.rpc_calls[0][1]["p_plan"] == "pro"
+    assert client.rpc_calls[0][1]["p_currency"] == "INR"
+    assert client.rpc_calls[0][1]["p_razorpay_payment_id"] == "pay_123"
+    assert client.rpc_calls[0][1]["p_amount"] == payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"]
+
+
+@pytest.mark.anyio
+async def test_verify_payment_replay_returns_existing_activation_without_extension(monkeypatch):
+    order = _razorpay_order(user_id="user-123", plan="pro", currency="INR", billing="monthly")
+    payment = {
+        "id": "pay_replay",
+        "order_id": order["id"],
+        "amount": payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "status": "captured",
+    }
+    secret = "verify-secret"
+    signature = hmac.new(secret.encode(), f"{order['id']}|{payment['id']}".encode(), hashlib.sha256).hexdigest()
+    client = _ActivationRpcClient()
+
+    monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+    monkeypatch.setattr(payments.settings, "razorpay_key_secret", secret)
+    monkeypatch.setattr(payments, "_rzp_client", lambda: _RazorpayClient(order, payment))
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    body = payments.VerifyRequest(
+        razorpay_order_id=order["id"],
+        razorpay_payment_id=payment["id"],
+        razorpay_signature=signature,
+        plan="elite",
+        currency="USD",
+        billing="annual",
+    )
+
+    first = await payments.verify_payment(body, user_id="user-123")
+    second = await payments.verify_payment(body, user_id="user-123")
+
+    assert first["replayed"] is False
+    assert second["replayed"] is True
+    assert second["expires_at"] == first["expires_at"]
+    assert client.activations == 1
+
+
+def test_webhook_replay_returns_ok_without_second_activation(monkeypatch):
+    order = _razorpay_order(user_id="user-123", plan="pro", currency="INR", billing="monthly")
+    payment = {
+        "id": "pay_webhook_replay",
+        "order_id": order["id"],
+        "amount": payments.PLAN_PRICES[("pro", "INR", "monthly")]["amount"],
+        "currency": "INR",
+        "status": "captured",
+    }
+    payload = {"event": "payment.captured", "payload": {"payment": {"entity": payment}}}
+    body = json.dumps(payload, separators=(",", ":")).encode()
+    secret = "webhook-secret"
+    signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    client = _ActivationRpcClient()
+
+    monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+    monkeypatch.setattr(payments.settings, "razorpay_webhook_secret", secret)
+    monkeypatch.setattr(payments, "_rzp_client", lambda: _RazorpayClient(order))
+    monkeypatch.setattr(payments, "get_admin_client", lambda: client)
+
+    assert asyncio.run(payments.razorpay_webhook(_WebhookRequest(body, signature))) == {"status": "ok"}
+    assert asyncio.run(payments.razorpay_webhook(_WebhookRequest(body, signature))) == {"status": "ok"}
+    assert client.activations == 1
 
 
 def test_effective_plan_helper_treats_expired_paid_rows_as_free():
@@ -296,3 +578,23 @@ async def test_plan_reconcile_explicitly_downgrades_expired_paid_rows(monkeypatc
 
     assert result == {"plan": "free", "expires_at": expired, "active": False, "reconciled": True}
     assert client.updates == [("users", {"plan": "free"})]
+
+
+class TestWebhookPlanUpdate:
+    """Verify that invalid webhook signatures are rejected."""
+
+    @pytest.mark.anyio
+    async def test_webhook_rejects_invalid_signature(self, monkeypatch):
+        monkeypatch.setattr(payments.settings, "razorpay_webhook_secret", "webhook_secret")
+        monkeypatch.setattr(payments.settings, "payment_checkout_enabled", True)
+
+        class FakeRequest:
+            headers = {"X-Razorpay-Signature": "invalid"}
+            async def body(self):
+                return b'{"event":"payment.captured"}'
+            async def json(self):
+                return {"event": "payment.captured"}
+
+        with pytest.raises(HTTPException) as exc:
+            await payments.razorpay_webhook(FakeRequest())
+        assert exc.value.status_code == 400

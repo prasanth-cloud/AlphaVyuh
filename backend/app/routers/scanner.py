@@ -24,7 +24,7 @@ from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
 logger = logging.getLogger(__name__)
