@@ -23,4 +23,45 @@ describe("watchlist feedback copy", () => {
     expect(source).toContain('source: "watchlist"');
     expect(source).toContain("decisionRecordRows({");
   });
+
+  it("exposes a row-level journal draft action without live execution copy", () => {
+    expect(source).toContain("watchlist_order_draft_opened");
+    expect(source).toContain("Draft order for");
+    expect(source).toContain("Journal capture only: save the plan to Journal. Place any real trade directly with your broker.");
+    expect(source).not.toContain("Place live order");
+  });
+
+  it("keeps chart review and journal capture as visible row-level actions", () => {
+    expect(source).toContain("Open chart for");
+    expect(source).toContain("Chart");
+    expect(source).toContain("Draft");
+    expect(source).toContain("onOpenChart(item.symbol)");
+    expect(source).toContain("onDraftOrder(item.symbol)");
+  });
+
+  it("keeps the watchlist setup flow scanner, chart, decision, and journal first", () => {
+    expect(source).toContain("watchlist-workflow-strip");
+    expect(source).toContain("Queue workflow");
+    expect(source).toContain("Scanner ideas");
+    expect(source).toContain("Chart review");
+    expect(source).toContain("Decision desk");
+    expect(source).toContain("Journal draft only");
+    expect(source).toContain("no live execution");
+    expect(source).toContain("Add starter queue");
+    expect(source).toContain('router.push("/scanner")');
+  });
+
+  it("prefetches chart candles from watchlist row intent", () => {
+    expect(source).toContain("onPrefetchChart");
+    expect(source).toContain("onMouseEnter={() => onPrefetchChart(item.symbol)}");
+    expect(source).toContain("onFocus={() => onPrefetchChart(item.symbol)}");
+    expect(source).toContain("prefetchWatchlistChart");
+    expect(source).toContain('getWatchlistChartRequest("3M")');
+    expect(source).toContain("prefetchCandles(symbol");
+  });
+
+  it("opens the journal capture ticket when a chart plan returns to the Decision Desk", () => {
+    expect(source).toContain("Chart plan context loaded into Decision Desk. Journal ticket is ready.");
+    expect(source).toContain("openOrderDraft(draftSymbol)");
+  });
 });

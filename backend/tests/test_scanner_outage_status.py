@@ -10,6 +10,15 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 from app.routers import scanner  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _clear_scanner_readiness_cache():
+    scanner._m3a_readiness_cache.clear()
+    scanner._scan_result_cache.clear()
+    yield
+    scanner._m3a_readiness_cache.clear()
+    scanner._scan_result_cache.clear()
+
+
 class _Result:
     def __init__(self, data=None, count=None):
         self.data = data
@@ -316,6 +325,7 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
     assert result["source_metadata"]["confidence"] == "healthy"
     scanner_performance = result["source_metadata"]["scanner_performance"]
     assert scanner_performance == {
+        "cache_status": "miss",
         "query_rows": 2,
         "universe_size": 1000,
         "query_row_reduction_pct": 99.8,
@@ -339,6 +349,7 @@ def test_execute_scan_reports_query_reduction_without_marking_data_degraded():
         "score",
         "sort",
         "universe_count",
+        "cache_lookup",
         "total",
     }
     assert all(value >= 0 for value in scanner_performance["timing_ms"].values())
@@ -382,6 +393,28 @@ def test_execute_scan_retries_compatibility_prefilters_before_broad_fallback():
     ]
     assert result["query_row_reduction_pct"] == 99.8
     assert client.table_calls.count("daily_ohlcv") == 4
+    assert scanner_performance["cache_status"] == "fallback_not_cached"
+    calls_after_first = len(client.table_calls)
+    repeated = asyncio.run(
+        scanner.execute_scan(
+            client,
+            scanner.ScanRequest(
+                filters=scanner.ScanFilters(
+                    week_52_high_pct_max=8,
+                    volume_ratio_min=1.5,
+                    darvas_box_height_pct_max=15,
+                    avg_volume_50d_min=100000,
+                    series=["EQ"],
+                ),
+                page_size=25,
+            ),
+            plan="pro",
+            trade_date="2026-05-19",
+        )
+    )
+    assert repeated["source_metadata"]["scanner_performance"]["cache_status"] == "fallback_not_cached"
+    assert len(client.table_calls) > calls_after_first
+    assert scanner._scan_result_cache == {}
     scan_queries = [
         query for query in client.queries
         if query.table_name == "daily_ohlcv" and not query._count_mode
@@ -491,11 +524,18 @@ def test_execute_scan_caches_universe_count_for_repeated_scans():
     )
 
     first = asyncio.run(scanner.execute_scan(client, body, plan="pro", trade_date="2026-05-19"))
+    table_calls_after_first = list(client.table_calls)
     second = asyncio.run(scanner.execute_scan(client, body, plan="pro", trade_date="2026-05-19"))
 
     assert first["universe_size"] == 1000
     assert second["universe_size"] == 1000
+    assert client.table_calls == table_calls_after_first
     assert client.table_calls.count("stock_universe") == 1
+    assert first["source_metadata"]["scanner_performance"]["cache_status"] == "miss"
+    assert second["source_metadata"]["scanner_performance"]["cache_status"] == "hit"
+    assert second["source_metadata"]["scanner_performance"]["cache_origin_total_ms"] == first["source_metadata"]["scanner_performance"]["timing_ms"]["total"]
+    assert second["source_metadata"]["scanner_performance"]["timing_ms"]["query"] == 0
+    assert second["source_metadata"]["scanner_performance"]["timing_ms"]["total"] <= 1
     assert second["source_metadata"]["scanner_performance"]["db_prefilters_applied"][-4:] == [
         {"op": "gte", "column": "rs_score", "value": 70},
         {"op": "gte", "column": "volume_ratio", "value": 1.5},
@@ -503,6 +543,55 @@ def test_execute_scan_caches_universe_count_for_repeated_scans():
         {"op": "lte", "column": "w52h_pct", "value": 10},
     ]
     scanner._universe_count_cache.clear()
+
+
+def test_execute_scan_cache_isolated_from_caller_mutation_and_plan_limits():
+    client = _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000)
+    body = scanner.ScanRequest(filters=scanner.ScanFilters(series=["EQ"]), page_size=25)
+
+    first = asyncio.run(scanner.execute_scan(client, body, plan="pro", trade_date="2026-05-19"))
+    calls_after_pro = list(client.table_calls)
+    first["results"].clear()
+
+    cached_pro = asyncio.run(scanner.execute_scan(client, body, plan="pro", trade_date="2026-05-19"))
+    assert len(cached_pro["results"]) == 2
+    assert client.table_calls == calls_after_pro
+    assert cached_pro["source_metadata"]["scanner_performance"]["cache_status"] == "hit"
+
+    free_result = asyncio.run(scanner.execute_scan(client, body, plan="free", trade_date="2026-05-19"))
+    assert free_result["plan"] == "free"
+    assert len(client.table_calls) > len(calls_after_pro)
+    assert free_result["source_metadata"]["scanner_performance"]["cache_status"] == "miss"
+
+
+def test_execute_scan_can_bypass_result_cache_for_cold_benchmarks():
+    client = _ScannerClient([_scanner_row("AAA"), _scanner_row("BBB")], universe_count=1000)
+    body = scanner.ScanRequest(filters=scanner.ScanFilters(series=["EQ"]), page_size=25)
+
+    first = asyncio.run(
+        scanner.execute_scan(
+            client,
+            body,
+            plan="pro",
+            trade_date="2026-05-19",
+            use_result_cache=False,
+        )
+    )
+    calls_after_first = len(client.table_calls)
+    second = asyncio.run(
+        scanner.execute_scan(
+            client,
+            body,
+            plan="pro",
+            trade_date="2026-05-19",
+            use_result_cache=False,
+        )
+    )
+
+    assert first["source_metadata"]["scanner_performance"]["cache_status"] == "bypass"
+    assert second["source_metadata"]["scanner_performance"]["cache_status"] == "bypass"
+    assert len(client.table_calls) > calls_after_first
+    assert scanner._scan_result_cache == {}
 
 
 def test_scanner_selects_avoid_unmigrated_market_cap_category_column():

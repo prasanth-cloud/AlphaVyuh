@@ -115,6 +115,64 @@ describe("mock order flow", () => {
     });
   });
 
+  it("reuses the existing journal entry when the same order intent is retried", async () => {
+    const { getJournalEntries, placeOrder } = await import("@/lib/api");
+    const intentKey = "11111111-1111-4111-8111-111111111111";
+    const request = {
+      symbol: "RELIANCE",
+      side: "buy" as const,
+      quantity: 10,
+      price: 1500,
+      order_type: "market" as const,
+      source_page: "chart" as const,
+      idempotency_key: intentKey,
+    };
+
+    const first = await placeOrder(request);
+    const second = await placeOrder(request);
+    const journal = await getJournalEntries({ symbol: "RELIANCE", status: "open" });
+    const intentEntries = journal.entries.filter((entry) =>
+      entry.entry_reason?.includes(`[alphavyuh-order-intent:${intentKey}]`),
+    );
+
+    expect(first.status).toBe("filled");
+    expect(second).toMatchObject({
+      status: "deduplicated",
+      journal_id: first.journal_id,
+      broker: "simulated",
+    });
+    expect(intentEntries).toHaveLength(1);
+    expect(intentEntries[0].id).toBe(first.journal_id);
+  });
+
+  it("rejects a materially changed mock order that reuses an intent key", async () => {
+    const { placeOrder } = await import("@/lib/api");
+    const intentKey = "22222222-2222-4222-8222-222222222222";
+    const request = {
+      symbol: "RELIANCE",
+      side: "buy" as const,
+      quantity: 10,
+      price: 1500,
+      order_type: "market" as const,
+      source_page: "chart" as const,
+      idempotency_key: intentKey,
+    };
+
+    await placeOrder(request);
+
+    await expect(placeOrder({ ...request, quantity: 11 })).rejects.toThrow(
+      "already attached to a different order",
+    );
+  });
+
+  it("does not offer broker reconciliation for simulated orders", async () => {
+    const { reconcileBrokerOrder } = await import("@/lib/api");
+
+    await expect(reconcileBrokerOrder("simulated-order")).rejects.toThrow(
+      "Simulated orders do not require broker reconciliation",
+    );
+  });
+
   it("deduplicates mock broker imports and exposes sync state", async () => {
     const { getBrokerStatus, getJournalEntries, importBrokerTrades, importZerodhaTrades, runBrokerReadOnlySmoke, runZerodhaReadOnlySmoke } = await import("@/lib/api");
 

@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync("app/(app)/journal/page.tsx", "utf8");
+const tradeTableSource = readFileSync("app/(app)/journal/components/TradeTable.tsx", "utf8");
+const globalStyles = readFileSync("app/globals.css", "utf8");
 
 describe("journal feedback copy", () => {
   it("uses stable action-oriented copy for journal mutations", () => {
@@ -30,5 +32,16 @@ describe("journal feedback copy", () => {
     expect(source.indexOf('data-testid="journal-review-queue"')).toBeLessThan(source.indexOf('<TradeTable'));
     expect(source).toContain('getJournalReviewStage(entries');
     expect(source).toContain('reviewStage.primaryAction');
+  });
+
+  it("keeps mobile journal rows actionable without horizontal table hunting", () => {
+    expect(tradeTableSource).toContain("journal-mobile-trade-card");
+    expect(tradeTableSource).toContain("journal-mobile-trade-grid");
+    expect(tradeTableSource).toContain("P&L / R");
+    expect(tradeTableSource).toContain("Source");
+    expect(tradeTableSource).toContain("Review");
+    expect(globalStyles).toContain(".journal-table-mobile-hide");
+    expect(globalStyles).toContain(".journal-table-secondary");
+    expect(globalStyles).toContain(".journal-table {\n    min-width: 0;");
   });
 });

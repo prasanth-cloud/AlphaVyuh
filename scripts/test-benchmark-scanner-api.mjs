@@ -153,6 +153,7 @@ await withServer(async (request, response) => {
 
   if (request.url === "/api/v1/scanner/run" && request.method === "POST") {
     assert.equal(request.headers.authorization, "Bearer production-smoke-token");
+    assert.equal(request.headers["cache-control"], "no-cache");
     const requestBody = await readJsonBody(request);
     await sleep(8);
     response.end(JSON.stringify(scannerResponse(requestBody)));
@@ -225,6 +226,7 @@ await withServer(async (request, response) => {
     const output = JSON.parse(readFileSync(outputPath, "utf8"));
     assert.equal(output.runs, 2);
     assert.equal(output.warmup_runs, 1);
+    assert.equal(output.cache_scope, "result_cache_bypassed_helper_caches_warm");
     assert.equal(output.api_base, apiUrl);
     assert.ok(Array.isArray(output.results), "benchmark output should include results array");
     assert.equal(output.proof.production_proof, "timing_captured_without_speedup_gate");

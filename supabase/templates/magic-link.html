@@ -13,7 +13,7 @@
         <p style="margin:0 0 18px;font-size:15px;line-height:1.65;color:#b8c3c7;">
           Continue into your AlphaVyuh account with this secure sign-in link.
         </p>
-        <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#8cf0e1;color:#061110;text-decoration:none;font-size:14px;font-weight:800;">
+        <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&amp;type=magiclink&amp;next={{ .RedirectTo }}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#8cf0e1;color:#061110;text-decoration:none;font-size:14px;font-weight:800;">
           Sign in to AlphaVyuh
         </a>
         <p style="margin:20px 0 0;font-size:12px;line-height:1.6;color:#809096;">

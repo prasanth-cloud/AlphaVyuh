@@ -25,6 +25,18 @@ interface TradeTableProps {
   onRetry?: () => void;
 }
 
+const JOURNAL_TABLE_HEADERS = [
+  { label: "Symbol", className: "" },
+  { label: "Side", className: "" },
+  { label: "Setup", className: "" },
+  { label: "Dates", className: "journal-table-secondary" },
+  { label: "Entry / Exit", className: "journal-table-secondary" },
+  { label: "P&L / R", className: "journal-table-mobile-hide" },
+  { label: "Review", className: "journal-table-mobile-hide" },
+  { label: "Source", className: "journal-table-mobile-hide" },
+  { label: "", className: "journal-table-mobile-hide" },
+];
+
 export function TradeTable({
   entries,
   loading,
@@ -92,8 +104,8 @@ export function TradeTable({
         <table className="journal-table">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border-subtle)", background: "var(--surface-2)" }}>
-              {["Symbol", "Side", "Setup", "Dates", "Entry / Exit", "P&L / R", "Review", "Source", ""].map(h => (
-                <th key={h} className="label" style={{ textAlign: "left", padding: "8px 10px", whiteSpace: "nowrap" }}>{h}</th>
+              {JOURNAL_TABLE_HEADERS.map((header) => (
+                <th key={header.label} className={`label ${header.className}`} style={{ textAlign: "left", padding: "8px 10px", whiteSpace: "nowrap" }}>{header.label}</th>
               ))}
             </tr>
           </thead>
@@ -165,6 +177,47 @@ export function TradeTable({
                   <td style={{ padding: "8px 10px" }}>
                     <span className="mono" style={{ fontWeight: 600, color: "var(--text-primary)" }}>{e.symbol}</span>
                     {e.company_name && <div className="caption" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.company_name}</div>}
+                    <div className="journal-mobile-trade-card">
+                      <div className="journal-mobile-trade-grid">
+                        <div>
+                          <div className="label">P&L / R</div>
+                          {e.pnl == null ? (
+                            <div className="caption">Open trade</div>
+                          ) : (
+                            <>
+                              <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: e.pnl >= 0 ? "var(--gain)" : "var(--loss)" }}>
+                                {e.pnl >= 0 ? "+" : ""}{fmtCcy(e.pnl)}
+                              </div>
+                              <div className="caption">
+                                {rMultiple != null ? `${rMultiple >= 0 ? "+" : ""}${rMultiple.toFixed(2)}R` : e.pnl_pct != null ? `${e.pnl_pct >= 0 ? "+" : ""}${e.pnl_pct.toFixed(2)}%` : "R pending"}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        <div>
+                          <div className="label">Review</div>
+                          <Badge variant={flow.reviewTone}>{flow.reviewLabel}</Badge>
+                        </div>
+                        <div>
+                          <div className="label">Source</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{flow.sourceLabel}</div>
+                          <div className="caption">{flow.brokerLabel ? `${flow.brokerLabel} · auto` : (flow.autoRecorded ? "Auto-recorded" : "Manual")}</div>
+                        </div>
+                        <div>
+                          <div className="label">Action</div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} onClick={ev => ev.stopPropagation()}>
+                            {e.status === "open" && (
+                              <button onClick={() => onCloseEntry(e)} className="workspace-chip-button">
+                                Close
+                              </button>
+                            )}
+                            <button onClick={() => onSelectEntry(e)} className="workspace-chip-button active">
+                              Review
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </td>
                   <td style={{ padding: "8px 10px" }}>
                     <Badge variant={e.trade_type === "long" ? "gain" : "loss"}>
@@ -174,15 +227,15 @@ export function TradeTable({
                   <td style={{ padding: "8px 10px" }}>
                     <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{e.setup_type || "—"}</span>
                   </td>
-                  <td style={{ padding: "8px 10px", color: "var(--text-secondary)" }}>
+                  <td className="journal-table-secondary" style={{ padding: "8px 10px", color: "var(--text-secondary)" }}>
                     <div>{fmtDate(e.entry_date)}</div>
                     <div className="caption">{e.exit_date ? fmtDate(e.exit_date) : "Open"}</div>
                   </td>
-                  <td style={{ padding: "8px 10px" }}>
+                  <td className="journal-table-secondary" style={{ padding: "8px 10px" }}>
                     <div className="mono" style={{ fontSize: 12, color: "var(--text-primary)" }}>₹{e.entry_price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</div>
                     <div className="caption">{e.exit_price != null ? `₹${e.exit_price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "No exit"}</div>
                   </td>
-                  <td style={{ padding: "8px 10px" }}>
+                  <td className="journal-table-mobile-hide" style={{ padding: "8px 10px" }}>
                     {e.pnl == null ? (
                       <span className="caption">Open</span>
                     ) : (
@@ -196,7 +249,7 @@ export function TradeTable({
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: "8px 10px" }}>
+                  <td className="journal-table-mobile-hide" style={{ padding: "8px 10px" }}>
                     <Badge variant={flow.reviewTone}>
                       {flow.reviewLabel}
                     </Badge>
@@ -204,13 +257,13 @@ export function TradeTable({
                       <div className="caption" style={{ marginTop: 3, color: "var(--warn)" }}>Primary action</div>
                     )}
                   </td>
-                  <td style={{ padding: "8px 10px" }}>
+                  <td className="journal-table-mobile-hide" style={{ padding: "8px 10px" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                       <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>{flow.sourceLabel}</span>
                       <span className="caption">{flow.brokerLabel ? `${flow.brokerLabel} • auto` : (flow.autoRecorded ? "Auto-recorded" : "Manual")}</span>
                     </div>
                   </td>
-                  <td style={{ padding: "8px 10px" }} onClick={ev => ev.stopPropagation()}>
+                  <td className="journal-table-mobile-hide" style={{ padding: "8px 10px" }} onClick={ev => ev.stopPropagation()}>
                     <div style={{ display: "flex", gap: 8 }}>
                       {e.status === "open" && (
                         <button onClick={() => onCloseEntry(e)} style={{ fontSize: 11, color: "var(--accent)", cursor: "pointer" }}>

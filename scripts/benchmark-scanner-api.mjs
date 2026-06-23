@@ -359,6 +359,7 @@ function benchmarkPayload(results, failure = null) {
     api_base: apiBase,
     runs,
     warmup_runs: warmupRuns,
+    cache_scope: "result_cache_bypassed_helper_caches_warm",
     scenarios: results,
     results,
     proof: benchmarkProof(results, failure),
@@ -387,6 +388,11 @@ function dbPrefilterCount(scanner) {
 function scannerTiming(scanner) {
   const timing = scanner?.source_metadata?.scanner_performance?.timing_ms;
   return timing && typeof timing === "object" ? timing : null;
+}
+
+function scannerCacheStatus(scanner) {
+  const value = scanner?.source_metadata?.scanner_performance?.cache_status;
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function scannerFallbackQuery(scanner) {
@@ -434,6 +440,7 @@ async function runScenario(scenario) {
     await fetchJson("/api/v1/scanner/run", {
       method: "POST",
       body: scenario.body,
+      headers: { "Cache-Control": "no-cache" },
     });
   }
 
@@ -445,6 +452,7 @@ async function runScenario(scenario) {
     lastResponse = await fetchJson("/api/v1/scanner/run", {
       method: "POST",
       body: scenario.body,
+      headers: { "Cache-Control": "no-cache" },
     });
     samples.push(Math.round(performance.now() - started));
   }
@@ -464,6 +472,12 @@ async function runScenario(scenario) {
   );
   const prefilterCount = dbPrefilterCount(lastResponse);
   const timingMs = scannerTiming(lastResponse);
+  const cacheStatus = scannerCacheStatus(lastResponse);
+  if (cacheStatus === "hit") {
+    throw new Error(
+      `${scenario.name} benchmark unexpectedly measured a result-cache hit; benchmark requests require Cache-Control: no-cache.`,
+    );
+  }
   const fallbackQuery = scannerFallbackQuery(lastResponse);
   const fallbackStage = scannerFallbackStage(lastResponse);
 
@@ -490,6 +504,7 @@ async function runScenario(scenario) {
     queryReductionPct,
     prefilterCount,
     timingMs,
+    cacheStatus,
     fallbackQuery,
     fallbackStage,
     enforceSpeedup: scenario.enforceSpeedup === true,
@@ -573,11 +588,12 @@ try {
     const timingText = result.timingMs
       ? `, server total=${result.timingMs.total ?? "unknown"}ms query=${result.timingMs.query ?? "unknown"}ms filter=${result.timingMs.filter ?? "unknown"}ms`
       : "";
+    const cacheText = result.cacheStatus ? `, cache=${result.cacheStatus}` : "";
     const fallbackText = result.fallbackQuery ? `, fallback=${result.fallbackStage ?? "unknown"}` : "";
     const speedupText = result.speedup_p50 !== null || result.speedup_p95 !== null
       ? `, speedup p50=${result.speedup_p50 ?? "unknown"}x p95=${result.speedup_p95 ?? "unknown"}x`
       : "";
-    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText}${timingText}${fallbackText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
+    return `${result.name}: p50=${result.p50}ms p95=${result.p95}ms min=${result.min}ms max=${result.max}ms${speedupText}${timingText}${cacheText}${fallbackText} ${queryRows}, ${reduction}, ${prefilters}, matches=${result.visibleCount}/${result.totalMatches}, date=${result.tradeDate ?? "unknown"}`;
   });
 
   writeBenchmarkJson(enrichedResults);

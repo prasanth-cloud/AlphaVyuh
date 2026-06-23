@@ -116,12 +116,65 @@ export type EmaBreadthSeries = {
   ema200: number;
 };
 
+export type EmaBreadthLookback = "day" | "week" | "month" | "year";
+
 export type EmaBreadthHistoryRow = {
   trade_date: string;
   ema20: number;
   ema50: number;
   ema200: number;
 };
+
+export const EMA_BREADTH_LOOKBACK_OPTIONS: readonly { id: EmaBreadthLookback; label: string }[] = [
+  { id: "day", label: "Last 7 days" },
+  { id: "week", label: "Last 7 weeks" },
+  { id: "month", label: "Last 7 months" },
+  { id: "year", label: "Last 7 years" },
+] as const;
+
+export function hasEmaBreadthYearLookback(data: MarketOverview): boolean {
+  const yearRows = data.ema_breadth_lookback?.year;
+  return Array.isArray(yearRows) && yearRows.length >= 2;
+}
+
+export function visibleEmaBreadthLookbackOptions(data: MarketOverview) {
+  return EMA_BREADTH_LOOKBACK_OPTIONS.filter((option) => option.id !== "year" || hasEmaBreadthYearLookback(data));
+}
+
+export function resolveEmaBreadthLookbackRows(lookback: EmaBreadthLookback, data: MarketOverview): EmaBreadthHistoryRow[] {
+  const bucket = data.ema_breadth_lookback?.[lookback];
+  if (Array.isArray(bucket) && bucket.length > 0) {
+    return bucket.map((row) => ({
+      trade_date: row.trade_date,
+      ema20: safeMarketNumber(row.ema20),
+      ema50: safeMarketNumber(row.ema50),
+      ema200: safeMarketNumber(row.ema200),
+    }));
+  }
+  if (lookback === "day" && Array.isArray(data.ema_breadth_daily_history)) {
+    return data.ema_breadth_daily_history.slice(0, 7).map((row) => ({
+      trade_date: row.trade_date,
+      ema20: safeMarketNumber(row.ema20),
+      ema50: safeMarketNumber(row.ema50),
+      ema200: safeMarketNumber(row.ema200),
+    }));
+  }
+  return [];
+}
+
+export function emaBreadthDeltaTone(current: number, prior: number | undefined): string {
+  if (prior == null || !Number.isFinite(prior)) return "var(--text-primary)";
+  if (current > prior + 0.05) return "var(--gain)";
+  if (current < prior - 0.05) return "var(--loss)";
+  return "var(--text-secondary)";
+}
+
+export function moverCompanyLabel(symbol: string, companyName: string | null | undefined): string | null {
+  const name = companyName?.trim();
+  if (!name) return null;
+  if (name.toUpperCase() === symbol.trim().toUpperCase()) return null;
+  return name;
+}
 
 /** Short label for EMA breadth history rows, e.g. `12th Jun'26`. */
 export function formatEmaBreadthTradeDate(tradeDate: string): string {

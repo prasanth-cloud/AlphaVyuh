@@ -1,0 +1,36 @@
+---
+description: Fintech data-trust invariants for AlphaVyuh trader surfaces
+alwaysApply: true
+---
+
+# AlphaVyuh Trust Invariants
+
+Traders must see **real EOD/live data** or a **clear unavailable state**. Never imply success when data or mutations failed.
+
+## Data display
+
+- Reject HTTP 200 payloads with `mode: "unavailable"` or `status: "unavailable"` in API helpers — throw or surface error copy.
+- Do not show `No results`, `No data yet`, or zero counts when the backend was unavailable or degraded.
+- Empty arrays after a failed fetch are **not** empty user state.
+- Production live mode must never silently fall back to demo/mock data (`NEXT_PUBLIC_ALLOW_MOCK_FALLBACK=false` in prod).
+
+## Mutations
+
+- A watchlist, journal, alert, drawing, or layout change is successful only after backend confirmation.
+- On mutation failure, keep retryable UI state; do not optimistically treat local edits as saved.
+
+## Copy patterns
+
+- Unavailable: `"<Surface> is temporarily unavailable. Check Data Status before …"`
+- Partial/degraded: warn with `Data Status` link; do not use neutral empty copy.
+- True empty: only when the service responded successfully with zero rows.
+
+## Owner gates (do not bypass)
+
+- No production Supabase migrations, deploys, broker orders, or billing without explicit owner approval.
+- No pushing to `main`. No secrets in commits or logs.
+
+## Verification
+
+- Add or update unit/e2e coverage when changing trust behavior.
+- Run proportional checks: `npm run typecheck`, `npm run lint`, targeted Vitest/Playwright for touched surfaces.

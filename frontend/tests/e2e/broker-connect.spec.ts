@@ -226,6 +226,74 @@ test.describe("Broker settings — connected", () => {
     await expect(evidence).toContainText("evidence, not approval to place orders");
   });
 
+  test("shows pending lifecycle and reconciles it into Journal", async ({ page }) => {
+    let reconciled = false;
+    let reconcileRequests = 0;
+    await page.route("**/api/v1/broker/orders/activity?limit=25", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          count: 1,
+          orders: [{
+            id: "activity-1",
+            broker: "zerodha",
+            broker_order_id: "kite-order-1",
+            journal_id: reconciled ? "journal-1" : null,
+            symbol: "RELIANCE",
+            side: "BUY",
+            quantity: 5,
+            order_type: "LIMIT",
+            requested_price: 2500,
+            execution_status: reconciled ? "COMPLETE" : "PENDING",
+            filled_quantity: reconciled ? 5 : 0,
+            average_fill_price: reconciled ? 2498.5 : null,
+            requires_reconciliation: !reconciled,
+            rejection_reason: null,
+            placed_at: "2026-06-18T14:00:00Z",
+            reconciled_at: reconciled ? "2026-06-18T14:01:00Z" : null,
+            journal_state: reconciled ? "recorded" : "not_created",
+          }],
+        }),
+      })
+    );
+    await page.route("**/api/v1/orders/reconcile/kite-order-1", (route) => {
+      reconcileRequests += 1;
+      reconciled = true;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "filled",
+          broker: "zerodha",
+          broker_order_id: "kite-order-1",
+          execution_status: "COMPLETE",
+          symbol: "RELIANCE",
+          quantity: 5,
+          filled_quantity: 5,
+          average_fill_price: 2498.5,
+          requires_reconciliation: false,
+          rejection_reason: null,
+          journal_id: "journal-1",
+          journal_status: "open",
+          message: "Zerodha reports complete: 5/5 filled.",
+        }),
+      });
+    });
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const timeline = page.getByTestId("broker-activity-timeline");
+    await expect(timeline).toContainText("Awaiting fill");
+    await expect(timeline).toContainText("not counted as a position yet");
+    await timeline.getByRole("button", { name: "Check broker" }).click();
+    await expect.poll(() => reconcileRequests).toBe(1);
+    await expect(timeline).toContainText("Filled");
+    await expect(timeline.getByRole("link", { name: "Open journal" })).toBeVisible();
+    await expect(timeline.getByRole("button", { name: "Check broker" })).not.toBeVisible();
+  });
+
   test("shows stale read-only smoke as a refresh-required gate", async ({ page }) => {
     await mockBrokerStatus(page, {
       connected: true,

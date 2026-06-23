@@ -101,8 +101,8 @@ async function login(page: import("@playwright/test").Page) {
 
   await page.goto("/login");
   await page.getByLabel("Email").fill(EMAIL);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expectPathname(page, "/dashboard");
 }
 

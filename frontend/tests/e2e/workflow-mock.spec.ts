@@ -142,6 +142,10 @@ test.describe("Mock workflow smoke", () => {
       }
       if (route === "/dashboard") {
         await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
+        await page.getByRole("tab", { name: "Full desk All dashboard cards", exact: true }).click();
+        await expect(page.getByTestId("dashboard-workflow-funnel")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId("dashboard-priority-queue")).toContainText(/Chart/i, { timeout: 15_000 });
+        await expect(page.getByTestId("dashboard-priority-queue")).toContainText(/Review/i);
         await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
       }
     }
@@ -174,6 +178,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByTestId("scanner-history-toggle").click();
     await expect(page.getByTestId("scanner-run-history")).toContainText(/Trend Template|Custom scan/, { timeout: 10_000 });
     await expect(page.getByTestId("scanner-run-history")).toContainText(/AlphaVyuh mock fixtures|Demo/i);
+    await expect(page.getByTestId("scanner-run-history")).toContainText(/Runtime \d+ ms|Runtime \d+\.\d s/i);
 
     await page.evaluate(() => sessionStorage.removeItem("alphavyuh-scanner-last-results-v1"));
     await page.reload({ waitUntil: "domcontentloaded" });
@@ -191,6 +196,7 @@ test.describe("Mock workflow smoke", () => {
       dataSource: expect.stringMatching(/AlphaVyuh mock fixtures|Demo/i),
       topSymbols: expect.arrayContaining([firstSymbol]),
     });
+    expect(history[0].elapsedMs).toEqual(expect.any(Number));
     expect(history[0].label).toMatch(/Trend Template|Custom scan/);
     expect(history[0].results.length).toBeGreaterThan(0);
     expect(errors).toEqual([]);
@@ -423,7 +429,7 @@ test.describe("Mock workflow smoke", () => {
       ]));
     });
     await page.goto("/watchlist?id=mock-leaders");
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 20_000 });
     const seededWatchlist = await page.evaluate(() => {
       const lists = JSON.parse(localStorage.getItem("alphavyuh-mock-watchlists-v1") || "[]");
       return lists.find((list: { name: string }) => list.name === "Leaders");
@@ -579,6 +585,8 @@ test.describe("Mock workflow smoke", () => {
     expect(chartWorkflow.scanner_context?.preset_name).toMatch(/Trend Template|Custom scan/i);
     expect(chartWorkflow.scanner_context?.match_reasons?.length).toBeGreaterThan(0);
     await expect(page.getByText("Chart playbook")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("chart-review-cockpit")).toContainText(/Setup|HTF|Journal|Order plan/i, { timeout: 15_000 });
+    await expect(page.getByTestId("chart-review-cockpit")).toContainText(/Journal capture only|broker import only/i);
     await expect(page.locator("body")).toContainText(/Demo data|Data as of/i, { timeout: 15_000 });
 
     await page.goto(watchlistUrl);
@@ -725,7 +733,7 @@ test.describe("Mock workflow smoke", () => {
     });
 
     await page.goto(`/watchlist?id=${leadersWatchlist.id}&symbol=${shortlistSymbol}`);
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${shortlistSymbol}` }).first()).toBeVisible({ timeout: 10_000 });
     await page.goto("/scanner");
     await selectPresetAndRunScan(page);
@@ -845,11 +853,12 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByRole("button", { name: /Send to desk/i })).toBeVisible({ timeout: 10_000 });
     await page.getByRole("button", { name: /Send to desk/i }).click();
     await expect(page.getByText(/Confirm desk handoff/i)).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText(/R:R/i)).toBeVisible();
+    await expect(page.getByText("R:R 2.0", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: /^Send plan$/i }).click();
 
     await expect(page).toHaveURL(/\/watchlist\?symbol=AUBANK&id=desk-secondary&planDraft=chart/, { timeout: 15_000 });
-    await expect(page.getByText(/Chart plan context loaded into Decision Desk/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Chart plan context loaded into Decision Desk\. Journal ticket is ready\./i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Journal capture only: save the plan to Journal. Place any real trade directly with your broker.")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".workspace-pill").filter({ hasText: "Focus: AUBANK" }).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByPlaceholder("Thesis")).toHaveValue(/Chart plan:/, { timeout: 15_000 });
     await expect(page.getByPlaceholder("Invalidation rule")).toHaveValue(/drawn stop below/i);

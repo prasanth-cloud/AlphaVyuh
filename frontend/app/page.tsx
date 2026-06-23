@@ -10,15 +10,48 @@ import {
   type TapeQuote,
 } from "@/lib/public-market-tape";
 
+type LandingIdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+function scheduleLandingEnhancements(setup: () => void | (() => void)) {
+  if (typeof window === "undefined") return () => {};
+
+  let cancelled = false;
+  let teardown: (() => void) | undefined;
+  const run = () => {
+    if (cancelled) return;
+    const cleanup = setup();
+    if (typeof cleanup === "function") teardown = cleanup;
+  };
+  const idleWindow = window as LandingIdleWindow;
+
+  if (typeof idleWindow.requestIdleCallback === "function") {
+    const handle = idleWindow.requestIdleCallback(run, { timeout: 900 });
+    return () => {
+      cancelled = true;
+      idleWindow.cancelIdleCallback?.(handle);
+      teardown?.();
+    };
+  }
+
+  const handle = window.setTimeout(run, 250);
+  return () => {
+    cancelled = true;
+    window.clearTimeout(handle);
+    teardown?.();
+  };
+}
+
 export default function LandingPage() {
-  const scanRowsRef = useRef<HTMLDivElement>(null);
-  const tapeRef = useRef<HTMLDivElement>(null);
   const chartLineRef = useRef<SVGPathElement>(null);
   const chartAreaRef = useRef<SVGPathElement>(null);
   const chartRsRef = useRef<SVGPathElement>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [menuOpen, setMenuOpen] = useState(false);
   const [tapeState, setTapeState] = useState<"loading" | "live" | "unavailable">("loading");
+  const [tapeQuotes, setTapeQuotes] = useState<TapeQuote[]>([]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("alphavyuh-theme") === "light" ? "light" : "dark";
@@ -43,181 +76,128 @@ export default function LandingPage() {
   }
 
   useEffect(() => {
-    const cleanups: Array<() => void> = [];
-
-    // Nav scroll
     const nav = document.getElementById("lp-nav");
     const onScroll = () => nav?.classList.toggle("lp-scrolled", window.scrollY > 40);
     window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
-    // Counter animation
-    function animateCounter(el: HTMLElement) {
-      const target = +(el.dataset.target || 0);
-      const suffix = el.dataset.suffix || "";
-      const dur = 900, start = performance.now();
-      const step = (now: number) => {
-        const p = Math.min((now - start) / dur, 1);
-        const ease = 1 - Math.pow(1 - p, 3);
-        const val = Math.round(ease * target);
-        el.textContent = (val >= 1000 ? val.toLocaleString("en-IN") : val) + suffix;
-        if (p < 1) requestAnimationFrame(step);
+  useEffect(() => {
+    return scheduleLandingEnhancements(() => {
+      const cleanups: Array<() => void> = [];
+
+      // Counter animation
+      function animateCounter(el: HTMLElement) {
+        const target = +(el.dataset.target || 0);
+        const suffix = el.dataset.suffix || "";
+        const dur = 900, start = performance.now();
+        const step = (now: number) => {
+          const p = Math.min((now - start) / dur, 1);
+          const ease = 1 - Math.pow(1 - p, 3);
+          const val = Math.round(ease * target);
+          el.textContent = (val >= 1000 ? val.toLocaleString("en-IN") : val) + suffix;
+          if (p < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
+
+      // IntersectionObserver
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            (e.target as HTMLElement).classList.add("lp-visible");
+            const t = e.target as HTMLElement;
+            if (t.dataset.target) animateCounter(t);
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.15 });
+      document.querySelectorAll(".lp-fade,.lp-step,.lp-tcard,.lp-pcard,.lp-af-item,[data-target]").forEach(el => io.observe(el));
+
+      // Chart SVG
+      const pts = [8,72,58,80,50,68,45,62,55,50,42,60,35,52,40,45,38,55,30,48,36,42,28,50,22,40,30,35,20,45,15,38,25,30,18,42,10,35,16,28,12,38,8,30];
+      const h = 160, w = 400;
+      let pd = "", ad = "";
+      for (let i = 0; i < pts.length; i += 2) {
+        const x = (pts[i] / 44) * w, y = h - (pts[i + 1] / 100) * h * 0.85 - 10;
+        pd += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+        ad += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+      }
+      ad += `L${w},${h}L0,${h}Z`;
+      const rsPts = [0,35,50,40,100,45,150,38,200,48,250,42,300,50,350,44,400,52];
+      let rd = "";
+      for (let i = 0; i < rsPts.length; i += 2) {
+        const x = rsPts[i], y = h - (rsPts[i + 1] / 100) * h * 0.7 - 10;
+        rd += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+      }
+      if (chartLineRef.current && chartAreaRef.current && chartRsRef.current) {
+        chartLineRef.current.setAttribute("d", pd);
+        chartAreaRef.current.setAttribute("d", ad);
+        chartRsRef.current.setAttribute("d", rd);
+        const len = chartLineRef.current.getTotalLength();
+        chartLineRef.current.style.strokeDasharray = String(len);
+        chartLineRef.current.style.strokeDashoffset = String(len);
+        chartLineRef.current.style.transition = "stroke-dashoffset 2s ease";
+        window.setTimeout(() => { if (chartLineRef.current) chartLineRef.current.style.strokeDashoffset = "0"; }, 400);
+      }
+
+      // Tabs
+      const tabsHeader = document.getElementById("lp-tabs-header");
+      const onTabClick = (e: Event) => {
+        const btn = (e.target as HTMLElement).closest(".lp-tab-btn") as HTMLElement;
+        if (!btn) return;
+        document.querySelectorAll(".lp-tab-btn").forEach(b => b.classList.remove("lp-tab-active"));
+        document.querySelectorAll(".lp-tab-panel").forEach(p => p.classList.remove("lp-tab-active"));
+        btn.classList.add("lp-tab-active");
+        const panel = document.getElementById("lp-tab-" + btn.dataset.tab);
+        if (panel) panel.classList.add("lp-tab-active");
       };
-      requestAnimationFrame(step);
-    }
+      tabsHeader?.addEventListener("click", onTabClick);
+      if (tabsHeader) cleanups.push(() => tabsHeader.removeEventListener("click", onTabClick));
 
-    // IntersectionObserver
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(e => {
-        if (e.isIntersecting) {
-          (e.target as HTMLElement).classList.add("lp-visible");
-          const t = e.target as HTMLElement;
-          if (t.dataset.target) animateCounter(t);
-          io.unobserve(e.target);
-        }
+      // FAQ
+      document.querySelectorAll(".lp-faq-q").forEach(q => {
+        const onFaqClick = () => {
+          const item = (q as HTMLElement).parentElement!;
+          const wasOpen = item.classList.contains("lp-faq-open");
+          document.querySelectorAll(".lp-faq-item").forEach(i => i.classList.remove("lp-faq-open"));
+          if (!wasOpen) item.classList.add("lp-faq-open");
+        };
+        q.addEventListener("click", onFaqClick);
+        cleanups.push(() => q.removeEventListener("click", onFaqClick));
       });
-    }, { threshold: 0.15 });
-    document.querySelectorAll(".lp-fade,.lp-step,.lp-tcard,.lp-pcard,.lp-af-item,[data-target]").forEach(el => io.observe(el));
 
-    // Chart SVG
-    const pts = [8,72,58,80,50,68,45,62,55,50,42,60,35,52,40,45,38,55,30,48,36,42,28,50,22,40,30,35,20,45,15,38,25,30,18,42,10,35,16,28,12,38,8,30];
-    const h = 160, w = 400;
-    let pd = "", ad = "";
-    for (let i = 0; i < pts.length; i += 2) {
-      const x = (pts[i] / 44) * w, y = h - (pts[i + 1] / 100) * h * 0.85 - 10;
-      pd += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
-      ad += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
-    }
-    ad += `L${w},${h}L0,${h}Z`;
-    const rsPts = [0,35,50,40,100,45,150,38,200,48,250,42,300,50,350,44,400,52];
-    let rd = "";
-    for (let i = 0; i < rsPts.length; i += 2) {
-      const x = rsPts[i], y = h - (rsPts[i + 1] / 100) * h * 0.7 - 10;
-      rd += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
-    }
-    if (chartLineRef.current && chartAreaRef.current && chartRsRef.current) {
-      chartLineRef.current.setAttribute("d", pd);
-      chartAreaRef.current.setAttribute("d", ad);
-      chartRsRef.current.setAttribute("d", rd);
-      const len = chartLineRef.current.getTotalLength();
-      chartLineRef.current.style.strokeDasharray = String(len);
-      chartLineRef.current.style.strokeDashoffset = String(len);
-      chartLineRef.current.style.transition = "stroke-dashoffset 2s ease";
-      setTimeout(() => { if (chartLineRef.current) chartLineRef.current.style.strokeDashoffset = "0"; }, 400);
-    }
-
-    // Tabs
-    const tabsHeader = document.getElementById("lp-tabs-header");
-    const onTabClick = (e: Event) => {
-      const btn = (e.target as HTMLElement).closest(".lp-tab-btn") as HTMLElement;
-      if (!btn) return;
-      document.querySelectorAll(".lp-tab-btn").forEach(b => b.classList.remove("lp-tab-active"));
-      document.querySelectorAll(".lp-tab-panel").forEach(p => p.classList.remove("lp-tab-active"));
-      btn.classList.add("lp-tab-active");
-      const panel = document.getElementById("lp-tab-" + btn.dataset.tab);
-      if (panel) panel.classList.add("lp-tab-active");
-    };
-    tabsHeader?.addEventListener("click", onTabClick);
-    if (tabsHeader) cleanups.push(() => tabsHeader.removeEventListener("click", onTabClick));
-
-    // FAQ
-    document.querySelectorAll(".lp-faq-q").forEach(q => {
-      const onFaqClick = () => {
-        const item = (q as HTMLElement).parentElement!;
-        const wasOpen = item.classList.contains("lp-faq-open");
-        document.querySelectorAll(".lp-faq-item").forEach(i => i.classList.remove("lp-faq-open"));
-        if (!wasOpen) item.classList.add("lp-faq-open");
+      // Pricing toggle
+      const ptToggle = document.getElementById("lp-billing") as HTMLInputElement;
+      const ptM = document.getElementById("lp-ptm");
+      const ptA = document.getElementById("lp-pta");
+      const onPricingToggle = () => {
+        const annual = ptToggle.checked;
+        ptM?.classList.toggle("lp-pt-active", !annual);
+        ptA?.classList.toggle("lp-pt-active", annual);
+        const pPro = document.getElementById("lp-p-pro");
+        const pElite = document.getElementById("lp-p-elite");
+        const pProOld = document.getElementById("lp-p-pro-old");
+        const pEliteOld = document.getElementById("lp-p-elite-old");
+        if (pPro) pPro.textContent = annual ? "499" : "599";
+        if (pElite) pElite.textContent = annual ? "3,499" : "4,999";
+        if (pProOld) pProOld.style.display = annual ? "" : "none";
+        if (pEliteOld) pEliteOld.style.display = annual ? "" : "none";
       };
-      q.addEventListener("click", onFaqClick);
-      cleanups.push(() => q.removeEventListener("click", onFaqClick));
+      ptToggle?.addEventListener("change", onPricingToggle);
+      if (ptToggle) cleanups.push(() => ptToggle.removeEventListener("change", onPricingToggle));
+
+      return () => {
+        cleanups.forEach(cleanup => cleanup());
+        io.disconnect();
+      };
     });
-
-    // Pricing toggle
-    const ptToggle = document.getElementById("lp-billing") as HTMLInputElement;
-    const ptM = document.getElementById("lp-ptm");
-    const ptA = document.getElementById("lp-pta");
-    const onPricingToggle = () => {
-      const annual = ptToggle.checked;
-      ptM?.classList.toggle("lp-pt-active", !annual);
-      ptA?.classList.toggle("lp-pt-active", annual);
-      const pPro = document.getElementById("lp-p-pro");
-      const pElite = document.getElementById("lp-p-elite");
-      const pProOld = document.getElementById("lp-p-pro-old");
-      const pEliteOld = document.getElementById("lp-p-elite-old");
-      if (pPro) pPro.textContent = annual ? "499" : "599";
-      if (pElite) pElite.textContent = annual ? "3,499" : "4,999";
-      if (pProOld) pProOld.style.display = annual ? "" : "none";
-      if (pEliteOld) pEliteOld.style.display = annual ? "" : "none";
-    };
-    ptToggle?.addEventListener("change", onPricingToggle);
-    if (ptToggle) cleanups.push(() => ptToggle.removeEventListener("change", onPricingToggle));
-
-    // 3D tilt
-    document.querySelectorAll(".lp-tilt").forEach(card => {
-      const onTiltMove = (ev: Event) => {
-        const e = ev as MouseEvent;
-        const r = (card as HTMLElement).getBoundingClientRect();
-        const x = ((e.clientX - r.left) / r.width - 0.5) * 14;
-        const y = ((e.clientY - r.top) / r.height - 0.5) * -14;
-        (card as HTMLElement).style.transform = `perspective(600px) rotateY(${x}deg) rotateX(${y}deg) scale(1.02)`;
-      };
-      const onTiltLeave = () => {
-        (card as HTMLElement).style.transform = "perspective(600px) rotateX(0) rotateY(0) scale(1)";
-      };
-      card.addEventListener("mousemove", onTiltMove);
-      card.addEventListener("mouseleave", onTiltLeave);
-      cleanups.push(() => {
-        card.removeEventListener("mousemove", onTiltMove);
-        card.removeEventListener("mouseleave", onTiltLeave);
-      });
-    });
-
-    // Activity feed pulse
-    const afItems = document.querySelectorAll(".lp-af-item");
-    let afIdx = 0;
-    const afInterval = setInterval(() => {
-      afItems.forEach(i => (i as HTMLElement).style.boxShadow = "");
-      const el = afItems[afIdx % afItems.length] as HTMLElement;
-      if (el) el.style.boxShadow = "0 0 0 1.5px rgba(214,223,232,.2),0 4px 16px rgba(0,0,0,.2)";
-      afIdx++;
-    }, 2200);
-
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      cleanups.forEach(cleanup => cleanup());
-      clearInterval(afInterval);
-      io.disconnect();
-    };
   }, []);
 
   // Live market tape + hero movers (free EOD/latest quotes, honest unavailable state)
   useEffect(() => {
     let cancelled = false;
-
-    function renderTape(quotes: TapeQuote[]) {
-      const tape = tapeRef.current;
-      if (!tape) return;
-      tape.innerHTML = "";
-      [...quotes, ...quotes].forEach((quote) => {
-        const el = document.createElement("div");
-        el.className = "lp-tape-item";
-        el.innerHTML = `<span class="lp-tape-sym">${quote.label}</span><span class="lp-tape-price">${formatTapePrice(quote.price)}</span><span class="${quote.changePct >= 0 ? "lp-tape-pos" : "lp-tape-neg"}">${formatTapeChange(quote.changePct)}</span>`;
-        tape.appendChild(el);
-      });
-    }
-
-    function renderHeroRows(quotes: TapeQuote[]) {
-      const rc = scanRowsRef.current;
-      if (!rc) return;
-      rc.innerHTML = "";
-      topMovers(quotes, 5).forEach((quote, i) => {
-        const row = document.createElement("div");
-        row.className = "lp-srow";
-        row.style.animationDelay = (i * 0.06) + "s";
-        const changeCls = quote.changePct >= 0 ? "lp-chg-pos" : "lp-chg-neg";
-        row.innerHTML = `<div><div class="lp-sym">${quote.label}</div><div class="lp-sym-sub">NSE EQ</div></div><div class="lp-pval">₹${formatTapePrice(quote.price)}</div><div class="${changeCls}">${formatTapeChange(quote.changePct)}</div>`;
-        rc.appendChild(row);
-      });
-    }
 
     async function loadTape() {
       try {
@@ -227,11 +207,13 @@ export default function LandingPage() {
         if (cancelled || !Array.isArray(payload.quotes) || payload.quotes.length === 0) {
           throw new Error("tape empty");
         }
-        renderTape(payload.quotes);
-        renderHeroRows(payload.quotes);
+        setTapeQuotes(payload.quotes);
         setTapeState("live");
       } catch {
-        if (!cancelled) setTapeState("unavailable");
+        if (!cancelled) {
+          setTapeQuotes([]);
+          setTapeState("unavailable");
+        }
       }
     }
 
@@ -242,6 +224,9 @@ export default function LandingPage() {
       window.clearInterval(refresh);
     };
   }, []);
+
+  const heroRows = tapeState === "live" ? topMovers(tapeQuotes, 5) : [];
+  const scrollingTapeQuotes = tapeState === "live" ? [...tapeQuotes, ...tapeQuotes] : [];
 
   return (
     <>
@@ -306,27 +291,35 @@ export default function LandingPage() {
         <div className="lp-hero-inner">
           <div className="lp-hero-text">
             <div className="lp-eyebrow">
-               <div className="lp-live-pill" style={{color:"#00D9A7",fontSize:11,fontWeight:600,letterSpacing:"0.14em",textTransform:"uppercase" as const}}>EOD trading workflow</div>
+              <div className="lp-live-pill"><div className="lp-pulse"></div>Terminal workflow · EOD market data</div>
             </div>
             <h1 className="lp-h1">
-              <span className="lp-h1-s1">India&apos;s trading OS</span>
+              <span className="lp-h1-s1">A trader cockpit for scanning, planning, and reviewing Indian equities.</span>
             </h1>
-            <p className="lp-sub">Scan markets. Build watchlists. Analyze charts. Review your trades. All in one place for NSE swing traders.</p>
+            <p className="lp-sub">Start with market breadth, jump into high-quality EOD scanners, review TradingView-style charts, build a watchlist, then save the decision trail into your journal.</p>
             <div className="lp-ctas">
-              <Link href="/signup" className="lp-btn-primary">Get started</Link>
-              <a href="#how" className="lp-btn-secondary">See how it works</a>
+              <Link href="/signup" className="lp-btn-primary">Request access →</Link>
+              <a href="#how" className="lp-btn-secondary">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4"/><path d="M6 5.5L10.5 8L6 10.5V5.5Z" fill="currentColor"/></svg>
+                See workflow
+              </a>
             </div>
             <div className="lp-trust-row" aria-label="Product scope">
               <span>EOD market data</span>
               <span>NSE/BSE cash equity</span>
               <span>No trade calls</span>
-              <span>Broker import only</span>
+              <span>Order ticket drafts journal only</span>
+            </div>
+            <div className="lp-terminal-strip" aria-label="Terminal workflow status">
+              <div><span>Scan</span><strong>precomputed EOD factors</strong></div>
+              <div><span>Chart</span><strong>RS, pivots, drawings</strong></div>
+              <div><span>Journal</span><strong>plan to outcome</strong></div>
             </div>
           </div>
 
           {/* Hero visual */}
           <div className="lp-hero-visual">
-            <div className="lp-hero-card lp-tilt">
+            <div className="lp-hero-card lp-terminal-surface">
               <div className="lp-card-bar">
                 <div className="lp-dot" style={{background:"#FF5F57"}}></div>
                 <div className="lp-dot" style={{background:"#FFBD2E"}}></div>
@@ -336,6 +329,20 @@ export default function LandingPage() {
                 </span>
               </div>
               <div className="lp-card-body">
+                <div className="lp-command-strip" aria-label="Desk command status">
+                  <div>
+                    <span>Data date</span>
+                    <strong>{tapeState === "live" ? "Latest EOD" : "Waiting"}</strong>
+                  </div>
+                  <div>
+                    <span>Scanner path</span>
+                    <strong>cache-first</strong>
+                  </div>
+                  <div>
+                    <span>Order path</span>
+                    <strong>journal draft</strong>
+                  </div>
+                </div>
                 {tapeState === "unavailable" ? (
                   <p className="lp-tape-unavailable">Live quotes are temporarily unavailable. Market movers will return shortly.</p>
                 ) : (
@@ -345,9 +352,70 @@ export default function LandingPage() {
                       <div className="lp-col-h">Price</div>
                       <div className="lp-col-h">Change</div>
                     </div>
-                    <div ref={scanRowsRef}></div>
+                    <div>
+                      {heroRows.map((quote, index) => (
+                        <div
+                          key={quote.symbol}
+                          className="lp-srow"
+                          style={{ animationDelay: `${index * 0.06}s` }}
+                        >
+                          <div>
+                            <div className="lp-sym">{quote.label}</div>
+                            <div className="lp-sym-sub">{quote.isIndex ? "INDEX" : "NSE EQ"}</div>
+                          </div>
+                          <div className="lp-pval">₹{formatTapePrice(quote.price)}</div>
+                          <div className={quote.changePct >= 0 ? "lp-chg-pos" : "lp-chg-neg"}>
+                            {formatTapeChange(quote.changePct)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </>
                 )}
+                <div className="lp-workstation-grid" aria-label="Trading workstation preview">
+                  <div className="lp-mini-chart">
+                    <div className="lp-mini-chart-head">
+                      <span>Chart review</span>
+                      <strong>RS + levels</strong>
+                    </div>
+                    <div className="lp-candle-board" aria-hidden="true">
+                      {[38, 52, 45, 61, 57, 70, 64, 78, 73, 84].map((height, index) => (
+                        <span
+                          key={index}
+                          className={index % 3 === 1 ? "lp-candle lp-candle-down" : "lp-candle"}
+                          style={{ height: `${height}%` }}
+                        />
+                      ))}
+                      <div className="lp-level-line lp-level-line-top" />
+                      <div className="lp-level-line lp-level-line-mid" />
+                    </div>
+                    <div className="lp-mini-chart-foot">
+                      <span>Watchlist context</span>
+                      <span>5Y EOD range</span>
+                    </div>
+                  </div>
+                  <div className="lp-flow-queue">
+                    <div className="lp-flow-head">Desk queue</div>
+                    {[
+                      ["Scan", "169 matches", "hot"],
+                      ["Watch", "24 tracked", "steady"],
+                      ["Journal", "6 reviews due", "warn"],
+                    ].map(([label, value, tone]) => (
+                      <div key={label} className="lp-flow-row">
+                        <span className={`lp-flow-dot lp-flow-dot-${tone}`} />
+                        <div>
+                          <span>{label}</span>
+                          <strong>{value}</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="lp-cockpit-panel">
+                  <div className="lp-cockpit-row"><span>Market state</span><strong>{tapeState === "live" ? "Latest session loaded" : "Checking tape"}</strong></div>
+                  <div className="lp-cockpit-row"><span>Scanner latency target</span><strong>cache + paged API first</strong></div>
+                  <div className="lp-cockpit-row"><span>Broker posture</span><strong>import and journal capture</strong></div>
+                </div>
               </div>
             </div>
           </div>
@@ -358,8 +426,8 @@ export default function LandingPage() {
       <section id="how" style={{padding:"88px 0 96px",background:"var(--lp-surface)",borderTop:"1px solid var(--lp-border)",borderBottom:"1px solid var(--lp-border)"}}>
         <div className="lp-wrap" style={{textAlign:"center"}}>
           <span className="lp-sec-label">Daily workflow</span>
-          <h2 className="lp-sec-title">One desk flow from open to review.</h2>
-          <p className="lp-sec-sub" style={{margin:"0 auto"}}>Dashboard checkpoint → Scanner discovery → Watchlist analysis → Chart planning → Journal review. Every step keeps scan reason, levels, and outcome attached.</p>
+          <h2 className="lp-sec-title">One cockpit flow from market state to trade review.</h2>
+          <p className="lp-sec-sub" style={{margin:"0 auto"}}>Dashboard checkpoint → Scanner discovery → Watchlist analysis → Chart planning → Journal review. Every step keeps scan reason, levels, order-ticket draft context, and outcome attached.</p>
           <div className="lp-steps">
             {TRADER_WORKFLOW_STEPS.map((step, index) => (
               <div key={step.title} className="lp-step" style={{transitionDelay:`${index * 0.08}s`}}>
@@ -389,7 +457,17 @@ export default function LandingPage() {
         {tapeState === "unavailable" ? (
           <p className="lp-tape-unavailable" style={{padding:"2px 28px"}}>Live market tape is temporarily unavailable.</p>
         ) : (
-          <div className="lp-tape" ref={tapeRef}></div>
+          <div className="lp-tape">
+            {scrollingTapeQuotes.map((quote, index) => (
+              <div className="lp-tape-item" key={`${quote.symbol}-${index}`}>
+                <span className="lp-tape-sym">{quote.label}</span>
+                <span className="lp-tape-price">{formatTapePrice(quote.price)}</span>
+                <span className={quote.changePct >= 0 ? "lp-tape-pos" : "lp-tape-neg"}>
+                  {formatTapeChange(quote.changePct)}
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -412,14 +490,14 @@ export default function LandingPage() {
             <div className="lp-tp-text">
               <span className="lp-feat-label">Scanner</span>
               <h3 className="lp-tp-h">Discovery that keeps the reason</h3>
-              <p className="lp-tp-p">Run EOD scans across NSE/BSE equities, then move candidates into review with the original match context attached.</p>
+              <p className="lp-tp-p">Run EOD scans across NSE/BSE equities, then move candidates into review with the original match context and timing evidence attached.</p>
               <ul className="lp-feat-list">
-                {["EOD presets for repeatable NSE/BSE routines","Scanner reason, score, and data date stay attached","Relative strength and volume context travel with the symbol","Saved scans can be checked after the next session","Results move into watchlist review without copy-paste"].map(f => (
+                {["EOD presets for repeatable NSE/BSE routines","Scanner reason, score, latency, and data date stay attached","Relative strength and volume context travel with the symbol","Saved scans can be checked after the next session","Results move into watchlist review without copy-paste"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
             </div>
-            <div className="lp-tv lp-tilt">
+            <div className="lp-tv lp-terminal-surface">
               <div className="lp-tv-bar"><div className="lp-dot" style={{background:"#FF5F57"}}></div><div className="lp-dot" style={{background:"#FFBD2E",marginLeft:6}}></div><div className="lp-dot" style={{background:"#28CA41",marginLeft:6}}></div><span className="lp-card-title">Scanner · NSE EQ · VCP Momentum</span></div>
               <div className="lp-tv-body">
                 <div className="lp-filter-bar">
@@ -438,14 +516,14 @@ export default function LandingPage() {
             <div className="lp-tp-text">
               <span className="lp-feat-label">Watchlist</span>
               <h3 className="lp-tp-h">A focused desk for symbols under review</h3>
-              <p className="lp-tp-p">Keep scan reason, notes, status, and chart context together before a symbol moves into or out of your routine.</p>
+              <p className="lp-tp-p">Keep scan reason, notes, status, chart context, and journal readiness together before a symbol moves into or out of your routine.</p>
               <ul className="lp-feat-list">
-                {["User-owned status labels: watch, ready, tagged, needs review","Notes stay attached to the symbol","Chart preview keeps context visible","Sort by sector, price, volume, and RS","No platform ratings or trade calls"].map(f => (
+                {["User-owned status labels: watch, ready, tagged, needs review","Notes stay attached to the symbol","Chart preview keeps context visible","Sort by sector, price, volume, and RS","Future order ticket opens as a journal capture draft"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
             </div>
-            <div className="lp-tv lp-tilt">
+            <div className="lp-tv lp-terminal-surface">
               <div className="lp-tv-bar"><div className="lp-dot" style={{background:"#FF5F57"}}></div><div className="lp-dot" style={{background:"#FFBD2E",marginLeft:6}}></div><span className="lp-card-title">Watchlist · 24 symbols · 4 tagged</span></div>
               <div className="lp-tv-body">
                 {[["DEEPAKNTR","Chemicals","Ready"],["DIXON","Electronics","Watch"],["PERSISTENT","IT Services","Tagged"],["CAMS","BFSI","Needs review"]].map(r => (
@@ -464,14 +542,14 @@ export default function LandingPage() {
             <div className="lp-tp-text">
               <span className="lp-feat-label">Charts</span>
               <h3 className="lp-tp-h">Charting with RS line and pivot zones</h3>
-              <p className="lp-tp-p">TradingView Lightweight Charts v5. Drawing tools, precomputed indicators, earnings overlays, and watchlist context on one screen.</p>
+              <p className="lp-tp-p">TradingView Lightweight Charts v5. Drawing tools, precomputed indicators, earnings overlays, watchlist context, and journal capture on one screen.</p>
               <ul className="lp-feat-list">
-                {["Candlestick charts with overlay indicators","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Broker connections are read-only/import only"].map(f => (
+                {["Candlestick charts with overlay indicators","Relative Strength line vs Nifty plotted on every chart","Pivot highs/lows marked as horizontal zones","Drawing tools: trendline, Fibonacci, horizontal, text","Order ticket creates a journal capture draft; live execution remains disabled"].map(f => (
                   <li key={f} className="lp-fi"><div className="lp-fcheck">✓</div>{f}</li>
                 ))}
               </ul>
             </div>
-            <div className="lp-tv lp-tilt">
+            <div className="lp-tv lp-terminal-surface">
               <div className="lp-tv-bar"><div className="lp-dot" style={{background:"#FF5F57"}}></div><div className="lp-dot" style={{background:"#FFBD2E",marginLeft:6}}></div><span className="lp-card-title">DEEPAKNTR · Daily · EMA 21/50/200 · RS Line</span></div>
               <div className="lp-tv-body">
                 <div style={{height:160,position:"relative",overflow:"hidden"}}>
@@ -508,7 +586,7 @@ export default function LandingPage() {
                 ))}
               </ul>
             </div>
-            <div className="lp-tv lp-tilt">
+            <div className="lp-tv lp-terminal-surface">
               <div className="lp-tv-bar"><div className="lp-dot" style={{background:"#FF5F57"}}></div><div className="lp-dot" style={{background:"#FFBD2E",marginLeft:6}}></div><span className="lp-card-title">Trade Journal · Apr 2025</span></div>
               <div className="lp-tv-body">
                 {[["DEEPAKNTR","Apr 14 · 3d","+₹14,280",true],["CAMS","Apr 10 · 5d","+₹8,640",true],["RVNL","Apr 7 · 1d","−₹3,120",false],["DIXON","Apr 4 · 7d","+₹22,500",true]].map(j=>(
@@ -557,7 +635,7 @@ export default function LandingPage() {
               {av:"CH",bg:"#2A2D3E",c:"var(--info)",n:"Watchlist to chart",r:"Planning workflow",ret:"Context stays attached",q:"Chart markings, active levels, and notes stay attached to the same symbol, so review does not split across disconnected tools."},
               {av:"JR",bg:"#2A3A38",c:"var(--accent)",n:"Journal to review",r:"Learning workflow",ret:"Mistakes become visible",q:"Every closed trade can carry the setup, exit reason, mistakes, lessons, and review notes needed to improve the next decision."},
             ].map((t,i) => (
-              <div key={t.n} className="lp-tcard lp-tilt" style={{transitionDelay:(i*0.1)+"s"}}>
+              <div key={t.n} className="lp-tcard lp-terminal-surface" style={{transitionDelay:(i*0.1)+"s"}}>
                 <div className="lp-tstars">{t.r}</div>
                 <p className="lp-tquote">{t.q}</p>
                 <div className="lp-tauthor">
@@ -728,6 +806,10 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
 .lp-btn-secondary:hover{border-color:var(--lp-accent);color:var(--lp-accent)}
 .lp-trust-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:560px}
 .lp-trust-row span{padding:6px 10px;border:1px solid var(--lp-border);border-radius:999px;background:var(--lp-surface2);color:var(--lp-text2);font-size:var(--lp-type-micro);font-weight:500;line-height:var(--lp-lh-snug)}
+.lp-terminal-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-width:560px;margin-top:14px}
+.lp-terminal-strip div{min-width:0;padding:9px 10px;border:1px solid var(--lp-border);border-radius:8px;background:rgba(255,255,255,.025)}
+.lp-terminal-strip span{display:block;font-size:.66rem;font-weight:600;text-transform:uppercase;color:var(--lp-muted);line-height:1.25}
+.lp-terminal-strip strong{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;font-weight:600;color:var(--lp-text)}
 .lp-hero-visual{position:relative}
 .lp-hero-card{background:var(--lp-surface);border:1px solid var(--lp-border);border-radius:16px;overflow:hidden;box-shadow:0 24px 56px rgba(0,0,0,.32),0 0 0 1px rgba(214,223,232,.04)}
 :root[data-theme="light"] .lp-hero-card{box-shadow:0 20px 48px rgba(15,23,42,.1),0 0 0 1px rgba(15,23,42,.06)}
@@ -735,10 +817,36 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
 .lp-dot{width:11px;height:11px;border-radius:50%}
 .lp-card-title{margin-left:8px;font-size:.72rem;font-weight:600;color:var(--lp-muted)}
 .lp-card-body{padding:16px}
+.lp-command-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.lp-command-strip div{min-width:0;padding:8px 9px;border:1px solid var(--lp-border);border-radius:8px;background:rgba(255,255,255,.025)}
+.lp-command-strip span{display:block;font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--lp-muted);line-height:1.2}
+.lp-command-strip strong{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-geist-mono),monospace;font-size:.72rem;font-weight:600;color:var(--lp-text)}
 .lp-col-header{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;padding:6px 0;margin-bottom:4px}
 .lp-col-h{font-size:.72rem;font-weight:600;text-transform:none;letter-spacing:0;color:var(--lp-muted)}
 .lp-srow{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--lp-border);align-items:center;animation:lp-row-in .4s ease both}
 @keyframes lp-row-in{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+.lp-workstation-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(132px,.65fr);gap:10px;margin-top:12px}
+.lp-mini-chart,.lp-flow-queue{min-width:0;border:1px solid var(--lp-border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));overflow:hidden}
+.lp-mini-chart-head,.lp-mini-chart-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;font-size:.68rem;color:var(--lp-muted)}
+.lp-mini-chart-head strong,.lp-mini-chart-foot span:last-child{font-family:var(--font-geist-mono),monospace;font-weight:600;color:var(--lp-text)}
+.lp-candle-board{position:relative;display:flex;align-items:flex-end;gap:7px;height:112px;padding:12px 12px 10px;background:linear-gradient(180deg,rgba(255,255,255,.018),transparent)}
+.lp-candle{position:relative;z-index:1;flex:1;min-width:5px;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,var(--lp-green),rgba(45,181,116,.42));box-shadow:0 0 16px rgba(45,181,116,.12)}
+.lp-candle-down{background:linear-gradient(180deg,var(--lp-red),rgba(232,90,79,.42));box-shadow:0 0 16px rgba(232,90,79,.1)}
+.lp-level-line{position:absolute;left:10px;right:10px;height:1px;background:rgba(214,223,232,.22)}
+.lp-level-line-top{top:28px}.lp-level-line-mid{top:64px;background:rgba(245,158,11,.28)}
+.lp-flow-queue{padding:10px;display:grid;gap:8px}
+.lp-flow-head{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--lp-muted)}
+.lp-flow-row{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid rgba(255,255,255,.045);border-radius:8px;background:rgba(255,255,255,.02)}
+.lp-flow-dot{width:7px;height:7px;border-radius:999px;flex-shrink:0}
+.lp-flow-dot-hot{background:var(--lp-green);box-shadow:0 0 0 4px rgba(45,181,116,.1)}
+.lp-flow-dot-steady{background:var(--lp-accent);box-shadow:0 0 0 4px rgba(214,223,232,.08)}
+.lp-flow-dot-warn{background:var(--lp-yellow);box-shadow:0 0 0 4px rgba(245,158,11,.1)}
+.lp-flow-row span:not(.lp-flow-dot){display:block;font-size:.66rem;color:var(--lp-muted);line-height:1.2}
+.lp-flow-row strong{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-geist-mono),monospace;font-size:.76rem;color:var(--lp-text);font-weight:600}
+.lp-cockpit-panel{display:grid;gap:7px;margin-top:14px;padding:10px;border:1px solid var(--lp-border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015))}
+.lp-cockpit-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:.74rem;line-height:1.35}
+.lp-cockpit-row span{color:var(--lp-muted)}
+.lp-cockpit-row strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--lp-text);font-weight:600;text-align:right}
 .lp-sym{font-size:var(--lp-type-small);font-weight:600;font-family:var(--font-geist-mono),monospace}
 .lp-sym-sub{font-size:.68rem;color:var(--lp-muted)}
 .lp-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:600;letter-spacing:0}
@@ -824,8 +932,9 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
 .lp-ai-label{font-size:.72rem;font-weight:600;color:var(--lp-accent);letter-spacing:0;text-transform:none;margin-bottom:6px}
 .lp-ai-body{font-size:.78rem;color:var(--lp-text2);line-height:1.6}
 .lp-af{max-width:700px;margin:48px auto 0;display:flex;flex-direction:column;gap:12px}
-.lp-af-item{display:flex;align-items:center;gap:14px;background:var(--lp-bg);border:1px solid var(--lp-border);border-radius:10px;padding:12px 16px;opacity:0;transform:translateX(-20px);transition:opacity .5s,transform .5s,box-shadow .3s}
-.lp-af-item.lp-visible{opacity:1;transform:none}
+	.lp-af-item{display:flex;align-items:center;gap:14px;background:var(--lp-bg);border:1px solid var(--lp-border);border-radius:10px;padding:12px 16px;opacity:0;transform:translateX(-20px);transition:opacity .5s,transform .5s,border-color .2s,background .2s}
+	.lp-af-item.lp-visible{opacity:1;transform:none}
+	.lp-af-item:hover{border-color:rgba(214,223,232,.22);background:var(--lp-surface2)}
 .lp-af-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:var(--lp-type-micro);font-weight:600;flex-shrink:0}
 .lp-af-text{flex:1;font-size:var(--lp-type-small);font-weight:400;color:var(--lp-text2)}.lp-af-text strong{font-weight:600;color:var(--lp-text)}
 .lp-hl{color:var(--lp-accent)}
@@ -914,9 +1023,11 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
 .lp-fcol a:hover{color:var(--lp-accent)}
 .lp-footer-bottom{border-top:1px solid var(--lp-border);padding-top:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
 .lp-footer-bottom p{font-size:.78rem;color:var(--lp-muted)}
-.lp-fade{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease}
-.lp-fade.lp-visible{opacity:1;transform:none}
-.lp-tilt{transform-style:preserve-3d;transition:transform .1s ease}
+	.lp-fade{opacity:0;transform:translateY(32px);transition:opacity .7s ease,transform .7s ease}
+	.lp-fade.lp-visible{opacity:1;transform:none}
+	.lp-terminal-surface{will-change:auto;transition:border-color .2s ease,box-shadow .2s ease,transform .2s ease}
+	.lp-terminal-surface:hover{border-color:rgba(214,223,232,.22);box-shadow:0 20px 54px rgba(0,0,0,.3);transform:translateY(-2px)}
+	:root[data-theme="light"] .lp-terminal-surface:hover{border-color:rgba(15,23,42,.2);box-shadow:0 18px 44px rgba(15,23,42,.12)}
 @media(max-width:1024px){
   .lp-hero-inner{grid-template-columns:1fr;gap:56px}
   .lp-hero-visual{display:none}
@@ -955,6 +1066,7 @@ body{background:var(--lp-bg);color:var(--lp-text);font-family:var(--font-geist-s
   .lp-stat{border-right:none;border-top:1px solid var(--lp-border)}
   .lp-stat:first-child{border-top:none}
   .lp-tv{display:none}
+  .lp-terminal-strip{grid-template-columns:1fr}
   .lp-tab-panel.lp-tab-active{grid-template-columns:1fr}
   #lp-ticker{display:none}
 }

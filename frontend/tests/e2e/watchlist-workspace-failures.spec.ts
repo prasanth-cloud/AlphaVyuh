@@ -88,7 +88,7 @@ test.describe("Watchlist chart workspace failures", () => {
     if (page.url().includes("/login")) return;
 
     const chartHeader = page.locator(".watchlist-chart-header");
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 20_000 });
     await expect(chartHeader).toContainText("RELIANCE", { timeout: 20_000 });
 
     await chartHeader.locator("details summary").filter({ hasText: /SMA|Indicators/ }).click();

@@ -179,7 +179,7 @@ export function useChartData({
     const request = getWatchlistChartRequest(rangeLabel);
     if (request.timeframe !== timeframe) setTimeframe(request.timeframe);
     const overlayInds = activeIndicators.filter((indicator) => ["ema20", "ema50", "ema200", "bb", "vwap"].includes(indicator));
-    const panelInds = activeIndicators.filter((indicator) => ["rsi", "macd"].includes(indicator));
+    const panelInds = activeIndicators.filter((indicator) => ["rsi", "macd", "stoch", "atr"].includes(indicator));
     const allInds = Array.from(new Set([...overlayInds, ...panelInds]));
     const baseCacheKey = [symbol, rangeLabel, request.timeframe, request.from_date, request.to_date, request.limit, liveMode ? "live" : "eod"].join(":");
     const cacheKey = [baseCacheKey, allInds.sort().join(",")].join(":");

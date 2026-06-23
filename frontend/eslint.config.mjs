@@ -15,6 +15,7 @@ const config = [
   {
     ignores: [
       ".next/**",
+      ".next-stale-*/**",
       "node_modules/**",
       "public/sw.js",
       "public/sw.js.map",

@@ -48,7 +48,7 @@ const forbidden = [
 const pages = [
   {
     path: "/",
-    mustInclude: [/Account access/i, /EOD market data/i, /Request access/i],
+    mustInclude: [/Account access/i, /EOD market data/i, /Get started/i],
   },
   {
     path: "/login",

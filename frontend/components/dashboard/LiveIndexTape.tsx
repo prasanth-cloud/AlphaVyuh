@@ -45,7 +45,7 @@ export function LiveIndexTape({ data }: { data: MarketOverview }) {
 
   const loadTape = useCallback(async () => {
     try {
-      const response = await fetch("/api/public/market-tape", { cache: "no-store" });
+      const response = await fetch("/api/public/market-tape");
       if (!response.ok) {
         setTapeError(true);
         return;

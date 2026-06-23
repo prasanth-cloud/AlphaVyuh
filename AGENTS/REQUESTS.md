@@ -17,21 +17,39 @@ Description of what's needed and why.
 
 ## Open
 
-### REQ-002: Railway backend recovery
+### REQ-002: Production Supabase quota recovery
 **From:** backend-data / QA
 **To:** deploy
 **Created:** 2026-05-19
-**Status:** blocked on owner-controlled Railway auth or GitHub recovery secrets
+**Status:** recovery observed; blocked on authenticated verification
 
-`npm run check:data-recovery` proves Supabase EOD rows and Vercel production
-env are healthy, but `https://alphavyuh-production.up.railway.app/health`
-returns Railway fallback `404 Application not found`.
+`npm run check:data-recovery` now proves Railway hosting, Vercel production env,
+GitHub recovery secrets, Railway recovery workflow, and local Railway CLI are
+available. The remaining production blocker is Supabase project restriction:
+`exceed_db_size_quota`.
 
-Deploy owner must provide Railway recovery values or refresh local Railway auth:
+Fresh evidence from 2026-06-16:
 
-```bash
-npm run recover:railway-backend:login
-```
+- `https://www.alphavyuh.com/api/auth/login` returns the Supabase Auth error
+  `Service for this project is restricted due to the following violations:
+  exceed_db_size_quota`.
+- Railway `/health` returns 200, but
+  `https://alphavyuh-production.up.railway.app/api/v1/market/summary` returns
+  503 because backend PostgREST calls receive the same Supabase quota error.
+- Supabase connector stats show the organization is on plan `free`, production
+  database size is `1181 MB`, and the `daily_ohlcv` relation is `1132 MB`; Free
+  plan read-only restriction starts at 500 MB.
+- Vercel production env check passes after linking the checkout to the existing
+  `frontend` Vercel project.
+
+Fresh evidence from 2026-06-18 indicates the quota restriction is no longer
+blocking public auth or the production data API:
+
+- Invalid credentials now receive the expected HTTP 401 `Invalid login
+  credentials`, not `exceed_db_size_quota`.
+- `npm run check:data-recovery` passes the Railway market summary, breadth, and
+  five-year chart smoke through the 2026-06-17 session.
+- Vercel production configuration and the Railway recovery workflow still pass.
 
 After recovery:
 

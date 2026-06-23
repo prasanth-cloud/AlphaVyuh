@@ -1,33 +1,65 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import {
   getAiPatterns,
+  getBrokerOrderActivity,
   getBrokerStatus,
   getJournalAnalytics,
   getJournalEntries,
   getJournalStats,
   getMarketSnapshot,
   getMe,
+  prefetchCandles,
   getRecentAlertMatches,
+  getPriceAlerts,
   getWorkflowStates,
   listAlerts,
   getWatchlists,
   updateMe,
   type AiPatterns,
+  type BrokerOrderActivityItem,
   type DataHealth,
   type JournalAnalytics,
+  type JournalEntry,
   type JournalStats,
   type MarketOverview,
+  type PriceAlert,
   type ScanAlertMatch,
+  type WorkflowState as ApiWorkflowState,
 } from '@/lib/api'
-import { DashboardEquitySnapshotCard } from '@/components/dashboard/DashboardEquitySnapshot'
+import { DashboardActionBrief } from '@/components/dashboard/DashboardActionBrief'
+import { DashboardAlertPlanner } from '@/components/dashboard/DashboardAlertPlanner'
+import { DashboardBrokerFlightStatus } from '@/components/dashboard/DashboardBrokerFlightStatus'
+import { DashboardChartWorkbench } from '@/components/dashboard/DashboardChartWorkbench'
+import { DashboardSessionAgenda } from '@/components/dashboard/DashboardSessionAgenda'
+import { DashboardWorkspaceSwitcher } from '@/components/dashboard/DashboardWorkspaceSwitcher'
 import { MarketOverviewDesk } from '@/components/dashboard/MarketOverviewDesk'
 import { EmptyState } from '@/components/ui'
+import { buildDashboardPrioritySymbols, type DashboardPrioritySymbol } from '@/lib/dashboard-action-brief'
+import {
+  getDashboardWorkspaceSections,
+  normalizeDashboardWorkspaceView,
+  type DashboardWorkspaceView,
+} from '@/lib/dashboard-workspace-view'
 import { markAppTiming } from '@/lib/performance'
 import { describeMarketDataError } from '@/lib/data-errors'
 import { captureAccountData, setupBlockingAccountIssues, uniqueAccountIssues, type AccountDataIssue } from '@/lib/account-data-status'
+import { getWatchlistChartRequest } from '@/lib/watchlist-chart-range'
 import { FirstRunBanner } from '@/components/FirstRunBanner'
+
+const DashboardDataConfidence = dynamic(() => import('@/components/dashboard/DashboardDataConfidence').then(module => module.DashboardDataConfidence))
+const DashboardWorkflowFunnel = dynamic(() => import('@/components/dashboard/DashboardWorkflowFunnel').then(module => module.DashboardWorkflowFunnel))
+const DashboardScannerEffectiveness = dynamic(() => import('@/components/dashboard/DashboardScannerEffectiveness').then(module => module.DashboardScannerEffectiveness))
+const DashboardValidationLab = dynamic(() => import('@/components/dashboard/DashboardValidationLab').then(module => module.DashboardValidationLab))
+const DashboardEventRadar = dynamic(() => import('@/components/dashboard/DashboardEventRadar').then(module => module.DashboardEventRadar))
+const DashboardDisciplineChecklist = dynamic(() => import('@/components/dashboard/DashboardDisciplineChecklist').then(module => module.DashboardDisciplineChecklist))
+const DashboardRiskControl = dynamic(() => import('@/components/dashboard/DashboardRiskControl').then(module => module.DashboardRiskControl))
+const DashboardJournalEdge = dynamic(() => import('@/components/dashboard/DashboardJournalEdge').then(module => module.DashboardJournalEdge))
+const DashboardPerformanceCoach = dynamic(() => import('@/components/dashboard/DashboardPerformanceCoach').then(module => module.DashboardPerformanceCoach))
+const DashboardImportReconciliation = dynamic(() => import('@/components/dashboard/DashboardImportReconciliation').then(module => module.DashboardImportReconciliation))
+const DashboardEquitySnapshotCard = dynamic(() => import('@/components/dashboard/DashboardEquitySnapshot').then(module => module.DashboardEquitySnapshotCard))
 
 const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200;
 
@@ -72,18 +104,37 @@ type WorkflowState = {
   brokerName: string | null
   brokerStatusLabel: string | null
   brokerLastSyncedAt: string | null
+  brokerCanImport: boolean
+  brokerSyncStatus: string | null
+  brokerTokenExpired: boolean
+  brokerPlanAllows: boolean | null
+  brokerReadOnly: boolean | null
   closedTrades: number
   reviewedTrades: number
+  knownUnreviewedTrades: number
+  reviewCoveragePartial: boolean
+  journalEntries: JournalEntry[]
+  workflowStates: ApiWorkflowState[]
   scanAlerts: number
   alertMatchSymbols: number
+  priceAlerts: number
+  triggeredPriceAlerts: number
+  latestScanRunDate: string | null
+  latestScanAlertName: string | null
+  latestScanMatchCount: number | null
+  topAlertSymbols: { symbol: string; href: string }[]
   watchlistReviewDue: number
   onboardingCompleted: boolean
   patterns: AiPatterns | null
+  brokerOrders: BrokerOrderActivityItem[]
+  brokerActivityUnavailable: boolean
   accountIssues: AccountDataIssue[]
   alertIssues: AccountDataIssue[]
+  prioritySymbols: DashboardPrioritySymbol[]
 }
 
 const DASHBOARD_SNAPSHOT_CACHE_KEY = 'alphavyuh-dashboard-snapshot-v1'
+const DASHBOARD_WORKSPACE_VIEW_KEY = 'alphavyuh-dashboard-workspace-view-v1'
 
 type DashboardSnapshotCache = {
   data: MarketOverview
@@ -113,16 +164,56 @@ function writeDashboardSnapshotCache(data: MarketOverview, dataHealth: DataHealt
   }
 }
 
+function readDashboardWorkspaceView(): DashboardWorkspaceView {
+  if (typeof window === 'undefined') return 'session'
+  try {
+    return normalizeDashboardWorkspaceView(window.localStorage.getItem(DASHBOARD_WORKSPACE_VIEW_KEY))
+  } catch {
+    return 'session'
+  }
+}
+
+type DashboardIdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
+function scheduleDashboardBackgroundHydration(callback: () => void) {
+  if (typeof window === 'undefined') return () => {}
+
+  let cancelled = false
+  const run = () => {
+    if (!cancelled) callback()
+  }
+  const idleWindow = window as DashboardIdleWindow
+
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(run, { timeout: 900 })
+    return () => {
+      cancelled = true
+      idleWindow.cancelIdleCallback?.(handle)
+    }
+  }
+
+  const handle = window.setTimeout(run, 250)
+  return () => {
+    cancelled = true
+    window.clearTimeout(handle)
+  }
+}
+
 
 export default function DashboardPage() {
   const [data, setData] = useState<MarketOverview | null>(null)
   const dataRef = useRef<MarketOverview | null>(null)
+  const prefetchedPriorityChartsRef = useRef('')
   const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [journalStats, setJournalStats] = useState<JournalStats | null>(null)
   const [journalAnalytics, setJournalAnalytics] = useState<JournalAnalytics | null>(null)
   const [journalEquityUnavailable, setJournalEquityUnavailable] = useState<string | null>(null)
+  const [dashboardView, setDashboardView] = useState<DashboardWorkspaceView>('session')
   const [workflow, setWorkflow] = useState<WorkflowState>({
     watchlists: 0,
     trackedSymbols: 0,
@@ -132,15 +223,33 @@ export default function DashboardPage() {
     brokerName: null,
     brokerStatusLabel: null,
     brokerLastSyncedAt: null,
+    brokerCanImport: false,
+    brokerSyncStatus: null,
+    brokerTokenExpired: false,
+    brokerPlanAllows: null,
+    brokerReadOnly: null,
     closedTrades: 0,
     reviewedTrades: 0,
+    knownUnreviewedTrades: 0,
+    reviewCoveragePartial: false,
+    journalEntries: [],
+    workflowStates: [],
     scanAlerts: 0,
     alertMatchSymbols: 0,
+    priceAlerts: 0,
+    triggeredPriceAlerts: 0,
+    latestScanRunDate: null,
+    latestScanAlertName: null,
+    latestScanMatchCount: null,
+    topAlertSymbols: [],
     watchlistReviewDue: 0,
     onboardingCompleted: false,
     patterns: null,
+    brokerOrders: [],
+    brokerActivityUnavailable: false,
     accountIssues: [],
     alertIssues: [],
+    prioritySymbols: [],
   })
   const load = useCallback(async () => {
     setError('')
@@ -169,11 +278,22 @@ export default function DashboardPage() {
       setDataHealth(cached.dataHealth)
       setLoading(false)
     }
+    setDashboardView(readDashboardWorkspaceView())
+  }, [])
+
+  const handleDashboardViewChange = useCallback((nextView: DashboardWorkspaceView) => {
+    const normalized = normalizeDashboardWorkspaceView(nextView)
+    setDashboardView(normalized)
+    try {
+      window.localStorage.setItem(DASHBOARD_WORKSPACE_VIEW_KEY, normalized)
+    } catch {
+      // View preference is local-only; ignore private browsing storage failures.
+    }
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      Promise.all([
+    return scheduleDashboardBackgroundHydration(() => {
+      void Promise.all([
         captureAccountData(
           getWatchlists({ lite: true }),
           { id: 'watchlists', label: 'Watchlists', href: '/watchlist' },
@@ -200,6 +320,11 @@ export default function DashboardPage() {
           'Broker status is temporarily unavailable.',
         ),
         captureAccountData(
+          getBrokerOrderActivity(25),
+          { id: 'broker', label: 'Broker activity', href: '/settings/broker' },
+          'Broker activity is temporarily unavailable.',
+        ),
+        captureAccountData(
           listAlerts(),
           { id: 'alerts', label: 'Scan alerts', href: '/alerts' },
           'Scan alerts are temporarily unavailable.',
@@ -209,8 +334,13 @@ export default function DashboardPage() {
           { id: 'alerts', label: 'Scan alert matches', href: '/alerts' },
           'Recent scan alert matches are temporarily unavailable.',
         ),
+        captureAccountData(
+          getPriceAlerts(),
+          { id: 'alerts', label: 'Price alerts', href: '/alerts' },
+          'Price alerts are temporarily unavailable.',
+        ),
         getMe().catch(() => null),
-      ]).then(async ([watchlistsResult, journalResult, statsResult, analyticsResult, brokerResult, alertsResult, alertMatchesResult, me]) => {
+      ]).then(async ([watchlistsResult, journalResult, statsResult, analyticsResult, brokerResult, brokerActivityResult, alertsResult, alertMatchesResult, priceAlertsResult, me]) => {
         const watchlists = watchlistsResult.data ?? []
         const journal = journalResult.data ?? { entries: [], total: 0 }
         const stats = statsResult.data
@@ -232,16 +362,19 @@ export default function DashboardPage() {
           can_import: false,
           sync_status: 'idle' as const,
           last_synced_at: null,
+          plan_allows_broker: null,
         }
         const accountIssues = setupBlockingAccountIssues(uniqueAccountIssues([
           watchlistsResult.issue,
           journalResult.issue,
           statsResult.issue,
           brokerResult.issue,
+          brokerActivityResult.issue,
         ]))
         const alertIssues = uniqueAccountIssues([
           alertsResult.issue,
           alertMatchesResult.issue,
+          priceAlertsResult.issue,
         ])
         const trackedSymbols = watchlists.reduce((total, watchlist) => total + (watchlist.items?.length ?? 0), 0)
         const trackedSymbolSet = new Set<string>()
@@ -261,15 +394,42 @@ export default function DashboardPage() {
         const watchlistReviewDue = watchlists.reduce((total, watchlist) => (
           total + (watchlist.items ?? []).filter(item => !item.note?.trim() || reviewLaterSymbols.has(item.symbol.toUpperCase())).length
         ), 0)
+        const prioritySymbols = buildDashboardPrioritySymbols({
+          watchlists,
+          workflowStates,
+          journalEntries: journal.entries,
+          broker: {
+            connected: Boolean(broker.connected),
+            tokenExpired: Boolean(broker.token_expired),
+            planAllowsBroker: broker.plan_allows_broker ?? null,
+            statusError: brokerResult.issue?.message ?? null,
+          },
+        })
         const closedTradesInSample = journal.entries.filter(entry => entry.status === 'closed').length
         const openTradesInSample = journal.entries.filter(entry => entry.status === 'open').length
         const closedTrades = Math.max(closedTradesInSample, stats?.total_trades ?? 0)
-        const reviewedTrades = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
+        const reviewedClosedTradesInSample = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
+        const knownUnreviewedTrades = Math.max(0, closedTradesInSample - reviewedClosedTradesInSample)
+        const reviewCoveragePartial = journal.entries.length < journal.total || closedTrades > closedTradesInSample
+        const reviewedTrades = reviewCoveragePartial
+          ? Math.max(0, closedTrades - knownUnreviewedTrades)
+          : reviewedClosedTradesInSample
         const activeScanAlerts = (alertsResult.data ?? []).filter(alert => alert.is_active)
+        const activePriceAlerts = ((priceAlertsResult.data ?? []) as PriceAlert[]).filter(alert => alert.is_active)
+        const triggeredPriceAlerts = activePriceAlerts.filter(alert => alert.triggered_at).length
         const alertSymbolSet = new Set<string>()
-        for (const match of (alertMatchesResult.data ?? []) as ScanAlertMatch[]) {
+        const recentMatches = (alertMatchesResult.data ?? []) as ScanAlertMatch[]
+        const latestAlertMatch = [...recentMatches].sort((a, b) => {
+          const byDate = (b.run_date ?? '').localeCompare(a.run_date ?? '')
+          if (byDate !== 0) return byDate
+          return (b.match_count ?? 0) - (a.match_count ?? 0)
+        })[0] ?? null
+        for (const match of recentMatches) {
           for (const row of match.symbols ?? []) alertSymbolSet.add(row.symbol)
         }
+        const topAlertSymbols = Array.from(new Set(
+          (latestAlertMatch?.symbols ?? []).map(row => row.symbol.toUpperCase()).filter(Boolean),
+        )).slice(0, 5).map(symbol => ({ symbol, href: `/charts/${symbol}?from=dashboard-alerts&full=1` }))
         const nextWorkflow: WorkflowState = {
           watchlists: watchlists.length,
           trackedSymbols,
@@ -279,15 +439,33 @@ export default function DashboardPage() {
           brokerName: broker.broker,
           brokerStatusLabel: broker.status_label ?? null,
           brokerLastSyncedAt: broker.last_synced_at ?? null,
+          brokerCanImport: Boolean(broker.can_import),
+          brokerSyncStatus: broker.sync_status ?? null,
+          brokerTokenExpired: Boolean(broker.token_expired),
+          brokerPlanAllows: broker.plan_allows_broker ?? null,
+          brokerReadOnly: broker.read_only ?? null,
           closedTrades,
           reviewedTrades,
+          knownUnreviewedTrades,
+          reviewCoveragePartial,
+          journalEntries: journal.entries,
+          workflowStates,
           scanAlerts: activeScanAlerts.length,
           alertMatchSymbols: alertSymbolSet.size,
+          priceAlerts: activePriceAlerts.length,
+          triggeredPriceAlerts,
+          latestScanRunDate: latestAlertMatch?.run_date ?? null,
+          latestScanAlertName: latestAlertMatch?.scan_alerts?.name ?? null,
+          latestScanMatchCount: latestAlertMatch?.match_count ?? null,
+          topAlertSymbols,
           watchlistReviewDue,
           onboardingCompleted: Boolean(me?.onboarding_completed),
           patterns: null,
+          brokerOrders: brokerActivityResult.data?.orders ?? [],
+          brokerActivityUnavailable: Boolean(brokerActivityResult.issue),
           accountIssues,
           alertIssues,
+          prioritySymbols,
         }
         setWorkflow(nextWorkflow)
 
@@ -316,8 +494,7 @@ export default function DashboardPage() {
         }
         markAppTiming('dashboard-background-hydration-complete')
       })
-    }, 250)
-    return () => window.clearTimeout(timer)
+    })
   }, [])
 
   useEffect(() => {
@@ -326,6 +503,26 @@ export default function DashboardPage() {
     const t = setInterval(load, 5 * 60 * 1000)
     return () => clearInterval(t)
   }, [load])
+
+  const visibleDashboardSections = getDashboardWorkspaceSections(dashboardView)
+  const priorityChartSymbolsKey = workflow.prioritySymbols.slice(0, 4).map(item => item.symbol).join(',')
+
+  useEffect(() => {
+    if (!priorityChartSymbolsKey || prefetchedPriorityChartsRef.current === priorityChartSymbolsKey) return
+    prefetchedPriorityChartsRef.current = priorityChartSymbolsKey
+
+    return scheduleDashboardBackgroundHydration(() => {
+      const request = getWatchlistChartRequest('3M')
+      const params = {
+        limit: request.limit,
+        timeframe: request.timeframe,
+        from_date: request.from_date,
+        to_date: request.to_date,
+      }
+      workflow.prioritySymbols.slice(0, 4).forEach((item) => prefetchCandles(item.symbol, params))
+      markAppTiming('dashboard-priority-chart-prefetch')
+    })
+  }, [priorityChartSymbolsKey, workflow.prioritySymbols])
 
   return (
     <div style={{ background: 'transparent', minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -346,14 +543,235 @@ export default function DashboardPage() {
             <>
               <FirstRunBanner />
               <MarketOverviewDesk data={data} dataHealth={dataHealth} marketError={error} />
-              <DashboardEquitySnapshotCard
+              <DashboardWorkspaceSwitcher value={dashboardView} onChange={handleDashboardViewChange} />
+              {visibleDashboardSections.has('data') && <DashboardDataConfidence
+                marketDataStatus={dataHealth?.status ?? null}
+                marketDataMode={dataHealth?.mode ?? data.source_metadata?.mode ?? null}
+                tradeDate={data.trade_date}
+                latestTradeDate={dataHealth?.latest_trade_date ?? null}
+                hoursSinceRefresh={dataHealth?.hours_since_refresh ?? null}
+                coveragePct={dataHealth?.coverage_pct ?? null}
+                symbolsOnLatestDate={dataHealth?.symbols_on_latest_date ?? null}
+                universeActive={dataHealth?.universe_active ?? null}
+                fallbackActive={dataHealth?.fallback_active ?? null}
+                marketError={error}
+                accountIssueCount={workflow.accountIssues.length}
+                alertIssueCount={workflow.alertIssues.length}
+                closedTrades={workflow.closedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                trackedSymbols={workflow.trackedSymbols}
+                scanAlerts={workflow.scanAlerts}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                brokerConnected={workflow.brokerConnected}
+                brokerStatusLabel={workflow.brokerStatusLabel}
+                brokerLastSyncedAt={workflow.brokerLastSyncedAt}
+              />}
+              {visibleDashboardSections.has('action') && <DashboardActionBrief
+                tradeDate={data.trade_date}
+                marketPhase={data.market_phase}
+                marketDataStatus={dataHealth?.status ?? null}
+                marketDataMode={dataHealth?.mode ?? data.source_metadata?.mode ?? null}
+                trackedSymbols={workflow.trackedSymbols}
+                watchlistReviewDue={workflow.watchlistReviewDue}
+                scanAlerts={workflow.scanAlerts}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                closedTrades={workflow.closedTrades}
+                reviewedTrades={workflow.reviewedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                openTrades={workflow.openTrades}
+                brokerConnected={workflow.brokerConnected}
+                brokerName={workflow.brokerName}
+                brokerStatusLabel={workflow.brokerStatusLabel}
+                brokerLastSyncedAt={workflow.brokerLastSyncedAt}
+                accountIssueCount={workflow.accountIssues.length}
+                alertIssueCount={workflow.alertIssues.length}
+                prioritySymbols={workflow.prioritySymbols}
+              />}
+              {visibleDashboardSections.has('agenda') && <DashboardSessionAgenda
+                accountIssues={workflow.accountIssues}
+                alertIssues={workflow.alertIssues}
+                closedTrades={workflow.closedTrades}
+                reviewedTrades={workflow.reviewedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                watchlistReviewDue={workflow.watchlistReviewDue}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                scanAlerts={workflow.scanAlerts}
+                trackedSymbols={workflow.trackedSymbols}
+                watchlists={workflow.watchlists}
+                openTrades={workflow.openTrades}
+                brokerConnected={workflow.brokerConnected}
+                prioritySymbols={workflow.prioritySymbols}
+              />}
+              {visibleDashboardSections.has('broker') && <DashboardBrokerFlightStatus
+                orders={workflow.brokerOrders}
+                unavailable={workflow.brokerActivityUnavailable}
+              />}
+              {visibleDashboardSections.has('funnel') && <DashboardWorkflowFunnel
+                workflowStates={workflow.workflowStates}
+                journalEntries={workflow.journalEntries}
+                trackedSymbols={workflow.trackedSymbols}
+                watchlists={workflow.watchlists}
+                watchlistReviewDue={workflow.watchlistReviewDue}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                scanAlerts={workflow.scanAlerts}
+                openTrades={workflow.openTrades}
+                closedTrades={workflow.closedTrades}
+                reviewedTrades={workflow.reviewedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                accountIssueCount={workflow.accountIssues.length}
+                alertIssueCount={workflow.alertIssues.length}
+              />}
+              {visibleDashboardSections.has('alerts') && <DashboardAlertPlanner
+                marketDataStatus={dataHealth?.status ?? null}
+                alertIssueCount={workflow.alertIssues.length}
+                scanAlerts={workflow.scanAlerts}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                priceAlerts={workflow.priceAlerts}
+                triggeredPriceAlerts={workflow.triggeredPriceAlerts}
+                latestScanRunDate={workflow.latestScanRunDate}
+                latestScanAlertName={workflow.latestScanAlertName}
+                latestScanMatchCount={workflow.latestScanMatchCount}
+                topAlertSymbols={workflow.topAlertSymbols}
+                trackedSymbols={workflow.trackedSymbols}
+                watchlistReviewDue={workflow.watchlistReviewDue}
+                openTrades={workflow.openTrades}
+                brokerConnected={workflow.brokerConnected}
+                prioritySymbols={workflow.prioritySymbols}
+              />}
+              {visibleDashboardSections.has('charts') && <DashboardChartWorkbench
+                marketDataStatus={dataHealth?.status ?? null}
+                alertIssueCount={workflow.alertIssues.length}
+                priceAlerts={workflow.priceAlerts}
+                triggeredPriceAlerts={workflow.triggeredPriceAlerts}
+                topAlertSymbols={workflow.topAlertSymbols}
+                prioritySymbols={workflow.prioritySymbols}
+                trackedSymbols={workflow.trackedSymbols}
+                watchlistReviewDue={workflow.watchlistReviewDue}
+                openTrades={workflow.openTrades}
+              />}
+              {visibleDashboardSections.has('scanner') && <DashboardScannerEffectiveness
+                workflowStates={workflow.workflowStates}
+                journalEntries={workflow.journalEntries}
+                scanAlerts={workflow.scanAlerts}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                latestScanRunDate={workflow.latestScanRunDate}
+                latestScanAlertName={workflow.latestScanAlertName}
+                latestScanMatchCount={workflow.latestScanMatchCount}
+                alertIssueCount={workflow.alertIssues.length}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+              />}
+              {visibleDashboardSections.has('validation') && <DashboardValidationLab
+                marketDataStatus={dataHealth?.status ?? null}
+                workflowStates={workflow.workflowStates}
+                journalEntries={workflow.journalEntries}
+                scanAlerts={workflow.scanAlerts}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                latestScanRunDate={workflow.latestScanRunDate}
+                latestScanAlertName={workflow.latestScanAlertName}
+                latestScanMatchCount={workflow.latestScanMatchCount}
+                alertIssueCount={workflow.alertIssues.length}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+              />}
+              {visibleDashboardSections.has('events') && <DashboardEventRadar
+                marketDataStatus={dataHealth?.status ?? null}
+                marketDataMode={dataHealth?.mode ?? data.source_metadata?.mode ?? null}
+                tradeDate={data.trade_date}
+                latestTradeDate={dataHealth?.latest_trade_date ?? null}
+                hoursSinceRefresh={dataHealth?.hours_since_refresh ?? null}
+                trackedSymbols={workflow.trackedSymbols}
+                watchlistReviewDue={workflow.watchlistReviewDue}
+                openTrades={workflow.openTrades}
+                scanAlerts={workflow.scanAlerts}
+                alertMatchSymbols={workflow.alertMatchSymbols}
+                priceAlerts={workflow.priceAlerts}
+                triggeredPriceAlerts={workflow.triggeredPriceAlerts}
+                accountIssueCount={workflow.accountIssues.length}
+                alertIssueCount={workflow.alertIssues.length}
+                prioritySymbols={workflow.prioritySymbols}
+              />}
+              {visibleDashboardSections.has('discipline') && <DashboardDisciplineChecklist
+                marketDataStatus={dataHealth?.status ?? null}
+                accountIssueCount={workflow.accountIssues.length}
+                alertIssueCount={workflow.alertIssues.length}
+                trackedSymbols={workflow.trackedSymbols}
+                watchlistReviewDue={workflow.watchlistReviewDue}
+                openTrades={workflow.openTrades}
+                closedTrades={workflow.closedTrades}
+                reviewedTrades={workflow.reviewedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                brokerConnected={workflow.brokerConnected}
+                brokerCanImport={workflow.brokerCanImport}
+                brokerTokenExpired={workflow.brokerTokenExpired}
+                priceAlerts={workflow.priceAlerts}
+                triggeredPriceAlerts={workflow.triggeredPriceAlerts}
+              />}
+              {visibleDashboardSections.has('risk') && <DashboardRiskControl
+                stats={journalStats}
+                analytics={journalAnalytics}
+                closedTrades={workflow.closedTrades}
+                reviewedTrades={workflow.reviewedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                openTrades={workflow.openTrades}
+                marketDataStatus={dataHealth?.status ?? null}
+                accountIssueCount={workflow.accountIssues.length}
+                alertIssueCount={workflow.alertIssues.length}
+                brokerConnected={workflow.brokerConnected}
+              />}
+              {visibleDashboardSections.has('journal') && <DashboardJournalEdge
+                stats={journalStats}
+                analytics={journalAnalytics}
+                patterns={workflow.patterns}
+                journalEntries={workflow.journalEntries}
+                accountIssueCount={workflow.accountIssues.filter(issue => issue.id === 'journal').length}
+                closedTrades={workflow.closedTrades}
+                reviewedTrades={workflow.reviewedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                openTrades={workflow.openTrades}
+                brokerConnected={workflow.brokerConnected}
+              />}
+              {visibleDashboardSections.has('coach') && <DashboardPerformanceCoach
+                stats={journalStats}
+                analytics={journalAnalytics}
+                patterns={workflow.patterns}
+                closedTrades={workflow.closedTrades}
+                reviewedTrades={workflow.reviewedTrades}
+                knownUnreviewedTrades={workflow.knownUnreviewedTrades}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+                journalIssueCount={workflow.accountIssues.filter(issue => issue.id === 'journal').length}
+                brokerConnected={workflow.brokerConnected}
+              />}
+              {visibleDashboardSections.has('import') && <DashboardImportReconciliation
+                journalEntries={workflow.journalEntries}
+                totalTrades={workflow.totalTrades}
+                closedTrades={workflow.closedTrades}
+                openTrades={workflow.openTrades}
+                brokerConnected={workflow.brokerConnected}
+                brokerName={workflow.brokerName}
+                brokerStatusLabel={workflow.brokerStatusLabel}
+                brokerLastSyncedAt={workflow.brokerLastSyncedAt}
+                brokerCanImport={workflow.brokerCanImport}
+                brokerSyncStatus={workflow.brokerSyncStatus}
+                brokerTokenExpired={workflow.brokerTokenExpired}
+                brokerPlanAllows={workflow.brokerPlanAllows}
+                brokerReadOnly={workflow.brokerReadOnly}
+                accountIssueCount={workflow.accountIssues.filter(issue => issue.id === 'broker').length}
+                reviewCoveragePartial={workflow.reviewCoveragePartial}
+              />}
+              {visibleDashboardSections.has('equity') && <DashboardEquitySnapshotCard
                 stats={journalStats}
                 analytics={journalAnalytics}
                 closedTrades={workflow.closedTrades}
                 openTrades={workflow.openTrades}
                 unavailable={Boolean(journalEquityUnavailable)}
                 unavailableMessage={journalEquityUnavailable ?? undefined}
-              />
+              />}
             </>
           ) : !error ? (
             <EmptyState

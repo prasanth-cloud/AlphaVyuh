@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSafeAuthErrorMessage } from "@/lib/auth-error-copy";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
 import { allowMockAppAuth } from "@/lib/runtime-mode";
 
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
 
   if (error || !data.session) {
     return NextResponse.json(
-      { error: error?.message ?? "No session returned." },
+      { error: getSafeAuthErrorMessage(error, "Could not sign in. Check your email and password.") },
       { status: 401 }
     );
   }

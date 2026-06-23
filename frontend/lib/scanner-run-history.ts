@@ -28,6 +28,7 @@ export type ScannerRunHistoryEntry = {
   dataAsOf: string | null;
   coveragePct: number | null;
   universeSize: number | null;
+  elapsedMs: number | null;
   filters: Record<string, unknown> | null;
   topSymbols: string[];
   results: ScannerRunHistoryResult[];
@@ -57,6 +58,10 @@ function cleanNumber(value: unknown, fallback = 0): number {
 
 function cleanNullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function cleanNullablePositiveInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
 function cleanBoolean(value: unknown, fallback = false): boolean {
@@ -115,6 +120,7 @@ export function createScannerRunHistoryEntry(input: ScannerRunHistoryInput, save
     dataAsOf: cleanNullableString(input.dataAsOf),
     coveragePct: cleanNullableNumber(input.coveragePct),
     universeSize: cleanNullableNumber(input.universeSize),
+    elapsedMs: cleanNullablePositiveInteger(input.elapsedMs),
     filters: cleanFilters(input.filters),
     topSymbols,
     results,
@@ -145,9 +151,16 @@ function sanitizeHistoryEntry(value: unknown): ScannerRunHistoryEntry | null {
     dataAsOf: cleanNullableString(item.dataAsOf),
     coveragePct: cleanNullableNumber(item.coveragePct),
     universeSize: cleanNullableNumber(item.universeSize),
+    elapsedMs: cleanNullablePositiveInteger(item.elapsedMs),
     filters: cleanFilters(item.filters),
     results,
   }, savedAt);
+}
+
+export function formatScannerRunDuration(elapsedMs: number | null): string | null {
+  if (elapsedMs == null) return null;
+  if (elapsedMs < 1000) return `${elapsedMs} ms`;
+  return `${(elapsedMs / 1000).toFixed(1)} s`;
 }
 
 export function readScannerRunHistory(storage = browserStorage()): ScannerRunHistoryEntry[] {

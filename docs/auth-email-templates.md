@@ -9,7 +9,11 @@ AlphaVyuh auth emails are versioned under `supabase/templates/` and wired into l
 - Magic link: `supabase/templates/magic-link.html`
 - Invite: `supabase/templates/invite.html`
 
-Each template uses `{{ .ConfirmationURL }}` so Supabase keeps token handling and redirect validation in the Auth service. Application code passes `/auth/callback?next=...` as `emailRedirectTo`, and `frontend/app/auth/callback/route.ts` exchanges the code for a session before redirecting.
+Each template sends `{{ .TokenHash }}` to `/auth/callback` with the matching
+email OTP type. The callback verifies the token server-side and also keeps the
+PKCE `code` exchange path for existing emails. Application code passes
+`/auth/callback?next=...` as `emailRedirectTo`; the callback accepts only a
+same-origin callback URL and extracts its safe relative `next` destination.
 
 ## Hosted Supabase
 

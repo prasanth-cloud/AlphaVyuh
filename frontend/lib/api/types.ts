@@ -768,9 +768,55 @@ export type OrderResult = {
   broker:           string;          // "simulated" | "zerodha" | "upstox"
   broker_order_id:  string | null;
   execution_mode?:  string;
+  execution_status?: string;
+  filled_quantity?: number;
+  average_fill_price?: number | null;
+  requires_reconciliation?: boolean;
+  rejection_reason?: string | null;
   journal_status?:  string;
   risk_reward?:     number | null;
   next_actions?:    string[];
+};
+
+export type BrokerOrderReconciliation = {
+  status: string;
+  broker: "zerodha" | "upstox";
+  broker_order_id: string;
+  execution_status: "PENDING" | "OPEN" | "PARTIAL" | "COMPLETE" | "CANCELLED" | "REJECTED";
+  symbol: string;
+  quantity: number;
+  filled_quantity: number;
+  average_fill_price: number | null;
+  requires_reconciliation: boolean;
+  rejection_reason: string | null;
+  journal_id: string | null;
+  journal_status: string | null;
+  message: string;
+};
+
+export type BrokerOrderActivityItem = {
+  id: string;
+  broker: "simulated" | "zerodha" | "upstox";
+  broker_order_id: string | null;
+  journal_id: string | null;
+  symbol: string;
+  side: "BUY" | "SELL";
+  quantity: number;
+  order_type: string;
+  requested_price: number | null;
+  execution_status: string;
+  filled_quantity: number;
+  average_fill_price: number | null;
+  requires_reconciliation: boolean;
+  rejection_reason: string | null;
+  placed_at: string | null;
+  reconciled_at: string | null;
+  journal_state: "recorded" | "not_created";
+};
+
+export type BrokerOrderActivityResponse = {
+  orders: BrokerOrderActivityItem[];
+  count: number;
 };
 
 export type DataHealth = {
@@ -924,6 +970,7 @@ export interface MarketOverview {
   above_ema200_pct: number;
   ema_breadth_by_period?: Partial<Record<"day" | "week" | "month" | "year", { ema20: number; ema50: number; ema200: number } | null>>;
   ema_breadth_daily_history?: { trade_date: string; ema20: number; ema50: number; ema200: number }[];
+  ema_breadth_lookback?: Partial<Record<"day" | "week" | "month" | "year", { trade_date: string; ema20: number; ema50: number; ema200: number }[]>>;
   highs_lows_by_period?: Partial<Record<"daily" | "weekly", { highs: number; lows: number }>>;
   market_phase: string;
   market_phase_desc: string;
