@@ -10,7 +10,7 @@ type WorkflowPage = {
 const pages: WorkflowPage[] = [
   { path: "/dashboard", name: "dashboard", marker: (page) => page.getByTestId("dashboard-market-desk") },
   { path: "/scanner", name: "scanner", marker: (page) => page.getByRole("button", { name: /^Run scan$/i }) },
-  { path: "/watchlist", name: "watchlist", marker: (page) => page.getByText("Decision desk") },
+  { path: "/watchlist", name: "watchlist", marker: (page) => page.getByTestId("watchlist-workflow-strip") },
   { path: "/charts/AUBANK?full=1", name: "full chart", marker: (page) => page.getByTestId("chart-drawing-overlay") },
   { path: "/journal", name: "journal", marker: (page) => page.getByText(/Review/i).first() },
   { path: "/upload", name: "upload", marker: (page) => page.getByRole("heading", { name: "Upload trade report" }) },
@@ -155,15 +155,20 @@ test.describe("Workflow layout smoke", () => {
 
   test("scanner actions and watchlist chart header remain usable", async ({ page }) => {
     await page.goto("/scanner", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => {});
     await expect(page.locator("body")).not.toContainText("DISCOVERY");
-    await expect(page.getByRole("button", { name: /Technicals/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Fundamentals/i })).toBeVisible();
+    const technicalsTab = page.getByTestId("scanner-filter-tab-technicals");
+    const fundamentalsTab = page.getByTestId("scanner-filter-tab-fundamentals");
+    await expect(technicalsTab).toBeVisible();
+    await expect(fundamentalsTab).toBeVisible();
     await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
-    await page.getByRole("button", { name: /Fundamentals/i }).click();
+    await fundamentalsTab.click();
+    await expect(fundamentalsTab).toHaveClass(/active/);
     await expect(page.getByRole("button", { name: "Market cap" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Trend quality" })).toHaveCount(0);
-    await page.getByRole("button", { name: /Technicals/i }).click();
+    await technicalsTab.click();
+    await expect(technicalsTab).toHaveClass(/active/);
     await expect(page.getByRole("button", { name: "Trend quality" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Market cap" })).toHaveCount(0);
     await selectPresetAndRunScan(page);
@@ -177,11 +182,16 @@ test.describe("Workflow layout smoke", () => {
     await expect(page).toHaveURL(new RegExp(`/charts/${firstSymbol}`), { timeout: 15_000 });
 
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("body")).not.toContainText("WORKSPACE");
     await expect(page.locator(".watchlist-chart-header")).toBeVisible();
     await expect(page.locator(".workspace-card-title").first().locator("span").first()).toBeVisible();
     await expect(page.getByTestId("decision-desk-nudges")).toBeVisible();
+    const firstDraftAction = page.getByRole("button", { name: /Draft order for/i }).first();
+    await expect(firstDraftAction).toBeVisible();
+    await firstDraftAction.click();
+    await expect(page.getByText("Quick order")).toBeVisible();
+    await expect(page.locator("body")).toContainText("Journal capture only");
 
     const overlap = await page.locator(".watchlist-chart-header").evaluate((header) => {
       const children = Array.from(header.children).map((child) => child.getBoundingClientRect());
@@ -214,8 +224,15 @@ test.describe("Workflow layout smoke", () => {
   test("top search opens workflow commands", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-workspace-switcher")).toContainText("Session");
+    await expect(page.getByTestId("dashboard-action-brief")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("dashboard-index-tape")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-cockpit-instruments")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-cockpit-instruments")).toContainText(/Session|Queue|Open risk|Review|Import/);
+    await expect(page.getByTestId("dashboard-cockpit-instruments")).toContainText(/Read-only|Offline/);
+    await expect(page.getByTestId("dashboard-broker-flight-status")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-broker-flight-status")).toContainText(/Broker flight status/);
+    await expect(page.getByTestId("dashboard-broker-flight-status")).toContainText(/No broker order activity|Broker lifecycle clear/);
     await expect(page.locator(".app-nav").getByRole("link")).toHaveText(["Dashboard", "Scanner", "Watchlist", "Journal"]);
     await page.keyboard.press("/");
     await page.getByPlaceholder("Search symbol or command...").fill("dashboard");
@@ -229,6 +246,18 @@ test.describe("Workflow layout smoke", () => {
     await commandPanel.getByText("Review Journal", { exact: true }).click();
     await expect(page).toHaveURL(/\/journal/);
     await expect(page.getByTestId("journal-review-queue")).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("dashboard full desk lazy modules remain available on demand", async ({ page }) => {
+    await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-data-confidence")).not.toBeVisible();
+
+    await page.getByRole("tab", { name: "Full desk All dashboard cards", exact: true }).click();
+
+    await expect(page.getByTestId("dashboard-data-confidence")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-risk-control")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("dashboard-import-reconciliation")).toBeVisible({ timeout: 15_000 });
   });
 
   test("requested workspace copy and reminder strip are removed", async ({ page }) => {
@@ -253,9 +282,14 @@ test.describe("Workflow layout smoke", () => {
 
   test("login page uses simplified account-access copy", async ({ page }) => {
     await page.addInitScript(() => window.localStorage.setItem("alphavyuh-theme", "light"));
+    await page.addInitScript(() => window.localStorage.setItem("alphavyuh-last-login-email", "pilot@example.com"));
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-    await expect(page.getByText("Sign in to AlphaVyuh")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await expect(page.getByLabel("Email")).toHaveValue("pilot@example.com");
+    await expect(page.getByText("Remembered email")).toBeVisible();
+    await page.getByRole("button", { name: "Use another account" }).click();
+    await expect(page.getByLabel("Email")).toHaveValue("");
     await expect(page.locator("body")).toContainText(/EOD market data/i);
     await expect(page.locator("body")).toContainText(/Broker import only/i);
     await expect(page.locator("body")).not.toContainText(/Professional Access/i);
@@ -265,7 +299,7 @@ test.describe("Workflow layout smoke", () => {
 
   test("watchlist chart timeframe switching exposes range and source context", async ({ page }) => {
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator(".watchlist-chart-header")).toContainText(/3M · Daily · \d{4}-\d{2}-\d{2}/, { timeout: 15_000 });
 
     await page.locator(".watchlist-chart-header .chart-timeframe-dropdown summary").click();
@@ -288,7 +322,7 @@ test.describe("Workflow layout smoke", () => {
 
   test("feedback widget does not cover top workflow controls", async ({ page }) => {
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 15_000 });
     const boxes = await page.evaluate(() => {
       const serialize = (rect: DOMRect | undefined) => rect ? {
         x: rect.x,

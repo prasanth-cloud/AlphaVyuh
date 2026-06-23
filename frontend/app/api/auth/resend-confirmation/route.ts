@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getSafeAuthErrorMessage } from "@/lib/auth-error-copy";
 import { isSafeRedirect } from "@/lib/safe-redirect";
+import { getAuthRedirectOrigin } from "@/lib/auth-redirect-origin";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -12,7 +14,7 @@ export async function POST(request: Request) {
 
   const requestUrl = new URL(request.url);
   const safeNext = isSafeRedirect(next) ? next : "/dashboard";
-  const emailRedirectTo = `${requestUrl.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`;
+  const emailRedirectTo = `${getAuthRedirectOrigin(requestUrl.origin)}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 
   const response = NextResponse.json({ success: true });
   const supabase = await createRouteHandlerClient(response);
@@ -34,7 +36,10 @@ export async function POST(request: Request) {
     if (message.includes("already") || message.includes("confirmed") || message.includes("not found")) {
       return NextResponse.json({ success: true });
     }
-    return NextResponse.json({ error: "Could not resend confirmation email." }, { status: 400 });
+    return NextResponse.json(
+      { error: getSafeAuthErrorMessage(error, "Could not resend confirmation email.") },
+      { status: 400 },
+    );
   }
 
   return response;

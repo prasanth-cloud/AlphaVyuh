@@ -19,9 +19,11 @@ class _Query:
         self.client = client
         self.table_name = table_name
         self.insert_payload = None
+        self.update_payload = None
         self.upsert_payload = None
         self.ilike_value = None
         self.filters = {}
+        self.single = False
 
     def select(self, *_args, **_kwargs):
         return self
@@ -41,6 +43,7 @@ class _Query:
         return self
 
     def maybe_single(self):
+        self.single = True
         return self
 
     def insert(self, payload):
@@ -48,6 +51,7 @@ class _Query:
         return self
 
     def update(self, payload):
+        self.update_payload = payload
         self.client.updated.append((self.table_name, payload))
         return self
 
@@ -61,11 +65,45 @@ class _Query:
         if self.table_name == "stock_universe":
             return type("Result", (), {"data": {"symbol": "RELIANCE", "company_name": "Reliance Industries", "isin": "INE002A01018"}})()
         if self.table_name == "trade_journal" and self.insert_payload is not None:
+            if self.client.journal_insert_conflict:
+                self.client.journal_insert_conflict = False
+                self.client.journal_inserts.append(self.insert_payload)
+                raise RuntimeError("duplicate key value violates unique constraint")
             self.client.journal_inserts.append(self.insert_payload)
             return type("Result", (), {"data": [{"id": "journal-1", **self.insert_payload}]})()
+        if self.table_name == "trade_journal" and self.filters:
+            matches = [
+                {
+                    "id": f"journal-{idx + 1}",
+                    "created_at": "2026-05-05T12:00:00+00:00",
+                    **row,
+                }
+                for idx, row in enumerate(self.client.journal_inserts)
+                if all(row.get(key) == value for key, value in self.filters.items())
+            ]
+            return type("Result", (), {"data": (matches[0] if matches else None) if self.single else matches})()
+        if self.table_name == "broker_orders" and self.insert_payload is not None:
+            row = {"id": f"broker-order-row-{len(self.client.broker_order_inserts) + 1}", **self.insert_payload}
+            self.client.broker_order_inserts.append(row)
+            return type("Result", (), {"data": [row]})()
+        if self.table_name == "broker_orders" and self.update_payload is not None:
+            for row in self.client.broker_order_inserts:
+                if all(row.get(key) == value for key, value in self.filters.items()):
+                    row.update(self.update_payload)
+            return type("Result", (), {"data": None})()
+        if self.table_name == "broker_orders":
+            matches = [
+                row for row in self.client.broker_order_inserts
+                if all(row.get(key) == value for key, value in self.filters.items())
+            ]
+            return type("Result", (), {"data": (matches[0] if matches else None) if self.single else matches})()
         if self.table_name == "trade_journal" and self.ilike_value:
             matches = [
-                {"id": f"journal-{idx + 1}", "created_at": "2026-05-05T12:00:00+00:00"}
+                {
+                    "id": f"journal-{idx + 1}",
+                    "created_at": "2026-05-05T12:00:00+00:00",
+                    **row,
+                }
                 for idx, row in enumerate(self.client.journal_inserts)
                 if self.ilike_value in str(row.get("entry_reason", ""))
             ]
@@ -98,6 +136,8 @@ class _FakeSupabase:
         self.updated = []
         self.broker_connection_metadata = {}
         self.broker_connection_upserts = []
+        self.broker_order_inserts = []
+        self.journal_insert_conflict = False
 
     def table(self, table_name: str):
         return _Query(self, table_name)
@@ -191,6 +231,66 @@ def test_order_from_valid_plan_carries_context_into_journal(monkeypatch):
     assert "Thesis: Breakout holding" in entry["entry_reason"]
     assert "Invalidation: Exit if price closes below" in entry["entry_reason"]
     assert client.workflow_upserts[-1]["scanner_context"]["setup_score"] == 84
+
+
+def test_repeated_order_intent_reuses_existing_journal_entry(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: {})
+    intent_key = "11111111-1111-4111-8111-111111111111"
+    order = _order()
+    order.idempotency_key = intent_key
+
+    first = asyncio.run(broker_router.place_order(order, user_id="user-1"))
+    second = asyncio.run(broker_router.place_order(order, user_id="user-1"))
+
+    assert first["status"] == "filled"
+    assert second["status"] == "deduplicated"
+    assert second["journal_id"] == first["journal_id"]
+    assert second["broker_order_id"] is None
+    assert len(client.journal_inserts) == 1
+    assert len(client.workflow_upserts) == 1
+    assert f"[{broker_router.ORDER_INTENT_MARKER}:{intent_key}]" in client.journal_inserts[0]["entry_reason"]
+
+
+def test_reused_order_intent_rejects_materially_changed_order(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: {})
+    intent_key = "11111111-1111-4111-8111-111111111111"
+    order = _order()
+    order.idempotency_key = intent_key
+
+    asyncio.run(broker_router.place_order(order, user_id="user-1"))
+    changed = _order()
+    changed.quantity = order.quantity + 1
+    changed.idempotency_key = intent_key
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(broker_router.place_order(changed, user_id="user-1"))
+
+    assert exc_info.value.status_code == 409
+    assert "different order" in str(exc_info.value.detail)
+    assert len(client.journal_inserts) == 1
+    assert len(client.workflow_upserts) == 1
+
+
+def test_unique_journal_intent_conflict_reuses_winning_entry(monkeypatch):
+    client = _FakeSupabase()
+    client.journal_insert_conflict = True
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: {})
+    intent_key = "44444444-4444-4444-8444-444444444444"
+    order = _order()
+    order.idempotency_key = intent_key
+
+    result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
+
+    assert result["status"] == "deduplicated"
+    assert result["journal_id"] == "journal-1"
+    assert len(client.journal_inserts) == 1
+    assert client.journal_inserts[0]["order_intent_key"] == intent_key
+    assert client.workflow_upserts == []
 
 
 def test_trade_lesson_generation_does_not_overwrite_user_review():
@@ -316,13 +416,14 @@ def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypa
     assert client.journal_inserts == []
 
 
-def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
+def test_confirmed_upstox_pending_order_does_not_create_open_journal(monkeypatch):
     client = _FakeSupabase()
     client.broker_connection_metadata["upstox"] = _fresh_read_only_smoke("upstox")
     captured = {}
 
     class _FakeUpstoxAdapter:
         async def place_order(self, user_id, creds, order):
+            captured["calls"] = captured.get("calls", 0) + 1
             captured["user_id"] = user_id
             captured["creds"] = creds
             captured["order"] = order
@@ -357,16 +458,215 @@ def test_confirmed_upstox_order_routes_live_and_creates_journal(monkeypatch):
     )
     monkeypatch.setattr(broker_router, "UpstoxAdapter", _FakeUpstoxAdapter)
 
-    result = asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+    intent_key = "33333333-3333-4333-8333-333333333333"
+    order = _order(live_confirmed=True)
+    order.idempotency_key = intent_key
+    repeated_order = _order(live_confirmed=True)
+    repeated_order.idempotency_key = intent_key
+    result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
+    repeated = asyncio.run(broker_router.place_order(repeated_order, user_id="user-1"))
 
     assert result["broker"] == "upstox"
     assert result["broker_order_id"] == "upstox-order-1"
-    assert result["journal_status"] == "open"
+    assert result["status"] == "submitted"
+    assert result["execution_status"] == "PENDING"
+    assert result["filled_quantity"] == 0
+    assert result["requires_reconciliation"] is True
+    assert result["journal_id"] is None
+    assert result["journal_status"] is None
+    assert repeated["status"] == "submitted"
+    assert repeated["broker_order_id"] == "upstox-order-1"
+    assert captured["calls"] == 1
     assert captured["user_id"] == "user-1"
     assert captured["creds"].broker_id == "upstox"
     assert captured["order"].idempotency_key
     assert captured["order"].extensions.upstox.instrument_token == "NSE_EQ|INE002A01018"
-    assert client.journal_inserts
+    assert client.journal_inserts == []
+    assert len(client.broker_order_inserts) == 1
+    assert client.workflow_upserts[-1]["lifecycle"] == "triggered"
+
+
+def test_confirmed_upstox_partial_fill_records_only_filled_quantity(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_connection_metadata["upstox"] = _fresh_read_only_smoke("upstox")
+
+    class _FakeUpstoxAdapter:
+        async def place_order(self, _user_id, _creds, order):
+            now = datetime.now(timezone.utc)
+            return OrderResult(
+                order=Order(
+                    id=order.idempotency_key,
+                    broker_order_id=BrokerOrderId("upstox-order-partial"),
+                    symbol=order.symbol,
+                    exchange=order.exchange,
+                    side=order.side,
+                    order_type=order.order_type,
+                    product=order.product,
+                    status="PARTIAL",
+                    quantity=order.quantity,
+                    filled_quantity=2,
+                    average_price=2480,
+                    fills=[],
+                    child_broker_order_ids=[],
+                    placed_at=now,
+                    updated_at=now,
+                ),
+                from_cache=False,
+            )
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(
+        broker_router,
+        "_get_user_broker_credentials",
+        lambda _user_id, broker="zerodha": {"broker_type": "upstox"} if broker == "zerodha" else _upstox_creds(),
+    )
+    monkeypatch.setattr(broker_router, "UpstoxAdapter", _FakeUpstoxAdapter)
+    order = _order(live_confirmed=True)
+    order.quantity = 5
+
+    result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
+
+    assert result["status"] == "partially_filled"
+    assert result["execution_status"] == "PARTIAL"
+    assert result["filled_quantity"] == 2
+    assert result["average_fill_price"] == 2480
+    assert result["journal_status"] == "open"
+    assert client.journal_inserts[-1]["quantity"] == 2
+    assert client.journal_inserts[-1]["entry_price"] == 2480
+    assert client.journal_inserts[-1]["risk_reward"] == 3.38
+    assert client.workflow_upserts[-1]["position_size"] == 2
+    assert client.workflow_upserts[-1]["lifecycle"] == "open"
+
+
+def test_reconcile_pending_order_creates_journal_after_fill(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_order_inserts.append({
+        "id": "broker-order-row-1",
+        "user_id": "user-1",
+        "broker": "upstox",
+        "broker_order_id": "upstox-order-1",
+        "journal_id": None,
+        "status": "PENDING",
+        "raw_response": {
+            "journal_draft": {
+                "user_id": "user-1",
+                "symbol": "RELIANCE",
+                "company_name": "Reliance Industries",
+                "trade_type": "long",
+                "entry_date": "2026-06-18",
+                "entry_price": 2500,
+                "quantity": 5,
+                "stop_loss": 2400,
+                "target_price": 2750,
+                "setup_type": "breakout",
+                "entry_reason": "Breakout [Upstox · Watchlist]",
+                "risk_reward": 2.5,
+                "source_page": "watchlist",
+                "source_context": "Swing queue",
+                "scanner_context": None,
+                "thesis": "Base breakout",
+                "invalidation_rule": "Close below base",
+                "status": "open",
+            },
+        },
+    })
+
+    class _FilledAdapter:
+        async def get_order(self, _creds, _broker_order_id):
+            now = datetime.now(timezone.utc)
+            return Order(
+                id=broker_router.IdempotencyKey("11111111-1111-4111-8111-111111111111"),
+                broker_order_id=BrokerOrderId("upstox-order-1"),
+                symbol="RELIANCE",
+                exchange="NSE",
+                side="BUY",
+                order_type="MARKET",
+                product="CNC",
+                status="COMPLETE",
+                quantity=5,
+                filled_quantity=5,
+                average_price=2490,
+                fills=[],
+                child_broker_order_ids=[],
+                placed_at=now,
+                updated_at=now,
+            )
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _upstox_creds())
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _FilledAdapter())
+
+    result = asyncio.run(
+        broker_router.reconcile_broker_order("upstox-order-1", user_id="user-1")
+    )
+
+    assert result["status"] == "filled"
+    assert result["execution_status"] == "COMPLETE"
+    assert result["journal_id"] == "journal-1"
+    assert result["requires_reconciliation"] is False
+    assert client.journal_inserts[-1]["quantity"] == 5
+    assert client.journal_inserts[-1]["entry_price"] == 2490
+    assert client.broker_order_inserts[0]["journal_id"] == "journal-1"
+    assert client.broker_order_inserts[0]["status"] == "COMPLETE"
+    assert client.workflow_upserts[-1]["lifecycle"] == "open"
+
+
+def test_broker_activity_normalizes_lifecycle_without_exposing_draft(monkeypatch):
+    client = _FakeSupabase()
+    client.broker_order_inserts.extend([
+        {
+            "id": "broker-order-row-1",
+            "user_id": "user-1",
+            "broker": "upstox",
+            "broker_order_id": "upstox-pending",
+            "journal_id": None,
+            "symbol": "reliance",
+            "side": "BUY",
+            "quantity": 5,
+            "order_type": "LIMIT",
+            "price": 2500,
+            "status": "PENDING",
+            "placed_at": "2026-06-18T14:00:00+00:00",
+            "raw_response": {
+                "filled_quantity": 0,
+                "journal_draft": {"thesis": "must not be returned"},
+            },
+        },
+        {
+            "id": "broker-order-row-2",
+            "user_id": "user-1",
+            "broker": "zerodha",
+            "broker_order_id": "kite-complete",
+            "journal_id": "journal-1",
+            "symbol": "TCS",
+            "side": "SELL",
+            "quantity": 3,
+            "order_type": "MARKET",
+            "price": 3500,
+            "status": "COMPLETE",
+            "placed_at": "2026-06-18T13:00:00+00:00",
+            "raw_response": {
+                "filled_quantity": 3,
+                "average_fill_price": 3492.5,
+                "reconciled_at": "2026-06-18T13:01:00+00:00",
+            },
+        },
+    ])
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+
+    result = asyncio.run(broker_router.broker_order_activity(limit=25, user_id="user-1"))
+
+    assert result["count"] == 2
+    pending, complete = result["orders"]
+    assert pending["symbol"] == "RELIANCE"
+    assert pending["requires_reconciliation"] is True
+    assert pending["journal_state"] == "not_created"
+    assert "raw_response" not in pending
+    assert complete["execution_status"] == "COMPLETE"
+    assert complete["filled_quantity"] == 3
+    assert complete["average_fill_price"] == 3492.5
+    assert complete["journal_state"] == "recorded"
 
 
 def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):

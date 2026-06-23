@@ -946,6 +946,7 @@ export type Database = {
           id: string
           lessons: string | null
           mistakes: string | null
+          order_intent_key: string | null
           pnl: number | null
           pnl_pct: number | null
           quantity: number
@@ -977,6 +978,7 @@ export type Database = {
           id?: string
           lessons?: string | null
           mistakes?: string | null
+          order_intent_key?: string | null
           pnl?: number | null
           pnl_pct?: number | null
           quantity: number
@@ -1008,6 +1010,7 @@ export type Database = {
           id?: string
           lessons?: string | null
           mistakes?: string | null
+          order_intent_key?: string | null
           pnl?: number | null
           pnl_pct?: number | null
           quantity?: number

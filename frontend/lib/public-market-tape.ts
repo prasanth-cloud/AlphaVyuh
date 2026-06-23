@@ -15,7 +15,7 @@ export type TapeQuote = {
 export type MarketTapePayload = {
   quotes: TapeQuote[];
   asOf: string;
-  source: "yahoo-finance";
+  source: "yahoo-finance" | "mock";
 };
 
 export const TAPE_SYMBOLS: Array<{ yahoo: string; label: string; isIndex: boolean }> = [
@@ -38,6 +38,17 @@ export const TAPE_SYMBOLS: Array<{ yahoo: string; label: string; isIndex: boolea
 
 /** Minimum quotes required before the tape is considered trustworthy. */
 export const TAPE_MIN_QUOTES = 5;
+
+const MOCK_TAPE_QUOTES: TapeQuote[] = [
+  { symbol: "^NSEI", label: "NIFTY 50", price: 23184, changePct: 0.42, isIndex: true },
+  { symbol: "^BSESN", label: "SENSEX", price: 76592, changePct: 0.31, isIndex: true },
+  { symbol: "^NSEBANK", label: "BANKNIFTY", price: 50248, changePct: -0.18, isIndex: true },
+  { symbol: "RELIANCE.NS", label: "RELIANCE", price: 2924, changePct: 1.24, isIndex: false },
+  { symbol: "HDFCBANK.NS", label: "HDFCBANK", price: 1678, changePct: -0.42, isIndex: false },
+  { symbol: "ICICIBANK.NS", label: "ICICIBANK", price: 1142, changePct: 0.73, isIndex: false },
+  { symbol: "TCS.NS", label: "TCS", price: 3928, changePct: -0.36, isIndex: false },
+  { symbol: "INFY.NS", label: "INFY", price: 1486, changePct: 0.91, isIndex: false },
+];
 
 type YahooChartMeta = {
   regularMarketPrice?: number;
@@ -66,6 +77,14 @@ export function parseYahooChartMeta(
     price,
     changePct: ((price - prevClose) / prevClose) * 100,
     isIndex: symbol.isIndex,
+  };
+}
+
+export function mockMarketTapePayload(now = new Date()): MarketTapePayload {
+  return {
+    quotes: MOCK_TAPE_QUOTES,
+    asOf: now.toISOString(),
+    source: "mock",
   };
 }
 

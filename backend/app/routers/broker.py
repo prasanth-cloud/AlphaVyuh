@@ -13,8 +13,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Literal, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -24,7 +27,9 @@ from app.middleware.auth import get_current_user_id
 from app.brokers.adapter import (
     BrokerCredentials,
     BrokerError,
+    BrokerOrderId,
     IdempotencyKey,
+    Order,
     OrderExtensions,
     OrderRequest as BrokerOrderRequest,
     UpstoxExtensions,
@@ -48,6 +53,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["orders"])
 
 BROKER_IMPORT_MARKER = "alphavyuh-broker-import"
+ORDER_INTENT_MARKER = "alphavyuh-order-intent"
 BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS = 24
 
 
@@ -70,7 +76,7 @@ class PlaceOrderRequest(BaseModel):
     source_context: Optional[str]   = None
     chart_snapshot: Optional[dict[str, Any]] = None
     live_confirmed: bool = False
-    idempotency_key: Optional[str] = None
+    idempotency_key: Optional[UUID] = None
 
 
 class BrokerCallbackRequest(BaseModel):
@@ -335,6 +341,170 @@ def _record_broker_order(
         ).execute()
     except Exception:
         logger.debug("Broker order log unavailable; migration may not be applied yet.", exc_info=True)
+
+
+def _order_intent_marker(idempotency_key: str) -> str:
+    return f"[{ORDER_INTENT_MARKER}:{idempotency_key}]"
+
+
+def _existing_order_journal(sb, user_id: str, idempotency_key: str | None) -> dict | None:
+    if not idempotency_key:
+        return None
+    try:
+        rows = (
+            sb.table("trade_journal")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("order_intent_key", idempotency_key)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        logger.debug("Order-intent journal lookup unavailable.", exc_info=True)
+        return None
+    return rows[0] if rows else None
+
+
+def _existing_broker_order(sb, user_id: str, idempotency_key: str | None) -> dict | None:
+    if not idempotency_key:
+        return None
+    try:
+        return (
+            sb.table("broker_orders")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("idempotency_key", idempotency_key)
+            .order("placed_at", desc=True)
+            .limit(1)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception:
+        logger.debug("Order-intent broker lookup unavailable.", exc_info=True)
+        return None
+
+
+def _broker_order_intent_matches(body: PlaceOrderRequest, row: dict) -> bool:
+    try:
+        existing_quantity = int(row.get("quantity"))
+        existing_price = float(row.get("price"))
+    except (TypeError, ValueError):
+        return False
+    return (
+        str(row.get("symbol") or "").upper() == body.symbol.strip().upper()
+        and str(row.get("side") or "").upper() == body.side.upper()
+        and existing_quantity == body.quantity
+        and abs(existing_price - body.price) < 0.005
+    )
+
+
+def _existing_broker_order_response(body: PlaceOrderRequest, row: dict) -> dict:
+    raw = row.get("raw_response") if isinstance(row.get("raw_response"), dict) else {}
+    execution_status = str(row.get("status") or raw.get("execution_status") or "PENDING").upper()
+    filled_quantity = int(raw.get("filled_quantity") or 0)
+    response_status = {
+        "COMPLETE": "filled",
+        "PARTIAL": "partially_filled",
+        "REJECTED": "rejected",
+        "CANCELLED": "cancelled",
+    }.get(execution_status, "submitted")
+    journal_id = row.get("journal_id")
+    return {
+        "status": "deduplicated" if journal_id else response_status,
+        "order_type": body.order_type,
+        "broker": row.get("broker"),
+        "execution_mode": row.get("broker"),
+        "broker_order_id": row.get("broker_order_id"),
+        "symbol": str(row.get("symbol") or body.symbol).upper(),
+        "side": body.side,
+        "quantity": int(row.get("quantity") or body.quantity),
+        "price": float(row.get("price") or body.price),
+        "execution_status": execution_status,
+        "filled_quantity": filled_quantity,
+        "average_fill_price": raw.get("average_fill_price"),
+        "requires_reconciliation": execution_status not in {"COMPLETE", "CANCELLED", "REJECTED"},
+        "rejection_reason": raw.get("rejection_reason"),
+        "risk_reward": None,
+        "message": (
+            "This order intent is already recorded. Reusing its broker lifecycle state; "
+            "no second broker order was submitted."
+        ),
+        "journal_id": journal_id,
+        "journal_status": "open" if journal_id else None,
+        "next_actions": [
+            "No second broker order was submitted.",
+            "Check broker status before changing or retrying this order.",
+        ],
+    }
+
+
+def _existing_order_response(body: PlaceOrderRequest, entry: dict) -> dict:
+    entry_reason = str(entry.get("entry_reason") or "")
+    broker = "simulated"
+    if "Zerodha" in entry_reason:
+        broker = "zerodha"
+    elif "Upstox" in entry_reason:
+        broker = "upstox"
+    broker_order_match = re.search(r"\[Order #([^\]]+)\]", entry_reason)
+    journal_id = str(entry.get("id") or "")
+    return {
+        "status": "deduplicated",
+        "order_type": body.order_type,
+        "broker": broker,
+        "execution_mode": broker,
+        "execution_status": "SIMULATED" if broker == "simulated" else "COMPLETE",
+        "broker_order_id": broker_order_match.group(1) if broker_order_match else None,
+        "symbol": str(entry.get("symbol") or body.symbol).upper(),
+        "side": body.side,
+        "quantity": int(entry.get("quantity") or body.quantity),
+        "price": float(entry.get("entry_price") or body.price),
+        "filled_quantity": int(entry.get("quantity") or body.quantity),
+        "average_fill_price": float(entry.get("entry_price") or body.price),
+        "requires_reconciliation": False,
+        "rejection_reason": None,
+        "risk_reward": entry.get("risk_reward"),
+        "message": "This order intent was already recorded. Reusing the existing Journal entry.",
+        "journal_id": journal_id,
+        "journal_status": str(entry.get("status") or "open"),
+        "next_actions": [
+            "No second broker order or Journal entry was created.",
+            "Verify broker status before retrying with a new order intent.",
+            "Continue managing the existing trade from Journal or the chart.",
+        ],
+    }
+
+
+def _order_intent_matches(body: PlaceOrderRequest, entry: dict) -> bool:
+    expected_trade_type = "long" if body.side == "buy" else "short"
+    try:
+        existing_quantity = int(entry.get("quantity"))
+        existing_price = float(entry.get("entry_price"))
+    except (TypeError, ValueError):
+        return False
+    return (
+        str(entry.get("symbol") or "").upper() == body.symbol.strip().upper()
+        and str(entry.get("trade_type") or "").lower() == expected_trade_type
+        and existing_quantity == body.quantity
+        and abs(existing_price - body.price) < 0.005
+    )
+
+
+def _execution_result_status(order: Order | None) -> str:
+    if order is None:
+        return "filled"
+    if order.status == "COMPLETE":
+        return "filled"
+    if order.status == "PARTIAL" or order.filled_quantity > 0:
+        return "partially_filled"
+    if order.status == "REJECTED":
+        return "rejected"
+    if order.status == "CANCELLED":
+        return "cancelled"
+    return "submitted"
 
 
 def _smoke_checked_at_is_fresh(checked_at: Any) -> bool:
@@ -662,6 +832,7 @@ async def place_order(
     """
     sb = get_admin_client()
     sym = body.symbol.strip().upper()
+    intent_key = str(body.idempotency_key or uuid.uuid4())
     plan, plan_expires_at = _get_user_plan(user_id)
     plan_allows_broker = _plan_allows_broker(plan, plan_expires_at)
 
@@ -689,9 +860,28 @@ async def place_order(
     company_name = sym_check.data.get("company_name", sym)
     isin = sym_check.data.get("isin")
 
+    existing_broker_order = _existing_broker_order(sb, user_id, intent_key)
+    if existing_broker_order:
+        if not _broker_order_intent_matches(body, existing_broker_order):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This order intent key is already attached to a different order recorded by the broker. Submit the changed order as a new intent.",
+            )
+        return _existing_broker_order_response(body, existing_broker_order)
+
+    existing_journal = _existing_order_journal(sb, user_id, intent_key)
+    if existing_journal:
+        if not _order_intent_matches(body, existing_journal):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This order intent key is already attached to a different order. Submit the changed order as a new intent.",
+            )
+        return _existing_order_response(body, existing_journal)
+
     # Try real broker if connected and explicitly enabled for a future release.
     broker_order_id: str | None = None
     broker_used = "simulated"
+    broker_order: Order | None = None
 
     creds = _get_user_broker_credentials(user_id, "zerodha") if settings.broker_live_orders_enabled else {}
     bt = creds.get("broker_type") if settings.broker_live_orders_enabled else None
@@ -709,8 +899,6 @@ async def place_order(
         if live_ready and body.live_confirmed and bt in {"zerodha", "upstox"}:
             _require_read_only_smoke_gate(sb, user_id, str(bt))
         if bt == "zerodha" and live_ready:
-            import uuid
-
             try:
                 adapter_result = await get_adapter("zerodha").place_order(
                     user_id,
@@ -720,7 +908,7 @@ async def place_order(
                         expires_at=datetime.fromisoformat(str(creds["expires_at"]).replace("Z", "+00:00")),
                     ),
                     BrokerOrderRequest(
-                        idempotency_key=IdempotencyKey(body.idempotency_key or str(uuid.uuid4())),
+                        idempotency_key=IdempotencyKey(intent_key),
                         symbol=sym,
                         exchange="NSE",
                         side="BUY" if body.side == "buy" else "SELL",
@@ -741,11 +929,10 @@ async def place_order(
                     detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
                 ) from exc
             broker_order_id = str(adapter_result.order.broker_order_id)
+            broker_order = adapter_result.order
             if broker_order_id:
                 broker_used = "zerodha"
         elif bt == "upstox" and live_ready:
-            import uuid
-
             try:
                 adapter_result = await UpstoxAdapter().place_order(
                     user_id,
@@ -755,7 +942,7 @@ async def place_order(
                         expires_at=datetime.fromisoformat(str(creds["expires_at"]).replace("Z", "+00:00")),
                     ),
                     BrokerOrderRequest(
-                        idempotency_key=IdempotencyKey(body.idempotency_key or str(uuid.uuid4())),
+                        idempotency_key=IdempotencyKey(intent_key),
                         symbol=sym,
                         exchange="NSE",
                         side="BUY" if body.side == "buy" else "SELL",
@@ -778,6 +965,7 @@ async def place_order(
                     detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
                 ) from exc
             broker_order_id = str(adapter_result.order.broker_order_id)
+            broker_order = adapter_result.order
             if broker_order_id:
                 broker_used = "upstox"
         if live_ready and body.live_confirmed and bt in {"zerodha", "upstox"} and not broker_order_id:
@@ -861,15 +1049,22 @@ async def place_order(
     entry_reason = f"{base_reason} [{' · '.join(context_bits)}]"
     if broker_order_id:
         entry_reason = f"{entry_reason} [Order #{broker_order_id}]"
+    entry_reason = f"{entry_reason} {_order_intent_marker(intent_key)}"
 
+    entry_quantity = broker_order.filled_quantity if broker_order and broker_order.filled_quantity > 0 else body.quantity
+    entry_price = broker_order.average_price if broker_order and broker_order.average_price > 0 else body.price
+    if body.stop_loss and body.target_price and body.stop_loss != entry_price:
+        risk = abs(entry_price - body.stop_loss)
+        reward = abs(body.target_price - entry_price)
+        risk_reward = round(reward / risk, 2) if risk > 0 else None
     entry = {
         "user_id":        user_id,
         "symbol":         sym,
         "company_name":   company_name,
         "trade_type":     trade_type,
         "entry_date":     str(date.today()),
-        "entry_price":    body.price,
-        "quantity":       body.quantity,
+        "entry_price":    entry_price,
+        "quantity":       entry_quantity,
         "stop_loss":      body.stop_loss,
         "target_price":   body.target_price,
         "setup_type":     setup_type,
@@ -880,74 +1075,126 @@ async def place_order(
         "scanner_context": scanner_context if isinstance(scanner_context, dict) else None,
         "thesis":         thesis,
         "invalidation_rule": invalidation_rule,
+        "order_intent_key": intent_key,
         "status":         "open",
     }
 
-    result = sb.table("trade_journal").insert(entry).execute()
-    if not result.data:
-        raise HTTPException(status_code=500, detail="Failed to create journal entry")
+    should_create_journal = broker_order is None or broker_order.filled_quantity > 0
+    journal_entry: dict | None = None
+    if should_create_journal:
+        try:
+            result = sb.table("trade_journal").insert(entry).execute()
+        except Exception as exc:
+            existing_journal = _existing_order_journal(sb, user_id, intent_key)
+            if existing_journal and _order_intent_matches(body, existing_journal):
+                return _existing_order_response(body, existing_journal)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This order intent could not claim a unique Journal entry. Reconcile the existing broker order before retrying.",
+            ) from exc
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create journal entry")
+        journal_entry = result.data[0]
 
-    journal_entry = result.data[0]
+    execution_status = broker_order.status if broker_order else "SIMULATED"
     _record_broker_order(
         sb,
         user_id=user_id,
         broker=broker_used,
         broker_order_id=broker_order_id,
-        journal_id=journal_entry.get("id"),
+        journal_id=journal_entry.get("id") if journal_entry else None,
         symbol=sym,
         side=body.side,
         quantity=body.quantity,
         order_type=body.order_type,
         price=body.price,
         trigger_price=None,
-        status_value="PLACED" if broker_order_id else "SIMULATED",
-        idempotency_key=body.idempotency_key,
+        status_value=execution_status,
+        idempotency_key=intent_key,
         raw_response={
             "broker": broker_used,
             "broker_order_id": broker_order_id,
-            "journal_id": journal_entry.get("id"),
+            "journal_id": journal_entry.get("id") if journal_entry else None,
             "live_confirmed": body.live_confirmed,
+            "execution_status": execution_status,
+            "filled_quantity": broker_order.filled_quantity if broker_order else body.quantity,
+            "average_fill_price": broker_order.average_price if broker_order else body.price,
+            "rejection_reason": broker_order.rejection_reason if broker_order else None,
+            "journal_draft": entry,
         },
     )
     sync_workflow_state(sb, user_id, sym, {
         "source": source_page,
-        "lifecycle": "open",
+        "lifecycle": "open" if journal_entry else "triggered",
         "entry": body.price,
         "stop": body.stop_loss,
         "target": body.target_price,
-        "position_size": body.quantity,
+        "position_size": entry_quantity if journal_entry else body.quantity,
         "setup_type": setup_type,
         "notes": body.notes,
         "thesis": thesis,
         "invalidation_rule": invalidation_rule,
         "scanner_context": scanner_context,
         "broker_order_id": broker_order_id,
-        "journal_id": journal_entry["id"],
+        "journal_id": journal_entry["id"] if journal_entry else None,
     })
-    next_actions = [
-        "Journal draft created with setup, stop, target, and source context.",
-        "When the trade is closed, AlphaVyuh will compute P&L and generate a trade lesson.",
-        "Use the Journal AI tab after a few closed trades to surface repeat mistakes and process tips.",
-    ]
+    next_actions: list[str]
     if broker_used == "simulated":
-        next_actions.insert(0, "Simulated execution used because no live broker session was available.")
+        next_actions = [
+            "Simulated execution used because no live broker session was available.",
+            "Journal draft created with setup, stop, target, and source context.",
+            "When the trade is closed, AlphaVyuh will compute P&L and generate a trade lesson.",
+        ]
+    elif journal_entry:
+        next_actions = [
+            f"{broker_context} reports {execution_status.lower()}; {entry_quantity} filled shares were recorded.",
+            "Verify final broker status before modifying or closing the position.",
+            "The Journal entry reflects filled quantity and average fill price, not requested values.",
+        ]
+    elif execution_status in {"REJECTED", "CANCELLED"}:
+        next_actions = [
+            f"{broker_context} reports {execution_status.lower()}; no open Journal position was created.",
+            broker_order.rejection_reason or "Review the broker response before creating a new order intent.",
+            "Do not retry with the same intent key after changing order details.",
+        ]
     else:
-        next_actions.insert(0, f"Order routed to {broker_context}; verify final status in the broker terminal.")
+        next_actions = [
+            f"Order submitted to {broker_context}; no fill has been reported yet.",
+            "No open Journal position was created from an unfilled order.",
+            "Reconcile broker status before retrying, modifying, or treating this as a position.",
+        ]
 
+    response_status = _execution_result_status(broker_order)
+    if broker_order is None:
+        message = f"{body.side.upper()} {body.quantity} × {sym} @ ₹{body.price:,.2f} — recorded in Journal"
+    elif journal_entry:
+        message = f"{broker_context} reports {response_status.replace('_', ' ')} — {entry_quantity} × {sym} recorded at ₹{entry_price:,.2f}"
+    elif execution_status == "REJECTED":
+        reason = broker_order.rejection_reason or "broker rejected the order"
+        message = f"{broker_context} rejected {body.side.upper()} {body.quantity} × {sym} — {reason}"
+    elif execution_status == "CANCELLED":
+        message = f"{broker_context} reports the {sym} order was cancelled before any fill"
+    else:
+        message = f"{body.side.upper()} {body.quantity} × {sym} submitted to {broker_context} — awaiting fill"
     return {
-        "status":      "filled",
+        "status":      response_status,
         "order_type":  body.order_type,
         "broker":      broker_used,
         "execution_mode": broker_used if broker_used != "simulated" else "simulated",
         "broker_order_id": broker_order_id,
         "symbol":      sym,
         "side":        body.side,
-        "quantity":    body.quantity,
-        "price":       body.price,
+        "quantity":    entry_quantity if journal_entry else body.quantity,
+        "price":       entry_price if journal_entry else body.price,
+        "execution_status": execution_status,
+        "filled_quantity": broker_order.filled_quantity if broker_order else body.quantity,
+        "average_fill_price": broker_order.average_price if broker_order and broker_order.average_price > 0 else (body.price if broker_order is None else None),
+        "requires_reconciliation": bool(broker_order and broker_order.status not in {"COMPLETE", "CANCELLED", "REJECTED"}),
+        "rejection_reason": broker_order.rejection_reason if broker_order else None,
         "risk_reward": risk_reward,
-        "message":     f"{body.side.upper()} {body.quantity} × {sym} @ ₹{body.price:,.2f} — recorded in Journal",
-        "journal_id":  journal_entry["id"],
-        "journal_status": "open",
+        "message":     message,
+        "journal_id":  journal_entry["id"] if journal_entry else None,
+        "journal_status": "open" if journal_entry else None,
         "next_actions": next_actions,
     }
 
@@ -1015,6 +1262,233 @@ async def close_position(
         "review_tip": "Open the journal review after close to inspect the generated lesson and tag execution mistakes.",
         "message": f"Trade closed: {'profit' if pnl >= 0 else 'loss'} ₹{abs(pnl):,.2f} ({pnl_pct:+.2f}%)",
     }
+
+
+@router.post("/orders/reconcile/{broker_order_id}")
+async def reconcile_broker_order(
+    broker_order_id: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Refresh one submitted broker order and journal only reported fills."""
+    sb = get_admin_client()
+    row = (
+        sb.table("broker_orders")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("broker_order_id", broker_order_id)
+        .maybe_single()
+        .execute()
+        .data
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broker order not found")
+
+    broker = str(row.get("broker") or "")
+    if broker not in {"zerodha", "upstox"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Simulated orders do not require broker reconciliation.",
+        )
+    creds = _get_user_broker_credentials(user_id, broker)
+    if not creds.get("access_token") or _token_is_expired(creds.get("expires_at")):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Reconnect {broker.capitalize()} before reconciling this order.",
+        )
+
+    credentials = BrokerCredentials(
+        broker_id=broker,
+        access_token=str(creds["access_token"]),
+        expires_at=datetime.fromisoformat(str(creds["expires_at"]).replace("Z", "+00:00")),
+    )
+    try:
+        broker_order = await get_adapter(broker).get_order(
+            credentials,
+            BrokerOrderId(broker_order_id),
+        )
+    except BrokerError as exc:
+        status_code = status.HTTP_409_CONFLICT if exc.kind == "AUTH_EXPIRED" else status.HTTP_502_BAD_GATEWAY
+        raise HTTPException(
+            status_code=status_code,
+            detail=f"{broker.capitalize()} order reconciliation failed: {exc}",
+        ) from exc
+
+    raw_response = row.get("raw_response") if isinstance(row.get("raw_response"), dict) else {}
+    journal_id = row.get("journal_id")
+    journal_status = None
+    if broker_order.filled_quantity > 0 and not journal_id:
+        draft = raw_response.get("journal_draft")
+        if not isinstance(draft, dict):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This broker order is missing its Journal draft context. Review it manually before importing.",
+            )
+        journal_entry = {
+            **draft,
+            "user_id": user_id,
+            "symbol": broker_order.symbol.upper(),
+            "trade_type": "long" if broker_order.side == "BUY" else "short",
+            "entry_price": broker_order.average_price or draft.get("entry_price"),
+            "quantity": broker_order.filled_quantity,
+            "status": "open",
+        }
+        inserted = sb.table("trade_journal").insert(journal_entry).execute().data or []
+        if not inserted:
+            raise HTTPException(status_code=500, detail="Broker fill was found but Journal creation failed")
+        journal_id = inserted[0]["id"]
+        journal_status = "open"
+        sb.table("broker_orders").update(
+            {
+                "journal_id": journal_id,
+                "status": broker_order.status,
+                "raw_response": {
+                    **raw_response,
+                    "execution_status": broker_order.status,
+                    "filled_quantity": broker_order.filled_quantity,
+                    "average_fill_price": broker_order.average_price,
+                    "rejection_reason": broker_order.rejection_reason,
+                    "reconciled_at": datetime.now(timezone.utc).isoformat(),
+                },
+            }
+        ).eq("id", row["id"]).eq("user_id", user_id).execute()
+        sync_workflow_state(sb, user_id, broker_order.symbol.upper(), {
+            "source": str(journal_entry.get("source_page") or "chart"),
+            "lifecycle": "open",
+            "entry": broker_order.average_price or journal_entry.get("entry_price"),
+            "stop": journal_entry.get("stop_loss"),
+            "target": journal_entry.get("target_price"),
+            "position_size": broker_order.filled_quantity,
+            "setup_type": journal_entry.get("setup_type"),
+            "thesis": journal_entry.get("thesis"),
+            "invalidation_rule": journal_entry.get("invalidation_rule"),
+            "scanner_context": journal_entry.get("scanner_context"),
+            "broker_order_id": broker_order_id,
+            "journal_id": journal_id,
+        })
+    else:
+        if broker_order.filled_quantity > 0 and journal_id:
+            existing_journal = (
+                sb.table("trade_journal")
+                .select("id,status")
+                .eq("id", journal_id)
+                .eq("user_id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            if existing_journal and existing_journal.get("status") == "open":
+                sb.table("trade_journal").update(
+                    {
+                        "quantity": broker_order.filled_quantity,
+                        "entry_price": broker_order.average_price or row.get("price"),
+                    }
+                ).eq("id", journal_id).eq("user_id", user_id).execute()
+        sb.table("broker_orders").update(
+            {
+                "status": broker_order.status,
+                "raw_response": {
+                    **raw_response,
+                    "execution_status": broker_order.status,
+                    "filled_quantity": broker_order.filled_quantity,
+                    "average_fill_price": broker_order.average_price,
+                    "rejection_reason": broker_order.rejection_reason,
+                    "reconciled_at": datetime.now(timezone.utc).isoformat(),
+                },
+            }
+        ).eq("id", row["id"]).eq("user_id", user_id).execute()
+        journal_status = "open" if journal_id else None
+        if not journal_id and broker_order.status in {"CANCELLED", "REJECTED"}:
+            sync_workflow_state(sb, user_id, broker_order.symbol.upper(), {
+                "source": str((raw_response.get("journal_draft") or {}).get("source_page") or "chart"),
+                "lifecycle": "ready",
+                "broker_order_id": broker_order_id,
+                "journal_id": None,
+            })
+
+    return {
+        "status": _execution_result_status(broker_order),
+        "broker": broker,
+        "broker_order_id": broker_order_id,
+        "execution_status": broker_order.status,
+        "symbol": broker_order.symbol,
+        "quantity": broker_order.quantity,
+        "filled_quantity": broker_order.filled_quantity,
+        "average_fill_price": broker_order.average_price or None,
+        "requires_reconciliation": broker_order.status not in {"COMPLETE", "CANCELLED", "REJECTED"},
+        "rejection_reason": broker_order.rejection_reason,
+        "journal_id": journal_id,
+        "journal_status": journal_status,
+        "message": (
+            f"{broker.capitalize()} reports {broker_order.status.lower()}: "
+            f"{broker_order.filled_quantity}/{broker_order.quantity} filled."
+        ),
+    }
+
+
+@router.get("/broker/orders/activity")
+async def broker_order_activity(
+    limit: int = Query(default=25, ge=1, le=100),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return a normalized, secret-free broker lifecycle timeline."""
+    sb = get_admin_client()
+    try:
+        rows = (
+            sb.table("broker_orders")
+            .select(
+                "id,broker,broker_order_id,journal_id,symbol,side,quantity,"
+                "order_type,price,status,placed_at,raw_response"
+            )
+            .eq("user_id", user_id)
+            .order("placed_at", desc=True)
+            .limit(limit)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as exc:
+        logger.warning("Broker activity lookup failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker activity is temporarily unavailable. Existing order state has not been changed.",
+        ) from exc
+
+    activity = []
+    for row in rows:
+        raw = row.get("raw_response") if isinstance(row.get("raw_response"), dict) else {}
+        execution_status = str(row.get("status") or raw.get("execution_status") or "UNKNOWN").upper()
+        requested_quantity = int(row.get("quantity") or 0)
+        filled_quantity = int(
+            raw.get("filled_quantity")
+            or (requested_quantity if execution_status == "SIMULATED" else 0)
+        )
+        average_fill_price = raw.get("average_fill_price")
+        journal_id = row.get("journal_id")
+        activity.append({
+            "id": row.get("id"),
+            "broker": row.get("broker"),
+            "broker_order_id": row.get("broker_order_id"),
+            "journal_id": journal_id,
+            "symbol": str(row.get("symbol") or "").upper(),
+            "side": str(row.get("side") or "").upper(),
+            "quantity": requested_quantity,
+            "order_type": row.get("order_type"),
+            "requested_price": float(row["price"]) if row.get("price") is not None else None,
+            "execution_status": execution_status,
+            "filled_quantity": filled_quantity,
+            "average_fill_price": float(average_fill_price) if average_fill_price not in (None, "") else None,
+            "requires_reconciliation": (
+                row.get("broker") in {"zerodha", "upstox"}
+                and bool(row.get("broker_order_id"))
+                and execution_status not in {"COMPLETE", "CANCELLED", "REJECTED"}
+            ),
+            "rejection_reason": raw.get("rejection_reason"),
+            "placed_at": row.get("placed_at"),
+            "reconciled_at": raw.get("reconciled_at"),
+            "journal_state": "recorded" if journal_id else "not_created",
+        })
+
+    return {"orders": activity, "count": len(activity)}
 
 
 @router.get("/orders")

@@ -86,6 +86,13 @@ function cleanValue(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+export function displayEntryReason(value: string | null | undefined): string {
+  return (value ?? "")
+    .replace(/\s*\[alphavyuh-order-intent:[0-9a-f-]+\]\s*/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function compactLesson(value: string | null | undefined): string | null {
   const cleaned = cleanValue(value);
   if (!cleaned) return null;

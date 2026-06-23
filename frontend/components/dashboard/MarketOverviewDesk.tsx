@@ -8,20 +8,24 @@ import { getMarketPanelEmptyCopy } from "@/lib/data-health-copy";
 import {
   breadthPhaseColor,
   breadthPhaseLabel,
-  emaPeriodLabel,
+  emaBreadthDeltaTone,
   formatEmaBreadthTradeDate,
   filterMajorSectorBreadth,
   formatMarketPercent,
   isMarketOverviewReady,
-  resolveEmaBreadthView,
+  moverCompanyLabel,
+  resolveEmaBreadthLookbackRows,
   resolveHighsLowsView,
   safeMarketNumber,
   sectorBreadthCaption,
   sectorHeatBackground,
   sectorHeatColor,
+  visibleEmaBreadthLookbackOptions,
+  type EmaBreadthHistoryRow,
+  type EmaBreadthLookback,
   type HighsLowsPeriod,
-  type MarketPeriod,
 } from "@/lib/dashboard-market";
+import { formatLastEodUpdated } from "@/lib/eod-freshness";
 import { LiveIndexTape } from "@/components/dashboard/LiveIndexTape";
 import { MarketRegimeStrip } from "@/components/dashboard/MarketRegimeStrip";
 
@@ -76,19 +80,31 @@ function SummaryTile({
   value,
   detail,
   tone,
+  href,
 }: {
   label: string;
   value: string;
   detail?: string;
   tone?: string;
+  href?: string;
 }) {
-  return (
-    <div className="dashboard-market-tile">
+  const content = (
+    <>
       <div className="label" style={{ marginBottom: 6 }}>{label}</div>
       <Num style={{ fontSize: 15, fontWeight: 600, color: tone ?? "var(--text-primary)" }}>{value}</Num>
       {detail ? <div className="caption" style={{ marginTop: 4 }}>{detail}</div> : null}
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <a className="dashboard-market-tile dashboard-market-tile-link" href={href} title={`Open scanner: ${label}`}>
+        {content}
+      </a>
+    );
+  }
+
+  return <div className="dashboard-market-tile">{content}</div>;
 }
 
 function HighsLowsBarChart({ data, ready }: { data: MarketOverview; ready: boolean }) {
@@ -155,9 +171,8 @@ function EmaAreaChart({ label, value, color }: { label: string; value: number; c
   );
 }
 
-function EmaBreadthHistoryTable({ rows }: { rows: MarketOverview["ema_breadth_daily_history"] }) {
-  const history = Array.isArray(rows) ? rows : [];
-  if (!history.length) return null;
+function EmaBreadthHistoryTable({ rows }: { rows: EmaBreadthHistoryRow[] }) {
+  if (!rows.length) return null;
 
   return (
     <div className="dashboard-ema-history-wrap" data-testid="dashboard-ema-breadth-history">
@@ -172,20 +187,30 @@ function EmaBreadthHistoryTable({ rows }: { rows: MarketOverview["ema_breadth_da
           </tr>
         </thead>
         <tbody>
-          {history.map((row) => (
-            <tr key={row.trade_date}>
-              <td className="dashboard-ema-history-date">{formatEmaBreadthTradeDate(row.trade_date)}</td>
-              <td className="dashboard-ema-history-col dashboard-ema-history-col-20">
-                <Num className="mono">{formatMarketPercent(row.ema20, 2)}</Num>
-              </td>
-              <td className="dashboard-ema-history-col dashboard-ema-history-col-50">
-                <Num className="mono">{formatMarketPercent(row.ema50, 2)}</Num>
-              </td>
-              <td className="dashboard-ema-history-col dashboard-ema-history-col-200">
-                <Num className="mono">{formatMarketPercent(row.ema200, 2)}</Num>
-              </td>
-            </tr>
-          ))}
+          {rows.map((row, index) => {
+            const prior = rows[index + 1];
+            const isLatest = index === 0;
+            return (
+              <tr key={row.trade_date} className={isLatest ? "dashboard-ema-history-row-latest" : undefined}>
+                <td className="dashboard-ema-history-date">{formatEmaBreadthTradeDate(row.trade_date)}</td>
+                <td className="dashboard-ema-history-col dashboard-ema-history-col-20">
+                  <Num className="mono" style={{ color: emaBreadthDeltaTone(row.ema20, prior?.ema20) }}>
+                    {formatMarketPercent(row.ema20, 2)}
+                  </Num>
+                </td>
+                <td className="dashboard-ema-history-col dashboard-ema-history-col-50">
+                  <Num className="mono" style={{ color: emaBreadthDeltaTone(row.ema50, prior?.ema50) }}>
+                    {formatMarketPercent(row.ema50, 2)}
+                  </Num>
+                </td>
+                <td className="dashboard-ema-history-col dashboard-ema-history-col-200">
+                  <Num className="mono" style={{ color: emaBreadthDeltaTone(row.ema200, prior?.ema200) }}>
+                    {formatMarketPercent(row.ema200, 2)}
+                  </Num>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -193,35 +218,46 @@ function EmaBreadthHistoryTable({ rows }: { rows: MarketOverview["ema_breadth_da
 }
 
 function EmaBreadthPanel({ data, ready }: { data: MarketOverview; ready: boolean }) {
-  const [period, setPeriod] = useState<MarketPeriod>("day");
-  const view = resolveEmaBreadthView(period, data);
-  const periods: MarketPeriod[] = ["day", "week", "month", "year"];
-  const showHistory = period === "day" && ready && Array.isArray(data.ema_breadth_daily_history) && data.ema_breadth_daily_history.length > 0;
+  const lookbackOptions = visibleEmaBreadthLookbackOptions(data);
+  const [lookback, setLookback] = useState<EmaBreadthLookback>("day");
+  const historyRows = resolveEmaBreadthLookbackRows(lookback, data);
+  const latest = historyRows[0];
 
   return (
     <Card padding="md" data-testid="dashboard-ema-breadth">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <h2 className="heading-card" style={{ fontWeight: 600 }}>Breadth by EMA</h2>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {periods.map((option) => (
-            <button key={option} type="button" onClick={() => setPeriod(option)} style={chipStyle(period === option)}>
-              {emaPeriodLabel(option)}
-            </button>
-          ))}
-        </div>
+        <label className="dashboard-ema-lookback-select-wrap">
+          <span className="caption" style={{ marginRight: 6 }}>Lookback</span>
+          <select
+            className="dashboard-ema-lookback-select"
+            value={lookback}
+            onChange={(event) => setLookback(event.target.value as EmaBreadthLookback)}
+            aria-label="EMA breadth lookback"
+            data-testid="dashboard-ema-lookback-select"
+          >
+            {lookbackOptions.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+        </label>
       </div>
       {!ready ? (
         <MarketUnavailableNote message="EMA breadth is temporarily unavailable. Check Data Status before reading trend participation." />
-      ) : view.status === "unavailable" ? (
-        <MarketUnavailableNote message={view.message} />
+      ) : !latest ? (
+        <div className="caption" style={{ color: "var(--text-tertiary)", lineHeight: 1.55 }}>
+          {lookback === "year"
+            ? "Yearly data will appear once 12 months of history is collected."
+            : "EMA breadth history is not available for this lookback yet. Check Data Status before reading trend participation."}
+        </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <EmaAreaChart label="Stocks above EMA20" value={view.data.ema20} color={view.data.ema20 > 60 ? "var(--gain)" : view.data.ema20 > 40 ? "var(--warn)" : "var(--loss)"} />
-            <EmaAreaChart label="Stocks above EMA50" value={view.data.ema50} color={view.data.ema50 > 60 ? "var(--gain)" : view.data.ema50 > 40 ? "var(--warn)" : "var(--loss)"} />
-            <EmaAreaChart label="Stocks above EMA200" value={view.data.ema200} color={view.data.ema200 > 60 ? "var(--gain)" : view.data.ema200 > 40 ? "var(--warn)" : "var(--loss)"} />
+            <EmaAreaChart label="Stocks above EMA20" value={latest.ema20} color={latest.ema20 > 60 ? "var(--gain)" : latest.ema20 > 40 ? "var(--warn)" : "var(--loss)"} />
+            <EmaAreaChart label="Stocks above EMA50" value={latest.ema50} color={latest.ema50 > 60 ? "var(--gain)" : latest.ema50 > 40 ? "var(--warn)" : "var(--loss)"} />
+            <EmaAreaChart label="Stocks above EMA200" value={latest.ema200} color={latest.ema200 > 60 ? "var(--gain)" : latest.ema200 > 40 ? "var(--warn)" : "var(--loss)"} />
           </div>
-          {showHistory ? <EmaBreadthHistoryTable rows={data.ema_breadth_daily_history} /> : null}
+          <EmaBreadthHistoryTable rows={historyRows} />
         </div>
       )}
     </Card>
@@ -279,16 +315,16 @@ function MajorSectorGrid({
             return (
               <div
                 key={cell.label}
-                className="dashboard-market-sector-cell"
+                className={`dashboard-market-sector-cell${missing ? " dashboard-market-sector-cell-missing" : ""}`}
                 style={{
                   background: missing ? "var(--surface-2)" : sectorHeatBackground(breadth),
-                  borderColor: missing ? "var(--border-subtle)" : "transparent",
+                  borderColor: "var(--border-subtle)",
                 }}
-                title={missing ? `${cell.label} breadth not returned for this session` : `${cell.label}: ${formatMarketPercent(breadth, 0)} of stocks advanced vs prior close`}
+                title={missing ? "Sector data unavailable for this session" : `${cell.label}: ${formatMarketPercent(breadth, 0)} of stocks advanced vs prior close`}
               >
                 <div className="label" style={{ marginBottom: 6, fontSize: 10 }}>{cell.label}</div>
                 {missing ? (
-                  <div className="caption" style={{ color: "var(--text-tertiary)" }}>—</div>
+                  <div className="caption dashboard-sector-no-data">No data</div>
                 ) : (
                   <>
                     <Num className="mono" style={{ fontSize: 14, fontWeight: 600, color: sectorHeatColor(breadth) }}>
@@ -339,6 +375,7 @@ function MoversList({
           safeItems.slice(0, 5).map((item) => {
             const close = safeMarketNumber(item.close, NaN);
             const pct = safeMarketNumber(item.pct_change, NaN);
+            const companyLabel = moverCompanyLabel(item.symbol, item.company_name);
             return (
               <a
                 key={item.symbol}
@@ -347,7 +384,9 @@ function MoversList({
               >
                 <div style={{ minWidth: 0 }}>
                   <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{item.symbol}</div>
-                  <div className="caption" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>{item.company_name}</div>
+                  {companyLabel ? (
+                    <div className="caption" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 140 }}>{companyLabel}</div>
+                  ) : null}
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
                   <div className="mono" style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>
@@ -376,6 +415,7 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
   const ready = isMarketOverviewReady(data, marketError);
   const phaseColor = breadthPhaseColor(data.market_phase);
   const adTone = data.advances >= data.declines ? "var(--gain)" : "var(--loss)";
+  const lastUpdated = formatLastEodUpdated(dataHealth, data);
 
   return (
     <section className="dashboard-market-desk" data-testid="dashboard-market-desk">
@@ -390,11 +430,18 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
               NSE universe · <Num>{safeMarketNumber(data.source_metadata.coverage_pct).toFixed(0)}%</Num>
             </span>
           )}
-          {data.trade_date && (
-            <span className="workspace-pill" title="Breadth and sector stats as of this trade date">
-              As of {data.trade_date}
-            </span>
-          )}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+            {data.trade_date && (
+              <span className="workspace-pill" title="Breadth and sector stats as of this trade date">
+                As of {data.trade_date}
+              </span>
+            )}
+            {lastUpdated ? (
+              <span className="caption dashboard-eod-last-updated" data-testid="dashboard-last-updated">
+                Last updated: {lastUpdated}
+              </span>
+            ) : null}
+          </div>
           <DataProvenanceBadge
             kind={dataHealth?.mode === "demo" ? "demo" : dataHealth?.status === "degraded" || dataHealth?.status === "stale" ? "fallback" : "live-provider"}
             compact
@@ -425,11 +472,13 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
           label="New 52W highs"
           value={ready ? String(safeMarketNumber(data.new_52w_highs)) : "—"}
           tone={ready ? "var(--gain)" : "var(--warn)"}
+          href={ready ? "/scanner?preset=high_52w_breakout" : undefined}
         />
         <SummaryTile
           label="New 52W lows"
           value={ready ? String(safeMarketNumber(data.new_52w_lows)) : "—"}
           tone={ready ? "var(--loss)" : "var(--warn)"}
+          href={ready ? "/scanner?preset=low_52w_breakout" : undefined}
         />
       </div>
 

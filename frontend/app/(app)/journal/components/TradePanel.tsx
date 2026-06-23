@@ -6,7 +6,7 @@ import { Card } from "@/components/ui";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
-import { SETUP_TYPES, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
+import { SETUP_TYPES, displayEntryReason, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
 
 // ── SetupChips ────────────────────────────────────────────────────────────────
 
@@ -237,7 +237,7 @@ export function TradePanel({
                   {(reviewContext.hasContext
                     ? reviewContext.summary
                     : [
-                        selectedEntry.entry_reason ? { label: "Entry reason", value: selectedEntry.entry_reason } : null,
+                        selectedEntry.entry_reason ? { label: "Entry reason", value: displayEntryReason(selectedEntry.entry_reason) } : null,
                         selectedEntry.stop_loss ? { label: "Stop", value: `₹${selectedEntry.stop_loss.toLocaleString("en-IN")}` } : null,
                         selectedEntry.target_price ? { label: "Target", value: `₹${selectedEntry.target_price.toLocaleString("en-IN")}` } : null,
                       ].filter((item): item is { label: string; value: string } => Boolean(item))
@@ -335,7 +335,7 @@ export function TradePanel({
             {selectedEntry.entry_reason && (
               <div>
                 <div className="label" style={{ marginBottom: 4 }}>Entry reason</div>
-                <p style={{ fontSize: 12, lineHeight: 1.6, color: "var(--text-secondary)" }}>{selectedEntry.entry_reason}</p>
+                <p style={{ fontSize: 12, lineHeight: 1.6, color: "var(--text-secondary)" }}>{displayEntryReason(selectedEntry.entry_reason)}</p>
               </div>
             )}
 

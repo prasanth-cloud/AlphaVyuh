@@ -15,7 +15,7 @@ import {
   getFundamentals, getPlanStatus, getQuote, getQuoteLive, getBrokerStatus, getPortfolio,
   getPriceAlerts, createPriceAlert, deletePriceAlert, deleteDrawing, updateDrawing,
   closePosition, updateJournalEntry, getJournalEntries, liveQuotePollingEnabled, createFeedbackReport,
-  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators,
+  streamLiveQuotes, isMockMode, prefetchCandles, prefetchIndicators, reconcileBrokerOrder,
 } from "@/lib/api";
 import { useChartData } from "@/components/charts/hooks/useChartData";
 import SymbolSearch from "@/components/charts/SymbolSearch";
@@ -35,6 +35,7 @@ import {
 import { formatMarketDataSource } from "@/lib/data-copy";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
+import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 type SymbolReviewContext = {
@@ -89,6 +90,7 @@ const INDICATOR_CONFIG = [
   { id: "volume", label: "Volume", color: "#9ca3af", bg: "rgba(156,163,175,0.10)" },
   { id: "bb",     label: "Bollinger Bands", color: "#8b96a6", bg: "rgba(139,150,166,0.10)" },
 ];
+const PRECOMPUTED_CANDLE_INDICATORS = new Set(["ema20", "ema50", "ema200"]);
 
 type DrawingTool = "Trendline" | "Ray" | "Horizontal" | "HorizontalRay" | "Rectangle" | "Fib" | "LongPosition" | "ShortPosition" | "Text";
 const FULL_CHART_DRAWING_TOOLS: DrawingTool[] = ["Trendline", "Horizontal", "HorizontalRay", "Ray", "Rectangle", "Fib", "Text", "LongPosition", "ShortPosition"];
@@ -412,7 +414,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const [showOrder, setShowOrder] = useState(false);
   const [orderSide, setOrderSide] = useState<"buy" | "sell">("buy");
   const [tradePlan, setTradePlan] = useState<{ entry: string; stop: string; target: string }>({ entry: "", stop: "", target: "" });
-  const [orderToast, setOrderToast] = useState<{ message: string; journalId: string | null; broker: string; nextActions?: string[]; riskReward?: number | null } | null>(null);
+  const [orderToast, setOrderToast] = useState<{
+    message: string;
+    journalId: string | null;
+    broker: string;
+    brokerOrderId?: string | null;
+    executionStatus?: string;
+    requiresReconciliation?: boolean;
+    nextActions?: string[];
+    riskReward?: number | null;
+  } | null>(null);
+  const [reconcilingOrder, setReconcilingOrder] = useState(false);
   const [symbolPositions, setSymbolPositions] = useState<PortfolioPosition[]>([]);
   const [symbolPositionsError, setSymbolPositionsError] = useState<string | null>(null);
   const [positionsLoading, setPositionsLoading] = useState(false);
@@ -823,6 +835,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   }
+
+  const prefetchIndicatorToggle = useCallback((id: string) => {
+    const request = getWatchlistChartRequest(rangeLabel);
+    const nextIndicators = activeIndicators.includes(id)
+      ? activeIndicators.filter((indicator) => indicator !== id)
+      : [...activeIndicators, id];
+    const uniqueIndicators = Array.from(new Set(nextIndicators)).sort();
+    if (!uniqueIndicators.length) return;
+    if (!liveMode && request.timeframe === "D" && uniqueIndicators.every((indicator) => PRECOMPUTED_CANDLE_INDICATORS.has(indicator))) return;
+    prefetchIndicators(symbol, uniqueIndicators, request.timeframe);
+  }, [activeIndicators, liveMode, rangeLabel, symbol]);
 
   const handleRangeChange = useCallback((range: LogicalRange | null) => {
     setLogicalRange(range);
@@ -1576,6 +1599,17 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   const displayBar = legendBar || (data?.candles.at(-1) ? {
     ...data.candles.at(-1)!,
   } : null);
+  const displayBarIndex = displayBar && data?.candles
+    ? data.candles.findIndex((candle) => candle.time === displayBar.time)
+    : -1;
+  const displayBarPrevClose = displayBarIndex > 0 && data?.candles
+    ? data.candles[displayBarIndex - 1]?.close
+    : displayPrevClose;
+  const displayBarChange = displayBar && displayBarPrevClose ? displayBar.close - displayBarPrevClose : null;
+  const displayBarChangePct = displayBarChange != null && displayBarPrevClose
+    ? (displayBarChange / displayBarPrevClose) * 100
+    : null;
+  const displayBarPositive = displayBarChange != null ? displayBarChange >= 0 : Boolean(displayBar && displayBar.close >= displayBar.open);
   const activeManagedPosition = symbolPositions.find((position) => position.id === activeManagedPositionId) ?? null;
   const activeManagedDraft = activeManagedPosition ? (closeDraft[activeManagedPosition.id] ?? {
     price: String(activeManagedPosition.current_price || latest?.close || activeManagedPosition.entry_price),
@@ -1717,6 +1751,51 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
   ];
   const playbookReadyCount = playbookItems.filter((item) => item.status === "ready").length;
   const playbookScore = Math.round((playbookReadyCount / playbookItems.length) * 100);
+  const higherTimeframeReview = useMemo(() => buildHigherTimeframeReview(data?.candles ?? []), [data?.candles]);
+  const journalReviewSummary = symbolReviewError
+    ? "Journal review unavailable"
+    : symbolReview.closed > 0
+      ? `${symbolReview.closed} closed · ${symbolReview.reviewed} reviewed${symbolReview.winRate != null ? ` · ${symbolReview.winRate.toFixed(0)}% win rate` : ""}`
+      : "No closed trades yet";
+  const orderPlanSummary = selectedPositionDraft
+    ? `${selectedPositionDraft.side === "long" ? "Long" : "Short"} plan · R:R ${selectedPositionDraft.riskReward.toFixed(2)}`
+    : planRiskReward != null
+      ? `Draft levels · R:R ${planRiskReward.toFixed(2)}`
+      : stopReady || targetReady
+        ? "Draft levels need full risk"
+        : "Draw entry, stop, target";
+  const chartReviewCockpitItems = [
+    {
+      label: "Setup",
+      value: setupLabel,
+      detail: `${playbookReadyCount}/${playbookItems.length} checks · score ${playbookScore}`,
+      tone: playbookScore >= 80 ? "good" : playbookScore >= 50 ? "warn" : "muted",
+    },
+    {
+      label: "HTF",
+      value: higherTimeframeReview.playbookDetail,
+      detail: `${higherTimeframeReview.weekly.summary} · ${higherTimeframeReview.monthly.summary}`,
+      tone: higherTimeframeReview.playbookStatus === "ready" ? "good" : higherTimeframeReview.playbookStatus === "watch" ? "warn" : "muted",
+    },
+    {
+      label: "Journal",
+      value: journalReviewSummary,
+      detail: symbolReview.latestLesson ? symbolReview.latestLesson.slice(0, 96) : "Review history stays informational, not advisory.",
+      tone: symbolReviewError ? "warn" : symbolReview.reviewed > 0 ? "good" : "muted",
+    },
+    {
+      label: "Order plan",
+      value: orderPlanSummary,
+      detail: "Journal capture only · broker import only",
+      tone: selectedPositionDraft || (planRiskReward != null && planRiskReward >= 2) ? "good" : "muted",
+    },
+    {
+      label: "Data",
+      value: `${rangeLabel} · ${data?.candles.length ?? 0} bars`,
+      detail: `As of ${data?.coverage?.as_of ?? data?.source_metadata?.as_of ?? lastCandleDate ?? "latest available"}`,
+      tone: showStaleWarning ? "warn" : "muted",
+    },
+  ];
   const chartSnapshot = [
     { label: liveQuote ? "Live price" : "Last price", value: displayClose != null ? fmtPrice(displayClose, symbolCurrency) : "Pending", tone: "var(--text-primary)" },
     { label: "Session move", value: changePct != null ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%` : "Pending", tone: positive ? "var(--gain)" : "var(--loss)" },
@@ -2051,7 +2130,11 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                       onClick={() => { toggleIndicator(ind.id); }}
                       className="w-full text-left flex items-center gap-2 px-3 py-2 text-[12px] transition-colors"
                       style={{ color: active ? ind.color : "var(--app-text2)" }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)"}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLElement).style.background = "var(--app-surface3)";
+                        prefetchIndicatorToggle(ind.id);
+                      }}
+                      onFocus={() => prefetchIndicatorToggle(ind.id)}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
                     >
                       <span className="w-3 h-3 rounded-[3px] flex-shrink-0 flex items-center justify-center text-[9px]" style={{ background: active ? ind.color + "22" : "transparent", border: `1px solid ${active ? ind.color : "var(--app-border)"}` }}>
@@ -2317,10 +2400,13 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                 message: result.message,
                 journalId: result.journal_id,
                 broker: result.broker,
+                brokerOrderId: result.broker_order_id,
+                executionStatus: result.execution_status,
+                requiresReconciliation: result.requires_reconciliation,
                 nextActions: result.next_actions,
                 riskReward: result.risk_reward,
               });
-              void loadSymbolPositions();
+              if (result.journal_id) void loadSymbolPositions();
               setTimeout(() => setOrderToast(null), 9000);
             }}
           />
@@ -2340,13 +2426,19 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{orderToast.message}</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)" }}>
-                {orderToast.broker === "simulated" ? "Journal capture" : `Broker routed via ${orderToast.broker}`} · journal capture completed
+                {orderToast.broker === "simulated"
+                  ? "Simulated journal capture completed"
+                  : orderToast.journalId
+                    ? `${orderToast.broker} · ${orderToast.executionStatus?.toLowerCase() ?? "fill recorded"} · journal position created`
+                    : `${orderToast.broker} · ${orderToast.executionStatus?.toLowerCase() ?? "submitted"} · no position recorded yet`}
                 {orderToast.riskReward != null ? ` · R:R ${orderToast.riskReward.toFixed(2)}` : ""}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <Link href="/journal" prefetch={false} style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
-                  Open journal
-                </Link>
+                {orderToast.journalId ? (
+                  <Link href={`/journal?symbol=${encodeURIComponent(symbol)}`} prefetch={false} style={{ fontSize: 11, fontWeight: 700, color: "var(--accent)" }}>
+                    Open journal
+                  </Link>
+                ) : null}
                 <Link href="/journal?tab=ai" prefetch={false} style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.82)" }}>
                   Review flow
                 </Link>
@@ -2360,6 +2452,40 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
                   </div>
                 ))}
               </div>
+            ) : null}
+            {orderToast.requiresReconciliation && orderToast.brokerOrderId ? (
+              <button
+                type="button"
+                disabled={reconcilingOrder}
+                onClick={async () => {
+                  setReconcilingOrder(true);
+                  try {
+                    const reconciled = await reconcileBrokerOrder(orderToast.brokerOrderId!);
+                    setOrderToast((current) => current ? {
+                      ...current,
+                      message: reconciled.message,
+                      journalId: reconciled.journal_id,
+                      executionStatus: reconciled.execution_status,
+                      requiresReconciliation: reconciled.requires_reconciliation,
+                      nextActions: reconciled.journal_id
+                        ? ["Broker fill reconciled into Journal.", "Review filled quantity and average price before managing the position."]
+                        : ["No fill is recorded yet. Keep this order out of position and P&L views."],
+                    } : current);
+                    if (reconciled.journal_id) void loadSymbolPositions();
+                  } catch (error) {
+                    setOrderToast((current) => current ? {
+                      ...current,
+                      message: error instanceof Error ? error.message : "Broker reconciliation failed.",
+                    } : current);
+                  } finally {
+                    setReconcilingOrder(false);
+                  }
+                }}
+                className="workspace-chip-button"
+                style={{ marginTop: 10 }}
+              >
+                {reconcilingOrder ? "Checking broker…" : "Check broker status"}
+              </button>
             ) : null}
           </div>
         )}
@@ -3038,6 +3164,18 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
         {/* Chart area */}
         <div className="chart-main-panel flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: "transparent" }}>
           <div
+            data-testid="chart-review-cockpit"
+            className="chart-review-cockpit"
+          >
+            {chartReviewCockpitItems.map((item) => (
+              <div key={item.label} className={`chart-review-cockpit-cell ${item.tone}`}>
+                <div className="chart-review-cockpit-label">{item.label}</div>
+                <div className="chart-review-cockpit-value">{item.value}</div>
+                <div className="chart-review-cockpit-detail">{item.detail}</div>
+              </div>
+            ))}
+          </div>
+          <div
             className="chart-context-bar flex items-center justify-between gap-3 px-4 py-2.5 flex-shrink-0"
             style={{ borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}
           >
@@ -3259,20 +3397,39 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             )}
             {/* Candle legend */}
             {displayBar && (
-              <>
-                <div className="absolute top-2 left-3 z-10 pointer-events-none rounded-[14px] px-3 py-2 text-[11px] font-mono"
-                  style={{ background: "rgba(13,15,20,0.82)", color: "rgba(255,255,255,0.48)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(12px)" }}>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="font-semibold" style={{ color: "rgba(255,255,255,0.92)" }}>{symbol}</span>
-                    <span>{displayBar.time}</span>
-                    <span>O <span style={{ color: "rgba(255,255,255,0.88)" }}>{displayBar.open?.toFixed(2)}</span></span>
-                    <span>H <span style={{ color: "rgba(255,255,255,0.88)" }}>{displayBar.high?.toFixed(2)}</span></span>
-                    <span>L <span style={{ color: "rgba(255,255,255,0.88)" }}>{displayBar.low?.toFixed(2)}</span></span>
-                    <span>C <span style={{ color: displayBar.close >= displayBar.open ? "#26a65b" : "#e5383b" }}>{displayBar.close?.toFixed(2)}</span></span>
-                    <span>Vol <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtVol(displayBar.volume)}</span></span>
-                  </div>
+              <div
+                data-testid="chart-terminal-readout"
+                className="chart-terminal-readout absolute top-2 left-3 z-10 pointer-events-none rounded-[14px] px-3 py-2 font-mono"
+                style={{
+                  background: "rgba(13,15,20,0.86)",
+                  color: "rgba(255,255,255,0.5)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  backdropFilter: "blur(12px)",
+                  boxShadow: "0 12px 34px rgba(0,0,0,0.28)",
+                }}
+              >
+                <div className="flex items-center gap-3 flex-wrap text-[11px]">
+                  <span className="font-semibold tracking-[0.02em]" style={{ color: "rgba(255,255,255,0.94)" }}>{symbol}</span>
+                  <span>{displayBar.time}</span>
+                  <span>O <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtPrice(displayBar.open, symbolCurrency)}</span></span>
+                  <span>H <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtPrice(displayBar.high, symbolCurrency)}</span></span>
+                  <span>L <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtPrice(displayBar.low, symbolCurrency)}</span></span>
+                  <span>C <span style={{ color: displayBarPositive ? "#26a65b" : "#e5383b" }}>{fmtPrice(displayBar.close, symbolCurrency)}</span></span>
+                  <span>Vol <span style={{ color: "rgba(255,255,255,0.88)" }}>{fmtVol(displayBar.volume)}</span></span>
+                  {displayBarChange != null && displayBarChangePct != null && (
+                    <span
+                      className="rounded-full px-2 py-0.5 font-semibold"
+                      style={{
+                        color: displayBarPositive ? "#22c55e" : "#ef4444",
+                        background: displayBarPositive ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                        border: displayBarPositive ? "1px solid rgba(34,197,94,0.18)" : "1px solid rgba(239,68,68,0.18)",
+                      }}
+                    >
+                      {displayBarPositive ? "+" : ""}{fmtPrice(displayBarChange, symbolCurrency)} · {displayBarPositive ? "+" : ""}{displayBarChangePct.toFixed(2)}%
+                    </span>
+                  )}
                 </div>
-              </>
+              </div>
             )}
 
             {(rangeNote || timeframeMessage) && (

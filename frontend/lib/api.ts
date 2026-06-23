@@ -32,6 +32,8 @@ import type {
   AiPatterns,
   BacktestResponse,
   BrokerHolding,
+  BrokerOrderActivityResponse,
+  BrokerOrderReconciliation,
   BrokerProfile,
   CandlesResponse,
   ChartLayout,
@@ -165,6 +167,16 @@ function mockWatchlistItem(symbol: string, sortOrder: number): WatchlistItem {
       };
 }
 
+function stableCacheKey(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableCacheKey).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableCacheKey(entry)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
 
 export async function runScan(
   filters: ScanFilters,
@@ -174,19 +186,22 @@ export async function runScan(
   _limit?: number   // limit is enforced server-side by plan
 ): Promise<ScanResponse> {
   if (shouldUseMockFallback()) return mockRunScan();
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/scanner/run`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ filters, sort_by, sort_order }),
+  const requestBody = { filters, sort_by, sort_order };
+  return cachedClientRequest(`scanner:run:${stableCacheKey(requestBody)}`, 5_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/scanner/run`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+    if (!res.ok) {
+      if (res.status === 401) throw new Error("Session expired — please refresh the page");
+      if (res.status === 503 || res.status === 502) throw new Error("Server is temporarily unavailable — try again in a moment");
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? `Scan failed (${res.status})`);
+    }
+    return res.json();
   });
-  if (!res.ok) {
-    if (res.status === 401) throw new Error("Session expired — please refresh the page");
-    if (res.status === 503 || res.status === 502) throw new Error("Server is temporarily unavailable — try again in a moment");
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail ?? `Scan failed (${res.status})`);
-  }
-  return res.json();
 }
 
 export async function getScreens(): Promise<SavedScreen[]> {
@@ -2195,6 +2210,40 @@ export async function triggerTradeLesson(entryId: string): Promise<JournalEntry>
 
 export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult> {
   if (shouldUseMockFallback()) {
+    const intentKey = order.idempotency_key
+      ?? globalThis.crypto?.randomUUID?.()
+      ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const intentMarker = `[alphavyuh-order-intent:${intentKey}]`;
+    const existing = readLocalJournalEntries().find((entry) => entry.entry_reason?.includes(intentMarker));
+    if (existing) {
+      const expectedTradeType = order.side === "buy" ? "long" : "short";
+      const matchesExistingIntent =
+        existing.symbol.toUpperCase() === order.symbol.trim().toUpperCase()
+        && existing.trade_type === expectedTradeType
+        && existing.quantity === order.quantity
+        && Math.abs(existing.entry_price - order.price) < 0.005;
+      if (!matchesExistingIntent) {
+        throw new Error("This order intent key is already attached to a different order. Submit the changed order as a new intent.");
+      }
+      return {
+        status: "deduplicated",
+        message: "This order intent was already recorded. Reusing the existing Journal entry.",
+        journal_id: existing.id,
+        symbol: existing.symbol,
+        side: order.side,
+        quantity: existing.quantity,
+        price: existing.entry_price,
+        broker: "simulated",
+        broker_order_id: null,
+        execution_mode: "simulated",
+        journal_status: existing.status,
+        risk_reward: existing.risk_reward,
+        next_actions: [
+          "No second simulated order or Journal entry was created.",
+          "Continue managing the existing trade from Journal or the chart.",
+        ],
+      };
+    }
     const side = order.side === "buy" ? "long" : "short";
     const localWorkflow = readLocalWorkflowStates();
     const symbol = order.symbol.toUpperCase();
@@ -2232,7 +2281,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
       setup_type: order.setup_type,
       stop_loss: order.stop_loss,
       target_price: order.target_price,
-      entry_reason: `${reasonParts.length ? reasonParts.join(" | ") : `${order.side.toUpperCase()} mock order`} [Simulated · ${order.source_page ?? "chart"}${order.source_context ? ` · ${order.source_context}` : ""}]`,
+      entry_reason: `${reasonParts.length ? reasonParts.join(" | ") : `${order.side.toUpperCase()} mock order`} [Simulated · ${order.source_page ?? "chart"}${order.source_context ? ` · ${order.source_context}` : ""}] ${intentMarker}`,
       source_page: order.source_page ?? "chart",
       source_context: order.source_context ?? null,
       scanner_context: scannerContext ?? null,
@@ -2294,6 +2343,31 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
   const result = await res.json();
   invalidateClientCache(["journal:", "portfolio"]);
   return result;
+}
+
+export async function reconcileBrokerOrder(brokerOrderId: string): Promise<BrokerOrderReconciliation> {
+  if (shouldUseMockFallback()) {
+    throw new Error("Simulated orders do not require broker reconciliation.");
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/orders/reconcile/${encodeURIComponent(brokerOrderId)}`, {
+    method: "POST",
+    headers,
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Order reconciliation failed (${res.status}).`));
+  }
+  return res.json();
+}
+
+export async function getBrokerOrderActivity(limit = 25): Promise<BrokerOrderActivityResponse> {
+  if (shouldUseMockFallback()) return { orders: [], count: 0 };
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/orders/activity?limit=${limit}`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Broker activity failed (${res.status}).`));
+  }
+  return res.json();
 }
 
 // ── Live candles (Yahoo Finance, no DB) ──────────────────────────────────────
@@ -2590,6 +2664,21 @@ function normalizeMarketOverview(raw: Partial<MarketOverview> | null | undefined
           ema200: numberOr(row.ema200),
         }))
       : undefined,
+    ema_breadth_lookback: data.ema_breadth_lookback && typeof data.ema_breadth_lookback === "object"
+      ? Object.fromEntries(
+          Object.entries(data.ema_breadth_lookback).map(([key, rows]) => [
+            key,
+            Array.isArray(rows)
+              ? rows.map((row) => ({
+                  trade_date: String(row.trade_date),
+                  ema20: numberOr(row.ema20),
+                  ema50: numberOr(row.ema50),
+                  ema200: numberOr(row.ema200),
+                }))
+              : [],
+          ]),
+        )
+      : undefined,
     highs_lows_by_period: data.highs_lows_by_period ?? undefined,
     market_phase: data.market_phase ?? "Pending",
     market_phase_desc: data.market_phase_desc ?? "Market breadth will appear after the latest complete trading day is available.",
@@ -2816,17 +2905,20 @@ export async function runScanner(filters: Record<string, unknown>, sort_by = "vo
       results: data.results,
     };
   }
-  const headers = await authHeaders();
-  const res = await fetch(`${API}/api/v1/scanner/run`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ filters, sort_by, sort_order }),
+  const requestBody = { filters, sort_by, sort_order };
+  return cachedClientRequest(`scanner:run:${stableCacheKey(requestBody)}`, 5_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/scanner/run`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+    if (!res.ok) throw new Error(await responseErrorMessage(res, `Scanner failed (${res.status}).`));
+    const data = await res.json();
+    const unavailableMessage = unavailablePayloadMessage(data, "Scanner data is temporarily unavailable.");
+    if (unavailableMessage) throw new Error(unavailableMessage);
+    return data;
   });
-  if (!res.ok) throw new Error(await responseErrorMessage(res, `Scanner failed (${res.status}).`));
-  const data = await res.json();
-  const unavailableMessage = unavailablePayloadMessage(data, "Scanner data is temporarily unavailable.");
-  if (unavailableMessage) throw new Error(unavailableMessage);
-  return data;
 }
 
 // ─── Adapter-backed broker routes (/api/brokers/*) ───────────────────────────

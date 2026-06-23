@@ -4,6 +4,7 @@ import {
   dedupeQuotes,
   formatTapeChange,
   formatTapePrice,
+  mockMarketTapePayload,
   parseYahooChartMeta,
   topMovers,
   type TapeQuote,
@@ -72,5 +73,13 @@ describe("public market tape", () => {
     expect(formatTapePrice(786.45)).toBe("786.45");
     expect(formatTapeChange(1.234)).toBe("+1.23%");
     expect(formatTapeChange(-0.5)).toBe("-0.50%");
+  });
+
+  it("provides a deterministic mock payload for hermetic browser QA", () => {
+    const payload = mockMarketTapePayload(new Date("2026-06-13T10:00:00.000Z"));
+    expect(payload.source).toBe("mock");
+    expect(payload.asOf).toBe("2026-06-13T10:00:00.000Z");
+    expect(payload.quotes.length).toBeGreaterThanOrEqual(5);
+    expect(topMovers(payload.quotes, 2)).toHaveLength(2);
   });
 });

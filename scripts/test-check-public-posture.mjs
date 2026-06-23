@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { strict as assert } from "node:assert";
 
 const pageCopy = {
-  "/": "Account access · EOD market data · Request access",
+  "/": "Account access · EOD market data · Get started",
   "/login": "Sign in to AlphaVyuh. EOD market data · Broker import only",
   "/access": "Operate your EOD trading workflow. Data and execution policy. No live/sandbox broker order placement. Account Access",
 };

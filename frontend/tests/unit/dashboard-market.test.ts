@@ -4,8 +4,10 @@ import {
   filterMajorSectorBreadth,
   isMarketOverviewReady,
   formatEmaBreadthTradeDate,
-  resolveEmaBreadthView,
+  resolveEmaBreadthLookbackRows,
   resolveHighsLowsView,
+  moverCompanyLabel,
+  visibleEmaBreadthLookbackOptions,
 } from "@/lib/dashboard-market";
 import type { MarketOverview } from "@/lib/api/types";
 
@@ -71,20 +73,43 @@ describe("dashboard-market helpers", () => {
     });
   });
 
-  it("returns day and week EMA breadth when period buckets exist", () => {
-    expect(resolveEmaBreadthView("day", sampleOverview)).toEqual({
-      status: "ready",
-      data: { ema20: 62, ema50: 54, ema200: 48 },
-    });
-    expect(resolveEmaBreadthView("week", sampleOverview)).toEqual({
-      status: "ready",
-      data: { ema20: 58, ema50: 51, ema200: 45 },
-    });
-    expect(resolveEmaBreadthView("month", sampleOverview).status).toBe("unavailable");
-    expect(resolveEmaBreadthView("year", sampleOverview).status).toBe("unavailable");
+  it("returns day lookback rows from lookback bucket or daily history fallback", () => {
+    expect(resolveEmaBreadthLookbackRows("day", {
+      ...sampleOverview,
+      ema_breadth_lookback: {
+        day: [
+          { trade_date: "2026-06-10", ema20: 62, ema50: 54, ema200: 48 },
+          { trade_date: "2026-06-09", ema20: 60, ema50: 52, ema200: 47 },
+        ],
+      },
+    })).toHaveLength(2);
+    expect(resolveEmaBreadthLookbackRows("day", {
+      ...sampleOverview,
+      ema_breadth_daily_history: [
+        { trade_date: "2026-06-10", ema20: 62, ema50: 54, ema200: 48 },
+      ],
+    })).toHaveLength(1);
   });
 
   it("formats EMA breadth history dates with spaced day label", () => {
     expect(formatEmaBreadthTradeDate("2026-06-12")).toBe("12th Jun'26");
+  });
+
+  it("hides duplicate mover labels when company name matches symbol", () => {
+    expect(moverCompanyLabel("NOCIL", "NOCIL")).toBeNull();
+    expect(moverCompanyLabel("NOCIL", "NOCIL Limited")).toBe("NOCIL Limited");
+  });
+
+  it("hides year lookback until enough yearly history exists", () => {
+    expect(visibleEmaBreadthLookbackOptions(sampleOverview).some((option) => option.id === "year")).toBe(false);
+    expect(visibleEmaBreadthLookbackOptions({
+      ...sampleOverview,
+      ema_breadth_lookback: {
+        year: [
+          { trade_date: "2026-06-10", ema20: 62, ema50: 54, ema200: 48 },
+          { trade_date: "2025-06-10", ema20: 58, ema50: 51, ema200: 45 },
+        ],
+      },
+    }).some((option) => option.id === "year")).toBe(true);
   });
 });

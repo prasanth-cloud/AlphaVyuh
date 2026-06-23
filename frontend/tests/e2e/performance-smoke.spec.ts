@@ -5,8 +5,8 @@ async function mockLogin(page: Page) {
   const { email, password } = qaCredentials();
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
 }
 
@@ -33,7 +33,7 @@ const budgets: PageBudget[] = [
   {
     path: "/watchlist",
     name: "watchlist decision desk",
-    marker: (page) => page.getByText("Decision desk"),
+    marker: (page) => page.getByTestId("watchlist-workflow-strip"),
     maxMs: 8_000,
   },
   {
@@ -102,6 +102,7 @@ test.describe("Mock workflow performance", () => {
       expect(elapsed, `${budget.name} loaded in ${elapsed}ms`).toBeLessThanOrEqual(budget.maxMs);
     }
 
+    console.info(`workflow-performance ${JSON.stringify(timings)}`);
     expect(
       Object.values(timings).reduce((sum, value) => sum + value, 0),
       `aggregate workflow timing ${JSON.stringify(timings)}`,

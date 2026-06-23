@@ -7,14 +7,16 @@ smaller candidate set returned by the DB push-filters.
 from __future__ import annotations
 
 import asyncio
+import copy
 import heapq
+import json
 import logging
 import threading
 import time
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 
 from app.middleware.auth import get_current_user_id
@@ -34,6 +36,9 @@ DbPrefilterValue = float | int | bool | str | list[str]
 DbPrefilterOp = tuple[str, str, DbPrefilterValue]
 UNIVERSE_COUNT_CACHE_TTL = 300.0
 LATEST_TRADE_DATE_CACHE_TTL = 60.0
+M3A_READINESS_CACHE_TTL = 300.0
+SCAN_RESULT_CACHE_TTL = 60.0
+SCAN_RESULT_CACHE_MAX_ENTRIES = 128
 COMPATIBILITY_PREFILTER_COLUMNS = {
     "stock_universe.is_active",
     "stock_universe.series",
@@ -78,6 +83,62 @@ _universe_count_cache: dict[tuple[str, ...], tuple[float, int | None]] = {}
 _universe_count_cache_lock = threading.Lock()
 _latest_trade_date_cache: tuple[float, str] | None = None
 _latest_trade_date_cache_lock = threading.Lock()
+_m3a_readiness_cache: dict[str, tuple[float, bool]] = {}
+_m3a_readiness_cache_lock = threading.Lock()
+_scan_result_cache: dict[str, tuple[float, dict]] = {}
+_scan_result_cache_lock = threading.Lock()
+
+
+def _scan_result_cache_key(
+    body: "ScanRequest",
+    *,
+    plan: str,
+    trade_date: str,
+    enforce_plan_limit: bool,
+    score_results: bool,
+    include_diagnostics: bool,
+) -> str:
+    payload = {
+        "body": body.model_dump(mode="json"),
+        "plan": plan,
+        "trade_date": trade_date,
+        "enforce_plan_limit": enforce_plan_limit,
+        "score_results": score_results,
+        "include_diagnostics": include_diagnostics,
+    }
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _read_scan_result_cache(cache_key: str) -> dict | None:
+    now = time.monotonic()
+    with _scan_result_cache_lock:
+        cached = _scan_result_cache.get(cache_key)
+        if not cached:
+            return None
+        expires_at, response = cached
+        if expires_at <= now:
+            _scan_result_cache.pop(cache_key, None)
+            return None
+        return copy.deepcopy(response)
+
+
+def _write_scan_result_cache(cache_key: str, response: dict) -> None:
+    now = time.monotonic()
+    with _scan_result_cache_lock:
+        expired_keys = [
+            key
+            for key, (expires_at, _) in _scan_result_cache.items()
+            if expires_at <= now
+        ]
+        for key in expired_keys:
+            _scan_result_cache.pop(key, None)
+        while len(_scan_result_cache) >= SCAN_RESULT_CACHE_MAX_ENTRIES:
+            oldest_key = next(iter(_scan_result_cache))
+            _scan_result_cache.pop(oldest_key, None)
+        _scan_result_cache[cache_key] = (
+            now + SCAN_RESULT_CACHE_TTL,
+            copy.deepcopy(response),
+        )
 
 
 def _list_filter(value: list[str] | str | None) -> list[str]:
@@ -307,6 +368,12 @@ def _scanner_latest_complete_trade_date(client) -> str | None:
 
 def _m3a_columns_ready(client, trade_date: str) -> bool:
     """True when >=80% of rows for trade_date have non-null rs_score."""
+    now = time.monotonic()
+    with _m3a_readiness_cache_lock:
+        cached = _m3a_readiness_cache.get(trade_date)
+        if cached and cached[0] > now:
+            return cached[1]
+
     try:
         total_res = (
             client.table("daily_ohlcv")
@@ -325,7 +392,10 @@ def _m3a_columns_ready(client, trade_date: str) -> bool:
             .execute()
         )
         scored = scored_res.count or 0
-        return (scored / total) >= 0.8
+        ready = (scored / total) >= 0.8
+        with _m3a_readiness_cache_lock:
+            _m3a_readiness_cache[trade_date] = (now + M3A_READINESS_CACHE_TTL, ready)
+        return ready
     except Exception:
         return False
 
@@ -1348,6 +1418,7 @@ async def execute_scan(
     enforce_plan_limit: bool = True,
     score_results: bool = True,
     include_diagnostics: bool = True,
+    use_result_cache: bool = True,
 ) -> dict:
     """Run the scanner core for UI scans and saved EOD scan alerts."""
     scan_started = time.perf_counter()
@@ -1369,6 +1440,35 @@ async def execute_scan(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="No complete trade date is available for scanner.",
         )
+
+    cache_key = _scan_result_cache_key(
+        body,
+        plan=plan,
+        trade_date=latest_date,
+        enforce_plan_limit=enforce_plan_limit,
+        score_results=score_results,
+        include_diagnostics=include_diagnostics,
+    )
+    cached_response = _read_scan_result_cache(cache_key) if use_result_cache else None
+    if cached_response is not None:
+        scanner_performance = cached_response["source_metadata"]["scanner_performance"]
+        origin_timing = scanner_performance["timing_ms"]
+        cache_lookup_elapsed_ms = round((time.perf_counter() - scan_started) * 1000)
+        scanner_performance["cache_status"] = "hit"
+        scanner_performance["cache_origin_total_ms"] = origin_timing.get("total", 0)
+        scanner_performance["timing_ms"] = {
+            "date_lookup": date_lookup_elapsed_ms,
+            "m3a_ready": 0,
+            "query": 0,
+            "filter": 0,
+            "vcp": 0,
+            "score": 0,
+            "sort": 0,
+            "universe_count": 0,
+            "cache_lookup": cache_lookup_elapsed_ms,
+            "total": cache_lookup_elapsed_ms,
+        }
+        return cached_response
 
     # Build base query with series filter pushed to DB
     f = body.filters
@@ -1494,6 +1594,11 @@ async def execute_scan(
         score_elapsed_ms = round(score_elapsed_ms + ((time.perf_counter() - score_started) * 1000))
 
     scanner_performance = {
+        "cache_status": (
+            "fallback_not_cached"
+            if used_fallback_query
+            else "miss" if use_result_cache else "bypass"
+        ),
         "query_rows": query_rows,
         "universe_size": universe_size,
         "query_row_reduction_pct": query_row_reduction_pct,
@@ -1510,6 +1615,7 @@ async def execute_scan(
             "score": score_elapsed_ms,
             "sort": sort_elapsed_ms,
             "universe_count": universe_count_elapsed_ms,
+            "cache_lookup": 0,
             "total": round((time.perf_counter() - scan_started) * 1000),
         },
     }
@@ -1523,7 +1629,7 @@ async def execute_scan(
     )
     metadata["scanner_performance"] = scanner_performance
 
-    return {
+    response = {
         "trade_date":    latest_date,
         "total_matches": total,
         "plan_limit":    hard_limit,
@@ -1544,12 +1650,16 @@ async def execute_scan(
         "query_row_reduction_pct": query_row_reduction_pct,
         "db_prefilters_applied": applied_prefilters,
     }
+    if use_result_cache and not used_fallback_query:
+        _write_scan_result_cache(cache_key, response)
+    return response
 
 
 @router.post("/run")
 async def run_scanner(
     body: ScanRequest,
     user_id: str = Depends(get_current_user_id),
+    cache_control: str | None = Header(default=None),
 ):
     if not scanner_limiter.is_allowed(user_id):
         retry_after = scanner_limiter.retry_after(user_id)
@@ -1568,7 +1678,13 @@ async def run_scanner(
             detail="Scanner data is temporarily unavailable.",
         )
 
-    return await execute_scan(client, body, plan=plan)
+    use_result_cache = "no-cache" not in (cache_control or "").lower()
+    return await execute_scan(
+        client,
+        body,
+        plan=plan,
+        use_result_cache=use_result_cache,
+    )
 
 
 @router.get("/screens")

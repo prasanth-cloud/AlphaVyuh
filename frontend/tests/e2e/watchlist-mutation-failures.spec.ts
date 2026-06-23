@@ -244,7 +244,7 @@ test.describe("Watchlist mutation failures", () => {
     await page.goto("/watchlist");
     if (page.url().includes("/login")) return;
 
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 20_000 });
     await expect(page.locator("tr[data-symbol='RELIANCE']")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("watchlist-journal-status")).toContainText("Journal review context is unavailable", { timeout: 15_000 });
     await expect(page.getByTestId("watchlist-journal-status")).toContainText("Watchlist queue, chart review, and planning remain usable.");

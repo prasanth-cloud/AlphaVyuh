@@ -12,6 +12,7 @@ import {
   startBrokerConnect,
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
+import { BrokerActivityTimeline } from "@/components/broker/BrokerActivityTimeline";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary } from "@/lib/broker-safety";
 
@@ -244,7 +245,7 @@ function BrokerSettingsContent() {
           <EyebrowLabel>Broker integration</EyebrowLabel>
           <div className="app-page-title" style={{ marginTop: 4 }}>Broker connect hub</div>
           <div className="text-[13px] mt-1" style={{ color: "var(--text-secondary)", maxWidth: 720 }}>
-            Connect one broker at a time for account checks and filled-trade import. Tokens stay encrypted on the backend. Broker execution stays in your broker terminal.
+            Connect one broker at a time for account checks, filled-trade import, and transparent order lifecycle review. Tokens stay encrypted on the backend. Order submission remains owner-gated.
           </div>
         </div>
 
@@ -286,7 +287,7 @@ function BrokerSettingsContent() {
             This keeps AlphaVyuh financially lean: no TradingView broker terminal dependency, no password handling, and every imported trade or journal capture can still create a draft before review after close.
           </div>
           <div className="text-[12px] mt-3" style={{ color: "var(--warn)", lineHeight: 1.65 }}>
-            Live and sandbox order submission are not enabled yet; broker connections stay read-only/import only while trade plans remain journal captures.
+            Live and sandbox order submission are not enabled yet. The lifecycle timeline is ready for controlled sandbox validation without treating submission as a fill.
           </div>
         </div>
 
@@ -315,7 +316,7 @@ function BrokerSettingsContent() {
                 </div>
                 <div className="text-[12px]" style={{ color: "var(--text-secondary)", lineHeight: 1.65 }}>
                   {mode === "read-only"
-                    ? "Profile, holdings, positions, orderbook, and filled-trade import are available. Order placement remains in your broker terminal."
+                    ? "Profile, holdings, positions, orderbook, filled-trade import, and lifecycle review are available. Order submission remains disabled until owner-approved sandbox validation."
                     : mode === "status-unavailable"
                       ? "Broker account state could not be confirmed. Recheck status before connecting, reconnecting, importing, or changing broker setup."
                       : mode === "token-expired"
@@ -484,7 +485,7 @@ function BrokerSettingsContent() {
                 "Secrets stay server-side and are written through the encrypted broker credential path.",
                 "The frontend only asks for connection status and never receives broker tokens.",
                 "Expired sessions fall back to journal capture mode instead of blocking chart/journal workflows.",
-                "Broker order submission stays outside AlphaVyuh; filled broker trades can be imported into Journal.",
+                "Broker submission remains disabled until owner-approved sandbox validation; lifecycle records never treat submission as a fill.",
                 "Broker passwords are never stored or requested; reconnect always happens through the broker security flow.",
                 "Every imported trade or journal capture should still create a journal entry with source context.",
               ].map((line) => (
@@ -512,6 +513,8 @@ function BrokerSettingsContent() {
             </div>
           </div>
         </div>
+
+        <BrokerActivityTimeline />
 
         <div className="broker-adapter-grid" style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
           {BROKERS.map((broker) => {

@@ -9,6 +9,7 @@ describe("MarketRegimeStrip", () => {
     expect(source).toContain("breadthPhaseLabel");
     expect(source).toContain("Unavailable");
     expect(source).toContain("Above EMA20");
-    expect(source).toContain("52W highs");
+    expect(source).toContain("dashboard-52w-highs-link");
+    expect(source).toContain("high_52w_breakout");
   });
 });

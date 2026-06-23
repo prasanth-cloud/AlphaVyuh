@@ -8,6 +8,7 @@ import { clearAuthHeaderCache, getDataHealth, searchSymbols, warmCoreMarketData,
 import type { DataHealth, SymbolSearchResult } from '@/lib/api'
 import { checkApiReachability } from '@/lib/api-reachability'
 import { dataModePresentation, type ApiReachability } from '@/lib/data-mode'
+import { formatLastEodUpdated } from '@/lib/eod-freshness'
 import { markAppTiming } from '@/lib/performance'
 import { allowClientMockFallback } from '@/lib/runtime-mode'
 import { useWorkflowState } from '@/lib/workflow'
@@ -205,29 +206,37 @@ function DataModePill() {
   })
   const down = tone === 'loss'
   const color = tone === 'loss' ? 'var(--loss)' : tone === 'gain' ? 'var(--gain)' : tone === 'warn' ? 'var(--warn)' : 'var(--text-tertiary)'
+  const lastUpdated = formatLastEodUpdated(eodHealth)
 
   return (
-    <Link
-      href="/data"
-      className="app-toolbar-pill"
-      title={title}
-      style={{ textDecoration: 'none' }}
-    >
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%',
-        background: color,
-        boxShadow: down ? '0 0 0 3px rgba(255,92,108,0.14)' : demo ? '0 0 0 3px rgba(217,119,6,0.14)' : undefined,
-        flexShrink: 0,
-      }} />
-      <span style={{
-        fontSize: 10, fontWeight: 700,
-        letterSpacing: '0.08em', textTransform: 'uppercase',
-        color,
-        whiteSpace: 'nowrap',
-      }}>
-        {label}
-      </span>
-    </Link>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+      <Link
+        href="/data"
+        className="app-toolbar-pill"
+        title={title}
+        style={{ textDecoration: 'none' }}
+      >
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: color,
+          boxShadow: down ? '0 0 0 3px rgba(255,92,108,0.14)' : demo ? '0 0 0 3px rgba(217,119,6,0.14)' : undefined,
+          flexShrink: 0,
+        }} />
+        <span style={{
+          fontSize: 10, fontWeight: 700,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+          color,
+          whiteSpace: 'nowrap',
+        }}>
+          {label}
+        </span>
+      </Link>
+      {lastUpdated ? (
+        <span className="caption dashboard-eod-last-updated" data-testid="app-toolbar-last-updated">
+          Last updated: {lastUpdated}
+        </span>
+      ) : null}
+    </div>
   )
 }
 

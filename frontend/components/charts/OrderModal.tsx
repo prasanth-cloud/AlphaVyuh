@@ -8,6 +8,7 @@ import { DataProvenanceBadge } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { buildChartSnapshotMetadata } from "@/lib/chart-snapshot";
+import { useOrderIntentKey } from "@/lib/order-intent";
 
 const SETUP_TYPES = [
   { value: "", label: "— Select setup —" },
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export default function OrderModal({ symbol, currentPrice, defaultSide, initialPlan, onClose, onFilled }: Props) {
+  const orderIntent = useOrderIntentKey();
   const [side, setSide]             = useState<"buy" | "sell">(defaultSide);
   const [quantity, setQuantity]     = useState("1");
   const [price, setPrice]           = useState((initialPlan?.entry ?? currentPrice).toFixed(2));
@@ -121,7 +123,9 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
         ...(setupType   ? { setup_type:  setupType } : {}),
         ...(notes       ? { notes }               : {}),
       };
+      req.idempotency_key = orderIntent.keyFor(req);
       const result = await placeOrder(req);
+      orderIntent.reset();
       trackEvent(canRouteLive && liveConfirmed ? "broker_order_submitted" : "mock_order_drafted", { source: "chart", symbol, side, broker: brokerName ?? "simulated" });
       onFilled(result);
     } catch (e: unknown) {

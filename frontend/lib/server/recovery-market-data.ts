@@ -865,6 +865,31 @@ export async function getRecoveryMarketOverview() {
       ema200: breadth.ema200,
     });
   }
+  const lookbackSteps: Record<"day" | "week" | "month" | "year", { count: number; step: number }> = {
+    day: { count: 7, step: 1 },
+    week: { count: 7, step: 5 },
+    month: { count: 7, step: 21 },
+    year: { count: 7, step: 251 },
+  };
+  const ema_breadth_lookback: Record<string, { trade_date: string; ema20: number; ema50: number; ema200: number }[]> = {};
+  for (const [granularity, config] of Object.entries(lookbackSteps)) {
+    const points: { trade_date: string; ema20: number; ema50: number; ema200: number }[] = [];
+    for (let index = 0; index < config.count; index += 1) {
+      const offset = index * config.step;
+      const tradeDate = tradeDates[offset];
+      if (!tradeDate) break;
+      const periodRows = await latestRows(client, tradeDate);
+      if (!periodRows.length) continue;
+      const breadth = emaBreadthPct(periodRows);
+      points.push({
+        trade_date: tradeDate,
+        ema20: breadth.ema20,
+        ema50: breadth.ema50,
+        ema200: breadth.ema200,
+      });
+    }
+    ema_breadth_lookback[granularity] = points;
+  }
   const ema200Pct = emaDay.ema200;
   return {
     trade_date: latest,
@@ -895,6 +920,7 @@ export async function getRecoveryMarketOverview() {
     above_ema200_pct: ema200Pct,
     ema_breadth_by_period,
     ema_breadth_daily_history,
+    ema_breadth_lookback,
     highs_lows_by_period: {
       daily: dailyCounts,
       weekly: { highs: weeklyHighs, lows: weeklyLows },

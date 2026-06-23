@@ -9,8 +9,8 @@ async function login(page: import("@playwright/test").Page) {
   if (ACCESS_URL) await page.goto(ACCESS_URL);
   await page.goto("/login");
   await page.getByLabel("Email").fill(EMAIL);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 20000 });
 }
 
@@ -85,12 +85,13 @@ test.describe("Full chart drawings", () => {
       await expect(page.getByText("Drawings · 1")).toHaveCount(0);
     }
 
-    await page.locator(".chart-timeframe-dropdown summary").click();
+    const timeframeDropdown = page.locator(".chart-timeframe-dropdown");
+    await timeframeDropdown.locator("summary").click();
     for (const tf of ["5m", "15m", "30m", "1h", "1D", "1W", "1M", "3M", "6M", "1Y", "3Y", "5Y", "Max"]) {
-      await expect(page.getByRole("button", { name: tf, exact: true })).toBeVisible();
+      await expect(timeframeDropdown.getByRole("button", { name: tf, exact: true })).toBeVisible();
     }
     await expect(page.getByText("Intraday data is not available on the EOD data plan yet.")).toBeVisible();
-    await page.getByRole("button", { name: "5m", exact: true }).click({ force: true });
+    await timeframeDropdown.getByRole("button", { name: "5m", exact: true }).click({ force: true });
     await expect(page.getByText(/Intraday data is not available/).first()).toBeVisible();
 
     await expect(page.getByTestId("chart-timeframe-pill-strip")).toBeVisible();

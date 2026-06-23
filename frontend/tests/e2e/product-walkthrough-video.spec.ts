@@ -61,7 +61,7 @@ test.describe("Product walkthrough video", () => {
     await page.waitForTimeout(1200);
 
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Decision desk")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 15_000 });
     await page.waitForTimeout(800);
 
     const ignored = consoleErrors.filter(

@@ -8,6 +8,27 @@ Core principle:
 
 The product wins if this loop is faster, cleaner, and more useful than stitching together multiple tools.
 
+## 2026-06-18 Sequencing And Safety Update
+
+ADR 013 remains authoritative: the journal feedback loop is the product wedge.
+Scanner work is limited to trust, correctness, and measured performance. Live
+broker execution remains owner-gated; until sandbox validation, idempotency,
+reconciliation, and legal review are complete, chart/watchlist actions create
+order drafts and journal context rather than sending real orders.
+
+Performance work follows this order:
+
+1. Measure browser, API, database, and compute time separately.
+2. Remove duplicate work with caching, precomputation, and narrower queries.
+3. Establish separately labelled p50/p95 production baselines for cold start,
+   helper-warm/result-cache-bypassed, and result-cache-hit paths.
+4. Profile CPU-heavy kernels with representative NSE data.
+5. Consider Rust/C++ only when profiling proves CPU time is the dominant
+   remaining bottleneck and the boundary can be isolated behind tests.
+
+The target is a measured 2x improvement on named flows, not an unsupported
+"100% faster" claim across the entire website.
+
 ## Product Goal
 
 Build the best end-to-end workflow for NSE/BSE systematic traders:
@@ -103,8 +124,9 @@ Make the chart good enough for serious daily usage.
 
 1. Add position overlay model to chart page
 2. Add stop/target line rendering and drag handlers
-3. Add modify/cancel broker actions from chart
-4. Add partial exit support
+3. Add sandbox-only modify/cancel flows behind explicit confirmation and
+   idempotency keys
+4. Add sandbox-only partial exit support after reconciliation tests pass
 5. Improve chart interaction polish:
    - hit targets
    - snap behavior
@@ -175,7 +197,6 @@ Make scanner the tool users start with every day.
 ### Features
 
 - saved scans
-- stronger presets
 - "why this matched" explanations
 - better result ranking
 - market regime filters
@@ -204,7 +225,7 @@ Make scanner the tool users start with every day.
 
 1. Add saved scan UX cleanup and make it central
 2. Add match explanation payload per stock
-3. Add stronger preset library and ranking logic
+3. Tune existing preset ranking using scanner-to-journal outcome evidence
 4. Add regime + sector context
 5. Tune result paging and query responsiveness
 
@@ -247,10 +268,30 @@ Make execution trustworthy enough for serious usage.
 ### Implementation Order
 
 1. Add unified broker order status model
-2. Add clear broker activity timeline
-3. Add explicit retry/failure states
-4. Add position reconciliation pass
-5. Add broker health diagnostics in settings
+2. Add a unique order-intent key spanning chart/watchlist, broker submission,
+   broker-order log, workflow state, and journal entry
+3. Add clear broker activity timeline
+4. Add explicit retry/failure and partial-fill states
+5. Add position reconciliation pass
+6. Add broker health diagnostics in settings
+
+Current lifecycle invariant: broker submission is not a fill. Pending or open
+orders with zero filled quantity remain in the triggered workflow state and do
+not create an open Journal position. Partial/complete fills use broker-reported
+quantity and average price.
+
+Database concurrency invariant: migration
+`20260619004532_atomic_order_intent_reservation.sql` enforces one broker-order
+row and one Journal position per user order intent. It must be applied and
+verified in staging before sandbox execution tests.
+
+Trader visibility invariant: Broker settings includes a lifecycle timeline.
+Pending orders remain visibly unfilled, can be reconciled through the broker,
+and only expose a Journal link after a fill-backed entry exists.
+
+Cockpit visibility invariant: the default Session dashboard surfaces broker
+exceptions in a compact flight-status module. Fill-to-Journal gaps outrank
+pending/partial orders, and unavailable activity never appears healthy.
 
 ### Success Criteria
 

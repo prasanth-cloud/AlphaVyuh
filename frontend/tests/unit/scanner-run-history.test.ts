@@ -5,6 +5,7 @@ import {
   appendScannerRunHistory,
   clearScannerRunHistory,
   createScannerRunHistoryEntry,
+  formatScannerRunDuration,
   readScannerRunHistory,
 } from "@/lib/scanner-run-history";
 
@@ -34,6 +35,7 @@ const baseInput = {
   dataAsOf: "2026-05-29",
   coveragePct: 98.4,
   universeSize: 1830,
+  elapsedMs: 842,
   filters: { rs_score_min: "70", series: ["EQ"] },
   results: [
     { symbol: "reliance", company_name: "Reliance Industries", sector: "Energy", match_reasons: ["RS near highs"] },
@@ -56,11 +58,18 @@ describe("scanner run history", () => {
       dataAsOf: "2026-05-29",
       coveragePct: 98.4,
       universeSize: 1830,
+      elapsedMs: 842,
       filters: { rs_score_min: "70", series: ["EQ"] },
       topSymbols: ["RELIANCE", "INFY"],
       savedAt: 1780000000000,
     });
     expect(entry.results[0]?.symbol).toBe("RELIANCE");
+  });
+
+  it("formats scan runtime for recent-run restore context", () => {
+    expect(formatScannerRunDuration(null)).toBeNull();
+    expect(formatScannerRunDuration(842)).toBe("842 ms");
+    expect(formatScannerRunDuration(1280)).toBe("1.3 s");
   });
 
   it("keeps newest runs first, dedupes repeat runs, and caps history", () => {
@@ -87,7 +96,7 @@ describe("scanner run history", () => {
 
   it("ignores malformed storage and clears local history", () => {
     const storage = memoryStorage();
-    storage.setItem(SCANNER_RUN_HISTORY_KEY, JSON.stringify([{ label: "Bad" }, null, { results: [] }]));
+    storage.setItem(SCANNER_RUN_HISTORY_KEY, JSON.stringify([{ label: "Bad", elapsedMs: -1 }, null, { results: [] }]));
     expect(readScannerRunHistory(storage)).toEqual([]);
 
     appendScannerRunHistory(baseInput, storage, 1780000000000);

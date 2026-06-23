@@ -14,9 +14,9 @@ export function DataTable({
   return (
     <div className={className} style={{
       border: '1px solid var(--border-subtle)',
-      borderRadius: 'var(--radius-lg)',
+      borderRadius: '8px',
       overflowX: 'auto',
-      overflowY: 'hidden',
+      overflowY: 'auto',
       background: 'var(--surface-1)',
       minWidth: 0,
       maxWidth: '100%',
@@ -31,7 +31,7 @@ export function DataTable({
 
 export function DataTableHead({ children }: { children: React.ReactNode }) {
   return (
-    <thead style={{ background: 'var(--surface-2)' }}>
+    <thead style={{ background: 'var(--surface-2)', position: 'sticky', top: 0, zIndex: 2 }}>
       <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         {children}
       </tr>
@@ -47,9 +47,9 @@ export function Th({ children, align = 'left', width, className }: {
 }) {
   return (
     <th className={className} style={{
-      padding: '10px 14px',
-      fontSize: 10, fontWeight: 600,
-      letterSpacing: '0.1em', textTransform: 'uppercase',
+      padding: '8px 12px',
+      fontSize: 10, fontWeight: 650,
+      letterSpacing: 0, textTransform: 'uppercase',
       color: 'var(--text-tertiary)',
       textAlign: align,
       whiteSpace: 'nowrap',
@@ -81,6 +81,7 @@ export function Tr({ children, onClick, onDoubleClick, onKeyDown, tabIndex, sele
         borderBottom: '1px solid var(--border-subtle)',
         background: selected ? 'var(--accent-subtle)' : 'transparent',
         cursor: onClick ? 'pointer' : 'default',
+        verticalAlign: 'middle',
         transition: 'background var(--motion-instant) var(--ease-out)',
       }}
       onMouseEnter={onClick ? e => {
@@ -104,8 +105,8 @@ export function Td({ children, align = 'left', mono, emphasized, className }: {
 }) {
   return (
     <td className={className} style={{
-      padding: '11px 14px',
-      fontSize: 13,
+      padding: '8px 12px',
+      fontSize: 12,
       color: emphasized ? 'var(--text-primary)' : 'var(--text-secondary)',
       fontWeight: emphasized ? 500 : 400,
       textAlign: align,

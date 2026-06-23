@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, Button } from "@/components/ui";
 import {
   buildDashboardEquitySnapshot,
@@ -10,6 +11,8 @@ import {
 import type { JournalAnalytics, JournalStats } from "@/lib/api/types";
 
 function MiniEquityCurve({ data }: { data: { date: string; cumulative_pnl: number }[] }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
   if (data.length < 2) {
     return (
       <div
@@ -37,22 +40,57 @@ function MiniEquityCurve({ data }: { data: { date: string; cumulative_pnl: numbe
   const min = Math.min(0, ...vals);
   const max = Math.max(0, ...vals);
   const range = max - min || 1;
+  const yTicks = [min, min + range / 2, max];
   const pts = data.map((point, index) => {
     const x = PAD + (index / (data.length - 1)) * (W - PAD * 2);
     const y = H - PAD - ((point.cumulative_pnl - min) / range) * (H - PAD * 2);
-    return `${x},${y}`;
+    return { x, y, point };
   });
   const zeroY = H - PAD - ((0 - min) / range) * (H - PAD * 2);
   const last = vals[vals.length - 1];
   const color = last >= 0 ? "var(--gain)" : "var(--loss)";
-  const fillPts = `${PAD},${zeroY} ${pts.join(" ")} ${W - PAD},${zeroY}`;
+  const fillPts = `${PAD},${zeroY} ${pts.map((entry) => `${entry.x},${entry.y}`).join(" ")} ${W - PAD},${zeroY}`;
+  const active = hoverIndex != null ? pts[hoverIndex] : pts[pts.length - 1];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 88 }} preserveAspectRatio="none" aria-hidden>
-      <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="var(--border-subtle)" strokeWidth="1" />
-      <polygon points={fillPts} fill={last >= 0 ? "rgba(45,181,116,0.12)" : "rgba(229,56,59,0.12)"} />
-      <polyline points={pts.join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
+    <div className="dashboard-equity-curve-wrap" data-testid="dashboard-equity-curve">
+      <div className="dashboard-equity-curve-axis">
+        {yTicks.map((tick) => (
+          <span key={tick} className="mono dashboard-equity-curve-axis-label">
+            {formatDashboardPnl(tick)}
+          </span>
+        ))}
+      </div>
+      <div style={{ position: "relative", flex: 1 }}>
+        {active ? (
+          <div className="dashboard-equity-curve-tooltip mono" data-testid="dashboard-equity-curve-tooltip">
+            {active.point.date} · {formatDashboardPnl(active.point.cumulative_pnl)}
+          </div>
+        ) : null}
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          style={{ width: "100%", height: 88, display: "block" }}
+          preserveAspectRatio="none"
+          onMouseLeave={() => setHoverIndex(null)}
+        >
+          <line x1={PAD} y1={zeroY} x2={W - PAD} y2={zeroY} stroke="var(--border-subtle)" strokeWidth="1" />
+          <polygon points={fillPts} fill={last >= 0 ? "rgba(45,181,116,0.12)" : "rgba(229,56,59,0.12)"} />
+          <polyline points={pts.map((entry) => `${entry.x},${entry.y}`).join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+          {pts.map((entry, index) => (
+            <rect
+              key={entry.point.date}
+              x={entry.x - (W / data.length) / 2}
+              y={0}
+              width={W / data.length}
+              height={H}
+              fill="transparent"
+              onMouseEnter={() => setHoverIndex(index)}
+            />
+          ))}
+          {active ? <circle cx={active.x} cy={active.y} r="2.5" fill={color} /> : null}
+        </svg>
+      </div>
+    </div>
   );
 }
 

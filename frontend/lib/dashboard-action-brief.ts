@@ -1,0 +1,374 @@
+import type { JournalEntry, Watchlist, WorkflowState } from "@/lib/api/types";
+import { buildWatchlistTriageSummary, type WatchlistTriageBrokerContext } from "@/lib/watchlist-triage";
+
+export type DashboardBriefStatus = "ready" | "action" | "warn" | "empty";
+
+export type DashboardBriefItem = {
+  id: "market" | "scanner" | "watchlist" | "journal" | "import";
+  label: string;
+  value: string;
+  detail: string;
+  href: string;
+  status: DashboardBriefStatus;
+};
+
+export type DashboardCockpitInstrument = {
+  id: "session" | "queue" | "risk" | "review" | "import";
+  label: string;
+  value: string;
+  detail: string;
+  href: string;
+  status: DashboardBriefStatus;
+};
+
+export type DashboardActionBriefInput = {
+  tradeDate: string | null;
+  marketPhase: string | null;
+  marketDataStatus: "healthy" | "degraded" | "stale" | "unknown" | null;
+  marketDataMode?: string | null;
+  trackedSymbols: number;
+  watchlistReviewDue: number;
+  scanAlerts: number;
+  alertMatchSymbols: number;
+  closedTrades: number;
+  reviewedTrades: number;
+  knownUnreviewedTrades?: number | null;
+  reviewCoveragePartial?: boolean;
+  openTrades: number;
+  brokerConnected: boolean;
+  brokerName: string | null;
+  brokerStatusLabel: string | null;
+  brokerLastSyncedAt: string | null;
+  accountIssueCount: number;
+  alertIssueCount: number;
+  prioritySymbols?: DashboardPrioritySymbol[];
+};
+
+export type DashboardActionBrief = {
+  readyCount: number;
+  totalCount: number;
+  headline: string;
+  nextAction: DashboardBriefItem;
+  items: DashboardBriefItem[];
+  instruments: DashboardCockpitInstrument[];
+  prioritySymbols: DashboardPrioritySymbol[];
+};
+
+export type DashboardPrioritySymbol = {
+  symbol: string;
+  companyName: string | null;
+  watchlistId: string;
+  watchlistName: string;
+  label: string;
+  score: number;
+  reason: string;
+  detail: string;
+  href: string;
+  chartHref: string;
+};
+
+export type DashboardPrioritySymbolInput = {
+  watchlists: Watchlist[];
+  workflowStates: WorkflowState[];
+  journalEntries: JournalEntry[];
+  broker?: WatchlistTriageBrokerContext | null;
+  limit?: number;
+  now?: Date;
+};
+
+function plural(count: number, singular: string, pluralLabel = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : pluralLabel}`;
+}
+
+function formatDate(raw: string | null) {
+  if (!raw) return "date pending";
+  return raw;
+}
+
+export function buildDashboardActionBrief(input: DashboardActionBriefInput): DashboardActionBrief {
+  const marketNeedsCheck = input.accountIssueCount > 0 ||
+    input.marketDataStatus === "degraded" ||
+    input.marketDataStatus === "stale";
+  const market: DashboardBriefItem = {
+    id: "market",
+    label: "Market first",
+    value: marketNeedsCheck ? "Check data" : input.marketPhase || "Market ready",
+    detail: marketNeedsCheck
+      ? "Data or account context needs review before planning new trades."
+      : `${input.marketDataMode === "demo" ? "Demo" : "EOD"} breadth as of ${formatDate(input.tradeDate)}.`,
+    href: marketNeedsCheck ? "/data" : "/dashboard",
+    status: marketNeedsCheck ? "warn" : "ready",
+  };
+
+  const scanner: DashboardBriefItem = input.alertIssueCount > 0
+    ? {
+        id: "scanner",
+        label: "Scanner queue",
+        value: "Check alerts",
+        detail: "Recent scan alert matches could not be loaded.",
+        href: "/alerts",
+        status: "warn",
+      }
+    : input.alertMatchSymbols > 0
+      ? {
+          id: "scanner",
+          label: "Scanner queue",
+          value: plural(input.alertMatchSymbols, "match", "matches"),
+          detail: "Review symbols that matched active scan alerts before adding new names.",
+          href: "/alerts",
+          status: "action",
+        }
+      : input.scanAlerts > 0
+        ? {
+            id: "scanner",
+            label: "Scanner queue",
+            value: plural(input.scanAlerts, "alert"),
+            detail: "Alerts are armed; run scanner after the latest EOD refresh.",
+            href: "/scanner",
+            status: "ready",
+          }
+        : {
+            id: "scanner",
+            label: "Scanner queue",
+            value: "Run scan",
+            detail: "Start with a saved screen or preset to create today's candidate list.",
+            href: "/scanner",
+            status: "empty",
+          };
+
+  const watchlist: DashboardBriefItem = input.trackedSymbols === 0
+    ? {
+        id: "watchlist",
+        label: "Watchlist focus",
+        value: "No symbols",
+        detail: "Move scanner candidates into a focused watchlist before chart review.",
+        href: "/scanner",
+        status: "empty",
+      }
+    : input.watchlistReviewDue > 0
+      ? {
+          id: "watchlist",
+          label: "Watchlist focus",
+          value: `${input.watchlistReviewDue} due`,
+          detail: `${plural(input.trackedSymbols, "symbol")} tracked; add notes or clear review-later flags.`,
+          href: "/watchlist",
+          status: "action",
+        }
+      : {
+          id: "watchlist",
+          label: "Watchlist focus",
+          value: `${input.trackedSymbols} tracked`,
+          detail: "Focus list is ready for chart and level planning.",
+          href: "/watchlist",
+          status: "ready",
+        };
+
+  const unreviewedTrades = input.knownUnreviewedTrades ?? Math.max(0, input.closedTrades - input.reviewedTrades);
+  const journal: DashboardBriefItem = input.closedTrades === 0
+    ? {
+        id: "journal",
+        label: "Journal learning",
+        value: input.openTrades > 0 ? `${input.openTrades} open` : "No closes",
+        detail: input.openTrades > 0
+          ? "Open plans are waiting for exit review before analytics can teach anything."
+          : "Close or import trades to unlock process review.",
+        href: "/journal",
+        status: "empty",
+      }
+    : unreviewedTrades > 0
+      ? {
+          id: "journal",
+          label: "Journal learning",
+          value: `${unreviewedTrades} unreviewed`,
+          detail: input.reviewCoveragePartial === true
+            ? "Loaded journal sample has closed trades that still need lessons."
+            : `${input.reviewedTrades}/${input.closedTrades} closed trades have lessons captured.`,
+          href: "/journal",
+          status: "action",
+        }
+      : {
+          id: "journal",
+          label: "Journal learning",
+          value: input.reviewCoveragePartial === true ? "Recent reviewed" : "Reviewed",
+          detail: input.reviewCoveragePartial === true
+            ? "Loaded journal sample has review context; full history may extend beyond this page."
+            : `${input.closedTrades} closed trades have review context.`,
+          href: "/journal?tab=analytics",
+          status: "ready",
+        };
+
+  const brokerImport: DashboardBriefItem = input.brokerConnected
+    ? {
+        id: "import",
+        label: "Import safety",
+        value: input.brokerName || "Connected",
+        detail: input.brokerLastSyncedAt
+          ? `Read-only import last synced ${input.brokerLastSyncedAt}.`
+          : input.brokerStatusLabel || "Read-only import is connected; execution remains disabled.",
+        href: "/settings/broker",
+        status: "ready",
+      }
+    : {
+        id: "import",
+        label: "Import safety",
+        value: "Import not connected",
+        detail: input.brokerStatusLabel || "Broker execution is disabled; connect read-only import when ready.",
+        href: "/settings/broker",
+        status: "warn",
+      };
+
+  const items = [market, scanner, watchlist, journal, brokerImport];
+  const nextAction = items.find((item) => item.status === "warn") ??
+    items.find((item) => item.status === "action") ??
+    items.find((item) => item.status === "empty") ??
+    scanner;
+  const readyCount = items.filter((item) => item.status === "ready").length;
+  const instruments: DashboardCockpitInstrument[] = [
+    {
+      id: "session",
+      label: "Session",
+      value: marketNeedsCheck ? "Verify" : input.marketPhase || "Ready",
+      detail: marketNeedsCheck
+        ? "Market data gate needs attention"
+        : `${input.marketDataMode === "demo" ? "Demo" : "EOD"} as of ${formatDate(input.tradeDate)}`,
+      href: market.href,
+      status: market.status,
+    },
+    {
+      id: "queue",
+      label: "Queue",
+      value: input.trackedSymbols > 0 ? `${input.trackedSymbols} tracked` : "No queue",
+      detail: input.alertMatchSymbols > 0
+        ? `${plural(input.alertMatchSymbols, "scan match", "scan matches")} waiting`
+        : input.scanAlerts > 0
+          ? `${plural(input.scanAlerts, "saved scan")} armed`
+          : "Run scanner to build candidates",
+      href: input.trackedSymbols > 0 ? "/watchlist" : "/scanner",
+      status: input.trackedSymbols > 0 ? (input.watchlistReviewDue > 0 ? "action" : "ready") : "empty",
+    },
+    {
+      id: "risk",
+      label: "Open risk",
+      value: input.openTrades > 0 ? `${input.openTrades} open` : "Flat",
+      detail: input.openTrades > 0
+        ? "Check stop, target, and invalidation"
+        : "No open plans in journal sample",
+      href: input.openTrades > 0 ? "/watchlist" : "/journal",
+      status: input.openTrades > 0 ? "action" : "ready",
+    },
+    {
+      id: "review",
+      label: "Review",
+      value: input.closedTrades === 0
+        ? "No closes"
+        : unreviewedTrades > 0
+          ? `${unreviewedTrades} due`
+          : input.reviewCoveragePartial === true ? "Recent clear" : "Clear",
+      detail: input.closedTrades === 0
+        ? "Close or import trades for lessons"
+        : unreviewedTrades > 0
+          ? "Closed trades need journal lessons"
+          : input.reviewCoveragePartial === true
+            ? "Loaded sample has review context"
+            : `${input.reviewedTrades}/${input.closedTrades} reviewed`,
+      href: unreviewedTrades > 0 ? "/journal?review=needs-review" : "/journal?tab=analytics",
+      status: input.closedTrades === 0 ? "empty" : unreviewedTrades > 0 ? "action" : "ready",
+    },
+    {
+      id: "import",
+      label: "Import",
+      value: input.brokerConnected ? "Read-only" : "Offline",
+      detail: input.brokerConnected
+        ? input.brokerLastSyncedAt ? `Synced ${input.brokerLastSyncedAt}` : input.brokerStatusLabel || "Connected for reconciliation"
+        : input.brokerStatusLabel || "Broker execution remains disabled",
+      href: "/settings/broker",
+      status: input.brokerConnected ? "ready" : "warn",
+    },
+  ];
+
+  return {
+    readyCount,
+    totalCount: items.length,
+    headline: `${readyCount}/${items.length} desk signals ready`,
+    nextAction,
+    items,
+    instruments,
+    prioritySymbols: (input.prioritySymbols ?? []).slice(0, 4),
+  };
+}
+
+function reviewStateForSymbol(symbol: string, entries: JournalEntry[]) {
+  const closed = entries.filter((entry) => entry.symbol.toUpperCase() === symbol && entry.status === "closed");
+  if (closed.length === 0) return { state: "new" as const };
+  const reviewed = closed.filter((entry) => Boolean(entry.lessons?.trim()));
+  return {
+    state: reviewed.length >= closed.length ? "reviewed" as const : "needs-review" as const,
+    closed: closed.length,
+    reviewed: reviewed.length,
+  };
+}
+
+function visiblePriorityReasons(reasons: string[]) {
+  const visible = reasons.slice(0, 3);
+  for (const criticalReason of ["Closed trade needs review", "Broker reconnect needed", "Broker status check"]) {
+    if (!reasons.includes(criticalReason) || visible.includes(criticalReason)) continue;
+    if (visible.length < 3) {
+      visible.push(criticalReason);
+    } else {
+      visible[visible.length - 1] = criticalReason;
+    }
+  }
+  return visible;
+}
+
+export function buildDashboardPrioritySymbols({
+  watchlists,
+  workflowStates,
+  journalEntries,
+  broker,
+  limit = 4,
+  now,
+}: DashboardPrioritySymbolInput): DashboardPrioritySymbol[] {
+  const workflowBySymbol = new Map(
+    workflowStates.map((state) => [state.symbol.toUpperCase(), state]),
+  );
+  const bestBySymbol = new Map<string, DashboardPrioritySymbol>();
+
+  for (const watchlist of watchlists) {
+    for (const item of watchlist.items ?? []) {
+      const symbol = item.symbol.toUpperCase();
+      const workflow = workflowBySymbol.get(symbol) ?? null;
+      const summary = buildWatchlistTriageSummary(item, {
+        workflow,
+        broker,
+        now,
+        meta: {
+          pinned: item.pinned,
+          tags: item.tags,
+          note: item.note,
+        },
+        reviewState: reviewStateForSymbol(symbol, journalEntries),
+      });
+      const reasons = visiblePriorityReasons(summary.reasons.filter((reason) => reason !== summary.reason));
+      const candidate: DashboardPrioritySymbol = {
+        symbol,
+        companyName: item.company_name ?? null,
+        watchlistId: watchlist.id,
+        watchlistName: watchlist.name,
+        label: summary.label,
+        score: summary.score,
+        reason: summary.reason,
+        detail: reasons.length ? reasons.join(" · ") : "Manual watchlist order",
+        href: `/watchlist?id=${encodeURIComponent(watchlist.id)}&symbol=${encodeURIComponent(symbol)}`,
+        chartHref: `/charts/${encodeURIComponent(symbol)}?from=dashboard&full=1`,
+      };
+      const current = bestBySymbol.get(symbol);
+      if (!current || candidate.score > current.score) bestBySymbol.set(symbol, candidate);
+    }
+  }
+
+  return Array.from(bestBySymbol.values())
+    .filter((item) => item.label !== "Archive check")
+    .sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol))
+    .slice(0, limit);
+}

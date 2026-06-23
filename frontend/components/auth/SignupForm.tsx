@@ -164,10 +164,14 @@ export default function SignupForm() {
             <div className="relative">
               <Input id="password" type={showPass ? "text" : "password"} value={form.password}
                 onChange={set("password")} placeholder="Min 8 characters" required minLength={8} />
-              <button type="button" onClick={() => setShowPass((s) => !s)}
+              <button
+                type="button"
+                aria-label={showPass ? "Hide password" : "Show password"}
+                title={showPass ? "Hide password" : "Show password"}
+                onClick={() => setShowPass((s) => !s)}
                 className="absolute right-3 top-1/2 -translate-y-1/2"
                 style={{ color: "var(--text-tertiary)" }}>
-                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showPass ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
               </button>
             </div>
           </div>

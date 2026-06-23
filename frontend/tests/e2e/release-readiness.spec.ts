@@ -10,8 +10,10 @@ test.describe("Release readiness — public and auth boundary", () => {
 
     expect(response?.ok()).toBeTruthy();
     await expect(page).toHaveTitle(/AlphaVyuh/);
-    await expect(page.locator(".lp-h1-s1").getByText("A trading workflow journal for Indian swing traders.", { exact: true })).toBeVisible();
-    await expect(page.locator("body")).toContainText(/Scan after market close, keep the reason, plan levels/i);
+    await expect(page.locator(".lp-h1-s1").getByText("A trader cockpit for scanning, planning, and reviewing Indian equities.", { exact: true })).toBeVisible();
+    await expect(page.locator("body")).toContainText(/Start with market breadth, jump into high-quality EOD scanners/i);
+    await expect(page.locator("body")).toContainText(/Desk queue/i);
+    await expect(page.locator("body")).toContainText(/journal draft/i);
     await expect(page.locator("body")).toContainText(/NSE\/BSE cash equity/i);
     await expect(page.getByRole("link", { name: /Get started/i }).first()).toBeVisible();
   });
@@ -80,7 +82,7 @@ test.describe("Release readiness — public and auth boundary", () => {
     await page.goto("/login?next=https%3A%2F%2Fevil.example");
 
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.getByText("Sign in to AlphaVyuh")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     expect(new URL(page.url()).hostname).not.toBe("evil.example");
   });
 });

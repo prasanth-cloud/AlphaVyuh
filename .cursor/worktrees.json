@@ -1,0 +1,25 @@
+{
+  "setup-worktree": [
+    "npm install --prefix frontend",
+    "test -d backend/.venv || (cd backend && python3 -m venv .venv)",
+    "backend/.venv/bin/pip install -r backend/requirements.txt"
+  ],
+  "tracks": {
+    "product-trust": {
+      "description": "Outage handling, empty states, mutation safety",
+      "suggestedBranchPrefix": "feat/trust-"
+    },
+    "product-ux": {
+      "description": "Trader-facing polish on scanner, watchlist, chart, journal",
+      "suggestedBranchPrefix": "feat/ux-"
+    },
+    "performance": {
+      "description": "Latency, caching, perceived speed",
+      "suggestedBranchPrefix": "feat/perf-"
+    },
+    "release-readiness": {
+      "description": "Launch gates, smoke tests, recovery scripts",
+      "suggestedBranchPrefix": "feat/release-"
+    }
+  }
+}

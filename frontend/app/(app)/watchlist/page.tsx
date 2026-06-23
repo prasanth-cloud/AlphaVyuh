@@ -68,6 +68,7 @@ import { decisionRecordRows, decisionLifecycleLabel, type DecisionRecordReviewSt
 import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { WorkflowDeskHeader } from "@/components/WorkflowDeskHeader";
+import { useOrderIntentKey } from "@/lib/order-intent";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -209,6 +210,81 @@ function WatchlistAvatar({ name, active = false, size = 26 }: { name: string | n
   );
 }
 
+function WatchlistWorkflowStrip({
+  hasItems,
+  adding,
+  onAddStarter,
+  onOpenScanner,
+}: {
+  hasItems: boolean;
+  adding: boolean;
+  onAddStarter: () => void;
+  onOpenScanner: () => void;
+}) {
+  const steps = [
+    { label: "Scanner ideas", value: "source" },
+    { label: "Chart review", value: "price + volume" },
+    { label: "Decision desk", value: "entry / stop / target" },
+    { label: "Journal draft only", value: "no live execution" },
+  ];
+
+  return (
+    <div
+      data-testid="watchlist-workflow-strip"
+      style={{
+        padding: "10px 18px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) auto",
+        gap: 12,
+        alignItems: "center",
+        flexShrink: 0,
+        background: "rgba(255,255,255,0.018)",
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <div className="label" style={{ marginBottom: 7 }}>Queue workflow</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
+          {steps.map((step, index) => (
+            <div
+              key={step.label}
+              style={{
+                minWidth: 0,
+                padding: "7px 8px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.07)",
+                background: index === 3 ? "rgba(217,119,6,0.08)" : "rgba(255,255,255,0.025)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <span className="mono" style={{ fontSize: 10, color: index === 3 ? "var(--warn)" : "var(--accent)", fontWeight: 800 }}>
+                  {index + 1}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {step.label}
+                </span>
+              </div>
+              <div className="caption" style={{ marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {step.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+        {!hasItems && (
+          <button className="workspace-chip-button active" onClick={onAddStarter} disabled={adding} style={{ opacity: adding ? 0.55 : 1 }}>
+            {adding ? "Adding..." : "Add starter queue"}
+          </button>
+        )}
+        <button className="workspace-chip-button" onClick={onOpenScanner}>
+          Run scanner
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sortable row ─────────────────────────────────────────────────────────────
 
 function SortableRow({
@@ -219,6 +295,8 @@ function SortableRow({
   onRemove,
   onSelect,
   onOpenChart,
+  onPrefetchChart,
+  onDraftOrder,
   dense,
 }: {
   item: WatchlistItem;
@@ -228,6 +306,8 @@ function SortableRow({
   onRemove: (symbol: string) => void;
   onSelect: (symbol: string) => void;
   onOpenChart: (symbol: string) => void;
+  onPrefetchChart: (symbol: string) => void;
+  onDraftOrder: (symbol: string) => void;
   dense: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -254,6 +334,8 @@ function SortableRow({
       tabIndex={0}
       onClick={() => onSelect(item.symbol)}
       onDoubleClick={() => onOpenChart(item.symbol)}
+      onMouseEnter={() => onPrefetchChart(item.symbol)}
+      onFocus={() => onPrefetchChart(item.symbol)}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -346,19 +428,41 @@ function SortableRow({
           {item.volume_ratio != null ? `${item.volume_ratio.toFixed(2)}× vol` : ""}
         </div>
       </td>
-      <td style={{ padding: dense ? "5px 6px 5px 4px" : "7px 8px 7px 4px", textAlign: "right", width: 24 }} onClick={e => e.stopPropagation()}>
-        <button
-          onClick={() => onRemove(item.symbol)}
-          aria-label={`Remove ${item.symbol} from watchlist`}
-          title={`Remove ${item.symbol} from watchlist`}
-          data-testid={`watchlist-remove-${item.symbol}`}
-          style={{ color: "var(--text-tertiary)", lineHeight: 0, opacity: 0 }}
-          className="remove-btn"
-          onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--loss)"}
-          onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
-        >
-          <Trash2 size={12} />
-        </button>
+      <td style={{ padding: dense ? "5px 6px 5px 4px" : "7px 8px 7px 4px", textAlign: "right", width: 138 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 6, minWidth: 128 }}>
+          <button
+            type="button"
+            onClick={() => onOpenChart(item.symbol)}
+            aria-label={`Open chart for ${item.symbol}`}
+            title={`Open chart for ${item.symbol}`}
+            className="workspace-chip-button"
+            style={{ minWidth: 44, height: 24, padding: "0 8px", fontSize: 10, lineHeight: 1 }}
+          >
+            Chart
+          </button>
+          <button
+            type="button"
+            onClick={() => onDraftOrder(item.symbol)}
+            aria-label={`Draft order for ${item.symbol}`}
+            title={`Draft order for ${item.symbol}`}
+            className="workspace-chip-button"
+            style={{ minWidth: 48, height: 24, padding: "0 8px", fontSize: 10, lineHeight: 1 }}
+          >
+            Draft
+          </button>
+          <button
+            onClick={() => onRemove(item.symbol)}
+            aria-label={`Remove ${item.symbol} from watchlist`}
+            title={`Remove ${item.symbol} from watchlist`}
+            data-testid={`watchlist-remove-${item.symbol}`}
+            style={{ color: "var(--text-tertiary)", lineHeight: 0, opacity: 0 }}
+            className="remove-btn"
+            onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--loss)"}
+            onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)"}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -378,6 +482,7 @@ function DecisionDesk({
   reviewState,
   onPlanChange,
   onToast,
+  onDraftOrder,
 }: {
   symbol: string;
   watchlistId: string | null;
@@ -386,6 +491,7 @@ function DecisionDesk({
   reviewState: DecisionRecordReviewState;
   onPlanChange: (plan: WorkflowState) => void;
   onToast: (msg: string) => void;
+  onDraftOrder: (symbol: string) => void;
 }) {
   const status = workflowPlanStatus(plan);
   const draft = plan ?? { symbol, watchlist_id: watchlistId, source: "watchlist", lifecycle: "watch", timeframe: "D", tags: [] };
@@ -464,7 +570,7 @@ function DecisionDesk({
           <button className={`workspace-chip-button${status.valid ? " active" : ""}`} disabled={!status.valid} onClick={markReady} style={{ opacity: status.valid ? 1 : 0.45 }}>
             Ready
           </button>
-          <button className="workspace-chip-button" disabled={!status.valid} onClick={() => onToast(status.valid ? "Order draft is unlocked in the chart order panel." : status.next)} style={{ opacity: status.valid ? 1 : 0.45 }}>
+          <button className="workspace-chip-button" disabled={!status.valid} onClick={() => status.valid ? onDraftOrder(symbol) : onToast(status.next)} style={{ opacity: status.valid ? 1 : 0.45 }}>
             Draft order
           </button>
         </div>
@@ -619,6 +725,7 @@ function ChartPanel({
   plan,
   planValid,
   planNextAction,
+  orderDraftNonce,
 }: {
   symbol: string;
   latestClose?: number | null;
@@ -629,7 +736,9 @@ function ChartPanel({
   plan: WorkflowState | null;
   planValid: boolean;
   planNextAction: string;
+  orderDraftNonce?: number;
 }) {
+  const orderIntent = useOrderIntentKey();
   const [candles, setCandles] = useState<CandleBar[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState(false);
@@ -686,6 +795,10 @@ function ChartPanel({
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
   const canRouteLiveOrder = false;
+  useEffect(() => {
+    if (!orderDraftNonce) return;
+    setShowOrderTicket(true);
+  }, [orderDraftNonce]);
   useEffect(() => {
     const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
     setTheme(current);
@@ -851,14 +964,16 @@ function ChartPanel({
         ...(plan?.scanner_context ? { scanner_context: plan.scanner_context } : {}),
       };
       req.live_confirmed = canRouteLiveOrder && liveConfirmed;
+      req.idempotency_key = orderIntent.keyFor(req);
       const result = await placeOrder(req);
+      orderIntent.reset();
       trackEvent(canRouteLiveOrder && liveConfirmed ? "broker_order_submitted" : "mock_order_drafted", { source: "watchlist", symbol, side, order_type: orderType, broker: result.broker });
       setOrderMsg({
         ok: true,
-        text: canRouteLiveOrder && liveConfirmed
-          ? `${side === "buy" ? "Buy" : "Sell"} order submitted via ${brokerStatus?.broker ?? "broker"} and journal draft created.`
-          : `${side === "buy" ? "Buy" : "Sell"} plan saved as a journal capture draft.`,
-        journalReady: true,
+        text: result.broker === "simulated"
+          ? `${side === "buy" ? "Buy" : "Sell"} plan saved as a journal capture draft.`
+          : result.message,
+        journalReady: Boolean(result.journal_id),
       });
       setLiveConfirmed(false);
       setTradeNote("");
@@ -1181,8 +1296,13 @@ function ChartPanel({
               {orderMsg.text}
             </div>
             {orderMsg.ok && orderMsg.journalReady && (
-              <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 4 }}>
-                Source: {watchlistName ? `${watchlistName} queue` : "Watchlist"} · Setup: {setupType || "—"}
+              <div style={{ marginTop: 4, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 10, color: "var(--text-tertiary)" }}>
+                  Source: {watchlistName ? `${watchlistName} queue` : "Watchlist"} · Setup: {setupType || "—"}
+                </span>
+                <a href={`/journal?symbol=${encodeURIComponent(symbol)}`} style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)" }}>
+                  Review journal
+                </a>
               </div>
             )}
           </div>
@@ -1247,6 +1367,7 @@ function WatchlistContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [chartSymbol, setChartSymbol] = useState<string | null>(null);
+  const [orderDraftRequest, setOrderDraftRequest] = useState<{ symbol: string; nonce: number } | null>(null);
 
   const [symbolInput, setSymbolInput] = useState("");
   const [addMsg, setAddMsg] = useState("");
@@ -1366,6 +1487,16 @@ function WatchlistContent() {
     setToast(msg);
     setTimeout(() => setToast(""), 3500);
   }
+
+  const openOrderDraft = useCallback((symbol: string) => {
+    setChartSymbol(symbol);
+    setOrderDraftRequest({ symbol, nonce: Date.now() });
+    trackEvent("watchlist_order_draft_opened", {
+      symbol,
+      watchlist_id: activeId ?? null,
+      source: "watchlist_action",
+    });
+  }, [activeId]);
 
   function watchlistUnavailableMessage(): string {
     return WATCHLIST_DATA_UNAVAILABLE_MESSAGE;
@@ -1533,11 +1664,12 @@ function WatchlistContent() {
       }));
       void upsertWorkflowState(patch);
       trackEvent("chart_plan_draft_applied", { symbol: draftSymbol, watchlist_id: targetWatchlistId, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
-      showToast("Chart plan context loaded into Decision Desk");
+      openOrderDraft(draftSymbol);
+      showToast("Chart plan context loaded into Decision Desk. Journal ticket is ready.");
     } catch {
       showToast("Could not load chart plan draft");
     }
-  }, [activeId, chartSymbol, planDraftParam, symbolParam, watchlistIdParam, watchlists]);
+  }, [activeId, chartSymbol, openOrderDraft, planDraftParam, symbolParam, watchlistIdParam, watchlists]);
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
   const chartHref = useCallback((symbol: string, draw?: "trendline") => {
@@ -1547,6 +1679,15 @@ function WatchlistContent() {
     if (activeWl?.name) params.set("watchlist", activeWl.name);
     return `/charts/${symbol}?${params.toString()}`;
   }, [activeWl?.id, activeWl?.name]);
+  const prefetchWatchlistChart = useCallback((symbol: string) => {
+    const request = getWatchlistChartRequest("3M");
+    prefetchCandles(symbol, {
+      limit: request.limit,
+      timeframe: request.timeframe,
+      from_date: request.from_date,
+      to_date: request.to_date,
+    });
+  }, []);
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
     for (const item of activeWl?.items ?? []) {
@@ -2056,7 +2197,7 @@ function WatchlistContent() {
   return (
     <div className="workspace-page" style={{ gap: 10, minHeight: "calc(100vh - 104px)" }}>
       <WorkflowDeskHeader pathname="/watchlist" compact showFlowCaption={false} />
-      <div className="workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
+      <div className="workspace-grid watchlist-workspace-grid" style={{ gridTemplateColumns: sidebarCollapsed ? '48px 360px minmax(0, 1fr)' : '252px 360px minmax(0, 1fr)', minHeight: "calc(100vh - 104px)" }}>
       {/* Toast */}
       {toast && (
         <div data-testid="watchlist-toast" style={{ position: "fixed", top: 88, left: "50%", transform: "translateX(-50%)", zIndex: 50, fontSize: 13, padding: "10px 16px", borderRadius: 16, boxShadow: "var(--shadow-panel)", background: "linear-gradient(180deg, rgba(20,29,33,0.96), rgba(13,20,24,0.96))", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-primary)" }}>
@@ -2066,7 +2207,7 @@ function WatchlistContent() {
 
       {/* ── Watchlist tabs sidebar ─── */}
       {sidebarCollapsed ? (
-        <div className="workspace-card workspace-card-muted" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
+        <div className="workspace-card workspace-card-muted watchlist-sidebar-panel" style={{ width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 14, gap: 10 }}>
           <button onClick={() => setSidebarCollapsed(false)} style={{ color: "var(--text-tertiary)" }}>
             <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
               <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2089,7 +2230,7 @@ function WatchlistContent() {
           </div>
         </div>
       ) : (
-        <aside className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <aside className="workspace-card workspace-card-muted watchlist-sidebar-panel" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <div className="workspace-card-header" style={{ padding: "14px 14px" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>Watchlists</span>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2176,7 +2317,7 @@ function WatchlistContent() {
       )}
 
       {/* ── Stock list ─────────────────────────────────────── */}
-      <div className="workspace-card workspace-card-muted" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="workspace-card workspace-card-muted watchlist-list-panel" style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Header */}
         <div className="workspace-card-header" style={{ paddingBottom: 10, flexShrink: 0 }}>
           <div>
@@ -2238,6 +2379,15 @@ function WatchlistContent() {
             </div>
           )}
         </div>
+
+        {activeWl && (
+          <WatchlistWorkflowStrip
+            hasItems={activeWl.items.length > 0}
+            adding={adding}
+            onAddStarter={() => void addStarterSymbols()}
+            onOpenScanner={() => router.push("/scanner")}
+          />
+        )}
 
         <div style={{ padding: "0 18px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
           {selectedItem ? (
@@ -2573,24 +2723,26 @@ function WatchlistContent() {
                         <th className="label" style={{ padding: "8px 10px", textAlign: "left" }}>Symbol</th>
                         <th className="label" style={{ padding: "8px 10px", textAlign: "right" }}>Price / Chg</th>
                         <th className="label" style={{ padding: "8px 6px", textAlign: "right" }}>Vol / RSI</th>
-                        <th style={{ width: 28 }} />
+                        <th className="label" style={{ width: 96, padding: "8px 8px", textAlign: "right" }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {pageItems.map(item => {
                         const meta = getItemMeta(activeId, item.symbol);
                         return (
-                        <SortableRow
-                          key={item.symbol}
-                          item={item}
-                          isSelected={chartSymbol === item.symbol}
-                          pinned={Boolean(meta.pinned)}
-                          reviewState={symbolReviewMap.get(item.symbol)?.state}
-                          onRemove={handleRemove}
-                          onSelect={setChartSymbol}
-                          onOpenChart={(sym) => router.push(chartHref(sym))}
-                          dense={denseRows}
-                        />
+                          <SortableRow
+                            key={item.symbol}
+                            item={item}
+                            isSelected={chartSymbol === item.symbol}
+                            pinned={Boolean(meta.pinned)}
+                            reviewState={symbolReviewMap.get(item.symbol)?.state}
+                            onRemove={handleRemove}
+                            onSelect={setChartSymbol}
+                            onOpenChart={(sym) => router.push(chartHref(sym))}
+                            onPrefetchChart={prefetchWatchlistChart}
+                            onDraftOrder={openOrderDraft}
+                            dense={denseRows}
+                          />
                         );
                       })}
                     </tbody>
@@ -2605,7 +2757,7 @@ function WatchlistContent() {
                     <th className="label" style={{ padding: "8px 10px", textAlign: "left" }}>Symbol</th>
                     <th className="label" style={{ padding: "8px 10px", textAlign: "right" }}>Price / Chg</th>
                     <th className="label" style={{ padding: "8px 6px", textAlign: "right" }}>Vol / RSI</th>
-                    <th style={{ width: 28 }} />
+                    <th className="label" style={{ width: 96, padding: "8px 8px", textAlign: "right" }}>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2618,11 +2770,13 @@ function WatchlistContent() {
                         isSelected={chartSymbol === item.symbol}
                         pinned={Boolean(meta.pinned)}
                         reviewState={symbolReviewMap.get(item.symbol)?.state}
-                      onRemove={handleRemove}
-                      onSelect={setChartSymbol}
-                      onOpenChart={(sym) => router.push(chartHref(sym))}
-                      dense={denseRows}
-                    />
+                        onRemove={handleRemove}
+                        onSelect={setChartSymbol}
+                        onOpenChart={(sym) => router.push(chartHref(sym))}
+                        onPrefetchChart={prefetchWatchlistChart}
+                        onDraftOrder={openOrderDraft}
+                        dense={denseRows}
+                      />
                     );
                   })}
                 </tbody>
@@ -2667,7 +2821,7 @@ function WatchlistContent() {
       </div>
 
       {/* ── Chart + order panel ─────────────────────────────── */}
-      <div className="workspace-card" style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div className="workspace-card watchlist-chart-panel" style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         {chartSymbol ? (
           <>
             <div style={{ flex: 1, minHeight: 0 }}>
@@ -2679,7 +2833,8 @@ function WatchlistContent() {
                 onStepSymbol={moveSelection}
                 plan={selectedWorkflow}
                 planValid={selectedPlanStatus.valid}
-                planNextAction={selectedPlanStatus.next} />
+                planNextAction={selectedPlanStatus.next}
+                orderDraftNonce={orderDraftRequest?.symbol === chartSymbol ? orderDraftRequest.nonce : 0} />
             </div>
             <DecisionDesk
               symbol={chartSymbol}
@@ -2689,6 +2844,7 @@ function WatchlistContent() {
               reviewState={selectedReviewState}
               onPlanChange={(next) => setWorkflowBySymbol((prev) => ({ ...prev, [next.symbol]: next }))}
               onToast={showToast}
+              onDraftOrder={openOrderDraft}
             />
           </>
         ) : (

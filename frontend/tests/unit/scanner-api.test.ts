@@ -55,6 +55,51 @@ describe("scanner API", () => {
     await expect(runScanner({ series: ["EQ"] })).rejects.toThrow("Scanner data is temporarily unavailable.");
   });
 
+  it("coalesces identical in-flight scanner runs for the low-latency hot path", async () => {
+    const payload = {
+      trade_date: "2026-06-17",
+      total_matches: 1,
+      plan: "pro",
+      results: [{ symbol: "AUBANK", close: 100, pct_change: 1.2, volume_ratio: 2.1 }],
+    };
+    let resolveFetch!: (value: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { runScanner } = await import("@/lib/api");
+    const first = runScanner({ series: ["EQ"], min_price: 100 });
+    const second = runScanner({ series: ["EQ"], min_price: 100 });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    resolveFetch(new Response(JSON.stringify(payload), { status: 200, headers: { "Content-Type": "application/json" } }));
+
+    await expect(Promise.all([first, second])).resolves.toEqual([payload, payload]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the hot scanner cache for equivalent reordered filters", async () => {
+    const payload = {
+      trade_date: "2026-06-17",
+      total_matches: 1,
+      plan: "pro",
+      results: [{ symbol: "DIXON", close: 200, pct_change: 2.2, volume_ratio: 3.1 }],
+    };
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify(payload),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { runScanner } = await import("@/lib/api");
+
+    await expect(runScanner({ min_price: 100, series: ["EQ"] })).resolves.toEqual(payload);
+    await expect(runScanner({ series: ["EQ"], min_price: 100 })).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps an empty saved scanner screen list as a valid response", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ screens: [] }),

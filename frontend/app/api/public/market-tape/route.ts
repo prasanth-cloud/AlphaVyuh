@@ -3,6 +3,7 @@ import {
   TAPE_MIN_QUOTES,
   TAPE_SYMBOLS,
   dedupeQuotes,
+  mockMarketTapePayload,
   parseYahooChartMeta,
   type TapeQuote,
 } from "@/lib/public-market-tape";
@@ -14,6 +15,10 @@ const FETCH_HEADERS = {
   "User-Agent": "Mozilla/5.0 (compatible; AlphaVyuhTape/1.0; +https://alphavyuh.com)",
   Accept: "application/json",
 };
+
+function shouldUseMockTape() {
+  return process.env.NEXT_PUBLIC_DATA_MODE === "mock";
+}
 
 async function fetchQuote(symbol: (typeof TAPE_SYMBOLS)[number]): Promise<TapeQuote | null> {
   try {
@@ -29,6 +34,13 @@ async function fetchQuote(symbol: (typeof TAPE_SYMBOLS)[number]): Promise<TapeQu
 }
 
 export async function GET() {
+  if (shouldUseMockTape()) {
+    return NextResponse.json(
+      mockMarketTapePayload(),
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   const results = await Promise.all(TAPE_SYMBOLS.map(fetchQuote));
   const quotes = dedupeQuotes(results.filter((quote): quote is TapeQuote => quote !== null));
 
@@ -41,6 +53,12 @@ export async function GET() {
 
   return NextResponse.json(
     { quotes, asOf: new Date().toISOString(), source: "yahoo-finance" },
-    { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } },
+    {
+      headers: {
+        "Cache-Control": "public, max-age=60, stale-while-revalidate=240",
+        "CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+        "Vercel-CDN-Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    },
   );
 }

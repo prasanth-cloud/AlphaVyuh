@@ -212,6 +212,20 @@ def _highs_lows_counts(enriched: list[dict]) -> dict[str, int]:
     return {"highs": new_highs, "lows": new_lows}
 
 
+def _ema_breadth_point(client, trade_date: str) -> dict | None:
+    rows = _filter_nse_eq_rows(_fetch_daily_rows(client, trade_date))
+    enriched = _enrich_breadth_rows(rows)
+    if not enriched:
+        return None
+    breadth = _ema_breadth_pct(enriched)
+    return {
+        "trade_date": trade_date,
+        "ema20": breadth["ema20"],
+        "ema50": breadth["ema50"],
+        "ema200": breadth["ema200"],
+    }
+
+
 def _build_ema_breadth_daily_history(
     client,
     trade_dates: list[str],
@@ -220,21 +234,34 @@ def _build_ema_breadth_daily_history(
 ) -> list[dict]:
     history: list[dict] = []
     for trade_date in trade_dates[:limit]:
-        rows = _filter_nse_eq_rows(_fetch_daily_rows(client, trade_date))
-        enriched = _enrich_breadth_rows(rows)
-        if not enriched:
-            continue
-        breadth = _ema_breadth_pct(enriched)
-        history.append({
-            "trade_date": trade_date,
-            "ema20": breadth["ema20"],
-            "ema50": breadth["ema50"],
-            "ema200": breadth["ema200"],
-        })
+        point = _ema_breadth_point(client, trade_date)
+        if point:
+            history.append(point)
     return history
 
 
-def _build_period_views(client, latest_date: str, daily_enriched: list[dict]) -> tuple[dict, dict, list[dict]]:
+def _build_ema_breadth_lookback_history(client, trade_dates: list[str]) -> dict[str, list[dict]]:
+    lookback_steps = {
+        "day": (7, 1),
+        "week": (7, 5),
+        "month": (7, 21),
+        "year": (7, 251),
+    }
+    history: dict[str, list[dict]] = {}
+    for granularity, (count, step) in lookback_steps.items():
+        points: list[dict] = []
+        for index in range(count):
+            offset = index * step
+            if offset >= len(trade_dates):
+                break
+            point = _ema_breadth_point(client, trade_dates[offset])
+            if point:
+                points.append(point)
+        history[granularity] = points
+    return history
+
+
+def _build_period_views(client, latest_date: str, daily_enriched: list[dict]) -> tuple[dict, dict, list[dict], dict[str, list[dict]]]:
     trade_dates = _list_recent_trade_dates(client, latest_date)
     period_offsets = {"day": 0, "week": 4, "month": 21, "year": 251}
     ema_by_period: dict[str, dict[str, float] | None] = {}
@@ -265,7 +292,8 @@ def _build_period_views(client, latest_date: str, daily_enriched: list[dict]) ->
         "weekly": {"highs": weekly_highs, "lows": weekly_lows},
     }
     ema_breadth_daily_history = _build_ema_breadth_daily_history(client, trade_dates)
-    return ema_by_period, highs_lows_by_period, ema_breadth_daily_history
+    ema_breadth_lookback = _build_ema_breadth_lookback_history(client, trade_dates)
+    return ema_by_period, highs_lows_by_period, ema_breadth_daily_history, ema_breadth_lookback
 
 
 def _snapshot_quality_error(overview: dict) -> str | None:
@@ -327,7 +355,7 @@ def build_market_breadth_snapshot(
     above_ema50 = sum(1 for row in enriched if row["ema_50"] and row["close"] > row["ema_50"])
     above_ema200 = sum(1 for row in enriched if row["ema_200"] and row["close"] > row["ema_200"])
 
-    ema_breadth_by_period, highs_lows_by_period, ema_breadth_daily_history = _build_period_views(
+    ema_breadth_by_period, highs_lows_by_period, ema_breadth_daily_history, ema_breadth_lookback = _build_period_views(
         client, latest_date, enriched,
     )
 
@@ -423,6 +451,7 @@ def build_market_breadth_snapshot(
         "above_ema200_pct": above_ema200_pct,
         "ema_breadth_by_period": ema_breadth_by_period,
         "ema_breadth_daily_history": ema_breadth_daily_history,
+        "ema_breadth_lookback": ema_breadth_lookback,
         "highs_lows_by_period": highs_lows_by_period,
         "market_phase": market_phase,
         "market_phase_desc": market_phase_desc,

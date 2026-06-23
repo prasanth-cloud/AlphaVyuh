@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, Fragment, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   addToWatchlist as addSymbolToWatchlist,
   authHeaders,
@@ -11,6 +11,7 @@ import {
   deleteScreen as deleteSavedScreen,
   getScreens as getCachedScreens,
   getWatchlists as getCachedWatchlists,
+  prefetchCandles,
   saveScreen as saveSavedScreen,
   shouldUseMockFallback as scannerUsesClientMockFallback,
   type SavedScreen,
@@ -26,6 +27,7 @@ import { describeMarketDataError } from '@/lib/data-errors'
 import {
   appendScannerRunHistory,
   clearScannerRunHistory,
+  formatScannerRunDuration,
   readScannerRunHistory,
   type ScannerRunHistoryEntry,
 } from '@/lib/scanner-run-history'
@@ -66,6 +68,7 @@ import { ScannerSectorHeatmap } from '@/components/scanner/ScannerSectorHeatmap'
 import { ScannerSelectionPanel } from '@/components/scanner/ScannerSelectionPanel'
 import { ScannerTrustBanner } from '@/components/scanner/ScannerTrustBanner'
 import type { ScannerFilterState } from '@/lib/scanner-active-filters'
+import { getWatchlistChartRequest } from '@/lib/watchlist-chart-range'
 
 const API = API_BASE_URL
 
@@ -76,6 +79,9 @@ const SCAN_ALERT_FAILED_MESSAGE = 'Could not create the scan alert. Check alerts
 const SAVED_SCREEN_SAVE_FAILED_MESSAGE = 'Saved scanner screen could not be saved. Try again after checking Data Status.'
 const SAVED_SCREEN_DELETE_FAILED_MESSAGE = 'Saved scanner screen could not be deleted. Try again after checking Data Status.'
 const WATCHLIST_CREATION_FAILED_MESSAGE = 'Watchlist creation failed. Check Watchlist or Data Status, then try again.'
+const INITIAL_SCANNER_ROW_RENDER_LIMIT = 60
+const SCANNER_ROW_RENDER_INCREMENT = 60
+const SCANNER_CHART_PREFETCH_LIMIT = 8
 
 function scannerWatchlistAddFailure(symbol?: string) {
   return symbol
@@ -154,6 +160,8 @@ type ScannerRunResponse = {
   source?: string
   message?: string
   detail?: string
+  recovery_mode?: string
+  incomplete_indicator_count?: number | null
   source_metadata?: {
     mode?: string
     source_name?: string
@@ -161,6 +169,7 @@ type ScannerRunResponse = {
     coverage_pct?: number | null
     universe_active?: number | null
     license_notes?: string
+    symbols_count?: number | null
   }
 }
 
@@ -189,11 +198,81 @@ type ScannerCacheSnapshot = {
   tradeDate: string
   isLimited: boolean
   scanTrust: ScanTrust | null
+  scanElapsedMs?: number | null
   savedAt: number
 }
 
 const SCANNER_CACHE_KEY = 'alphavyuh-scanner-last-results-v1'
 const SCANNER_CACHE_TTL_MS = 5 * 60 * 1000
+type ScannerRunRequestBody = {
+  filters: Record<string, unknown>
+  sort_by: string
+  sort_order: string
+  limit?: number
+  preset_id: string | null
+  page: number
+  page_size: number
+}
+
+const scannerRunInFlight = new Map<string, Promise<ScannerRunResponse>>()
+
+function stableScannerRunKey(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableScannerRunKey).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableScannerRunKey(entry)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'undefined'
+}
+
+async function scannerAuthScope(headers: HeadersInit): Promise<string> {
+  const authorization = new Headers(headers).get('Authorization') ?? 'anonymous'
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(authorization))
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function scannerRunRequestKey(body: ScannerRunRequestBody, authScope: string) {
+  return `scanner-page-run:${authScope}:${stableScannerRunKey(body)}`
+}
+
+async function fetchScannerRunResponse(
+  body: ScannerRunRequestBody,
+  getHeaders: () => Promise<HeadersInit>,
+): Promise<ScannerRunResponse> {
+  const headers = await getHeaders()
+  const cacheKey = scannerRunRequestKey(body, await scannerAuthScope(headers))
+  const pending = scannerRunInFlight.get(cacheKey)
+  if (pending) return pending
+
+  const promise = (async () => {
+    const res = await fetch(`${API}/api/v1/scanner/run`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}))
+      throw new Error((e as { detail?: string }).detail || `Error ${res.status}`)
+    }
+    const data = await res.json() as ScannerRunResponse
+    if (data.mode === 'unavailable' || data.status === 'unavailable') {
+      throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
+    }
+    return data
+  })()
+  scannerRunInFlight.set(cacheKey, promise)
+  promise.then(
+    () => {
+      if (scannerRunInFlight.get(cacheKey) === promise) scannerRunInFlight.delete(cacheKey)
+    },
+    () => {
+      if (scannerRunInFlight.get(cacheKey) === promise) scannerRunInFlight.delete(cacheKey)
+    },
+  )
+  return promise
+}
 
 function readScannerSnapshot(): ScannerCacheSnapshot | null {
   if (typeof window === 'undefined') return null
@@ -298,6 +377,16 @@ const PRESETS = [
     },
   },
   {
+    id: 'low_52w_breakout',
+    name: '52W Low Breakdown',
+    description: 'Stocks breaking to a new 52-week low on the latest EOD session.',
+    filters: {
+      new_52w_low: true,
+      pct_change_max: 0,
+      series: ['EQ'],
+    },
+  },
+  {
     id: 'episodic_pivot',
     name: 'Episodic Pivot',
     description: 'Event-style pivot: strong six-month performance, large positive move, volume expansion, and close above the intermediate trend.',
@@ -333,6 +422,13 @@ const MORE_PRESETS = PRESETS.filter((p) => !PRIMARY_PRESET_IDS.has(p.id))
 
 type Preset = (typeof PRESETS)[number]
 type WorkflowMark = 'shortlist' | 'ignored' | 'review_later' | 'watch'
+
+function presetFiltersForState(preset: Preset): Filters {
+  const normalizedFilters = Object.fromEntries(
+    Object.entries(preset.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
+  )
+  return { ...emptyFilters(), ...normalizedFilters } as Filters
+}
 
 type Filters = {
   price_min: string; price_max: string
@@ -506,6 +602,7 @@ function ScannerRowActions({
 
 export default function ScannerPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [filters, setFilters] = useState<Filters>(emptyFilters())
   const [activePreset, setActivePreset] = useState<string | null>(null)
   const [results, setResults] = useState<ScanResult[]>([])
@@ -549,9 +646,12 @@ export default function ScannerPage() {
   const [filterRailWidth, setFilterRailWidth] = useState(300)
   const [filterRailCollapsed, setFilterRailCollapsed] = useState(false)
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1)
+  const [renderedRowLimit, setRenderedRowLimit] = useState(INITIAL_SCANNER_ROW_RENDER_LIMIT)
   const [columnsPickerOpen, setColumnsPickerOpen] = useState(false)
   const symbolFilterRef = useRef<HTMLInputElement>(null)
   const resultsScrollRef = useRef<HTMLDivElement>(null)
+  const prefetchedScannerChartKeyRef = useRef('')
+  const scannerRequestSeqRef = useRef(0)
   const [hasCachedResults, setHasCachedResults] = useState(false)
   const [isLimited, setIsLimited] = useState(false)
   const [hasRun, setHasRun] = useState(false)
@@ -567,6 +667,15 @@ export default function ScannerPage() {
 
   const getAuthHeaders = useCallback(() => authHeaders(), [])
 
+  const beginScannerRequest = useCallback(() => {
+    scannerRequestSeqRef.current += 1
+    return scannerRequestSeqRef.current
+  }, [])
+
+  const isCurrentScannerRequest = useCallback((requestSeq: number) => {
+    return scannerRequestSeqRef.current === requestSeq
+  }, [])
+
   useEffect(() => {
     const cached = readScannerSnapshot()
     if (cached) {
@@ -577,6 +686,7 @@ export default function ScannerPage() {
       setTradeDate(cached.tradeDate)
       setIsLimited(cached.isLimited)
       setScanTrust(cached.scanTrust)
+      setScanElapsedMs(cached.scanElapsedMs ?? null)
       setHasRun(true)
       setHasCachedResults(true)
       setActiveCompositionName(null)
@@ -662,6 +772,7 @@ export default function ScannerPage() {
     sortBy: string
     sortDesc: boolean
     pageSize: number
+    elapsedMs: number | null
   }) => {
     const nextHistory = appendScannerRunHistory({
       label: scannerRunLabel(params.eventPreset),
@@ -679,6 +790,7 @@ export default function ScannerPage() {
       dataAsOf: params.scanTrust.asOf ?? params.tradeDate,
       coveragePct: params.scanTrust.coveragePct,
       universeSize: params.scanTrust.universeSize,
+      elapsedMs: params.elapsedMs,
       filters: params.filters,
       results: params.results,
     })
@@ -705,6 +817,7 @@ export default function ScannerPage() {
     setScanTrust(restoredTrust)
     setSortBy(entry.sortBy)
     setSortDesc(entry.sortDesc)
+    setScanElapsedMs(entry.elapsedMs)
     setFilters({ ...emptyFilters(), ...(entry.filters ?? {}) } as Filters)
     setActivePreset(entry.presetId === 'custom' ? null : entry.presetId)
     setActiveScreenName(entry.presetId === 'saved_screen' ? entry.label : null)
@@ -719,6 +832,7 @@ export default function ScannerPage() {
       tradeDate: entry.tradeDate,
       isLimited: entry.isLimited,
       scanTrust: restoredTrust,
+      scanElapsedMs: entry.elapsedMs,
     })
     trackEvent('scanner_run_history_restored', {
       label: entry.label,
@@ -790,6 +904,7 @@ export default function ScannerPage() {
   }, [])
 
   const runScan = useCallback(async (overrideFilters?: Filters, sb = sortBy, sd = sortDesc, page = currentPage, size = pageSize, eventPreset = activePreset ?? 'custom') => {
+    const requestSeq = beginScannerRequest()
     const hadResults = results.length > 0
     const scanStartedAt = performance.now()
     const activeFilters = overrideFilters || filters
@@ -805,6 +920,8 @@ export default function ScannerPage() {
         const nextTradeDate = data.trade_date || ''
         const nextIsLimited = data.is_limited || false
         const nextTrust = trustFromRunResponse(data as ScannerRunResponse, 'Demo data', 'demo')
+        const elapsedMs = Math.round(performance.now() - scanStartedAt)
+        if (!isCurrentScannerRequest(requestSeq)) return
         setResults(nextResults)
         setActiveCompositionName(null)
         setTotalMatches(nextTotalMatches)
@@ -816,7 +933,7 @@ export default function ScannerPage() {
         setRecoveryMode(false)
         setIncompleteIndicatorCount(0)
         setSymbolsScanned(data.source_metadata?.symbols_count ?? null)
-        setScanElapsedMs(Math.round(performance.now() - scanStartedAt))
+        setScanElapsedMs(elapsedMs)
         setHasCachedResults(false)
         writeScannerSnapshot({
           results: nextResults,
@@ -826,6 +943,7 @@ export default function ScannerPage() {
           tradeDate: nextTradeDate,
           isLimited: nextIsLimited,
           scanTrust: nextTrust,
+          scanElapsedMs: elapsedMs,
         })
         rememberScannerRun({
           eventPreset,
@@ -840,6 +958,7 @@ export default function ScannerPage() {
           sortBy: sb,
           sortDesc: sd,
           pageSize: size,
+          elapsedMs,
         })
         setHasRun(true)
         trackEvent('scanner_run', {
@@ -850,18 +969,13 @@ export default function ScannerPage() {
         })
         return
       }
-      const headers = await getAuthHeaders()
       const payload = buildPayload(activeFilters, sb, sd)
-      const res = await fetch(`${API}/api/v1/scanner/run`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ...payload, preset_id: eventPreset === 'custom' || eventPreset === 'saved_screen' ? null : eventPreset, page, page_size: size }),
-      })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
-      const data = await res.json()
-      if (data.mode === 'unavailable' || data.status === 'unavailable') {
-        throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
-      }
+      const data = await fetchScannerRunResponse({
+        ...payload,
+        preset_id: eventPreset === 'custom' || eventPreset === 'saved_screen' ? null : eventPreset,
+        page,
+        page_size: size,
+      }, getAuthHeaders)
       const nextResults = data.results || []
       const nextTotalMatches = data.total_matches || 0
       const nextTotalPages = data.total_pages || 1
@@ -869,6 +983,8 @@ export default function ScannerPage() {
       const nextTradeDate = data.trade_date || ''
       const nextIsLimited = data.is_limited || false
       const nextTrust = trustFromRunResponse(data, 'Market data', 'eod')
+      const elapsedMs = Math.round(performance.now() - scanStartedAt)
+      if (!isCurrentScannerRequest(requestSeq)) return
       setResults(nextResults)
       setSelectedResults(new Set())
       setActiveCompositionName(null)
@@ -884,7 +1000,7 @@ export default function ScannerPage() {
         ?? nextResults.filter((result: ScanResult) => (result.data_warnings?.length ?? 0) > 0).length,
       )
       setSymbolsScanned(data.source_metadata?.symbols_count ?? null)
-      setScanElapsedMs(Math.round(performance.now() - scanStartedAt))
+      setScanElapsedMs(elapsedMs)
       setHasCachedResults(false)
       writeScannerSnapshot({
         results: nextResults,
@@ -894,6 +1010,7 @@ export default function ScannerPage() {
         tradeDate: nextTradeDate,
         isLimited: nextIsLimited,
         scanTrust: nextTrust,
+        scanElapsedMs: elapsedMs,
       })
       rememberScannerRun({
         eventPreset,
@@ -908,6 +1025,7 @@ export default function ScannerPage() {
         sortBy: sb,
         sortDesc: sd,
         pageSize: size,
+        elapsedMs,
       })
       setHasRun(true)
       trackEvent('scanner_run', {
@@ -917,15 +1035,14 @@ export default function ScannerPage() {
         confidence_available: (data.results || []).some((result: ScanResult) => result.setup_score != null),
       })
     } catch (e: unknown) {
-      setError(describeMarketDataError(e))
-    } finally { setLoading(false) }
-  }, [activePreset, buildPayload, currentPage, filters, getAuthHeaders, pageSize, rememberScannerRun, results.length, sortBy, sortDesc])
+      if (isCurrentScannerRequest(requestSeq)) setError(describeMarketDataError(e))
+    } finally {
+      if (isCurrentScannerRequest(requestSeq)) setLoading(false)
+    }
+  }, [activePreset, beginScannerRequest, buildPayload, currentPage, filters, getAuthHeaders, isCurrentScannerRequest, pageSize, rememberScannerRun, results.length, sortBy, sortDesc])
 
   const selectPreset = useCallback((p: Preset) => {
-    const normalizedFilters = Object.fromEntries(
-      Object.entries(p.filters).map(([key, value]) => [key, typeof value === 'number' ? String(value) : value]),
-    )
-    const f = { ...emptyFilters(), ...normalizedFilters } as Filters
+    const f = presetFiltersForState(p)
     setFilters(f)
     setActivePreset(p.id)
     setActiveScreenName(null)
@@ -936,6 +1053,13 @@ export default function ScannerPage() {
     setVisibleColumnIds(columns)
     setActiveColumnPreset(detectColumnPreset(columns))
   }, [])
+
+  useEffect(() => {
+    const presetId = searchParams.get('preset')
+    if (!presetId) return
+    const preset = PRESETS.find((entry) => entry.id === presetId)
+    if (preset) selectPreset(preset)
+  }, [searchParams, selectPreset])
 
   useEffect(() => {
     const viewPrefs = readScannerViewPreferences()
@@ -1034,24 +1158,14 @@ export default function ScannerPage() {
       }
     }
 
-    const headers = await getAuthHeaders()
-    const res = await fetch(`${API}/api/v1/scanner/run`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        filters: screen.filters,
-        sort_by: sortBy,
-        sort_order: sortDesc ? 'desc' : 'asc',
-        preset_id: null,
-        page: 1,
-        page_size: 200,
-      }),
-    })
-    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as { detail?: string }).detail || `Error ${res.status}`) }
-    const data = await res.json() as ScannerRunResponse
-    if (data.mode === 'unavailable' || data.status === 'unavailable') {
-      throw new Error(data.message || data.detail || 'Scanner data is temporarily unavailable.')
-    }
+    const data = await fetchScannerRunResponse({
+      filters: screen.filters,
+      sort_by: sortBy,
+      sort_order: sortDesc ? 'desc' : 'asc',
+      preset_id: null,
+      page: 1,
+      page_size: 200,
+    }, getAuthHeaders)
     return {
       screen,
       results: data.results ?? [],
@@ -1067,6 +1181,7 @@ export default function ScannerPage() {
       showToast('Select at least two saved screens')
       return
     }
+    const requestSeq = beginScannerRequest()
     setComposingScreens(true)
     setLoading(true)
     setError('')
@@ -1082,6 +1197,7 @@ export default function ScannerPage() {
         message: `${compositionMode.toUpperCase()} composition across ${screens.length} saved screens.`,
       } satisfies ScanTrust
       const label = `${screens.map(screen => screen.name).join(compositionMode === 'and' ? ' + ' : ' / ')}`
+      if (!isCurrentScannerRequest(requestSeq)) return
       setResults(composed)
       setSelectedResults(new Set())
       setWorkflowMarks({})
@@ -1104,6 +1220,7 @@ export default function ScannerPage() {
         tradeDate: runs.find(run => run.tradeDate)?.tradeDate ?? '',
         isLimited: runs.some(run => run.isLimited),
         scanTrust: nextTrust,
+        scanElapsedMs: null,
       })
       trackEvent('scanner_saved_screen_composition', {
         mode: compositionMode,
@@ -1112,10 +1229,12 @@ export default function ScannerPage() {
       })
       showToast(`${composed.length} ${composed.length === 1 ? 'match' : 'matches'} from ${compositionMode.toUpperCase()} composition`)
     } catch (e: unknown) {
-      setError(describeMarketDataError(e))
+      if (isCurrentScannerRequest(requestSeq)) setError(describeMarketDataError(e))
     } finally {
-      setLoading(false)
-      setComposingScreens(false)
+      if (isCurrentScannerRequest(requestSeq)) {
+        setLoading(false)
+        setComposingScreens(false)
+      }
     }
   }
 
@@ -1190,16 +1309,17 @@ export default function ScannerPage() {
     }
   }
 
-  function scanContextOptions() {
+  const scanContextOptions = useCallback(() => {
+    const presetMeta = PRESETS.find(p => p.id === activePreset) ?? null
     return {
       presetId: activePreset,
-      presetName: activeCompositionName ?? activePresetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
+      presetName: activeCompositionName ?? presetMeta?.name ?? (activePreset === 'saved_screen' ? activeScreenName ?? 'Saved screen' : activePreset === 'custom' ? 'Custom scan' : null),
       tradeDate,
       dataSource: scanTrust?.source ?? null,
       dataMode: scanTrust?.mode ?? null,
       dataAsOf: scanTrust?.asOf ?? tradeDate ?? null,
     }
-  }
+  }, [activeCompositionName, activePreset, activeScreenName, scanTrust?.asOf, scanTrust?.mode, scanTrust?.source, tradeDate])
 
   async function addToWatchlist(symbol: string, wlId: string) {
     try {
@@ -1282,13 +1402,13 @@ export default function ScannerPage() {
     showToast(`Exported ${rows.length} rows to CSV`)
   }
 
-  async function openScannerChart(result: ScanResult) {
+  const openScannerChart = useCallback(async (result: ScanResult) => {
     await bulkUpsertWorkflowStates([
       scannerWorkflowPatch(result.symbol, 'shortlist', undefined, result, scanContextOptions()),
     ])
     trackEvent('scanner_chart_review_opened', { symbol: result.symbol, preset: activePreset ?? 'custom' })
     router.push(`/charts/${result.symbol}?from=scanner&full=1`)
-  }
+  }, [activePreset, router, scanContextOptions])
 
   function selectedSymbols() {
     return selectedScannerSymbols(results, selectedResults)
@@ -1465,10 +1585,47 @@ export default function ScannerPage() {
       row.company_name.toUpperCase().includes(query),
     )
   }, [resultSymbolFilter, results])
+  const renderedResults = useMemo(
+    () => filteredResults.slice(0, renderedRowLimit),
+    [filteredResults, renderedRowLimit],
+  )
+  const hasDeferredScannerRows = renderedResults.length < filteredResults.length
+  const scannerChartPrefetchKey = renderedResults
+    .slice(0, SCANNER_CHART_PREFETCH_LIMIT)
+    .map(row => row.symbol)
+    .join(',')
+
+  const prefetchScannerChart = useCallback((symbol: string) => {
+    const request = getWatchlistChartRequest('3M')
+    prefetchCandles(symbol, {
+      limit: request.limit,
+      timeframe: request.timeframe,
+      from_date: request.from_date,
+      to_date: request.to_date,
+    })
+  }, [])
+
+  useEffect(() => {
+    setRenderedRowLimit(Math.min(INITIAL_SCANNER_ROW_RENDER_LIMIT, filteredResults.length))
+  }, [filteredResults.length, currentPage, resultSymbolFilter, resultsView])
 
   useEffect(() => {
     setFocusedRowIndex(-1)
   }, [filteredResults.length, resultSymbolFilter, currentPage, resultsView])
+
+  useEffect(() => {
+    if (resultsView !== 'list' || !scannerChartPrefetchKey) return
+    const cacheKey = `${tradeDate || 'pending'}:${scannerChartPrefetchKey}`
+    if (prefetchedScannerChartKeyRef.current === cacheKey) return
+    prefetchedScannerChartKeyRef.current = cacheKey
+
+    const timer = window.setTimeout(() => {
+      renderedResults
+        .slice(0, SCANNER_CHART_PREFETCH_LIMIT)
+        .forEach(row => prefetchScannerChart(row.symbol))
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [prefetchScannerChart, renderedResults, resultsView, scannerChartPrefetchKey, tradeDate])
 
   useEffect(() => {
     if (resultsView !== 'list' || filteredResults.length === 0) return
@@ -1489,15 +1646,15 @@ export default function ScannerPage() {
       if (event.key === 'j' || event.key === 'k') {
         event.preventDefault()
         setFocusedRowIndex(prev => {
-          if (filteredResults.length === 0) return -1
-          if (prev < 0) return event.key === 'j' ? 0 : filteredResults.length - 1
+          if (renderedResults.length === 0) return -1
+          if (prev < 0) return event.key === 'j' ? 0 : renderedResults.length - 1
           const next = event.key === 'j' ? prev + 1 : prev - 1
-          return Math.max(0, Math.min(filteredResults.length - 1, next))
+          return Math.max(0, Math.min(renderedResults.length - 1, next))
         })
         return
       }
-      if (focusedRowIndex < 0 || focusedRowIndex >= filteredResults.length) return
-      const row = filteredResults[focusedRowIndex]
+      if (focusedRowIndex < 0 || focusedRowIndex >= renderedResults.length) return
+      const row = renderedResults[focusedRowIndex]
       if (event.key === 'Enter') {
         event.preventDefault()
         void openScannerChart(row)
@@ -1514,13 +1671,15 @@ export default function ScannerPage() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [filteredResults, focusedRowIndex, resultsView, openScannerChart])
+  }, [filteredResults.length, focusedRowIndex, renderedResults, resultsView, openScannerChart])
 
   useEffect(() => {
     if (focusedRowIndex < 0) return
+    const result = renderedResults[focusedRowIndex]
+    if (result) prefetchScannerChart(result.symbol)
     const row = resultsScrollRef.current?.querySelector(`[data-scanner-row-index="${focusedRowIndex}"]`)
     row?.scrollIntoView({ block: 'nearest' })
-  }, [focusedRowIndex])
+  }, [focusedRowIndex, prefetchScannerChart, renderedResults])
 
   function handleColumnSort(sortKey: string) {
     const newDesc = sortKey === sortBy ? !sortDesc : true
@@ -2193,37 +2352,41 @@ export default function ScannerPage() {
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
-              {runHistory.slice(0, 8).map(entry => (
-                <button
-                  key={entry.id}
-                  data-testid="scanner-run-history-entry"
-                  onClick={() => restoreScannerRun(entry)}
-                  title={`Restore ${entry.label}`}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '7px 9px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--surface-2)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: 'var(--text-primary)' }}>
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
-                    <span style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>{entry.totalMatches.toLocaleString('en-IN')}</span>
-                  </span>
-                  <span className="caption" style={{ display: 'block', marginTop: 3 }}>
-                    {entry.tradeDate || entry.dataAsOf || 'Latest'} · {entry.dataSource ?? 'Source pending'}
-                  </span>
-                  {entry.topSymbols.length > 0 && (
-                    <span className="caption mono" style={{ display: 'block', marginTop: 3, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {entry.topSymbols.slice(0, 4).join(' · ')}
+              {runHistory.slice(0, 8).map(entry => {
+                const runtimeLabel = formatScannerRunDuration(entry.elapsedMs)
+                return (
+                  <button
+                    key={entry.id}
+                    data-testid="scanner-run-history-entry"
+                    onClick={() => restoreScannerRun(entry)}
+                    title={`Restore ${entry.label}`}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '7px 9px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--surface-2)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: 'var(--text-primary)' }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.label}</span>
+                      <span style={{ color: 'var(--text-tertiary)', flexShrink: 0 }}>{entry.totalMatches.toLocaleString('en-IN')}</span>
                     </span>
-                  )}
-                </button>
-              ))}
+                    <span className="caption" style={{ display: 'block', marginTop: 3 }}>
+                      {entry.tradeDate || entry.dataAsOf || 'Latest'} · {entry.dataSource ?? 'Source pending'}
+                      {runtimeLabel ? ` · Runtime ${runtimeLabel}` : ''}
+                    </span>
+                    {entry.topSymbols.length > 0 && (
+                      <span className="caption mono" style={{ display: 'block', marginTop: 3, color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entry.topSymbols.slice(0, 4).join(' · ')}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -2347,10 +2510,10 @@ export default function ScannerPage() {
               tableStyle={{ minWidth: 720, tableLayout: 'fixed' }}
             >
               <DataTableHead>
-                <Th width={32} className="scanner-sticky-col scanner-sticky-col-check">
-                  <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
-                    onChange={e => setSelectedResults(e.target.checked ? new Set(results.map(r => r.symbol)) : new Set())} />
-                </Th>
+	                <Th width={32} className="scanner-sticky-col scanner-sticky-col-check">
+	                  <input type="checkbox" style={{ accentColor: 'var(--accent)' }}
+	                    onChange={e => setSelectedResults(e.target.checked ? new Set(filteredResults.map(r => r.symbol)) : new Set())} />
+	                </Th>
                 {visibleColumns.map(col => {
                   const sortable = col.sortKey != null
                   const active = sortable && sortBy === col.sortKey
@@ -2380,18 +2543,20 @@ export default function ScannerPage() {
                   )
                 })}
                 <Th width={88} align="right">{'\u00A0'}</Th>
-              </DataTableHead>
-              <tbody>
-                {filteredResults.map((r, rowIndex) => {
+	              </DataTableHead>
+	              <tbody>
+	                {renderedResults.map((r, rowIndex) => {
                   const focused = focusedRowIndex === rowIndex
                   return (
                     <Fragment key={r.symbol}>
                       <Tr
                         data-testid="scanner-result-row"
                         data-scanner-row-index={rowIndex}
-                        className={focused ? 'scanner-row-focused' : undefined}
-                        onClick={() => void openScannerChart(r)}
-                        onKeyDown={(e) => {
+	                        className={focused ? 'scanner-row-focused' : undefined}
+	                        onClick={() => void openScannerChart(r)}
+	                        onMouseEnter={() => prefetchScannerChart(r.symbol)}
+	                        onFocus={() => prefetchScannerChart(r.symbol)}
+	                        onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
                             void openScannerChart(r)
@@ -2462,14 +2627,24 @@ export default function ScannerPage() {
                   )
                 })}
               </tbody>
-            </DataTable>
-            <div className="workspace-toolbar scanner-pagination-footer">
-              <div className="workspace-card-copy">
-                Showing <Num>{filteredResults.length === 0 ? 0 : visibleStart}</Num>-<Num>{filteredResults.length === 0 ? 0 : Math.min(visibleEnd, visibleStart + filteredResults.length - 1)}</Num> of <Num>{totalMatches.toLocaleString('en-IN')}</Num> matches
-                {resultSymbolFilter.trim() ? ` · ${filteredResults.length} filtered on page` : ''}.
-              </div>
-              <div className="workspace-toolbar-group">
-                <button
+	            </DataTable>
+	            <div className="workspace-toolbar scanner-pagination-footer">
+	              <div className="workspace-card-copy">
+	                Showing <Num>{renderedResults.length === 0 ? 0 : visibleStart}</Num>-<Num>{renderedResults.length === 0 ? 0 : Math.min(visibleEnd, visibleStart + renderedResults.length - 1)}</Num> of <Num>{totalMatches.toLocaleString('en-IN')}</Num> matches
+	                {resultSymbolFilter.trim() ? ` · ${filteredResults.length} filtered on page` : ''}
+	                {hasDeferredScannerRows ? ` · rendering ${renderedResults.length}/${filteredResults.length} rows for speed` : ''}.
+	              </div>
+	              <div className="workspace-toolbar-group">
+	                {hasDeferredScannerRows && (
+	                  <button
+	                    className="workspace-chip-button"
+	                    data-testid="scanner-render-more-rows"
+	                    onClick={() => setRenderedRowLimit(limit => Math.min(filteredResults.length, limit + SCANNER_ROW_RENDER_INCREMENT))}
+	                  >
+	                    Render more rows
+	                  </button>
+	                )}
+	                <button
                   className="workspace-chip-button"
                   disabled={currentPage <= 1}
                   onClick={() => {

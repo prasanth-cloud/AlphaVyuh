@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { getDecisionMemorySummary, getJournalReviewStage, getReviewContext, getTradeFlowMeta } from "@/app/(app)/journal/components/utils";
+import { displayEntryReason, getDecisionMemorySummary, getJournalReviewStage, getReviewContext, getTradeFlowMeta } from "@/app/(app)/journal/components/utils";
 
 describe("journal review context", () => {
+  it("hides internal order-intent markers from trader-facing copy", () => {
+    expect(displayEntryReason(
+      "Breakout above pivot [Simulated · Chart] [alphavyuh-order-intent:11111111-1111-4111-8111-111111111111]",
+    )).toBe("Breakout above pivot [Simulated · Chart]");
+  });
+
   it("builds process prompts from the original scanner idea and plan", () => {
     const context = getReviewContext({
       entry_reason: "Scanner: Trend Template | Matched: Volume expansion | Thesis: Breakout holding | Invalidation: Close below base",

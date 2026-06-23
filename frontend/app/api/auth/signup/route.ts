@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getSafeAuthErrorMessage } from "@/lib/auth-error-copy";
 import { isSafeRedirect } from "@/lib/safe-redirect";
+import { getAuthRedirectOrigin } from "@/lib/auth-redirect-origin";
 import { createRouteHandlerClient } from "@/lib/supabase/server";
 import { allowMockAppAuth } from "@/lib/runtime-mode";
 
@@ -7,7 +9,7 @@ export async function POST(request: Request) {
   const { email, password, full_name, next } = await request.json();
   const requestUrl = new URL(request.url);
   const safeNext = isSafeRedirect(next) ? next : "/onboarding";
-  const emailRedirectTo = `${requestUrl.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`;
+  const emailRedirectTo = `${getAuthRedirectOrigin(requestUrl.origin)}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 
   const response = NextResponse.json({ success: true });
   response.headers.set("Server-Timing", 'alphavyuh_auth_signup;desc="session_set"');
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
     if (error.message.toLowerCase().includes("already")) {
       return NextResponse.json({ pending_confirmation: true });
     }
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ error: getSafeAuthErrorMessage(error, "Could not create the account.") }, { status: 400 });
   }
 
   // Email confirmation is OFF — session returned immediately.

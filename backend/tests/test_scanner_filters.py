@@ -8,6 +8,17 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 
+@pytest.fixture(autouse=True)
+def _clear_scanner_readiness_cache():
+    from app.routers import scanner
+
+    scanner._m3a_readiness_cache.clear()
+    scanner._scan_result_cache.clear()
+    yield
+    scanner._m3a_readiness_cache.clear()
+    scanner._scan_result_cache.clear()
+
+
 def _apply_numeric_filter(value, min_val, max_val):
     if min_val is not None and value < min_val:
         return False
@@ -610,6 +621,39 @@ class TestM3aDbPush:
                 return type("R", (), {"count": 50})()
 
         assert _m3a_columns_ready(_Client(), "2026-05-01") is False
+
+    def test_m3a_columns_ready_caches_completed_trade_date(self):
+        from app.routers.scanner import _m3a_columns_ready
+
+        class _Not:
+            def __init__(self, parent):
+                self._parent = parent
+
+            def is_(self, *_args, **_kwargs):
+                return self._parent
+
+        class _Client:
+            def __init__(self):
+                self._call = 0
+                self.not_ = _Not(self)
+
+            def table(self, _name):
+                return self
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                self._call += 1
+                return type("R", (), {"count": 100 if self._call == 1 else 85})()
+
+        client = _Client()
+        assert _m3a_columns_ready(client, "2026-05-01") is True
+        assert _m3a_columns_ready(client, "2026-05-01") is True
+        assert client._call == 2
 
 
 class TestExecuteScanDiagnostics:
