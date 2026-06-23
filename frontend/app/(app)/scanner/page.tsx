@@ -71,6 +71,20 @@ import { ScannerSelectionPanel } from '@/components/scanner/ScannerSelectionPane
 import { ScannerTrustBanner } from '@/components/scanner/ScannerTrustBanner'
 import type { ScannerFilterState } from '@/lib/scanner-active-filters'
 import { getWatchlistChartRequest } from '@/lib/watchlist-chart-range'
+import { countResultsMissingCoreFundamentals, FUNDAMENTALS_UNAVAILABLE_TOOLTIP, SCANNER_FUNDAMENTAL_COLUMN_IDS } from '@/lib/company-display'
+import {
+  PRESETS_VISIBLE_PER_GROUP,
+  SCREENER_CATEGORIES,
+  togglePresetGroupExpanded,
+  type ScreenerCategoryId,
+} from '@/lib/scanner-preset-groups'
+import {
+  countActiveFiltersInSection,
+  readScannerFilterSectionOpen,
+  writeScannerFilterSectionOpen,
+  SCANNER_FILTER_SECTIONS,
+  type ScannerFilterSectionId,
+} from '@/lib/scanner-filter-sections'
 
 const API = API_BASE_URL
 
@@ -94,7 +108,7 @@ function scannerWatchlistAddFailure(symbol?: string) {
 // ── Types ──────────────────────────────────────────────────
 interface ScanResult {
   symbol: string
-  company_name: string
+  company_name: string | null
   sector: string
   close: number
   pct_change: number
@@ -418,10 +432,6 @@ const PRESETS = [
   },
 ] as const
 
-const PRIMARY_PRESET_IDS = new Set(['trend_template', 'vcp_breakout', 'high_52w_breakout'])
-const PRIMARY_PRESETS = PRESETS.filter((p) => PRIMARY_PRESET_IDS.has(p.id))
-const MORE_PRESETS = PRESETS.filter((p) => !PRIMARY_PRESET_IDS.has(p.id))
-
 type Preset = (typeof PRESETS)[number]
 type WorkflowMark = 'shortlist' | 'ignored' | 'review_later' | 'watch'
 
@@ -554,12 +564,47 @@ const inputStyle: React.CSSProperties = {
   width: '100%',
 }
 
-function Section({ title, children, open: def = false }: { title: string; children: React.ReactNode; open?: boolean }) {
-  const [open, setOpen] = useState(def)
+function FilterSection({
+  sectionId,
+  title,
+  activeCount,
+  children,
+}: {
+  sectionId: ScannerFilterSectionId
+  title: string
+  activeCount: number
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(() => {
+    if (activeCount > 0) return true
+    return readScannerFilterSectionOpen(sectionId) ?? false
+  })
+
+  useEffect(() => {
+    if (activeCount > 0) setOpen(true)
+  }, [activeCount])
+
   return (
     <div className="scanner-filter-section">
-      <button type="button" className="scanner-filter-section-header" onClick={() => setOpen(o => !o)}>
-        {title}
+      <button
+        type="button"
+        className="scanner-filter-section-header"
+        onClick={() => {
+          setOpen((current) => {
+            const next = !current
+            writeScannerFilterSectionOpen(sectionId, next)
+            return next
+          })
+        }}
+      >
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {title}
+          {activeCount > 0 ? (
+            <span className="scanner-filter-section-active" aria-label={`${activeCount} active filters`}>
+              ({activeCount})
+            </span>
+          ) : null}
+        </span>
         <span style={{ fontSize: 12, transition: 'transform 0.15s', display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
       </button>
       {open && <div className="scanner-filter-section-body">{children}</div>}
@@ -631,6 +676,15 @@ export default function ScannerPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [filters, setFilters] = useState<Filters>(emptyFilters())
+  const filterSectionActiveCount = useCallback((sectionId: ScannerFilterSectionId) => {
+    const section = SCANNER_FILTER_SECTIONS.find((item) => item.id === sectionId)
+    if (!section) return 0
+    return countActiveFiltersInSection(
+      filters as unknown as Record<string, unknown>,
+      EMPTY_FILTERS as unknown as Record<string, unknown>,
+      section.keys,
+    )
+  }, [filters])
   const [activePreset, setActivePreset] = useState<string | null>(null)
   const [results, setResults] = useState<ScanResult[]>([])
   const [totalMatches, setTotalMatches] = useState(0)
@@ -662,7 +716,7 @@ export default function ScannerPage() {
   const [filterTab, setFilterTab] = useState<'technicals' | 'fundamentals'>('technicals')
   const [resultSymbolFilter, setResultSymbolFilter] = useState('')
   const [chartsLayout, setChartsLayout] = useState<ScannerChartsLayout>('2-up')
-  const [showMorePresets, setShowMorePresets] = useState(false)
+  const [expandedPresetGroups, setExpandedPresetGroups] = useState<Set<ScreenerCategoryId>>(new Set())
   const [historyOpen, setHistoryOpen] = useState(false)
   const [resultsView, setResultsView] = useState<ScannerResultsView>('list')
   const [visibleColumnIds, setVisibleColumnIds] = useState<ScannerColumnId[]>([...SCANNER_DEFAULT_COLUMN_IDS])
@@ -1619,9 +1673,13 @@ export default function ScannerPage() {
     if (!query) return results
     return results.filter(row =>
       row.symbol.toUpperCase().includes(query) ||
-      row.company_name.toUpperCase().includes(query),
+      (row.company_name?.toUpperCase().includes(query) ?? false),
     )
   }, [resultSymbolFilter, results])
+  const fundamentalsMissingCount = useMemo(
+    () => countResultsMissingCoreFundamentals(results),
+    [results],
+  )
   const renderedResults = useMemo(
     () => filteredResults.slice(0, renderedRowLimit),
     [filteredResults, renderedRowLimit],
@@ -1810,74 +1868,54 @@ export default function ScannerPage() {
         {/* Presets */}
         <div className="workspace-section" style={{ borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
           <div className="label" style={{ marginBottom: 8 }}>Screeners</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
-            {PRIMARY_PRESETS.map(p => {
-              const active = activePreset === p.id
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+            {SCREENER_CATEGORIES.map((category) => {
+              const categoryPresets = category.presetIds
+                .map((id) => PRESETS.find((preset) => preset.id === id))
+                .filter((preset): preset is Preset => preset != null)
+              const showAll = expandedPresetGroups.has(category.id)
+              const visiblePresets = showAll
+                ? categoryPresets
+                : categoryPresets.slice(0, PRESETS_VISIBLE_PER_GROUP)
               return (
-                <button
-                  key={p.id}
-                  onClick={() => selectPreset(p)}
-                  title={p.description}
-                  className={`workspace-chip-button${active ? ' active' : ''}`}
-                  style={{
-                    justifyContent: 'center',
-                    minHeight: 34,
-                    padding: '7px 10px',
-                    borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
-                    color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                  }}
-                >
-                  {p.name}
-                </button>
+                <div key={category.id} className="scanner-preset-group" data-testid={`scanner-preset-group-${category.id}`}>
+                  <div className="scanner-preset-group-label">{category.label}</div>
+                  <div className="scanner-preset-group-list">
+                    {visiblePresets.map((p) => {
+                      const active = activePreset === p.id
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => selectPreset(p)}
+                          title={p.description}
+                          className={`workspace-chip-button${active ? ' active' : ''}`}
+                          style={{
+                            justifyContent: 'center',
+                            minHeight: 34,
+                            padding: '7px 10px',
+                            borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
+                            color: active ? 'var(--accent)' : 'var(--text-secondary)',
+                          }}
+                        >
+                          {p.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {categoryPresets.length > PRESETS_VISIBLE_PER_GROUP && (
+                    <button
+                      type="button"
+                      className="scanner-preset-group-toggle"
+                      onClick={() => setExpandedPresetGroups((current) => togglePresetGroupExpanded(current, category.id))}
+                      data-testid={`scanner-preset-group-toggle-${category.id}`}
+                      aria-expanded={showAll}
+                    >
+                      {showAll ? 'Show less' : 'Show all'}
+                    </button>
+                  )}
+                </div>
               )
             })}
-            {MORE_PRESETS.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowMorePresets(o => !o)}
-                className="workspace-chip-button"
-                style={{ justifyContent: 'center', minHeight: 30, color: 'var(--text-tertiary)' }}
-                data-testid="scanner-more-presets-toggle"
-                aria-expanded={showMorePresets}
-              >
-                {showMorePresets ? 'Hide catalog' : `More screeners (${MORE_PRESETS.length})`}
-              </button>
-            )}
-            {showMorePresets && (
-              <div className="scanner-more-presets-panel" data-testid="scanner-more-presets-panel">
-                <div className="caption" style={{ marginBottom: 8, lineHeight: 1.5 }}>
-                  Additional swing-trader presets. Pick one to load filters, then run scan.
-                </div>
-                <div className="scanner-more-presets-grid">
-                  {MORE_PRESETS.map(p => {
-                    const active = activePreset === p.id
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => selectPreset(p)}
-                        title={p.description}
-                        className={`workspace-chip-button${active ? ' active' : ''}`}
-                        style={{
-                          justifyContent: 'flex-start',
-                          minHeight: 38,
-                          padding: '8px 10px',
-                          borderColor: active ? 'var(--accent)' : 'var(--border-subtle)',
-                          color: active ? 'var(--accent)' : 'var(--text-secondary)',
-                          textAlign: 'left',
-                        }}
-                      >
-                        <span style={{ display: 'grid', gap: 2 }}>
-                          <span>{p.name}</span>
-                          <span className="caption" style={{ color: 'var(--text-tertiary)', fontWeight: 400, lineHeight: 1.4 }}>
-                            {p.description}
-                          </span>
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -1974,14 +2012,14 @@ export default function ScannerPage() {
         <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
         {filterTab === 'technicals' ? (
             <>
-              <Section title="Price and change" open>
+              <FilterSection sectionId="price-change" title="Price and change" activeCount={filterSectionActiveCount('price-change')}>
                 {rangeRow('Price (₹)', 'price_min', 'price_max')}
                 {rangeRow('Change %', 'pct_change_min', 'pct_change_max')}
-              </Section>
-              <Section title="Liquidity">
+              </FilterSection>
+              <FilterSection sectionId="liquidity" title="Liquidity" activeCount={filterSectionActiveCount('liquidity')}>
                 {rangeRow('Vol ratio (× avg)', 'volume_ratio_min', 'volume_ratio_max')}
-              </Section>
-              <Section title="Trend quality" open>
+              </FilterSection>
+              <FilterSection sectionId="trend-quality" title="Trend quality" activeCount={filterSectionActiveCount('trend-quality')}>
                 {segRow('vs EMA 20', 'price_vs_ema20', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 50', 'price_vs_ema50', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
                 {segRow('vs EMA 150', 'price_vs_ema150', [{ value: 'above', label: 'Above' }, { value: 'below', label: 'Below' }])}
@@ -1995,13 +2033,13 @@ export default function ScannerPage() {
                 {toggleRow('EMA 150 above EMA 200', 'ema150_above_ema200')}
                 {toggleRow('All EMAs bullish (20>50>200)', 'all_emas_bullish')}
                 {toggleRow('All SMAs bullish (close>50>150>200)', 'all_smas_bullish')}
-              </Section>
-              <Section title="Relative strength">
+              </FilterSection>
+              <FilterSection sectionId="relative-strength" title="Relative strength" activeCount={filterSectionActiveCount('relative-strength')}>
                 {rangeRow('RSI 14', 'rsi_min', 'rsi_max')}
                 {rangeRow('ADX 14', 'adx_min', 'adx_max')}
                 {segRow('MACD histogram', 'macd_hist_positive', [{ value: 'positive', label: 'Positive' }, { value: 'negative', label: 'Negative' }])}
-              </Section>
-              <Section title="Setup structure">
+              </FilterSection>
+              <FilterSection sectionId="setup-structure" title="Setup structure" activeCount={filterSectionActiveCount('setup-structure')}>
                 {toggleRow('VCP contraction pass', 'vcp_contraction')}
                 {numberRow('VCP minimum pivots', 'vcp_min_pivots', '2')}
                 {numberRow('VCP max depth %', 'vcp_max_depth_pct', '15')}
@@ -2014,42 +2052,42 @@ export default function ScannerPage() {
                   { value: 'inside', label: 'Inside' },
                 ])}
                 {rangeRow('BB Width', 'bb_width_min', 'bb_width_max')}
-              </Section>
-              <Section title="Volatility and risk">
+              </FilterSection>
+              <FilterSection sectionId="volatility-risk" title="Volatility and risk" activeCount={filterSectionActiveCount('volatility-risk')}>
                 {rangeRow('ATR % of price', 'atr_pct_min', 'atr_pct_max')}
-              </Section>
-              <Section title="52-week range">
+              </FilterSection>
+              <FilterSection sectionId="week-range" title="52-week range" activeCount={filterSectionActiveCount('week-range')}>
                 {numRow('Max % below 52W high', 'week_52_high_pct_max', 'e.g. 25')}
                 {numRow('Min % above 52W low', 'w52l_pct_min', 'e.g. 30')}
                 {numRow('RS Score ≥', 'rs_score_min', 'e.g. 70')}
                 {toggleRow('New 52W high today', 'new_52w_high')}
                 {toggleRow('New 52W low today', 'new_52w_low')}
-              </Section>
-              <Section title="Candle patterns">
+              </FilterSection>
+              <FilterSection sectionId="candle-patterns" title="Candle patterns" activeCount={filterSectionActiveCount('candle-patterns')}>
                 {toggleRow('Inside bar', 'is_inside_bar')}
-              </Section>
+              </FilterSection>
             </>
         ) : (
             <>
-              <Section title="Market cap">
+              <FilterSection sectionId="market-cap" title="Market cap" activeCount={filterSectionActiveCount('market-cap')}>
                 {rangeRow('Market cap (₹ Cr)', 'market_cap_min', 'market_cap_max')}
                 <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginTop: -4, marginBottom: 6, lineHeight: 1.5 }}>
                   Large: 20000+  ·  Mid: 5000–20000  ·  Small: &lt;5000
                 </div>
-              </Section>
-              <Section title="Valuation">
+              </FilterSection>
+              <FilterSection sectionId="valuation" title="Valuation" activeCount={filterSectionActiveCount('valuation')}>
                 {rangeRow('P/E ratio', 'pe_min', 'pe_max')}
                 {rangeRow('P/B ratio', 'pb_min', 'pb_max')}
                 {rangeRow('EPS (₹)', 'eps_min', 'eps_max')}
-              </Section>
-              <Section title="Returns and efficiency">
+              </FilterSection>
+              <FilterSection sectionId="returns-efficiency" title="Returns and efficiency" activeCount={filterSectionActiveCount('returns-efficiency')}>
                 {numRow('ROE ≥ %', 'roe_min', 'e.g. 15')}
                 {numRow('ROCE ≥ %', 'roce_min', 'e.g. 15')}
-              </Section>
-              <Section title="Dividends & Debt">
+              </FilterSection>
+              <FilterSection sectionId="dividends-debt" title="Dividends & Debt" activeCount={filterSectionActiveCount('dividends-debt')}>
                 {rangeRow('Dividend yield %', 'dividend_yield_min', 'dividend_yield_max')}
                 {numRow('Debt/Equity ≤', 'debt_to_equity_max', 'e.g. 1')}
-              </Section>
+              </FilterSection>
             </>
         )}
         </div>
@@ -2110,40 +2148,50 @@ export default function ScannerPage() {
                 >
                   Filters
                 </button>
-                <span className="heading-card">
-                  {totalMatches > 0 ? <><Num>{totalMatches.toLocaleString('en-IN')}</Num> matches</> : 'No matches'}
+                <span className="heading-card" data-testid="scanner-match-summary">
+                  {totalMatches > 0 ? (
+                    <>
+                      <Num>{totalMatches.toLocaleString('en-IN')}</Num> matches
+                      {symbolsScanned != null && scanTrust?.universeSize != null ? (
+                        <span className="caption" style={{ marginLeft: 8, color: 'var(--text-secondary)' }}>
+                          from <Num>{symbolsScanned.toLocaleString('en-IN')}</Num> pre-filtered symbols (<Num>{scanTrust.universeSize.toLocaleString('en-IN')}</Num> universe)
+                        </span>
+                      ) : null}
+                    </>
+                  ) : 'No matches'}
                 </span>
-                <button
-                  type="button"
-                  className={`workspace-chip-button${resultsView === 'list' ? ' active' : ''}`}
-                  onClick={() => setResultsView('list')}
-                  data-testid="scanner-view-list"
-                >
-                  List
-                </button>
-                <button
-                  type="button"
-                  className={`workspace-chip-button${resultsView === 'charts' ? ' active' : ''}`}
-                  onClick={() => setResultsView('charts')}
-                  data-testid="scanner-view-charts"
-                >
-                  Charts
-                </button>
-                {resultsView === 'charts' && (
-                  <>
-                    {(['2-up', '4-up'] as const).map(option => (
-                      <button
-                        key={option}
-                        type="button"
-                        className={`workspace-chip-button${chartsLayout === option ? ' active' : ''}`}
-                        onClick={() => setChartsLayout(option)}
-                        data-testid={`scanner-charts-layout-${option}`}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </>
-                )}
+                <div className="scanner-view-tier-primary">
+                  <button
+                    type="button"
+                    className={`workspace-chip-button${resultsView === 'list' ? ' active' : ''}`}
+                    onClick={() => setResultsView('list')}
+                    data-testid="scanner-view-list"
+                  >
+                    List
+                  </button>
+                  <button
+                    type="button"
+                    className={`workspace-chip-button${resultsView === 'charts' ? ' active' : ''}`}
+                    onClick={() => setResultsView('charts')}
+                    data-testid="scanner-view-charts"
+                  >
+                    Charts
+                  </button>
+                  {(['2-up', '4-up'] as const).map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={`workspace-chip-button${resultsView === 'charts' && chartsLayout === option ? ' active' : ''}${resultsView !== 'charts' ? ' scanner-view-tier-muted' : ''}`}
+                      onClick={() => {
+                        setResultsView('charts')
+                        setChartsLayout(option)
+                      }}
+                      data-testid={`scanner-charts-layout-${option}`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
                 <input
                   ref={symbolFilterRef}
                   value={resultSymbolFilter}
@@ -2153,57 +2201,6 @@ export default function ScannerPage() {
                   data-testid="scanner-result-symbol-filter"
                   aria-label="Filter scan results by symbol or company name"
                 />
-                {SCANNER_COLUMN_PRESETS.map(preset => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={`workspace-chip-button${activeColumnPreset === preset.id ? ' active' : ''}`}
-                    onClick={() => applyColumnPreset(preset.id)}
-                    data-testid={`scanner-column-preset-${preset.id}`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={`workspace-chip-button${rowDensity === 'compact' ? ' active' : ''}`}
-                  onClick={() => setRowDensity(density => density === 'compact' ? 'comfortable' : 'compact')}
-                  data-testid="scanner-row-density-toggle"
-                  title="Toggle compact row density"
-                >
-                  {rowDensity === 'compact' ? 'Compact' : 'Comfort'}
-                </button>
-                <button
-                  type="button"
-                  className={`workspace-chip-button${heatmapEnabled ? ' active' : ''}`}
-                  onClick={() => setHeatmapEnabled(enabled => !enabled)}
-                  data-testid="scanner-heatmap-toggle"
-                >
-                  Heatmap
-                </button>
-                <button
-                  type="button"
-                  className="workspace-chip-button"
-                  onClick={() => setColumnsPickerOpen(open => !open)}
-                  data-testid="scanner-columns-toggle"
-                >
-                  Columns
-                </button>
-                {activeCompositionName && (
-                  <span className="workspace-pill" style={{ color: 'var(--accent)' }}>
-                    {activeCompositionName}
-                  </span>
-                )}
-                {activePresetLabel && !activeCompositionName && (
-                  <span className="workspace-pill" style={{ color: 'var(--text-secondary)' }}>
-                    {activePresetLabel}
-                  </span>
-                )}
-                {tradeDate && (
-                  <span className="workspace-pill" style={{ color: 'var(--text-tertiary)' }}>
-                    {tradeDate}
-                  </span>
-                )}
                 {selectedResults.size > 0 && (
                   <span className="workspace-pill" aria-live="polite">
                     <Num>{selectedResults.size}</Num> selected
@@ -2224,6 +2221,73 @@ export default function ScannerPage() {
                       {option.value === 200 ? '200 / page (scan cap)' : `${option.label} / page`}
                     </option>
                   ))}
+                </select>
+              </div>
+              <div className="scanner-toolbar-lens workspace-toolbar-group">
+                <div className="scanner-view-tier-secondary">
+                  {SCANNER_COLUMN_PRESETS.map(preset => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`workspace-chip-button${activeColumnPreset === preset.id ? ' active' : ''}`}
+                      onClick={() => applyColumnPreset(preset.id)}
+                      data-testid={`scanner-column-preset-${preset.id}`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`workspace-chip-button${rowDensity === 'compact' ? ' active' : ''}`}
+                    onClick={() => setRowDensity(density => density === 'compact' ? 'comfortable' : 'compact')}
+                    data-testid="scanner-row-density-toggle"
+                    title="Toggle compact row density"
+                  >
+                    {rowDensity === 'compact' ? 'Compact' : 'Comfort'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`workspace-chip-button${heatmapEnabled ? ' active' : ''}`}
+                    onClick={() => setHeatmapEnabled(enabled => !enabled)}
+                    data-testid="scanner-heatmap-toggle"
+                  >
+                    Heatmap
+                  </button>
+                  <button
+                    type="button"
+                    className={`workspace-chip-button${columnsPickerOpen ? ' active' : ''}`}
+                    onClick={() => setColumnsPickerOpen(open => !open)}
+                    data-testid="scanner-columns-toggle"
+                  >
+                    Columns
+                  </button>
+                </div>
+                <select
+                  className="scanner-view-options-select"
+                  data-testid="scanner-view-options-select"
+                  value=""
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === 'trader' || value === 'vcp' || value === 'fundamentals') {
+                      applyColumnPreset(value)
+                    } else if (value === 'comfort') {
+                      setRowDensity(density => density === 'compact' ? 'comfortable' : 'compact')
+                    } else if (value === 'heatmap') {
+                      setHeatmapEnabled(enabled => !enabled)
+                    } else if (value === 'columns') {
+                      setColumnsPickerOpen(true)
+                    }
+                    e.currentTarget.value = ''
+                  }}
+                  aria-label="View options"
+                >
+                  <option value="" disabled>View options</option>
+                  {SCANNER_COLUMN_PRESETS.map(preset => (
+                    <option key={preset.id} value={preset.id}>{preset.label} lens</option>
+                  ))}
+                  <option value="comfort">{rowDensity === 'compact' ? 'Comfort rows' : 'Compact rows'}</option>
+                  <option value="heatmap">{heatmapEnabled ? 'Hide heatmap' : 'Show heatmap'}</option>
+                  <option value="columns">Columns…</option>
                 </select>
               </div>
               <div className="scanner-toolbar-secondary workspace-toolbar-group">
@@ -2248,16 +2312,15 @@ export default function ScannerPage() {
                     Export CSV
                   </Button>
                 </div>
-                {runHistory.length > 0 && (
-                  <button
-                    type="button"
-                    className={`workspace-chip-button${historyOpen ? ' active' : ''}`}
-                    onClick={() => setHistoryOpen(o => !o)}
-                    data-testid="scanner-history-toggle"
-                  >
-                    History
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`workspace-chip-button${historyOpen ? ' active' : ''}`}
+                  onClick={() => setHistoryOpen(o => !o)}
+                  data-testid="scanner-history-toggle"
+                  title="View past scan results for this preset"
+                >
+                  History
+                </button>
                 {selectedResults.size > 0 && (
                   <>
                     <Button size="sm" variant="ghost" onClick={() => markWorkflow(selectedSymbols(), 'shortlist')}>
@@ -2276,6 +2339,20 @@ export default function ScannerPage() {
                 )}
               </div>
               <div className="scanner-toolbar-tertiary workspace-toolbar-group" data-testid="scanner-data-trust">
+                {(activeCompositionName || (activePresetLabel && !activeCompositionName)) && (
+                  <span
+                    className="workspace-pill"
+                    style={{ color: activeCompositionName ? 'var(--accent)' : 'var(--text-secondary)' }}
+                    data-testid="scanner-active-preset-pill"
+                  >
+                    {activeCompositionName ?? activePresetLabel}
+                  </span>
+                )}
+                {tradeDate && (
+                  <span className="workspace-pill" style={{ color: 'var(--text-tertiary)' }} data-testid="scanner-trade-date-pill">
+                    {tradeDate}
+                  </span>
+                )}
                 {scanTrust && (
                   <span className="workspace-pill scanner-meta-pill" title={scanTrust.message ?? scanTrust.source}>
                     {hasCachedResults ? 'Cached results · ' : ''}Source: {scanTrust.source}{scanTrust.coveragePct != null ? ` · Coverage: ${scanTrust.coveragePct}%` : ''}
@@ -2291,13 +2368,27 @@ export default function ScannerPage() {
                   </span>
                 )}
                 {scanTrust?.universeSize != null && symbolsScanned != null && (
-                  <span className="workspace-pill scanner-meta-pill" data-testid="scanner-coverage-pill">
+                  <span
+                    className="workspace-pill scanner-meta-pill"
+                    data-testid="scanner-coverage-pill"
+                    title={`${symbolsScanned.toLocaleString('en-IN')} symbols passed liquidity/price pre-filters before the scan ran`}
+                  >
                     <Num>{symbolsScanned.toLocaleString('en-IN')}</Num> / <Num>{scanTrust.universeSize.toLocaleString('en-IN')}</Num> symbols
                   </span>
                 )}
                 {incompleteIndicatorCount > 0 && (
                   <span className="workspace-pill" style={{ color: 'var(--warn)' }} data-testid="scanner-incomplete-warning">
                     <Num>{incompleteIndicatorCount}</Num> with incomplete indicator data
+                  </span>
+                )}
+                {fundamentalsMissingCount > 0 && (
+                  <span
+                    className="workspace-pill scanner-meta-pill"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    data-testid="scanner-fundamentals-coverage-pill"
+                    title={`${fundamentalsMissingCount.toLocaleString('en-IN')} result${fundamentalsMissingCount === 1 ? '' : 's'} missing P/E, P/B, ROE, and ROCE`}
+                  >
+                    <Num>{fundamentalsMissingCount}</Num> missing fundamentals
                   </span>
                 )}
                 {loading && results.length > 0 && (
@@ -2329,16 +2420,15 @@ export default function ScannerPage() {
                 >
                   Filters
                 </button>
-                {runHistory.length > 0 && (
-                  <button
-                    type="button"
-                    className={`workspace-chip-button${historyOpen ? ' active' : ''}`}
-                    onClick={() => setHistoryOpen(o => !o)}
-                    data-testid="scanner-history-toggle"
-                  >
-                    History
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={`workspace-chip-button${historyOpen ? ' active' : ''}`}
+                  onClick={() => setHistoryOpen(o => !o)}
+                  data-testid="scanner-history-toggle"
+                  title="View past scan results for this preset"
+                >
+                  History
+                </button>
               </div>
             </div>
           )}
@@ -2388,7 +2478,13 @@ export default function ScannerPage() {
           </div>
         )}
 
-        {historyOpen && runHistory.length > 0 && (
+        {historyOpen && (
+          <div className="scanner-history-panel" data-testid="scanner-history-panel">
+            {runHistory.length === 0 ? (
+              <div className="caption" style={{ padding: '12px 14px', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+                No past scans saved yet. Run a scan to record results.
+              </div>
+            ) : (
           <div
             data-testid="scanner-run-history"
             style={{
@@ -2440,6 +2536,8 @@ export default function ScannerPage() {
                 )
               })}
             </div>
+          </div>
+            )}
           </div>
         )}
 
@@ -2623,6 +2721,8 @@ export default function ScannerPage() {
                         </Td>
                         {visibleColumns.map(col => {
                           const value = formatScannerColumnValue(col.id, r)
+                          const fundamentalMissing = SCANNER_FUNDAMENTAL_COLUMN_IDS.has(col.id)
+                            && (r as unknown as Record<string, unknown>)[col.id] == null
                           const align = col.align ?? 'left'
                           const isPct = col.id === 'pct_change'
                           const tone = isPct && r.pct_change != null
@@ -2657,7 +2757,10 @@ export default function ScannerPage() {
                               ) : col.id === 'rs_score' ? (
                                 <span className="scanner-rs-cell" style={{ color: rsScoreColor(r.rs_score) }}>{value}</span>
                               ) : (
-                                <span style={{ color: isPct ? tone : undefined, fontWeight: isPct ? 600 : undefined, fontSize: isPct ? 12 : undefined }}>
+                                <span
+                                  style={{ color: isPct ? tone : undefined, fontWeight: isPct ? 600 : undefined, fontSize: isPct ? 12 : undefined }}
+                                  title={fundamentalMissing ? FUNDAMENTALS_UNAVAILABLE_TOOLTIP : undefined}
+                                >
                                   {value}
                                 </span>
                               )}

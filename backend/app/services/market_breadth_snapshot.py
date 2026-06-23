@@ -157,7 +157,7 @@ def _enrich_breadth_rows(rows: list[dict]) -> list[dict]:
 
         enriched.append({
             "symbol": row["symbol"],
-            "company_name": universe_row.get("company_name") or row["symbol"],
+            "company_name": universe_row.get("company_name") or None,
             "sector": universe_row.get("sector"),
             "close": close,
             "pct_change": pct_change,

@@ -12,6 +12,7 @@ import { getWatchlistChartRequest } from "@/lib/watchlist-chart-range";
 import { buildMultiChartReviewHref } from "@/lib/multi-chart-review";
 import type { ChartIndicator } from "@/components/charts/types";
 import { Num } from "@/components/ui";
+import { displayCompanyName } from "@/lib/company-display";
 
 const MiniChart = dynamic(() => import("@/components/charts/MiniChart"), { ssr: false });
 
@@ -23,7 +24,7 @@ const SCANNER_MINI_INDICATORS: ChartIndicator[] = [
 
 export type ScannerChartRow = {
   symbol: string;
-  company_name: string;
+  company_name: string | null;
   close: number;
   pct_change: number | null;
   rs_score: number | null;
@@ -162,7 +163,10 @@ export function ScannerChartsPanel({
                     onClick={() => onOpenChart(row)}
                   >
                     <span className="mono">{row.symbol}</span>
-                    <span className="caption scanner-chart-tile-name">{row.company_name}</span>
+                    {(() => {
+                      const label = displayCompanyName(row.symbol, row.company_name);
+                      return label ? <span className="caption scanner-chart-tile-name">{label}</span> : null;
+                    })()}
                   </button>
                 </div>
                 <div className="scanner-chart-tile-actions">

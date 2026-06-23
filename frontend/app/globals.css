@@ -569,6 +569,14 @@ input, textarea, select {
   .scanner-mobile-filters-trigger {
     display: inline-flex;
   }
+
+  .scanner-view-tier-secondary {
+    display: none;
+  }
+
+  .scanner-view-options-select {
+    display: inline-flex;
+  }
 }
 
 .app-topbar-inner {
@@ -825,6 +833,13 @@ input, textarea, select {
   color: var(--text-tertiary);
 }
 
+.scanner-filter-section-active {
+  color: var(--gain);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
 .scanner-filter-section-body {
   padding: 4px 14px 14px;
 }
@@ -856,6 +871,7 @@ input, textarea, select {
 }
 
 .scanner-toolbar-primary,
+.scanner-toolbar-lens,
 .scanner-toolbar-secondary,
 .scanner-toolbar-tertiary {
   display: flex;
@@ -863,6 +879,64 @@ input, textarea, select {
   flex-wrap: wrap;
   gap: 8px;
   padding: 10px 16px;
+}
+
+.scanner-toolbar-lens {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.scanner-view-tier-primary,
+.scanner-view-tier-secondary {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scanner-view-tier-muted {
+  opacity: 0.55;
+}
+
+.scanner-view-options-select {
+  display: none;
+  font-size: 11px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+}
+
+.scanner-preset-group {
+  display: grid;
+  gap: 6px;
+}
+
+.scanner-preset-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.scanner-preset-group-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.scanner-preset-group-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .scanner-toolbar-primary {
@@ -2260,7 +2334,7 @@ input, textarea, select {
 
 .scanner-sector-heatmap-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   gap: 6px;
 }
 

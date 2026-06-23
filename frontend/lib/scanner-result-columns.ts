@@ -1,6 +1,8 @@
+import { displayCompanyName } from "@/lib/company-display";
+
 export type ScannerResultView = {
   symbol: string;
-  company_name: string;
+  company_name: string | null;
   close: number;
   volume: number;
   pct_change?: number | null;
@@ -262,7 +264,7 @@ export function formatScannerColumnValue(id: ScannerColumnId, row: ScannerResult
     case "symbol":
       return row.symbol;
     case "company_name":
-      return row.company_name;
+      return displayCompanyName(row.symbol, row.company_name);
     case "close":
       return fmtNum(row.close, 2);
     case "volume":

@@ -1,4 +1,5 @@
 import type { MarketOverview } from "@/lib/api/types";
+import { displayCompanyName } from "@/lib/company-display";
 
 export type MarketPeriod = "day" | "week" | "month" | "year";
 export type HighsLowsPeriod = "daily" | "weekly";
@@ -170,10 +171,8 @@ export function emaBreadthDeltaTone(current: number, prior: number | undefined):
 }
 
 export function moverCompanyLabel(symbol: string, companyName: string | null | undefined): string | null {
-  const name = companyName?.trim();
-  if (!name) return null;
-  if (name.toUpperCase() === symbol.trim().toUpperCase()) return null;
-  return name;
+  const label = displayCompanyName(symbol, companyName);
+  return label || null;
 }
 
 /** Short label for EMA breadth history rows, e.g. `12th Jun'26`. */
