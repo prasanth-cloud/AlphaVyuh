@@ -1346,6 +1346,197 @@ input, textarea, select {
   gap: 8px;
 }
 
+.watchlist-workflow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.watchlist-workflow-step {
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.watchlist-workflow-step.complete {
+  border-color: rgba(45, 181, 116, 0.28);
+  background: rgba(45, 181, 116, 0.06);
+}
+
+.watchlist-workflow-step.active {
+  border-color: rgba(77, 214, 255, 0.45);
+  background: rgba(77, 214, 255, 0.1);
+  box-shadow: 0 0 0 1px rgba(77, 214, 255, 0.12);
+}
+
+.watchlist-workflow-step-index {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.watchlist-workflow-step-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchlist-structure-card {
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.watchlist-structure-card--gain {
+  border-color: rgba(45, 181, 116, 0.35);
+  background: linear-gradient(135deg, rgba(45, 181, 116, 0.12), rgba(255, 255, 255, 0.02));
+}
+
+.watchlist-structure-card--amber {
+  border-color: rgba(217, 119, 6, 0.35);
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12), rgba(255, 255, 255, 0.02));
+}
+
+.watchlist-structure-card--neutral {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.watchlist-magnitude-bar {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.watchlist-magnitude-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(77, 214, 255, 0.35), var(--accent));
+}
+
+.watchlist-structure-card--gain .watchlist-magnitude-bar span {
+  background: linear-gradient(90deg, rgba(45, 181, 116, 0.45), var(--gain));
+}
+
+.watchlist-structure-card--amber .watchlist-magnitude-bar span {
+  background: linear-gradient(90deg, rgba(217, 119, 6, 0.45), var(--warn));
+}
+
+.watchlist-ohlc-group {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  grid-column: 1 / -1;
+}
+
+.watchlist-ohlc-cell {
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.watchlist-ohlc-cell.highlight {
+  border-color: rgba(77, 214, 255, 0.35);
+  background: rgba(77, 214, 255, 0.08);
+}
+
+.watchlist-level-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.watchlist-level-dot--support {
+  background: var(--gain);
+  box-shadow: 0 0 0 2px rgba(45, 181, 116, 0.2);
+}
+
+.watchlist-level-dot--resistance {
+  background: var(--warn);
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
+}
+
+.watchlist-sticky-next {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 12;
+}
+
+.watchlist-chart-panel-inner {
+  position: relative;
+}
+
+.watchlist-keyboard-hints {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.3;
+  animation: watchlist-hint-fade 0.35s ease-out;
+}
+
+.watchlist-sidebar-vertical-name {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  max-height: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watchlist-sidebar-count-badge,
+.watchlist-sidebar-badge {
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@keyframes watchlist-hint-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 900px) {
+  .watchlist-workflow-step-label {
+    display: none;
+  }
+
+  .watchlist-sticky-next {
+    top: auto;
+    bottom: 12px;
+    right: 12px;
+    position: fixed;
+    z-index: 30;
+    box-shadow: var(--shadow-panel);
+  }
+}
+
+@media (max-width: 720px) {
+  .watchlist-chart-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .watchlist-workspace-grid {
   --watchlist-grid-columns: 252px 360px minmax(0, 1fr);
   --watchlist-grid-columns-collapsed: 48px 360px minmax(0, 1fr);

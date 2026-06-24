@@ -51,6 +51,16 @@ export function decisionJournalLabel(
   return "No linked journal yet";
 }
 
+export function decisionJournalHref(
+  workflow: Pick<WorkflowState, "journal_id" | "symbol"> | null | undefined,
+): string | null {
+  if (workflow?.journal_id) return null;
+  const symbol = workflow?.symbol?.trim().toUpperCase();
+  if (!symbol) return "/journal?tab=queue";
+  const params = new URLSearchParams({ tab: "queue", symbol });
+  return `/journal?${params.toString()}`;
+}
+
 export function scannerCapturedPriceLabel(context: ScannerIdeaContext | null | undefined): string | null {
   const price = formatPrice(context?.captured_price);
   if (!price) return null;
