@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { Badge, EmptyState } from "@/components/ui";
+import { displayCompanyName } from "@/lib/company-display";
+import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry } from "./types";
 import { fmtCcy, fmtDate, getTradeFlowMeta } from "./utils";
@@ -13,6 +15,7 @@ interface TradeTableProps {
   filterStatus: "all" | "open" | "closed";
   onFilterChange: (s: "all" | "open" | "closed") => void;
   symbolFocus: string;
+  dateFocus: string;
   reviewFocus: "all" | "needs-review" | "reviewed";
   onClearFocus: () => void;
   selectedEntry: JournalEntry | null;
@@ -43,6 +46,7 @@ export function TradeTable({
   filterStatus,
   onFilterChange,
   symbolFocus,
+  dateFocus,
   reviewFocus,
   onClearFocus,
   selectedEntry,
@@ -72,11 +76,16 @@ export function TradeTable({
             </button>
           ))}
         </div>
-        {(symbolFocus || reviewFocus !== "all") && (
+        {(symbolFocus || dateFocus || reviewFocus !== "all") && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             {symbolFocus && (
               <span className="mono" style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, background: "var(--accent-subtle)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
                 {symbolFocus}
+              </span>
+            )}
+            {dateFocus && (
+              <span style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, background: "var(--surface-2)", border: "1px solid var(--border-subtle)", color: "var(--text-secondary)" }}>
+                Exit {dateFocus}
               </span>
             )}
             {reviewFocus !== "all" && (
@@ -176,7 +185,11 @@ export function TradeTable({
                 >
                   <td style={{ padding: "8px 10px" }}>
                     <span className="mono" style={{ fontWeight: 600, color: "var(--text-primary)" }}>{e.symbol}</span>
-                    {e.company_name && <div className="caption" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.company_name}</div>}
+                    {displayCompanyName(e.symbol, e.company_name) ? (
+                      <div className="caption" style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {displayCompanyName(e.symbol, e.company_name)}
+                      </div>
+                    ) : null}
                     <div className="journal-mobile-trade-card">
                       <div className="journal-mobile-trade-grid">
                         <div>
@@ -225,7 +238,7 @@ export function TradeTable({
                     </Badge>
                   </td>
                   <td style={{ padding: "8px 10px" }}>
-                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{e.setup_type || "—"}</span>
+                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{formatSetupTagDisplay(e.setup_type)}</span>
                   </td>
                   <td className="journal-table-secondary" style={{ padding: "8px 10px", color: "var(--text-secondary)" }}>
                     <div>{fmtDate(e.entry_date)}</div>

@@ -1,7 +1,9 @@
 "use client";
 
 import { Card } from "@/components/ui";
-import type { JournalAnalytics as JournalAnalyticsType } from "./types";
+import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
+import type { JournalAnalytics as JournalAnalyticsType, JournalEntry } from "./types";
+import { JournalCalendarHeatmap } from "./JournalCalendarHeatmap";
 
 function formatCurrency(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -142,9 +144,16 @@ function DrawdownChart({ data }: { data: { date: string; drawdown: number; drawd
 interface JournalAnalyticsProps {
   analytics: JournalAnalyticsType | null;
   analyticsError?: string | null;
+  entries?: JournalEntry[];
+  onCalendarDateSelect?: (date: string) => void;
 }
 
-export function JournalAnalytics({ analytics, analyticsError }: JournalAnalyticsProps) {
+export function JournalAnalytics({
+  analytics,
+  analyticsError,
+  entries = [],
+  onCalendarDateSelect,
+}: JournalAnalyticsProps) {
   if (analyticsError) {
     return (
       <Card padding="lg" data-testid="journal-analytics-unavailable">
@@ -220,7 +229,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
               <div className="journal-review-grid">
                 <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "rgba(45,181,116,0.08)", border: "1px solid rgba(45,181,116,0.18)" }}>
                   <div className="label" style={{ color: "var(--gain)", marginBottom: 6 }}>Best setup</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{summary.bestSetup?.setup ?? "Not enough closed trades"}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>{summary.bestSetup ? formatSetupTagDisplay(summary.bestSetup.setup) : "Not enough closed trades"}</div>
                   <div className="caption" style={{ marginTop: 5 }}>
                     {summary.bestSetup
                       ? `${summary.bestSetup.trades} trades · ${formatPct(summary.bestSetup.win_rate)} win rate · ${formatCurrency(summary.bestSetup.total_pnl)}`
@@ -261,19 +270,40 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
             <div>
               <h2 className="heading-card" style={{ marginBottom: 12 }}>Monthly P&amp;L</h2>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {analytics!.monthly_pnl.map(m => {
-                  const pos = m.pnl >= 0;
-                  return (
-                    <div key={m.month} style={{ flex: "1 1 80px", minWidth: 80, borderRadius: "var(--radius-md)", padding: "10px 12px", textAlign: "center", background: pos ? "var(--gain-subtle)" : "var(--loss-subtle)" }}>
-                      <div className="mono" style={{ fontSize: 11, fontWeight: 600, color: pos ? "var(--gain)" : "var(--loss)" }}>
-                        {m.pnl >= 0 ? "+" : ""}₹{Math.abs(m.pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                {(() => {
+                  const months = analytics!.monthly_pnl;
+                  const bestAbs = Math.max(...months.map((m) => Math.abs(m.pnl)), 1);
+                  return months.map(m => {
+                    const pos = m.pnl >= 0;
+                    const barWidth = `${Math.max(8, (Math.abs(m.pnl) / bestAbs) * 100).toFixed(1)}%`;
+                    return (
+                      <div key={m.month} style={{ flex: "1 1 80px", minWidth: 80, borderRadius: "var(--radius-md)", padding: "10px 12px", textAlign: "center", background: pos ? "var(--gain-subtle)" : "var(--loss-subtle)", position: "relative", overflow: "hidden" }}>
+                        <div
+                          aria-hidden
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            bottom: 0,
+                            top: 0,
+                            width: barWidth,
+                            background: pos ? "rgba(45,181,116,0.18)" : "rgba(229,56,59,0.18)",
+                            pointerEvents: "none",
+                          }}
+                        />
+                        <div className="mono" style={{ position: "relative", fontSize: 11, fontWeight: 600, color: pos ? "var(--gain)" : "var(--loss)" }}>
+                          {m.pnl >= 0 ? "+" : ""}₹{Math.abs(m.pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        </div>
+                        <div className="caption" style={{ position: "relative", marginTop: 2 }}>{m.month}</div>
                       </div>
-                      <div className="caption" style={{ marginTop: 2 }}>{m.month}</div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </div>
+          )}
+
+          {entries.length > 0 && onCalendarDateSelect && (
+            <JournalCalendarHeatmap entries={entries} onSelectDate={onCalendarDateSelect} />
           )}
 
           {/* Setup breakdown */}
@@ -294,7 +324,7 @@ export function JournalAnalytics({ analytics, analyticsError }: JournalAnalytics
                       const pos = s.total_pnl >= 0;
                       return (
                         <tr key={s.setup} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-primary)", fontWeight: 500 }}>{s.setup}</td>
+                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-primary)", fontWeight: 500 }}>{formatSetupTagDisplay(s.setup)}</td>
                           <td style={{ padding: "10px 16px 10px 0", color: "var(--text-secondary)" }}>{s.trades}</td>
                           <td style={{ padding: "10px 16px 10px 0" }}>
                             <span className="mono" style={{ fontWeight: 600, color: s.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{s.win_rate}%</span>

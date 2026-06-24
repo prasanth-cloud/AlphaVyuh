@@ -13,6 +13,7 @@ import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, 
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
+import { normalizeSetupTagForSave } from "@/lib/setup-tag-display";
 import { TradeTable } from "./components/TradeTable";
 import { TradePanel } from "./components/TradePanel";
 import { JournalAnalytics as JournalAnalyticsTab } from "./components/JournalAnalytics";
@@ -83,6 +84,8 @@ export default function JournalPage() {
   });
   const [closeSetupType, setCloseSetupType] = useState("");
   const [symbolFocus, setSymbolFocus] = useState("");
+  const [dateFocus, setDateFocus] = useState("");
+  const [processNoteExpanded, setProcessNoteExpanded] = useState(false);
   const [reviewFocus, setReviewFocus] = useState<"all" | "needs-review" | "reviewed">("all");
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
@@ -226,6 +229,7 @@ export default function JournalPage() {
   const visibleEntries = useMemo(() => (
     entries.filter((entry) => {
       if (symbolFocus && entry.symbol !== symbolFocus) return false;
+      if (dateFocus && entry.exit_date?.slice(0, 10) !== dateFocus) return false;
       if (filterStatus !== "all" && entry.status !== filterStatus) return false;
       if (reviewFocus === "needs-review") {
         return entry.status === "closed" && !entry.lessons?.trim();
@@ -235,7 +239,7 @@ export default function JournalPage() {
       }
       return true;
     })
-  ), [entries, filterStatus, reviewFocus, symbolFocus]);
+  ), [dateFocus, entries, filterStatus, reviewFocus, symbolFocus]);
   const journalQueue = useMemo(() => {
     const closed = entries.filter((entry) => entry.status === "closed");
     const needsReview = closed.filter((entry) => !entry.lessons?.trim()).length;
@@ -268,7 +272,11 @@ export default function JournalPage() {
     }
     setSaving(true);
     try {
-      await createJournalEntry({ ...addForm, symbol: selectedSymbol } as CreateJournalEntry);
+      await createJournalEntry({
+        ...addForm,
+        symbol: selectedSymbol,
+        setup_type: normalizeSetupTagForSave(addForm.setup_type) ?? undefined,
+      } as CreateJournalEntry);
       trackEvent("journal_entry_created", { source: "manual", symbol: selectedSymbol, trade_type: addForm.trade_type ?? "unknown" });
       setAddForm({ trade_type: "long", entry_date: new Date().toISOString().split("T")[0] });
       setSelectedSymbol(""); setSymbolQ(""); setPanelMode(null);
@@ -283,7 +291,10 @@ export default function JournalPage() {
     }
     setSaving(true);
     try {
-      await updateJournalEntry(selectedEntry.id, { ...closeForm, ...(closeSetupType ? { setup_type: closeSetupType } : {}) } as UpdateJournalEntry);
+      await updateJournalEntry(selectedEntry.id, {
+        ...closeForm,
+        ...(closeSetupType ? { setup_type: normalizeSetupTagForSave(closeSetupType) ?? undefined } : {}),
+      } as UpdateJournalEntry);
       setPanelMode(null); setSelectedEntry(null);
       showToast("Trade closed - review generated"); load();
     } catch { showToast(JOURNAL_TRADE_CLOSE_FAILED_MESSAGE); }
@@ -367,72 +378,12 @@ export default function JournalPage() {
     finally { setAiLoading(false); }
   };
 
-  const focusNeedsReview = () => {
-    setTab("queue");
+  const handleCalendarDateSelect = (date: string) => {
+    setDateFocus(date);
+    setTab("trades");
     setFilterStatus("closed");
-    setReviewFocus("needs-review");
-  };
-
-  const focusReviewedTrades = () => {
-    setTab("queue");
-    setFilterStatus("closed");
-    setReviewFocus("reviewed");
-  };
-
-  const openReviewAction = () => {
-    if (journalLoadError) {
-      void load();
-      refreshBrokerStatus();
-      return;
-    }
-    if (reviewStage.status === "empty") {
-      openAddPanel();
-      return;
-    }
-    if (reviewStage.status === "build-sample") {
-      setTab("queue");
-      setReviewFocus("all");
-      setFilterStatus("all");
-      if (journalQueue.open > 0) {
-        const firstOpen = entries.find((entry) => entry.status === "open");
-        if (firstOpen) openClosePanel(firstOpen);
-      } else {
-        openAddPanel();
-      }
-      return;
-    }
-    if (reviewStage.status === "needs-review") {
-      focusNeedsReview();
-      const next = entries.find((entry) => entry.status === "closed" && !entry.lessons?.trim());
-      if (next) {
-        setSelectedEntry(next);
-        setPanelMode("view");
-      }
-      return;
-    }
-    setTab("ai");
-  };
-
-  const openSecondaryReviewAction = () => {
-    if (reviewStage.status === "unavailable") {
-      window.location.href = "/data";
-      return;
-    }
-    if (reviewStage.status === "empty") {
-      void handleImportZerodha();
-      return;
-    }
-    if (reviewStage.status === "needs-review") {
-      focusReviewedTrades();
-      return;
-    }
-    if (reviewStage.status === "ready") {
-      setTab("analytics");
-      return;
-    }
-    setTab("queue");
     setReviewFocus("all");
-    setFilterStatus("all");
+    setSymbolFocus("");
   };
 
   return (
@@ -558,24 +509,10 @@ export default function JournalPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={openReviewAction}
+              onClick={() => setTab("analytics")}
               className="workspace-chip-button"
-              style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)" }}
             >
-              {reviewStage.primaryAction}
-            </button>
-            <button
-              type="button"
-              onClick={openSecondaryReviewAction}
-              disabled={reviewStage.status === "empty" && !brokerCanImport}
-              className="workspace-chip-button"
-              style={{
-                opacity: reviewStage.status === "empty" && !brokerCanImport ? 0.55 : 1,
-                cursor: reviewStage.status === "empty" && !brokerCanImport ? "not-allowed" : "pointer",
-              }}
-              title={reviewStage.status === "empty" && !brokerCanImport ? "Connect a read-only broker import before importing trades." : undefined}
-            >
-              {reviewStage.secondaryAction}
+              Open Analytics
             </button>
             <Link href="/upload" className="workspace-chip-button" data-testid="journal-upload-link" style={{ textDecoration: "none" }}>
               Upload report
@@ -612,7 +549,7 @@ export default function JournalPage() {
               {decisionMemory.nextAction}
             </div>
             <div className="mt-2 text-[12px]" style={{ color: "var(--text-secondary)" }}>
-              <Num>{decisionMemory.decisionContextCount}</Num>/<Num>{decisionMemory.closedTrades}</Num> closed trades include scanner, chart, watchlist, or broker context.
+              <Num>{decisionMemory.decisionContextCount}</Num> of your <Num>{decisionMemory.closedTrades}</Num> trades have full context attached (source, chart, or broker link).
             </div>
           </div>
           <div
@@ -621,9 +558,22 @@ export default function JournalPage() {
             style={{ background: "rgba(244,247,251,0.04)", border: "1px solid var(--border-subtle)" }}
           >
             <div className="text-[11px] label" style={{ color: "var(--text-tertiary)" }}>What changed in my process</div>
-            <div className="mt-1 text-[12px] leading-relaxed" style={{ color: "var(--text-primary)" }}>
+            <div
+              className={`mt-1 text-[12px] leading-relaxed journal-process-note${processNoteExpanded ? " journal-process-note-expanded" : ""}`}
+              style={{ color: "var(--text-primary)" }}
+            >
               {reviewStage.processChange}
             </div>
+            {reviewStage.processChange.length > 120 && (
+              <button
+                type="button"
+                className="journal-process-note-toggle"
+                onClick={() => setProcessNoteExpanded((expanded) => !expanded)}
+                aria-expanded={processNoteExpanded}
+              >
+                {processNoteExpanded ? "Show less" : "Read more →"}
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             {[
@@ -675,7 +625,14 @@ export default function JournalPage() {
       </div>
 
       {/* ── Analytics tab ── */}
-      {tab === "analytics" && <JournalAnalyticsTab analytics={analytics} analyticsError={analyticsError} />}
+      {tab === "analytics" && (
+        <JournalAnalyticsTab
+          analytics={analytics}
+          analyticsError={analyticsError}
+          entries={entries}
+          onCalendarDateSelect={handleCalendarDateSelect}
+        />
+      )}
 
       {/* ── Trade review tab ── */}
       {tab === "ai" && (
@@ -703,9 +660,11 @@ export default function JournalPage() {
             filterStatus={filterStatus}
             onFilterChange={setFilterStatus}
             symbolFocus={symbolFocus}
+            dateFocus={dateFocus}
             reviewFocus={reviewFocus}
             onClearFocus={() => {
               setSymbolFocus("");
+              setDateFocus("");
               setReviewFocus("all");
             }}
             selectedEntry={selectedEntry}
