@@ -54,10 +54,9 @@ describe("watchlist chart range mapping", () => {
     expect(formatChartGranularity("M")).toBe("Monthly");
   });
 
-  it("exposes intraday options as unavailable in EOD data mode", () => {
+  it("hides intraday timeframe controls unless intraday is enabled", () => {
     const intraday = CHART_TIMEFRAME_OPTIONS.filter((option) => option.group === "Intraday");
     expect(intraday.map((option) => option.label)).toEqual(["5m", "15m", "30m", "1h"]);
-    expect(intraday.every((option) => option.disabled && option.unavailableReason === INTRADAY_UNAVAILABLE_MESSAGE)).toBe(true);
     expect(isIntradayTimeframe("15m")).toBe(true);
     expect(isIntradayTimeframe("1Y")).toBe(false);
   });

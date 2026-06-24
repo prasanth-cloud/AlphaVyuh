@@ -194,6 +194,8 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator("body")).not.toContainText("WORKSPACE");
     await expect(page.locator(".watchlist-chart-header")).toBeVisible();
     await expect(page.locator(".workspace-card-title").first().locator("span").first()).toBeVisible();
+    const startPlanning = page.getByRole("button", { name: "Start planning" });
+    if (await startPlanning.count() > 0) await startPlanning.click();
     await expect(page.getByTestId("decision-desk-nudges")).toBeVisible();
     const firstDraftAction = page.getByRole("button", { name: /Draft order for/i }).first();
     await expect(firstDraftAction).toBeVisible();

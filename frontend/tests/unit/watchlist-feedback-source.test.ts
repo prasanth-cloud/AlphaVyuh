@@ -42,11 +42,8 @@ describe("watchlist feedback copy", () => {
   it("keeps the watchlist setup flow scanner, chart, decision, and journal first", () => {
     expect(source).toContain("watchlist-workflow-strip");
     expect(source).toContain("Queue workflow");
-    expect(source).toContain("Scanner ideas");
-    expect(source).toContain("Chart review");
-    expect(source).toContain("Decision desk");
-    expect(source).toContain("Journal draft only");
-    expect(source).toContain("no live execution");
+    expect(source).toContain("WATCHLIST_QUEUE_STEPS");
+    expect(source).toContain("watchlist-workflow-step");
     expect(source).toContain("Add starter queue");
     expect(source).toContain('router.push("/scanner")');
   });

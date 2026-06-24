@@ -17,8 +17,21 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag, List, Eye, Filter } from "lucide-react";
+import { PencilLine, Plus, Trash2, GripVertical, X, Search, Pin, PinOff, Tag, List, Eye, Filter, Settings } from "lucide-react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
+import { displayCompanyName } from "@/lib/company-display";
+import {
+  WATCHLIST_QUEUE_STEPS,
+  bumpKeyboardHintSession,
+  getItemSignals,
+  readDecisionDeskExpandedMap,
+  readKeyboardHintSessions,
+  resolveWatchlistQueueStep,
+  signalToneColor,
+  writeDecisionDeskExpandedMap,
+} from "@/lib/watchlist-ux";
+import { decisionJournalHref } from "@/lib/decision-record";
 import type { Watchlist, WatchlistItem, CandleBar, JournalEntry, Fundamentals, ScanResult } from "@/lib/api";
 import {
   getWatchlists,
@@ -211,27 +224,73 @@ function WatchlistAvatar({ name, active = false, size = 26 }: { name: string | n
   );
 }
 
+function WatchlistSignalPills({ item, dense }: { item: WatchlistItem; dense?: boolean }) {
+  const signals = getItemSignals(item);
+  const primary = signals[0];
+  const extra = signals.length - 1;
+  if (!primary) return null;
+  const color = signalToneColor(primary.tone);
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+      <span
+        title={primary.tooltip}
+        className="watchlist-signal-pill"
+        style={{
+          fontSize: dense ? 9 : 10,
+          fontWeight: 700,
+          letterSpacing: "0.03em",
+          color: color,
+          padding: dense ? "2px 7px" : "3px 8px",
+          borderRadius: 999,
+          background: primary.tone === "gain" ? "rgba(45,181,116,0.1)" : "rgba(217,119,6,0.1)",
+          border: `1px solid ${color}`,
+          maxWidth: dense ? 110 : 140,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {primary.label}
+      </span>
+      {extra > 0 && (
+        <span
+          title={signals.slice(1).map((signal) => signal.label).join(" · ")}
+          className="watchlist-signal-pill"
+          style={{
+            fontSize: 9,
+            fontWeight: 700,
+            color: "var(--warn)",
+            padding: "2px 6px",
+            borderRadius: 999,
+            background: "rgba(217,119,6,0.08)",
+            border: "1px solid rgba(217,119,6,0.35)",
+          }}
+        >
+          +{extra} more
+        </span>
+      )}
+    </span>
+  );
+}
+
 function WatchlistWorkflowStrip({
+  activeStep,
   hasItems,
   adding,
   onAddStarter,
   onOpenScanner,
 }: {
+  activeStep: number;
   hasItems: boolean;
   adding: boolean;
   onAddStarter: () => void;
   onOpenScanner: () => void;
 }) {
-  const steps = [
-    { label: "Scanner ideas", value: "source" },
-    { label: "Chart review", value: "price + volume" },
-    { label: "Decision desk", value: "entry / stop / target" },
-    { label: "Journal draft only", value: "no live execution" },
-  ];
-
   return (
     <div
       data-testid="watchlist-workflow-strip"
+      className="watchlist-workflow-strip"
       style={{
         padding: "10px 18px",
         borderBottom: "1px solid rgba(255,255,255,0.06)",
@@ -245,31 +304,22 @@ function WatchlistWorkflowStrip({
     >
       <div style={{ minWidth: 0 }}>
         <div className="label" style={{ marginBottom: 7 }}>Queue workflow</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
-          {steps.map((step, index) => (
-            <div
-              key={step.label}
-              style={{
-                minWidth: 0,
-                padding: "7px 8px",
-                borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.07)",
-                background: index === 3 ? "rgba(217,119,6,0.08)" : "rgba(255,255,255,0.025)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                <span className="mono" style={{ fontSize: 10, color: index === 3 ? "var(--warn)" : "var(--accent)", fontWeight: 800 }}>
-                  {index + 1}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {step.label}
-                </span>
+        <div className="watchlist-workflow-steps">
+          {WATCHLIST_QUEUE_STEPS.map((step, index) => {
+            const isActive = index === activeStep;
+            const isComplete = index < activeStep;
+            return (
+              <div
+                key={step.key}
+                title={step.tooltip}
+                className={`watchlist-workflow-step${isActive ? " active" : ""}${isComplete ? " complete" : ""}`}
+                data-testid={`watchlist-workflow-step-${step.key}`}
+              >
+                <span className="watchlist-workflow-step-index mono">{index + 1}</span>
+                <span className="watchlist-workflow-step-label">{step.label}</span>
               </div>
-              <div className="caption" style={{ marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {step.value}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
@@ -314,8 +364,7 @@ function SortableRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.symbol });
   const priceTone = (item.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)";
-  const setup = getSetupSignal(item);
-  const setupColor = setupToneColor(setup.tone);
+  const companyLabel = displayCompanyName(item.symbol, item.company_name);
 
   return (
     <tr
@@ -370,26 +419,11 @@ function SortableRow({
               {item.sector}
             </span>
           )}
-          <span
-            title={`Metric match ${setup.score}`}
-            style={{
-              fontSize: 9,
-              fontWeight: 800,
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              color: setupColor,
-              padding: "2px 6px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.035)",
-              border: `1px solid ${setupColor}`,
-            }}
-          >
-            {setup.label}
-          </span>
+          <WatchlistSignalPills item={item} dense={dense} />
         </div>
-        {item.company_name && (
+        {companyLabel && (
           <div className="caption" style={{ maxWidth: dense ? 160 : 190, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: dense ? 0 : 2, fontSize: dense ? 10 : 11 }}>
-            {item.company_name}
+            {companyLabel}
           </div>
         )}
         {(!dense && reviewState) && (
@@ -481,6 +515,8 @@ function DecisionDesk({
   plan,
   item,
   reviewState,
+  expanded,
+  onExpandedChange,
   onPlanChange,
   onToast,
   onDraftOrder,
@@ -490,12 +526,16 @@ function DecisionDesk({
   plan: WorkflowState | null;
   item: WatchlistItem | null;
   reviewState: DecisionRecordReviewState;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   onPlanChange: (plan: WorkflowState) => void;
   onToast: (msg: string) => void;
   onDraftOrder: (symbol: string) => void;
 }) {
   const status = workflowPlanStatus(plan);
   const draft = plan ?? { symbol, watchlist_id: watchlistId, source: "watchlist", lifecycle: "watch", timeframe: "D", tags: [] };
+  const journalHref = decisionJournalHref(draft as WorkflowState);
+  const hasTradePlan = Boolean(draft.entry && draft.stop && draft.target);
   const requiredFields = [
     { key: "entry", label: "Entry", complete: Boolean(draft.entry && draft.entry > 0) },
     { key: "stop", label: "Stop", complete: Boolean(draft.stop && draft.stop > 0) },
@@ -562,20 +602,41 @@ function DecisionDesk({
 
   return (
     <section style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "12px 14px", background: "rgba(255,255,255,0.02)", flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: expanded ? 10 : 0 }}>
         <div>
           <div className="label" style={{ marginBottom: 3 }}>Decision desk</div>
-        <div className="caption">{status.next}</div>
+          <div className="caption">
+            Status: {decisionLifecycleLabel(draft as WorkflowState)}
+            {!expanded && status.next ? ` · ${status.next}` : ""}
+          </div>
         </div>
         <div className="workspace-pill-row" style={{ marginTop: 0 }}>
-          <button className={`workspace-chip-button${status.valid ? " active" : ""}`} disabled={!status.valid} onClick={markReady} style={{ opacity: status.valid ? 1 : 0.45 }}>
-            Ready
-          </button>
-          <button className="workspace-chip-button" disabled={!status.valid} onClick={() => status.valid ? onDraftOrder(symbol) : onToast(status.next)} style={{ opacity: status.valid ? 1 : 0.45 }}>
-            Draft order
-          </button>
+          {!expanded ? (
+            <button className="workspace-chip-button active" onClick={() => onExpandedChange(true)}>
+              Start planning
+            </button>
+          ) : (
+            <>
+              <button className={`workspace-chip-button${status.valid ? " active" : ""}`} disabled={!status.valid} onClick={markReady} style={{ opacity: status.valid ? 1 : 0.45 }}>
+                Ready
+              </button>
+              <button
+                className="workspace-chip-button"
+                disabled={!hasTradePlan}
+                onClick={() => hasTradePlan ? onDraftOrder(symbol) : onToast("Complete entry, stop, and target first.")}
+                style={{ opacity: hasTradePlan ? 1 : 0.45 }}
+              >
+                Draft order
+              </button>
+              <button className="workspace-chip-button" onClick={() => onExpandedChange(false)}>
+                Collapse
+              </button>
+            </>
+          )}
         </div>
       </div>
+      {!expanded ? null : (
+        <>
       <div className="decision-desk-progress" style={{ marginBottom: 10 }}>
         {requiredFields.map((field) => (
           <span key={field.key} className={`decision-desk-chip${field.complete ? " complete" : ""}`}>
@@ -626,9 +687,15 @@ function DecisionDesk({
           {decisionRows.map((row) => (
             <div key={`${row.label}-${row.value}`} style={{ minWidth: 0 }}>
               <div className="caption" style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{row.label}</div>
-              <div style={{ fontSize: 12, lineHeight: 1.35, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.value}>
-                {row.value}
-              </div>
+              {row.label === "Journal" && journalHref && row.value === "No linked journal yet" ? (
+                <Link href={journalHref} className="workspace-chip-button" style={{ marginTop: 4, fontSize: 11, textDecoration: "none", display: "inline-flex" }}>
+                  Start journal draft
+                </Link>
+              ) : (
+                <div style={{ fontSize: 12, lineHeight: 1.35, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.value}>
+                  {row.value}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -695,8 +762,13 @@ function DecisionDesk({
         <input type="number" placeholder="Target" value={draft.target ?? ""} onChange={(e) => patch({ target: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
         <input type="number" placeholder="Qty" value={draft.position_size ?? ""} onChange={(e) => patch({ position_size: e.target.value ? Number(e.target.value) : null })} style={inputStyle} />
       </div>
-      <div className="decision-desk-secondary-grid" style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 110px", gap: 8, marginTop: 8 }}>
-        <input placeholder="TF" value={draft.timeframe ?? "D"} onChange={(e) => patch({ timeframe: e.target.value.toUpperCase() || "D" })} style={inputStyle} />
+      <div className="label" style={{ marginTop: 10, marginBottom: 6 }}>Context</div>
+      <div className="decision-desk-secondary-grid" style={{ display: "grid", gridTemplateColumns: "90px 1fr 1fr 110px", gap: 8 }}>
+        <select value={draft.timeframe ?? "D"} onChange={(e) => patch({ timeframe: e.target.value })} style={inputStyle}>
+          <option value="D">D</option>
+          <option value="W">W</option>
+          <option value="M">M</option>
+        </select>
         <input placeholder="Thesis" value={draft.thesis ?? ""} onChange={(e) => patch({ thesis: e.target.value || null })} style={inputStyle} />
         <input placeholder="Invalidation rule" value={draft.invalidation_rule ?? ""} onChange={(e) => patch({ invalidation_rule: e.target.value || null })} style={inputStyle} />
         <select value={draft.confidence ?? ""} onChange={(e) => patch({ confidence: e.target.value ? Number(e.target.value) : null })} style={inputStyle}>
@@ -710,6 +782,8 @@ function DecisionDesk({
         onChange={(e) => patch({ notes: e.target.value || null })}
         style={{ ...inputStyle, marginTop: 8, minHeight: 48, resize: "vertical" }}
       />
+        </>
+      )}
     </section>
   );
 }
@@ -718,6 +792,7 @@ function DecisionDesk({
 
 function ChartPanel({
   symbol,
+  companyName,
   latestClose,
   watchlistName,
   onOpenChart,
@@ -727,8 +802,12 @@ function ChartPanel({
   planValid,
   planNextAction,
   orderDraftNonce,
+  chartFocused,
+  onChartFocus,
+  showKeyboardHints,
 }: {
   symbol: string;
+  companyName?: string | null;
   latestClose?: number | null;
   watchlistName?: string | null;
   onOpenChart: (symbol: string) => void;
@@ -738,6 +817,9 @@ function ChartPanel({
   planValid: boolean;
   planNextAction: string;
   orderDraftNonce?: number;
+  chartFocused: boolean;
+  onChartFocus: () => void;
+  showKeyboardHints: boolean;
 }) {
   const orderIntent = useOrderIntentKey();
   const [candles, setCandles] = useState<CandleBar[]>([]);
@@ -993,12 +1075,31 @@ function ChartPanel({
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+    <div
+      className="watchlist-chart-panel-inner"
+      style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}
+      tabIndex={0}
+      onFocus={onChartFocus}
+      data-testid="watchlist-chart-focus-surface"
+    >
+      <Link
+        href={`/charts/${encodeURIComponent(symbol)}`}
+        className="watchlist-sticky-next workspace-chip-button active"
+        data-testid="watchlist-sticky-next"
+        style={{ textDecoration: "none" }}
+      >
+        Next: Plan on chart →
+      </Link>
       {/* Topbar */}
       <div className="workspace-card-header watchlist-chart-header" style={{ background: "rgba(255,255,255,0.02)", paddingBottom: 8, flexShrink: 0 }}>
         <div className="watchlist-chart-title">
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
             <span className="mono" style={{ fontSize: 16, fontWeight: 700 }}>{symbol}</span>
+            {displayCompanyName(symbol, companyName) && (
+              <span className="caption" style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {displayCompanyName(symbol, companyName)}
+              </span>
+            )}
             <span className="caption">{referenceClose != null ? `Spot ${referenceClose.toFixed(2)}` : "Spot pending"}</span>
             {previewChange != null && (
               <span className="mono" style={{ fontSize: 12, fontWeight: 700, color: previewChange >= 0 ? "var(--gain)" : "var(--loss)" }}>
@@ -1029,12 +1130,21 @@ function ChartPanel({
           )}
         </div>
         <div className="watchlist-chart-controls">
-          <button onClick={() => onStepSymbol("prev")} className="workspace-chip-button">
-            ← Prev
-          </button>
-          <button onClick={() => onStepSymbol("next")} className="workspace-chip-button">
-            Next →
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button onClick={() => onStepSymbol("prev")} className="workspace-chip-button">
+                ← Prev
+              </button>
+              <button onClick={() => onStepSymbol("next")} className="workspace-chip-button">
+                Next →
+              </button>
+            </div>
+            {showKeyboardHints && chartFocused && (
+              <div className="watchlist-keyboard-hints caption" data-testid="watchlist-keyboard-hints">
+                ←/→ or J/K · Space for next
+              </div>
+            )}
+          </div>
           <button
             onClick={() => onOpenChart(symbol)}
             className="workspace-chip-button active"
@@ -1086,6 +1196,7 @@ function ChartPanel({
             value={tf}
             onChange={setTf}
             onUnavailable={setChartTimeframeMessage}
+            intradayEnabled={liveQuotePollingEnabled}
           />
         </div>
       </div>
@@ -1099,12 +1210,29 @@ function ChartPanel({
       {chartStats && (
         <div className="watchlist-chart-stats" style={{ padding: "10px 14px 2px", flexShrink: 0 }}>
           {[
-            { label: "Structure", value: chartStats.trend, tone: chartStats.trend === "Uptrend" ? "var(--gain)" : chartStats.trend === "Downtrend" ? "var(--loss)" : "var(--text-secondary)" },
-            { label: `${tf} move`, value: chartStats.change != null ? `${chartStats.change >= 0 ? "+" : ""}${chartStats.change.toFixed(2)}%` : "-", tone: (chartStats.change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" },
+            {
+              label: "Structure",
+              value: chartStats.trend,
+              tone: chartStats.trend === "Uptrend" ? "gain" : chartStats.trend === "Downtrend" ? "amber" : "neutral",
+              magnitude: chartStats.trend === "Uptrend" ? 78 : chartStats.trend === "Downtrend" ? 42 : 55,
+            },
+            {
+              label: `${tf} move`,
+              value: chartStats.change != null ? `${chartStats.change >= 0 ? "+" : ""}${chartStats.change.toFixed(2)}%` : "-",
+              tone: (chartStats.change ?? 0) >= 0 ? "gain" : "amber",
+              magnitude: Math.min(100, Math.abs(chartStats.change ?? 0) * 12),
+            },
           ].map((item) => (
-            <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div
+              key={item.label}
+              className={`watchlist-structure-card watchlist-structure-card--${item.tone}`}
+              style={{ minWidth: 0 }}
+            >
               <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>
-              <div className="mono" style={{ fontSize: 12, fontWeight: 700, color: item.tone, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.value}</div>
+              <div className="mono" style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.value}</div>
+              <div className="watchlist-magnitude-bar" aria-hidden="true">
+                <span style={{ width: `${item.magnitude}%` }} />
+              </div>
             </div>
           ))}
         </div>
@@ -1131,18 +1259,30 @@ function ChartPanel({
       {showChartDetails && (
         <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
           <div className="watchlist-chart-details">
+            <div className="watchlist-ohlc-group">
+              {[
+                { label: "Open", value: latestBar ? latestBar.open.toFixed(2) : "-" },
+                { label: "High", value: latestBar ? latestBar.high.toFixed(2) : "-" },
+                { label: "Low", value: latestBar ? latestBar.low.toFixed(2) : "-" },
+                { label: "Close", value: latestBar ? latestBar.close.toFixed(2) : "-", highlight: true },
+              ].map((item) => (
+                <div key={item.label} className={`watchlist-ohlc-cell${item.highlight ? " highlight" : ""}`}>
+                  <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>
+                  <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
             {[
-              { label: "Open", value: latestBar ? latestBar.open.toFixed(2) : "-" },
-              { label: "High", value: latestBar ? latestBar.high.toFixed(2) : "-" },
-              { label: "Low", value: latestBar ? latestBar.low.toFixed(2) : "-" },
-              { label: "Close", value: latestBar ? latestBar.close.toFixed(2) : "-" },
-              { label: "Support", value: chartStats ? formatNullablePrice(chartStats.support) : "-" },
-              { label: "Resistance", value: chartStats ? formatNullablePrice(chartStats.resistance) : "-" },
+              { label: "Support", value: chartStats ? formatNullablePrice(chartStats.support) : "-", dot: "support" as const },
+              { label: "Resistance", value: chartStats ? formatNullablePrice(chartStats.resistance) : "-", dot: "resistance" as const },
               { label: "Last volume", value: chartStats?.latestVolume != null ? formatCompactVolume(chartStats.latestVolume) : "-" },
               { label: "Bars", value: chartStats ? String(chartStats.sampleSize) : "-" },
             ].map((item) => (
-              <div key={item.label} style={{ padding: "7px 9px", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                <div className="label" style={{ marginBottom: 3 }}>{item.label}</div>
+              <div key={item.label} className="watchlist-ohlc-cell">
+                <div className="label" style={{ marginBottom: 3, display: "flex", alignItems: "center", gap: 6 }}>
+                  {item.dot && <span className={`watchlist-level-dot watchlist-level-dot--${item.dot}`} aria-hidden="true" />}
+                  {item.label}
+                </div>
                 <div className="mono" style={{ fontSize: 12, fontWeight: 600 }}>{item.value}</div>
               </div>
             ))}
@@ -1376,7 +1516,6 @@ function WatchlistContent() {
   const [symbolSearchError, setSymbolSearchError] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [listQuery, setListQuery] = useState("");
-  const [deskFilter, setDeskFilter] = useState<"all" | "gainers" | "losers" | "momentum">("all");
   const [denseRows, setDenseRows] = useState(true);
   const [localMeta, setLocalMeta] = useState<Record<string, WatchlistItemMetadataUpdate>>({});
   const [tagInput, setTagInput] = useState("");
@@ -1384,7 +1523,10 @@ function WatchlistContent() {
   const [queueView, setQueueView] = useState<"all" | "pinned" | "tagged" | "needs-review">("all");
   const [activeTagFilter, setActiveTagFilter] = useState<string>("all");
   const [sortMode, setSortMode] = useState<"manual" | "setup" | "move" | "volume" | "rsi">("manual");
-  const [showDeskControls, setShowDeskControls] = useState(false);
+  const [showQueueGear, setShowQueueGear] = useState(false);
+  const [chartFocused, setChartFocused] = useState(false);
+  const [keyboardHintSessions, setKeyboardHintSessions] = useState(0);
+  const [decisionDeskExpandedMap, setDecisionDeskExpandedMap] = useState<Record<string, boolean>>({});
   const [showSelectedMeta, setShowSelectedMeta] = useState(false);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
@@ -1402,6 +1544,25 @@ function WatchlistContent() {
 
   function itemMetaKey(watchlistId: string, symbol: string) {
     return `${watchlistId}:${symbol}`;
+  }
+
+  useEffect(() => {
+    setKeyboardHintSessions(readKeyboardHintSessions());
+    setDecisionDeskExpandedMap(readDecisionDeskExpandedMap());
+  }, []);
+
+  function setDecisionDeskExpanded(symbol: string, expanded: boolean) {
+    setDecisionDeskExpandedMap((prev) => {
+      const next = { ...prev, [symbol]: expanded };
+      writeDecisionDeskExpandedMap(next);
+      return next;
+    });
+  }
+
+  function handleChartFocus() {
+    setChartFocused(true);
+    bumpKeyboardHintSession();
+    setKeyboardHintSessions(readKeyboardHintSessions());
   }
 
   useEffect(() => {
@@ -1719,11 +1880,6 @@ function WatchlistContent() {
     const query = listQuery.trim().toLowerCase();
     const filtered = (activeWl?.items ?? []).filter((item) => {
       const meta = getItemMeta(activeId, item.symbol);
-      const matchesFilter =
-        deskFilter === "all" ? true :
-        deskFilter === "gainers" ? (item.pct_change ?? 0) > 0 :
-        deskFilter === "losers" ? (item.pct_change ?? 0) < 0 :
-        ((item.volume_ratio ?? 0) >= 1.5 || (item.rsi_14 ?? 0) >= 60);
       const matchesQueueView =
         queueView === "all" ? true :
         queueView === "pinned" ? Boolean(meta.pinned) :
@@ -1736,7 +1892,7 @@ function WatchlistContent() {
         : item.symbol.toLowerCase().includes(query)
           || item.company_name?.toLowerCase().includes(query)
           || item.sector?.toLowerCase().includes(query);
-      return matchesFilter && matchesQueueView && matchesTagFilter && matchesQuery;
+      return matchesQueueView && matchesTagFilter && matchesQuery;
     });
     return filtered.sort((a, b) => {
       const aMeta = getItemMeta(activeId, a.symbol);
@@ -1762,7 +1918,7 @@ function WatchlistContent() {
       if (sortMode === "manual" && aPinned !== bPinned) return bPinned - aPinned;
       return a.sort_order - b.sort_order;
     });
-  }, [activeId, activeWl?.items, deskFilter, listQuery, getItemMeta, queueView, activeTagFilter, sortMode]);
+  }, [activeId, activeWl?.items, listQuery, getItemMeta, queueView, activeTagFilter, sortMode]);
   const queuePageCount = Math.max(1, Math.ceil(visibleItems.length / WATCHLIST_PAGE_SIZE));
   const pageStart = Math.min(queuePage, queuePageCount - 1) * WATCHLIST_PAGE_SIZE;
   const pageItems = visibleItems.slice(pageStart, pageStart + WATCHLIST_PAGE_SIZE);
@@ -1772,8 +1928,17 @@ function WatchlistContent() {
   const selectedReviewState = chartSymbol ? symbolReviewMap.get(chartSymbol) : null;
   const selectedWorkflow = chartSymbol ? workflowBySymbol[chartSymbol] ?? null : null;
   const selectedPlanStatus = workflowPlanStatus(selectedWorkflow);
+  const decisionDeskExpanded = chartSymbol ? Boolean(decisionDeskExpandedMap[chartSymbol]) : false;
+  const activeWorkflowStepIndex = WATCHLIST_QUEUE_STEPS.findIndex(
+    (step) => step.key === resolveWatchlistQueueStep({
+      chartSymbol,
+      decisionExpanded: decisionDeskExpanded,
+      plan: selectedWorkflow,
+    }),
+  );
+  const showKeyboardHints = keyboardHintSessions < 3;
   const selectedFundamentals = chartSymbol ? fundamentalsBySymbol[chartSymbol] ?? null : null;
-  const canReorder = deskFilter === "all" && !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
+  const canReorder = !listQuery.trim() && queueView === "all" && activeTagFilter === "all" && sortMode === "manual";
 
   useEffect(() => {
     if (!chartSymbol || !visibleItems.length) return;
@@ -1875,7 +2040,7 @@ function WatchlistContent() {
 
   useEffect(() => {
     setQueuePage(0);
-  }, [activeId, deskFilter, listQuery, queueView, activeTagFilter, sortMode]);
+  }, [activeId, listQuery, queueView, activeTagFilter, sortMode]);
 
   useEffect(() => {
     if (queuePage > queuePageCount - 1) {
@@ -1899,6 +2064,35 @@ function WatchlistContent() {
       const tagName = target?.tagName ?? "";
       const isTyping = tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT" || Boolean(target?.closest("[contenteditable='true']"));
       if (isTyping || !visibleItems.length) return;
+
+      if (chartFocused) {
+        if (e.key === "ArrowDown" || e.key === "j" || e.key === "J") {
+          e.preventDefault();
+          moveSelection("next");
+          return;
+        }
+        if (e.key === "ArrowUp" || e.key === "k" || e.key === "K") {
+          e.preventDefault();
+          moveSelection("prev");
+          return;
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          moveSelection("next");
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          moveSelection("prev");
+          return;
+        }
+        if (e.key === " ") {
+          e.preventDefault();
+          moveSelection("next");
+          return;
+        }
+      }
+
       if (e.key === "ArrowDown") {
         e.preventDefault();
         moveSelection("next");
@@ -1914,7 +2108,7 @@ function WatchlistContent() {
     }
     window.addEventListener("keydown", handleDeskKeys);
     return () => window.removeEventListener("keydown", handleDeskKeys);
-  }, [chartHref, chartSymbol, moveSelection, router, visibleItems]);
+  }, [chartFocused, chartHref, chartSymbol, moveSelection, router, visibleItems]);
 
   async function handleDeleteWatchlist(id: string) {
     if (!confirm("Delete this watchlist and all its stocks?")) return;
@@ -2125,7 +2319,6 @@ function WatchlistContent() {
       tone: "var(--text-secondary)",
     },
   ] : [];
-  const selectedSetup = selectedItem ? getSetupSignal(selectedItem) : null;
 
   useEffect(() => {
     if (activeTagFilter !== "all" && !availableTags.includes(activeTagFilter)) {
@@ -2187,7 +2380,6 @@ function WatchlistContent() {
 
   function resetDeskView() {
     setQueueView("all");
-    setDeskFilter("all");
     setActiveTagFilter("all");
     setSortMode("manual");
     setListQuery("");
@@ -2214,10 +2406,13 @@ function WatchlistContent() {
                   setActiveId(wl.id);
                   setSidebarCollapsed(false);
                 }}
-                title={wl.name}
+                title={`${wl.name} · ${wl.items.length} stocks`}
+                className="watchlist-sidebar-collapsed-item"
                 style={{ lineHeight: 0 }}
               >
                 <WatchlistAvatar name={wl.name} active={activeId === wl.id} size={28} />
+                <span className="watchlist-sidebar-vertical-name">{wl.name}</span>
+                <span className="watchlist-sidebar-count-badge">{wl.items.length}</span>
               </button>
             ))}
           </div>
@@ -2359,7 +2554,9 @@ function WatchlistContent() {
                         onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--surface-3)"}
                         onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{s.symbol}</div>
-                        <div className="caption" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.company_name}</div>
+                        <div className="caption" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {displayCompanyName(s.symbol, s.company_name) || s.company_name || ""}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2375,6 +2572,7 @@ function WatchlistContent() {
 
         {activeWl && (
           <WatchlistWorkflowStrip
+            activeStep={activeWorkflowStepIndex >= 0 ? activeWorkflowStepIndex : 0}
             hasItems={activeWl.items.length > 0}
             adding={adding}
             onAddStarter={() => void addStarterSymbols()}
@@ -2395,26 +2593,10 @@ function WatchlistContent() {
                     <Num style={{ fontSize: 12, fontWeight: 700, color: (selectedItem.pct_change ?? 0) >= 0 ? "var(--gain)" : "var(--loss)" }}>
                       {selectedItem.pct_change != null ? `${selectedItem.pct_change >= 0 ? "+" : ""}${selectedItem.pct_change.toFixed(2)}%` : "-"}
                     </Num>
-                    {selectedSetup && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 800,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase",
-                          color: setupToneColor(selectedSetup.tone),
-                          padding: "2px 7px",
-                          borderRadius: 999,
-                          background: "rgba(255,255,255,0.04)",
-                          border: `1px solid ${setupToneColor(selectedSetup.tone)}`,
-                        }}
-                      >
-                        {selectedSetup.label}
-                      </span>
-                    )}
+                    <WatchlistSignalPills item={selectedItem} />
                   </div>
                   <div className="caption" style={{ marginTop: 2, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {selectedItem.company_name || selectedItem.sector || "Active watchlist symbol"}
+                    {displayCompanyName(selectedItem.symbol, selectedItem.company_name) || selectedItem.sector || "Active watchlist symbol"}
                     {quotesAsOf ? ` · As of ${quotesAsOf}` : ""}
                   </div>
                 </div>
@@ -2614,67 +2796,81 @@ function WatchlistContent() {
                 </button>
               ))}
             </div>
-            <div className="workspace-pill-row">
-              {(queueView !== "all" || deskFilter !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
+            <div className="workspace-pill-row" style={{ position: "relative" }}>
+              {(queueView !== "all" || activeTagFilter !== "all" || sortMode !== "manual" || listQuery.trim()) && (
                 <button className="workspace-chip-button" onClick={resetDeskView}>
                   Reset
                 </button>
               )}
-              <button className={`workspace-chip-button${showDeskControls ? " active" : ""}`} onClick={() => setShowDeskControls((current) => !current)}>
-                {showDeskControls ? "Hide controls" : "Desk controls"}
+              <button
+                className={`workspace-chip-button${showQueueGear ? " active" : ""}`}
+                onClick={() => setShowQueueGear((current) => !current)}
+                aria-label="Queue display settings"
+                title="Queue display settings"
+              >
+                <Settings size={13} />
               </button>
-            </div>
-            {showDeskControls && (
-              <>
-                <div className="workspace-pill-row">
-                  {[
-                    { id: "all", label: "All moves" },
-                    { id: "gainers", label: "Gainers" },
-                    { id: "losers", label: "Losers" },
-                    { id: "momentum", label: "Momentum" },
-                  ].map((filter) => (
-                    <button
-                      key={filter.id}
-                      className={`workspace-chip-button${deskFilter === filter.id ? " active" : ""}`}
-                      onClick={() => setDeskFilter(filter.id as typeof deskFilter)}
-                    >
-                      {filter.label}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <button className={`workspace-chip-button${denseRows ? "" : " active"}`} onClick={() => setDenseRows(false)}>
-                    Comfortable
-                  </button>
-                  <button className={`workspace-chip-button${denseRows ? " active" : ""}`} onClick={() => setDenseRows(true)}>
-                    Dense
-                  </button>
-                </div>
-                {availableTags.length > 0 && (
-                  <select
-                    value={activeTagFilter}
-                    onChange={(e) => setActiveTagFilter(e.target.value)}
-                    style={{ fontSize: 12, borderRadius: 999, padding: "7px 12px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
-                  >
-                    <option value="all">All tags</option>
-                    {availableTags.map((tag) => (
-                      <option key={tag} value={tag}>#{tag}</option>
-                    ))}
-                  </select>
-                )}
-                <select
-                  value={sortMode}
-                  onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
-                  style={{ fontSize: 12, borderRadius: 999, padding: "7px 12px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+              {showQueueGear && (
+                <div
+                  className="watchlist-queue-gear-popover"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    right: 0,
+                    zIndex: 40,
+                    width: 260,
+                    padding: 10,
+                    borderRadius: 12,
+                    background: "var(--surface-1)",
+                    border: "1px solid var(--border-subtle)",
+                    boxShadow: "var(--shadow-panel)",
+                    display: "grid",
+                    gap: 10,
+                  }}
                 >
-                  <option value="manual">Manual order</option>
-                  <option value="setup">Sort by setup</option>
-                  <option value="move">Sort by move</option>
-                  <option value="volume">Sort by volume ratio</option>
-                  <option value="rsi">Sort by RSI</option>
-                </select>
-              </>
-            )}
+                  <div>
+                    <div className="label" style={{ marginBottom: 6 }}>Row density</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className={`workspace-chip-button${denseRows ? "" : " active"}`} onClick={() => setDenseRows(false)}>
+                        Comfortable
+                      </button>
+                      <button className={`workspace-chip-button${denseRows ? " active" : ""}`} onClick={() => setDenseRows(true)}>
+                        Dense
+                      </button>
+                    </div>
+                  </div>
+                  {availableTags.length > 0 && (
+                    <div>
+                      <div className="label" style={{ marginBottom: 6 }}>Tag filter</div>
+                      <select
+                        value={activeTagFilter}
+                        onChange={(e) => setActiveTagFilter(e.target.value)}
+                        style={{ width: "100%", fontSize: 12, borderRadius: 8, padding: "7px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+                      >
+                        <option value="all">All tags</option>
+                        {availableTags.map((tag) => (
+                          <option key={tag} value={tag}>#{tag}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <div className="label" style={{ marginBottom: 6 }}>Sort</div>
+                    <select
+                      value={sortMode}
+                      onChange={(e) => setSortMode(e.target.value as typeof sortMode)}
+                      style={{ width: "100%", fontSize: 12, borderRadius: 8, padding: "7px 10px", background: "var(--surface-3)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}
+                    >
+                      <option value="manual">Manual order</option>
+                      <option value="setup">Sort by setup</option>
+                      <option value="move">Sort by move</option>
+                      <option value="volume">Sort by volume ratio</option>
+                      <option value="rsi">Sort by RSI</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="caption">
               {visibleItems.length > 0
                 ? <>Showing <Num>{pageStart + 1}</Num>-<Num>{Math.min(pageStart + WATCHLIST_PAGE_SIZE, visibleItems.length)}</Num> of <Num>{visibleItems.length}</Num>. Arrow keys move through the full queue.</>
@@ -2713,7 +2909,7 @@ function WatchlistContent() {
               icon={Filter}
               title="No symbols match the current filter"
               description="The active filter excludes all symbols. Reset or widen it to see the full list."
-              action={{ label: "Reset view", onClick: () => { setDeskFilter("all"); setListQuery(""); } }}
+              action={{ label: "Reset view", onClick: () => { setListQuery(""); resetDeskView(); } }}
               testId="watchlist-empty-filtered"
             />
           ) : (
@@ -2829,7 +3025,10 @@ function WatchlistContent() {
         {chartSymbol ? (
           <>
             <div style={{ flex: 1, minHeight: 0 }}>
-              <ChartPanel key={chartSymbol} symbol={chartSymbol}
+              <ChartPanel
+                key={chartSymbol}
+                symbol={chartSymbol}
+                companyName={selectedItem?.company_name ?? activeWl?.items.find((i) => i.symbol === chartSymbol)?.company_name}
                 latestClose={visibleItems.find(i => i.symbol === chartSymbol)?.close ?? activeWl?.items.find(i => i.symbol === chartSymbol)?.close}
                 watchlistName={activeWl?.name ?? null}
                 onOpenChart={(sym) => router.push(chartHref(sym))}
@@ -2838,7 +3037,11 @@ function WatchlistContent() {
                 plan={selectedWorkflow}
                 planValid={selectedPlanStatus.valid}
                 planNextAction={selectedPlanStatus.next}
-                orderDraftNonce={orderDraftRequest?.symbol === chartSymbol ? orderDraftRequest.nonce : 0} />
+                orderDraftNonce={orderDraftRequest?.symbol === chartSymbol ? orderDraftRequest.nonce : 0}
+                chartFocused={chartFocused}
+                onChartFocus={handleChartFocus}
+                showKeyboardHints={showKeyboardHints}
+              />
             </div>
             <DecisionDesk
               symbol={chartSymbol}
@@ -2846,6 +3049,8 @@ function WatchlistContent() {
               plan={selectedWorkflow}
               item={selectedItem}
               reviewState={selectedReviewState}
+              expanded={decisionDeskExpanded}
+              onExpandedChange={(expanded) => setDecisionDeskExpanded(chartSymbol, expanded)}
               onPlanChange={(next) => setWorkflowBySymbol((prev) => ({ ...prev, [next.symbol]: next }))}
               onToast={showToast}
               onDraftOrder={openOrderDraft}

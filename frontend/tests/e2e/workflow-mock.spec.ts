@@ -463,6 +463,7 @@ test.describe("Mock workflow smoke", () => {
     const lockedOrder = page.getByRole("button", { name: /Create a plan before drafting an order|Complete entry/i });
     await expect(lockedOrder).toBeVisible();
     await expect(lockedOrder).toBeDisabled();
+    await page.getByRole("button", { name: "Start planning" }).click();
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeDisabled();
     await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Complete entry|Next workflow step/i);
     await expect(page.getByTestId("order-safety-nudges")).toContainText(/Create a plan|Complete entry|Decision Desk/i);

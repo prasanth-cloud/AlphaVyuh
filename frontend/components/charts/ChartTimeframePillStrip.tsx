@@ -14,9 +14,19 @@ type Props = {
   value: WatchlistChartTimeframe;
   onChange: (value: WatchlistChartTimeframe) => void;
   onUnavailable?: (message: string) => void;
+  intradayEnabled?: boolean;
 };
 
-export default function ChartTimeframePillStrip({ value, onChange, onUnavailable }: Props) {
+export default function ChartTimeframePillStrip({
+  value,
+  onChange,
+  onUnavailable,
+  intradayEnabled = false,
+}: Props) {
+  const options = CHART_TIMEFRAME_PILL_OPTIONS.filter(
+    (label) => intradayEnabled || !isIntradayTimeframe(label),
+  );
+
   return (
     <div
       className="chart-timeframe-pill-strip"
@@ -33,13 +43,13 @@ export default function ChartTimeframePillStrip({ value, onChange, onUnavailable
         flexShrink: 0,
       }}
     >
-      {CHART_TIMEFRAME_PILL_OPTIONS.map((label) => (
+      {options.map((label) => (
         <button
           key={label}
           type="button"
           data-testid={`chart-timeframe-pill-${label}`}
           onClick={() => {
-            if (isIntradayTimeframe(label)) {
+            if (!intradayEnabled && isIntradayTimeframe(label)) {
               onUnavailable?.(INTRADAY_UNAVAILABLE_MESSAGE);
               return;
             }
