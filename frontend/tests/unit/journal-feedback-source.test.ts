@@ -31,7 +31,8 @@ describe("journal feedback copy", () => {
     expect(source).toContain('{ id: "ai", label: "Trade review" }');
     expect(source.indexOf('data-testid="journal-review-queue"')).toBeLessThan(source.indexOf('<TradeTable'));
     expect(source).toContain('getJournalReviewStage(entries');
-    expect(source).toContain('reviewStage.primaryAction');
+    expect(source).toContain("Open Analytics");
+    expect(source).not.toContain("{reviewStage.primaryAction}");
   });
 
   it("keeps mobile journal rows actionable without horizontal table hunting", () => {

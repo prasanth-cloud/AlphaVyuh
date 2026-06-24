@@ -1,6 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui";
+import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import type { AiPatterns } from "./types";
 
 interface JournalAiInsightsProps {
@@ -30,14 +31,21 @@ function renderReviewLine(line: string, key: number, bullet = false) {
     </span>
   );
 
-  if (!bullet) return <div key={key}>{content}</div>;
+  if (!bullet) return <div key={key} className="journal-ai-review-line">{content}</div>;
   return (
-    <div key={key} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 4 }}>
+    <div key={key} className="journal-ai-review-bullet">
       <span style={{ color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }}>•</span>
       {content}
     </div>
   );
 }
+
+const AI_REVIEW_SECTIONS = new Set([
+  "Key Patterns",
+  "Top Mistakes",
+  "What's Working",
+  "Observed Process Patterns",
+]);
 
 export function JournalAiInsights({
   patterns,
@@ -63,6 +71,27 @@ export function JournalAiInsights({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {!aiAnalysis && !aiLoading && closedTrades >= 3 && (
+        <Card padding="lg" data-testid="journal-wide-review-cta">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <div className="heading-card" style={{ marginBottom: 4 }}>Run journal-wide review</div>
+              <div className="body-secondary">
+                Analyse {closedTrades} closed trades for repeat mistakes, strengths, and process patterns from your notes.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onAnalyse}
+              className="workspace-chip-button"
+              style={{ background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)", padding: "10px 16px", fontSize: 13, fontWeight: 600 }}
+            >
+              Run journal-wide review
+            </button>
+          </div>
+        </Card>
+      )}
+
       <Card padding="lg">
         <h2 className="heading-card" style={{ marginBottom: 4 }}>Review loop</h2>
         <div className="body-secondary" style={{ marginBottom: 16 }}>
@@ -157,7 +186,7 @@ export function JournalAiInsights({
                     <tbody>
                       {patterns.setup_breakdown!.map(row => (
                         <tr key={row.setup} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                          <td style={{ padding: "8px 12px 8px 0", fontWeight: 600 }}>{row.setup}</td>
+                          <td style={{ padding: "8px 12px 8px 0", fontWeight: 600 }}>{formatSetupTagDisplay(row.setup)}</td>
                           <td style={{ padding: "8px 12px 8px 0" }}>{row.trades}</td>
                           <td style={{ padding: "8px 12px 8px 0", color: row.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{row.win_rate}%</td>
                           <td style={{ padding: "8px 12px 8px 0" }}>{row.avg_holding_days != null ? `${row.avg_holding_days}d` : "—"}</td>
@@ -244,7 +273,7 @@ export function JournalAiInsights({
             </div>
             <button
               onClick={onAnalyse}
-              style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer" }}
+              style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, background: "var(--surface-2)", color: "var(--text-primary)", border: "1px solid var(--border-subtle)", cursor: "pointer" }}
             >
               Run pattern analysis
             </button>
@@ -265,7 +294,7 @@ export function JournalAiInsights({
           <button
             onClick={onAnalyse}
             disabled={aiLoading}
-            style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid var(--accent)", cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
+            style={{ flexShrink: 0, padding: "7px 14px", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, background: aiAnalysis ? "var(--surface-2)" : "var(--accent)", color: aiAnalysis ? "var(--text-primary)" : "var(--text-on-accent)", border: `1px solid ${aiAnalysis ? "var(--border-subtle)" : "var(--accent)"}`, cursor: "pointer", opacity: aiLoading ? 0.5 : 1, marginLeft: 16 }}
           >
             {aiLoading ? "Reviewing…" : aiAnalysis ? "Run review again" : "Review my journal"}
           </button>
@@ -292,18 +321,25 @@ export function JournalAiInsights({
             <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: "var(--radius-md)", fontSize: 11, lineHeight: 1.6, background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)", color: "var(--warn)" }}>
               Trade analysis is for educational purposes only and does not constitute SEBI-registered investment advice.
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.7, color: "var(--text-primary)" }}>
+            <div className="journal-ai-review-output">
               {aiAnalysis.split("\n").map((line, i) => {
+                const sectionTitle = line.replace(/^#+\s/, "").trim();
                 if (line.startsWith("## ") || line.startsWith("### ")) {
-                  return <div key={i} style={{ fontSize: 13, fontWeight: 600, marginTop: 16, marginBottom: 4, color: "var(--text-primary)" }}>{line.replace(/^#+\s/, "")}</div>;
+                  const isMajorSection = AI_REVIEW_SECTIONS.has(sectionTitle);
+                  return (
+                    <div key={i} className={isMajorSection ? "journal-ai-review-section" : "journal-ai-review-subsection"}>
+                      {isMajorSection && i > 0 ? <div className="journal-ai-review-divider" aria-hidden /> : null}
+                      <div className="journal-ai-review-section-title">{sectionTitle}</div>
+                    </div>
+                  );
                 }
                 if (line.startsWith("**") && line.endsWith("**")) {
-                  return <div key={i} style={{ fontSize: 13, fontWeight: 600, marginTop: 12, marginBottom: 4 }}>{line.replace(/\*\*/g, "")}</div>;
+                  return <div key={i} className="journal-ai-review-label">{line.replace(/\*\*/g, "")}</div>;
                 }
                 if (line.startsWith("- ") || line.startsWith("* ")) {
                   return renderReviewLine(line.slice(2), i, true);
                 }
-                if (line.trim() === "") return <div key={i} style={{ height: 6 }} />;
+                if (line.trim() === "") return <div key={i} className="journal-ai-review-spacer" />;
                 return renderReviewLine(line, i);
               })}
             </div>

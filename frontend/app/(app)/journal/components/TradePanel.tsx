@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui";
+import { displayCompanyName } from "@/lib/company-display";
+import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
@@ -123,9 +125,14 @@ export function TradePanel({
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="heading-card">
-              {mode === "add" ? "Log trade" : mode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
-            </span>
+            <div>
+              <span className="heading-card">
+                {mode === "add" ? "Log trade" : mode === "close" ? `Close ${selectedEntry?.symbol}` : selectedEntry?.symbol}
+              </span>
+              {selectedEntry && mode !== "add" && displayCompanyName(selectedEntry.symbol, selectedEntry.company_name) ? (
+                <div className="caption" style={{ marginTop: 2 }}>{displayCompanyName(selectedEntry.symbol, selectedEntry.company_name)}</div>
+              ) : null}
+            </div>
             {mode === "add" && chartPrefilled && (
               <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: "rgba(0,217,167,0.10)", color: "#00D9A7" }}>
                 Pre-filled from chart
@@ -157,7 +164,9 @@ export function TradePanel({
                     <button key={r.symbol} onClick={() => { onSelectSymbol(r.symbol); onSymbolQChange(r.symbol); }}
                       style={{ width: "100%", textAlign: "left", padding: "8px 12px", fontSize: 13, borderBottom: "1px solid var(--border-subtle)", color: "var(--text-primary)" }}>
                       <span style={{ fontWeight: 500 }}>{r.symbol}</span>
-                      <span className="caption" style={{ marginLeft: 8 }}>{r.company_name}</span>
+                      {displayCompanyName(r.symbol, r.company_name) ? (
+                        <span className="caption" style={{ marginLeft: 8 }}>{displayCompanyName(r.symbol, r.company_name)}</span>
+                      ) : null}
                     </button>
                   ))}
                 </div>
@@ -364,7 +373,7 @@ export function TradePanel({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
               {[
                 ["Direction", selectedEntry.trade_type === "long" ? "Long" : "Short"],
-                ["Setup", selectedEntry.setup_type || "—"],
+                ["Setup", formatSetupTagDisplay(selectedEntry.setup_type)],
                 ["Entry date", fmtDate(selectedEntry.entry_date)],
                 ["Exit date", fmtDate(selectedEntry.exit_date)],
                 ["Entry price", `₹${selectedEntry.entry_price.toLocaleString("en-IN")}`],

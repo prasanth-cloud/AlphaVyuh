@@ -1575,6 +1575,97 @@ input, textarea, select {
   z-index: 1;
 }
 
+.journal-process-note {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.journal-process-note-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.journal-process-note-toggle {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.journal-calendar-grid {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.journal-calendar-week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.journal-calendar-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 0;
+  cursor: pointer;
+}
+
+.journal-calendar-cell-empty {
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+
+.journal-ai-review-output {
+  font-size: 13px;
+  line-height: 1.85;
+  color: var(--text-primary);
+}
+
+.journal-ai-review-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.journal-ai-review-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 14px 0 10px;
+}
+
+.journal-ai-review-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
+.journal-ai-review-bullet {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.journal-ai-review-spacer {
+  height: 8px;
+}
+
 .journal-review-cockpit {
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
 }
