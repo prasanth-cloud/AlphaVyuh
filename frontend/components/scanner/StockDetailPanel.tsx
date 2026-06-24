@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { displayCompanyName } from "@/lib/company-display";
 import type { ScanResult } from "@/lib/api";
 import { addToWatchlist, getWatchlists } from "@/lib/api";
 import RsiBadge from "./RsiBadge";
@@ -66,7 +67,9 @@ export default function StockDetailPanel({ stock, onClose }: Props) {
               </span>
             )}
           </div>
-          <div className="text-[11px] text-[#aaa] mt-0.5 leading-tight">{stock.company_name}</div>
+          {displayCompanyName(stock.symbol, stock.company_name) ? (
+            <div className="text-[11px] text-[#aaa] mt-0.5 leading-tight">{displayCompanyName(stock.symbol, stock.company_name)}</div>
+          ) : null}
           <div className="flex items-center gap-2 mt-1.5">
             <span className="text-[16px] font-semibold tabular-nums text-[#1c1c1a]">
               ₹{stock.close.toLocaleString("en-IN", { minimumFractionDigits: 2 })}

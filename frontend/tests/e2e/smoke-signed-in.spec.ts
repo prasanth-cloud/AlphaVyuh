@@ -131,6 +131,10 @@ async function expectDashboardReady(page: import("@playwright/test").Page) {
   await expect(marketDesk).toBeVisible({ timeout: 15000 });
 }
 
+async function openDashboardFullDesk(page: import("@playwright/test").Page) {
+  await page.getByRole("tab", { name: "Full desk All dashboard cards", exact: true }).click();
+}
+
 async function verifyScannerApiFallback(page: import("@playwright/test").Page) {
   if (!EXPECT_REAL_DATA || !API_BEARER_TOKEN) return false;
 
@@ -169,6 +173,7 @@ test.describe("Signed-in smoke flow", () => {
       "Journal",
     ]);
     await expect(page.getByTestId("dashboard-data-trust")).toBeVisible({ timeout: 15000 });
+    await openDashboardFullDesk(page);
     await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId("dashboard-index-tape")).toBeVisible({ timeout: 15000 });
     await expectRealDataContext(page, "today", /Data updating|As of|Market|coverage|NSE universe/i);

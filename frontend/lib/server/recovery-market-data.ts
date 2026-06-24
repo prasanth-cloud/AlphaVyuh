@@ -320,7 +320,7 @@ function scanResultFromRow(row: DailyRow) {
   const low3w = numberValue(row.low_3w);
   return {
     symbol: row.symbol,
-    company_name: meta.company_name || row.symbol,
+    company_name: meta.company_name || null,
     series: meta.series || "EQ",
     sector: meta.sector ?? null,
     market: meta.market || "NSE",
@@ -515,7 +515,7 @@ export async function getRecoveryCandles(symbol: string, options: { timeframe?: 
     requested_symbol: sym,
     resolved_from_alias: false,
     alias: null,
-    company_name: metaQuery.data?.company_name ?? sym,
+    company_name: metaQuery.data?.company_name ?? null,
     sector: metaQuery.data?.sector ?? null,
     timeframe,
     candles,

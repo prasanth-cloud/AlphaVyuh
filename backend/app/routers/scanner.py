@@ -1260,7 +1260,7 @@ def _apply_filters(
 
         result = {
             "symbol":         row["symbol"],
-            "company_name":   su.get("company_name") or row["symbol"],
+            "company_name":   su.get("company_name") or None,
             "series":         su.get("series") or "",
             "sector":         su.get("sector"),
             "market":         su.get("market") or "NSE",
