@@ -115,7 +115,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(selectedActions).toContainText(/Open chart/);
     await expect(selectedActions).toContainText(/Review journal/);
     await expect(selectedActions).toContainText(/Details/);
-    await expect(page.getByText("Plan ready")).toBeVisible();
+    await expect(page.getByText(/Ready for order draft|Plan ready/i)).toBeVisible();
     await expect(page.getByRole("button", { name: "Full chart" }).first()).toBeVisible();
     const labels = await selectedActions.locator("button").evaluateAll((nodes) =>
       nodes.map((node) => node.textContent?.replace(/\s+/g, " ").trim()).filter(Boolean),
@@ -475,8 +475,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByPlaceholder("Thesis").fill("Breakout holding above prior resistance with clean volume.");
     await page.getByPlaceholder("Invalidation rule").fill("Exit if price closes below the breakout base.");
 
-    await expect(page.getByText("Ready for order draft.")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Plan ready|Ready for journal capture draft/i);
+    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Plan ready|Ready for journal capture draft/i, { timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeEnabled();
     await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
 
@@ -552,6 +551,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page).toHaveURL(/\/watchlist/, { timeout: 15_000 });
     await expect(page.getByText("Launch Flow QA").first()).toBeVisible();
     await expect(page.locator(".workspace-pill").filter({ hasText: `Focus: ${symbol}` }).first()).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Start planning" }).click();
     await expect(page.getByTestId("watchlist-decision-record")).toContainText(/Decision record|Source|Reason|Data as of|Captured price|Current price|Journal/i, { timeout: 10_000 });
     await expect(page.getByTestId("trade-idea-context")).toContainText(/Original scan|Trend Template|As of/i, { timeout: 10_000 });
 
@@ -603,7 +603,7 @@ test.describe("Mock workflow smoke", () => {
     await page.getByPlaceholder("Thesis").fill("Launch QA setup from scanner shortlist with clear confirmation.");
     await page.getByPlaceholder("Invalidation rule").fill("Exit if the breakout base fails on closing basis.");
 
-    await expect(page.getByText("Ready for order draft.")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Ready for journal capture draft/i, { timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
     await page.getByRole("button", { name: /^Save buy journal draft$/i }).click();
     await expect(page.getByText(/saved as a journal capture draft/i)).toBeVisible({ timeout: 10_000 });

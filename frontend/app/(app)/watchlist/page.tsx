@@ -1650,6 +1650,7 @@ function WatchlistContent() {
 
   const openOrderDraft = useCallback((symbol: string) => {
     setChartSymbol(symbol);
+    setDecisionDeskExpanded(symbol, true);
     setOrderDraftRequest({ symbol, nonce: Date.now() });
     trackEvent("watchlist_order_draft_opened", {
       symbol,
