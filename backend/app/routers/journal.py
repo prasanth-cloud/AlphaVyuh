@@ -1,9 +1,10 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 import yfinance as yf
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.plans import get_effective_user_plan
@@ -18,16 +19,32 @@ from app.services.journal_snapshots import (
 )
 from app.services.rate_limit import RateLimiter
 from app.services.supabase import get_admin_client, get_user_client
+from app.services.journal_weekly_review import (
+    EvidenceScopeMismatch,
+    build_weekly_review_response,
+    completed_week_period,
+    current_market_date,
+    fetch_completed_trade_rows_snapshot,
+    fetch_week_evidence_snapshot,
+)
 from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
 MAX_SNAPSHOT_REQUEST_BYTES = MAX_SNAPSHOT_BYTES + 4096
+MAX_WEEKLY_EVIDENCE_IDS = 500
+MAX_WEEKLY_REVIEW_WEEKS = 12
 journal_snapshot_limiter = RateLimiter(max_calls=10, period=60.0)
 
 
 def _get_user_plan(user_id: str) -> str:
     sb = get_admin_client()
     return get_effective_user_plan(sb, user_id)
+
+
+def _journal_history_cutoff(plan: str, *, today: date | None = None) -> date | None:
+    if plan != "free":
+        return None
+    return (today or date.today()) - timedelta(days=FREE_JOURNAL_MONTHS * 30)
 
 
 def _portfolio_unavailable() -> HTTPException:
@@ -80,6 +97,57 @@ class JournalSnapshotCreate(BaseModel):
     state: dict[str, Any]
 
 
+ReviewAdherence = Literal["followed", "partial", "not_followed", "not_applicable"]
+ReviewRuleBreak = Literal[
+    "setup_not_confirmed",
+    "entry_outside_plan",
+    "position_risk_exceeded",
+    "stop_rule_broken",
+    "exit_rule_broken",
+    "other",
+]
+
+
+class ProcessReviewV1(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1]
+    planned_setup: str = Field(min_length=1, max_length=80)
+    adherence: ReviewAdherence
+    rule_breaks: list[ReviewRuleBreak] = Field(max_length=6)
+    lesson: str = Field(min_length=1, max_length=500)
+    expected_updated_at: str = Field(min_length=1, max_length=64)
+
+    @field_validator("planned_setup", "lesson", "expected_updated_at")
+    @classmethod
+    def clean_required_text(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("value must not be blank")
+        return cleaned
+
+    @field_validator("expected_updated_at")
+    @classmethod
+    def validate_expected_updated_at(cls, value: str) -> str:
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("expected_updated_at must be an ISO-8601 timestamp") from exc
+        if parsed.tzinfo is None:
+            raise ValueError("expected_updated_at must include a timezone")
+        return value
+
+    @model_validator(mode="after")
+    def validate_rule_breaks(self):
+        if len(self.rule_breaks) != len(set(self.rule_breaks)):
+            raise ValueError("rule_breaks must contain unique codes")
+        if self.adherence in {"followed", "not_applicable"} and self.rule_breaks:
+            raise ValueError("followed and not_applicable reviews cannot include rule breaks")
+        if self.adherence in {"partial", "not_followed"} and not self.rule_breaks:
+            raise ValueError("partial and not_followed reviews require at least one rule break")
+        return self
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _compute_pnl(entry_price: float, exit_price: float, quantity: int, trade_type: str):
@@ -100,6 +168,25 @@ def _clean_text(value: str | None, max_len: int) -> str | None:
 
 def _clean_context(value: dict[str, Any] | None) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
+
+
+def _serialize_journal_entry(value: dict[str, Any]) -> dict[str, Any]:
+    """Expose additive review aliases without repurposing legacy note fields."""
+    entry = dict(value)
+    planned_setup = entry.pop("review_planned_setup", None)
+    setup_adherence = entry.pop("review_setup_adherence", None)
+    rule_breaks = entry.pop("review_rule_breaks", None)
+    if entry.get("review_schema_version") == 1:
+        entry["planned_setup"] = planned_setup
+        entry["setup_adherence"] = setup_adherence
+        entry["rule_breaks"] = rule_breaks
+        entry["review_lesson"] = entry.get("review_lesson")
+    else:
+        entry["planned_setup"] = None
+        entry["setup_adherence"] = None
+        entry["rule_breaks"] = None
+        entry["review_lesson"] = None
+    return entry
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -286,6 +373,98 @@ async def get_stats(user_id: str = Depends(get_current_user_id)):
     }
 
 
+@router.get("/weekly-reviews")
+async def get_weekly_reviews(
+    weeks: int = Query(default=8, ge=1, le=12),
+    user_id: str = Depends(get_current_user_id),
+):
+    period_start, period_end = completed_week_period(current_market_date(), weeks)
+    try:
+        plan = _get_user_plan(user_id)
+        entry_date_cutoff = _journal_history_cutoff(plan)
+        rows = fetch_completed_trade_rows_snapshot(
+            get_admin_client(), user_id, period_start, period_end, entry_date_cutoff
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Weekly journal review is temporarily unavailable.",
+        ) from exc
+    return build_weekly_review_response(rows, period_start, period_end)
+
+
+@router.get("/weekly-reviews/evidence")
+async def get_weekly_review_evidence(
+    week_start: str = Query(min_length=10, max_length=10),
+    entry_ids: str = Query(min_length=1, max_length=20_000),
+    rule_break: ReviewRuleBreak | None = None,
+    user_id: str = Depends(get_current_user_id),
+):
+    try:
+        parsed_week_start = date.fromisoformat(week_start)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="week_start must be YYYY-MM-DD") from exc
+    if parsed_week_start.isoformat() != week_start or parsed_week_start.weekday() != 0:
+        raise HTTPException(status_code=400, detail="week_start must be a Monday")
+    week_end = parsed_week_start + timedelta(days=6)
+    today = current_market_date()
+    allowed_start, allowed_end = completed_week_period(today, MAX_WEEKLY_REVIEW_WEEKS)
+    if parsed_week_start < allowed_start or week_end > allowed_end:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Weekly evidence is available only for the latest {MAX_WEEKLY_REVIEW_WEEKS} completed weeks",
+        )
+
+    raw_ids = entry_ids.split(",")
+    if not raw_ids or len(raw_ids) > MAX_WEEKLY_EVIDENCE_IDS or any(not item.strip() for item in raw_ids):
+        raise HTTPException(
+            status_code=400,
+            detail=f"entry_ids must contain 1 to {MAX_WEEKLY_EVIDENCE_IDS} UUIDs",
+        )
+    normalized_ids: list[str] = []
+    seen_ids: set[str] = set()
+    try:
+        for raw_id in raw_ids:
+            normalized = str(UUID(raw_id.strip()))
+            if normalized not in seen_ids:
+                seen_ids.add(normalized)
+                normalized_ids.append(normalized)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="entry_ids must contain valid UUIDs") from exc
+
+    try:
+        plan = _get_user_plan(user_id)
+        entry_date_cutoff = _journal_history_cutoff(plan)
+        rows = fetch_week_evidence_snapshot(
+            get_admin_client(),
+            user_id,
+            parsed_week_start,
+            week_end,
+            normalized_ids,
+            rule_break,
+            entry_date_cutoff,
+        )
+    except EvidenceScopeMismatch as exc:
+        raise HTTPException(
+            status_code=404,
+            detail="One or more requested journal entries are not available for this evidence scope.",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Weekly journal evidence is temporarily unavailable.",
+        ) from exc
+    return {
+        "week_start": parsed_week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "rule_break": rule_break,
+        "requested_entry_ids": normalized_ids,
+        "matched_count": len(rows),
+        "coverage_complete": True,
+        "entries": [_serialize_journal_entry(row) for row in rows],
+    }
+
+
 @router.get("")
 async def list_entries(
     limit: int = Query(default=50, le=500),
@@ -304,18 +483,19 @@ async def list_entries(
         .order("entry_date", desc=True)
         .range(offset, offset + limit - 1)
     )
-    if plan == "free":
-        cutoff = (date.today() - timedelta(days=FREE_JOURNAL_MONTHS * 30)).isoformat()
-        q = q.gte("entry_date", cutoff)
+    cutoff = _journal_history_cutoff(plan)
+    if cutoff is not None:
+        q = q.gte("entry_date", cutoff.isoformat())
     if status:
         q = q.eq("status", status)
     if symbol:
         q = q.eq("symbol", symbol.upper())
 
     result = q.execute()
+    entries = [_serialize_journal_entry(entry) for entry in (result.data or [])]
     return {
-        "entries": result.data or [],
-        "total": len(result.data or []),
+        "entries": entries,
+        "total": len(entries),
         "plan": plan,
         "history_months": FREE_JOURNAL_MONTHS if plan == "free" else None,
     }
@@ -383,7 +563,7 @@ async def create_entry(
         "scanner_context": row["scanner_context"],
         "journal_id": created["id"],
     })
-    return created
+    return _serialize_journal_entry(created)
 
 
 def _snapshot_response(
@@ -520,7 +700,15 @@ async def update_entry(
         exit_d = date.fromisoformat(body.exit_date)  # type: ignore[arg-type]
         update_data["holding_days"] = (exit_d - entry_d).days
 
-    result = sb.table("trade_journal").update(update_data).eq("id", entry_id).execute()
+    result = (
+        sb.table("trade_journal")
+        .update(update_data)
+        .eq("id", entry_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=409, detail="Entry changed before the update completed")
     updated_entry = result.data[0]
 
     # Generate a local trade lesson when a trade is closed.
@@ -536,7 +724,63 @@ async def update_entry(
             "journal_id": entry_id,
         })
 
-    return updated_entry
+    return _serialize_journal_entry(updated_entry)
+
+
+@router.put("/{entry_id}/process-review")
+async def put_process_review(
+    entry_id: str,
+    body: ProcessReviewV1,
+    user_id: str = Depends(get_current_user_id),
+):
+    sb = get_admin_client()
+    try:
+        existing = (
+            sb.table("trade_journal")
+            .select("id,status,updated_at")
+            .eq("id", entry_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Journal review is temporarily unavailable.",
+        ) from exc
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    if existing.data.get("status") != "closed":
+        raise HTTPException(status_code=400, detail="Trade must be closed before review")
+    if str(existing.data.get("updated_at") or "") != body.expected_updated_at:
+        raise HTTPException(status_code=409, detail="Entry changed; reload before saving review")
+
+    reviewed_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    payload = {
+        "review_schema_version": 1,
+        "review_planned_setup": body.planned_setup,
+        "review_setup_adherence": body.adherence,
+        "review_rule_breaks": list(body.rule_breaks),
+        "review_lesson": body.lesson,
+        "reviewed_at": reviewed_at,
+    }
+    try:
+        updated = (
+            sb.table("trade_journal")
+            .update(payload)
+            .eq("id", entry_id)
+            .eq("user_id", user_id)
+            .eq("updated_at", body.expected_updated_at)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Journal review could not be saved.",
+        ) from exc
+    if not updated.data:
+        raise HTTPException(status_code=409, detail="Entry changed; reload before saving review")
+    return _serialize_journal_entry(updated.data[0])
 
 
 @router.post("/{entry_id}/lessons")
@@ -562,7 +806,7 @@ async def generate_lessons(
     from app.routers.ai import _DISCLAIMER
     result = dict(updated.data or {})
     result["disclaimer"] = _DISCLAIMER
-    return result
+    return _serialize_journal_entry(result)
 
 
 @router.delete("/{entry_id}")

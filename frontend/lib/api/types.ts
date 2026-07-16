@@ -504,6 +504,12 @@ export type JournalEntry = {
   invalidation_rule?: string | null;
   snapshot_state_path?: string | null;
   snapshot_captured_at?: string | null;
+  review_schema_version?: 1 | null;
+  planned_setup?: string | null;
+  setup_adherence?: SetupAdherence | null;
+  rule_breaks?: JournalRuleBreakCode[] | null;
+  review_lesson?: string | null;
+  reviewed_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -547,6 +553,69 @@ export type JournalChartSnapshot = {
   state: ChartSnapshotStateV1 | null;
   storage_path: string | null;
   captured_at: string | null;
+};
+
+export type SetupAdherence = "followed" | "partial" | "not_followed" | "not_applicable";
+
+export type JournalRuleBreakCode =
+  | "setup_not_confirmed"
+  | "entry_outside_plan"
+  | "position_risk_exceeded"
+  | "stop_rule_broken"
+  | "exit_rule_broken"
+  | "other";
+
+export type SaveJournalProcessReviewRequest = {
+  schema_version: 1;
+  planned_setup: string;
+  adherence: SetupAdherence;
+  rule_breaks: JournalRuleBreakCode[];
+  lesson: string;
+  expected_updated_at: string;
+};
+
+export type WeeklyReviewSupportingEntry = {
+  entry_id: string;
+  symbol: string;
+  exit_date: string;
+  planned_setup: string | null;
+  review_status: "reviewed" | "unreviewed";
+  setup_adherence: SetupAdherence | null;
+  rule_breaks: JournalRuleBreakCode[];
+  lesson: string | null;
+};
+
+export type JournalWeeklyReviewWeek = {
+  week_start: string;
+  week_end: string;
+  closed_trades: number;
+  reviewed_trades: number;
+  unreviewed_trades: number;
+  adherence: Record<SetupAdherence, number> & { denominator: number };
+  rule_breaks: Array<{ code: JournalRuleBreakCode; count: number; entry_ids: string[] }>;
+  supporting_entries: WeeklyReviewSupportingEntry[];
+};
+
+export type JournalWeeklyReviewResponse = {
+  schema_version: 1;
+  generated_at: string;
+  timezone: "Asia/Kolkata";
+  week_basis: "exit_date_monday_sunday";
+  completed_weeks_only: true;
+  period_start: string;
+  period_end: string;
+  coverage_complete: boolean;
+  weeks: JournalWeeklyReviewWeek[];
+};
+
+export type JournalWeeklyReviewEvidenceResponse = {
+  coverage_complete: true;
+  week_start: string;
+  week_end: string;
+  rule_break: JournalRuleBreakCode | null;
+  requested_entry_ids: string[];
+  matched_count: number;
+  entries: JournalEntry[];
 };
 
 export type JournalStats = {

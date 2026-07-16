@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { JournalEntry } from "./types";
+import { isCompletedProcessReview } from "@/lib/journal-weekly-review";
 
 export const SETUP_TYPES = [
   "VCP", "Breakout", "Stage 2", "Base Build", "Cup & Handle",
@@ -50,7 +51,7 @@ export type ReviewContext = {
 
 type DecisionMemoryEntry = Pick<
   JournalEntry,
-  "entry_reason" | "status" | "lessons" | "source_page" | "source_context" | "scanner_context" | "thesis" | "invalidation_rule"
+  "entry_reason" | "status" | "lessons" | "source_page" | "source_context" | "scanner_context" | "thesis" | "invalidation_rule" | "review_schema_version" | "setup_adherence" | "reviewed_at" | "review_lesson"
 >;
 
 export type DecisionMemorySummary = {
@@ -220,7 +221,7 @@ export function getReviewContext(entry: ContextEntry): ReviewContext {
   };
 }
 
-export function getTradeFlowMeta(entry: Pick<JournalEntry, "entry_reason" | "status" | "lessons" | "source_page">): TradeFlowMeta {
+export function getTradeFlowMeta(entry: Pick<JournalEntry, "entry_reason" | "status" | "lessons" | "source_page" | "review_schema_version" | "setup_adherence" | "reviewed_at" | "review_lesson">): TradeFlowMeta {
   const reason = (entry.entry_reason || "").toLowerCase();
 
   const sourceLabel = sourceLabelFromEntry(entry);
@@ -241,7 +242,7 @@ export function getTradeFlowMeta(entry: Pick<JournalEntry, "entry_reason" | "sta
     };
   }
 
-  if (entry.lessons?.trim()) {
+  if (isCompletedProcessReview(entry)) {
     return {
       sourceLabel,
       brokerLabel,
@@ -276,7 +277,7 @@ export function getDecisionMemorySummary(
 ): DecisionMemorySummary {
   const closedEntries = entries.filter((entry) => entry.status === "closed");
   const closedTrades = options.closedTrades ?? closedEntries.length;
-  const reviewedTrades = options.reviewedTrades ?? closedEntries.filter((entry) => Boolean(entry.lessons?.trim())).length;
+  const reviewedTrades = options.reviewedTrades ?? closedEntries.filter(isCompletedProcessReview).length;
   const decisionContextCount = closedEntries.filter(hasDecisionContext).length;
   const coveragePct = closedTrades > 0 ? Math.min(100, Math.round((reviewedTrades / closedTrades) * 100)) : 0;
 
@@ -321,7 +322,7 @@ export function getDecisionMemorySummary(
     return {
       status: "needs-review",
       headline: `${remaining} closed ${remaining === 1 ? "trade needs" : "trades need"} review`,
-      nextAction: "Turn closed trades into lessons before judging setup quality.",
+      nextAction: "Complete adherence and one lesson for each closed trade before judging setup quality.",
       coveragePct,
       closedTrades,
       reviewedTrades,
@@ -358,10 +359,10 @@ export function getJournalReviewStage(
     : 0;
   const latestLesson = compactLesson(
     entries
-      .filter((entry) => entry.status === "closed" && entry.lessons?.trim())
+      .filter((entry) => entry.status === "closed" && isCompletedProcessReview(entry))
       .slice()
       .reverse()
-      .find((entry) => entry.lessons?.trim())?.lessons,
+      .find((entry) => entry.review_lesson?.trim())?.review_lesson,
   );
 
   if (options.unavailable) {
@@ -408,21 +409,21 @@ export function getJournalReviewStage(
     return {
       status: "needs-review",
       headline: `${options.needsReview} closed ${options.needsReview === 1 ? "trade needs" : "trades need"} review`,
-      detail: "Attach a lesson to every closed trade before trusting broad pattern analysis.",
+      detail: "Record planned setup, adherence, rule breaks, and one lesson before trusting broad pattern analysis.",
       primaryAction: "Review next trade",
       secondaryAction: "View reviewed trades",
       progressLabel: `${options.reviewedTrades}/${options.closedTrades} reviewed`,
       progressPct: coveragePct,
       processChange: latestLesson
         ? `Latest process note: ${latestLesson}`
-        : "The process story is incomplete until the next closed trade gets a lesson.",
+        : "The process story is incomplete until the next closed trade gets an explicit process review.",
     };
   }
 
   return {
     status: "ready",
     headline: "Review coverage is current",
-    detail: "Closed trades have lessons attached, so the next useful step is pattern review before another plan.",
+    detail: "Closed trades have explicit process reviews, so the next useful step is pattern review before another plan.",
     primaryAction: "Run journal-wide review",
     secondaryAction: "Open Analytics",
     progressLabel: `${options.reviewedTrades}/${options.closedTrades} reviewed`,
