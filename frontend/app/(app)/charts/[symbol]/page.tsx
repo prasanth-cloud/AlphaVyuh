@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Activity, Bell, BookmarkPlus, Check, Eye, EyeOff, Lock, Magnet, Minus, MoveRight, MousePointer2, PencilLine, RectangleHorizontal, RotateCcw, RotateCw, Save, Share2, SlidersHorizontal, TrendingDown, TrendingUp, Type, Unlock, Waves } from "lucide-react";
 import type { LogicalRange } from "lightweight-charts";
 import type {
-  CandleBar, CandlesResponse, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
+  CandleBar, CandlesResponse, ChartSnapshotStateV1, Drawing, Fundamentals, JournalEntry, LiveQuote, OrderResult, PortfolioPosition, PriceAlert, Watchlist,
 } from "@/lib/api";
 import {
   getCandles, getDrawings, saveDrawing,
@@ -37,6 +37,7 @@ import { formatMarketDataSource } from "@/lib/data-copy";
 import { buildChartPlanDraft } from "@/lib/chart-plan-handoff";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { buildHigherTimeframeReview } from "@/lib/chart-review-timeframes";
+import { buildChartSnapshotState } from "@/lib/chart-snapshot";
 
 type BrokerStatus = Awaited<ReturnType<typeof getBrokerStatus>>;
 type SymbolReviewContext = {
@@ -2404,6 +2405,32 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
               target: tradePlan.target ? parseFloat(tradePlan.target) : null,
             }}
             onClose={() => setShowOrder(false)}
+            captureChartSnapshot={(entryPrice): ChartSnapshotStateV1 => buildChartSnapshotState({
+              symbol,
+              timeframe,
+              range_label: rangeLabel,
+              chart_type: chartType,
+              visible_range: logicalRange && Number.isFinite(logicalRange.from) && Number.isFinite(logicalRange.to)
+                ? { from: logicalRange.from, to: logicalRange.to }
+                : null,
+              indicators: [...activeIndicators],
+              drawings: drawnLines.map((drawing) => ({
+                id: drawing.id,
+                tool: drawing.tool,
+                p1: { ...drawing.p1 },
+                p2: { ...drawing.p2 },
+                p3: drawing.p3 ? { ...drawing.p3 } : undefined,
+                color: drawing.color,
+                text: drawing.text,
+                locked: drawing.locked === true,
+                hidden: drawing.hidden === true,
+              })),
+              entry_price: entryPrice,
+              last_bar_time: lastCandleDate,
+              data_source: data?.source_metadata?.source_name ?? data?.source ?? "AlphaVyuh chart data",
+              data_mode: isMockMode ? "demo" : data?.source_metadata?.mode ?? data?.mode ?? "unknown",
+              data_as_of: data?.coverage?.as_of ?? data?.source_metadata?.as_of ?? lastCandleDate,
+            })}
             onFilled={(result: OrderResult) => {
               setShowOrder(false);
               setOrderToast({

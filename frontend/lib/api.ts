@@ -37,6 +37,7 @@ import type {
   BrokerProfile,
   CandlesResponse,
   ChartLayout,
+  ChartSnapshotStateV1,
   ChartWorkspace,
   CreateJournalEntry,
   DataHealth,
@@ -46,6 +47,7 @@ import type {
   Fundamentals,
   IndicatorsResponse,
   JournalAnalytics,
+  JournalChartSnapshot,
   JournalEntry,
   JournalStats,
   LiveMarketStatus,
@@ -87,6 +89,7 @@ import type {
   WorkflowStatePatch,
   ZerodhaReadOnlySmoke,
 } from './api/types'
+import { cloneChartSnapshotState, normalizeJournalChartSnapshot } from './chart-snapshot'
 
 export * from './api/types'
 export {
@@ -107,6 +110,7 @@ export const API = API_BASE_URL;
 
 // Public endpoints don't need auth — just JSON content-type
 const publicHeaders: HeadersInit = { "Content-Type": "application/json" };
+const mockJournalChartSnapshots = new Map<string, ChartSnapshotStateV1>();
 
 export async function getMarkets(): Promise<Market[]> {
   const res = await fetch(`${API}/api/v1/market/markets`, { headers: publicHeaders });
@@ -1193,6 +1197,7 @@ export async function saveDefaultChartLayout(layout: Omit<ChartLayout, "symbol">
 
 
 const mockJournalKey = "alphavyuh-mock-journal-v1";
+const mockJournalChartSnapshotKey = "alphavyuh-mock-journal-chart-snapshots-v1";
 const mockBrokerSyncKey = "alphavyuh-mock-broker-sync-v1";
 const brokerImportMarker = "alphavyuh-broker-import";
 type BrokerImportSource = "zerodha" | "upstox";
@@ -1237,6 +1242,56 @@ function readLocalJournalEntries(): JournalEntry[] {
 function writeLocalJournalEntries(entries: JournalEntry[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(mockJournalKey, JSON.stringify(entries));
+}
+
+function readLocalJournalChartSnapshot(entryId: string): ChartSnapshotStateV1 | null {
+  const inMemory = mockJournalChartSnapshots.get(entryId);
+  if (inMemory) return cloneChartSnapshotState(inMemory);
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(mockJournalChartSnapshotKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const normalized = normalizeJournalChartSnapshot({
+      available: true,
+      state: parsed && typeof parsed === "object" ? parsed[entryId] : null,
+    });
+    if (!normalized.state) return null;
+    mockJournalChartSnapshots.set(entryId, normalized.state);
+    return cloneChartSnapshotState(normalized.state);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalJournalChartSnapshot(entryId: string, state: ChartSnapshotStateV1) {
+  const immutable = cloneChartSnapshotState(state);
+  mockJournalChartSnapshots.set(entryId, immutable);
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(mockJournalChartSnapshotKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const snapshots = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    window.localStorage.setItem(mockJournalChartSnapshotKey, JSON.stringify({
+      ...snapshots,
+      [entryId]: immutable,
+    }));
+  } catch {
+    // Mock persistence is best effort; production uses private Storage.
+  }
+}
+
+function deleteLocalJournalChartSnapshot(entryId: string) {
+  mockJournalChartSnapshots.delete(entryId);
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(mockJournalChartSnapshotKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    delete parsed[entryId];
+    window.localStorage.setItem(mockJournalChartSnapshotKey, JSON.stringify(parsed));
+  } catch {
+    // Mock cleanup is best effort; production cleanup is server-owned.
+  }
 }
 
 function readLocalBrokerSync(): { last_synced_at: string | null; last_synced_broker: BrokerImportSource | null } {
@@ -1425,9 +1480,71 @@ export async function updateJournalEntry(id: string, update: UpdateJournalEntry)
   return updated;
 }
 
+export async function attachJournalChartSnapshot(
+  entryId: string,
+  state: ChartSnapshotStateV1,
+): Promise<JournalChartSnapshot> {
+  if (shouldUseMockFallback()) {
+    const existing = readLocalJournalChartSnapshot(entryId);
+    const immutableState = existing ?? cloneChartSnapshotState(state);
+    if (!existing) writeLocalJournalChartSnapshot(entryId, immutableState);
+    const entries = readLocalJournalEntries();
+    writeLocalJournalEntries(entries.map((entry) => entry.id === entryId
+      ? {
+          ...entry,
+          snapshot_state_path: `mock://trade-snapshots/${entryId}.json`,
+          snapshot_captured_at: immutableState.captured_at,
+        }
+      : entry));
+    invalidateClientCache(["journal:"]);
+    return {
+      available: true,
+      state: cloneChartSnapshotState(immutableState),
+      storage_path: `mock://trade-snapshots/${entryId}.json`,
+      captured_at: immutableState.captured_at,
+    };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(entryId)}/snapshot`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ state }),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Chart context could not be attached (${res.status}).`));
+  }
+  const parsed = normalizeJournalChartSnapshot(await res.json().catch(() => null));
+  if (!parsed.available || !parsed.state) {
+    throw new Error("Chart context attachment returned an invalid response.");
+  }
+  invalidateClientCache(["journal:"]);
+  return parsed;
+}
+
+export async function getJournalChartSnapshot(entryId: string): Promise<JournalChartSnapshot> {
+  if (shouldUseMockFallback()) {
+    const state = readLocalJournalChartSnapshot(entryId);
+    return state
+      ? {
+          available: true,
+          state: cloneChartSnapshotState(state),
+          storage_path: `mock://trade-snapshots/${entryId}.json`,
+          captured_at: state.captured_at,
+        }
+      : { available: false, state: null, storage_path: null, captured_at: null };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(entryId)}/snapshot`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Chart context is temporarily unavailable (${res.status}).`));
+  }
+  return normalizeJournalChartSnapshot(await res.json().catch(() => null));
+}
+
 export async function deleteJournalEntry(id: string): Promise<void> {
   if (shouldUseMockFallback()) {
     writeLocalJournalEntries(readLocalJournalEntries().filter((entry) => entry.id !== id));
+    deleteLocalJournalChartSnapshot(id);
     invalidateClientCache(["journal:", "portfolio"]);
     return;
   }

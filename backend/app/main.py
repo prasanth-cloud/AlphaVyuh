@@ -38,6 +38,7 @@ try:
 except ImportError:
     _ai_review_available = False
 from app.services.supabase import settings
+from app.middleware.snapshot_body_limit import SnapshotBodyLimitMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SnapshotBodyLimitMiddleware)
 
 app.include_router(admin_router.router)
 app.include_router(users.router)

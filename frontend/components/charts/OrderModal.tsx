@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { placeOrder, getBrokerStatus } from "@/lib/api";
-import type { PlaceOrderRequest, OrderResult } from "@/lib/api";
+import { attachJournalChartSnapshot, placeOrder, getBrokerStatus } from "@/lib/api";
+import type { ChartSnapshotStateV1, PlaceOrderRequest, OrderResult } from "@/lib/api";
 import { DataProvenanceBadge } from "@/components/ui";
 import { trackEvent } from "@/lib/analytics";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
-import { buildChartSnapshotMetadata } from "@/lib/chart-snapshot";
+import { buildChartSnapshotMetadata, cloneChartSnapshotState } from "@/lib/chart-snapshot";
 import { useOrderIntentKey } from "@/lib/order-intent";
 
 const SETUP_TYPES = [
@@ -30,9 +30,10 @@ type Props = {
   };
   onClose:     () => void;
   onFilled:    (result: OrderResult) => void;
+  captureChartSnapshot?: (entryPrice: number) => ChartSnapshotStateV1;
 };
 
-export default function OrderModal({ symbol, currentPrice, defaultSide, initialPlan, onClose, onFilled }: Props) {
+export default function OrderModal({ symbol, currentPrice, defaultSide, initialPlan, onClose, onFilled, captureChartSnapshot }: Props) {
   const orderIntent = useOrderIntentKey();
   const [side, setSide]             = useState<"buy" | "sell">(defaultSide);
   const [quantity, setQuantity]     = useState("1");
@@ -108,6 +109,16 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
     setPlacing(true);
     setError("");
     try {
+      let snapshotState: ChartSnapshotStateV1 | null = null;
+      let snapshotCaptureWarning: string | null = null;
+      if (captureChartSnapshot) {
+        try {
+          // Freeze the decision context before the primary order/journal request begins.
+          snapshotState = cloneChartSnapshotState(captureChartSnapshot(priceNum));
+        } catch {
+          snapshotCaptureWarning = "The journal entry was recorded, but its structured chart context could not be captured.";
+        }
+      }
       const req: PlaceOrderRequest = {
         symbol,
         side,
@@ -125,9 +136,34 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
       };
       req.idempotency_key = orderIntent.keyFor(req);
       const result = await placeOrder(req);
+      let completedResult = result;
+      if (snapshotState && result.journal_id) {
+        try {
+          await attachJournalChartSnapshot(result.journal_id, snapshotState);
+          const partialNotice = "Structured chart context was captured at this decision. An image preview is not available in this release.";
+          completedResult = {
+            ...result,
+            chart_snapshot_status: "captured",
+            chart_snapshot_warning: partialNotice,
+            next_actions: [...(result.next_actions ?? []), partialNotice],
+          };
+        } catch {
+          snapshotCaptureWarning = "The journal entry was recorded, but its structured chart context could not be attached. The primary journal action was not reversed.";
+        }
+      } else if (snapshotState && !result.journal_id) {
+        snapshotCaptureWarning = "The primary action succeeded without a Journal entry, so structured chart context could not be attached.";
+      }
+      if (snapshotCaptureWarning) {
+        completedResult = {
+          ...result,
+          chart_snapshot_status: "failed",
+          chart_snapshot_warning: snapshotCaptureWarning,
+          next_actions: [...(result.next_actions ?? []), snapshotCaptureWarning],
+        };
+      }
       orderIntent.reset();
       trackEvent(canRouteLive && liveConfirmed ? "broker_order_submitted" : "mock_order_drafted", { source: "chart", symbol, side, broker: brokerName ?? "simulated" });
-      onFilled(result);
+      onFilled(completedResult);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Order failed");
     } finally {
