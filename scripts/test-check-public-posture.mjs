@@ -6,7 +6,7 @@ import { strict as assert } from "node:assert";
 
 const pageCopy = {
   "/": "Account access · EOD market data · Get started",
-  "/login": "Sign in to AlphaVyuh. EOD market data · Broker import only",
+  "/login": "<h1>Sign in</h1> EOD market data · Broker import only",
   "/access": "Operate your EOD trading workflow. Data and execution policy. No live/sandbox broker order placement. Account Access",
 };
 
@@ -109,7 +109,7 @@ await withServer(servePages({ "/access": `${pageCopy["/access"]} Professional ch
   );
 });
 
-await withServer(servePages({ "/login": "Sign in to AlphaVyuh. Broker import only" }), async (siteUrl) => {
+await withServer(servePages({ "/login": "<h1>Sign in</h1> Broker import only" }), async (siteUrl) => {
   const { code, stdout, stderr } = await runChecker(siteUrl);
   assert.notEqual(code, 0, "public posture check should fail on missing EOD data copy");
   assert.match(

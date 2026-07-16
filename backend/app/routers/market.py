@@ -22,6 +22,7 @@ from app.services.market_breadth_snapshot import (
     read_market_breadth_snapshot,
 )
 from app.services.market_context import eod_source_metadata, fallback_source_metadata
+from app.services.market_analytics import load_market_analytics
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.sector_taxonomy import NSE_SECTORAL_INDEXES, build_sector_taxonomy_metadata
 from app.services.supabase import get_admin_client
@@ -32,6 +33,9 @@ router = APIRouter(prefix="/api/v1/market", tags=["market"])
 OVERVIEW_CACHE_TTL_SECONDS = 300
 _overview_cache: dict | None = None
 _overview_cache_expires_at = 0.0
+ANALYTICS_CACHE_TTL_SECONDS = 300
+_analytics_cache: dict | None = None
+_analytics_cache_expires_at = 0.0
 LIVE_MARKET_STATUS_CACHE_TTL_SECONDS = 30
 LIVE_SECTOR_INDEX_CACHE_TTL_SECONDS = 30
 _live_status_cache: dict | None = None
@@ -257,6 +261,42 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
     _overview_cache = deepcopy(overview)
     _overview_cache_expires_at = monotonic() + OVERVIEW_CACHE_TTL_SECONDS
     return overview
+
+
+@router.get("/analytics")
+async def market_analytics(user_id: str = Depends(get_current_user_id)):
+    """Completed-session Market Pulse and relative sector participation context."""
+    global _analytics_cache, _analytics_cache_expires_at
+
+    now = monotonic()
+    if _analytics_cache and _analytics_cache_expires_at > now:
+        cached = deepcopy(_analytics_cache)
+        cached["cache_status"] = "hit"
+        for field in ("provenance", "source_metadata"):
+            if isinstance(cached.get(field), dict):
+                cached[field]["cache_status"] = "hit"
+        return cached
+
+    try:
+        client = get_admin_client()
+        latest_date = get_latest_complete_trade_date(client)
+        if not latest_date:
+            raise HTTPException(
+                status_code=503,
+                detail="Market Pulse is temporarily unavailable.",
+            )
+        payload = load_market_analytics(client, latest_date)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Market Pulse is temporarily unavailable.",
+        )
+
+    _analytics_cache = deepcopy(payload)
+    _analytics_cache_expires_at = monotonic() + ANALYTICS_CACHE_TTL_SECONDS
+    return payload
 
 
 @router.get("/live/status")

@@ -66,6 +66,7 @@ const NAV_TITLES: Record<WorkflowDeskRoute, string> = {
 
 const APP_ROUTE_LABELS: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/analytics": "Market Pulse",
   "/scanner": "Scanner",
   "/watchlist": "Watchlist",
   "/journal": "Journal",
