@@ -9,9 +9,11 @@ describe("integrated visual evidence contract", () => {
     expect(specSource).toContain('"dashboard-desktop"');
     expect(specSource).toContain('"market-pulse-desktop"');
     expect(specSource).toContain('"journal-timeline-desktop"');
+    expect(specSource).toContain('"feedback-toolbar-desktop"');
     expect(specSource).toContain('"dashboard-mobile"');
     expect(specSource).toContain('"market-pulse-mobile"');
     expect(specSource).toContain('"journal-timeline-mobile"');
+    expect(specSource).toContain('"feedback-toolbar-mobile"');
     expect(specSource).toContain('filter({ hasText: "DIXON" })');
     expect(specSource).toContain("toHaveCount(2)");
     expect(specSource).toContain("expectNoHorizontalOverflow");

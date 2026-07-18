@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFeedbackReport } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { currentFeedbackHref } from "@/lib/feedback-context";
@@ -11,6 +11,8 @@ type FeedbackWidgetProps = {
   defaultSymbol?: string | null;
 };
 
+const UTILITY_POPOVER_EVENT = "alphavyuh:utility-popover-open";
+
 export default function FeedbackWidget({ defaultCategory = "general", defaultSymbol = null }: FeedbackWidgetProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -18,6 +20,51 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("");
+  const widgetRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+
+  function closeAndRestoreFocus() {
+    setOpen(false);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  }
+
+  function toggleDisclosure() {
+    const next = !open;
+    if (next) {
+      window.dispatchEvent(new CustomEvent(UTILITY_POPOVER_EVENT, { detail: "feedback" }));
+    }
+    setOpen(next);
+  }
+
+  useEffect(() => {
+    const closeForAnotherUtility = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== "feedback") setOpen(false);
+    };
+    window.addEventListener(UTILITY_POPOVER_EVENT, closeForAnotherUtility);
+    return () => window.removeEventListener(UTILITY_POPOVER_EVENT, closeForAnotherUtility);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const focusId = window.requestAnimationFrame(() => messageRef.current?.focus());
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!widgetRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      closeAndRestoreFocus();
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.cancelAnimationFrame(focusId);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
 
   async function submit() {
     const text = message.trim();
@@ -41,8 +88,8 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
       });
       trackEvent("feedback_submitted", { category, page: pathname, has_symbol: Boolean(defaultSymbol) });
       setMessage("");
-      setOpen(false);
       setStatus("Feedback sent.");
+      closeAndRestoreFocus();
       window.setTimeout(() => setStatus(""), 2500);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not send feedback.");
@@ -52,13 +99,14 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
   }
 
   return (
-    <div className="feedback-widget">
+    <div ref={widgetRef} className="feedback-widget">
       {open && (
         <div
+          id="feedback-widget-panel"
           className="feedback-widget-panel"
+          role="group"
+          aria-label="Send feedback"
           style={{
-            width: 320,
-            marginBottom: 10,
             padding: 14,
             borderRadius: 14,
             background: "var(--surface-1)",
@@ -68,6 +116,7 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
         >
           <div className="heading-card" style={{ marginBottom: 8 }}>Send feedback</div>
           <select
+            aria-label="Feedback category"
             value={category}
             onChange={(event) => setCategory(event.target.value as typeof category)}
             style={{ width: "100%", marginBottom: 8, padding: "9px 10px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", fontSize: 12 }}
@@ -78,15 +127,17 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
             <option value="feature_request">Feature request</option>
           </select>
           <textarea
+            ref={messageRef}
+            aria-label="Feedback details"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             rows={4}
             placeholder="What happened? What did you expect?"
             style={{ width: "100%", resize: "vertical", padding: 10, borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border-subtle)", color: "var(--text-primary)", fontSize: 12, lineHeight: 1.5 }}
           />
-          {status && <div className="caption" style={{ marginTop: 8, color: status.includes("sent") ? "var(--gain)" : "var(--warn)" }}>{status}</div>}
+          {status && <div role="status" aria-live="polite" className="caption" style={{ marginTop: 8, color: status.includes("sent") ? "var(--gain)" : "var(--warn)" }}>{status}</div>}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
-            <button className="workspace-chip-button" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="workspace-chip-button" onClick={closeAndRestoreFocus}>Cancel</button>
             <button className="workspace-chip-button active" disabled={sending} onClick={submit}>
               {sending ? "Sending..." : "Send"}
             </button>
@@ -94,14 +145,18 @@ export default function FeedbackWidget({ defaultCategory = "general", defaultSym
         </div>
       )}
       <button
-        onClick={() => setOpen((value) => !value)}
+        type="button"
+        ref={triggerRef}
+        onClick={toggleDisclosure}
         className="workspace-chip-button active"
+        aria-expanded={open}
+        aria-controls="feedback-widget-panel"
         style={{ boxShadow: "0 12px 30px rgba(0,0,0,0.28)" }}
       >
         Feedback
       </button>
       {!open && status && (
-        <div className="caption" style={{ marginTop: 8, textAlign: "right", color: "var(--gain)" }}>{status}</div>
+        <div role="status" aria-live="polite" className="caption" style={{ marginTop: 8, textAlign: "right", color: "var(--gain)" }}>{status}</div>
       )}
     </div>
   );

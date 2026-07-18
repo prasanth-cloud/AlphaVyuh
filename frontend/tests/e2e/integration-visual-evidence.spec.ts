@@ -28,12 +28,13 @@ async function attachScreenshot(
   testInfo: TestInfo,
   name: string,
   locator?: Locator,
+  fullPage = true,
 ) {
   const path = testInfo.outputPath(`${name}.png`);
   if (locator) {
     await locator.screenshot({ path, animations: "disabled" });
   } else {
-    await page.screenshot({ path, fullPage: true, animations: "disabled" });
+    await page.screenshot({ path, fullPage, animations: "disabled" });
   }
   await testInfo.attach(name, { path, contentType: "image/png" });
 }
@@ -61,6 +62,10 @@ test("captures the coherent integrated decision workflow", async ({ page }, test
   await settleForEvidence(page);
   await expectNoHorizontalOverflow(page);
   await attachScreenshot(page, testInfo, "dashboard-desktop");
+  await page.getByRole("button", { name: "Feedback" }).click();
+  await expect(page.getByRole("group", { name: "Send feedback" })).toBeVisible();
+  await attachScreenshot(page, testInfo, "feedback-toolbar-desktop", undefined, false);
+  await page.keyboard.press("Escape");
 
   await page.goto("/analytics", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("market-pulse-provenance")).toBeVisible({ timeout: 15_000 });
@@ -89,6 +94,10 @@ test("captures the coherent integrated decision workflow", async ({ page }, test
   await settleForEvidence(page);
   await expectNoHorizontalOverflow(page);
   await attachScreenshot(page, testInfo, "dashboard-mobile");
+  await page.getByRole("button", { name: "Feedback" }).click();
+  await expect(page.getByRole("group", { name: "Send feedback" })).toBeVisible();
+  await attachScreenshot(page, testInfo, "feedback-toolbar-mobile", undefined, false);
+  await page.keyboard.press("Escape");
 
   await page.goto("/analytics", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("market-pulse-provenance")).toBeVisible({ timeout: 15_000 });

@@ -156,6 +156,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <DataModePill />
             <MarketStatus />
             <AccountMenuButton theme={theme} onToggleTheme={toggleTheme} />
+            {!hideFeedback && <FeedbackWidget />}
           </div>
         </div>
       </nav>
@@ -163,7 +164,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <KiteTokenBanner />
       <main className={fullChart ? 'app-content app-content-full-chart' : 'app-content'}>{children}</main>
-      {!hideFeedback && <FeedbackWidget />}
     </div>
   )
 }
@@ -289,6 +289,14 @@ function AccountMenuButton({ theme, onToggleTheme }: { theme: 'dark' | 'light'; 
   const router = useRouter()
 
   useEffect(() => {
+    const closeForAnotherUtility = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== 'account') setOpen(false)
+    }
+    window.addEventListener('alphavyuh:utility-popover-open', closeForAnotherUtility)
+    return () => window.removeEventListener('alphavyuh:utility-popover-open', closeForAnotherUtility)
+  }, [])
+
+  useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
@@ -306,7 +314,14 @@ function AccountMenuButton({ theme, onToggleTheme }: { theme: 'dark' | 'light'; 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        type="button"
+        aria-label="Account menu"
+        aria-expanded={open}
+        onClick={() => {
+          const next = !open
+          if (next) window.dispatchEvent(new CustomEvent('alphavyuh:utility-popover-open', { detail: 'account' }))
+          setOpen(next)
+        }}
         style={{
           width: 34, height: 34,
           borderRadius: '50%',

@@ -87,8 +87,8 @@ export default function AccessPage() {
           <Panel title="Feedback and bug report paths">
             <div className="space-y-4 text-sm leading-7 text-[#b6c0ce]">
               <p>
-                Signed-in users can use the fixed <strong className="text-[#f4f7fb]">Feedback</strong> button
-                in the lower-right corner. Choose General feedback, Bug, Data issue, or Feature request.
+                Signed-in users can use the <strong className="text-[#f4f7fb]">Feedback</strong> control
+                in the application toolbar. Choose General feedback, Bug, Data issue, or Feature request.
               </p>
               <p>
                 For account, onboarding, workflow, or urgent bug reports, email{" "}

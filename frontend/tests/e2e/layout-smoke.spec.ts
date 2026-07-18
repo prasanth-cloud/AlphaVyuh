@@ -321,25 +321,66 @@ test.describe("Workflow layout smoke", () => {
     await expect(page.locator(".watchlist-chart-header").getByRole("button", { name: /Bollinger/i })).toBeVisible();
   });
 
-  test("feedback widget does not cover top workflow controls", async ({ page }) => {
+  test("feedback disclosure stays inside desktop and mobile viewports", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 15_000 });
-    const boxes = await page.evaluate(() => {
-      const serialize = (rect: DOMRect | undefined) => rect ? {
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-      } : null;
-      const widget = serialize(document.querySelector(".feedback-widget")?.getBoundingClientRect());
-      const topbar = serialize(document.querySelector(".app-topbar")?.getBoundingClientRect());
-      const chartHeader = serialize(document.querySelector(".watchlist-chart-header")?.getBoundingClientRect());
-      return { widget, topbar, chartHeader };
-    });
+    const accountTrigger = page.getByRole("button", { name: "Account menu" });
+    const feedbackTrigger = page.getByRole("button", { name: "Feedback" });
 
-    expect(boxes.widget).toBeTruthy();
-    if (boxes.widget && boxes.topbar) expect(intersects(boxes.widget, boxes.topbar)).toBe(false);
-    if (boxes.widget && boxes.chartHeader) expect(intersects(boxes.widget, boxes.chartHeader)).toBe(false);
+    await accountTrigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+    await feedbackTrigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("group", { name: "Send feedback" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Settings", exact: true })).toBeHidden();
+    await accountTrigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("group", { name: "Send feedback" })).toBeHidden();
+    await expect(page.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 720 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/watchlist", { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId("watchlist-workflow-strip")).toBeVisible({ timeout: 15_000 });
+      const trigger = page.getByRole("button", { name: "Feedback" });
+      await expect(trigger).toBeVisible();
+      await trigger.click();
+      const panel = page.getByRole("group", { name: "Send feedback" });
+      await expect(panel).toBeVisible();
+
+      const boxes = await page.evaluate(() => {
+        const serialize = (rect: DOMRect | undefined) => rect ? {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+        } : null;
+        const widget = serialize(document.querySelector(".feedback-widget")?.getBoundingClientRect());
+        const panel = serialize(document.querySelector(".feedback-widget-panel")?.getBoundingClientRect());
+        const chartHeader = serialize(document.querySelector(".watchlist-chart-header")?.getBoundingClientRect());
+        const position = document.querySelector(".feedback-widget")
+          ? getComputedStyle(document.querySelector(".feedback-widget") as Element).position
+          : null;
+        return { widget, panel, chartHeader, position, viewportWidth: window.innerWidth };
+      });
+
+      expect(boxes.widget).toBeTruthy();
+      expect(boxes.panel).toBeTruthy();
+      expect(boxes.position).toBe("relative");
+      if (boxes.widget && boxes.panel) {
+        expect(boxes.panel.x).toBeGreaterThanOrEqual(16);
+        expect(boxes.panel.x + boxes.panel.width).toBeLessThanOrEqual(boxes.viewportWidth - 16);
+        expect(boxes.panel.y).toBeGreaterThanOrEqual(boxes.widget.y + boxes.widget.height);
+      }
+      if (boxes.widget && boxes.chartHeader) expect(intersects(boxes.widget, boxes.chartHeader)).toBe(false);
+
+      await page.keyboard.press("Escape");
+      await expect(panel).toBeHidden();
+      await expect(trigger).toBeFocused();
+    }
   });
 
   test("launch routes render without console errors or horizontal overflow", async ({ page }) => {
