@@ -48,6 +48,8 @@ SECRET_GATED_PUBLIC_ROUTES = {
     ("GET", "/api/v1/email/unsubscribe"),
 }
 
+AUTH_DEPENDENCIES = {"get_current_user_id", "get_current_user_token"}
+
 
 def _route_deps(route) -> set[str]:
     dependant = getattr(route, "dependant", None)
@@ -73,7 +75,7 @@ def test_backend_route_auth_inventory_is_explicit():
 
     for method, path, deps in _api_routes():
         route = (method, path)
-        if "get_current_user_id" in deps:
+        if deps & AUTH_DEPENDENCIES:
             stale_allowlist.discard(route)
             continue
         if route in PUBLIC_ROUTES:
@@ -90,6 +92,12 @@ def test_sensitive_data_health_routes_require_user_auth():
 
     assert "get_current_user_id" in routes[("GET", "/api/v1/data/health")]
     assert "get_current_user_id" in routes[("GET", "/api/v1/data/runs")]
+
+
+def test_market_analytics_requires_the_validated_user_token():
+    routes = {(method, path): deps for method, path, deps in _api_routes()}
+
+    assert "get_current_user_token" in routes[("GET", "/api/v1/market/analytics")]
 
 
 def test_secret_gated_public_routes_are_named_in_allowlist():

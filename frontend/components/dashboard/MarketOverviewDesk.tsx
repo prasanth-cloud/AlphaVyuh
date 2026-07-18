@@ -426,6 +426,9 @@ export function MarketOverviewDesk({ data, dataHealth, marketError }: Props) {
           <div className="caption">Live index quotes with NSE breadth, sector map, and leadership.</div>
         </div>
         <div data-testid="dashboard-data-trust" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <a href="/analytics" className="workspace-chip-button" style={{ textDecoration: "none" }}>
+            Breadth history
+          </a>
           {data.source_metadata?.coverage_pct != null && (
             <span className="workspace-pill" title={`${data.source_metadata.symbols_count ?? data.total} symbols included`}>
               NSE universe · <Num>{safeMarketNumber(data.source_metadata.coverage_pct).toFixed(0)}%</Num>
