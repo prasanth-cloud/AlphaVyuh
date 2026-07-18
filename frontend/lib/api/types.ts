@@ -502,8 +502,51 @@ export type JournalEntry = {
   scanner_context?: ScannerIdeaContext | null;
   thesis?: string | null;
   invalidation_rule?: string | null;
+  snapshot_state_path?: string | null;
+  snapshot_captured_at?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ChartSnapshotPointV1 = {
+  time: string;
+  price: number;
+};
+
+export type ChartSnapshotDrawingV1 = {
+  id: string;
+  tool: string;
+  p1: ChartSnapshotPointV1;
+  p2: ChartSnapshotPointV1;
+  p3?: ChartSnapshotPointV1;
+  color: string;
+  text?: string;
+  locked: boolean;
+  hidden: boolean;
+};
+
+export type ChartSnapshotStateV1 = {
+  schema_version: 1;
+  symbol: string;
+  timeframe: string;
+  range_label: string;
+  chart_type: string;
+  visible_range: { from: number; to: number } | null;
+  indicators: string[];
+  drawings: ChartSnapshotDrawingV1[];
+  entry_price: number;
+  last_bar_time: string | null;
+  data_source: string;
+  data_mode: DataMode;
+  data_as_of: string | null;
+  captured_at: string;
+};
+
+export type JournalChartSnapshot = {
+  available: boolean;
+  state: ChartSnapshotStateV1 | null;
+  storage_path: string | null;
+  captured_at: string | null;
 };
 
 export type JournalStats = {
@@ -776,6 +819,8 @@ export type OrderResult = {
   journal_status?:  string;
   risk_reward?:     number | null;
   next_actions?:    string[];
+  chart_snapshot_status?: "captured" | "unavailable" | "failed";
+  chart_snapshot_warning?: string | null;
 };
 
 export type BrokerOrderReconciliation = {
