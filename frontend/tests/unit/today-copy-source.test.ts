@@ -13,13 +13,13 @@ describe("Dashboard page copy", () => {
     expect(dashboardSource).toMatch(/Data status/i);
   });
 
-  it("focuses the dashboard on market overview and equity snapshot without session workflow chrome", () => {
+  it("focuses the dashboard on market state and one operating brief without session workflow chrome", () => {
     expect(dashboardSource).toContain("MarketOverviewDesk");
-    expect(dashboardSource).toContain("DashboardEquitySnapshotCard");
+    expect(dashboardSource).toContain("DashboardActionBrief");
     expect(dashboardSource).toContain("Market overview is temporarily unavailable");
     expect(dashboardSource).not.toContain("DashboardWorkflowSection");
     expect(dashboardSource).not.toContain("dashboard-workflow-toggle");
-    expect(marketDeskSource).toContain("Live index quotes");
+    expect(marketDeskSource).toContain("Market state");
     expect(marketDeskSource).not.toContain("Latest completed session");
   });
 });

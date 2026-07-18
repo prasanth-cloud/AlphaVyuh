@@ -142,11 +142,11 @@ test.describe("Mock workflow smoke", () => {
       }
       if (route === "/dashboard") {
         await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
-        await page.getByRole("tab", { name: "Full desk All dashboard cards", exact: true }).click();
-        await expect(page.getByTestId("dashboard-workflow-funnel")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId("dashboard-action-brief")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId("dashboard-action-brief")).toContainText(/Review queue|Continue workflow/);
         await expect(page.getByTestId("dashboard-priority-queue")).toContainText(/Chart/i, { timeout: 15_000 });
         await expect(page.getByTestId("dashboard-priority-queue")).toContainText(/Review/i);
-        await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("tab")).toHaveCount(0);
       }
     }
 
