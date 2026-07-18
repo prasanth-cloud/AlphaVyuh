@@ -13,7 +13,7 @@ from time import monotonic
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import StreamingResponse
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.kite_stream import KiteStreamError, kite_live_ticker
 from app.services.market_data import MarketDataError, MarketIdentity, ProviderNotConfiguredError, _kite_access_token, _kite_api_key, get_market_data_provider
 from app.services.market_breadth_snapshot import (
@@ -25,7 +25,7 @@ from app.services.market_context import eod_source_metadata, fallback_source_met
 from app.services.market_analytics import load_market_analytics
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.sector_taxonomy import NSE_SECTORAL_INDEXES, build_sector_taxonomy_metadata
-from app.services.supabase import get_admin_client
+from app.services.supabase import get_admin_client, get_user_client
 from app.services.rate_limit import market_live_limiter
 
 router = APIRouter(prefix="/api/v1/market", tags=["market"])
@@ -264,7 +264,7 @@ async def market_overview(user_id: str = Depends(get_current_user_id)):
 
 
 @router.get("/analytics")
-async def market_analytics(user_id: str = Depends(get_current_user_id)):
+async def market_analytics(user_token: str = Depends(get_current_user_token)):
     """Completed-session Market Pulse and relative sector participation context."""
     global _analytics_cache, _analytics_cache_expires_at
 
@@ -278,7 +278,7 @@ async def market_analytics(user_id: str = Depends(get_current_user_id)):
         return cached
 
     try:
-        client = get_admin_client()
+        client = get_user_client(user_token)
         latest_date = get_latest_complete_trade_date(client)
         if not latest_date:
             raise HTTPException(

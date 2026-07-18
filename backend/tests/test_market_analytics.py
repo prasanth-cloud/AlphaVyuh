@@ -114,11 +114,12 @@ def test_market_pulse_rejects_rows_without_the_latest_complete_session():
 def test_market_analytics_endpoint_raises_503_when_complete_session_is_unavailable(monkeypatch):
     market_router._analytics_cache = None
     market_router._analytics_cache_expires_at = 0
-    monkeypatch.setattr(market_router, "get_admin_client", lambda: object())
+    client = object()
+    monkeypatch.setattr(market_router, "get_user_client", lambda token: client)
     monkeypatch.setattr(market_router, "get_latest_complete_trade_date", lambda _client: None)
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(market_router.market_analytics(user_id="user-1"))
+        asyncio.run(market_router.market_analytics(user_token="user-jwt"))
 
     assert exc.value.status_code == 503
     assert exc.value.detail == "Market Pulse is temporarily unavailable."
@@ -136,18 +137,25 @@ def test_market_analytics_endpoint_caches_successful_payload(monkeypatch):
     }
     calls = []
     client = object()
-    monkeypatch.setattr(market_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(
+        market_router,
+        "get_user_client",
+        lambda token: calls.append(("client", token)) or client,
+    )
     monkeypatch.setattr(market_router, "get_latest_complete_trade_date", lambda _client: "2026-06-10")
     monkeypatch.setattr(
         market_router,
         "load_market_analytics",
-        lambda _client, _date: calls.append((_client, _date)) or payload,
+        lambda _client, _date: calls.append(("analytics", _client, _date)) or payload,
     )
 
-    first = asyncio.run(market_router.market_analytics(user_id="user-1"))
-    second = asyncio.run(market_router.market_analytics(user_id="user-1"))
+    first = asyncio.run(market_router.market_analytics(user_token="user-jwt"))
+    second = asyncio.run(market_router.market_analytics(user_token="user-jwt"))
 
     assert first["cache_status"] == "miss"
     assert second["cache_status"] == "hit"
     assert second["provenance"]["cache_status"] == "hit"
-    assert calls == [(client, "2026-06-10")]
+    assert calls == [
+        ("client", "user-jwt"),
+        ("analytics", client, "2026-06-10"),
+    ]
