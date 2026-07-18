@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 import yfinance as yf
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.plans import get_effective_user_plan
 from app.services.journal_snapshots import (
     InvalidJournalSnapshot,
@@ -17,7 +17,7 @@ from app.services.journal_snapshots import (
     MAX_SNAPSHOT_BYTES,
 )
 from app.services.rate_limit import RateLimiter
-from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
+from app.services.supabase import get_admin_client, get_user_client
 from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
@@ -411,6 +411,7 @@ async def create_snapshot(
     request: Request,
     body: JournalSnapshotCreate,
     user_id: str = Depends(get_current_user_id),
+    user_token: str = Depends(get_current_user_token),
 ):
     if not journal_snapshot_limiter.is_allowed(user_id):
         retry_after = journal_snapshot_limiter.retry_after(user_id)
@@ -429,9 +430,16 @@ async def create_snapshot(
             raise HTTPException(status_code=400, detail="Invalid Content-Length header")
         if declared_size > MAX_SNAPSHOT_REQUEST_BYTES:
             raise HTTPException(status_code=413, detail="Snapshot request is too large")
-    sb = get_admin_client()
+    user_client = get_user_client(user_token)
+    admin_client = get_admin_client()
     try:
-        state, created = attach_snapshot(sb, user_id, entry_id, body.state)
+        state, created = attach_snapshot(
+            admin_client,
+            user_id,
+            entry_id,
+            body.state,
+            authorization_client=user_client,
+        )
     except JournalEntryNotFound as exc:
         raise HTTPException(status_code=404, detail="Entry not found") from exc
     except InvalidJournalSnapshot as exc:
@@ -449,10 +457,11 @@ async def create_snapshot(
 async def get_snapshot(
     entry_id: str,
     user_id: str = Depends(get_current_user_id),
+    user_token: str = Depends(get_current_user_token),
 ):
-    sb = get_admin_client()
+    user_client = get_user_client(user_token)
     try:
-        state = read_snapshot(sb, user_id, entry_id)
+        state = read_snapshot(user_client, user_id, entry_id)
     except JournalEntryNotFound as exc:
         raise HTTPException(status_code=404, detail="Entry not found") from exc
     except (InvalidJournalSnapshot, JournalSnapshotUnavailable) as exc:

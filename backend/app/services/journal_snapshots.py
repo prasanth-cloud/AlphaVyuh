@@ -269,16 +269,18 @@ def attach_snapshot(
     entry_id: str,
     raw_state: Any,
     *,
+    authorization_client: Any | None = None,
     now: datetime | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Attach exactly one JSON state object. A successful first write always wins."""
-    entry = _owned_entry(client, user_id, entry_id)
+    scoped_client = authorization_client if authorization_client is not None else client
+    entry = _owned_entry(scoped_client, user_id, entry_id)
     existing_path = entry.get("snapshot_state_path")
     if isinstance(existing_path, str) and existing_path:
         if existing_path != f"{user_id}/{entry_id}.json":
             logger.error("Unexpected journal snapshot path for entry %s", entry_id)
             raise JournalSnapshotUnavailable("Journal snapshot is temporarily unavailable")
-        return _download_state(client, existing_path, str(entry["symbol"])), False
+        return _download_state(scoped_client, existing_path, str(entry["symbol"])), False
 
     state, encoded = _attest_snapshot_state(raw_state, entry, now or datetime.now(UTC))
     path = f"{user_id}/{entry_id}.json"
@@ -293,7 +295,7 @@ def attach_snapshot(
     except Exception:
         # A concurrent/retried first write may already own the deterministic path.
         try:
-            existing_state = _download_state(client, path, str(entry["symbol"]))
+            existing_state = _download_state(scoped_client, path, str(entry["symbol"]))
         except JournalSnapshotError as exc:
             raise JournalSnapshotUnavailable("Journal snapshot could not be saved") from exc
         state = existing_state
@@ -318,7 +320,7 @@ def attach_snapshot(
         update_error = exc
 
     try:
-        attached = _owned_entry(client, user_id, entry_id)
+        attached = _owned_entry(scoped_client, user_id, entry_id)
     except JournalEntryNotFound:
         if uploaded:
             _remove_unclaimed_object(client, path, entry_id)

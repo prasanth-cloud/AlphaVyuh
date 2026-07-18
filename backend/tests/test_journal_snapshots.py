@@ -351,14 +351,20 @@ def test_failed_update_cleans_only_proven_unclaimed_or_deleted_entry_objects():
 
 def test_router_returns_not_found_for_cross_user_snapshot_access(monkeypatch):
     client = _FakeSupabase()
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda token: client)
+    monkeypatch.setattr(
+        journal,
+        "get_admin_client",
+        lambda: (_ for _ in ()).throw(AssertionError("read must not use service role")),
+    )
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(journal.get_snapshot("journal-1", user_id="user-2"))
+        asyncio.run(journal.get_snapshot("journal-1", user_id="user-2", user_token="jwt-2"))
 
     assert exc_info.value.status_code == 404
     assert exc_info.value.detail == "Entry not found"
 
+    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
     with pytest.raises(HTTPException) as upload_exc:
         asyncio.run(
             journal.create_snapshot(
@@ -366,14 +372,45 @@ def test_router_returns_not_found_for_cross_user_snapshot_access(monkeypatch):
                 _Request(),
                 journal.JournalSnapshotCreate(state=_state()),
                 user_id="user-2",
+                user_token="jwt-2",
             )
         )
     assert upload_exc.value.status_code == 404
 
 
+def test_snapshot_attach_requires_rls_scoped_ownership_before_admin_write(monkeypatch):
+    admin_client = _FakeSupabase()
+    user_client = _FakeSupabase()
+    user_client.entries = {}
+    seen_tokens = []
+    monkeypatch.setattr(journal, "get_admin_client", lambda: admin_client)
+    monkeypatch.setattr(
+        journal,
+        "get_user_client",
+        lambda token: seen_tokens.append(token) or user_client,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            journal.create_snapshot(
+                "journal-1",
+                _Request(),
+                journal.JournalSnapshotCreate(state=_state()),
+                user_id="user-1",
+                user_token="jwt-1",
+            )
+        )
+
+    assert exc_info.value.status_code == 404
+    assert seen_tokens == ["jwt-1"]
+    assert admin_client.update_attempted is False
+    assert admin_client.objects == {}
+
+
 def test_snapshot_route_returns_private_read_descriptor_and_maps_storage_failure(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda token: client)
 
     created = asyncio.run(
         journal.create_snapshot(
@@ -381,6 +418,7 @@ def test_snapshot_route_returns_private_read_descriptor_and_maps_storage_failure
             _Request(),
             journal.JournalSnapshotCreate(state=_state(data_mode="fallback")),
             user_id="user-1",
+            user_token="jwt-1",
         )
     )
 
@@ -389,9 +427,21 @@ def test_snapshot_route_returns_private_read_descriptor_and_maps_storage_failure
     assert created["image_available"] is False
     assert created["already_captured"] is False
 
+    monkeypatch.setattr(
+        journal,
+        "get_admin_client",
+        lambda: (_ for _ in ()).throw(AssertionError("read must not use service role")),
+    )
+    read_back = asyncio.run(
+        journal.get_snapshot("journal-1", user_id="user-1", user_token="jwt-1")
+    )
+    assert read_back["state"] == created["state"]
+    assert read_back["storage_path"] == "user-1/journal-1.json"
+
     other = _FakeSupabase()
     other.fail_upload = True
     monkeypatch.setattr(journal, "get_admin_client", lambda: other)
+    monkeypatch.setattr(journal, "get_user_client", lambda token: other)
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(
             journal.create_snapshot(
@@ -399,6 +449,7 @@ def test_snapshot_route_returns_private_read_descriptor_and_maps_storage_failure
                 _Request(),
                 journal.JournalSnapshotCreate(state=_state()),
                 user_id="user-1",
+                user_token="jwt-1",
             )
         )
     assert exc_info.value.status_code == 503
@@ -408,6 +459,7 @@ def test_snapshot_route_returns_private_read_descriptor_and_maps_storage_failure
 def test_snapshot_route_prechecks_content_length_and_rate_limits(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda token: client)
     monkeypatch.setattr(
         journal,
         "journal_snapshot_limiter",
@@ -421,6 +473,7 @@ def test_snapshot_route_prechecks_content_length_and_rate_limits(monkeypatch):
                 _Request(str(journal.MAX_SNAPSHOT_REQUEST_BYTES + 1)),
                 journal.JournalSnapshotCreate(state=_state()),
                 user_id="user-1",
+                user_token="jwt-1",
             )
         )
     assert oversized.value.status_code == 413
@@ -437,6 +490,7 @@ def test_snapshot_route_prechecks_content_length_and_rate_limits(monkeypatch):
             _Request(),
             journal.JournalSnapshotCreate(state=_state()),
             user_id="user-1",
+            user_token="jwt-1",
         )
     )
     with pytest.raises(HTTPException) as limited:
@@ -446,6 +500,7 @@ def test_snapshot_route_prechecks_content_length_and_rate_limits(monkeypatch):
                 _Request(),
                 journal.JournalSnapshotCreate(state=_state()),
                 user_id="user-1",
+                user_token="jwt-1",
             )
         )
     assert limited.value.status_code == 429
