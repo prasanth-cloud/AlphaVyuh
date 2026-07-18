@@ -612,6 +612,12 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Review|Needs review|Open/i, { timeout: 15_000 });
     await page.locator("tbody tr").filter({ hasText: symbol }).first().click();
+    const reviewTimeline = page.getByTestId("journal-review-timeline");
+    await expect(reviewTimeline).toBeVisible({ timeout: 10_000 });
+    for (const stage of ["Plan", "Entry context", "Outcome", "Adherence", "Next adjustment"]) {
+      await expect(reviewTimeline).toContainText(stage);
+    }
+    await expect(reviewTimeline).toContainText(/Trade in progress|Loading evidence/);
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Original scan|Original thesis/i, { timeout: 10_000 });
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Trend Template|Launch QA setup/i);
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Review prompts/i);

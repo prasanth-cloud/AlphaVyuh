@@ -26,6 +26,28 @@ export type JournalReviewTimeline = {
   stages: JournalReviewTimelineStage[];
 };
 
+export type JournalSnapshotLoadState = {
+  entryId: string | null;
+  snapshot: JournalChartSnapshot | null;
+  loading: boolean;
+  error: string | null;
+};
+
+export type JournalSnapshotEvidence = Omit<JournalSnapshotLoadState, "entryId">;
+
+export function journalSnapshotEvidenceForEntry(
+  entry: Pick<JournalEntry, "id" | "snapshot_state_path">,
+  loadState: JournalSnapshotLoadState,
+): JournalSnapshotEvidence {
+  if (!entry.snapshot_state_path) return { snapshot: null, loading: false, error: null };
+  if (loadState.entryId !== entry.id) return { snapshot: null, loading: true, error: null };
+  return {
+    snapshot: loadState.snapshot,
+    loading: loadState.loading,
+    error: loadState.error,
+  };
+}
+
 function clean(value: string | null | undefined): string | null {
   const result = value?.trim();
   return result ? result : null;

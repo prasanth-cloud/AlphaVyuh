@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildJournalReviewTimeline } from "@/lib/journal-review-timeline";
+import { buildJournalReviewTimeline, journalSnapshotEvidenceForEntry } from "@/lib/journal-review-timeline";
 import type { JournalChartSnapshot, JournalEntry } from "@/lib/api";
 
 function entry(overrides: Partial<JournalEntry> = {}): JournalEntry {
@@ -156,5 +156,18 @@ describe("journal review timeline", () => {
       state: "missing",
       primary: "Immutable entry context was not captured",
     });
+  });
+
+  it("never exposes a previous trade snapshot while a newly selected trade is loading", () => {
+    const previousSnapshot = snapshot;
+    const selectedEntry = entry({ id: "trade-2", symbol: "TCS", snapshot_state_path: "user-1/trade-2.json" });
+    const evidence = journalSnapshotEvidenceForEntry(selectedEntry, {
+      entryId: "trade-1",
+      snapshot: previousSnapshot,
+      loading: false,
+      error: null,
+    });
+
+    expect(evidence).toEqual({ snapshot: null, loading: true, error: null });
   });
 });

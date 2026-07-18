@@ -1724,6 +1724,166 @@ input, textarea, select {
   flex-shrink: 0;
 }
 
+.journal-review-timeline {
+  margin-bottom: 14px;
+  padding: 12px 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.journal-review-timeline-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.journal-review-timeline-summary {
+  display: grid;
+  flex-shrink: 0;
+  gap: 2px;
+  text-align: right;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.journal-review-timeline-list {
+  display: grid;
+  margin: 0;
+  padding: 12px 0 0;
+  list-style: none;
+}
+
+.journal-review-timeline-stage {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.journal-review-timeline-rail {
+  position: relative;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.journal-review-timeline-stage:not(:last-child) .journal-review-timeline-rail::after {
+  position: absolute;
+  top: 20px;
+  bottom: 0;
+  left: 8px;
+  width: 1px;
+  background: var(--border-subtle);
+  content: "";
+}
+
+.journal-review-timeline-marker {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--text-tertiary);
+}
+
+.journal-review-timeline-stage.is-recorded .journal-review-timeline-marker {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.journal-review-timeline-stage.is-pending .journal-review-timeline-marker {
+  border-color: var(--text-secondary);
+  color: var(--text-secondary);
+}
+
+.journal-review-timeline-stage.is-unavailable .journal-review-timeline-marker {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.journal-review-timeline-content {
+  min-width: 0;
+  padding: 0 0 14px 2px;
+}
+
+.journal-review-timeline-stage:last-child .journal-review-timeline-content {
+  padding-bottom: 0;
+}
+
+.journal-review-timeline-stage-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.journal-review-timeline-state {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.journal-review-timeline-stage.is-recorded .journal-review-timeline-state {
+  color: var(--accent);
+}
+
+.journal-review-timeline-stage.is-pending .journal-review-timeline-state {
+  color: var(--text-secondary);
+}
+
+.journal-review-timeline-stage.is-unavailable .journal-review-timeline-state {
+  color: var(--warn);
+}
+
+.journal-review-timeline-primary {
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.journal-review-timeline-details {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.journal-review-timeline-details > li {
+  overflow-wrap: anywhere;
+}
+
+.journal-review-timeline-time {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.journal-review-timeline-note {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .journal-edge-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

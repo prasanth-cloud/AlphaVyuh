@@ -7,12 +7,13 @@ import { displayCompanyName } from "@/lib/company-display";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import { getJournalChartSnapshot } from "@/lib/api";
-import type { JournalChartSnapshot } from "@/lib/api";
 import { JOURNAL_RULE_BREAKS, isCompletedProcessReview } from "@/lib/journal-weekly-review";
+import { journalSnapshotEvidenceForEntry, type JournalSnapshotLoadState } from "@/lib/journal-review-timeline";
 import type { JournalRuleBreakCode, SaveJournalProcessReviewRequest, SetupAdherence } from "@/lib/api";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
 import type { PanelMode } from "./types";
 import { SETUP_TYPES, displayEntryReason, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
+import { JournalReviewTimeline } from "./JournalReviewTimeline";
 
 // ── SetupChips ────────────────────────────────────────────────────────────────
 
@@ -114,9 +115,12 @@ export function TradePanel({
   chartPrefilled,
 }: TradePanelProps) {
   const [lessonDraft, setLessonDraft] = useState("");
-  const [chartSnapshot, setChartSnapshot] = useState<JournalChartSnapshot | null>(null);
-  const [chartSnapshotLoading, setChartSnapshotLoading] = useState(false);
-  const [chartSnapshotError, setChartSnapshotError] = useState<string | null>(null);
+  const [chartSnapshotLoad, setChartSnapshotLoad] = useState<JournalSnapshotLoadState>({
+    entryId: null,
+    snapshot: null,
+    loading: false,
+    error: null,
+  });
   const [plannedSetupDraft, setPlannedSetupDraft] = useState("");
   const [adherenceDraft, setAdherenceDraft] = useState<SetupAdherence | null>(null);
   const [ruleBreakDraft, setRuleBreakDraft] = useState<JournalRuleBreakCode[]>([]);
@@ -130,24 +134,29 @@ export function TradePanel({
 
   useEffect(() => {
     let cancelled = false;
-    setChartSnapshot(null);
-    setChartSnapshotError(null);
-    setChartSnapshotLoading(false);
-    if (!selectedEntry?.snapshot_state_path) return;
-    setChartSnapshotLoading(true);
-    getJournalChartSnapshot(selectedEntry.id)
+    if (!selectedEntry?.snapshot_state_path) {
+      setChartSnapshotLoad({ entryId: selectedEntry?.id ?? null, snapshot: null, loading: false, error: null });
+      return;
+    }
+    const entryId = selectedEntry.id;
+    setChartSnapshotLoad({ entryId, snapshot: null, loading: true, error: null });
+    getJournalChartSnapshot(entryId)
       .then((snapshot) => {
         if (cancelled) return;
-        setChartSnapshot(snapshot);
-        if (!snapshot.available || !snapshot.state) {
-          setChartSnapshotError("The immutable chart context is unavailable. The journal entry remains usable.");
-        }
+        const error = !snapshot.available || !snapshot.state
+          ? "The immutable chart context is unavailable. The journal entry remains usable."
+          : null;
+        setChartSnapshotLoad({ entryId, snapshot, loading: false, error });
       })
       .catch(() => {
-        if (!cancelled) setChartSnapshotError("The immutable chart context could not be loaded. The journal entry remains usable.");
-      })
-      .finally(() => {
-        if (!cancelled) setChartSnapshotLoading(false);
+        if (!cancelled) {
+          setChartSnapshotLoad({
+            entryId,
+            snapshot: null,
+            loading: false,
+            error: "The immutable chart context could not be loaded. The journal entry remains usable.",
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -159,6 +168,9 @@ export function TradePanel({
   const reviewContext = selectedEntry ? getReviewContext(selectedEntry) : null;
   const reviewDraft = lessonDraft.trim();
   const processReviewComplete = selectedEntry ? isCompletedProcessReview(selectedEntry) : false;
+  const snapshotEvidence = selectedEntry
+    ? journalSnapshotEvidenceForEntry(selectedEntry, chartSnapshotLoad)
+    : { snapshot: null, loading: false, error: null };
   const needsRuleBreak = adherenceDraft === "partial" || adherenceDraft === "not_followed";
   const processReviewReady = Boolean(
     plannedSetupDraft.trim()
@@ -193,50 +205,13 @@ export function TradePanel({
           <button onClick={onClose} style={{ fontSize: 18, lineHeight: 1, color: "var(--text-tertiary)" }}>×</button>
         </div>
 
-        {selectedEntry && mode !== "add" && selectedEntry.snapshot_state_path && (
-          <div
-            data-testid="journal-immutable-chart-context"
-            style={{
-              borderRadius: "var(--radius-md)",
-              padding: "12px 14px",
-              marginBottom: 12,
-              background: "rgba(244,247,251,0.04)",
-              border: "1px solid var(--border-subtle)",
-            }}
-          >
-            <div className="label" style={{ marginBottom: 6 }}>Immutable chart context</div>
-            {chartSnapshotLoading && (
-              <div className="caption">Loading the structured state captured with this decision…</div>
-            )}
-            {chartSnapshotError && (
-              <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--warn)" }}>{chartSnapshotError}</div>
-            )}
-            {chartSnapshot?.available && chartSnapshot.state && (
-              <>
-                <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)", marginBottom: 10 }}>
-                  Structured state captured {new Date(chartSnapshot.state.captured_at).toLocaleString("en-IN")}. It preserves the decision context even if the current chart changes.
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-                  {[
-                    ["Timeframe", `${chartSnapshot.state.range_label} · ${chartSnapshot.state.timeframe}`],
-                    ["Chart type", chartSnapshot.state.chart_type],
-                    ["Indicators", chartSnapshot.state.indicators.length ? chartSnapshot.state.indicators.join(", ") : "None"],
-                    ["Drawings", String(chartSnapshot.state.drawings.length)],
-                    ["Data mode", chartSnapshot.state.data_mode.toUpperCase()],
-                    ["Data as of", chartSnapshot.state.data_as_of ?? chartSnapshot.state.last_bar_time ?? "Not reported"],
-                  ].map(([label, value]) => (
-                    <div key={label} style={{ minWidth: 0 }}>
-                      <div className="caption" style={{ textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
-                      <div style={{ fontSize: 12, color: "var(--text-primary)", overflowWrap: "anywhere" }}>{value}</div>
-                    </div>
-                  ))}
-                </div>
-                <div data-testid="journal-chart-image-unavailable" style={{ marginTop: 10, fontSize: 11, lineHeight: 1.5, color: "var(--text-secondary)" }}>
-                  Image preview was not captured in this release. This is structured chart state, not a screenshot.
-                </div>
-              </>
-            )}
-          </div>
+        {selectedEntry && mode !== "add" && (
+          <JournalReviewTimeline
+            entry={selectedEntry}
+            snapshot={snapshotEvidence.snapshot}
+            snapshotLoading={snapshotEvidence.loading}
+            snapshotError={snapshotEvidence.error}
+          />
         )}
 
         {/* ── ADD FORM ── */}

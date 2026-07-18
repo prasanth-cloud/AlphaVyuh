@@ -17,23 +17,26 @@ describe("journal chart snapshot trust copy", () => {
   });
 
   it("distinguishes immutable structured state from the mutable current chart", () => {
-    const source = fs.readFileSync(path.join(root, "app/(app)/journal/components/TradePanel.tsx"), "utf8");
+    const panelSource = fs.readFileSync(path.join(root, "app/(app)/journal/components/TradePanel.tsx"), "utf8");
+    const timelineSource = fs.readFileSync(path.join(root, "app/(app)/journal/components/JournalReviewTimeline.tsx"), "utf8");
 
-    expect(source).toContain("Immutable chart context");
-    expect(source).toContain("This is structured chart state, not a screenshot");
-    expect(source).toContain("Open current chart");
-    expect(source).not.toContain("Open chart at entry");
+    expect(timelineSource).toContain("Immutable chart context");
+    expect(timelineSource).toContain("this is structured chart state, not a screenshot");
+    expect(panelSource).toContain("Open current chart");
+    expect(`${panelSource}\n${timelineSource}`).not.toContain("Open chart at entry");
   });
 
-  it("renders one shared immutable-context block for both view and close modes", () => {
-    const source = fs.readFileSync(path.join(root, "app/(app)/journal/components/TradePanel.tsx"), "utf8");
-    const sharedBlock = source.indexOf('selectedEntry && mode !== "add" && selectedEntry.snapshot_state_path');
-    const closeBranch = source.indexOf('mode === "close" && selectedEntry');
-    const viewBranch = source.indexOf('mode === "view" && selectedEntry');
+  it("renders one shared decision timeline for both view and close modes", () => {
+    const panelSource = fs.readFileSync(path.join(root, "app/(app)/journal/components/TradePanel.tsx"), "utf8");
+    const timelineSource = fs.readFileSync(path.join(root, "app/(app)/journal/components/JournalReviewTimeline.tsx"), "utf8");
+    const sharedTimeline = panelSource.indexOf('selectedEntry && mode !== "add"');
+    const closeBranch = panelSource.indexOf('mode === "close" && selectedEntry');
+    const viewBranch = panelSource.indexOf('mode === "view" && selectedEntry');
 
-    expect(sharedBlock).toBeGreaterThan(-1);
-    expect(sharedBlock).toBeLessThan(closeBranch);
-    expect(sharedBlock).toBeLessThan(viewBranch);
-    expect(source.match(/data-testid="journal-immutable-chart-context"/g)).toHaveLength(1);
+    expect(sharedTimeline).toBeGreaterThan(-1);
+    expect(sharedTimeline).toBeLessThan(closeBranch);
+    expect(sharedTimeline).toBeLessThan(viewBranch);
+    expect(panelSource.match(/<JournalReviewTimeline/g)).toHaveLength(1);
+    expect(timelineSource.match(/"journal-immutable-chart-context"/g)).toHaveLength(1);
   });
 });
