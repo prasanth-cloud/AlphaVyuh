@@ -198,11 +198,20 @@ def _closed_entry(**overrides):
 
 
 def test_process_review_is_closed_owner_scoped_server_timed_and_concurrency_safe(monkeypatch):
-    client = _Client([_closed_entry(lessons="Legacy free-form lesson")])
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    user_client = _Client([_closed_entry(lessons="Legacy free-form lesson")])
+    admin_client = _Client([_closed_entry(lessons="Legacy free-form lesson")])
+    user_tokens = []
+    monkeypatch.setattr(
+        journal,
+        "get_user_client",
+        lambda token: user_tokens.append(token) or user_client,
+    )
+    monkeypatch.setattr(journal, "get_admin_client", lambda: admin_client)
 
     updated = asyncio.run(
-        journal.put_process_review("journal-1", _review_body(), user_id="user-1")
+        journal.put_process_review(
+            "journal-1", _review_body(), user_id="user-1", user_token="jwt-user-1"
+        )
     )
 
     assert updated["review_schema_version"] == 1
@@ -212,7 +221,9 @@ def test_process_review_is_closed_owner_scoped_server_timed_and_concurrency_safe
     assert updated["setup_adherence"] == "followed"
     assert updated["rule_breaks"] == []
     assert updated["reviewed_at"].endswith("Z")
-    assert client.last_update_filters == {
+    assert user_tokens == ["jwt-user-1"]
+    assert user_client.last_update_filters == {}
+    assert admin_client.last_update_filters == {
         "id": "journal-1",
         "user_id": "user-1",
         "updated_at": "2026-07-16T12:00:00Z",
@@ -221,15 +232,28 @@ def test_process_review_is_closed_owner_scoped_server_timed_and_concurrency_safe
 
 def test_process_review_rejects_open_cross_user_and_stale_rows(monkeypatch):
     open_client = _Client([_closed_entry(status="open")])
-    monkeypatch.setattr(journal, "get_admin_client", lambda: open_client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: open_client)
+    monkeypatch.setattr(
+        journal,
+        "get_admin_client",
+        lambda: (_ for _ in ()).throw(AssertionError("privileged write must not run")),
+    )
     with pytest.raises(HTTPException) as open_error:
-        asyncio.run(journal.put_process_review("journal-1", _review_body(), user_id="user-1"))
+        asyncio.run(
+            journal.put_process_review(
+                "journal-1", _review_body(), user_id="user-1", user_token="jwt-user-1"
+            )
+        )
     assert open_error.value.status_code == 400
 
     owner_client = _Client([_closed_entry()])
-    monkeypatch.setattr(journal, "get_admin_client", lambda: owner_client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: owner_client)
     with pytest.raises(HTTPException) as cross_user:
-        asyncio.run(journal.put_process_review("journal-1", _review_body(), user_id="user-2"))
+        asyncio.run(
+            journal.put_process_review(
+                "journal-1", _review_body(), user_id="user-2", user_token="jwt-user-2"
+            )
+        )
     assert cross_user.value.status_code == 404
 
     with pytest.raises(HTTPException) as stale:
@@ -238,13 +262,20 @@ def test_process_review_rejects_open_cross_user_and_stale_rows(monkeypatch):
                 "journal-1",
                 _review_body(expected_updated_at="2026-07-16T11:00:00Z"),
                 user_id="user-1",
+                user_token="jwt-user-1",
             )
         )
     assert stale.value.status_code == 409
 
-    owner_client.force_empty_update = True
+    admin_client = _Client([_closed_entry()])
+    admin_client.force_empty_update = True
+    monkeypatch.setattr(journal, "get_admin_client", lambda: admin_client)
     with pytest.raises(HTTPException) as raced:
-        asyncio.run(journal.put_process_review("journal-1", _review_body(), user_id="user-1"))
+        asyncio.run(
+            journal.put_process_review(
+                "journal-1", _review_body(), user_id="user-1", user_token="jwt-user-1"
+            )
+        )
     assert raced.value.status_code == 409
 
 
@@ -443,10 +474,14 @@ def test_shared_contract_excludes_not_applicable_from_adherence_denominator():
 
 
 def test_weekly_review_outage_returns_503(monkeypatch):
-    monkeypatch.setattr(journal, "get_admin_client", lambda: _Client(fail=True))
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: _Client(fail=True))
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(journal.get_weekly_reviews(weeks=8, user_id="user-1"))
+        asyncio.run(
+            journal.get_weekly_reviews(
+                weeks=8, user_id="user-1", user_token="jwt-user-1"
+            )
+        )
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "Weekly journal review is temporarily unavailable."
@@ -456,11 +491,15 @@ def test_weekly_review_outage_returns_503(monkeypatch):
 def test_weekly_review_malformed_snapshot_returns_503(monkeypatch, payload):
     client = _Client()
     client.rpc_override = payload
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: client)
     monkeypatch.setattr(journal, "_get_user_plan", lambda _user_id: "premium")
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(journal.get_weekly_reviews(weeks=8, user_id="user-1"))
+        asyncio.run(
+            journal.get_weekly_reviews(
+                weeks=8, user_id="user-1", user_token="jwt-user-1"
+            )
+        )
 
     assert exc_info.value.status_code == 503
     assert exc_info.value.detail == "Weekly journal review is temporarily unavailable."
@@ -483,7 +522,12 @@ def test_weekly_aggregate_applies_plan_history_cutoff_in_snapshot_rpc(
         ]
     )
     plan_calls = []
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    user_tokens = []
+    monkeypatch.setattr(
+        journal,
+        "get_user_client",
+        lambda token: user_tokens.append(token) or client,
+    )
     monkeypatch.setattr(
         journal,
         "_get_user_plan",
@@ -496,9 +540,14 @@ def test_weekly_aggregate_applies_plan_history_cutoff_in_snapshot_rpc(
     )
     monkeypatch.setattr(journal, "current_market_date", lambda: date(2026, 7, 16))
 
-    response = asyncio.run(journal.get_weekly_reviews(weeks=1, user_id="user-1"))
+    response = asyncio.run(
+        journal.get_weekly_reviews(
+            weeks=1, user_id="user-1", user_token="jwt-user-1"
+        )
+    )
 
     assert plan_calls == ["user-1"]
+    assert user_tokens == ["jwt-user-1"]
     assert client.rpc_calls == [
         (
             "get_journal_weekly_review_rows",
@@ -536,7 +585,12 @@ def test_weekly_evidence_returns_complete_public_entries(monkeypatch):
             _closed_entry(id=second_id, exit_date="2026-07-12", lessons="Legacy only"),
         ]
     )
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    user_tokens = []
+    monkeypatch.setattr(
+        journal,
+        "get_user_client",
+        lambda token: user_tokens.append(token) or client,
+    )
     monkeypatch.setattr(journal, "_get_user_plan", lambda _user_id: "premium")
     monkeypatch.setattr(journal, "current_market_date", lambda: date(2026, 7, 16))
 
@@ -546,6 +600,7 @@ def test_weekly_evidence_returns_complete_public_entries(monkeypatch):
             entry_ids=f"{first_id},{second_id},{first_id}",
             rule_break=None,
             user_id="user-1",
+            user_token="jwt-user-1",
         )
     )
 
@@ -561,6 +616,7 @@ def test_weekly_evidence_returns_complete_public_entries(monkeypatch):
     assert reviewed["review_lesson"] == "Wait for the planned entry."
     assert reviewed["lessons"] == "Legacy note remains intact."
     assert "review_planned_setup" not in reviewed
+    assert user_tokens == ["jwt-user-1"]
     assert client.rpc_calls == [
         (
             "get_journal_weekly_review_evidence",
@@ -590,7 +646,7 @@ def test_weekly_evidence_rejects_any_scope_mismatch(
 ):
     entry_id = _uuid(3)
     client = _Client([_closed_entry(id=entry_id, **{"exit_date": "2026-07-10", **row_overrides})])
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: client)
     monkeypatch.setattr(journal, "_get_user_plan", lambda _user_id: "premium")
     monkeypatch.setattr(journal, "current_market_date", lambda: date(2026, 7, 16))
 
@@ -601,6 +657,7 @@ def test_weekly_evidence_rejects_any_scope_mismatch(
                 entry_ids=entry_id,
                 rule_break=rule_break,
                 user_id="user-1",
+                user_token="jwt-user-1",
             )
         )
 
@@ -608,7 +665,7 @@ def test_weekly_evidence_rejects_any_scope_mismatch(
 
 
 def test_weekly_evidence_rejects_invalid_or_excessive_ids_and_incomplete_weeks(monkeypatch):
-    monkeypatch.setattr(journal, "get_admin_client", lambda: _Client())
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: _Client())
     monkeypatch.setattr(journal, "_get_user_plan", lambda _user_id: "premium")
     monkeypatch.setattr(journal, "current_market_date", lambda: date(2026, 7, 16))
 
@@ -625,6 +682,7 @@ def test_weekly_evidence_rejects_invalid_or_excessive_ids_and_incomplete_weeks(m
                     entry_ids=entry_ids,
                     rule_break=None,
                     user_id="user-1",
+                    user_token="jwt-user-1",
                 )
             )
         assert exc_info.value.status_code == 400
@@ -633,7 +691,7 @@ def test_weekly_evidence_rejects_invalid_or_excessive_ids_and_incomplete_weeks(m
 def test_weekly_evidence_malformed_snapshot_returns_503(monkeypatch):
     client = _Client()
     client.rpc_override = {"unexpected": "shape"}
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: client)
     monkeypatch.setattr(journal, "_get_user_plan", lambda _user_id: "premium")
     monkeypatch.setattr(journal, "current_market_date", lambda: date(2026, 7, 16))
 
@@ -644,6 +702,7 @@ def test_weekly_evidence_malformed_snapshot_returns_503(monkeypatch):
                 entry_ids=_uuid(1),
                 rule_break=None,
                 user_id="user-1",
+                user_token="jwt-user-1",
             )
         )
 
@@ -655,7 +714,7 @@ def test_weekly_evidence_accepts_oldest_week_in_twelve_week_window(monkeypatch):
     client = _Client(
         [_closed_entry(id=entry_id, entry_date="2026-04-20", exit_date="2026-04-20")]
     )
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: client)
     monkeypatch.setattr(journal, "_get_user_plan", lambda _user_id: "premium")
     monkeypatch.setattr(journal, "current_market_date", lambda: date(2026, 7, 16))
 
@@ -665,6 +724,7 @@ def test_weekly_evidence_accepts_oldest_week_in_twelve_week_window(monkeypatch):
             entry_ids=entry_id,
             rule_break=None,
             user_id="user-1",
+            user_token="jwt-user-1",
         )
     )
 
@@ -675,7 +735,7 @@ def test_weekly_evidence_accepts_oldest_week_in_twelve_week_window(monkeypatch):
 def test_weekly_evidence_rejects_week_older_than_twelve_weeks_before_rpc(monkeypatch):
     client = _Client()
     plan_calls = []
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: client)
     monkeypatch.setattr(
         journal,
         "_get_user_plan",
@@ -690,6 +750,7 @@ def test_weekly_evidence_rejects_week_older_than_twelve_weeks_before_rpc(monkeyp
                 entry_ids=_uuid(11),
                 rule_break=None,
                 user_id="user-1",
+                user_token="jwt-user-1",
             )
         )
 
@@ -706,7 +767,7 @@ def test_weekly_evidence_enforces_free_history_cutoff_at_snapshot_boundary(
     client = _Client(
         [_closed_entry(id=entry_id, entry_date="2026-01-05", exit_date="2026-07-10")]
     )
-    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+    monkeypatch.setattr(journal, "get_user_client", lambda _token: client)
     monkeypatch.setattr(journal, "_get_user_plan", lambda _user_id: plan)
     monkeypatch.setattr(
         journal,
@@ -723,6 +784,7 @@ def test_weekly_evidence_enforces_free_history_cutoff_at_snapshot_boundary(
                     entry_ids=entry_id,
                     rule_break=None,
                     user_id="user-1",
+                    user_token="jwt-user-1",
                 )
             )
         assert exc_info.value.status_code == expected_status
@@ -734,13 +796,14 @@ def test_weekly_evidence_enforces_free_history_cutoff_at_snapshot_boundary(
                 entry_ids=entry_id,
                 rule_break=None,
                 user_id="user-1",
+                user_token="jwt-user-1",
             )
         )
         assert response["matched_count"] == 1
         assert client.rpc_calls[0][1]["p_entry_date_cutoff"] is None
 
 
-def test_process_review_migration_is_nullable_bounded_and_server_owned():
+def test_process_review_migration_is_nullable_bounded_server_owned_and_rls_scoped():
     sql = (
         REPO_ROOT
         / "supabase/migrations/20260716160000_journal_process_reviews.sql"
@@ -784,6 +847,8 @@ def test_process_review_migration_is_nullable_bounded_and_server_owned():
     assert sql.count("security invoker") == 2
     assert sql.count("set search_path = public, pg_temp") == 2
     assert sql.count("from public, anon, authenticated") == 2
-    assert sql.count("to service_role") == 2
+    assert sql.count("p_user_id = auth.uid()") == 2
+    assert sql.count("to authenticated") == 2
+    assert "to service_role" not in sql
     assert "jsonb_agg(to_jsonb(journal)" in sql
     assert "journal.entry_date >= p_entry_date_cutoff" in sql

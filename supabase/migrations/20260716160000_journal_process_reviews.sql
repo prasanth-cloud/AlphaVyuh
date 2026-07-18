@@ -138,7 +138,8 @@ as $$
     '[]'::jsonb
   )
   from public.trade_journal as journal
-  where journal.user_id = p_user_id
+  where p_user_id = auth.uid()
+    and journal.user_id = p_user_id
     and journal.status = 'closed'
     and journal.exit_date between p_period_start and p_period_end
     and (
@@ -150,7 +151,7 @@ $$;
 revoke all on function public.get_journal_weekly_review_rows(uuid, date, date, date)
   from public, anon, authenticated;
 grant execute on function public.get_journal_weekly_review_rows(uuid, date, date, date)
-  to service_role;
+  to authenticated;
 
 -- Drill-through uses the same single-snapshot, owner/week/status boundary and
 -- returns only the requested intersection. Full rows let the existing journal
@@ -174,7 +175,8 @@ as $$
     '[]'::jsonb
   )
   from public.trade_journal as journal
-  where journal.user_id = p_user_id
+  where p_user_id = auth.uid()
+    and journal.user_id = p_user_id
     and journal.status = 'closed'
     and journal.exit_date between p_week_start and p_week_end
     and journal.id = any(p_entry_ids)
@@ -191,4 +193,4 @@ $$;
 revoke all on function public.get_journal_weekly_review_evidence(uuid, date, date, uuid[], text, date)
   from public, anon, authenticated;
 grant execute on function public.get_journal_weekly_review_evidence(uuid, date, date, uuid[], text, date)
-  to service_role;
+  to authenticated;

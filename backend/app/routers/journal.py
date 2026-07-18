@@ -377,13 +377,18 @@ async def get_stats(user_id: str = Depends(get_current_user_id)):
 async def get_weekly_reviews(
     weeks: int = Query(default=8, ge=1, le=12),
     user_id: str = Depends(get_current_user_id),
+    user_token: str = Depends(get_current_user_token),
 ):
     period_start, period_end = completed_week_period(current_market_date(), weeks)
     try:
         plan = _get_user_plan(user_id)
         entry_date_cutoff = _journal_history_cutoff(plan)
         rows = fetch_completed_trade_rows_snapshot(
-            get_admin_client(), user_id, period_start, period_end, entry_date_cutoff
+            get_user_client(user_token),
+            user_id,
+            period_start,
+            period_end,
+            entry_date_cutoff,
         )
     except Exception as exc:
         raise HTTPException(
@@ -399,6 +404,7 @@ async def get_weekly_review_evidence(
     entry_ids: str = Query(min_length=1, max_length=20_000),
     rule_break: ReviewRuleBreak | None = None,
     user_id: str = Depends(get_current_user_id),
+    user_token: str = Depends(get_current_user_token),
 ):
     try:
         parsed_week_start = date.fromisoformat(week_start)
@@ -436,7 +442,7 @@ async def get_weekly_review_evidence(
         plan = _get_user_plan(user_id)
         entry_date_cutoff = _journal_history_cutoff(plan)
         rows = fetch_week_evidence_snapshot(
-            get_admin_client(),
+            get_user_client(user_token),
             user_id,
             parsed_week_start,
             week_end,
@@ -732,11 +738,12 @@ async def put_process_review(
     entry_id: str,
     body: ProcessReviewV1,
     user_id: str = Depends(get_current_user_id),
+    user_token: str = Depends(get_current_user_token),
 ):
-    sb = get_admin_client()
+    user_sb = get_user_client(user_token)
     try:
         existing = (
-            sb.table("trade_journal")
+            user_sb.table("trade_journal")
             .select("id,status,updated_at")
             .eq("id", entry_id)
             .eq("user_id", user_id)
@@ -764,6 +771,10 @@ async def put_process_review(
         "review_lesson": body.lesson,
         "reviewed_at": reviewed_at,
     }
+    # Review metadata is protected by a database trigger and must remain
+    # server-timed. Authorize the row through the caller's RLS client first,
+    # then keep the privileged write narrowly owner- and version-scoped.
+    sb = get_admin_client()
     try:
         updated = (
             sb.table("trade_journal")
