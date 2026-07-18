@@ -41,6 +41,7 @@ At the inspected state, mobile document height fell from 8,274px to 2,554px. Des
 - `npm run lint`: passed with 7 existing warnings and no errors.
 - In-app browser: scanner navigation, broker Continue route, priority chart route, desktop and mobile overflow, and browser error logs verified.
 - Layout smoke: dashboard-specific replacements passed. The full cross-page run also exposed and corrected stale expectations for the removed full-desk dashboard and the current historical-only watchlist timeframe menu.
+- Signed-in and workflow mock smoke now verify the compact dashboard directly instead of attempting to open the removed Full desk tab: 1 focused signed-in flow and 17 workflow flows passed.
 
 ## Known gates
 
