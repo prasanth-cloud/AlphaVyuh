@@ -1736,6 +1736,30 @@ input, textarea, select {
   gap: 10px;
 }
 
+.journal-weekly-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.journal-weekly-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.journal-adherence-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.journal-adherence-options > button {
+  min-width: 0;
+  justify-content: center;
+}
+
 .app-content-full-chart {
   max-width: none;
   width: 100%;
@@ -2177,6 +2201,10 @@ input, textarea, select {
   .journal-review-cockpit,
   .journal-edge-grid,
   .journal-review-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .journal-weekly-grid {
     grid-template-columns: 1fr !important;
   }
 

@@ -47,6 +47,9 @@ import type {
   IndicatorsResponse,
   JournalAnalytics,
   JournalEntry,
+  JournalWeeklyReviewResponse,
+  JournalWeeklyReviewEvidenceResponse,
+  JournalRuleBreakCode,
   JournalStats,
   LiveMarketStatus,
   LiveQuote,
@@ -71,6 +74,7 @@ import type {
   ScannerIdeaContext,
   ScanResponse,
   ScanResult,
+  SaveJournalProcessReviewRequest,
   SectorBreadthItem,
   SectorListResponse,
   SectorTaxonomyMetadata,
@@ -87,6 +91,13 @@ import type {
   WorkflowStatePatch,
   ZerodhaReadOnlySmoke,
 } from './api/types'
+import {
+  buildMockJournalWeeklyReviews,
+  normalizeJournalWeeklyReviewResponse,
+  normalizeJournalWeeklyReviewEvidenceResponse,
+  normalizeProcessReviewedEntry,
+  validateProcessReviewDraft,
+} from './journal-weekly-review'
 
 export * from './api/types'
 export {
@@ -1425,6 +1436,122 @@ export async function updateJournalEntry(id: string, update: UpdateJournalEntry)
   return updated;
 }
 
+export async function saveJournalProcessReview(
+  id: string,
+  review: SaveJournalProcessReviewRequest,
+): Promise<JournalEntry> {
+  const validationError = validateProcessReviewDraft(review);
+  if (validationError) throw new Error(validationError);
+  if (shouldUseMockFallback()) {
+    const base = mockJournalEntries().entries;
+    const local = readLocalJournalEntries();
+    const existing = local.find((entry) => entry.id === id) ?? base.find((entry) => entry.id === id);
+    if (!existing) throw new Error("Journal entry not found.");
+    if (existing.status !== "closed") throw new Error("Only closed trades can be reviewed.");
+    if (existing.updated_at !== review.expected_updated_at) throw new Error("This trade changed in another view. Refresh before saving the review.");
+    const reviewedAt = new Date().toISOString();
+    const updated: JournalEntry = {
+      ...existing,
+      review_schema_version: 1,
+      planned_setup: review.planned_setup.trim(),
+      setup_adherence: review.adherence,
+      rule_breaks: [...review.rule_breaks],
+      review_lesson: review.lesson.trim(),
+      reviewed_at: reviewedAt,
+      updated_at: reviewedAt,
+    };
+    writeLocalJournalEntries([updated, ...local.filter((entry) => entry.id !== id)]);
+    invalidateClientCache(["journal:"]);
+    return updated;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(id)}/process-review`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(review),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, res.status === 409
+      ? "This trade changed in another view. Refresh before saving the review."
+      : `Process review could not be saved (${res.status}).`));
+  }
+  const updated = normalizeProcessReviewedEntry(await res.json().catch(() => null));
+  if (!updated) throw new Error("Process review returned an invalid response.");
+  invalidateClientCache(["journal:"]);
+  return updated;
+}
+
+export async function getJournalWeeklyReviews(weeks = 8): Promise<JournalWeeklyReviewResponse> {
+  const boundedWeeks = Math.max(1, Math.min(12, Math.trunc(weeks)));
+  if (shouldUseMockFallback()) {
+    return buildMockJournalWeeklyReviews(
+      mergeMockJournalEntries(readLocalJournalEntries(), mockJournalEntries().entries),
+      boundedWeeks,
+    );
+  }
+  return cachedClientRequest(`journal:weekly-reviews:${boundedWeeks}`, 30_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/journal/weekly-reviews?weeks=${boundedWeeks}`, { headers });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Weekly review is temporarily unavailable (${res.status}).`));
+    }
+    const parsed = normalizeJournalWeeklyReviewResponse(await res.json().catch(() => null));
+    if (!parsed) throw new Error("Weekly review returned an invalid response.");
+    return parsed;
+  });
+}
+
+export async function getJournalWeeklyReviewEvidence(input: {
+  weekStart: string;
+  entryIds: string[];
+  ruleBreak?: JournalRuleBreakCode;
+}): Promise<JournalWeeklyReviewEvidenceResponse> {
+  const entryIds = Array.from(new Set(input.entryIds));
+  if (entryIds.length !== input.entryIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(input.weekStart) || entryIds.length < 1 || entryIds.length > 500
+    || entryIds.some((id) => !/^[A-Za-z0-9-]{1,128}$/.test(id))) {
+    throw new Error("Weekly review evidence request is invalid.");
+  }
+  if (shouldUseMockFallback()) {
+    const allEntries = mergeMockJournalEntries(readLocalJournalEntries(), mockJournalEntries().entries);
+    const weekEndDate = new Date(`${input.weekStart}T00:00:00Z`);
+    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+    const weekEnd = weekEndDate.toISOString().slice(0, 10);
+    const entries = entryIds.map((id) => allEntries.find((entry) => entry.id === id)).filter((entry): entry is JournalEntry => Boolean(entry));
+    const complete = entries.length === entryIds.length && entries.every((entry) => (
+      entry.status === "closed"
+      && entry.exit_date != null
+      && entry.exit_date.slice(0, 10) >= input.weekStart
+      && entry.exit_date.slice(0, 10) <= weekEnd
+      && (!input.ruleBreak || (entry.rule_breaks ?? []).includes(input.ruleBreak))
+    ));
+    if (!complete) throw new Error("Weekly review evidence is unavailable.");
+    return {
+      coverage_complete: true,
+      week_start: input.weekStart,
+      week_end: weekEnd,
+      rule_break: input.ruleBreak ?? null,
+      requested_entry_ids: entryIds,
+      matched_count: entries.length,
+      entries,
+    };
+  }
+  const query = new URLSearchParams({
+    week_start: input.weekStart,
+    entry_ids: entryIds.join(","),
+  });
+  if (input.ruleBreak) query.set("rule_break", input.ruleBreak);
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/weekly-reviews/evidence?${query}`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Weekly review evidence is unavailable (${res.status}).`));
+  const parsed = normalizeJournalWeeklyReviewEvidenceResponse(await res.json().catch(() => null), {
+    weekStart: input.weekStart,
+    entryIds,
+    ruleBreak: input.ruleBreak,
+  });
+  if (!parsed) throw new Error("Weekly review evidence returned an invalid or incomplete response.");
+  return parsed;
+}
+
 export async function deleteJournalEntry(id: string): Promise<void> {
   if (shouldUseMockFallback()) {
     writeLocalJournalEntries(readLocalJournalEntries().filter((entry) => entry.id !== id));
@@ -1432,7 +1559,10 @@ export async function deleteJournalEntry(id: string): Promise<void> {
     return;
   }
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/journal/${id}`, { method: "DELETE", headers });
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(id)}`, { method: "DELETE", headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Trade could not be deleted (${res.status}).`));
+  }
   invalidateClientCache(["journal:", "portfolio"]);
 }
 
