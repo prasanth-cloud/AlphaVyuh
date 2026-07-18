@@ -8,6 +8,7 @@ import {
   mockLiveQuote,
   mockMarketMovers,
   mockMarketOverview,
+  mockMarketAnalytics,
   mockMarketSummary,
   mockPortfolio,
   mockPriceAlerts,
@@ -52,6 +53,7 @@ import type {
   LiveQuote,
   LiveSectorIndex,
   Market,
+  MarketAnalyticsBundle,
   MarketMovers,
   MarketOverview,
   MarketSnapshot,
@@ -87,6 +89,7 @@ import type {
   WorkflowStatePatch,
   ZerodhaReadOnlySmoke,
 } from './api/types'
+import { normalizeMarketAnalyticsPayload } from './market-analytics'
 
 export * from './api/types'
 export {
@@ -2536,6 +2539,26 @@ export async function getPortfolio(): Promise<PortfolioResponse> {
 // ── Backtest ──────────────────────────────────────────────────────────────────
 
 
+
+export async function getMarketAnalytics(): Promise<MarketAnalyticsBundle> {
+  if (shouldUseMockFallback()) return mockMarketAnalytics();
+  const headers = await authHeaders();
+  const res = await withTimeout(fetch(`${API}/api/v1/market/analytics`, { headers }), 5000).catch(() => null);
+  if (!res?.ok) {
+    const detail = res
+      ? await responseErrorMessage(res, `Market pulse is temporarily unavailable (${res.status}).`)
+      : "Market pulse is temporarily unavailable.";
+    throw new Error(detail);
+  }
+  const payload = await res.json();
+  const unavailableMessage = unavailablePayloadMessage(payload, "Market pulse is temporarily unavailable.");
+  if (unavailableMessage) throw new Error(unavailableMessage);
+  const normalized = normalizeMarketAnalyticsPayload(payload);
+  if (!normalized.trade_date || normalized.breadth_history.length === 0) {
+    throw new Error("Market pulse does not have enough complete EOD history yet.");
+  }
+  return normalized;
+}
 
 export async function runBacktest(
   filters: ScanFilters,
