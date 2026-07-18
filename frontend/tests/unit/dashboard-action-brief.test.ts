@@ -44,7 +44,8 @@ function prioritySymbol(symbol: string, score: number): DashboardPrioritySymbol 
   };
 }
 
-function closedTrade(symbol: string, lessons: string | null): JournalEntry {
+function closedTrade(symbol: string, options: { reviewed?: boolean; legacyLesson?: string | null } = {}): JournalEntry {
+  const reviewedAt = options.reviewed ? "2026-06-06T09:30:00.000Z" : null;
   return {
     id: `journal-${symbol}`,
     user_id: "user-1",
@@ -66,13 +67,19 @@ function closedTrade(symbol: string, lessons: string | null): JournalEntry {
     entry_reason: "Test setup",
     exit_reason: "Target partial",
     mistakes: null,
-    lessons,
+    lessons: options.legacyLesson ?? null,
     status: "closed",
     source_page: "manual",
     source_context: null,
     scanner_context: null,
     thesis: null,
     invalidation_rule: null,
+    review_schema_version: options.reviewed ? 1 : null,
+    planned_setup: options.reviewed ? "Breakout" : null,
+    setup_adherence: options.reviewed ? "followed" : null,
+    rule_breaks: options.reviewed ? [] : null,
+    review_lesson: options.reviewed ? "Keep the entry aligned with the plan." : null,
+    reviewed_at: reviewedAt,
     created_at: "2026-06-01T09:30:00.000Z",
     updated_at: "2026-06-05T09:30:00.000Z",
   };
@@ -286,11 +293,19 @@ describe("buildDashboardPrioritySymbols", () => {
     const queue = buildDashboardPrioritySymbols({
       watchlists,
       workflowStates,
-      journalEntries: [closedTrade("INFY", null)],
+      journalEntries: [closedTrade("INFY", { legacyLesson: "Legacy generated lesson" })],
       now,
     });
 
     expect(queue[0]?.symbol).toBe("INFY");
     expect(queue[0]?.detail).toContain("Closed trade needs review");
+
+    const reviewedQueue = buildDashboardPrioritySymbols({
+      watchlists,
+      workflowStates,
+      journalEntries: [closedTrade("INFY", { reviewed: true })],
+      now,
+    });
+    expect(reviewedQueue[0]?.detail).not.toContain("Closed trade needs review");
   });
 });

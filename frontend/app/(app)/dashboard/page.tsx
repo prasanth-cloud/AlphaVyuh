@@ -30,6 +30,7 @@ import {
   type AccountDataIssue,
 } from '@/lib/account-data-status'
 import { getWatchlistChartRequest } from '@/lib/watchlist-chart-range'
+import { isCompletedProcessReview } from '@/lib/journal-weekly-review'
 import { FirstRunBanner } from '@/components/FirstRunBanner'
 
 const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200
@@ -236,7 +237,7 @@ export default function DashboardPage() {
     const closedTradesInSample = journal.entries.filter(entry => entry.status === 'closed').length
     const openTradesInSample = journal.entries.filter(entry => entry.status === 'open').length
     const closedTrades = Math.max(closedTradesInSample, stats?.total_trades ?? 0)
-    const reviewedClosedTradesInSample = journal.entries.filter(entry => entry.status === 'closed' && Boolean(entry.lessons?.trim())).length
+    const reviewedClosedTradesInSample = journal.entries.filter(entry => entry.status === 'closed' && isCompletedProcessReview(entry)).length
     const knownUnreviewedTrades = Math.max(0, closedTradesInSample - reviewedClosedTradesInSample)
     const reviewCoveragePartial = journal.entries.length < journal.total || closedTrades > closedTradesInSample
     const activeScanAlerts = (alertsResult.data ?? []).filter(alert => alert.is_active)

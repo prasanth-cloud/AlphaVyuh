@@ -32,7 +32,9 @@ describe("dashboard page source", () => {
   });
 
   it("does not infer unseen journal trades were reviewed", () => {
+    expect(dashboardSource).toContain("isCompletedProcessReview(entry)");
     expect(dashboardSource).toContain("reviewedTrades: reviewedClosedTradesInSample");
+    expect(dashboardSource).not.toContain("Boolean(entry.lessons?.trim())");
     expect(dashboardSource).not.toContain("closedTrades - knownUnreviewedTrades");
   });
 

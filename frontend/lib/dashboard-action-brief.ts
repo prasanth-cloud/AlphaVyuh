@@ -1,4 +1,5 @@
 import type { JournalEntry, Watchlist, WorkflowState } from "@/lib/api/types";
+import { isCompletedProcessReview } from "@/lib/journal-weekly-review";
 import { buildWatchlistTriageSummary, type WatchlistTriageBrokerContext } from "@/lib/watchlist-triage";
 
 export type DashboardBriefStatus = "ready" | "action" | "warn" | "empty";
@@ -191,8 +192,8 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
           label: "Journal learning",
           value: `${unreviewedTrades} due`,
           detail: input.reviewCoveragePartial === true
-            ? "Loaded journal sample has closed trades that still need lessons."
-            : `${input.reviewedTrades}/${input.closedTrades} closed trades have lessons captured.`,
+            ? "Loaded journal sample has closed trades that still need process review."
+            : `${input.reviewedTrades}/${input.closedTrades} closed trades have process review recorded.`,
           href: "/journal?review=needs-review",
           status: "action",
         }
@@ -209,7 +210,7 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
           id: "journal",
           label: "Journal learning",
           value: "Reviewed",
-          detail: `${input.closedTrades} closed trades have review context.`,
+          detail: `${input.closedTrades} closed trades have completed process reviews.`,
           href: "/journal?tab=analytics",
           status: "ready",
         };
@@ -254,7 +255,7 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
 function reviewStateForSymbol(symbol: string, entries: JournalEntry[]) {
   const closed = entries.filter((entry) => entry.symbol.toUpperCase() === symbol && entry.status === "closed");
   if (closed.length === 0) return { state: "new" as const };
-  const reviewed = closed.filter((entry) => Boolean(entry.lessons?.trim()));
+  const reviewed = closed.filter(isCompletedProcessReview);
   return {
     state: reviewed.length >= closed.length ? "reviewed" as const : "needs-review" as const,
     closed: closed.length,
