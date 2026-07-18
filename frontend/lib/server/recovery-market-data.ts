@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { buildMarketUniverseEvidence, MARKET_UNIVERSE_CONTRACT } from "@/lib/market-universe-contract";
 
 type DailyRow = {
   symbol: string;
@@ -163,6 +164,7 @@ const RECOVERY_SCANNER_SORT_KEYS = new Set([
 const RECOVERY_SCANNER_PAGE_SIZES = new Set([0, 25, 50, 150, 200]);
 
 let latestRowsCache: { tradeDate: string; expiresAt: number; rows: DailyRow[] } | null = null;
+let latestTradeDateCache: { expiresAt: number; tradeDate: string | null } | null = null;
 
 function cleanEnv(value?: string | null): string {
   return String(value ?? "").trim().replace(/^['"`]|['"`]$/g, "");
@@ -188,16 +190,18 @@ export function getRecoverySupabaseClient(): SupabaseClient {
 }
 
 function sourceMetadata(asOf: string | null, symbolsCount?: number | null, universeActive?: number | null) {
-  const coveragePct = symbolsCount != null && universeActive ? Number(((symbolsCount / universeActive) * 100).toFixed(1)) : null;
+  const universe = buildMarketUniverseEvidence(symbolsCount, universeActive);
+  const coveragePct = universe.coverage_pct;
   return {
     source_name: "NSE bhavcopy",
-    mode: coveragePct != null && coveragePct < 90 ? "fallback" : "eod",
+    mode: coveragePct != null && coveragePct < MARKET_UNIVERSE_CONTRACT.healthy_coverage_pct ? "fallback" : "eod",
     as_of: asOf,
     generated_at: new Date().toISOString(),
-    confidence: coveragePct != null && coveragePct < 90 ? "degraded" : "healthy",
+    confidence: coveragePct != null && coveragePct < MARKET_UNIVERSE_CONTRACT.healthy_coverage_pct ? "degraded" : "healthy",
     coverage_pct: coveragePct,
     symbols_count: symbolsCount ?? null,
     universe_active: universeActive ?? null,
+    universe,
     cache_status: "vercel_recovery",
     license_notes: "NSE bhavcopy data from the latest completed market session; not a licensed realtime feed.",
   };
@@ -386,21 +390,66 @@ function recoveryMatchReasons(row: DailyRow): string[] {
   return reasons;
 }
 
+export function selectLatestCompleteTradeDate(
+  rows: Array<{ trade_date?: string | null; symbol?: string | null }>,
+  universeActive: number | null,
+): string | null {
+  const minimum = Math.max(
+    1000,
+    universeActive
+      ? Math.floor(universeActive * (MARKET_UNIVERSE_CONTRACT.complete_session_min_coverage_pct / 100))
+      : 0,
+  );
+  const symbolsByDate = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const tradeDate = row.trade_date?.trim();
+    const symbol = row.symbol?.trim();
+    if (!tradeDate || !symbol) continue;
+    const symbols = symbolsByDate.get(tradeDate) ?? new Set<string>();
+    symbols.add(symbol);
+    symbolsByDate.set(tradeDate, symbols);
+  }
+  return [...symbolsByDate.entries()]
+    .filter(([, symbols]) => symbols.size >= minimum)
+    .map(([tradeDate]) => tradeDate)
+    .sort()
+    .at(-1) ?? null;
+}
+
 export async function getLatestTradeDate(client = getRecoverySupabaseClient()): Promise<string | null> {
-  const { data, error } = await client
-    .from("daily_ohlcv")
-    .select("trade_date")
-    .order("trade_date", { ascending: false })
-    .limit(1);
-  if (error) throw error;
-  return data?.[0]?.trade_date ?? null;
+  const now = Date.now();
+  if (latestTradeDateCache && latestTradeDateCache.expiresAt > now) return latestTradeDateCache.tradeDate;
+
+  const universeActive = await getUniverseCount(client);
+  const rows: Array<{ trade_date: string; symbol: string }> = [];
+  for (let offset = 0; offset < RECOVERY_ROWS_MAX; offset += RECOVERY_ROWS_PAGE_SIZE) {
+    const end = Math.min(offset + RECOVERY_ROWS_PAGE_SIZE - 1, RECOVERY_ROWS_MAX - 1);
+    const { data, error } = await client
+      .from("daily_ohlcv")
+      .select("trade_date,symbol,stock_universe!daily_ohlcv_symbol_fkey!inner(series,market,is_active)")
+      .eq("stock_universe.market", MARKET_UNIVERSE_CONTRACT.market)
+      .in("stock_universe.series", [...MARKET_UNIVERSE_CONTRACT.series])
+      .eq("stock_universe.is_active", MARKET_UNIVERSE_CONTRACT.active_only)
+      .order("trade_date", { ascending: false })
+      .range(offset, end);
+    if (error) throw error;
+    const page = (data ?? []) as unknown as Array<{ trade_date: string; symbol: string }>;
+    rows.push(...page);
+    if (page.length < RECOVERY_ROWS_PAGE_SIZE) break;
+  }
+
+  const tradeDate = selectLatestCompleteTradeDate(rows, universeActive);
+  latestTradeDateCache = { tradeDate, expiresAt: now + RECOVERY_ROWS_CACHE_TTL_MS };
+  return tradeDate;
 }
 
 export async function getUniverseCount(client = getRecoverySupabaseClient()): Promise<number | null> {
   const { count, error } = await client
     .from("stock_universe")
     .select("symbol", { count: "exact", head: true })
-    .eq("is_active", true);
+    .eq("market", MARKET_UNIVERSE_CONTRACT.market)
+    .in("series", [...MARKET_UNIVERSE_CONTRACT.series])
+    .eq("is_active", MARKET_UNIVERSE_CONTRACT.active_only);
   if (error) return null;
   return count ?? null;
 }
@@ -410,8 +459,11 @@ export async function getLatestCoverage(client = getRecoverySupabaseClient(), tr
   if (!latest) return { trade_date: null, symbols_count: 0, universe_active: await getUniverseCount(client) };
   const { count, error } = await client
     .from("daily_ohlcv")
-    .select("symbol", { count: "exact", head: true })
-    .eq("trade_date", latest);
+    .select("symbol,stock_universe!daily_ohlcv_symbol_fkey!inner(series,market,is_active)", { count: "exact", head: true })
+    .eq("trade_date", latest)
+    .eq("stock_universe.market", MARKET_UNIVERSE_CONTRACT.market)
+    .in("stock_universe.series", [...MARKET_UNIVERSE_CONTRACT.series])
+    .eq("stock_universe.is_active", MARKET_UNIVERSE_CONTRACT.active_only);
   if (error) throw error;
   return {
     trade_date: latest,
@@ -443,6 +495,7 @@ export async function getRecoveryDataHealth() {
     symbols_on_latest_date: coverage.symbols_count,
     universe_active: coverage.universe_active,
     coverage_pct: metadata.coverage_pct,
+    universe: metadata.universe,
     mode: metadata.mode,
     message: "Vercel read-only recovery is serving the latest Supabase EOD data while Railway backend recovery is pending.",
     indicators_missing: {
@@ -684,6 +737,7 @@ export async function getRecoveryMarketOverview() {
     cache_status: "vercel_recovery",
     provider: metadata,
     source_metadata: metadata,
+    universe: metadata.universe,
     mode: metadata.mode,
   };
 }
@@ -705,6 +759,7 @@ export async function getRecoveryMarketSummary() {
     total_stocks: overview.total,
     mode: overview.mode,
     source_metadata: overview.source_metadata,
+    universe: overview.universe,
   };
 }
 
@@ -746,6 +801,7 @@ export async function runRecoveryScanner(body: { filters?: ScanFilters; sort_by?
 
 export function clearRecoveryMarketDataCache() {
   latestRowsCache = null;
+  latestTradeDateCache = null;
 }
 
 export async function latestRows(client: SupabaseClient, latest: string) {
@@ -761,6 +817,9 @@ export async function latestRows(client: SupabaseClient, latest: string) {
       .from("daily_ohlcv")
       .select(DAILY_WITH_UNIVERSE_SELECT)
       .eq("trade_date", latest)
+      .eq("stock_universe.market", MARKET_UNIVERSE_CONTRACT.market)
+      .in("stock_universe.series", [...MARKET_UNIVERSE_CONTRACT.series])
+      .eq("stock_universe.is_active", MARKET_UNIVERSE_CONTRACT.active_only)
       .range(offset, end);
     if (error) throw error;
     const page = (data ?? []) as unknown as DailyRow[];

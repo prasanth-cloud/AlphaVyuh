@@ -70,7 +70,22 @@ function serveHealthyApi(request, response) {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    response.end(JSON.stringify({
+      as_of: "2026-05-18",
+      total_stocks: 3147,
+      advances: 1000,
+      declines: 900,
+      unchanged: 120,
+      universe: {
+        id: "nse_active_eq",
+        market: "NSE",
+        series: ["EQ"],
+        active_only: true,
+        symbols_count: 3147,
+        universe_active: 3447,
+        coverage_pct: 91.3,
+      },
+    }));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {

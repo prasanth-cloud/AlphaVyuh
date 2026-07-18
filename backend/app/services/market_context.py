@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from app.services.market_universe_contract import MARKET_UNIVERSE_CONTRACT, market_universe_evidence
+
 
 EOD_SOURCE_NAME = "NSE bhavcopy"
 EOD_LICENSE_NOTE = "NSE bhavcopy data from the latest completed market session; not a licensed realtime feed."
@@ -46,6 +48,10 @@ def eod_source_metadata(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "confidence": confidence,
         "coverage_pct": coverage_pct,
+        "universe": market_universe_evidence(
+            symbols_count=symbols_count,
+            universe_active=universe_active,
+        ),
         "symbols_count": symbols_count,
         "universe_active": universe_active,
         "cache_status": cache_status,
@@ -160,7 +166,7 @@ def health_status_from_counts(
         return "unknown", "unknown", coverage_pct
     if hours_stale is not None and hours_stale > 28:
         return "stale", "unknown", coverage_pct
-    if coverage_pct is not None and coverage_pct < 90:
+    if coverage_pct is not None and coverage_pct < MARKET_UNIVERSE_CONTRACT["healthy_coverage_pct"]:
         return "degraded", "fallback", coverage_pct
     if total_syms and (null_rsi / total_syms) > 0.05:
         return "degraded", "fallback", coverage_pct
@@ -211,6 +217,10 @@ def normalize_health_row(row: dict[str, Any]) -> dict[str, Any]:
         "symbols_on_latest_date": symbols_latest,
         "universe_active": universe_active,
         "coverage_pct": coverage_pct,
+        "universe": market_universe_evidence(
+            symbols_count=symbols_latest,
+            universe_active=universe_active,
+        ),
         "indicators_missing": {
             "rsi_14": row.get("null_rsi_latest"),
             "ema_200": row.get("null_ema200_latest"),

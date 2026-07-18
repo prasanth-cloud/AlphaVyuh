@@ -18,6 +18,7 @@ from typing import Any
 
 from app.services.market_dates import analyze_trade_date_quality
 from app.services.market_context import eod_source_metadata
+from app.services.market_universe_contract import MARKET_UNIVERSE_CONTRACT
 from app.services.sector_taxonomy import build_sector_taxonomy_metadata
 
 SNAPSHOT_RUN_ID_PREFIX = "market-breadth-snapshot"
@@ -423,7 +424,11 @@ def build_market_breadth_snapshot(
     most_active = sorted(with_volume, key=lambda item: item["volume_ratio"] or 0, reverse=True)[:5]
 
     coverage_pct = round((total / universe_active) * 100, 1) if universe_active else None
-    coverage_status = "healthy" if coverage_pct is None or coverage_pct >= 90 else "degraded"
+    coverage_status = (
+        "healthy"
+        if coverage_pct is None or coverage_pct >= MARKET_UNIVERSE_CONTRACT["healthy_coverage_pct"]
+        else "degraded"
+    )
     metadata = eod_source_metadata(
         as_of=latest_date,
         status=coverage_status,

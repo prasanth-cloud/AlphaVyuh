@@ -116,6 +116,30 @@ function chartResponse(symbol, startDate = "2021-05-18", endDate = "2026-05-18",
   });
 }
 
+function marketSummary(overrides = {}) {
+  const total = overrides.total_stocks ?? 3147;
+  return {
+    as_of: "2026-05-18",
+    total_stocks: total,
+    advances: 1000,
+    declines: 900,
+    unchanged: 120,
+    ...overrides,
+    universe: {
+      schema_version: 1,
+      id: "nse_active_eq",
+      label: "Active NSE equity universe",
+      market: "NSE",
+      series: ["EQ"],
+      active_only: true,
+      session_basis: "latest_complete_eod_session",
+      symbols_count: total,
+      universe_active: Math.max(total, 3150),
+      coverage_pct: Number(((total / Math.max(total, 3150)) * 100).toFixed(1)),
+    },
+  };
+}
+
 await withServer((request, response) => {
   if (request.url === "/health") {
     response.writeHead(404, {
@@ -149,7 +173,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    response.end(JSON.stringify(marketSummary()));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
@@ -176,7 +200,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 0, declines: 2, unchanged: 2462 }));
+    response.end(JSON.stringify(marketSummary({ advances: 0, declines: 2, unchanged: 2462 })));
     return;
   }
 
@@ -199,7 +223,31 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    const summary = marketSummary();
+    delete summary.universe;
+    response.end(JSON.stringify(summary));
+    return;
+  }
+  response.writeHead(404);
+  response.end(JSON.stringify({ error: "unexpected path" }));
+}, async (apiUrl) => {
+  const { code, stdout, stderr } = await runChecker(apiUrl);
+  assert.notEqual(code, 0, "production API check should fail when the universe contract is unnamed");
+  assert.match(
+    stderr,
+    /did not name its market-universe contract/,
+    `stderr should explain the missing universe contract, got:\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`,
+  );
+});
+
+await withServer((request, response) => {
+  response.setHeader("content-type", "application/json");
+  if (request.url === "/health") {
+    response.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (request.url === "/api/v1/market/summary") {
+    response.end(JSON.stringify(marketSummary()));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
@@ -226,7 +274,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    response.end(JSON.stringify(marketSummary()));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
@@ -255,7 +303,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    response.end(JSON.stringify(marketSummary()));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
@@ -285,7 +333,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    response.end(JSON.stringify(marketSummary()));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
@@ -317,7 +365,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    response.end(JSON.stringify(marketSummary()));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
@@ -363,7 +411,7 @@ await withServer((request, response) => {
     return;
   }
   if (request.url === "/api/v1/market/summary") {
-    response.end(JSON.stringify({ as_of: "2026-05-18", total_stocks: 3147, advances: 1000, declines: 900, unchanged: 120 }));
+    response.end(JSON.stringify(marketSummary()));
     return;
   }
   if (request.url === "/api/v1/charts/RELIANCE/candles?timeframe=D&from_date=2021-05-18&to_date=2026-05-18&limit=1300") {
