@@ -37,6 +37,7 @@ import type {
   BrokerProfile,
   CandlesResponse,
   ChartLayout,
+  ChartSnapshotStateV1,
   ChartWorkspace,
   CreateJournalEntry,
   DataHealth,
@@ -46,7 +47,11 @@ import type {
   Fundamentals,
   IndicatorsResponse,
   JournalAnalytics,
+  JournalChartSnapshot,
   JournalEntry,
+  JournalWeeklyReviewResponse,
+  JournalWeeklyReviewEvidenceResponse,
+  JournalRuleBreakCode,
   JournalStats,
   LiveMarketStatus,
   LiveQuote,
@@ -71,6 +76,7 @@ import type {
   ScannerIdeaContext,
   ScanResponse,
   ScanResult,
+  SaveJournalProcessReviewRequest,
   SectorBreadthItem,
   SectorListResponse,
   SectorTaxonomyMetadata,
@@ -87,6 +93,14 @@ import type {
   WorkflowStatePatch,
   ZerodhaReadOnlySmoke,
 } from './api/types'
+import { cloneChartSnapshotState, normalizeJournalChartSnapshot } from './chart-snapshot'
+import {
+  buildMockJournalWeeklyReviews,
+  normalizeJournalWeeklyReviewResponse,
+  normalizeJournalWeeklyReviewEvidenceResponse,
+  normalizeProcessReviewedEntry,
+  validateProcessReviewDraft,
+} from './journal-weekly-review'
 
 export * from './api/types'
 export {
@@ -107,6 +121,7 @@ export const API = API_BASE_URL;
 
 // Public endpoints don't need auth — just JSON content-type
 const publicHeaders: HeadersInit = { "Content-Type": "application/json" };
+const mockJournalChartSnapshots = new Map<string, ChartSnapshotStateV1>();
 
 export async function getMarkets(): Promise<Market[]> {
   const res = await fetch(`${API}/api/v1/market/markets`, { headers: publicHeaders });
@@ -1193,6 +1208,7 @@ export async function saveDefaultChartLayout(layout: Omit<ChartLayout, "symbol">
 
 
 const mockJournalKey = "alphavyuh-mock-journal-v1";
+const mockJournalChartSnapshotKey = "alphavyuh-mock-journal-chart-snapshots-v1";
 const mockBrokerSyncKey = "alphavyuh-mock-broker-sync-v1";
 const brokerImportMarker = "alphavyuh-broker-import";
 type BrokerImportSource = "zerodha" | "upstox";
@@ -1237,6 +1253,56 @@ function readLocalJournalEntries(): JournalEntry[] {
 function writeLocalJournalEntries(entries: JournalEntry[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(mockJournalKey, JSON.stringify(entries));
+}
+
+function readLocalJournalChartSnapshot(entryId: string): ChartSnapshotStateV1 | null {
+  const inMemory = mockJournalChartSnapshots.get(entryId);
+  if (inMemory) return cloneChartSnapshotState(inMemory);
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(mockJournalChartSnapshotKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const normalized = normalizeJournalChartSnapshot({
+      available: true,
+      state: parsed && typeof parsed === "object" ? parsed[entryId] : null,
+    });
+    if (!normalized.state) return null;
+    mockJournalChartSnapshots.set(entryId, normalized.state);
+    return cloneChartSnapshotState(normalized.state);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalJournalChartSnapshot(entryId: string, state: ChartSnapshotStateV1) {
+  const immutable = cloneChartSnapshotState(state);
+  mockJournalChartSnapshots.set(entryId, immutable);
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(mockJournalChartSnapshotKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const snapshots = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    window.localStorage.setItem(mockJournalChartSnapshotKey, JSON.stringify({
+      ...snapshots,
+      [entryId]: immutable,
+    }));
+  } catch {
+    // Mock persistence is best effort; production uses private Storage.
+  }
+}
+
+function deleteLocalJournalChartSnapshot(entryId: string) {
+  mockJournalChartSnapshots.delete(entryId);
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem(mockJournalChartSnapshotKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    delete parsed[entryId];
+    window.localStorage.setItem(mockJournalChartSnapshotKey, JSON.stringify(parsed));
+  } catch {
+    // Mock cleanup is best effort; production cleanup is server-owned.
+  }
 }
 
 function readLocalBrokerSync(): { last_synced_at: string | null; last_synced_broker: BrokerImportSource | null } {
@@ -1425,14 +1491,195 @@ export async function updateJournalEntry(id: string, update: UpdateJournalEntry)
   return updated;
 }
 
+export async function attachJournalChartSnapshot(
+  entryId: string,
+  state: ChartSnapshotStateV1,
+): Promise<JournalChartSnapshot> {
+  if (shouldUseMockFallback()) {
+    const existing = readLocalJournalChartSnapshot(entryId);
+    const immutableState = existing ?? cloneChartSnapshotState(state);
+    if (!existing) writeLocalJournalChartSnapshot(entryId, immutableState);
+    const entries = readLocalJournalEntries();
+    writeLocalJournalEntries(entries.map((entry) => entry.id === entryId
+      ? {
+          ...entry,
+          snapshot_state_path: `mock://trade-snapshots/${entryId}.json`,
+          snapshot_captured_at: immutableState.captured_at,
+        }
+      : entry));
+    invalidateClientCache(["journal:"]);
+    return {
+      available: true,
+      state: cloneChartSnapshotState(immutableState),
+      storage_path: `mock://trade-snapshots/${entryId}.json`,
+      captured_at: immutableState.captured_at,
+    };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(entryId)}/snapshot`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ state }),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Chart context could not be attached (${res.status}).`));
+  }
+  const parsed = normalizeJournalChartSnapshot(await res.json().catch(() => null));
+  if (!parsed.available || !parsed.state) {
+    throw new Error("Chart context attachment returned an invalid response.");
+  }
+  invalidateClientCache(["journal:"]);
+  return parsed;
+}
+
+export async function getJournalChartSnapshot(entryId: string): Promise<JournalChartSnapshot> {
+  if (shouldUseMockFallback()) {
+    const state = readLocalJournalChartSnapshot(entryId);
+    return state
+      ? {
+          available: true,
+          state: cloneChartSnapshotState(state),
+          storage_path: `mock://trade-snapshots/${entryId}.json`,
+          captured_at: state.captured_at,
+        }
+      : { available: false, state: null, storage_path: null, captured_at: null };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(entryId)}/snapshot`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Chart context is temporarily unavailable (${res.status}).`));
+  }
+  return normalizeJournalChartSnapshot(await res.json().catch(() => null));
+}
+
+export async function saveJournalProcessReview(
+  id: string,
+  review: SaveJournalProcessReviewRequest,
+): Promise<JournalEntry> {
+  const validationError = validateProcessReviewDraft(review);
+  if (validationError) throw new Error(validationError);
+  if (shouldUseMockFallback()) {
+    const base = mockJournalEntries().entries;
+    const local = readLocalJournalEntries();
+    const existing = local.find((entry) => entry.id === id) ?? base.find((entry) => entry.id === id);
+    if (!existing) throw new Error("Journal entry not found.");
+    if (existing.status !== "closed") throw new Error("Only closed trades can be reviewed.");
+    if (existing.updated_at !== review.expected_updated_at) throw new Error("This trade changed in another view. Refresh before saving the review.");
+    const reviewedAt = new Date().toISOString();
+    const updated: JournalEntry = {
+      ...existing,
+      review_schema_version: 1,
+      planned_setup: review.planned_setup.trim(),
+      setup_adherence: review.adherence,
+      rule_breaks: [...review.rule_breaks],
+      review_lesson: review.lesson.trim(),
+      reviewed_at: reviewedAt,
+      updated_at: reviewedAt,
+    };
+    writeLocalJournalEntries([updated, ...local.filter((entry) => entry.id !== id)]);
+    invalidateClientCache(["journal:"]);
+    return updated;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(id)}/process-review`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(review),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, res.status === 409
+      ? "This trade changed in another view. Refresh before saving the review."
+      : `Process review could not be saved (${res.status}).`));
+  }
+  const updated = normalizeProcessReviewedEntry(await res.json().catch(() => null));
+  if (!updated) throw new Error("Process review returned an invalid response.");
+  invalidateClientCache(["journal:"]);
+  return updated;
+}
+
+export async function getJournalWeeklyReviews(weeks = 8): Promise<JournalWeeklyReviewResponse> {
+  const boundedWeeks = Math.max(1, Math.min(12, Math.trunc(weeks)));
+  if (shouldUseMockFallback()) {
+    return buildMockJournalWeeklyReviews(
+      mergeMockJournalEntries(readLocalJournalEntries(), mockJournalEntries().entries),
+      boundedWeeks,
+    );
+  }
+  return cachedClientRequest(`journal:weekly-reviews:${boundedWeeks}`, 30_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/journal/weekly-reviews?weeks=${boundedWeeks}`, { headers });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Weekly review is temporarily unavailable (${res.status}).`));
+    }
+    const parsed = normalizeJournalWeeklyReviewResponse(await res.json().catch(() => null));
+    if (!parsed) throw new Error("Weekly review returned an invalid response.");
+    return parsed;
+  });
+}
+
+export async function getJournalWeeklyReviewEvidence(input: {
+  weekStart: string;
+  entryIds: string[];
+  ruleBreak?: JournalRuleBreakCode;
+}): Promise<JournalWeeklyReviewEvidenceResponse> {
+  const entryIds = Array.from(new Set(input.entryIds));
+  if (entryIds.length !== input.entryIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(input.weekStart) || entryIds.length < 1 || entryIds.length > 500
+    || entryIds.some((id) => !/^[A-Za-z0-9-]{1,128}$/.test(id))) {
+    throw new Error("Weekly review evidence request is invalid.");
+  }
+  if (shouldUseMockFallback()) {
+    const allEntries = mergeMockJournalEntries(readLocalJournalEntries(), mockJournalEntries().entries);
+    const weekEndDate = new Date(`${input.weekStart}T00:00:00Z`);
+    weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
+    const weekEnd = weekEndDate.toISOString().slice(0, 10);
+    const entries = entryIds.map((id) => allEntries.find((entry) => entry.id === id)).filter((entry): entry is JournalEntry => Boolean(entry));
+    const complete = entries.length === entryIds.length && entries.every((entry) => (
+      entry.status === "closed"
+      && entry.exit_date != null
+      && entry.exit_date.slice(0, 10) >= input.weekStart
+      && entry.exit_date.slice(0, 10) <= weekEnd
+      && (!input.ruleBreak || (entry.rule_breaks ?? []).includes(input.ruleBreak))
+    ));
+    if (!complete) throw new Error("Weekly review evidence is unavailable.");
+    return {
+      coverage_complete: true,
+      week_start: input.weekStart,
+      week_end: weekEnd,
+      rule_break: input.ruleBreak ?? null,
+      requested_entry_ids: entryIds,
+      matched_count: entries.length,
+      entries,
+    };
+  }
+  const query = new URLSearchParams({
+    week_start: input.weekStart,
+    entry_ids: entryIds.join(","),
+  });
+  if (input.ruleBreak) query.set("rule_break", input.ruleBreak);
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/weekly-reviews/evidence?${query}`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, `Weekly review evidence is unavailable (${res.status}).`));
+  const parsed = normalizeJournalWeeklyReviewEvidenceResponse(await res.json().catch(() => null), {
+    weekStart: input.weekStart,
+    entryIds,
+    ruleBreak: input.ruleBreak,
+  });
+  if (!parsed) throw new Error("Weekly review evidence returned an invalid or incomplete response.");
+  return parsed;
+}
+
 export async function deleteJournalEntry(id: string): Promise<void> {
   if (shouldUseMockFallback()) {
     writeLocalJournalEntries(readLocalJournalEntries().filter((entry) => entry.id !== id));
+    deleteLocalJournalChartSnapshot(id);
     invalidateClientCache(["journal:", "portfolio"]);
     return;
   }
   const headers = await authHeaders();
-  await fetch(`${API}/api/v1/journal/${id}`, { method: "DELETE", headers });
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(id)}`, { method: "DELETE", headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Trade could not be deleted (${res.status}).`));
+  }
   invalidateClientCache(["journal:", "portfolio"]);
 }
 
