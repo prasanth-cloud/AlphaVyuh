@@ -12,6 +12,8 @@ describe("compact dashboard market state", () => {
     expect(source).toContain("Leading sectors");
     expect(source).toContain('href="/data"');
     expect(source).toContain('href="/scanner"');
+    expect(source).toContain('href="/analytics"');
+    expect(source).toContain("Market Pulse");
   });
 
   it("removes analysis panels that belong outside the dashboard", () => {
