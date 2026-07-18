@@ -5256,6 +5256,16 @@ input, textarea, select {
   .market-pulse-range { width: 100%; margin-left: 0; }
   .market-pulse-chart svg { min-width: 520px; }
   .market-pulse-chart { overflow-x: auto; }
+  .market-pulse-sector-table { min-width: 0; table-layout: fixed; }
+  .market-pulse-sector-table th,
+  .market-pulse-sector-table td { padding: 9px 4px; font-size: 10px; white-space: normal; }
+  .market-pulse-sector-table th:first-child,
+  .market-pulse-sector-table td:first-child { width: 43%; padding-left: 10px; }
+  .market-pulse-sector-table th:not(:first-child),
+  .market-pulse-sector-table td:not(:first-child) { width: 19%; white-space: nowrap; }
+  .market-pulse-sector-table th:last-child,
+  .market-pulse-sector-table td:last-child { padding-right: 10px; }
+  .market-pulse-sector-table td:first-child strong { display: block; overflow-wrap: anywhere; }
 }
 
 /* Light theme bridge for older pages that still use hard-coded Tailwind colors. */

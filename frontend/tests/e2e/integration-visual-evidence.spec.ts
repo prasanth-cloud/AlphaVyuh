@@ -46,6 +46,11 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(overflow).toBeLessThanOrEqual(2);
 }
 
+async function expectNoInnerHorizontalOverflow(locator: Locator) {
+  const overflow = await locator.evaluate((element) => element.scrollWidth - element.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(2);
+}
+
 test("captures the coherent integrated decision workflow", async ({ page }, testInfo) => {
   test.setTimeout(90_000);
 
@@ -87,8 +92,11 @@ test("captures the coherent integrated decision workflow", async ({ page }, test
 
   await page.goto("/analytics", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("market-pulse-provenance")).toBeVisible({ timeout: 15_000 });
+  const mobileSectorTable = page.getByTestId("market-pulse-sector-table");
+  await expect(mobileSectorTable).toBeVisible({ timeout: 15_000 });
   await settleForEvidence(page);
   await expectNoHorizontalOverflow(page);
+  await expectNoInnerHorizontalOverflow(mobileSectorTable);
   await attachScreenshot(page, testInfo, "market-pulse-mobile");
 
   await page.goto("/journal", { waitUntil: "domcontentloaded" });

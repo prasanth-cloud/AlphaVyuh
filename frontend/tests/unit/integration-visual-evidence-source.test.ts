@@ -15,6 +15,7 @@ describe("integrated visual evidence contract", () => {
     expect(specSource).toContain('filter({ hasText: "DIXON" })');
     expect(specSource).toContain("toHaveCount(2)");
     expect(specSource).toContain("expectNoHorizontalOverflow");
+    expect(specSource).toContain("expectNoInnerHorizontalOverflow(mobileSectorTable)");
     expect(specSource).toContain('reducedMotion: "reduce"');
   });
 
