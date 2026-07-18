@@ -18,4 +18,11 @@ describe("Market Pulse trust and UX source", () => {
     expect(charts).toContain("View map values");
     expect(charts).toContain("Shared scale");
   });
+
+  it("keeps all sector metrics readable in the compact mobile table", () => {
+    expect(charts).toContain('aria-label="20 sessions"');
+    expect(charts).toContain('aria-label="5 sessions"');
+    expect(charts).toContain('market-pulse-header-compact');
+    expect(charts).toContain('market-pulse-sector-rank');
+  });
 });

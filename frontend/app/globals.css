@@ -5236,6 +5236,8 @@ input, textarea, select {
 .market-pulse-table-scroll th, .market-pulse-table-scroll td { padding: 9px 10px; border-bottom: 1px solid var(--border-subtle); text-align: right; white-space: nowrap; }
 .market-pulse-table-scroll th:first-child, .market-pulse-table-scroll td:first-child { text-align: left; }
 .market-pulse-sector-table td:first-child span { display: block; margin-top: 2px; color: var(--text-tertiary); font-size: 11px; }
+.market-pulse-sector-table td:first-child .market-pulse-sector-rank { display: inline; margin: 0 3px 0 0; color: inherit; font-size: inherit; }
+.market-pulse-header-compact { display: none; }
 .market-pulse-svg-label { fill: var(--text-tertiary); font-size: 11px; }
 .market-pulse-svg-sector { fill: var(--text-secondary); font-size: 10px; }
 .market-pulse-svg-axis { fill: var(--text-tertiary); font-size: 10px; }
@@ -5266,6 +5268,8 @@ input, textarea, select {
   .market-pulse-sector-table th:last-child,
   .market-pulse-sector-table td:last-child { padding-right: 10px; }
   .market-pulse-sector-table td:first-child strong { display: block; overflow-wrap: anywhere; }
+  .market-pulse-header-full { display: none; }
+  .market-pulse-header-compact { display: inline; }
 }
 
 /* Light theme bridge for older pages that still use hard-coded Tailwind colors. */

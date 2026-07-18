@@ -146,11 +146,18 @@ export function SectorLeaderboard({ rows }: { rows: MarketSectorParticipation[] 
   return (
     <div className="market-pulse-table-scroll" data-testid="market-pulse-sector-table">
       <table className="market-pulse-sector-table">
-        <thead><tr><th>Sector</th><th>20 sessions</th><th>5 sessions</th><th>Breadth</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Sector</th>
+            <th aria-label="20 sessions"><span className="market-pulse-header-full" aria-hidden="true">20 sessions</span><span className="market-pulse-header-compact" aria-hidden="true">20S</span></th>
+            <th aria-label="5 sessions"><span className="market-pulse-header-full" aria-hidden="true">5 sessions</span><span className="market-pulse-header-compact" aria-hidden="true">5S</span></th>
+            <th>Breadth</th>
+          </tr>
+        </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.sector}>
-              <td><strong>{row.rank}. {row.sector}</strong><span>{row.constituents} constituents</span></td>
+              <td><strong><span className="market-pulse-sector-rank">{row.rank}.</span>{row.sector}</strong><span>{row.constituents} constituents</span></td>
               <td className="mono">{row.return_20d_pct == null ? "—" : `${row.return_20d_pct > 0 ? "+" : ""}${row.return_20d_pct.toFixed(2)}%`}</td>
               <td className="mono">{row.return_5d_pct == null ? "—" : `${row.return_5d_pct > 0 ? "+" : ""}${row.return_5d_pct.toFixed(2)}%`}</td>
               <td className="mono">{row.breadth_pct == null ? "—" : `${row.breadth_pct.toFixed(1)}%`}</td>
