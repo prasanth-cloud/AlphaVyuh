@@ -17,6 +17,20 @@ if [[ -z "$PYTHON_BIN" ]]; then
   fi
 fi
 
+PYTEST_CMD=()
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m pytest --version >/dev/null 2>&1; then
+  PYTEST_CMD=("$PYTHON_BIN" -m pytest)
+elif command -v uv >/dev/null 2>&1; then
+  PYTEST_CMD=(uv run --with-requirements backend/requirements.txt python -m pytest)
+fi
+
+PIP_AUDIT_CMD=()
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m pip_audit --version >/dev/null 2>&1; then
+  PIP_AUDIT_CMD=("$PYTHON_BIN" -m pip_audit)
+elif command -v uv >/dev/null 2>&1; then
+  PIP_AUDIT_CMD=(uv run --with-requirements backend/requirements.txt --with pip-audit python -m pip_audit)
+fi
+
 # Backend tests import settings during collection. Use explicit non-secret
 # placeholders when local/CI environments have no Supabase credentials.
 export SUPABASE_URL="${SUPABASE_URL:-https://example.supabase.co}"
@@ -26,13 +40,17 @@ run_step() {
   local name="$1"
   shift
   echo "== $name =="
-  "$@"
+  node "$ROOT/scripts/run-command-with-timeout.mjs" \
+    --name "$name" \
+    --timeout "${STEP_TIMEOUT_SECONDS:-900}" \
+    -- "$@"
   echo
 }
 
 run_step "Git tracked changes" git status --short
 
 run_step "Launch checker regression tests" npm run test:production-api-check
+run_step "Launch readiness runner regression tests" npm run test:launch-readiness-script
 run_step "Five-year chart contract regression tests" npm run test:five-year-chart-check
 run_step "Production smoke env regression tests" npm run test:production-smoke-env-check
 run_step "Production smoke workflow regression tests" npm run test:production-smoke-workflow-check
@@ -52,7 +70,7 @@ run_step "Frontend lint" npm --prefix frontend run lint
 run_step "Frontend typecheck" npm --prefix frontend run typecheck
 run_step "Frontend unit tests" bash -lc "cd frontend && npm run test"
 run_step "Frontend production build" npm --prefix frontend run build
-run_step "Frontend dependency audit" npm audit --audit-level=moderate
+run_step "Frontend dependency audit" npm --prefix frontend audit --audit-level=moderate
 
 if [[ "${SKIP_BROWSER_SMOKE:-}" == "1" ]]; then
   echo "Skipping browser smoke checks because SKIP_BROWSER_SMOKE=1."
@@ -67,21 +85,18 @@ else
 fi
 
 if [[ -d backend ]]; then
-  if [[ -n "$PYTHON_BIN" ]]; then
-    run_step "Backend tests" "$PYTHON_BIN" -m pytest backend/tests
+  if [[ ${#PYTEST_CMD[@]} -gt 0 ]]; then
+    run_step "Backend tests" "${PYTEST_CMD[@]}" backend/tests
   else
-    echo "Skipping backend tests: no Python interpreter is available."
+    echo "Skipping backend tests: neither a pytest-enabled Python interpreter nor uv is available."
     echo
   fi
 fi
 
-if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m pip_audit --version >/dev/null 2>&1; then
-  run_step "Backend dependency audit" "$PYTHON_BIN" -m pip_audit -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off
+if [[ ${#PIP_AUDIT_CMD[@]} -gt 0 ]]; then
+  run_step "Backend dependency audit" "${PIP_AUDIT_CMD[@]}" -r backend/requirements.txt --disable-pip --no-deps --progress-spinner off
 else
-  echo "Skipping backend dependency audit: pip-audit is not installed."
-  if [[ -n "$PYTHON_BIN" ]]; then
-    echo "Install with: $PYTHON_BIN -m pip install pip-audit"
-  fi
+  echo "Skipping backend dependency audit: neither pip-audit nor uv is available."
   echo
 fi
 

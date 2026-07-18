@@ -35,6 +35,7 @@
     "test:railway-secret-prep": "node scripts/test-prepare-railway-recovery-secrets.mjs",
     "test:ci-action-runtime-check": "node scripts/test-check-ci-action-runtime.mjs",
     "test:daily-refresh-workflow-safety": "node scripts/test-check-daily-refresh-workflow-safety.mjs",
+    "test:launch-readiness-script": "node scripts/test-launch-readiness-script.mjs",
     "check:public-posture": "node scripts/check-public-posture.mjs",
     "check:recovery-handoff-credentials": "node scripts/check-recovery-handoff-credentials.mjs",
     "check:signed-in-copy-posture": "node scripts/check-signed-in-copy-posture.mjs",

@@ -20,10 +20,15 @@ run_step "Setup review unit contract tests" \
     chart-review-timeframes.test.ts \
     watchlist-chart-range.test.ts
 
-run_step "Setup review browser workflow smoke" \
-  npm --prefix frontend exec -- playwright test \
-    --config=frontend/playwright.mock.config.ts \
-    frontend/tests/e2e/workflow-mock.spec.ts \
-    -g "multi-chart review board compares scanner candidates"
+if [[ "${SKIP_BROWSER_SMOKE:-}" == "1" ]]; then
+  echo "Skipping setup review browser workflow smoke because SKIP_BROWSER_SMOKE=1."
+  echo
+else
+  run_step "Setup review browser workflow smoke" \
+    npm --prefix frontend exec -- playwright test \
+      --config=frontend/playwright.mock.config.ts \
+      frontend/tests/e2e/workflow-mock.spec.ts \
+      -g "multi-chart review board compares scanner candidates"
+fi
 
 echo "Setup review contract checks complete."
