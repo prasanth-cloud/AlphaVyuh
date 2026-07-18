@@ -36,6 +36,7 @@ def test_market_summary_uses_precomputed_snapshot(monkeypatch):
         "above_ema50_pct": 48.4,
         "above_ema200_pct": 38.9,
         "total": 3076,
+        "universe_active": 3100,
         "cache_status": "snapshot",
     }
 
@@ -58,3 +59,19 @@ def test_market_summary_uses_precomputed_snapshot(monkeypatch):
     assert summary["declines"] == 1486
     assert summary["above_ema200_pct"] == 38.9
     assert summary["total_stocks"] == 3076
+    assert summary["universe"] == {
+        "schema_version": 1,
+        "id": "nse_active_eq",
+        "label": "Active NSE equity universe",
+        "market": "NSE",
+        "series": ["EQ"],
+        "active_only": True,
+        "session_basis": "latest_complete_eod_session",
+        "numerator": "distinct_symbols_with_valid_eod_row",
+        "denominator": "active_stock_universe_symbols",
+        "complete_session_min_coverage_pct": 75,
+        "healthy_coverage_pct": 90,
+        "symbols_count": 3076,
+        "universe_active": 3100,
+        "coverage_pct": 99.2,
+    }

@@ -14,6 +14,11 @@ from app.services.market_data import (
     get_market_data_provider,
     yf_ticker_symbol,
 )
+from app.services.market_universe_contract import (
+    active_market_universe_count,
+    apply_market_universe_filters,
+    market_universe_evidence,
+)
 from app.services.rate_limit import client_rate_key, public_market_limiter
 from app.services.sector_taxonomy import build_sector_taxonomy_metadata
 from app.services.supabase import get_admin_client  # SERVICE_ROLE: permitted — no user context
@@ -75,8 +80,9 @@ def _yf_ticker_symbol(sym: str, market: str) -> str:
     return yf_ticker_symbol(sym, market)
 
 
-def _market_summary_from_snapshot(snapshot: dict) -> dict:
+def _market_summary_from_snapshot(snapshot: dict, *, universe_active: int | None = None) -> dict:
     total = snapshot.get("total_stocks") or snapshot.get("total") or snapshot.get("symbols_count") or 0
+    eligible = snapshot.get("universe_active") or universe_active
     return {
         "trade_date": snapshot.get("trade_date") or snapshot.get("as_of"),
         "advances": snapshot.get("advances") or 0,
@@ -91,6 +97,7 @@ def _market_summary_from_snapshot(snapshot: dict) -> dict:
         "total_stocks": total,
         "cache_status": snapshot.get("cache_status") or "snapshot",
         "source_metadata": snapshot.get("source_metadata") or snapshot.get("provider"),
+        "universe": market_universe_evidence(symbols_count=total, universe_active=eligible),
     }
 
 
@@ -223,6 +230,7 @@ async def get_market_summary():
 
     try:
         client = get_admin_client()
+        universe_active = active_market_universe_count(client)
         snapshot = read_latest_market_breadth_snapshot(
             client,
             indices=[],
@@ -230,22 +238,27 @@ async def get_market_summary():
             indices_live=False,
         )
         if snapshot:
-            summary = _market_summary_from_snapshot(snapshot)
+            summary = _market_summary_from_snapshot(snapshot, universe_active=universe_active)
             _market_summary_cache = (now + _MARKET_SUMMARY_TTL, dict(summary))
             return summary
 
         latest_date = get_latest_complete_trade_date(client)
         if not latest_date:
             return {"trade_date": None, "advances": 0, "declines": 0, "unchanged": 0,
-                    "new_52w_highs": 0, "new_52w_lows": 0, "total_stocks": 0}
+                    "new_52w_highs": 0, "new_52w_lows": 0, "total_stocks": 0,
+                    "universe": market_universe_evidence(symbols_count=0, universe_active=universe_active)}
 
         # Fetch all rows for latest date (paginate in 1000-row chunks)
         all_rows = []
         offset = 0
         while True:
-            chunk = client.table("daily_ohlcv") \
-                .select("close, prev_close, week_52_high, week_52_low, ema_20, ema_50, ema_200") \
-                .eq("trade_date", latest_date) \
+            query = client.table("daily_ohlcv") \
+                .select(
+                    "close,prev_close,week_52_high,week_52_low,ema_20,ema_50,ema_200,"
+                    "stock_universe!daily_ohlcv_symbol_fkey!inner(series,market,is_active)"
+                ) \
+                .eq("trade_date", latest_date)
+            chunk = apply_market_universe_filters(query) \
                 .range(offset, offset + 999) \
                 .execute()
             if not chunk.data:
@@ -315,6 +328,7 @@ async def get_market_summary():
         "above_ema50_pct": round(above_ema50 / valid_ema50 * 100, 1) if valid_ema50 else None,
         "above_ema200_pct": round(above_ema200 / valid_ema200 * 100, 1) if valid_ema200 else None,
         "total_stocks": total,
+        "universe": market_universe_evidence(symbols_count=total, universe_active=universe_active),
     }
     _market_summary_cache = (now + _MARKET_SUMMARY_TTL, dict(summary))
     return summary

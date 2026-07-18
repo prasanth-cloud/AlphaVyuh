@@ -170,9 +170,27 @@ export type SourceMetadata = {
   coverage_pct?: number | null;
   symbols_count?: number | null;
   universe_active?: number | null;
+  universe?: MarketUniverseEvidence;
   cache_status?: string | null;
   license_notes?: string;
   message?: string;
+};
+
+export type MarketUniverseEvidence = {
+  schema_version: 1;
+  id: "nse_active_eq";
+  label: string;
+  market: "NSE";
+  series: readonly ["EQ"];
+  active_only: true;
+  session_basis: "latest_complete_eod_session";
+  numerator: "distinct_symbols_with_valid_eod_row";
+  denominator: "active_stock_universe_symbols";
+  complete_session_min_coverage_pct: 75;
+  healthy_coverage_pct: 90;
+  symbols_count: number | null;
+  universe_active: number | null;
+  coverage_pct: number | null;
 };
 
 export type ChartCoverage = {
@@ -204,6 +222,7 @@ export type MarketSummary = {
   above_ema50_pct: number | null;
   above_ema200_pct: number | null;
   total_stocks: number;
+  universe?: MarketUniverseEvidence;
 };
 
 export type WatchlistItem = {
@@ -827,6 +846,7 @@ export type DataHealth = {
   symbols_on_latest_date: number | null;
   universe_active: number | null;
   coverage_pct?: number | null;
+  universe?: MarketUniverseEvidence;
   mode?: DataMode;
   message?: string;
   indicators_missing: {

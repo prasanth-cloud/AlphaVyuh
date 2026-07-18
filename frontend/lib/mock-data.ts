@@ -20,6 +20,7 @@ import type {
   SymbolSearchResult,
   Watchlist,
 } from "./api/types";
+import { buildMarketUniverseEvidence } from "./market-universe-contract";
 
 const TRADE_DATE = "2026-04-24";
 
@@ -155,6 +156,7 @@ export function mockMarketSummary(): MarketSummary {
     above_ema50_pct: 54,
     above_ema200_pct: 63,
     total_stocks: 2097,
+    universe: buildMarketUniverseEvidence(2097, 2097),
   };
 }
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import Counter
+
+from app.services.market_universe_contract import MARKET_UNIVERSE_CONTRACT
 from typing import Any
 
 
@@ -136,7 +138,7 @@ def get_latest_complete_trade_date(
     *,
     min_rows: int = 1000,
     lookback_rows: int = 20000,
-    min_coverage_pct: float = 0.75,
+    min_coverage_pct: float = MARKET_UNIVERSE_CONTRACT["complete_session_min_coverage_pct"] / 100,
 ) -> str | None:
     """
     Return the most recent trade_date with enough rows to represent a full market day.

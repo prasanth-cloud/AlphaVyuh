@@ -217,10 +217,19 @@ try {
   const summaryDate = summary?.trade_date || summary?.as_of || summary?.asOf;
   assert(summaryDate, "Market summary did not include a trade/as-of date.");
   const totalStocks = numberValue(summary?.total_stocks, summary?.total, summary?.symbols_count);
+  const universe = summary?.universe || summary?.source_metadata?.universe;
   const advances = numberValue(summary?.advances);
   const declines = numberValue(summary?.declines);
   const unchanged = numberValue(summary?.unchanged);
   assert(totalStocks !== null && totalStocks >= 1000, `Market summary stock count looked too low: ${totalStocks}.`);
+  assert(universe && typeof universe === "object", "Market summary did not name its market-universe contract.");
+  assert(universe.id === "nse_active_eq", `Market summary universe ${universe.id ?? "missing"} is not nse_active_eq.`);
+  assert(universe.market === "NSE" && Array.isArray(universe.series) && universe.series.join(",") === "EQ" && universe.active_only === true,
+    `Market summary universe scope is inconsistent: ${JSON.stringify(universe)}.`);
+  assert(numberValue(universe.symbols_count) === totalStocks,
+    `Market summary universe numerator ${universe.symbols_count} did not match total_stocks ${totalStocks}.`);
+  assert(numberValue(universe.universe_active) !== null && numberValue(universe.universe_active) >= totalStocks,
+    `Market summary universe denominator ${universe.universe_active} is missing or smaller than total_stocks ${totalStocks}.`);
   assert(
     advances !== null && declines !== null && unchanged !== null,
     `Market summary did not include full breadth counts: advances=${advances}, declines=${declines}, unchanged=${unchanged}.`,
