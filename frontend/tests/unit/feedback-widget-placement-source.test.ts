@@ -18,4 +18,10 @@ describe("feedback widget placement", () => {
     expect(widget).toContain("closeAndRestoreFocus");
     expect(widget).toContain('role="status" aria-live="polite"');
   });
+
+  it("does not claim authoritative NSE session status from the browser clock", () => {
+    expect(shell).not.toContain("<MarketStatus />");
+    expect(shell).not.toContain("function MarketStatus()");
+    expect(shell).not.toContain("NSE {isOpen ? 'Open' : 'Closed'}");
+  });
 });

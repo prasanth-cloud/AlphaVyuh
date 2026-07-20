@@ -22,6 +22,27 @@ function statusColor(status: DashboardBriefStatus) {
 }
 
 export function DashboardActionBrief(props: DashboardActionBriefInput) {
+  if (props.workflowLoading === true) {
+    return (
+      <Card padding="md" data-testid="dashboard-action-brief" aria-busy="true">
+        <div className="dashboard-focus-grid">
+          <section className="dashboard-review-queue" aria-labelledby="dashboard-review-queue-title">
+            <div className="label" style={{ marginBottom: 6 }}>Review queue</div>
+            <h2 id="dashboard-review-queue-title" className="heading-card">Loading workflow context…</h2>
+            <div className="caption" style={{ marginTop: 6 }}>
+              Watchlists, open risk, journal review, alerts, and broker import are being checked. Pending data is not treated as empty.
+            </div>
+          </section>
+          <section className="dashboard-continue-workflow" aria-labelledby="dashboard-continue-title">
+            <div className="label" style={{ marginBottom: 6 }}>Continue workflow</div>
+            <h2 id="dashboard-continue-title" className="heading-card">Preparing the next verified action</h2>
+            <div className="caption dashboard-continue-copy">The queue will remain neutral until account evidence is loaded.</div>
+          </section>
+        </div>
+      </Card>
+    );
+  }
+
   const brief = buildDashboardActionBrief(props);
   const reviewQueue = brief.items.filter((item) => ["scanner", "watchlist", "risk", "journal"].includes(item.id));
   const actionCount = reviewQueue.filter((item) => item.status === "action" || item.status === "warn").length;

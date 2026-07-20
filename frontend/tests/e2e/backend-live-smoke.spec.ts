@@ -84,6 +84,14 @@ test.describe("Live backend smoke", () => {
     const overviewJson = await overview.json();
     expect(overviewJson).toHaveProperty("market_phase");
     expect(overviewJson).toHaveProperty("indices");
+
+    const analytics = await request.get("/api/v1/market/analytics", { headers: authHeaders });
+    const analyticsJson = await expectOkOrUnavailable(analytics);
+    if (analytics.status() === 200) {
+      expect(analyticsJson).toHaveProperty("breadth_history");
+      expect(analyticsJson).toHaveProperty("sector_leadership");
+      expect(analyticsJson).toHaveProperty("coverage");
+    }
   });
 
   test("broker routes expose setup and disconnected states without live credentials", async ({ request }) => {

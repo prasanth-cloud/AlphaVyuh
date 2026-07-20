@@ -8,7 +8,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 from app.routers import market as market_router  # noqa: E402
-from app.services.market_analytics import build_market_analytics  # noqa: E402
+from app.services.market_analytics import _fetch_analytics_rows, build_market_analytics  # noqa: E402
 
 
 def _row(symbol: str, sector: str, trade_date: str, pct_change: float) -> dict:
@@ -46,6 +46,72 @@ def _rotation_rows() -> tuple[list[dict], list[str]]:
         for trade_date, pct_change in zip(dates, returns, strict=True):
             rows.append(_row(f"S{index}", sector, trade_date, pct_change))
     return rows, dates
+
+
+class _PagedAnalyticsResult:
+    def __init__(self, data: list[dict]):
+        self.data = data
+
+
+class _PagedAnalyticsQuery:
+    def __init__(self, rows: list[dict]):
+        self.rows = rows
+        self.order_fields: list[str] = []
+        self.start = 0
+        self.end = 0
+
+    def select(self, _clause: str):
+        return self
+
+    def in_(self, _field: str, _values: list[str]):
+        return self
+
+    def order(self, field: str):
+        self.order_fields.append(field)
+        return self
+
+    def range(self, start: int, end: int):
+        self.start = start
+        self.end = end
+        return self
+
+    def execute(self):
+        if self.order_fields == ["trade_date", "symbol"]:
+            ordered = sorted(self.rows, key=lambda row: (row["trade_date"], row["symbol"]))
+        else:
+            # Tied trade_date rows have no guaranteed database order. Emulate a
+            # later page choosing the opposite tie order so offset pagination
+            # duplicates the first page and omits rows beyond the boundary.
+            ordered = sorted(
+                self.rows,
+                key=lambda row: (row["trade_date"], row["symbol"]),
+                reverse=self.start > 0,
+            )
+        return _PagedAnalyticsResult(ordered[self.start:self.end + 1])
+
+
+class _PagedAnalyticsClient:
+    def __init__(self, rows: list[dict]):
+        self.rows = rows
+
+    def table(self, name: str):
+        assert name == "daily_ohlcv"
+        return _PagedAnalyticsQuery(self.rows)
+
+
+def test_market_analytics_pagination_uses_total_order_without_boundary_loss():
+    trade_date = "2026-06-10"
+    rows = [
+        {"symbol": f"S{index:04d}", "trade_date": trade_date}
+        for index in range(1_505)
+    ]
+
+    result = _fetch_analytics_rows(_PagedAnalyticsClient(rows), [trade_date])
+
+    symbols = [row["symbol"] for row in result]
+    assert len(symbols) == len(rows)
+    assert len(set(symbols)) == len(rows)
+    assert symbols == [row["symbol"] for row in rows]
 
 
 def test_market_pulse_builds_truthful_breadth_sector_and_rotation_contract():

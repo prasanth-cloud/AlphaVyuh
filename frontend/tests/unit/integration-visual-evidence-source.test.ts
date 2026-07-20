@@ -29,4 +29,9 @@ describe("integrated visual evidence contract", () => {
     expect(workflowSource).toContain("if-no-files-found: ignore");
     expect(workflowSource).toContain("retention-days: 14");
   });
+
+  it("pairs mock UI evidence with a live FastAPI HTTP contract smoke", () => {
+    expect(workflowSource).toContain("Live backend HTTP smoke");
+    expect(workflowSource).toContain("npm run test:e2e:backend");
+  });
 });

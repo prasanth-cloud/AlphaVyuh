@@ -117,6 +117,49 @@ describe("buildDashboardActionBrief", () => {
     expect(brief.nextAction.id).toBe("market");
   });
 
+  it("routes unavailable account evidence to its owning workflow instead of Data Status", () => {
+    const brief = buildDashboardActionBrief({
+      ...base,
+      accountIssueCount: 4,
+      watchlistUnavailable: true,
+      journalUnavailable: true,
+      brokerUnavailable: true,
+    });
+
+    expect(brief.items.find((item) => item.id === "market")).toMatchObject({
+      value: "Bullish",
+      href: "/dashboard",
+      status: "ready",
+    });
+    expect(brief.items.find((item) => item.id === "watchlist")).toMatchObject({
+      value: "Unavailable",
+      href: "/watchlist",
+      status: "warn",
+    });
+    expect(brief.items.find((item) => item.id === "risk")).toMatchObject({
+      value: "Unavailable",
+      href: "/journal",
+      status: "warn",
+    });
+    expect(brief.items.find((item) => item.id === "journal")).toMatchObject({
+      value: "Unavailable",
+      href: "/journal",
+      status: "warn",
+    });
+    expect(brief.items.find((item) => item.id === "import")).toMatchObject({
+      value: "Unavailable",
+      href: "/settings/broker",
+      status: "warn",
+    });
+  });
+
+  it("does not render zero-state claims while workflow evidence is loading", () => {
+    expect(actionBriefSource).toContain('props.workflowLoading === true');
+    expect(actionBriefSource).toContain('aria-busy="true"');
+    expect(actionBriefSource).toContain("Pending data is not treated as empty.");
+    expect(actionBriefSource).toContain("The queue will remain neutral until account evidence is loaded.");
+  });
+
   it("turns an empty account into a scanner-first starter checklist", () => {
     const brief = buildDashboardActionBrief({
       ...base,
@@ -147,6 +190,7 @@ describe("buildDashboardActionBrief", () => {
     expect(brief.items.find((item) => item.id === "risk")).toMatchObject({
       value: "2 open",
       detail: "Check stop, target, and invalidation",
+      href: "/journal?status=open",
       status: "action",
     });
     expect(brief.items.find((item) => item.id === "journal")).toMatchObject({
@@ -264,7 +308,7 @@ describe("buildDashboardPrioritySymbols", () => {
     expect(queue[0]).toMatchObject({
       companyName: "Reliance Industries",
       href: "/watchlist?id=qa-list&symbol=RELIANCE",
-      chartHref: "/charts/RELIANCE?from=dashboard&full=1",
+      chartHref: "/charts/RELIANCE?from=watchlist&watchlistId=qa-list&watchlist=Codex%20QA%20Watchlist&full=1",
       label: "Act now",
     });
   });

@@ -14,6 +14,22 @@ describe("weekly process review placement and trust copy", () => {
     expect(page).toContain("getJournalWeeklyReviewEvidence");
     expect(page).toContain("No local trade rows were substituted");
     expect(page).toContain("invalidateWeeklyReview()");
+    expect(page).toContain('searchParams.get("status")');
+    expect(page).toContain("setFilterStatus(requestedStatus)");
+  });
+
+  it("exposes the Journal views as a keyboard-operable tab set", () => {
+    expect(page).toContain('role="tablist"');
+    expect(page).toContain('role="tab"');
+    expect(page).toContain("aria-selected={tab === id}");
+    expect(page).toContain('role="tabpanel"');
+    expect(page).toContain("id !== tab");
+    expect(page).toContain("hidden");
+    expect(page).toContain("handleTabKeyDown");
+    expect(page).toContain('event.key === "ArrowRight"');
+    expect(page).toContain('event.key === "ArrowLeft"');
+    expect(page).toContain('event.key === "Home"');
+    expect(page).toContain('event.key === "End"');
   });
 
   it("requires explicit adherence and keeps legacy lessons unreviewed", () => {
@@ -21,6 +37,8 @@ describe("weekly process review placement and trust copy", () => {
     expect(panel).toContain("Save process review");
     expect(panel).toContain("Self-reported adherence evidence");
     expect(panel).toContain("selectedEntry?.review_lesson ?? selectedEntry?.lessons");
+    expect(panel).toContain('htmlFor="journal-review-lesson"');
+    expect(panel).toContain('id="journal-review-lesson"');
   });
 
   it("shows sample counts and excludes advice, scores, and P&L claims", () => {

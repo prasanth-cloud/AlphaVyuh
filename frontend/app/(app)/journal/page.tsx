@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -38,6 +38,13 @@ const JOURNAL_ANALYSIS_FAILED_MESSAGE = `Journal analysis could not run. ${JOURN
 const JOURNAL_SYMBOL_SEARCH_FAILED_MESSAGE = "Symbol search is temporarily unavailable. Check Data Status, then try again.";
 const JOURNAL_IMPORT_RESULT_FAILED_MESSAGE = `Broker import result was unavailable. Check Broker or Data Status, then refresh Journal.`;
 const JOURNAL_WEEKLY_REVIEW_FAILED_MESSAGE = `Weekly review is temporarily unavailable. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_TABS: ReadonlyArray<{ id: Tab; label: string }> = [
+  { id: "queue", label: "Review queue" },
+  { id: "weekly", label: "Weekly review" },
+  { id: "ai", label: "Trade review" },
+  { id: "analytics", label: "Analytics" },
+  { id: "trades", label: "Trades" },
+];
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
@@ -98,6 +105,22 @@ export default function JournalPage() {
   const [processNoteExpanded, setProcessNoteExpanded] = useState(false);
   const [reviewFocus, setReviewFocus] = useState<"all" | "needs-review" | "reviewed">("all");
 
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % JOURNAL_TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + JOURNAL_TABS.length) % JOURNAL_TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = JOURNAL_TABS.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextTab = JOURNAL_TABS[nextIndex];
+    setTab(nextTab.id);
+    event.currentTarget.parentElement
+      ?.querySelector<HTMLButtonElement>(`#journal-tab-${nextTab.id}`)
+      ?.focus();
+  };
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
   const load = useCallback(async () => {
@@ -150,6 +173,12 @@ export default function JournalPage() {
     }
     const requestedSymbol = searchParams.get("symbol");
     setSymbolFocus(requestedSymbol?.toUpperCase() ?? "");
+    const requestedStatus = searchParams.get("status");
+    if (requestedStatus === "open" || requestedStatus === "closed") {
+      setFilterStatus(requestedStatus);
+    } else {
+      setFilterStatus("all");
+    }
     const requestedReview = searchParams.get("review");
     if (requestedReview === "needs-review" || requestedReview === "reviewed") {
       setReviewFocus(requestedReview);
@@ -675,15 +704,19 @@ export default function JournalPage() {
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {([
-          { id: "queue", label: "Review queue" },
-          { id: "weekly", label: "Weekly review" },
-          { id: "ai", label: "Trade review" },
-          { id: "analytics", label: "Analytics" },
-          { id: "trades", label: "Trades" },
-        ] as { id: Tab; label: string }[]).map(({ id, label }) => (
-          <button key={id} onClick={() => setTab(id)} style={{
+      <div role="tablist" aria-label="Journal views" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {JOURNAL_TABS.map(({ id, label }, index) => (
+          <button
+            key={id}
+            id={`journal-tab-${id}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            aria-controls={`journal-panel-${id}`}
+            tabIndex={tab === id ? 0 : -1}
+            onClick={() => setTab(id)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
+            style={{
             padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer",
             color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
             background: tab === id ? "var(--surface-2)" : "transparent",
@@ -695,47 +728,69 @@ export default function JournalPage() {
         ))}
       </div>
 
+      {JOURNAL_TABS.filter(({ id }) => id !== tab).map(({ id }) => (
+        <div
+          key={id}
+          id={`journal-panel-${id}`}
+          role="tabpanel"
+          aria-labelledby={`journal-tab-${id}`}
+          hidden
+        />
+      ))}
+
       {/* ── Analytics tab ── */}
       {tab === "analytics" && (
-        <JournalAnalyticsTab
-          analytics={analytics}
-          analyticsError={analyticsError}
-          entries={entries}
-          onCalendarDateSelect={handleCalendarDateSelect}
-        />
+        <div id="journal-panel-analytics" role="tabpanel" aria-labelledby="journal-tab-analytics" tabIndex={0}>
+          <JournalAnalyticsTab
+            analytics={analytics}
+            analyticsError={analyticsError}
+            entries={entries}
+            onCalendarDateSelect={handleCalendarDateSelect}
+          />
+        </div>
       )}
 
       {tab === "weekly" && (
-        <JournalWeeklyReview
-          data={weeklyReview}
-          loading={weeklyReviewLoading || (!weeklyReview && !weeklyReviewError)}
-          error={weeklyReviewError}
-          evidenceLoading={weeklyEvidenceLoading}
-          onRetry={() => { setWeeklyReviewError(null); void loadWeeklyReview(); }}
-          onDrillThrough={handleWeeklyDrillThrough}
-        />
+        <div id="journal-panel-weekly" role="tabpanel" aria-labelledby="journal-tab-weekly" tabIndex={0}>
+          <JournalWeeklyReview
+            data={weeklyReview}
+            loading={weeklyReviewLoading || (!weeklyReview && !weeklyReviewError)}
+            error={weeklyReviewError}
+            evidenceLoading={weeklyEvidenceLoading}
+            onRetry={() => { setWeeklyReviewError(null); void loadWeeklyReview(); }}
+            onDrillThrough={handleWeeklyDrillThrough}
+          />
+        </div>
       )}
 
       {/* ── Trade review tab ── */}
       {tab === "ai" && (
-        <JournalAiInsights
-          patterns={patterns}
-          patternsLoading={patternsLoading}
-          patternsError={patternsError}
-          aiAnalysis={aiAnalysis}
-          aiTradesCount={aiTradesCount}
-          aiLoading={aiLoading}
-          aiError={aiError}
-          closedTrades={closedTrades}
-          reviewedTrades={reviewedTrades}
-          autoAnalysisStarted={autoAnalysisStarted}
-          onAnalyse={handleAnalyse}
-        />
+        <div id="journal-panel-ai" role="tabpanel" aria-labelledby="journal-tab-ai" tabIndex={0}>
+          <JournalAiInsights
+            patterns={patterns}
+            patternsLoading={patternsLoading}
+            patternsError={patternsError}
+            aiAnalysis={aiAnalysis}
+            aiTradesCount={aiTradesCount}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            closedTrades={closedTrades}
+            reviewedTrades={reviewedTrades}
+            autoAnalysisStarted={autoAnalysisStarted}
+            onAnalyse={handleAnalyse}
+          />
+        </div>
       )}
 
       {/* ── Review queue / Trades tab ── */}
       {(tab === "queue" || tab === "trades") && (
-        <div className="journal-trades-layout">
+        <div
+          id={`journal-panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`journal-tab-${tab}`}
+          tabIndex={0}
+          className="journal-trades-layout"
+        >
           <TradeTable
             entries={visibleEntries}
             loading={loading}

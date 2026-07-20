@@ -34,6 +34,11 @@ export type DashboardActionBriefInput = {
   brokerLastSyncedAt: string | null;
   accountIssueCount: number;
   alertIssueCount: number;
+  workflowLoading?: boolean;
+  watchlistUnavailable?: boolean;
+  workflowContextUnavailable?: boolean;
+  journalUnavailable?: boolean;
+  brokerUnavailable?: boolean;
   prioritySymbols?: DashboardPrioritySymbol[];
 };
 
@@ -79,7 +84,6 @@ function formatDate(raw: string | null) {
 
 export function buildDashboardActionBrief(input: DashboardActionBriefInput): DashboardActionBrief {
   const marketNeedsCheck = input.marketRefreshFailed === true ||
-    input.accountIssueCount > 0 ||
     input.marketDataStatus === "degraded" ||
     input.marketDataStatus === "stale";
   const market: DashboardBriefItem = {
@@ -87,7 +91,7 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
     label: "Market first",
     value: marketNeedsCheck ? "Check data" : input.marketPhase || "Market ready",
     detail: marketNeedsCheck
-      ? "Data or account context needs review before planning new trades."
+      ? "Market data needs review before planning new trades."
       : `${input.marketDataMode === "demo" ? "Demo" : "EOD"} breadth as of ${formatDate(input.tradeDate)}.`,
     href: marketNeedsCheck ? "/data" : "/dashboard",
     status: marketNeedsCheck ? "warn" : "ready",
@@ -129,7 +133,18 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
             status: "empty",
           };
 
-  const watchlist: DashboardBriefItem = input.trackedSymbols === 0
+  const watchlist: DashboardBriefItem = input.watchlistUnavailable === true || input.workflowContextUnavailable === true
+    ? {
+        id: "watchlist",
+        label: "Watchlist focus",
+        value: "Unavailable",
+        detail: input.watchlistUnavailable === true
+          ? "Saved watchlists could not be loaded. Existing lists are not being treated as empty."
+          : "Workflow context could not be loaded. Review status is unknown.",
+        href: "/watchlist",
+        status: "warn",
+      }
+    : input.trackedSymbols === 0
     ? {
         id: "watchlist",
         label: "Watchlist focus",
@@ -156,13 +171,22 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
           status: "ready",
         };
 
-  const openRisk: DashboardBriefItem = input.openTrades > 0
+  const openRisk: DashboardBriefItem = input.journalUnavailable === true
+    ? {
+        id: "risk",
+        label: "Open risk",
+        value: "Unavailable",
+        detail: "Open-position totals could not be confirmed. No flat state is being inferred.",
+        href: "/journal",
+        status: "warn",
+      }
+    : input.openTrades > 0
     ? {
         id: "risk",
         label: "Open risk",
         value: `${input.openTrades} open`,
         detail: "Check stop, target, and invalidation",
-        href: "/watchlist",
+        href: "/journal?status=open",
         status: "action",
       }
     : {
@@ -175,7 +199,16 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
       };
 
   const unreviewedTrades = input.knownUnreviewedTrades ?? Math.max(0, input.closedTrades - input.reviewedTrades);
-  const journal: DashboardBriefItem = input.closedTrades === 0
+  const journal: DashboardBriefItem = input.journalUnavailable === true
+    ? {
+        id: "journal",
+        label: "Journal learning",
+        value: "Unavailable",
+        detail: "Journal account evidence could not be fully loaded. Existing entries and reviews are not being treated as empty.",
+        href: "/journal",
+        status: "warn",
+      }
+    : input.closedTrades === 0
     ? {
         id: "journal",
         label: "Journal learning",
@@ -215,7 +248,16 @@ export function buildDashboardActionBrief(input: DashboardActionBriefInput): Das
           status: "ready",
         };
 
-  const brokerImport: DashboardBriefItem = input.brokerConnected
+  const brokerImport: DashboardBriefItem = input.brokerUnavailable === true
+    ? {
+        id: "import",
+        label: "Import safety",
+        value: "Unavailable",
+        detail: "Broker import status could not be confirmed. Existing access is not being treated as disconnected.",
+        href: "/settings/broker",
+        status: "warn",
+      }
+    : input.brokerConnected
     ? {
         id: "import",
         label: "Import safety",
@@ -315,7 +357,7 @@ export function buildDashboardPrioritySymbols({
         reason: summary.reason,
         detail: reasons.length ? reasons.join(" · ") : "Manual watchlist order",
         href: `/watchlist?id=${encodeURIComponent(watchlist.id)}&symbol=${encodeURIComponent(symbol)}`,
-        chartHref: `/charts/${encodeURIComponent(symbol)}?from=dashboard&full=1`,
+        chartHref: `/charts/${encodeURIComponent(symbol)}?from=watchlist&watchlistId=${encodeURIComponent(watchlist.id)}&watchlist=${encodeURIComponent(watchlist.name)}&full=1`,
       };
       const current = bestBySymbol.get(symbol);
       if (!current || candidate.score > current.score) bestBySymbol.set(symbol, candidate);

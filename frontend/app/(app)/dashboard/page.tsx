@@ -31,7 +31,6 @@ import {
 } from '@/lib/account-data-status'
 import { getWatchlistChartRequest } from '@/lib/watchlist-chart-range'
 import { isCompletedProcessReview } from '@/lib/journal-weekly-review'
-import { FirstRunBanner } from '@/components/FirstRunBanner'
 
 const WORKFLOW_STATE_SYMBOL_BATCH_SIZE = 200
 
@@ -70,6 +69,10 @@ type WorkflowState = {
   watchlistReviewDue: number
   accountIssues: AccountDataIssue[]
   alertIssues: AccountDataIssue[]
+  watchlistUnavailable: boolean
+  workflowContextUnavailable: boolean
+  journalUnavailable: boolean
+  brokerUnavailable: boolean
   prioritySymbols: DashboardPrioritySymbol[]
 }
 
@@ -119,6 +122,10 @@ const initialWorkflow: WorkflowState = {
   watchlistReviewDue: 0,
   accountIssues: [],
   alertIssues: [],
+  watchlistUnavailable: false,
+  workflowContextUnavailable: false,
+  journalUnavailable: false,
+  brokerUnavailable: false,
   prioritySymbols: [],
 }
 
@@ -129,6 +136,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [workflow, setWorkflow] = useState<WorkflowState>(initialWorkflow)
+  const [workflowLoading, setWorkflowLoading] = useState(true)
 
   const loadMarket = useCallback(async () => {
     try {
@@ -264,9 +272,14 @@ export default function DashboardPage() {
       watchlistReviewDue,
       accountIssues,
       alertIssues,
+      watchlistUnavailable: Boolean(watchlistsResult.issue),
+      workflowContextUnavailable: Boolean(workflowStatesResult.issue),
+      journalUnavailable: Boolean(journalResult.issue || statsResult.issue),
+      brokerUnavailable: Boolean(brokerResult.issue),
       prioritySymbols,
     }
     setWorkflow(nextWorkflow)
+    setWorkflowLoading(false)
 
     const onboardingComplete = accountIssues.length === 0
       && nextWorkflow.watchlists > 0
@@ -335,7 +348,6 @@ export default function DashboardPage() {
 
       {!loading && data ? (
         <>
-          <FirstRunBanner />
           <MarketOverviewDesk data={data} dataHealth={dataHealth} marketError={error} />
           <DashboardActionBrief
             tradeDate={data.trade_date}
@@ -358,6 +370,11 @@ export default function DashboardPage() {
             brokerLastSyncedAt={workflow.brokerLastSyncedAt}
             accountIssueCount={workflow.accountIssues.length}
             alertIssueCount={workflow.alertIssues.length}
+            workflowLoading={workflowLoading}
+            watchlistUnavailable={workflow.watchlistUnavailable}
+            workflowContextUnavailable={workflow.workflowContextUnavailable}
+            journalUnavailable={workflow.journalUnavailable}
+            brokerUnavailable={workflow.brokerUnavailable}
             prioritySymbols={workflow.prioritySymbols}
           />
         </>

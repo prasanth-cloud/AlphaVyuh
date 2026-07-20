@@ -27,9 +27,9 @@ The integration branch combines the review-ready product and launch slices:
 
 - frontend lint: 0 errors, 7 pre-existing warnings
 - frontend typecheck and production build passed, including `/analytics`
-- frontend unit tests: 124 files, 567 tests passed after the responsive Market Pulse and contextual-feedback fixes
+- frontend unit tests: 124 files, 573 tests passed after the completion-audit fixes
 - frontend dependency audit: 0 known vulnerabilities
-- backend tests: 478 passed, 1 skipped
+- backend tests: 479 passed, 1 skipped
 - backend dependency audit: 0 known vulnerabilities
 - launch, recovery, data-contract, setup-review, broker-safety, and security regression suites passed
 
@@ -53,3 +53,15 @@ Date: 2026-07-20
 - `npm run check:five-year-charts:railway` stops at the same missing market-universe contract before chart-depth checks, so current five-year production coverage is not re-proven by this refresh.
 - `LIVE_URL=https://www.alphavyuh.com npm run check:public-posture` fails at `/` with HTTP 403 because the automated request reaches the managed challenge instead of AlphaVyuh code.
 - A raw unauthenticated request to the public domain is intercepted by Cloudflare's managed challenge. That HTTP 403 is edge-bot behavior and is not used as evidence of AlphaVyuh application health.
+
+## Completion-audit hardening
+
+Date: 2026-07-20
+
+- Market Pulse pagination now uses the stable total order `trade_date, symbol`; a 1,505-row regression fixture proves no duplicate or missing rows across the 1,000-row boundary.
+- Dashboard account evidence remains neutral while loading and explicit when watchlist, workflow, journal, broker, or alert sources are unavailable. Failures no longer become false zero/empty claims or incorrectly blame market data.
+- The inaccurate legacy first-run banner and browser-clock-derived NSE open/closed pill were removed.
+- Dashboard priority charts preserve the originating watchlist queue, and open-risk actions deep-link to the Journal's open-trade filter.
+- Journal view buttons now expose tablist/tab/tabpanel semantics, roving focus, Arrow/Home/End keyboard operation, and an associated label for the required review lesson.
+- The PR gate now pairs mock UI evidence with a live FastAPI HTTP smoke that includes the Market Pulse endpoint. This validates the real HTTP route and fail-soft response boundary, but does not replace migration-backed staging or authenticated production proof.
+- Browser-free `npm run launch:check` passes with 124 frontend files / 573 tests, production build/typecheck, 479 backend passes plus 1 skip, and both dependency audits clear. Lint remains at 0 errors and 7 pre-existing warnings.

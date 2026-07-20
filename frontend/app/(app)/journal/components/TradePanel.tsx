@@ -610,8 +610,9 @@ export function TradePanel({
                 )}
 
                 <div>
-                  <div className="label" style={{ marginBottom: 6 }}>Lesson to carry forward</div>
+                  <label className="label" htmlFor="journal-review-lesson" style={{ display: "block", marginBottom: 6 }}>Lesson to carry forward</label>
                   <textarea
+                    id="journal-review-lesson"
                     value={lessonDraft}
                     onChange={ev => setLessonDraft(ev.target.value)}
                     maxLength={500}

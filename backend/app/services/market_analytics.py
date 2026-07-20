@@ -97,6 +97,7 @@ def _fetch_analytics_rows(client, trade_dates: list[str]) -> list[dict]:
             .select(select_clause)
             .in_("trade_date", trade_dates)
             .order("trade_date")
+            .order("symbol")
             .range(offset, offset + ANALYTICS_PAGE_SIZE - 1)
             .execute()
             .data or []

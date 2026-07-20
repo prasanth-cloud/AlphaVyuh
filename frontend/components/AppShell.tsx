@@ -154,7 +154,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="app-toolbar">
             <DataModePill />
-            <MarketStatus />
             <AccountMenuButton theme={theme} onToggleTheme={toggleTheme} />
             {!hideFeedback && <FeedbackWidget />}
           </div>
@@ -240,44 +239,6 @@ function DataModePill() {
           Last updated: {lastUpdated}
         </span>
       ) : null}
-    </div>
-  )
-}
-
-/* ── MARKET STATUS ───────────────────────────────────────────────────────── */
-function MarketStatus() {
-  const [isOpen, setIsOpen] = useState(false)
-
-  useEffect(() => {
-    const check = () => {
-      const now = new Date()
-      const istOffset = 5.5 * 60 * 60 * 1000
-      const ist = new Date(now.getTime() + istOffset)
-      const h = ist.getUTCHours() + ist.getUTCMinutes() / 60
-      const day = ist.getUTCDay()
-      setIsOpen(day >= 1 && day <= 5 && h >= 9.25 && h < 15.5)
-    }
-    check()
-    const id = setInterval(check, 60000)
-    return () => clearInterval(id)
-  }, [])
-
-  return (
-    <div className="app-toolbar-pill">
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%',
-        background: isOpen ? 'var(--gain)' : 'var(--text-tertiary)',
-        boxShadow: isOpen ? '0 0 0 3px rgba(45, 181, 116, 0.15)' : undefined,
-        flexShrink: 0,
-      }} />
-      <span style={{
-        fontSize: 10, fontWeight: 600,
-        letterSpacing: '0.08em', textTransform: 'uppercase',
-        color: isOpen ? 'var(--gain)' : 'var(--text-tertiary)',
-        whiteSpace: 'nowrap',
-      }}>
-        NSE {isOpen ? 'Open' : 'Closed'}
-      </span>
     </div>
   )
 }

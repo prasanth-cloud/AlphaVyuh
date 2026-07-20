@@ -24,7 +24,7 @@ describe("dashboard page source", () => {
   it("renders one coherent three-part decision surface", () => {
     expect(dashboardSource).toContain("MarketOverviewDesk");
     expect(dashboardSource).toContain("DashboardActionBrief");
-    expect(dashboardSource).toContain("FirstRunBanner");
+    expect(dashboardSource).not.toContain("FirstRunBanner");
     expect(dashboardSource).not.toContain("DashboardWorkspaceSwitcher");
     expect(dashboardSource).not.toContain("DashboardSessionAgenda");
     expect(dashboardSource).not.toContain("visibleDashboardSections");
@@ -51,5 +51,14 @@ describe("dashboard page source", () => {
     expect(dashboardSource).toContain("getWorkflowStatesForSymbols(Array.from(trackedSymbolSet))");
     expect(dashboardSource).toContain("'Workflow context is temporarily unavailable.'");
     expect(dashboardSource).toContain("workflowStatesResult.issue");
+  });
+
+  it("keeps pending and unavailable account evidence distinct from empty workflow state", () => {
+    expect(dashboardSource).toContain("const [workflowLoading, setWorkflowLoading] = useState(true)");
+    expect(dashboardSource).toContain("workflowLoading={workflowLoading}");
+    expect(dashboardSource).toContain("watchlistUnavailable: Boolean(watchlistsResult.issue)");
+    expect(dashboardSource).toContain("workflowContextUnavailable: Boolean(workflowStatesResult.issue)");
+    expect(dashboardSource).toContain("journalUnavailable: Boolean(journalResult.issue || statsResult.issue)");
+    expect(dashboardSource).toContain("brokerUnavailable: Boolean(brokerResult.issue)");
   });
 });

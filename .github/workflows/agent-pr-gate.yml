@@ -148,6 +148,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Live backend HTTP smoke
+        run: npm run test:e2e:backend
+
       - name: Backend tests
         run: python -m pytest backend/tests
 
