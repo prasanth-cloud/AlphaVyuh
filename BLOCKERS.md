@@ -51,6 +51,14 @@ Use this file when an agent cannot safely continue without owner input, credenti
   `npm run check:public-posture`, then run the 8-test public/auth-boundary suite
   and the signed-in production smoke with short-lived QA credentials.
 
+### 2026-07-20 evidence refresh
+
+- The in-app browser still renders Vercel's paused-deployment page. Direct Vercel project evidence now confirms that recent preview deployments are `READY` while the project itself reports `live: false`.
+- A raw unauthenticated public-domain probe is now intercepted by Cloudflare's managed challenge. Its HTTP 403 must not be reported as an AlphaVyuh application response.
+- Railway remains reachable and current for the completed 2026-07-20 session, with 2,383 covered symbols and 96.7% reported coverage.
+- Railway is contract-old despite current data: `npm run check:production-api:railway` fails because the response does not name the market-universe contract. PR #409's `nse_active_eq` contract still needs review, merge, and deployment.
+- The safe next step is unchanged: the owner restores Vercel, applies and verifies the journal migrations staging-first, reviews the stacked PRs, and supplies short-lived QA credentials for authenticated production verification.
+
 ## Blocker Entry Template
 
 ```md
