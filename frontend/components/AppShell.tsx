@@ -27,6 +27,7 @@ type SearchResult = SymbolResult | CommandResult
 
 const COMMAND_RESULTS: CommandResult[] = [
   { command: 'dashboard workflow', label: 'Open Dashboard', detail: 'Daily checkpoint: review due, data health, watchlist focus', href: '/dashboard' },
+  { command: 'market pulse breadth sectors', label: 'Open Market Pulse', detail: 'Breadth, participation, and sector leadership before scanning', href: '/analytics' },
   { command: 'journal review', label: 'Review Journal', detail: 'Close the learning loop and process notes', href: '/journal?review=needs-review' },
   { command: 'watchlist desk', label: 'Open Watchlist', detail: 'Plan the active queue and Decision Desk', href: '/watchlist' },
   { command: 'scanner discovery', label: 'Discover Setups', detail: 'Find candidates to feed watchlist and journal review', href: '/scanner' },
@@ -153,8 +154,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="app-toolbar">
             <DataModePill />
-            <MarketStatus />
             <AccountMenuButton theme={theme} onToggleTheme={toggleTheme} />
+            {!hideFeedback && <FeedbackWidget />}
           </div>
         </div>
       </nav>
@@ -162,7 +163,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <KiteTokenBanner />
       <main className={fullChart ? 'app-content app-content-full-chart' : 'app-content'}>{children}</main>
-      {!hideFeedback && <FeedbackWidget />}
     </div>
   )
 }
@@ -243,49 +243,19 @@ function DataModePill() {
   )
 }
 
-/* ── MARKET STATUS ───────────────────────────────────────────────────────── */
-function MarketStatus() {
-  const [isOpen, setIsOpen] = useState(false)
-
-  useEffect(() => {
-    const check = () => {
-      const now = new Date()
-      const istOffset = 5.5 * 60 * 60 * 1000
-      const ist = new Date(now.getTime() + istOffset)
-      const h = ist.getUTCHours() + ist.getUTCMinutes() / 60
-      const day = ist.getUTCDay()
-      setIsOpen(day >= 1 && day <= 5 && h >= 9.25 && h < 15.5)
-    }
-    check()
-    const id = setInterval(check, 60000)
-    return () => clearInterval(id)
-  }, [])
-
-  return (
-    <div className="app-toolbar-pill">
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%',
-        background: isOpen ? 'var(--gain)' : 'var(--text-tertiary)',
-        boxShadow: isOpen ? '0 0 0 3px rgba(45, 181, 116, 0.15)' : undefined,
-        flexShrink: 0,
-      }} />
-      <span style={{
-        fontSize: 10, fontWeight: 600,
-        letterSpacing: '0.08em', textTransform: 'uppercase',
-        color: isOpen ? 'var(--gain)' : 'var(--text-tertiary)',
-        whiteSpace: 'nowrap',
-      }}>
-        NSE {isOpen ? 'Open' : 'Closed'}
-      </span>
-    </div>
-  )
-}
-
 /* ── ACCOUNT MENU ────────────────────────────────────────────────────────── */
 function AccountMenuButton({ theme, onToggleTheme }: { theme: 'dark' | 'light'; onToggleTheme: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    const closeForAnotherUtility = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== 'account') setOpen(false)
+    }
+    window.addEventListener('alphavyuh:utility-popover-open', closeForAnotherUtility)
+    return () => window.removeEventListener('alphavyuh:utility-popover-open', closeForAnotherUtility)
+  }, [])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -305,7 +275,14 @@ function AccountMenuButton({ theme, onToggleTheme }: { theme: 'dark' | 'light'; 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
-        onClick={() => setOpen(o => !o)}
+        type="button"
+        aria-label="Account menu"
+        aria-expanded={open}
+        onClick={() => {
+          const next = !open
+          if (next) window.dispatchEvent(new CustomEvent('alphavyuh:utility-popover-open', { detail: 'account' }))
+          setOpen(next)
+        }}
         style={{
           width: 34, height: 34,
           borderRadius: '50%',

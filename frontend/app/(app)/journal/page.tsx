@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -8,8 +8,9 @@ import {
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
   searchSymbols, analyseJournal, getAiPatterns,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
+  getJournalWeeklyReviews, getJournalWeeklyReviewEvidence, saveJournalProcessReview,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, JournalWeeklyReviewResponse, JournalRuleBreakCode, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, SaveJournalProcessReviewRequest } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
@@ -18,11 +19,13 @@ import { TradeTable } from "./components/TradeTable";
 import { TradePanel } from "./components/TradePanel";
 import { JournalAnalytics as JournalAnalyticsTab } from "./components/JournalAnalytics";
 import { JournalAiInsights } from "./components/JournalAiInsights";
+import { JournalWeeklyReview } from "./components/JournalWeeklyReview";
 import type { PanelMode, Tab } from "./components/types";
 import { useWorkflowState } from "@/lib/workflow";
 import { trackEvent } from "@/lib/analytics";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { BrokerFailureBanner } from "@/components/BrokerFailureBanner";
+import { isCompletedProcessReview } from "@/lib/journal-weekly-review";
 
 const JOURNAL_RECOVERY_MESSAGE = "Check Journal or Data Status, then try again.";
 const JOURNAL_TRADE_SAVE_FAILED_MESSAGE = `Trade could not be saved. ${JOURNAL_RECOVERY_MESSAGE}`;
@@ -34,6 +37,14 @@ const JOURNAL_IMPORT_FAILED_MESSAGE = `Broker import could not run. Check Broker
 const JOURNAL_ANALYSIS_FAILED_MESSAGE = `Journal analysis could not run. ${JOURNAL_RECOVERY_MESSAGE}`;
 const JOURNAL_SYMBOL_SEARCH_FAILED_MESSAGE = "Symbol search is temporarily unavailable. Check Data Status, then try again.";
 const JOURNAL_IMPORT_RESULT_FAILED_MESSAGE = `Broker import result was unavailable. Check Broker or Data Status, then refresh Journal.`;
+const JOURNAL_WEEKLY_REVIEW_FAILED_MESSAGE = `Weekly review is temporarily unavailable. ${JOURNAL_RECOVERY_MESSAGE}`;
+const JOURNAL_TABS: ReadonlyArray<{ id: Tab; label: string }> = [
+  { id: "queue", label: "Review queue" },
+  { id: "weekly", label: "Weekly review" },
+  { id: "ai", label: "Trade review" },
+  { id: "analytics", label: "Analytics" },
+  { id: "trades", label: "Trades" },
+];
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
@@ -68,6 +79,12 @@ export default function JournalPage() {
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [saving, setSaving] = useState(false);
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [weeklyReview, setWeeklyReview] = useState<JournalWeeklyReviewResponse | null>(null);
+  const [weeklyReviewLoading, setWeeklyReviewLoading] = useState(false);
+  const [weeklyReviewError, setWeeklyReviewError] = useState<string | null>(null);
+  const [weeklyEvidenceLoading, setWeeklyEvidenceLoading] = useState(false);
+  const [entryIdFocus, setEntryIdFocus] = useState<string[]>([]);
+  const [entryFocusLabel, setEntryFocusLabel] = useState("");
   const [toast, setToast] = useState("");
 
   const [symbolQ, setSymbolQ] = useState("");
@@ -88,12 +105,28 @@ export default function JournalPage() {
   const [processNoteExpanded, setProcessNoteExpanded] = useState(false);
   const [reviewFocus, setReviewFocus] = useState<"all" | "needs-review" | "reviewed">("all");
 
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % JOURNAL_TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + JOURNAL_TABS.length) % JOURNAL_TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = JOURNAL_TABS.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    const nextTab = JOURNAL_TABS[nextIndex];
+    setTab(nextTab.id);
+    event.currentTarget.parentElement
+      ?.querySelector<HTMLButtonElement>(`#journal-tab-${nextTab.id}`)
+      ?.focus();
+  };
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
   const load = useCallback(async () => {
     setLoading(true);
     const [entriesResult, statsResult] = await Promise.allSettled([
-      getJournalEntries({}),
+      getJournalEntries({ limit: 500 }),
       getJournalStats(),
     ]);
 
@@ -133,13 +166,19 @@ export default function JournalPage() {
     const requestedTab = searchParams.get("tab");
     if (requestedTab === "queue" || requestedTab === "review") {
       setTab("queue");
-    } else if (requestedTab === "analytics" || requestedTab === "ai" || requestedTab === "trades") {
+    } else if (requestedTab === "weekly" || requestedTab === "analytics" || requestedTab === "ai" || requestedTab === "trades") {
       setTab(requestedTab);
     } else {
       setTab("queue");
     }
     const requestedSymbol = searchParams.get("symbol");
     setSymbolFocus(requestedSymbol?.toUpperCase() ?? "");
+    const requestedStatus = searchParams.get("status");
+    if (requestedStatus === "open" || requestedStatus === "closed") {
+      setFilterStatus(requestedStatus);
+    } else {
+      setFilterStatus("all");
+    }
     const requestedReview = searchParams.get("review");
     if (requestedReview === "needs-review" || requestedReview === "reviewed") {
       setReviewFocus(requestedReview);
@@ -181,6 +220,29 @@ export default function JournalPage() {
       })
       .finally(() => setPatternsLoading(false));
   }, [tab, patterns]);
+
+  const loadWeeklyReview = useCallback(async () => {
+    setWeeklyReviewLoading(true);
+    try {
+      const result = await getJournalWeeklyReviews(8);
+      setWeeklyReview(result);
+      setWeeklyReviewError(null);
+    } catch {
+      setWeeklyReview(null);
+      setWeeklyReviewError(JOURNAL_WEEKLY_REVIEW_FAILED_MESSAGE);
+    } finally {
+      setWeeklyReviewLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "weekly" && !weeklyReview && !weeklyReviewLoading && !weeklyReviewError) void loadWeeklyReview();
+  }, [loadWeeklyReview, tab, weeklyReview, weeklyReviewError, weeklyReviewLoading]);
+
+  const invalidateWeeklyReview = useCallback(() => {
+    setWeeklyReview(null);
+    setWeeklyReviewError(null);
+  }, []);
 
   useEffect(() => {
     if (symbolQ.length < 1) { setSymbolResults([]); setSymbolSearchError(""); return; }
@@ -224,25 +286,26 @@ export default function JournalPage() {
   const closedTradesFromRows = entries.filter(entry => entry.status === "closed").length;
   const totalTrades = stats?.total_trades ?? (journalLoadError ? 0 : entries.length);
   const closedTrades = journalLoadError ? 0 : closedTradesFromRows;
-  const reviewedTrades = entries.filter(entry => entry.status === "closed" && Boolean(entry.lessons?.trim())).length;
+  const reviewedTrades = entries.filter(entry => entry.status === "closed" && isCompletedProcessReview(entry)).length;
   const reviewReady = closedTrades >= 3;
   const visibleEntries = useMemo(() => (
     entries.filter((entry) => {
       if (symbolFocus && entry.symbol !== symbolFocus) return false;
       if (dateFocus && entry.exit_date?.slice(0, 10) !== dateFocus) return false;
+      if (entryIdFocus.length && !entryIdFocus.includes(entry.id)) return false;
       if (filterStatus !== "all" && entry.status !== filterStatus) return false;
       if (reviewFocus === "needs-review") {
-        return entry.status === "closed" && !entry.lessons?.trim();
+        return entry.status === "closed" && !isCompletedProcessReview(entry);
       }
       if (reviewFocus === "reviewed") {
-        return entry.status === "closed" && Boolean(entry.lessons?.trim());
+        return entry.status === "closed" && isCompletedProcessReview(entry);
       }
       return true;
     })
-  ), [dateFocus, entries, filterStatus, reviewFocus, symbolFocus]);
+  ), [dateFocus, entries, entryIdFocus, filterStatus, reviewFocus, symbolFocus]);
   const journalQueue = useMemo(() => {
     const closed = entries.filter((entry) => entry.status === "closed");
-    const needsReview = closed.filter((entry) => !entry.lessons?.trim()).length;
+    const needsReview = closed.filter((entry) => !isCompletedProcessReview(entry)).length;
     const reviewed = closed.length - needsReview;
     const imported = entries.filter((entry) => getTradeFlowMeta(entry).sourceLabel === "Broker import").length;
     const chartOrders = entries.filter((entry) => getTradeFlowMeta(entry).sourceLabel === "Chart order").length;
@@ -277,6 +340,7 @@ export default function JournalPage() {
         symbol: selectedSymbol,
         setup_type: normalizeSetupTagForSave(addForm.setup_type) ?? undefined,
       } as CreateJournalEntry);
+      invalidateWeeklyReview();
       trackEvent("journal_entry_created", { source: "manual", symbol: selectedSymbol, trade_type: addForm.trade_type ?? "unknown" });
       setAddForm({ trade_type: "long", entry_date: new Date().toISOString().split("T")[0] });
       setSelectedSymbol(""); setSymbolQ(""); setPanelMode(null);
@@ -295,6 +359,7 @@ export default function JournalPage() {
         ...closeForm,
         ...(closeSetupType ? { setup_type: normalizeSetupTagForSave(closeSetupType) ?? undefined } : {}),
       } as UpdateJournalEntry);
+      invalidateWeeklyReview();
       setPanelMode(null); setSelectedEntry(null);
       showToast("Trade closed - review generated"); load();
     } catch { showToast(JOURNAL_TRADE_CLOSE_FAILED_MESSAGE); }
@@ -305,30 +370,36 @@ export default function JournalPage() {
     setLessonLoading(entry.id);
     try {
       const updated = await triggerTradeLesson(entry.id);
+      invalidateWeeklyReview();
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       if (selectedEntry?.id === updated.id) setSelectedEntry(updated);
-      completeReview(updated.symbol);
-      trackEvent("journal_entry_reviewed", { source: getTradeFlowMeta(updated).sourceLabel, symbol: updated.symbol });
-      showToast("Trade lesson generated");
+      showToast("Lesson draft generated. Confirm adherence before completing review.");
     } catch { showToast(JOURNAL_LESSON_FAILED_MESSAGE); }
     finally { setLessonLoading(null); }
   };
 
-  const handleSaveReviewLesson = async (entry: JournalEntry, lesson: string) => {
-    const cleaned = lesson.trim();
-    if (!cleaned) {
-      showToast("Add one lesson before saving the review");
-      return;
-    }
+  const handleSaveProcessReview = async (
+    entry: JournalEntry,
+    review: Omit<SaveJournalProcessReviewRequest, "schema_version" | "expected_updated_at">,
+  ) => {
     setReviewSaving(true);
     try {
-      const updated = await updateJournalEntry(entry.id, { lessons: cleaned });
+      const updated = await saveJournalProcessReview(entry.id, {
+        schema_version: 1,
+        ...review,
+        expected_updated_at: entry.updated_at,
+      });
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       setSelectedEntry(updated);
       completeReview(updated.symbol);
-      trackEvent("journal_entry_reviewed", { source: getTradeFlowMeta(updated).sourceLabel, symbol: updated.symbol, method: "manual" });
-      showToast("Review saved");
-    } catch { showToast(JOURNAL_REVIEW_SAVE_FAILED_MESSAGE); }
+      trackEvent("journal_process_review_completed", { method: "manual" });
+      invalidateWeeklyReview();
+      showToast("Process review saved");
+    } catch (error) {
+      showToast(error instanceof Error && /changed in another view|refresh before saving/i.test(error.message)
+        ? "Trade changed in another view. Refresh Journal before saving review."
+        : JOURNAL_REVIEW_SAVE_FAILED_MESSAGE);
+    }
     finally { setReviewSaving(false); }
   };
 
@@ -340,7 +411,7 @@ export default function JournalPage() {
       showToast(r.message || JOURNAL_IMPORT_RESULT_FAILED_MESSAGE);
       setBrokerLastSyncedAt(r.last_synced_at ?? new Date().toISOString());
       refreshBrokerStatus();
-      if (r.imported > 0) load();
+      if (r.imported > 0) { invalidateWeeklyReview(); load(); }
     } catch { showToast(JOURNAL_IMPORT_FAILED_MESSAGE); }
     finally { setImporting(false); }
   };
@@ -349,6 +420,7 @@ export default function JournalPage() {
     if (!confirm("Delete this trade?")) return;
     try {
       await deleteJournalEntry(id);
+      invalidateWeeklyReview();
       if (selectedEntry?.id === id) { setSelectedEntry(null); setPanelMode(null); }
       showToast("Deleted"); load();
     } catch {
@@ -384,6 +456,33 @@ export default function JournalPage() {
     setFilterStatus("closed");
     setReviewFocus("all");
     setSymbolFocus("");
+    setEntryIdFocus([]);
+    setEntryFocusLabel("");
+  };
+
+  const handleWeeklyDrillThrough = async (request: { weekStart: string; entryIds: string[]; label: string; ruleBreak?: JournalRuleBreakCode }) => {
+    const validated = Array.from(new Set(request.entryIds.filter((id) => /^[A-Za-z0-9-]{1,128}$/.test(id))));
+    if (validated.length !== request.entryIds.length || validated.length < 1 || validated.length > 500) {
+      showToast("Weekly review evidence request is invalid.");
+      return;
+    }
+    setWeeklyEvidenceLoading(true);
+    try {
+      const evidence = await getJournalWeeklyReviewEvidence({ weekStart: request.weekStart, entryIds: validated, ruleBreak: request.ruleBreak });
+      const evidenceIds = new Set(evidence.entries.map((entry) => entry.id));
+      setEntries((current) => [...evidence.entries, ...current.filter((entry) => !evidenceIds.has(entry.id))]);
+      setEntryIdFocus(evidence.entries.map((entry) => entry.id));
+      setEntryFocusLabel(request.label);
+      setSymbolFocus("");
+      setDateFocus("");
+      setReviewFocus("all");
+      setFilterStatus("closed");
+      setTab("trades");
+    } catch {
+      showToast("Weekly review evidence is unavailable. No local trade rows were substituted.");
+    } finally {
+      setWeeklyEvidenceLoading(false);
+    }
   };
 
   return (
@@ -485,7 +584,7 @@ export default function JournalPage() {
               <div className="text-[12px] text-right" style={{ color: "var(--text-secondary)", lineHeight: 1.5 }}>
                 <div>{reviewStage.progressLabel}</div>
                 <div style={{ color: "var(--text-tertiary)" }}>
-                  {reviewStage.status === "build-sample" ? "Sample unlock" : "Closed trades with lessons"}
+                  {reviewStage.status === "build-sample" ? "Sample unlock" : "Closed trades reviewed"}
                 </div>
               </div>
             </div>
@@ -605,14 +704,19 @@ export default function JournalPage() {
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {([
-          { id: "queue", label: "Review queue" },
-          { id: "ai", label: "Trade review" },
-          { id: "analytics", label: "Analytics" },
-          { id: "trades", label: "Trades" },
-        ] as { id: Tab; label: string }[]).map(({ id, label }) => (
-          <button key={id} onClick={() => setTab(id)} style={{
+      <div role="tablist" aria-label="Journal views" style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {JOURNAL_TABS.map(({ id, label }, index) => (
+          <button
+            key={id}
+            id={`journal-tab-${id}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            aria-controls={`journal-panel-${id}`}
+            tabIndex={tab === id ? 0 : -1}
+            onClick={() => setTab(id)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
+            style={{
             padding: "8px 14px", fontSize: 13, fontWeight: 500, cursor: "pointer",
             color: tab === id ? "var(--text-primary)" : "var(--text-secondary)",
             background: tab === id ? "var(--surface-2)" : "transparent",
@@ -624,36 +728,69 @@ export default function JournalPage() {
         ))}
       </div>
 
+      {JOURNAL_TABS.filter(({ id }) => id !== tab).map(({ id }) => (
+        <div
+          key={id}
+          id={`journal-panel-${id}`}
+          role="tabpanel"
+          aria-labelledby={`journal-tab-${id}`}
+          hidden
+        />
+      ))}
+
       {/* ── Analytics tab ── */}
       {tab === "analytics" && (
-        <JournalAnalyticsTab
-          analytics={analytics}
-          analyticsError={analyticsError}
-          entries={entries}
-          onCalendarDateSelect={handleCalendarDateSelect}
-        />
+        <div id="journal-panel-analytics" role="tabpanel" aria-labelledby="journal-tab-analytics" tabIndex={0}>
+          <JournalAnalyticsTab
+            analytics={analytics}
+            analyticsError={analyticsError}
+            entries={entries}
+            onCalendarDateSelect={handleCalendarDateSelect}
+          />
+        </div>
+      )}
+
+      {tab === "weekly" && (
+        <div id="journal-panel-weekly" role="tabpanel" aria-labelledby="journal-tab-weekly" tabIndex={0}>
+          <JournalWeeklyReview
+            data={weeklyReview}
+            loading={weeklyReviewLoading || (!weeklyReview && !weeklyReviewError)}
+            error={weeklyReviewError}
+            evidenceLoading={weeklyEvidenceLoading}
+            onRetry={() => { setWeeklyReviewError(null); void loadWeeklyReview(); }}
+            onDrillThrough={handleWeeklyDrillThrough}
+          />
+        </div>
       )}
 
       {/* ── Trade review tab ── */}
       {tab === "ai" && (
-        <JournalAiInsights
-          patterns={patterns}
-          patternsLoading={patternsLoading}
-          patternsError={patternsError}
-          aiAnalysis={aiAnalysis}
-          aiTradesCount={aiTradesCount}
-          aiLoading={aiLoading}
-          aiError={aiError}
-          closedTrades={closedTrades}
-          reviewedTrades={reviewedTrades}
-          autoAnalysisStarted={autoAnalysisStarted}
-          onAnalyse={handleAnalyse}
-        />
+        <div id="journal-panel-ai" role="tabpanel" aria-labelledby="journal-tab-ai" tabIndex={0}>
+          <JournalAiInsights
+            patterns={patterns}
+            patternsLoading={patternsLoading}
+            patternsError={patternsError}
+            aiAnalysis={aiAnalysis}
+            aiTradesCount={aiTradesCount}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            closedTrades={closedTrades}
+            reviewedTrades={reviewedTrades}
+            autoAnalysisStarted={autoAnalysisStarted}
+            onAnalyse={handleAnalyse}
+          />
+        </div>
       )}
 
       {/* ── Review queue / Trades tab ── */}
       {(tab === "queue" || tab === "trades") && (
-        <div className="journal-trades-layout">
+        <div
+          id={`journal-panel-${tab}`}
+          role="tabpanel"
+          aria-labelledby={`journal-tab-${tab}`}
+          tabIndex={0}
+          className="journal-trades-layout"
+        >
           <TradeTable
             entries={visibleEntries}
             loading={loading}
@@ -662,10 +799,13 @@ export default function JournalPage() {
             symbolFocus={symbolFocus}
             dateFocus={dateFocus}
             reviewFocus={reviewFocus}
+            entryFocusLabel={entryFocusLabel}
             onClearFocus={() => {
               setSymbolFocus("");
               setDateFocus("");
               setReviewFocus("all");
+              setEntryIdFocus([]);
+              setEntryFocusLabel("");
             }}
             selectedEntry={selectedEntry}
             onSelectEntry={e => { setSelectedEntry(e); setPanelMode("view"); }}
@@ -701,7 +841,7 @@ export default function JournalPage() {
             onCloseTrade={handleCloseTrade}
             onClose={() => { setPanelMode(null); setSelectedEntry(null); }}
             onGetLesson={handleGetLesson}
-            onSaveReviewLesson={handleSaveReviewLesson}
+            onSaveProcessReview={handleSaveProcessReview}
             onInitiateClose={openClosePanel}
             reviewSaving={reviewSaving}
             riskPerShare={addForm.entry_price && addForm.stop_loss ? Math.abs(addForm.entry_price - addForm.stop_loss) : null}

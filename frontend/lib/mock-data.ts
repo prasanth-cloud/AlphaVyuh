@@ -6,6 +6,7 @@ import type {
   JournalEntry,
   JournalStats,
   LiveQuote,
+  MarketAnalyticsBundle,
   MarketMovers,
   MarketOverview,
   MarketSummary,
@@ -202,6 +203,81 @@ export function mockMarketOverview(): MarketOverview {
       universe_active: MOCK_STOCKS.length,
       license_notes: "Deterministic mock data for workflow QA, not market data.",
     },
+  };
+}
+
+export function mockMarketAnalytics(): MarketAnalyticsBundle {
+  const breadthHistory = Array.from({ length: 20 }, (_, index) => {
+    const advances = 980 + index * 12 + (index % 4) * 18;
+    const declines = 1160 - index * 9 + (index % 3) * 12;
+    return {
+      date: `2026-06-${String(index + 1).padStart(2, "0")}`,
+      advances,
+      declines,
+      unchanged: 65,
+      total: advances + declines + 65,
+      advance_decline_ratio: Number((advances / declines).toFixed(2)),
+      advance_pct: Number((advances / (advances + declines + 65) * 100).toFixed(1)),
+      above_ema20_pct: 42 + index * 0.8,
+      above_ema50_pct: 46 + index * 0.45,
+      above_ema200_pct: 51 + index * 0.2,
+      new_52w_highs: 18 + index,
+      new_52w_lows: Math.max(4, 25 - index),
+    };
+  });
+  const latest = breadthHistory.at(-1)!;
+  return {
+    trade_date: latest.date,
+    phase: "Neutral",
+    breadth_history: breadthHistory,
+    sector_leaderboard: [
+      { sector: "Capital goods", rank: 1, constituents: 40, advances: 27, declines: 12, return_5d_pct: 2.1, return_20d_pct: 5.8, breadth_pct: 67.5 },
+      { sector: "Information technology", rank: 2, constituents: 42, advances: 25, declines: 16, return_5d_pct: 1.4, return_20d_pct: 4.2, breadth_pct: 59.5 },
+      { sector: "Automobile", rank: 3, constituents: 31, advances: 16, declines: 14, return_5d_pct: 0.4, return_20d_pct: 1.8, breadth_pct: 51.6 },
+      { sector: "Financial services", rank: 4, constituents: 55, advances: 24, declines: 30, return_5d_pct: -0.3, return_20d_pct: -0.8, breadth_pct: 43.6 },
+      { sector: "FMCG", rank: 5, constituents: 28, advances: 10, declines: 17, return_5d_pct: -1.2, return_20d_pct: -3.1, breadth_pct: 35.7 },
+    ],
+    rotation_points: [
+      { sector: "Capital goods", strength_score: 86, momentum_score: 74, quadrant: "Leading", return_20d_pct: 5.8, momentum_delta_pct: 1.4 },
+      { sector: "Information technology", strength_score: 71, momentum_score: 58, quadrant: "Leading", return_20d_pct: 4.2, momentum_delta_pct: 0.6 },
+      { sector: "Automobile", strength_score: 58, momentum_score: 43, quadrant: "Weakening", return_20d_pct: 1.8, momentum_delta_pct: -0.4 },
+      { sector: "Financial services", strength_score: 43, momentum_score: 61, quadrant: "Improving", return_20d_pct: -0.8, momentum_delta_pct: 0.3 },
+      { sector: "FMCG", strength_score: 19, momentum_score: 27, quadrant: "Lagging", return_20d_pct: -3.1, momentum_delta_pct: -1.1 },
+    ],
+    summary: {
+      advances: latest.advances,
+      declines: latest.declines,
+      advance_decline_ratio: latest.advance_decline_ratio,
+      above_ema20_pct: latest.above_ema20_pct,
+      above_ema50_pct: latest.above_ema50_pct,
+      above_ema200_pct: latest.above_ema200_pct,
+      new_52w_highs: latest.new_52w_highs,
+      new_52w_lows: latest.new_52w_lows,
+    },
+    rotation_label: "Sector participation map",
+    rotation_methodology: "Demo relative sector map, not a true RRG. Both axes are centered at 50.",
+    lookback_sessions: breadthHistory.length,
+    completeness: {
+      status: "complete",
+      latest_session_rows: latest.total,
+      active_universe: latest.total,
+      coverage_pct: 100,
+      sessions_requested: 20,
+      sessions_available: 20,
+    },
+    generated_at: "2026-06-20T12:00:00Z",
+    source_metadata: {
+      source_name: "AlphaVyuh mock fixtures",
+      mode: "demo",
+      as_of: latest.date,
+      confidence: "demo",
+      coverage_pct: 100,
+      symbols_count: latest.total,
+      universe_active: latest.total,
+      license_notes: "Deterministic mock data for workflow QA, not market data.",
+    },
+    cache_status: "mock",
+    mode: "demo",
   };
 }
 
@@ -444,9 +520,26 @@ export function mockSearchSymbols(q: string): SymbolSearchResult[] {
 
 export function mockJournalEntries(): { entries: JournalEntry[]; total: number; plan: string; history_months: null } {
   const entries: JournalEntry[] = [
-    journal("j1", "DIXON", "long", 13940, 14220, 12, "Breakout continuation", "closed"),
+    {
+      ...journal("j1", "DIXON", "long", 13940, 14220, 12, "Breakout continuation", "closed"),
+      review_schema_version: 1,
+      planned_setup: "Breakout continuation",
+      setup_adherence: "followed",
+      rule_breaks: [],
+      review_lesson: "Wait for confirmation and keep risk fixed.",
+      reviewed_at: "2026-04-25T10:00:00Z",
+    },
     journal("j2", "RELIANCE", "long", 1364, null, 40, "Mean reversion at support", "open"),
-    journal("j3", "PERSISTENT", "long", 4720, 4956, 20, "Stage 2 pullback", "closed"),
+    {
+      ...journal("j3", "PERSISTENT", "long", 4720, 4956, 20, "Stage 2 pullback", "closed"),
+      exit_date: "2026-05-01",
+      review_schema_version: 1,
+      planned_setup: "Stage 2 pullback",
+      setup_adherence: "partial",
+      rule_breaks: ["entry_outside_plan"],
+      review_lesson: "Record the trigger before entry.",
+      reviewed_at: "2026-05-02T10:00:00Z",
+    },
   ];
   return { entries, total: entries.length, plan: "mock", history_months: null };
 }

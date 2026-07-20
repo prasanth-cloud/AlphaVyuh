@@ -44,7 +44,8 @@ function prioritySymbol(symbol: string, score: number): DashboardPrioritySymbol 
   };
 }
 
-function closedTrade(symbol: string, lessons: string | null): JournalEntry {
+function closedTrade(symbol: string, options: { reviewed?: boolean; legacyLesson?: string | null } = {}): JournalEntry {
+  const reviewedAt = options.reviewed ? "2026-06-06T09:30:00.000Z" : null;
   return {
     id: `journal-${symbol}`,
     user_id: "user-1",
@@ -66,13 +67,19 @@ function closedTrade(symbol: string, lessons: string | null): JournalEntry {
     entry_reason: "Test setup",
     exit_reason: "Target partial",
     mistakes: null,
-    lessons,
+    lessons: options.legacyLesson ?? null,
     status: "closed",
     source_page: "manual",
     source_context: null,
     scanner_context: null,
     thesis: null,
     invalidation_rule: null,
+    review_schema_version: options.reviewed ? 1 : null,
+    planned_setup: options.reviewed ? "Breakout" : null,
+    setup_adherence: options.reviewed ? "followed" : null,
+    rule_breaks: options.reviewed ? [] : null,
+    review_lesson: options.reviewed ? "Keep the entry aligned with the plan." : null,
+    reviewed_at: reviewedAt,
     created_at: "2026-06-01T09:30:00.000Z",
     updated_at: "2026-06-05T09:30:00.000Z",
   };
@@ -81,18 +88,10 @@ function closedTrade(symbol: string, lessons: string | null): JournalEntry {
 describe("buildDashboardActionBrief", () => {
   it("summarizes a ready desk with scanner as the next routine action", () => {
     const brief = buildDashboardActionBrief(base);
-    expect(brief.headline).toBe("5/5 desk signals ready");
+    expect(brief.headline).toBe("6/6 desk signals ready");
     expect(brief.nextAction.id).toBe("scanner");
-    expect(brief.items.map((item) => item.status)).toEqual(["ready", "ready", "ready", "ready", "ready"]);
-    expect(brief.instruments.map((item) => item.id)).toEqual(["session", "queue", "risk", "review", "import"]);
-    expect(brief.instruments.find((item) => item.id === "session")).toMatchObject({
-      value: "Bullish",
-      detail: "EOD as of 2026-06-12",
-    });
-    expect(brief.instruments.find((item) => item.id === "import")).toMatchObject({
-      value: "Read-only",
-      detail: "Synced 2026-06-12",
-    });
+    expect(brief.items.map((item) => item.status)).toEqual(["ready", "ready", "ready", "ready", "ready", "ready"]);
+    expect(brief.items.map((item) => item.id)).toEqual(["market", "scanner", "watchlist", "risk", "journal", "import"]);
   });
 
   it("prioritizes data issues before trading actions", () => {
@@ -106,6 +105,59 @@ describe("buildDashboardActionBrief", () => {
     expect(brief.nextAction.id).toBe("market");
     expect(brief.nextAction.href).toBe("/data");
     expect(brief.items.find((item) => item.id === "scanner")?.value).toBe("3 matches");
+  });
+
+  it("treats a failed market refresh as unconfirmed even with cached healthy data", () => {
+    const brief = buildDashboardActionBrief({
+      ...base,
+      marketRefreshFailed: true,
+    });
+    const market = brief.items.find((item) => item.id === "market");
+    expect(market).toMatchObject({ value: "Check data", href: "/data", status: "warn" });
+    expect(brief.nextAction.id).toBe("market");
+  });
+
+  it("routes unavailable account evidence to its owning workflow instead of Data Status", () => {
+    const brief = buildDashboardActionBrief({
+      ...base,
+      accountIssueCount: 4,
+      watchlistUnavailable: true,
+      journalUnavailable: true,
+      brokerUnavailable: true,
+    });
+
+    expect(brief.items.find((item) => item.id === "market")).toMatchObject({
+      value: "Bullish",
+      href: "/dashboard",
+      status: "ready",
+    });
+    expect(brief.items.find((item) => item.id === "watchlist")).toMatchObject({
+      value: "Unavailable",
+      href: "/watchlist",
+      status: "warn",
+    });
+    expect(brief.items.find((item) => item.id === "risk")).toMatchObject({
+      value: "Unavailable",
+      href: "/journal",
+      status: "warn",
+    });
+    expect(brief.items.find((item) => item.id === "journal")).toMatchObject({
+      value: "Unavailable",
+      href: "/journal",
+      status: "warn",
+    });
+    expect(brief.items.find((item) => item.id === "import")).toMatchObject({
+      value: "Unavailable",
+      href: "/settings/broker",
+      status: "warn",
+    });
+  });
+
+  it("does not render zero-state claims while workflow evidence is loading", () => {
+    expect(actionBriefSource).toContain('props.workflowLoading === true');
+    expect(actionBriefSource).toContain('aria-busy="true"');
+    expect(actionBriefSource).toContain("Pending data is not treated as empty.");
+    expect(actionBriefSource).toContain("The queue will remain neutral until account evidence is loaded.");
   });
 
   it("turns an empty account into a scanner-first starter checklist", () => {
@@ -133,14 +185,15 @@ describe("buildDashboardActionBrief", () => {
       reviewedTrades: 3,
     });
     const journal = brief.items.find((item) => item.id === "journal");
-    expect(journal?.value).toBe("4 unreviewed");
+    expect(journal?.value).toBe("4 due");
     expect(journal?.status).toBe("action");
-    expect(brief.instruments.find((item) => item.id === "risk")).toMatchObject({
+    expect(brief.items.find((item) => item.id === "risk")).toMatchObject({
       value: "2 open",
       detail: "Check stop, target, and invalidation",
+      href: "/journal?status=open",
       status: "action",
     });
-    expect(brief.instruments.find((item) => item.id === "review")).toMatchObject({
+    expect(brief.items.find((item) => item.id === "journal")).toMatchObject({
       value: "4 due",
       href: "/journal?review=needs-review",
       status: "action",
@@ -156,12 +209,12 @@ describe("buildDashboardActionBrief", () => {
       reviewCoveragePartial: true,
     });
     const journal = brief.items.find((item) => item.id === "journal");
-    expect(journal?.value).toBe("Recent reviewed");
-    expect(journal?.detail).toMatch(/full history may extend/i);
-    expect(journal?.status).toBe("ready");
+    expect(journal?.value).toBe("Coverage partial");
+    expect(journal?.detail).toMatch(/full-history review state is unknown/i);
+    expect(journal?.status).toBe("warn");
   });
 
-  it("carries only the top four priority symbols into the dashboard brief", () => {
+  it("carries only the top two priority symbols into the dashboard brief", () => {
     const brief = buildDashboardActionBrief({
       ...base,
       prioritySymbols: [
@@ -173,10 +226,12 @@ describe("buildDashboardActionBrief", () => {
       ],
     });
 
-    expect(brief.prioritySymbols.map((item) => item.symbol)).toEqual(["A", "B", "C", "D"]);
+    expect(brief.prioritySymbols.map((item) => item.symbol)).toEqual(["A", "B"]);
   });
 
   it("keeps chart and watchlist handoffs visible in the dashboard priority queue", () => {
+    expect(actionBriefSource).toContain("Review queue");
+    expect(actionBriefSource).toContain("Continue workflow");
     expect(actionBriefSource).toContain("dashboard-priority-actions");
     expect(actionBriefSource).toContain("Open ${item.symbol} full chart");
     expect(actionBriefSource).toContain("{item.chartHref}");
@@ -253,7 +308,7 @@ describe("buildDashboardPrioritySymbols", () => {
     expect(queue[0]).toMatchObject({
       companyName: "Reliance Industries",
       href: "/watchlist?id=qa-list&symbol=RELIANCE",
-      chartHref: "/charts/RELIANCE?from=dashboard&full=1",
+      chartHref: "/charts/RELIANCE?from=watchlist&watchlistId=qa-list&watchlist=Codex%20QA%20Watchlist&full=1",
       label: "Act now",
     });
   });
@@ -282,11 +337,19 @@ describe("buildDashboardPrioritySymbols", () => {
     const queue = buildDashboardPrioritySymbols({
       watchlists,
       workflowStates,
-      journalEntries: [closedTrade("INFY", null)],
+      journalEntries: [closedTrade("INFY", { legacyLesson: "Legacy generated lesson" })],
       now,
     });
 
     expect(queue[0]?.symbol).toBe("INFY");
     expect(queue[0]?.detail).toContain("Closed trade needs review");
+
+    const reviewedQueue = buildDashboardPrioritySymbols({
+      watchlists,
+      workflowStates,
+      journalEntries: [closedTrade("INFY", { reviewed: true })],
+      now,
+    });
+    expect(reviewedQueue[0]?.detail).not.toContain("Closed trade needs review");
   });
 });

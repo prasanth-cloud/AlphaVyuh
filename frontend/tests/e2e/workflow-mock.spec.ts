@@ -142,11 +142,11 @@ test.describe("Mock workflow smoke", () => {
       }
       if (route === "/dashboard") {
         await expect(page.getByTestId("dashboard-market-desk")).toBeVisible({ timeout: 15_000 });
-        await page.getByRole("tab", { name: "Full desk All dashboard cards", exact: true }).click();
-        await expect(page.getByTestId("dashboard-workflow-funnel")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId("dashboard-action-brief")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId("dashboard-action-brief")).toContainText(/Review queue|Continue workflow/);
         await expect(page.getByTestId("dashboard-priority-queue")).toContainText(/Chart/i, { timeout: 15_000 });
         await expect(page.getByTestId("dashboard-priority-queue")).toContainText(/Review/i);
-        await expect(page.getByTestId("dashboard-equity-snapshot")).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole("tab")).toHaveCount(0);
       }
     }
 
@@ -612,6 +612,12 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
     await expect(page.locator("body")).toContainText(/Review|Needs review|Open/i, { timeout: 15_000 });
     await page.locator("tbody tr").filter({ hasText: symbol }).first().click();
+    const reviewTimeline = page.getByTestId("journal-review-timeline");
+    await expect(reviewTimeline).toBeVisible({ timeout: 10_000 });
+    for (const stage of ["Plan", "Entry context", "Outcome", "Adherence", "Next adjustment"]) {
+      await expect(reviewTimeline).toContainText(stage);
+    }
+    await expect(reviewTimeline).toContainText(/Trade in progress|Loading evidence/);
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Original scan|Original thesis/i, { timeout: 10_000 });
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Trend Template|Launch QA setup/i);
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Review prompts/i);

@@ -1,5 +1,7 @@
 # Release goal status — 2026-06-09
 
+> Historical snapshot. Do not use this file as current release evidence. The current integration and production posture is recorded in `docs/agent-runs/2026-07-18-platform-integration.md` and `BLOCKERS.md`.
+
 GOAL_ACHIEVED=false
 
 Staging reactivation is blocked by the Supabase free-tier active-project limit. All other release gates passed on 2026-06-09.

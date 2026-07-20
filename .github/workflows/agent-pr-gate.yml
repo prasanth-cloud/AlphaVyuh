@@ -136,6 +136,21 @@ jobs:
       - name: Release readiness browser smoke
         run: npm run test:e2e:release
 
+      - name: Capture integrated visual evidence
+        run: npm --prefix frontend exec -- playwright test --config=frontend/playwright.mock.config.ts frontend/tests/e2e/integration-visual-evidence.spec.ts
+
+      - name: Upload integrated visual evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: alphavyuh-integrated-visual-evidence-${{ github.event.pull_request.number || github.run_id }}
+          path: frontend/test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Live backend HTTP smoke
+        run: npm run test:e2e:backend
+
       - name: Backend tests
         run: python -m pytest backend/tests
 

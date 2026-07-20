@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const port = process.env.PLAYWRIGHT_BACKEND_PORT ?? "8010";
 const jwtSecret = process.env.PLAYWRIGHT_SUPABASE_JWT_SECRET ?? "playwright-secret";
+const backendCommand = process.env.PLAYWRIGHT_BACKEND_COMMAND ?? "python -m uvicorn";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -26,7 +27,7 @@ export default defineConfig({
       "UPSTOX_API_KEY=upstox-test-key",
       "UPSTOX_API_SECRET=upstox-test-secret",
       `UPSTOX_REDIRECT_URI=http://127.0.0.1:${port}/api/brokers/upstox/connect/callback`,
-      `.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port ${port}`,
+      `${backendCommand} app.main:app --host 127.0.0.1 --port ${port}`,
     ].join(" "),
     url: `http://127.0.0.1:${port}/health`,
     reuseExistingServer: false,
