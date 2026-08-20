@@ -226,6 +226,53 @@ test.describe("Broker settings — connected", () => {
     await expect(evidence).toContainText("evidence, not approval to place orders");
   });
 
+  test("loads the owner-scoped read-only holdings and positions snapshot", async ({ page }) => {
+    let holdingsRequests = 0;
+    let positionsRequests = 0;
+    await page.route("**/api/brokers/zerodha/holdings", (route) => {
+      holdingsRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{
+          symbol: "INFY",
+          exchange: "NSE",
+          quantity: 5,
+          average_price: 1500,
+          current_value: 8000,
+          pnl: 500,
+        }]),
+      });
+    });
+    await page.route("**/api/brokers/zerodha/positions", (route) => {
+      positionsRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{
+          symbol: "SBIN",
+          exchange: "NSE",
+          quantity: 2,
+          average_price: 570.95,
+          pnl: 0.45,
+          day_pnl: 0.2,
+        }]),
+      });
+    });
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const snapshot = page.getByTestId("broker-account-snapshot");
+    await snapshot.getByRole("button", { name: "Load snapshot" }).click();
+    await expect.poll(() => holdingsRequests).toBe(1);
+    await expect.poll(() => positionsRequests).toBe(1);
+    await expect(snapshot).toContainText("SBIN");
+    await expect(snapshot).toContainText("Holdings: INFY (5)");
+    await expect(snapshot).toContainText("1 open position");
+    await expect(snapshot).toContainText("1 holding");
+  });
+
   test("shows pending lifecycle and reconciles it into Journal", async ({ page }) => {
     let reconciled = false;
     let reconcileRequests = 0;
