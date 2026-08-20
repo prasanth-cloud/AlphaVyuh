@@ -85,6 +85,7 @@ jobs:
 
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
             echo "remote_count=unknown (add SUPABASE_ACCESS_TOKEN secret)" >> $GITHUB_OUTPUT
+            echo "remote_reason=missing-token" >> $GITHUB_OUTPUT
             echo "SUPABASE_ACCESS_TOKEN not set — skipping remote count"
           elif [[ "$SUPABASE_URL" =~ ^https://([a-z0-9]+)\.supabase\.co/?$ ]]; then
             PROJECT_REF="${BASH_REMATCH[1]}"
@@ -94,21 +95,33 @@ jobs:
             if [ "$HTTP_CODE" = "200" ]; then
               REMOTE=$(jq 'length' /tmp/migrations_resp.json 2>/dev/null || echo "parse-error")
               echo "remote_count=$REMOTE" >> $GITHUB_OUTPUT
+              echo "remote_reason=ok" >> $GITHUB_OUTPUT
               {
                 echo "remote_versions<<HEREDOC"
                 jq -r '.[] | (.version // .name // .migration_version // .id // empty)' /tmp/migrations_resp.json 2>/dev/null || true
                 echo "HEREDOC"
               } >> $GITHUB_OUTPUT
               echo "Prod applied: $REMOTE | Local files (excl. stubs): $LOCAL"
-            elif [ "$HTTP_CODE" = "401" ]; then
+            elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
               echo "remote_count=auth-error (check SUPABASE_ACCESS_TOKEN value)" >> $GITHUB_OUTPUT
-              echo "401 Unauthorized — SUPABASE_ACCESS_TOKEN may be expired"
+              echo "remote_reason=auth" >> $GITHUB_OUTPUT
+              echo "$HTTP_CODE Unauthorized — SUPABASE_ACCESS_TOKEN may be expired or lacks access to project $PROJECT_REF"
+            elif [ "$HTTP_CODE" = "404" ]; then
+              echo "remote_count=project-not-found (check SUPABASE_URL project ref)" >> $GITHUB_OUTPUT
+              echo "remote_reason=project-not-found" >> $GITHUB_OUTPUT
+              echo "Supabase project $PROJECT_REF was not found or is not visible to SUPABASE_ACCESS_TOKEN"
+            elif [ "$HTTP_CODE" = "000" ]; then
+              echo "remote_count=network-error (Supabase Management API unreachable)" >> $GITHUB_OUTPUT
+              echo "remote_reason=network" >> $GITHUB_OUTPUT
+              echo "Supabase Management API request could not connect"
             else
               echo "remote_count=api-error ($HTTP_CODE)" >> $GITHUB_OUTPUT
+              echo "remote_reason=api" >> $GITHUB_OUTPUT
               echo "Supabase API returned HTTP $HTTP_CODE"
             fi
           else
             echo "remote_count=invalid-url (set SUPABASE_URL to https://<project-ref>.supabase.co)" >> $GITHUB_OUTPUT
+            echo "remote_reason=invalid-url" >> $GITHUB_OUTPUT
             echo "SUPABASE_URL is missing or does not match the expected Supabase project URL format"
           fi
 
@@ -214,6 +227,7 @@ jobs:
           ADDED_FILES: ${{ steps.detect.outputs.added_files }}
           LOCAL_COUNT: ${{ steps.counts.outputs.local_count }}
           REMOTE_COUNT: ${{ steps.counts.outputs.remote_count }}
+          REMOTE_REASON: ${{ steps.counts.outputs.remote_reason }}
           REMOTE_VERSIONS: ${{ steps.counts.outputs.remote_versions }}
         run: |
           PR_BODY=$(gh pr view ${{ github.event.pull_request.number }} \
@@ -226,6 +240,7 @@ jobs:
             echo "  Could not verify production migration state through the Supabase API."
             echo "  Local count:  ${LOCAL_COUNT:-unknown}"
             echo "  Remote count: ${REMOTE_COUNT:-unknown}"
+            echo "  Remote reason: ${REMOTE_REASON:-unknown}"
             echo "  Configure SUPABASE_ACCESS_TOKEN and rerun after applying migrations."
             echo ""
             exit 1

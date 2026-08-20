@@ -21,6 +21,16 @@ assert.match(
   /v1\/projects\/\$PROJECT_REF\/database\/migrations/,
   "migration drift must derive the management API project ref",
 );
+assert.match(
+  workflow,
+  /remote_reason=project-not-found/,
+  "migration drift must distinguish an unavailable Supabase project",
+);
+assert.match(
+  workflow,
+  /remote_reason=network/,
+  "migration drift must distinguish a Supabase Management API network failure",
+);
 assert.doesNotMatch(
   workflow,
   /v1\/projects\/fyxltykqdvacbdgmeucf\/database\/migrations/,
