@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
 import { BrokerActivityTimeline } from "@/components/broker/BrokerActivityTimeline";
+import { BrokerOrderbookSnapshot } from "@/components/broker/BrokerOrderbookSnapshot";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary } from "@/lib/broker-safety";
 import type { BrokerHolding, BrokerPosition } from "@/lib/api/types";
@@ -265,6 +266,7 @@ function BrokerSettingsContent() {
   ];
   const lastSyncedLabel = statusError ? "Unknown" : state?.last_synced_at ? new Date(state.last_synced_at).toLocaleString() : "Never synced";
   const activeBrokerLabel = state?.broker === "upstox" ? "Upstox" : "Zerodha";
+  const activeBroker = state?.broker === "upstox" ? "upstox" : state?.broker === "zerodha" ? "zerodha" : null;
   const importBrokerLabel = statusError ? "broker" : state?.broker === "upstox" ? "Upstox" : "Zerodha";
 
   if (loading) {
@@ -640,6 +642,11 @@ function BrokerSettingsContent() {
         </div>
 
         <BrokerActivityTimeline />
+
+        <BrokerOrderbookSnapshot
+          broker={activeBroker}
+          enabled={Boolean(!statusError && state?.connected && state?.plan_allows_broker)}
+        />
 
         <div className="broker-adapter-grid" style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
           {BROKERS.map((broker) => {

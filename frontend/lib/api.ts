@@ -32,6 +32,8 @@ import type {
   AiPatterns,
   BacktestResponse,
   BrokerHolding,
+  BrokerOrderSnapshot,
+  BrokerOrderbookResponse,
   BrokerOrderActivityResponse,
   BrokerOrderReconciliation,
   BrokerPosition,
@@ -3766,6 +3768,49 @@ export async function getBrokerPositions(broker: string): Promise<BrokerPosition
   const data: unknown = await res.json();
   if (!Array.isArray(data) || !data.every(isBrokerPosition)) {
     throw new Error("Broker positions are temporarily unavailable.");
+  }
+  return data;
+}
+
+function isBrokerOrder(value: unknown): value is BrokerOrderSnapshot {
+  return isRecord(value) &&
+    typeof value.broker_order_id === "string" &&
+    typeof value.symbol === "string" &&
+    (value.exchange === "NSE" || value.exchange === "BSE") &&
+    (value.side === "BUY" || value.side === "SELL") &&
+    (value.order_type === "MARKET" || value.order_type === "LIMIT" || value.order_type === "SL" || value.order_type === "SL_MARKET") &&
+    (value.product === "CNC" || value.product === "MIS" || value.product === "NRML") &&
+    (value.status === "PENDING" || value.status === "OPEN" || value.status === "PARTIAL" || value.status === "COMPLETE" || value.status === "CANCELLED" || value.status === "REJECTED") &&
+    typeof value.quantity === "number" &&
+    typeof value.filled_quantity === "number" &&
+    typeof value.average_price === "number" &&
+    (value.limit_price === null || typeof value.limit_price === "number") &&
+    (value.trigger_price === null || typeof value.trigger_price === "number") &&
+    typeof value.placed_at === "string" &&
+    typeof value.updated_at === "string" &&
+    (value.rejection_reason === null || typeof value.rejection_reason === "string");
+}
+
+function isBrokerOrderbookResponse(value: unknown): value is BrokerOrderbookResponse {
+  return isRecord(value) &&
+    (value.broker === "zerodha" || value.broker === "upstox") &&
+    Array.isArray(value.orders) &&
+    value.orders.every(isBrokerOrder) &&
+    typeof value.count === "number" &&
+    typeof value.fetched_at === "string";
+}
+
+export async function getBrokerOrders(
+  broker: "zerodha" | "upstox",
+  limit = 25,
+): Promise<BrokerOrderbookResponse> {
+  const boundedLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/orders?limit=${boundedLimit}`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Broker orderbook is temporarily unavailable."));
+  const data: unknown = await res.json();
+  if (!isBrokerOrderbookResponse(data)) {
+    throw new Error("Broker orderbook is temporarily unavailable.");
   }
   return data;
 }

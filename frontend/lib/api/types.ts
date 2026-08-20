@@ -1284,3 +1284,30 @@ export type BrokerPosition = {
   pnl: number;
   day_pnl: number;
 };
+
+export type BrokerOrderStatus = "PENDING" | "OPEN" | "PARTIAL" | "COMPLETE" | "CANCELLED" | "REJECTED";
+
+export type BrokerOrderSnapshot = {
+  broker_order_id: string;
+  symbol: string;
+  exchange: "NSE" | "BSE";
+  side: "BUY" | "SELL";
+  order_type: "MARKET" | "LIMIT" | "SL" | "SL_MARKET";
+  product: "CNC" | "MIS" | "NRML";
+  status: BrokerOrderStatus;
+  quantity: number;
+  filled_quantity: number;
+  average_price: number;
+  limit_price: number | null;
+  trigger_price: number | null;
+  placed_at: string;
+  updated_at: string;
+  rejection_reason: string | null;
+};
+
+export type BrokerOrderbookResponse = {
+  broker: "zerodha" | "upstox";
+  orders: BrokerOrderSnapshot[];
+  count: number;
+  fetched_at: string;
+};

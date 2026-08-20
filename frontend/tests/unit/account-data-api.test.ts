@@ -108,4 +108,36 @@ describe("account data API failures", () => {
 
     await expect(getBrokerPositions("upstox")).rejects.toThrow("Broker positions are temporarily unavailable.");
   });
+
+  it("rejects malformed broker orderbook payloads instead of treating them as empty", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        broker: "upstox",
+        orders: [{
+          broker_order_id: "order-1",
+          symbol: "SBIN",
+          exchange: "NSE",
+          side: "BUY",
+          order_type: "LIMIT",
+          product: "CNC",
+          status: "COMPLETE",
+          quantity: 2,
+          filled_quantity: 2,
+          average_price: 570.95,
+          limit_price: 571,
+          trigger_price: null,
+          placed_at: "2026-05-05T09:20:00Z",
+          // updated_at intentionally omitted
+          rejection_reason: null,
+        }],
+        count: 1,
+        fetched_at: "2026-05-05T09:21:00Z",
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getBrokerOrders } = await import("@/lib/api");
+
+    await expect(getBrokerOrders("upstox")).rejects.toThrow("Broker orderbook is temporarily unavailable.");
+  });
 });

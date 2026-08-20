@@ -273,6 +273,49 @@ test.describe("Broker settings — connected", () => {
     await expect(snapshot).toContainText("1 holding");
   });
 
+  test("loads the broker-reported read-only equity orderbook", async ({ page }) => {
+    let orderbookRequests = 0;
+    await page.route("**/api/brokers/zerodha/orders?limit=25", (route) => {
+      orderbookRequests += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          broker: "zerodha",
+          count: 1,
+          fetched_at: "2026-05-30T09:12:00Z",
+          orders: [{
+            broker_order_id: "kite-order-1",
+            symbol: "RELIANCE",
+            exchange: "NSE",
+            side: "BUY",
+            order_type: "LIMIT",
+            product: "CNC",
+            status: "COMPLETE",
+            quantity: 5,
+            filled_quantity: 5,
+            average_price: 2498.5,
+            limit_price: 2500,
+            trigger_price: null,
+            placed_at: "2026-05-30T09:10:00Z",
+            updated_at: "2026-05-30T09:11:00Z",
+            rejection_reason: null,
+          }],
+        }),
+      });
+    });
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const orderbook = page.getByTestId("broker-orderbook-snapshot");
+    await orderbook.getByRole("button", { name: "Load orderbook" }).click();
+    await expect.poll(() => orderbookRequests).toBe(1);
+    await expect(orderbook).toContainText("RELIANCE");
+    await expect(orderbook).toContainText("5/5 filled");
+    await expect(orderbook).toContainText("Broker-reported orderbook");
+  });
+
   test("shows pending lifecycle and reconciles it into Journal", async ({ page }) => {
     let reconciled = false;
     let reconcileRequests = 0;

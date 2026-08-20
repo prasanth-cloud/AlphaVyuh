@@ -128,6 +128,7 @@ GET    /api/brokers/{broker}/connect/callback → exchanges code, stores creds, 
 GET    /api/brokers/{broker}/profile          → BrokerProfile JSON
 GET    /api/brokers/{broker}/positions        → Position[] JSON
 GET    /api/brokers/{broker}/holdings         → Holding[] JSON
+GET    /api/brokers/{broker}/orders           → broker-reported equity orderbook JSON
 GET    /api/v1/broker/orders/activity         → normalized lifecycle records for review
 POST   /api/v1/orders                         → owner-gated order intent path; live broker orders remain disabled
 DELETE /api/brokers/{broker}/disconnect       → clears credentials
@@ -136,6 +137,11 @@ DELETE /api/brokers/{broker}/disconnect       → clears credentials
 Each route validates the Supabase JWT, loads the adapter, retrieves encrypted credentials
 via `credentials.get_broker_credential()`, calls the Python adapter method, and returns
 JSON matching the TypeScript DTOs.
+
+The adapter-backed orderbook is read-only and equity-only. Zerodha and Upstox rows whose
+exchange is not `NSE` or `BSE` are excluded until AlphaVyuh has a separate derivatives
+instrument model. The route returns broker order status and fill totals; it does not expose
+credentials, raw broker payloads, or any order mutation controls.
 
 ---
 

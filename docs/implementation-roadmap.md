@@ -88,12 +88,14 @@ Delivered:
 - Upstox read-only positions map NSE/BSE equity rows into the shared position contract and skip derivatives until their instrument model exists.
 - Authenticated `/api/brokers/{broker}/positions` and existing holdings routes are available for owner-scoped account reads.
 - The broker settings page can load a read-only holdings/positions snapshot with explicit unavailable and empty states; it never calls an order route.
+- Authenticated `/api/brokers/{broker}/orders` exposes a secret-free, broker-reported equity orderbook snapshot with explicit loading, empty, and unavailable UI states.
+- Zerodha and Upstox adapter order lists exclude non-NSE/BSE rows until a separate derivatives model exists, preventing unsupported orders from entering equity workflows.
 - Malformed broker response payloads are rejected in the frontend instead of becoming false-empty account state.
 
 Remaining:
 
 - Run the owner-approved Zerodha/Upstox real-account smoke and record profile, holdings, positions, orderbook, tradebook, and import evidence.
-- Add a broker-reported orderbook read surface and reconcile imported fills to durable setup ids.
+- Reconcile imported fills and broker-reported completed orders to durable setup ids.
 - Apply and verify the current migrations in the correct Supabase project before production use.
 
 ## Milestone 6 — broker execution, only after owner approval

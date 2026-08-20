@@ -8,6 +8,7 @@ Routes:
   GET    /api/brokers/{broker}/profile            → BrokerProfile JSON
   GET    /api/brokers/{broker}/positions          → Position[] JSON
   GET    /api/brokers/{broker}/holdings           → Holding[] JSON
+  GET    /api/brokers/{broker}/orders             → broker-reported equity orderbook JSON
   DELETE /api/brokers/{broker}/disconnect         → clears credentials
 
 See docs/broker-adapter.md for the frontend→backend flow.
@@ -22,7 +23,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 
-from app.brokers.adapter import BrokerCredentials, BrokerError, BrokerId
+from app.brokers.adapter import BrokerCredentials, BrokerError, BrokerId, Order
 from app.brokers.credentials import (
     delete_broker_credentials,
     get_broker_credential,
@@ -303,6 +304,60 @@ async def get_broker_positions(
         _raise_for_broker_error(exc)
 
     return [position.model_dump() for position in positions]
+
+
+def _broker_order_snapshot(order: Order) -> dict[str, Any]:
+    """Return the secret-free, equity orderbook contract used by the UI."""
+    return {
+        "broker_order_id": str(order.broker_order_id),
+        "symbol": order.symbol,
+        "exchange": order.exchange,
+        "side": order.side,
+        "order_type": order.order_type,
+        "product": order.product,
+        "status": order.status,
+        "quantity": order.quantity,
+        "filled_quantity": order.filled_quantity,
+        "average_price": order.average_price,
+        "limit_price": order.limit_price,
+        "trigger_price": order.trigger_price,
+        "placed_at": order.placed_at.isoformat(),
+        "updated_at": order.updated_at.isoformat(),
+        "rejection_reason": order.rejection_reason,
+    }
+
+
+@router.get("/{broker}/orders")
+async def get_broker_orders(
+    broker: str,
+    limit: int = Query(default=25, ge=1, le=100),
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Return a broker-reported, read-only equity orderbook snapshot.
+
+    This is deliberately separate from AlphaVyuh's internal order lifecycle
+    timeline. It only calls the adapter's list_orders method and cannot place,
+    modify, cancel, or reconcile an order.
+    """
+    _require_broker_plan(user_id)
+    broker_id = _validate_broker(broker)
+    creds = _load_creds(user_id, broker_id)
+    adapter = get_adapter(broker_id)
+
+    try:
+        orders = await adapter.list_orders(creds)
+    except BrokerError as exc:
+        _raise_for_broker_error(exc)
+
+    ordered = sorted(orders, key=lambda order: order.updated_at, reverse=True)
+    snapshots = [_broker_order_snapshot(order) for order in ordered[:limit]]
+    return {
+        "broker": broker_id,
+        "orders": snapshots,
+        "count": len(snapshots),
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def _smoke_metadata(*, broker: BrokerId, passed: bool, checked_at: str, checks: dict[str, dict[str, Any]]) -> dict[str, Any]:
