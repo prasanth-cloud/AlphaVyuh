@@ -61,6 +61,35 @@ describe("account data API failures", () => {
     await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics are temporarily unavailable.");
   });
 
+  it("rejects malformed review-aware analytics instead of trusting the response shape", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        equity_curve: [],
+        setup_breakdown: [],
+        monthly_pnl: [],
+        drawdown_curve: [],
+        max_drawdown: null,
+        longest_dd_days: 0,
+        recovery_factor: null,
+        profit_factor: null,
+        review_summary: {
+          minimum_sample_size: 5,
+          reviewed_trades: "4",
+          unreviewed_closed_trades: 1,
+          linked_trades: 1,
+          unplanned_trades: 0,
+          sample_size_sufficient: false,
+          plan_adherence: [],
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+
+    await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics returned an invalid review summary.");
+  });
+
   it("surfaces AI pattern failures instead of returning insufficient-trade readiness", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ detail: "Trade pattern review is temporarily unavailable." }),

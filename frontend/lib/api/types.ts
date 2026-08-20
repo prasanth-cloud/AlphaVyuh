@@ -732,6 +732,28 @@ export type JournalStats = {
   avg_holding_days: number;
 };
 
+export type JournalAnalyticsAdherence = "followed" | "partial" | "not_followed" | "unknown";
+
+export type JournalAnalyticsAdherenceRow = {
+  adherence: JournalAnalyticsAdherence;
+  trades: number;
+  wins: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_pnl: number;
+};
+
+export type JournalAnalyticsReviewSummary = {
+  minimum_sample_size: number;
+  reviewed_trades: number;
+  unreviewed_closed_trades: number;
+  linked_trades: number;
+  unplanned_trades: number;
+  sample_size_sufficient: boolean;
+  review_data_status?: "available" | "unavailable";
+  plan_adherence: JournalAnalyticsAdherenceRow[];
+};
+
 export type CreateJournalEntry = {
   symbol: string;
   setup_id?: string | null;
@@ -787,6 +809,7 @@ export type JournalAnalytics = {
   longest_dd_days: number;
   recovery_factor: number | null;
   profit_factor: number | null;
+  review_summary?: JournalAnalyticsReviewSummary;
 };
 
 export type Fundamentals = {

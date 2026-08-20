@@ -77,8 +77,11 @@ Delivered:
 - Existing journal lesson writes are synchronized into `trade_reviews`, so older journal clients do not silently lose review durability.
 - The journal review queue hydrates the durable review records while retaining its existing closed-trade and lesson UX.
 - Journal entries without a `setup_id` now show their reconciliation state and load same-symbol active setups for owner resolution; linking uses the existing owner/symbol validation on the journal update endpoint.
+- Journal analytics now joins closed trades to completed `trade_reviews` and reports plan-adherence outcomes, setup-linked versus unplanned coverage, and an explicit five-review descriptive-sample guard.
+- Review enrichment is optional at runtime: core realized P&L/drawdown analytics remain available when the review table is unavailable, and the response marks the review data state.
+- The frontend validates the analytics response, renders process outcomes with loading/error-safe copy, and refuses malformed review summaries instead of treating them as empty history.
 
-Remaining: add review-aware outcome analytics and verify the new migration/RLS behavior in the correct Supabase project before production use.
+Remaining: verify the new migration/RLS behavior in the correct Supabase project before production use.
 
 ## Milestone 5 — broker read-only verification
 

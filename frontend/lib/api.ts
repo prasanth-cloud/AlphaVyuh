@@ -723,6 +723,98 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
+  type EquityPoint = JournalAnalytics["equity_curve"][number];
+  type SetupPoint = JournalAnalytics["setup_breakdown"][number];
+  type MonthlyPoint = JournalAnalytics["monthly_pnl"][number];
+  type DrawdownPoint = JournalAnalytics["drawdown_curve"][number];
+
+  const isNullableFiniteNumber = (candidate: unknown): candidate is number | null =>
+    candidate === null || isFiniteNumber(candidate);
+  const isEquityPoint = (candidate: unknown): candidate is EquityPoint =>
+    isRecord(candidate) && typeof candidate.date === "string" && isFiniteNumber(candidate.cumulative_pnl);
+  const isSetupPoint = (candidate: unknown): candidate is SetupPoint =>
+    isRecord(candidate) && typeof candidate.setup === "string" && isFiniteNumber(candidate.trades) &&
+    isFiniteNumber(candidate.wins) && isFiniteNumber(candidate.win_rate) && isFiniteNumber(candidate.total_pnl) &&
+    isFiniteNumber(candidate.avg_pnl) &&
+    (candidate.avg_holding_days === undefined || isNullableFiniteNumber(candidate.avg_holding_days)) &&
+    (candidate.avg_risk_reward === undefined || isNullableFiniteNumber(candidate.avg_risk_reward));
+  const isMonthlyPoint = (candidate: unknown): candidate is MonthlyPoint =>
+    isRecord(candidate) && typeof candidate.month === "string" && isFiniteNumber(candidate.pnl);
+  const isDrawdownPoint = (candidate: unknown): candidate is DrawdownPoint =>
+    isRecord(candidate) && typeof candidate.date === "string" && isFiniteNumber(candidate.drawdown) &&
+    isFiniteNumber(candidate.drawdown_pct);
+
+  const equity_curve = isRecord(value) && Array.isArray(value.equity_curve) ? value.equity_curve : null;
+  const setup_breakdown = isRecord(value) && Array.isArray(value.setup_breakdown) ? value.setup_breakdown : null;
+  const monthly_pnl = isRecord(value) && Array.isArray(value.monthly_pnl) ? value.monthly_pnl : null;
+  const drawdown_curve = isRecord(value) && Array.isArray(value.drawdown_curve) ? value.drawdown_curve : null;
+  if (!equity_curve || !equity_curve.every(isEquityPoint) || !setup_breakdown || !setup_breakdown.every(isSetupPoint) ||
+      !monthly_pnl || !monthly_pnl.every(isMonthlyPoint) || !drawdown_curve || !drawdown_curve.every(isDrawdownPoint) ||
+      !isRecord(value) || !isNullableFiniteNumber(value.max_drawdown) || !isFiniteNumber(value.longest_dd_days) ||
+      !isNullableFiniteNumber(value.recovery_factor) || !isNullableFiniteNumber(value.profit_factor)) {
+    throw new Error("Journal analytics returned an invalid response.");
+  }
+
+  let review_summary: JournalAnalytics["review_summary"];
+  if (value.review_summary !== undefined) {
+    const rawSummary = value.review_summary;
+    const adherenceValues = new Set(["followed", "partial", "not_followed", "unknown"]);
+    if (!isRecord(rawSummary) || !isFiniteNumber(rawSummary.minimum_sample_size) ||
+        !isFiniteNumber(rawSummary.reviewed_trades) || !isFiniteNumber(rawSummary.unreviewed_closed_trades) ||
+        !isFiniteNumber(rawSummary.linked_trades) || !isFiniteNumber(rawSummary.unplanned_trades) ||
+        typeof rawSummary.sample_size_sufficient !== "boolean" ||
+        (rawSummary.review_data_status !== undefined && rawSummary.review_data_status !== "available" && rawSummary.review_data_status !== "unavailable") ||
+        !Array.isArray(rawSummary.plan_adherence) || rawSummary.plan_adherence.length !== 4) {
+      throw new Error("Journal analytics returned an invalid review summary.");
+    }
+    const plan_adherence = rawSummary.plan_adherence.map((candidate) => {
+      if (!isRecord(candidate) || typeof candidate.adherence !== "string" || !adherenceValues.has(candidate.adherence) ||
+          !isFiniteNumber(candidate.trades) || !isFiniteNumber(candidate.wins) || !isFiniteNumber(candidate.win_rate) ||
+          !isFiniteNumber(candidate.total_pnl) || !isFiniteNumber(candidate.avg_pnl)) {
+        throw new Error("Journal analytics returned an invalid review summary.");
+      }
+      return {
+        adherence: candidate.adherence as "followed" | "partial" | "not_followed" | "unknown",
+        trades: candidate.trades,
+        wins: candidate.wins,
+        win_rate: candidate.win_rate,
+        total_pnl: candidate.total_pnl,
+        avg_pnl: candidate.avg_pnl,
+      };
+    });
+    if (new Set(plan_adherence.map((row) => row.adherence)).size !== 4) {
+      throw new Error("Journal analytics returned an invalid review summary.");
+    }
+    review_summary = {
+      minimum_sample_size: rawSummary.minimum_sample_size,
+      reviewed_trades: rawSummary.reviewed_trades,
+      unreviewed_closed_trades: rawSummary.unreviewed_closed_trades,
+      linked_trades: rawSummary.linked_trades,
+      unplanned_trades: rawSummary.unplanned_trades,
+      sample_size_sufficient: rawSummary.sample_size_sufficient,
+      review_data_status: rawSummary.review_data_status === "unavailable" ? "unavailable" : "available",
+      plan_adherence,
+    };
+  }
+
+  return {
+    equity_curve,
+    setup_breakdown,
+    monthly_pnl,
+    drawdown_curve,
+    max_drawdown: value.max_drawdown,
+    longest_dd_days: value.longest_dd_days,
+    recovery_factor: value.recovery_factor,
+    profit_factor: value.profit_factor,
+    review_summary,
+  };
+}
+
 function isSetupReviewRule(value: unknown): value is SetupReview["results"][number] {
   return isRecord(value) &&
     typeof value.code === "string" &&
@@ -2281,7 +2373,7 @@ export async function getJournalAnalytics(): Promise<JournalAnalytics> {
     const data = await res.json();
     const unavailableMessage = unavailablePayloadMessage(data, "Journal analytics are temporarily unavailable.");
     if (unavailableMessage) throw new Error(unavailableMessage);
-    return data;
+    return parseJournalAnalyticsResponse(data);
   });
 }
 

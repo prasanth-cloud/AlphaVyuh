@@ -24,6 +24,13 @@ function toneForSigned(value: number | null | undefined) {
   return value >= 0 ? "var(--gain)" : "var(--loss)";
 }
 
+const adherenceLabels = {
+  followed: "Plan followed",
+  partial: "Partially followed",
+  not_followed: "Plan not followed",
+  unknown: "Not reviewed",
+} as const;
+
 function getLastEquityValue(analytics: JournalAnalyticsType | null) {
   const curve = analytics?.equity_curve ?? [];
   return curve.length > 0 ? curve[curve.length - 1].cumulative_pnl : null;
@@ -166,11 +173,13 @@ export function JournalAnalytics({
   }
 
   const summary = buildReviewSummary(analytics);
+  const reviewSummary = analytics?.review_summary;
   const hasAnalytics = Boolean(
     analytics?.setup_breakdown?.length ||
     analytics?.equity_curve?.length ||
     analytics?.monthly_pnl?.length ||
-    analytics?.drawdown_curve?.length,
+    analytics?.drawdown_curve?.length ||
+    reviewSummary,
   );
   const scoreCards = [
     {
@@ -254,6 +263,80 @@ export function JournalAnalytics({
                   </div>
                   <div className="caption" style={{ marginTop: 5 }}>Use this month as the benchmark for setup quality and position sizing discipline.</div>
                 </div>
+              </div>
+            </section>
+          )}
+
+          {reviewSummary && (
+            <section data-testid="journal-review-outcomes" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                <div>
+                  <h2 className="heading-card" style={{ marginBottom: 4 }}>Process adherence</h2>
+                  <div className="caption">Descriptive outcomes grouped by completed post-trade review. This is not investment advice.</div>
+                </div>
+                <div style={{ maxWidth: 360, padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ marginBottom: 4, color: "var(--text-tertiary)" }}>Review sample</div>
+                  <div className="mono" style={{ fontSize: 16, fontWeight: 600, color: reviewSummary.sample_size_sufficient ? "var(--gain)" : "var(--warn)" }}>
+                    {reviewSummary.reviewed_trades} reviewed · {reviewSummary.unreviewed_closed_trades} unreviewed
+                  </div>
+                  <div className="caption" style={{ marginTop: 5 }}>
+                    {reviewSummary.review_data_status === "unavailable"
+                      ? "Review records could not be loaded; rows are shown as not reviewed."
+                      : reviewSummary.sample_size_sufficient
+                        ? `At least ${reviewSummary.minimum_sample_size} completed reviews are available for descriptive comparison.`
+                        : (() => {
+                            const remaining = Math.max(0, reviewSummary.minimum_sample_size - reviewSummary.reviewed_trades);
+                            return `Descriptive sample only — need ${remaining} more completed review${remaining === 1 ? "" : "s"} before comparing process outcomes.`;
+                          })()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="journal-edge-grid">
+                <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>Setup-linked trades</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>{reviewSummary.linked_trades}</div>
+                  <div className="caption" style={{ marginTop: 5 }}>Closed trades retaining durable setup lineage.</div>
+                </div>
+                <div style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                  <div className="label" style={{ color: "var(--warn)", marginBottom: 6 }}>Unplanned trades</div>
+                  <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: reviewSummary.unplanned_trades > 0 ? "var(--warn)" : "var(--gain)" }}>{reviewSummary.unplanned_trades}</div>
+                  <div className="caption" style={{ marginTop: 5 }}>Closed trades without a valid setup lineage.</div>
+                </div>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                      {["Plan adherence", "Trades", "Win rate", "Avg P&L", "Total P&L"].map((heading) => (
+                        <th key={heading} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{heading}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewSummary.plan_adherence.map((row) => {
+                      const positive = row.total_pnl >= 0;
+                      return (
+                        <tr key={row.adherence} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-primary)", fontWeight: 500 }}>
+                            {adherenceLabels[row.adherence]}
+                          </td>
+                          <td style={{ padding: "10px 16px 10px 0", color: "var(--text-secondary)" }}>{row.trades}</td>
+                          <td style={{ padding: "10px 16px 10px 0" }}>
+                            <span className="mono" style={{ fontWeight: 600, color: row.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{formatPct(row.win_rate)}</span>
+                          </td>
+                          <td style={{ padding: "10px 16px 10px 0" }}>
+                            <span className="mono" style={{ color: toneForSigned(row.avg_pnl) }}>{formatCurrency(row.avg_pnl)}</span>
+                          </td>
+                          <td style={{ padding: "10px 0" }}>
+                            <span className="mono" style={{ fontWeight: 600, color: positive ? "var(--gain)" : "var(--loss)" }}>{formatCurrency(row.total_pnl)}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </section>
           )}

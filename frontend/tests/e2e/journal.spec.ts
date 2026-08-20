@@ -76,6 +76,21 @@ const ANALYTICS = {
   longest_dd_days: 4,
   recovery_factor: 4.29,
   profit_factor: 2.1,
+  review_summary: {
+    minimum_sample_size: 5,
+    reviewed_trades: 4,
+    unreviewed_closed_trades: 1,
+    linked_trades: 1,
+    unplanned_trades: 0,
+    sample_size_sufficient: false,
+    review_data_status: "available",
+    plan_adherence: [
+      { adherence: "followed", trades: 2, wins: 2, win_rate: 100, total_pnl: 1800, avg_pnl: 900 },
+      { adherence: "partial", trades: 1, wins: 0, win_rate: 0, total_pnl: -350, avg_pnl: -350 },
+      { adherence: "not_followed", trades: 0, wins: 0, win_rate: 0, total_pnl: 0, avg_pnl: 0 },
+      { adherence: "unknown", trades: 2, wins: 0, win_rate: 0, total_pnl: 50, avg_pnl: 25 },
+    ],
+  },
 };
 
 const AI_PATTERNS = {
@@ -614,6 +629,9 @@ test.describe("Journal — tab navigation", () => {
     await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Expectancy / trade", { timeout: 15_000 });
     await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Next review focus");
     await expect(page.getByTestId("journal-edge-dashboard")).toContainText("Best setup");
+    await expect(page.getByTestId("journal-review-outcomes")).toContainText("Process adherence");
+    await expect(page.getByTestId("journal-review-outcomes")).toContainText("4 reviewed · 1 unreviewed");
+    await expect(page.getByTestId("journal-review-outcomes")).toContainText("need 1 more completed review");
   });
 
   test("Trade review tab switch shows 'Pattern stats' heading", async ({

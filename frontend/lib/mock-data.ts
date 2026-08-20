@@ -491,6 +491,21 @@ export function mockJournalAnalytics(): JournalAnalytics {
     longest_dd_days: 11,
     recovery_factor: 9.25,
     profit_factor: 2.4,
+    review_summary: {
+      minimum_sample_size: 5,
+      reviewed_trades: 4,
+      unreviewed_closed_trades: 14,
+      linked_trades: 16,
+      unplanned_trades: 2,
+      sample_size_sufficient: false,
+      review_data_status: "available",
+      plan_adherence: [
+        { adherence: "followed", trades: 10, wins: 7, win_rate: 70, total_pnl: 38200, avg_pnl: 3820 },
+        { adherence: "partial", trades: 2, wins: 1, win_rate: 50, total_pnl: 4200, avg_pnl: 2100 },
+        { adherence: "not_followed", trades: 2, wins: 0, win_rate: 0, total_pnl: -6400, avg_pnl: -3200 },
+        { adherence: "unknown", trades: 4, wins: 2, win_rate: 50, total_pnl: 22000, avg_pnl: 5500 },
+      ],
+    },
   };
 }
 

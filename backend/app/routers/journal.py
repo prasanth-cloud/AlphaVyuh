@@ -13,6 +13,8 @@ from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
 UNPLANNED_SETUP_TYPE = "unplanned"
+REVIEW_ANALYTICS_MINIMUM_SAMPLE = 5
+REVIEW_ANALYTICS_ADHERENCE = ("followed", "partial", "not_followed", "unknown")
 
 
 def _get_user_plan(user_id: str) -> str:
@@ -95,6 +97,77 @@ def _effective_setup_type(setup_id: UUID | None, setup_type: str | None) -> str 
     return cleaned or (UNPLANNED_SETUP_TYPE if setup_id is None else None)
 
 
+def _review_analytics_summary(entries: list[dict[str, Any]], reviews: list[dict[str, Any]], *, data_status: str) -> dict[str, Any]:
+    """Build descriptive process metrics without implying investment advice.
+
+    Only completed review records count toward the reviewed sample. Closed trades
+    without a completed review remain visible in the unknown bucket so missing
+    process data cannot look like adherence.
+    """
+    review_by_entry: dict[str, dict[str, Any]] = {}
+    for review in reviews:
+        journal_entry_id = review.get("journal_entry_id")
+        if journal_entry_id is None:
+            continue
+        key = str(journal_entry_id)
+        if key not in review_by_entry:
+            review_by_entry[key] = review
+
+    adherence_map = {
+        adherence: {"trades": 0, "wins": 0, "total_pnl": 0.0}
+        for adherence in REVIEW_ANALYTICS_ADHERENCE
+    }
+    reviewed_trades = 0
+    linked_trades = 0
+    unplanned_trades = 0
+
+    for entry in entries:
+        if entry.get("setup_id") is not None:
+            linked_trades += 1
+        else:
+            unplanned_trades += 1
+
+        review = review_by_entry.get(str(entry.get("id")))
+        is_completed = isinstance(review, dict) and review.get("status") == "completed"
+        adherence = review.get("plan_adherence") if is_completed else "unknown"
+        if adherence not in REVIEW_ANALYTICS_ADHERENCE:
+            adherence = "unknown"
+        if is_completed:
+            reviewed_trades += 1
+
+        pnl = float(entry["pnl"]) if entry.get("pnl") is not None else 0.0
+        row = adherence_map[adherence]
+        row["trades"] += 1
+        if pnl > 0:
+            row["wins"] += 1
+        row["total_pnl"] += pnl
+
+    plan_adherence = []
+    for adherence in REVIEW_ANALYTICS_ADHERENCE:
+        row = adherence_map[adherence]
+        trades = row["trades"]
+        total_pnl = row["total_pnl"]
+        plan_adherence.append({
+            "adherence": adherence,
+            "trades": trades,
+            "wins": row["wins"],
+            "win_rate": round(row["wins"] / trades * 100, 1) if trades else 0,
+            "total_pnl": round(total_pnl, 2),
+            "avg_pnl": round(total_pnl / trades, 2) if trades else 0,
+        })
+
+    return {
+        "minimum_sample_size": REVIEW_ANALYTICS_MINIMUM_SAMPLE,
+        "reviewed_trades": reviewed_trades,
+        "unreviewed_closed_trades": len(entries) - reviewed_trades,
+        "linked_trades": linked_trades,
+        "unplanned_trades": unplanned_trades,
+        "sample_size_sufficient": reviewed_trades >= REVIEW_ANALYTICS_MINIMUM_SAMPLE,
+        "review_data_status": data_status,
+        "plan_adherence": plan_adherence,
+    }
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/analytics")
@@ -103,7 +176,7 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         sb = get_admin_client()
         result = (
             sb.table("trade_journal")
-            .select("symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days,risk_reward")
+            .select("id,setup_id,symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days,risk_reward")
             .eq("user_id", user_id)
             .eq("status", "closed")
             .order("exit_date", desc=False)
@@ -115,6 +188,22 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
             detail="Journal analytics are temporarily unavailable.",
         )
     entries = result.data or []
+
+    # Review metrics enrich the core journal analytics. A missing or unavailable
+    # review table should not hide the user's realised P&L and drawdown history.
+    reviews: list[dict[str, Any]] = []
+    review_data_status = "available"
+    try:
+        review_result = (
+            sb.table("trade_reviews")
+            .select("journal_entry_id,status,plan_adherence,reviewed_at,updated_at")
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        reviews = review_result.data or []
+    except Exception:
+        review_data_status = "unavailable"
 
     # ── Equity curve ─────────────────────────────────────────────────────────
     equity_curve = []
@@ -229,6 +318,7 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         "longest_dd_days": longest_dd_days,
         "recovery_factor": recovery_factor,
         "profit_factor":   profit_factor,
+        "review_summary":  _review_analytics_summary(entries, reviews, data_status=review_data_status),
     }
 
 
