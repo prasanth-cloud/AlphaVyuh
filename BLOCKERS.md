@@ -23,6 +23,8 @@ Use this file when an agent cannot safely continue without owner input, credenti
 
 ## 2026-06-18 - Production recovery needs authenticated verification
 
+> Historical evidence only. This entry is superseded by the 2026-08-20 AlphaVyuh Supabase project blocker above; current verification found the Railway market-summary path returning HTTP 503 and the intended Supabase project unavailable.
+
 - Owner: Product/deploy owner with production QA access.
 - Blocking: A complete signed-in production declaration for dashboard, scanner,
   watchlist, chart, and journal.
