@@ -126,7 +126,8 @@ GET    /api/brokers/{broker}/connect/callback → exchanges code, stores creds, 
 GET    /api/brokers/{broker}/profile          → BrokerProfile JSON
 GET    /api/brokers/{broker}/positions        → Position[] JSON
 GET    /api/brokers/{broker}/holdings         → Holding[] JSON
-POST   /api/brokers/{broker}/orders           → places order, returns OrderResult JSON
+GET    /api/v1/broker/orders/activity         → normalized lifecycle records for review
+POST   /api/v1/orders                         → owner-gated order intent path; live broker orders remain disabled
 DELETE /api/brokers/{broker}/disconnect       → clears credentials
 ```
 

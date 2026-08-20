@@ -79,9 +79,22 @@ Delivered:
 
 Remaining: reconcile every imported fill to a setup, add review-aware outcome analytics, and verify the new migration/RLS behavior in the correct Supabase project before production use.
 
-## Milestone 5 — Zerodha read-only verification
+## Milestone 5 — broker read-only verification
 
-Verify credential storage, account/position/order read paths, freshness, rate-limit handling, and failure UX in a non-ordering environment. Record the verification evidence and keep the product read-only until reconciliation rules are proven.
+Status: the adapter-backed account snapshot slice is implemented locally; real-account verification and production Supabase migration evidence remain blocked.
+
+Delivered:
+
+- Upstox read-only positions map NSE/BSE equity rows into the shared position contract and skip derivatives until their instrument model exists.
+- Authenticated `/api/brokers/{broker}/positions` and existing holdings routes are available for owner-scoped account reads.
+- The broker settings page can load a read-only holdings/positions snapshot with explicit unavailable and empty states; it never calls an order route.
+- Malformed broker response payloads are rejected in the frontend instead of becoming false-empty account state.
+
+Remaining:
+
+- Run the owner-approved Zerodha/Upstox real-account smoke and record profile, holdings, positions, orderbook, tradebook, and import evidence.
+- Add a broker-reported orderbook read surface and reconcile imported fills to durable setup ids.
+- Apply and verify the current migrations in the correct Supabase project before production use.
 
 ## Milestone 6 — broker execution, only after owner approval
 
