@@ -227,6 +227,28 @@ def test_get_holdings_maps_long_term_holdings():
     assert holdings[0].current_value == 7800
 
 
+def test_get_positions_reads_short_term_positions_and_skips_non_equity():
+    with patch(
+        "app.brokers.upstox.api.get_positions",
+        return_value=[
+            {
+                "trading_symbol": "SBIN",
+                "exchange": "NSE",
+                "quantity": 2,
+                "average_price": 570.95,
+                "pnl": 0.45,
+                "unrealised": 0.2,
+            },
+            {"trading_symbol": "BANKNIFTY23OCT38000PE", "exchange": "NFO", "quantity": 15},
+        ],
+    ):
+        positions = _run(UpstoxAdapter().get_positions(_creds()))
+    assert len(positions) == 1
+    assert positions[0].symbol == "SBIN"
+    assert positions[0].quantity == 2
+    assert positions[0].day_pnl == 0.2
+
+
 def test_upstox_auth_errors_wrap_as_auth_expired():
     with patch(
         "app.brokers.upstox.api.get_profile",

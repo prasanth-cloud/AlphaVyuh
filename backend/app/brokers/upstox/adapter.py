@@ -82,7 +82,32 @@ class UpstoxAdapter(BrokerAdapter):
         )
 
     async def get_positions(self, creds: BrokerCredentials) -> list[Position]:
-        return []
+        try:
+            raw = upstox_api.get_positions(creds.access_token)
+        except UpstoxApiError as exc:
+            raise _wrap(exc) from exc
+
+        positions: list[Position] = []
+        for item in raw:
+            exchange = str(item.get("exchange") or "").upper()
+            # The shared equity contract intentionally excludes derivatives and
+            # commodity/currency contracts until their instrument model exists.
+            if exchange not in {"NSE", "BSE"}:
+                continue
+            symbol = str(item.get("trading_symbol") or item.get("tradingsymbol") or "").upper()
+            if not symbol:
+                continue
+            positions.append(
+                Position(
+                    symbol=symbol,
+                    exchange=exchange,  # type: ignore[arg-type]
+                    quantity=int(float(item.get("quantity") or 0)),
+                    average_price=float(item.get("average_price") or item.get("buy_price") or 0),
+                    pnl=float(item.get("pnl") or 0),
+                    day_pnl=float(item.get("unrealised") or 0),
+                )
+            )
+        return positions
 
     async def get_holdings(self, creds: BrokerCredentials) -> list[Holding]:
         try:
