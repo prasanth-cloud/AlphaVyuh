@@ -77,6 +77,7 @@ jobs:
         if: steps.detect.outputs.has_new == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         run: |
           # Exclude stub files — they have no executable SQL and are not applied
           LOCAL=$(find supabase/migrations -name '*.sql' ! -name '*_stub.sql' | wc -l | tr -d ' ')
@@ -85,10 +86,11 @@ jobs:
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
             echo "remote_count=unknown (add SUPABASE_ACCESS_TOKEN secret)" >> $GITHUB_OUTPUT
             echo "SUPABASE_ACCESS_TOKEN not set — skipping remote count"
-          else
+          elif [[ "$SUPABASE_URL" =~ ^https://([a-z0-9]+)\.supabase\.co/?$ ]]; then
+            PROJECT_REF="${BASH_REMATCH[1]}"
             HTTP_CODE=$(curl -s -o /tmp/migrations_resp.json -w "%{http_code}" \
               -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
-              "https://api.supabase.com/v1/projects/fyxltykqdvacbdgmeucf/database/migrations")
+              "https://api.supabase.com/v1/projects/$PROJECT_REF/database/migrations")
             if [ "$HTTP_CODE" = "200" ]; then
               REMOTE=$(jq 'length' /tmp/migrations_resp.json 2>/dev/null || echo "parse-error")
               echo "remote_count=$REMOTE" >> $GITHUB_OUTPUT
@@ -105,6 +107,9 @@ jobs:
               echo "remote_count=api-error ($HTTP_CODE)" >> $GITHUB_OUTPUT
               echo "Supabase API returned HTTP $HTTP_CODE"
             fi
+          else
+            echo "remote_count=invalid-url (set SUPABASE_URL to https://<project-ref>.supabase.co)" >> $GITHUB_OUTPUT
+            echo "SUPABASE_URL is missing or does not match the expected Supabase project URL format"
           fi
 
       # ── Step 3: Block modifications/renames of existing migrations ───────────
