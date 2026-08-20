@@ -39,7 +39,7 @@ Remaining for this milestone: apply and verify the migration in the correct Supa
 
 ## Milestone 3 — EOD data quality and scanner lineage
 
-Status: scanner lineage slice implemented locally; EOD quality/job expansion and database application remain pending.
+Status: scanner lineage and the first EOD quality/job-evidence slice are implemented locally; database application and live verification remain pending.
 
 Delivered in the current slice:
 
@@ -48,10 +48,12 @@ Delivered in the current slice:
 - Scanner responses carry user-specific `scan_run_id` and `candidate_id` values without placing user-owned ids in the shared market-result cache.
 - `setups.source_scanner_candidate_id` and the chart/watchlist handoff preserve candidate lineage into the durable setup spine.
 - Authenticated read endpoints expose run history and candidate evidence; definition CRUD is available for the next scan-builder UI slice.
+- The bhavcopy path validates rows before writes, rejects bad OHLCV/missing/duplicate rows, and records explicit quality counters.
+- Each bhavcopy attempt creates best-effort service-only `job_runs` evidence with status, timing, input, result, and failure details.
 
 Remaining for this milestone:
 
-- Normalize the existing `ingest_runs`/bhavcopy path into a complete EOD quality contract with explicit duplicate, missing, and invalid-OHLC counters.
+- Add database-backed verification for `job_runs` and the new bhavcopy quality columns, including service-role-only access and failure recovery.
 - Apply the new migration in the correct Supabase project and verify RLS with an authenticated user and a second-user denial check.
 - Replace the current saved-screen UI's JSON-only persistence with the normalized definition/group/filter editor.
 

@@ -989,6 +989,16 @@ export type DataHealth = {
     source_url?: string | null;
     error_message?: string | null;
     warning_message?: string | null;
+    quality?: {
+      status: string | null;
+      source_rows: number | null;
+      accepted_rows: number | null;
+      filtered_series_rows: number | null;
+      missing_required_rows: number | null;
+      invalid_ohlcv_rows: number | null;
+      duplicate_rows: number | null;
+      reasons?: string[];
+    };
   };
   provider?: SourceMetadata;
   fallback_active?: boolean;

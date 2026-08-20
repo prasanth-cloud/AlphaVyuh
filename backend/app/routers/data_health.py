@@ -64,6 +64,37 @@ def _kite_market_status() -> dict:
     }
 
 
+def _latest_bhavcopy_quality(sb) -> dict:
+    """Read additive EOD quality columns without breaking older deployments."""
+    try:
+        result = (
+            sb.table("bhavcopy_ingestion_log")
+            .select(
+                "quality_status,source_rows,accepted_rows,filtered_series_rows,"
+                "missing_required_rows,invalid_ohlcv_rows,duplicate_rows,quality_summary"
+            )
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        row = (result.data or [None])[0]
+        if not row:
+            return {}
+        summary = row.get("quality_summary") if isinstance(row.get("quality_summary"), dict) else {}
+        return {
+            "last_bhavcopy_quality_status": row.get("quality_status"),
+            "last_bhavcopy_source_rows": row.get("source_rows"),
+            "last_bhavcopy_accepted_rows": row.get("accepted_rows"),
+            "last_bhavcopy_filtered_series_rows": row.get("filtered_series_rows"),
+            "last_bhavcopy_missing_required_rows": row.get("missing_required_rows"),
+            "last_bhavcopy_invalid_ohlcv_rows": row.get("invalid_ohlcv_rows"),
+            "last_bhavcopy_duplicate_rows": row.get("duplicate_rows"),
+            "last_bhavcopy_quality_reasons": summary.get("reasons") if isinstance(summary.get("reasons"), list) else [],
+        }
+    except Exception:
+        return {}
+
+
 @router.get("/health")
 async def data_health(user_id: str = Depends(get_current_user_id)):
     """Returns overall data freshness for signed-in workspace users."""
@@ -71,6 +102,7 @@ async def data_health(user_id: str = Depends(get_current_user_id)):
         sb = get_admin_client()
         health_res = sb.from_("data_health").select("*").limit(1).execute()
         h = health_res.data[0] if health_res.data else {}
+        h = {**h, **_latest_bhavcopy_quality(sb)}
     except Exception:
         return _unavailable_health()
 

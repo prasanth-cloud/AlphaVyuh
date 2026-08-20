@@ -26,7 +26,7 @@ The existing scanner has saved screens and scanner context. The scanner-lineage 
 
 ### P1 — EOD job and data-quality model
 
-The existing ingest pipeline and `ingest_runs` provide a foundation. The attached plan additionally requires normalized EOD bars, duplicate/missing/bad-OHLC validation, indicator computation, and durable job status. The exact NSE/BSE data source and licensing constraints must be confirmed before expanding this slice.
+The existing ingest pipeline and `ingest_runs` provide a foundation. The new EOD quality slice now validates duplicate/missing/bad-OHLC rows before writes, records explicit counters on the bhavcopy log, and records each bhavcopy attempt in service-only `job_runs`. Database application, RLS verification, and source/licensing confirmation remain before production use.
 
 ### P2 — read-only broker reconciliation
 
@@ -42,7 +42,7 @@ Explicit confirmation, server-only credentials, idempotency, broker status, fill
 | --- | --- | --- | --- |
 | Stabilize/audit | Existing app, docs, migrations, tests | No factual audit packet for this implementation | This audit packet |
 | Shared domain model | Workflow state and journal fields | No durable setup entity | Add setup foundation |
-| EOD pipeline | Ingest routes and `ingest_runs` | Missing complete quality/job contract | Extend after setup spine |
+| EOD pipeline | Ingest routes, `ingest_runs`, and bhavcopy log | New quality/job contract still needs database-backed verification | Apply and verify the additive migration |
 | Scanner builder | Scanner UI/API and saved screens | Missing explicit candidate lineage | Add candidate model and explainability |
 | Chart/setup | Chart plan and decision desk | Handoff is local-draft plus symbol state | Persist setup and link handoff |
 | Rulebook | Plan fields and broker checks | No reusable rule evaluation model | Attach evaluations to setup |

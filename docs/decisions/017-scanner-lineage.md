@@ -21,4 +21,4 @@ The shared in-process market-result cache must not contain user-owned ids. Cache
 
 ## Follow-up
 
-Complete explicit ingest-quality counters and replace the saved-screen JSON editor with the normalized definition/group/filter builder after external database access is restored.
+Replace the saved-screen JSON editor with the normalized definition/group/filter builder after external database access is restored. The first EOD quality counters and service-only job-run evidence now live in Decision 018.

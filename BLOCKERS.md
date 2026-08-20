@@ -12,6 +12,15 @@ Use this file when an agent cannot safely continue without owner input, credenti
 - Production launch posture: Professional Access is the current posture; broader
   paid/public launch timing remains an owner decision.
 
+## 2026-08-20 - AlphaVyuh Supabase project unavailable
+
+- Owner: Product/deploy owner with access to the AlphaVyuh Supabase organization.
+- Blocking: The repository's new setup, rulebook, scanner-lineage, and EOD quality migrations cannot be applied or RLS-tested against the intended production project.
+- Why it matters: The connected Supabase account lists only unrelated projects, direct access to project `fyxltykqdvacbdgmeucf` is denied, and the production Supabase hostname is unresolved. Railway health is reachable, but `/api/v1/market/summary` returns HTTP 503 and authenticated production smoke cannot prepare its QA account.
+- Required decision or input: Reconnect the correct Supabase account/project and repair the GitHub `SUPABASE_ACCESS_TOKEN`/environment configuration. Do not create a replacement database without an explicit recovery decision.
+- Safe work completed: Local implementation, tests, review, PR #412, and branch CI/Vercel status are complete; no production database or broker state was mutated.
+- Safe next step after input: Apply migrations in staging first, verify two-user RLS and service-only operational access, then recover the production data path and rerun authenticated browser/API smokes.
+
 ## 2026-06-18 - Production recovery needs authenticated verification
 
 - Owner: Product/deploy owner with production QA access.

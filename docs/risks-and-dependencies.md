@@ -18,7 +18,7 @@ The current workflow uniqueness `(user_id, symbol)` is retained for compatibilit
 
 ## Data and licensing dependencies
 
-The attached plan depends on reliable NSE/BSE EOD data and indicator calculations. The source, licensing terms, symbol normalization, corporate-action treatment, timezone, missing-bar behavior, and freshness SLA must be documented before the pipeline is expanded. Existing ingestion records should not be reinterpreted as a complete job-run or data-quality system without evidence.
+The attached plan depends on reliable NSE/BSE EOD data and indicator calculations. The source, licensing terms, symbol normalization, corporate-action treatment, timezone, missing-bar behavior, and freshness SLA must be documented before production use. The repository now rejects missing/invalid/duplicate EOD rows and records quality counters plus service-only job history, but that contract still needs a database-backed staging verification and source/licensing decision.
 
 ## Broker dependencies
 
