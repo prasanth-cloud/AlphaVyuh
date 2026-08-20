@@ -114,7 +114,7 @@ export function TradePanel({
     setLessonDraft("");
     setReviewAdherence(selectedEntry?.review?.plan_adherence ?? "unknown");
     setFollowUpDraft(selectedEntry?.review?.follow_up ?? "");
-  }, [selectedEntry?.id]);
+  }, [selectedEntry?.id, selectedEntry?.review?.follow_up, selectedEntry?.review?.plan_adherence]);
 
   if (!mode) return null;
   const flow = selectedEntry ? getTradeFlowMeta(selectedEntry) : null;
