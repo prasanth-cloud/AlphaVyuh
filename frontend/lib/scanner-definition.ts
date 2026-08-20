@@ -166,22 +166,16 @@ export type ScannerDefinitionRunMapping = {
 export function scannerDefinitionToRunMapping(definition: ScannerDefinition): ScannerDefinitionRunMapping {
   const filters: Record<string, unknown> = { series: ["EQ"] };
   const unsupported: string[] = [];
-  const seen = new Set<string>();
+  if (definition.universe !== "all_nse") {
+    unsupported.push("This universe has no verified membership source yet; choose All NSE equity.");
+  }
   for (const group of groupsForDefinition(definition)) {
     const groupFilters = filtersForGroup(group);
-    if (group.operator === "or" && groupFilters.length > 1) {
-      unsupported.push("OR groups are saved, but this EOD runner currently executes AND filters only.");
-    }
     for (const filter of groupFilters) {
       if (!optionByKind.has(filter.kind)) {
         unsupported.push(filter.kind);
         continue;
       }
-      if (seen.has(filter.kind)) {
-        unsupported.push(`${filter.kind} (duplicate)`);
-        continue;
-      }
-      seen.add(filter.kind);
       const value = filterValue(filter.value);
       if (value === null || value === undefined || value === "") {
         unsupported.push(`${filter.kind} (missing value)`);

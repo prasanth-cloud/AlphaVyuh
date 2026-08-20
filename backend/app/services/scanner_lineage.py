@@ -102,6 +102,7 @@ def record_scanner_run(
     body: Any,
     response: dict[str, Any],
     candidates: list[dict[str, Any]],
+    definition: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write one completed run and its ranked candidates.
 
@@ -118,6 +119,15 @@ def record_scanner_run(
         "preset_id": body.preset_id,
         "input_definition": _json_safe({
             "filters": body.filters.model_dump(mode="json"),
+            "normalized_definition": (
+                {
+                    "id": definition.get("id"),
+                    "universe": definition.get("universe"),
+                    "groups": definition.get("groups") or [],
+                }
+                if definition is not None
+                else None
+            ),
             "sort_by": body.sort_by,
             "sort_order": body.sort_order,
             "page": body.page,

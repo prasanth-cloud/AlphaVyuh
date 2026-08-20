@@ -122,6 +122,24 @@ def test_create_definition_persists_owner_scoped_groups_and_filters(monkeypatch)
     assert result["groups"][0]["scanner_definition_id"] == result["definition"]["id"]
     assert result["filters"][0]["user_id"] == "user-1"
     assert result["filters"][0]["kind"] == "rs_score_min"
+    assert result["filters"][0]["value"] == 70
+
+
+def test_create_definition_rejects_empty_group(monkeypatch):
+    client = _Client()
+    monkeypatch.setattr(router, "get_user_client", lambda token: client)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(router.create_scanner_definition(
+            router.ScannerDefinitionCreate(
+                name="Invalid definition",
+                groups=[router.ScannerFilterGroupInput(filters=[])],
+            ),
+            user_id="user-1",
+            user_jwt="token-1",
+        ))
+
+    assert exc_info.value.status_code == 422
 
 
 def test_list_definition_returns_nested_filter_tree(monkeypatch):

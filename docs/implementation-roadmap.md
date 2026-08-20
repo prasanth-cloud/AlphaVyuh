@@ -51,13 +51,14 @@ Delivered in the current slice:
 - The bhavcopy path validates rows before writes, rejects bad OHLCV/missing/duplicate rows, and records explicit quality counters.
 - Each bhavcopy attempt creates best-effort service-only `job_runs` evidence with status, timing, input, result, and failure details.
 - The scanner UI now has a normalized definition builder for owner-scoped universes, filter groups, and validated filter values. Definitions can be created, edited, selected, and carried into scanner run requests with their `scanner_definition_id`.
-- The builder preserves AND/OR group intent; the current flat EOD runner explicitly blocks multi-filter OR execution rather than silently changing its meaning.
+- The builder preserves AND/OR group intent, and the server evaluates groups as AND across groups with the selected operator inside each group. OR expressions are no longer flattened into a false AND scan.
+- All NSE equity is the only runnable universe until verified Nifty 500, MidSmallcap 400, or custom membership data is connected; other choices remain stored but visibly blocked.
 
 Remaining for this milestone:
 
 - Add database-backed verification for `job_runs` and the new bhavcopy quality columns, including service-role-only access and failure recovery.
 - Apply the new migration in the correct Supabase project and verify RLS with an authenticated user and a second-user denial check.
-- Extend EOD execution to evaluate OR groups once the scan engine has a server-side group-expression contract.
+- Verify the server-side group-expression path against applied EOD data after the correct Supabase project is accessible.
 
 Live streaming, options, and broad backtesting remain deferred.
 

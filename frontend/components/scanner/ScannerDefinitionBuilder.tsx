@@ -128,7 +128,7 @@ export function ScannerDefinitionBuilder({
           {initialDefinition ? 'Edit scanner definition' : 'Build scanner definition'}
         </div>
         <div className="caption" style={{ lineHeight: 1.5, marginBottom: 16 }}>
-          Save a user-owned universe and filter tree. The current EOD runner executes flat AND filters; OR groups remain visible and are blocked from execution until that engine supports them.
+          Save a user-owned universe and filter tree. Groups are combined with AND, while filters inside each group can use AND or OR semantics in the EOD runner.
         </div>
 
         <label className="label" htmlFor="scanner-definition-name">Definition name</label>
@@ -153,6 +153,9 @@ export function ScannerDefinitionBuilder({
           <option value="nifty_midsmallcap_400">Nifty MidSmallcap 400</option>
           <option value="custom">Custom universe</option>
         </select>
+        <div className="caption" style={{ marginTop: -10, marginBottom: 16 }}>
+          All NSE equity is runnable now. Index and custom universes are stored for later membership-source integration and remain visibly blocked from execution.
+        </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div className="label">Filter groups</div>

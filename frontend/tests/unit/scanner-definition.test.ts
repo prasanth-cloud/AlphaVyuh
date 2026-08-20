@@ -65,7 +65,7 @@ describe("scanner definitions", () => {
     });
   });
 
-  it("keeps unsupported OR semantics explicit instead of flattening them into a false scan", () => {
+  it("keeps OR groups runnable without pretending they are flat AND filters", () => {
     const mapped = scannerDefinitionToRunMapping(definition([{
       id: "group-1",
       scanner_definition_id: "definition-1",
@@ -77,8 +77,8 @@ describe("scanner definitions", () => {
       ],
     }]));
 
-    expect(mapped.runnable).toBe(false);
-    expect(mapped.unsupported[0]).toContain("OR groups");
+    expect(mapped.runnable).toBe(true);
+    expect(mapped.unsupported).toEqual([]);
     expect(mapped.filters).toMatchObject({ series: ["EQ"], price_min: 100, roe_min: 15 });
   });
 
@@ -96,5 +96,15 @@ describe("scanner definitions", () => {
       operator: "and",
       filters: [{ clientId: "filter-1", kind: "price_min", value: "100" }],
     }]);
+  });
+
+  it("blocks universes without a verified membership source", () => {
+    const mapped = scannerDefinitionToRunMapping({
+      ...definition([]),
+      universe: "nifty500",
+    });
+
+    expect(mapped.runnable).toBe(false);
+    expect(mapped.unsupported[0]).toContain("verified membership source");
   });
 });

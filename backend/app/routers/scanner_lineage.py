@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.services.scanner_definition import normalize_scanner_definition_groups
 from app.services.supabase import get_user_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner-lineage"])
@@ -74,32 +75,37 @@ def _write_groups(
     definition_id: str,
     group_inputs: list[ScannerFilterGroupInput],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    try:
+        normalized_groups = normalize_scanner_definition_groups([
+            group_input.model_dump(mode="json")
+            for group_input in group_inputs
+        ])
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
     groups: list[dict[str, Any]] = []
     filters: list[dict[str, Any]] = []
-    for group_input in group_inputs:
+    for group_input in normalized_groups:
         group_result = client.table("scanner_filter_groups").insert({
             "user_id": user_id,
             "scanner_definition_id": definition_id,
-            "operator": group_input.operator,
-            "sort_order": group_input.sort_order,
+            "operator": group_input["operator"],
+            "sort_order": group_input.get("sort_order", 0),
         }).execute()
         if not group_result.data:
             raise _lineage_unavailable()
         group = group_result.data[0]
         groups.append(group)
-        for filter_input in group_input.filters:
-            kind = filter_input.kind.strip()
-            if not kind:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="Scanner filter kind is required",
-                )
+        for filter_input in group_input["filters"]:
             filter_result = client.table("scanner_filters").insert({
                 "user_id": user_id,
                 "group_id": group["id"],
-                "kind": kind,
-                "value": filter_input.value,
-                "sort_order": filter_input.sort_order,
+                "kind": filter_input["kind"],
+                "value": filter_input["value"],
+                "sort_order": filter_input.get("sort_order", 0),
             }).execute()
             if not filter_result.data:
                 raise _lineage_unavailable()
@@ -240,6 +246,8 @@ async def update_scanner_definition(
                 definition_id=str(definition_id),
                 group_inputs=[ScannerFilterGroupInput.model_validate(group) for group in group_inputs],
             )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise _lineage_unavailable() from exc
     if not result.data:

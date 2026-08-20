@@ -12,7 +12,9 @@ The previous saved-screen path persisted one JSON filter object and could not re
 
 ## Execution boundary
 
-The first supported filter set maps directly to the existing scanner request contract: price, volume ratio, average volume, RSI, 50 DMA/EMA position, 52-week-high proximity, relative strength, market cap, P/E, ROE, ROCE, and debt/equity. The current engine applies flat AND filters. A definition containing a multi-filter OR group remains editable and explainable but is blocked from execution with an inline reason; it is never silently flattened into a different scan.
+The first supported filter set maps directly to the existing scanner request contract: price, volume ratio, average volume, RSI, 50 DMA/EMA position, 52-week-high proximity, relative strength, market cap, P/E, ROE, ROCE, and debt/equity. The server evaluates groups as AND across groups and applies the selected AND/OR operator to filters inside each group. A definition is never silently flattened into a different scan.
+
+All NSE equity is the only runnable universe in this slice. Nifty 500, Nifty MidSmallcap 400, and custom selections are persisted for future membership-source integration but are blocked until their membership data can be verified.
 
 ## Safety
 
@@ -23,4 +25,4 @@ The first supported filter set maps directly to the existing scanner request con
 
 ## Follow-up
 
-Define and test a server-side group-expression contract before enabling OR execution. Apply and RLS-test the scanner migration in the correct AlphaVyuh Supabase project before calling the builder production-ready.
+Apply and RLS-test the scanner migration in the correct AlphaVyuh Supabase project, then run the group-expression path against real EOD data before calling the builder production-ready.

@@ -25,6 +25,10 @@ from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
 from app.services.scanner_lineage import add_lineage_ids, record_scanner_run
+from app.services.scanner_definition import (
+    normalize_scanner_definition_groups,
+    normalize_scanner_filter_value,
+)
 from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
@@ -98,6 +102,7 @@ def _scan_result_cache_key(
     enforce_plan_limit: bool,
     score_results: bool,
     include_diagnostics: bool,
+    definition_signature: dict | None = None,
 ) -> str:
     payload = {
         "body": body.model_dump(mode="json"),
@@ -106,6 +111,7 @@ def _scan_result_cache_key(
         "enforce_plan_limit": enforce_plan_limit,
         "score_results": score_results,
         "include_diagnostics": include_diagnostics,
+        "definition_signature": definition_signature,
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
@@ -573,6 +579,56 @@ class SaveScreenRequest(BaseModel):
     name:       str
     filters:    dict
     is_default: bool = False
+
+
+def _load_scanner_definition(client, definition_id: UUID, user_id: str) -> dict:
+    """Load and validate a user-owned normalized definition for execution."""
+
+    definition_result = (
+        client.table("scanner_definitions")
+        .select("id,universe,definition,updated_at")
+        .eq("id", str(definition_id))
+        .eq("user_id", user_id)
+        .execute()
+    )
+    definitions = definition_result.data or []
+    if not definitions:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scanner definition not found")
+
+    definition = definitions[0]
+    if definition.get("universe") != "all_nse":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This scanner universe is saved but has no verified membership source yet; choose All NSE equity.",
+        )
+    group_result = (
+        client.table("scanner_filter_groups")
+        .select("*")
+        .eq("scanner_definition_id", str(definition_id))
+        .eq("user_id", user_id)
+        .order("sort_order")
+        .execute()
+    )
+    groups: list[dict] = []
+    for group in group_result.data or []:
+        filter_result = (
+            client.table("scanner_filters")
+            .select("*")
+            .eq("group_id", str(group["id"]))
+            .eq("user_id", user_id)
+            .order("sort_order")
+            .execute()
+        )
+        groups.append({**group, "filters": filter_result.data or []})
+
+    try:
+        normalized_groups = normalize_scanner_definition_groups(groups)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Scanner definition is invalid: {exc}",
+        ) from exc
+    return {**definition, "groups": normalized_groups}
 
 
 # ── Valid sort keys ───────────────────────────────────────────────────────────
@@ -1331,6 +1387,68 @@ def _apply_filters(
     return results
 
 
+def _definition_filter_label(kind: str, value: float | str) -> str:
+    return f"{kind} {value}"
+
+
+def _apply_definition_groups(
+    rows: list[dict],
+    groups: list[dict],
+    *,
+    base_filters: ScanFilters,
+) -> list[dict]:
+    """Evaluate normalized groups without flattening OR expressions.
+
+    Groups are combined with AND. Filters inside an ``and`` group are all
+    required; filters inside an ``or`` group require at least one match. Each
+    leaf reuses the canonical scanner predicate so definition runs cannot
+    drift from the normal scanner semantics.
+    """
+
+    normalized_groups = normalize_scanner_definition_groups(groups)
+    matched_rows: list[dict] = []
+    reasons_by_symbol: dict[str, list[str]] = {}
+
+    for row in rows:
+        symbol = str(row.get("symbol") or "")
+        definition_reasons: list[str] = []
+        definition_matches = True
+        for group in normalized_groups:
+            outcomes: list[tuple[bool, str]] = []
+            for scanner_filter in group["filters"]:
+                kind = scanner_filter["kind"]
+                value = normalize_scanner_filter_value(kind, scanner_filter["value"])
+                condition = ScanFilters(**{kind: value})
+                outcome = bool(_apply_filters([row], condition, score_results=False))
+                outcomes.append((outcome, _definition_filter_label(kind, value)))
+
+            group_matches = (
+                all(outcome for outcome, _label in outcomes)
+                if group["operator"] == "and"
+                else any(outcome for outcome, _label in outcomes)
+            )
+            if not group_matches:
+                definition_matches = False
+                break
+            definition_reasons.extend(label for outcome, label in outcomes if outcome)
+
+        if definition_matches:
+            matched_rows.append(row)
+            reasons_by_symbol[symbol] = definition_reasons
+
+    # Enrich accepted rows once with the shared read-model builder. This also
+    # applies the definition's universe-level active/series constraints.
+    enriched = _apply_filters(matched_rows, base_filters, score_results=False)
+    for result in enriched:
+        symbol = str(result.get("symbol") or "")
+        definition_reasons = reasons_by_symbol.get(symbol, [])
+        existing_reasons = result.get("match_reasons") or []
+        result["match_reasons"] = list(dict.fromkeys(
+            [*definition_reasons, *existing_reasons]
+        ))[:6]
+    return enriched
+
+
 VCP_RPC_CHUNK = 500   # max symbols per get_vcp_lookback RPC call (avoids statement timeout)
 VCP_CONCURRENCY = 4  # simultaneous chunk fetches — keeps Supabase connection pool healthy
 
@@ -1422,6 +1540,7 @@ async def execute_scan(
     include_diagnostics: bool = True,
     use_result_cache: bool = True,
     user_id: str | None = None,
+    definition: dict | None = None,
 ) -> dict:
     """Run the scanner core for UI scans and saved EOD scan alerts."""
     scan_started = time.perf_counter()
@@ -1451,6 +1570,15 @@ async def execute_scan(
         enforce_plan_limit=enforce_plan_limit,
         score_results=score_results,
         include_diagnostics=include_diagnostics,
+        definition_signature=(
+            {
+                "id": definition.get("id"),
+                "updated_at": definition.get("updated_at"),
+                "groups": definition.get("groups") or [],
+            }
+            if definition is not None
+            else None
+        ),
     )
     cached_response = _read_scan_result_cache(cache_key) if use_result_cache else None
     if cached_response is not None:
@@ -1479,6 +1607,7 @@ async def execute_scan(
                     body=body,
                     response=cached_response,
                     candidates=cached_response.get("results") or [],
+                    definition=definition,
                 )
                 return add_lineage_ids(
                     cached_response,
@@ -1490,8 +1619,17 @@ async def execute_scan(
                 cached_response["lineage"] = {"status": "unavailable"}
         return cached_response
 
-    # Build base query with series filter pushed to DB
-    f = body.filters
+    # Build base query with series filter pushed to DB. A normalized
+    # definition is evaluated as a group expression below, so only its
+    # universe-level series constraint is pushed here; flattening its leaves
+    # would turn OR into an incorrect AND query.
+    definition_groups = definition.get("groups") if definition is not None else None
+    definition_mode = isinstance(definition_groups, list) and bool(definition_groups)
+    f = (
+        ScanFilters(series=body.filters.series or ["EQ", "BE"])
+        if definition_mode
+        else body.filters
+    )
     series_list = f.series or ["EQ", "BE"]
 
     sort_key = body.sort_by if body.sort_by in SORT_KEYS else "volume_ratio"
@@ -1560,9 +1698,12 @@ async def execute_scan(
                 ) from primary_error
     query_elapsed_ms = round((time.perf_counter() - query_started) * 1000)
 
-    # Python-side filter for computed columns
+    # Python-side filter for computed columns or normalized definition groups.
     filter_started = time.perf_counter()
-    results = _apply_filters(rows, f, body.preset_id, score_results=False)
+    if definition_mode:
+        results = _apply_definition_groups(rows, definition_groups, base_filters=f)
+    else:
+        results = _apply_filters(rows, f, body.preset_id, score_results=False)
     filter_elapsed_ms = round((time.perf_counter() - filter_started) * 1000)
 
     # ── Pass 2: VCP two-pass (only when explicitly requested) ────────────────
@@ -1679,6 +1820,7 @@ async def execute_scan(
                 body=body,
                 response=response,
                 candidates=capped,
+                definition=definition,
             )
             response = add_lineage_ids(
                 response,
@@ -1729,22 +1871,17 @@ async def run_scanner(
             detail="Scanner data is temporarily unavailable.",
         )
 
+    definition = None
     if body.scanner_definition_id is not None:
         try:
-            definition = (
-                client.table("scanner_definitions")
-                .select("id")
-                .eq("id", str(body.scanner_definition_id))
-                .eq("user_id", user_id)
-                .execute()
-            )
+            definition = _load_scanner_definition(client, body.scanner_definition_id, user_id)
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Scanner definition is temporarily unavailable.",
             ) from exc
-        if not definition.data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scanner definition not found")
 
     use_result_cache = "no-cache" not in (cache_control or "").lower()
     return await execute_scan(
@@ -1753,6 +1890,7 @@ async def run_scanner(
         plan=plan,
         user_id=user_id,
         use_result_cache=use_result_cache,
+        definition=definition,
     )
 
 

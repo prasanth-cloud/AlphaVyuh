@@ -58,6 +58,14 @@ def test_record_scanner_run_keeps_explainability_and_ranked_snapshots() -> None:
         "total_matches": 2,
         "source_metadata": {"mode": "eod", "as_of": "2026-08-20"},
     }
+    definition = {
+        "id": "definition-1",
+        "universe": "all_nse",
+        "groups": [{
+            "operator": "or",
+            "filters": [{"kind": "price_min", "value": 100}],
+        }],
+    }
     candidates = [
         {
             "symbol": "TCS",
@@ -82,11 +90,13 @@ def test_record_scanner_run_keeps_explainability_and_ranked_snapshots() -> None:
         body=body,
         response=response,
         candidates=candidates,
+        definition=definition,
     )
 
     assert len(client.runs) == 1
     assert client.runs[0]["user_id"] == "user-1"
     assert client.runs[0]["input_definition"]["filters"]["rs_score_min"] == 70
+    assert client.runs[0]["input_definition"]["normalized_definition"]["groups"][0]["operator"] == "or"
     assert len(client.candidates) == 2
     assert [row["rank"] for row in client.candidates] == [1, 2]
     assert client.candidates[0]["matched_conditions"]["match_reasons"] == ["RS score 88"]
