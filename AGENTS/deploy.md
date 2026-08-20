@@ -86,8 +86,10 @@ This rule overrides everything else. A page that ships with advisory copy is a P
   fyxltykqdvacbdgmeucf.supabase.co`.
 - The connected Supabase account does not expose the intended AlphaVyuh project,
   and the `fyxl...` hostname does not resolve. The current Vercel build is a
-  passing preview only; the latest observed production deployment is older main
-  code.
+  passing preview only. Railway's latest production deployment is deployment
+  `59899d8e-6c69-4c75-91f4-d26badacf2e0` from main commit
+  `7dc231080656701861c626c74ccd80f73531f703`; its logs show the same Supabase
+  DNS failure in the scheduled price-alert job.
 
 The immediate recovery action is to reconnect the actual AlphaVyuh Supabase
 project and update the matching GitHub and Railway secrets. Do not substitute
