@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getJournalEntries, getJournalStats, getJournalAnalytics,
+  getJournalReviews, saveTradeReview,
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
   searchSymbols, analyseJournal, getAiPatterns,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
@@ -101,6 +102,23 @@ export default function JournalPage() {
       setEntries(entriesResult.value.entries);
       setJournalPlan(entriesResult.value.plan ?? null);
       setJournalLoadError(null);
+      getJournalReviews()
+        .then((reviews) => {
+          const reviewsByEntry = new Map(reviews.map((review) => [review.journal_entry_id, review]));
+          setEntries((current) => current.map((entry) => {
+            const review = reviewsByEntry.get(entry.id);
+            if (!review) return entry;
+            return {
+              ...entry,
+              review,
+              mistakes: review.mistakes ?? entry.mistakes,
+              lessons: review.lesson ?? entry.lessons,
+            };
+          }));
+        })
+        .catch(() => {
+          // The legacy journal fields remain usable while the review resource is unavailable.
+        });
       getJournalAnalytics()
         .then((analytics) => {
           setAnalytics(analytics);
@@ -322,7 +340,13 @@ export default function JournalPage() {
     }
     setReviewSaving(true);
     try {
-      const updated = await updateJournalEntry(entry.id, { lessons: cleaned });
+      const review = await saveTradeReview(entry.id, { lesson: cleaned, source: "manual" });
+      const updated = {
+        ...entry,
+        review,
+        mistakes: review.mistakes ?? entry.mistakes,
+        lessons: review.lesson ?? entry.lessons,
+      };
       setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
       setSelectedEntry(updated);
       completeReview(updated.symbol);

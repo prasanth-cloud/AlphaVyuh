@@ -85,6 +85,8 @@ import type {
   ScannerDefinition,
   ScannerFilter,
   ScannerFilterGroup,
+  TradeReview,
+  TradeReviewRequest,
   UpdateScannerDefinitionRequest,
   UpdateSetupRequest,
   SharedScreen,
@@ -2001,6 +2003,114 @@ export async function getJournalEntries(
     }
     return res.json();
   });
+}
+
+function parseTradeReview(value: unknown): TradeReview {
+  if (!isRecord(value) ||
+      typeof value.id !== "string" ||
+      typeof value.user_id !== "string" ||
+      typeof value.journal_entry_id !== "string" ||
+      (value.setup_id !== null && typeof value.setup_id !== "string") ||
+      (value.status !== "draft" && value.status !== "completed") ||
+      (value.plan_adherence !== "followed" && value.plan_adherence !== "partial" && value.plan_adherence !== "not_followed" && value.plan_adherence !== "unknown") ||
+      (value.mistakes !== null && typeof value.mistakes !== "string") ||
+      (value.lesson !== null && typeof value.lesson !== "string") ||
+      (value.follow_up !== null && typeof value.follow_up !== "string") ||
+      (value.source !== "manual" && value.source !== "generated" && value.source !== "journal_sync") ||
+      (value.reviewed_at !== null && typeof value.reviewed_at !== "string") ||
+      typeof value.created_at !== "string" ||
+      typeof value.updated_at !== "string") {
+    throw new Error("Trade review returned an invalid response.");
+  }
+  return {
+    id: value.id,
+    user_id: value.user_id,
+    journal_entry_id: value.journal_entry_id,
+    setup_id: value.setup_id,
+    status: value.status,
+    plan_adherence: value.plan_adherence,
+    mistakes: value.mistakes,
+    lesson: value.lesson,
+    follow_up: value.follow_up,
+    source: value.source,
+    reviewed_at: value.reviewed_at,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function parseTradeReviewsResponse(value: unknown): TradeReview[] {
+  if (!isRecord(value) || !Array.isArray(value.reviews)) {
+    throw new Error("Trade reviews returned an invalid response.");
+  }
+  return value.reviews.map(parseTradeReview);
+}
+
+function mockTradeReview(entry: JournalEntry): TradeReview {
+  const now = new Date().toISOString();
+  return {
+    id: entry.review?.id ?? `mock-review-${entry.id}`,
+    user_id: entry.user_id,
+    journal_entry_id: entry.id,
+    setup_id: entry.setup_id ?? null,
+    status: entry.lessons?.trim() ? "completed" : "draft",
+    plan_adherence: entry.review?.plan_adherence ?? "unknown",
+    mistakes: entry.mistakes ?? null,
+    lesson: entry.lessons ?? null,
+    follow_up: entry.review?.follow_up ?? null,
+    source: entry.review?.source ?? "journal_sync",
+    reviewed_at: entry.review?.reviewed_at ?? (entry.lessons?.trim() ? entry.updated_at : null),
+    created_at: entry.review?.created_at ?? now,
+    updated_at: entry.review?.updated_at ?? entry.updated_at,
+  };
+}
+
+export async function getJournalReviews(): Promise<TradeReview[]> {
+  if (shouldUseMockFallback()) {
+    const entries = mergeMockJournalEntries(readLocalJournalEntries(), mockJournalEntries().entries);
+    return entries
+      .filter((entry) => entry.status === "closed" && (entry.lessons?.trim() || entry.mistakes?.trim() || entry.review))
+      .map(mockTradeReview);
+  }
+  return cachedClientRequest("journal:reviews", 20_000, async () => {
+    const res = await fetch(`${API}/api/v1/journal/reviews`, { headers: await authHeaders() });
+    if (!res.ok) {
+      throw new Error(await responseErrorMessage(res, `Trade reviews are temporarily unavailable (${res.status}).`));
+    }
+    return parseTradeReviewsResponse(await res.json());
+  });
+}
+
+export async function saveTradeReview(entryId: string, request: TradeReviewRequest): Promise<TradeReview> {
+  if (shouldUseMockFallback()) {
+    const updated = updateLocalJournalEntry(entryId, {
+      mistakes: request.mistakes ?? undefined,
+      lessons: request.lesson ?? undefined,
+    });
+    if (!updated) throw new Error("Entry not found");
+    const review = mockTradeReview({
+      ...updated,
+      review: {
+        ...mockTradeReview(updated),
+        plan_adherence: request.plan_adherence ?? "unknown",
+        source: request.source ?? "manual",
+        follow_up: request.follow_up ?? null,
+      },
+    });
+    invalidateClientCache(["journal:", "portfolio"]);
+    return review;
+  }
+  const res = await fetch(`${API}/api/v1/journal/${encodeURIComponent(entryId)}/review`, {
+    method: "PUT",
+    headers: await authHeaders(),
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Trade review could not be saved (${res.status}).`));
+  }
+  const review = parseTradeReview(await res.json());
+  invalidateClientCache(["journal:", "portfolio"]);
+  return review;
 }
 
 export async function getJournalStats(): Promise<JournalStats> {

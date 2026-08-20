@@ -28,9 +28,9 @@ The existing scanner has saved screens and scanner context. The scanner-lineage 
 
 The existing ingest pipeline and `ingest_runs` provide a foundation. The new EOD quality slice now validates duplicate/missing/bad-OHLC rows before writes, records explicit counters on the bhavcopy log, and records each bhavcopy attempt in service-only `job_runs`. Database application, RLS verification, and source/licensing confirmation remain before production use.
 
-### P1 — explicit unplanned journal path
+### P1 — explicit unplanned journal path and durable reviews
 
-Manual and imported journal records now receive an explicit `unplanned` setup tag when no valid durable setup is linked, and legacy null tags have an additive backfill migration. A durable trade-review entity and live broker reconciliation remain.
+Manual and imported journal records now receive an explicit `unplanned` setup tag when no valid durable setup is linked, and legacy null tags have an additive backfill migration. Closed trades can now persist one owner-scoped `trade_reviews` record with plan adherence, mistakes, lesson, and follow-up fields; the journal review queue hydrates those records and older lesson writes are synchronized by a database trigger. Live broker reconciliation and review-aware outcome analytics remain.
 
 ### P2 — read-only broker reconciliation
 
@@ -50,7 +50,7 @@ Explicit confirmation, server-only credentials, idempotency, broker status, fill
 | Scanner builder | Scanner UI/API and saved screens | Missing explicit candidate lineage | Add candidate model and explainability |
 | Chart/setup | Chart plan and decision desk | Handoff is local-draft plus symbol state | Persist setup and link handoff |
 | Rulebook | Plan fields and broker checks | No reusable rule evaluation model | Attach evaluations to setup |
-| Watchlist/journal | Watchlist, workflow, manual/simulated journal, explicit unplanned tagging | Durable trade-review entity remains | Link existing records and add trade reviews |
+| Watchlist/journal | Watchlist, workflow, manual/simulated journal, explicit unplanned tagging, durable trade reviews | Imported-fill reconciliation and review-aware analytics remain | Link every fill to setup and measure review outcomes |
 | Zerodha read-only | Broker adapters/import surfaces | Fresh external verification required | Verify read-only path |
 | Execution | Simulated/order-intent safety foundation | Live execution owner-gated | Do not enable in this slice |
 | Review intelligence | Journal and AI review surfaces | Review lineage is incomplete | Build after setup/fill lineage |

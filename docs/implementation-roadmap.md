@@ -64,7 +64,7 @@ Live streaming, options, and broad backtesting remain deferred.
 
 ## Milestone 4 — watchlist and journal continuity
 
-Status: setup-linked manual/import continuity exists locally; explicit unplanned tagging is now implemented, while trade-review persistence remains a later slice.
+Status: setup-linked manual/import continuity and durable post-trade review persistence are implemented locally; migration application and production verification remain pending.
 
 Delivered:
 
@@ -72,8 +72,12 @@ Delivered:
 - CSV report imports use the explicit `unplanned` tag and include an `UNPLANNED` entry marker.
 - Existing null setup tags are backfilled by an additive migration.
 - Existing setup-linked chart/watchlist/simulated flows retain their `setup_id` and review gate.
+- `trade_reviews` stores one owner-scoped review artifact per closed journal entry, including plan adherence, mistakes, lesson, follow-up, source, and review timestamps.
+- Authenticated review list/save endpoints use the user's RLS-scoped Supabase client.
+- Existing journal lesson writes are synchronized into `trade_reviews`, so older journal clients do not silently lose review durability.
+- The journal review queue hydrates the durable review records while retaining its existing closed-trade and lesson UX.
 
-Remaining: add a durable trade-review entity and reconcile every imported fill to a setup before live production verification.
+Remaining: reconcile every imported fill to a setup, add review-aware outcome analytics, and verify the new migration/RLS behavior in the correct Supabase project before production use.
 
 ## Milestone 5 — Zerodha read-only verification
 

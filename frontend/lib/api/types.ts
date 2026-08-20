@@ -690,8 +690,33 @@ export type JournalEntry = {
   scanner_context?: ScannerIdeaContext | null;
   thesis?: string | null;
   invalidation_rule?: string | null;
+  review?: TradeReview | null;
   created_at: string;
   updated_at: string;
+};
+
+export type TradeReview = {
+  id: string;
+  user_id: string;
+  journal_entry_id: string;
+  setup_id: string | null;
+  status: "draft" | "completed";
+  plan_adherence: "followed" | "partial" | "not_followed" | "unknown";
+  mistakes: string | null;
+  lesson: string | null;
+  follow_up: string | null;
+  source: "manual" | "generated" | "journal_sync";
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TradeReviewRequest = {
+  plan_adherence?: TradeReview["plan_adherence"];
+  mistakes?: string | null;
+  lesson?: string | null;
+  follow_up?: string | null;
+  source?: "manual" | "generated";
 };
 
 export type JournalStats = {
