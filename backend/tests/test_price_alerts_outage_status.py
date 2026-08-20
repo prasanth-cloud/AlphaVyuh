@@ -127,3 +127,12 @@ async def test_delete_price_alert_raises_503_when_store_delete_fails(monkeypatch
 
     assert exc.value.status_code == 503
     assert exc.value.detail == "Price alerts are temporarily unavailable."
+
+
+def test_background_price_alert_check_retries_after_store_outage(monkeypatch, caplog):
+    monkeypatch.setattr(price_alerts, "get_admin_client", lambda: _PriceAlertClient(fail=True))
+
+    price_alerts.check_price_alerts()
+
+    assert "will retry next interval" in caplog.text
+    assert "price alerts store down" in caplog.text
