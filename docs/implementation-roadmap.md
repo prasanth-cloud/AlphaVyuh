@@ -64,7 +64,16 @@ Live streaming, options, and broad backtesting remain deferred.
 
 ## Milestone 4 — watchlist and journal continuity
 
-Link manual entries, imported trades, simulated captures, and trade reviews to setup ids. Preserve an explicit `UNPLANNED` path for records that do not have a setup. Add status transitions and review-needed behavior without duplicating the server state in a second client store.
+Status: setup-linked manual/import continuity exists locally; explicit unplanned tagging is now implemented, while trade-review persistence remains a later slice.
+
+Delivered:
+
+- Journal create/update paths mark records without a durable setup as `unplanned`.
+- CSV report imports use the explicit `unplanned` tag and include an `UNPLANNED` entry marker.
+- Existing null setup tags are backfilled by an additive migration.
+- Existing setup-linked chart/watchlist/simulated flows retain their `setup_id` and review gate.
+
+Remaining: add a durable trade-review entity and reconcile every imported fill to a setup before live production verification.
 
 ## Milestone 5 — Zerodha read-only verification
 

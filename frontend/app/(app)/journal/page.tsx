@@ -275,7 +275,7 @@ export default function JournalPage() {
       await createJournalEntry({
         ...addForm,
         symbol: selectedSymbol,
-        setup_type: normalizeSetupTagForSave(addForm.setup_type) ?? undefined,
+        setup_type: normalizeSetupTagForSave(addForm.setup_type) ?? "unplanned",
       } as CreateJournalEntry);
       trackEvent("journal_entry_created", { source: "manual", symbol: selectedSymbol, trade_type: addForm.trade_type ?? "unknown" });
       setAddForm({ trade_type: "long", entry_date: new Date().toISOString().split("T")[0] });

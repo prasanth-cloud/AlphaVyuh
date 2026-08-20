@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import type { JournalEntry } from "./types";
 
 export const SETUP_TYPES = [
+  "UNPLANNED",
   "VCP", "Breakout", "Stage 2", "Base Build", "Cup & Handle",
   "Oversold Bounce", "Trend Follow", "Earnings Play", "Pullback", "Reversal", "Other",
 ];

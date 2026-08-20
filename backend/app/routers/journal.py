@@ -12,6 +12,7 @@ from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scop
 from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
+UNPLANNED_SETUP_TYPE = "unplanned"
 
 
 def _get_user_plan(user_id: str) -> str:
@@ -87,6 +88,11 @@ def _clean_text(value: str | None, max_len: int) -> str | None:
 
 def _clean_context(value: dict[str, Any] | None) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
+
+
+def _effective_setup_type(setup_id: UUID | None, setup_type: str | None) -> str | None:
+    cleaned = _clean_text(setup_type, 80)
+    return cleaned or (UNPLANNED_SETUP_TYPE if setup_id is None else None)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -349,6 +355,8 @@ async def create_entry(
         if risk > 0:
             risk_reward = round(reward / risk, 2)
 
+    setup_type = _effective_setup_type(body.setup_id, body.setup_type)
+
     row = {
         "user_id": user_id,
         "symbol": body.symbol.upper(),
@@ -358,7 +366,7 @@ async def create_entry(
         "entry_date": body.entry_date,
         "entry_price": body.entry_price,
         "quantity": body.quantity,
-        "setup_type": body.setup_type,
+        "setup_type": setup_type,
         "stop_loss": body.stop_loss,
         "target_price": body.target_price,
         "risk_reward": risk_reward,
@@ -379,7 +387,7 @@ async def create_entry(
         "stop": body.stop_loss,
         "target": body.target_price,
         "position_size": body.quantity,
-        "setup_type": body.setup_type,
+        "setup_type": setup_type,
         "notes": body.entry_reason,
         "thesis": row["thesis"],
         "invalidation_rule": row["invalidation_rule"],
@@ -436,6 +444,12 @@ async def update_entry(
             if str(setup.get("symbol") or "").upper() != str(entry.get("symbol") or "").upper():
                 raise HTTPException(status_code=400, detail="Setup symbol does not match the journal symbol")
         update_data["setup_id"] = str(update_data["setup_id"]) if update_data["setup_id"] else None
+
+    if "setup_type" in update_data:
+        update_data["setup_type"] = _clean_text(update_data["setup_type"], 80)
+    effective_setup_id = update_data.get("setup_id", entry.get("setup_id"))
+    if effective_setup_id is None and not update_data.get("setup_type"):
+        update_data["setup_type"] = UNPLANNED_SETUP_TYPE
 
     closing_now = bool(body.exit_price and body.exit_date)
 
