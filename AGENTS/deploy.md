@@ -3,7 +3,9 @@
 **You are the Deploy agent for AlphaVyuh.** You own everything outside the code.
 
 ## Autonomy level: 3
-Fully autonomous. Ship to prod. Report after.
+Fully autonomous within owner-approved release gates. Do not mutate production
+Supabase, broker, billing, DNS, or deployment state when the target resource is
+ambiguous or unavailable; record the evidence and continue safe validation.
 
 ## The Cardinal Rule (READ FIRST)
 
@@ -49,9 +51,9 @@ This rule overrides everything else. A page that ships with advisory copy is a P
 - `SUPABASE_SERVICE_ROLE_KEY` ✓ set
 - `SUPABASE_ACCESS_TOKEN` ✓ set
 - `VERCEL_TOKEN` ✓ set
-- `RAILWAY_TOKEN` — missing; required for GitHub-based backend recovery
-- `RAILWAY_PROJECT_ID` — missing; required for GitHub-based backend recovery
-- `RAILWAY_SERVICE` — missing; required for GitHub-based backend recovery
+- `RAILWAY_TOKEN` ✓ set
+- `RAILWAY_PROJECT_ID` ✓ set
+- `RAILWAY_SERVICE` ✓ set
 - `RAILWAY_WORKSPACE` — optional when the project can be linked without it
 
 ### Vercel project env vars (production)
@@ -73,19 +75,43 @@ This rule overrides everything else. A page that ships with advisory copy is a P
 
 **SPRINT: Railway backend recovery + production evidence**
 
+### Verified state — 2026-08-20
+
+- Railway `https://alphavyuh-production.up.railway.app/healthz` returns HTTP
+  200 with backend version `0.3.1`.
+- Railway `/api/v1/market/summary` returns HTTP 503 because its Supabase
+  dependency is unavailable.
+- GitHub production signed-in smoke run `32405141720` failed while preparing
+  the QA account with `getaddrinfo ENOTFOUND
+  fyxltykqdvacbdgmeucf.supabase.co`.
+- The connected Supabase account does not expose the intended AlphaVyuh project,
+  and the `fyxl...` hostname does not resolve. The current Vercel build is a
+  passing preview only; the latest observed production deployment is older main
+  code.
+
+The immediate recovery action is to reconnect the actual AlphaVyuh Supabase
+project and update the matching GitHub and Railway secrets. Do not substitute
+the unrelated Commuto or MenuDash projects, and do not create a replacement
+database without an explicit owner recovery decision.
+
 1. **Verify current recovery state**
 ```bash
 npm run check:data-recovery
 ```
-Expected blocker until recovery: Railway fallback `404 Application not found`
-while Vercel production env and Supabase EOD data pass.
+Expected blocker until the Supabase target is restored: the Railway market
+summary dependency fails, or the production smoke cannot prepare its QA
+account. A Railway 404 is a separate hosting failure and is no longer the
+current observed state.
 
 2. **Recover Railway using owner-approved credentials**
 ```bash
 npm run recover:railway-backend:login
 ```
-If local browserless login is not available, add the missing Railway GitHub
-secrets and run the manual `Railway Backend Recovery` workflow.
+If local browserless login is not available, use the existing Railway GitHub
+secrets only after confirming their values identify the AlphaVyuh project, then
+run the manual `Railway Backend Recovery` workflow. The secret names already
+exist; the current blocker is the unavailable Supabase target, not missing
+Railway secret names.
 
 3. **Run post-recovery evidence**
 ```bash

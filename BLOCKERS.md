@@ -16,9 +16,9 @@ Use this file when an agent cannot safely continue without owner input, credenti
 
 - Owner: Product/deploy owner with access to the AlphaVyuh Supabase organization.
 - Blocking: The repository's new setup, rulebook, scanner-lineage, EOD quality, unplanned-tag, and trade-review migrations cannot be applied or RLS-tested against the intended production project.
-- Why it matters: The connected Supabase account lists only unrelated projects, direct access to project `fyxltykqdvacbdgmeucf` is denied, and the production Supabase hostname is unresolved. Railway health is reachable, but `/api/v1/market/summary` returns HTTP 503 and authenticated production smoke cannot prepare its QA account.
+- Why it matters: The connected Supabase account lists only unrelated projects, direct access to project `fyxltykqdvacbdgmeucf` is denied, and the production Supabase hostname is unresolved. Railway health is reachable (`/healthz` HTTP 200, version 0.3.1), but `/api/v1/market/summary` returns HTTP 503. GitHub production signed-in smoke run `32405141720` failed during QA-account preparation with `getaddrinfo ENOTFOUND fyxltykqdvacbdgmeucf.supabase.co`.
 - Required decision or input: Reconnect the correct Supabase account/project and repair the GitHub `SUPABASE_ACCESS_TOKEN`/environment configuration. Do not create a replacement database without an explicit recovery decision.
-- Safe work completed: Local implementation, tests, review, PR #412, and branch Vercel/code checks are complete; migration drift reports local count 65 and remote `auth-error`; no production database or broker state was mutated.
+- Safe work completed: Local implementation, tests, review, PR #412, and branch Vercel/code checks are complete; GitHub secret names for Railway recovery are present; migration drift reports local count 65 and remote `auth-error`; no production database or broker state was mutated.
 - Safe next step after input: Apply migrations in staging first, verify two-user RLS and service-only operational access, then recover the production data path and rerun authenticated browser/API smokes.
 
 ## 2026-06-18 - Production recovery needs authenticated verification
