@@ -7,8 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.middleware.auth import get_current_user_id
-from app.services.supabase import get_admin_client
+from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.services.supabase import get_user_client
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner-lineage"])
 
@@ -69,10 +69,11 @@ def _owned_row(client: Any, table: str, row_id: UUID, user_id: str) -> dict[str,
 @router.get("/definitions")
 async def list_scanner_definitions(
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
     try:
         result = (
-            get_admin_client()
+            get_user_client(user_jwt)
             .table("scanner_definitions")
             .select("*")
             .eq("user_id", user_id)
@@ -88,8 +89,9 @@ async def list_scanner_definitions(
 async def create_scanner_definition(
     body: ScannerDefinitionCreate,
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(user_jwt)
     name = body.name.strip()
     if not name:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Scanner definition name is required")
@@ -146,8 +148,9 @@ async def update_scanner_definition(
     definition_id: UUID,
     body: ScannerDefinitionPatch,
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(user_jwt)
     _owned_row(client, "scanner_definitions", definition_id, user_id)
     changes = body.model_dump(exclude_unset=True)
     if "name" in changes and changes["name"] is not None:
@@ -174,8 +177,9 @@ async def update_scanner_definition(
 async def delete_scanner_definition(
     definition_id: UUID,
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(user_jwt)
     _owned_row(client, "scanner_definitions", definition_id, user_id)
     try:
         client.table("scanner_definitions").delete().eq("id", str(definition_id)).eq("user_id", user_id).execute()
@@ -187,10 +191,11 @@ async def delete_scanner_definition(
 async def list_scanner_runs(
     limit: int = Query(default=25, ge=1, le=100),
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
     try:
         result = (
-            get_admin_client()
+            get_user_client(user_jwt)
             .table("scanner_runs")
             .select("*")
             .eq("user_id", user_id)
@@ -208,8 +213,9 @@ async def list_scanner_candidates(
     run_id: UUID,
     limit: int = Query(default=200, ge=1, le=1000),
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
-    client = get_admin_client()
+    client = get_user_client(user_jwt)
     _owned_row(client, "scanner_runs", run_id, user_id)
     try:
         result = (
@@ -230,5 +236,6 @@ async def list_scanner_candidates(
 async def get_scanner_candidate(
     candidate_id: UUID,
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
-    return _owned_row(get_admin_client(), "scanner_candidates", candidate_id, user_id)
+    return _owned_row(get_user_client(user_jwt), "scanner_candidates", candidate_id, user_id)

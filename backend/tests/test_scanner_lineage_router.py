@@ -103,7 +103,7 @@ class _Client:
 
 def test_create_definition_persists_owner_scoped_groups_and_filters(monkeypatch):
     client = _Client()
-    monkeypatch.setattr(router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(router, "get_user_client", lambda token: client)
 
     result = asyncio.run(router.create_scanner_definition(
         router.ScannerDefinitionCreate(
@@ -115,6 +115,7 @@ def test_create_definition_persists_owner_scoped_groups_and_filters(monkeypatch)
             )],
         ),
         user_id="user-1",
+        user_jwt="token-1",
     ))
 
     assert result["definition"]["user_id"] == "user-1"
@@ -126,9 +127,9 @@ def test_create_definition_persists_owner_scoped_groups_and_filters(monkeypatch)
 def test_candidate_list_does_not_cross_user_run_boundary(monkeypatch):
     client = _Client()
     client.tables["scanner_runs"] = [{"id": str(RUN_ID), "user_id": "owner"}]
-    monkeypatch.setattr(router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(router, "get_user_client", lambda token: client)
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(router.list_scanner_candidates(RUN_ID, user_id="other-user"))
+        asyncio.run(router.list_scanner_candidates(RUN_ID, user_id="other-user", user_jwt="token-2"))
 
     assert exc_info.value.status_code == 404
