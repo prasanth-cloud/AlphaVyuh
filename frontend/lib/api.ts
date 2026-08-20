@@ -34,6 +34,7 @@ import type {
   BrokerHolding,
   BrokerOrderActivityResponse,
   BrokerOrderReconciliation,
+  BrokerPosition,
   BrokerProfile,
   CandlesResponse,
   ChartLayout,
@@ -3730,8 +3731,43 @@ export async function getBrokerProfile(broker: string): Promise<BrokerProfile> {
 export async function getBrokerHoldings(broker: string): Promise<BrokerHolding[]> {
   const headers = await authHeaders();
   const res = await fetch(`${API}/api/brokers/${broker}/holdings`, { headers });
-  if (!res.ok) throw new Error("Failed to fetch broker holdings");
-  return res.json();
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Broker holdings are temporarily unavailable."));
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isBrokerHolding)) {
+    throw new Error("Broker holdings are temporarily unavailable.");
+  }
+  return data;
+}
+
+function isBrokerHolding(value: unknown): value is BrokerHolding {
+  return isRecord(value) &&
+    typeof value.symbol === "string" &&
+    typeof value.exchange === "string" &&
+    typeof value.quantity === "number" &&
+    typeof value.average_price === "number" &&
+    typeof value.current_value === "number" &&
+    typeof value.pnl === "number";
+}
+
+function isBrokerPosition(value: unknown): value is BrokerPosition {
+  return isRecord(value) &&
+    typeof value.symbol === "string" &&
+    typeof value.exchange === "string" &&
+    typeof value.quantity === "number" &&
+    typeof value.average_price === "number" &&
+    typeof value.pnl === "number" &&
+    typeof value.day_pnl === "number";
+}
+
+export async function getBrokerPositions(broker: string): Promise<BrokerPosition[]> {
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/brokers/${broker}/positions`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Broker positions are temporarily unavailable."));
+  const data: unknown = await res.json();
+  if (!Array.isArray(data) || !data.every(isBrokerPosition)) {
+    throw new Error("Broker positions are temporarily unavailable.");
+  }
+  return data;
 }
 
 export async function disconnectBroker(broker: string): Promise<void> {

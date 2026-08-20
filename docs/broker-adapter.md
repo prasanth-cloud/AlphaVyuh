@@ -124,6 +124,7 @@ The frontend never calls broker APIs directly. It calls FastAPI routes:
 POST   /api/brokers/{broker}/connect/start    → returns { auth_url }
 GET    /api/brokers/{broker}/connect/callback → exchanges code, stores creds, redirects
 GET    /api/brokers/{broker}/profile          → BrokerProfile JSON
+GET    /api/brokers/{broker}/positions        → Position[] JSON
 GET    /api/brokers/{broker}/holdings         → Holding[] JSON
 POST   /api/brokers/{broker}/orders           → places order, returns OrderResult JSON
 DELETE /api/brokers/{broker}/disconnect       → clears credentials

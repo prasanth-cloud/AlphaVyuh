@@ -6,6 +6,7 @@ Routes:
   POST   /api/brokers/{broker}/connect/start      → { auth_url }
   GET    /api/brokers/{broker}/connect/callback   → exchanges code, stores creds, redirects
   GET    /api/brokers/{broker}/profile            → BrokerProfile JSON
+  GET    /api/brokers/{broker}/positions          → Position[] JSON
   GET    /api/brokers/{broker}/holdings           → Holding[] JSON
   DELETE /api/brokers/{broker}/disconnect         → clears credentials
 
@@ -284,6 +285,24 @@ async def get_broker_holdings(
         _raise_for_broker_error(exc)
 
     return [h.model_dump() for h in holdings]
+
+
+@router.get("/{broker}/positions")
+async def get_broker_positions(
+    broker: str,
+    user_id: str = Depends(get_current_user_id),
+):
+    _require_broker_plan(user_id)
+    broker_id = _validate_broker(broker)
+    creds = _load_creds(user_id, broker_id)
+    adapter = get_adapter(broker_id)
+
+    try:
+        positions = await adapter.get_positions(creds)
+    except BrokerError as exc:
+        _raise_for_broker_error(exc)
+
+    return [position.model_dump() for position in positions]
 
 
 def _smoke_metadata(*, broker: BrokerId, passed: bool, checked_at: str, checks: dict[str, dict[str, Any]]) -> dict[str, Any]:

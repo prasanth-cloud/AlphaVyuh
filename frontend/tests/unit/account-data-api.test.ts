@@ -97,4 +97,15 @@ describe("account data API failures", () => {
 
     await expect(getBrokerStatus()).rejects.toThrow("Broker status temporarily unavailable.");
   });
+
+  it("rejects malformed broker position payloads instead of treating them as empty", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify([{ symbol: "SBIN", exchange: "NSE", quantity: 2 }]),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getBrokerPositions } = await import("@/lib/api");
+
+    await expect(getBrokerPositions("upstox")).rejects.toThrow("Broker positions are temporarily unavailable.");
+  });
 });

@@ -1275,3 +1275,12 @@ export type BrokerHolding = {
   current_value: number;
   pnl: number;
 };
+
+export type BrokerPosition = {
+  symbol: string;
+  exchange: string;
+  quantity: number;
+  average_price: number;
+  pnl: number;
+  day_pnl: number;
+};

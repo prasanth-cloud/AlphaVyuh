@@ -12,7 +12,7 @@ os.environ.setdefault("BROKER_CREDS_KEY", secrets.token_bytes(32).hex())
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
-from app.brokers.adapter import BrokerCredentials, BrokerProfile
+from app.brokers.adapter import BrokerCredentials, BrokerProfile, Position
 from app.routers import brokers as brokers_router
 
 
@@ -31,6 +31,18 @@ class _FakeAdapter:
             refresh_token="extended-token",
             expires_at=datetime(2026, 5, 5, 22, 0, tzinfo=timezone.utc),
         )
+
+    async def get_positions(self, _creds):
+        return [
+            Position(
+                symbol="SBIN",
+                exchange="NSE",
+                quantity=2,
+                average_price=570.95,
+                pnl=0.45,
+                day_pnl=0.2,
+            )
+        ]
 
 
 def test_broker_router_accepts_upstox_oauth_code(monkeypatch):
@@ -116,6 +128,34 @@ def test_broker_connect_start_requires_paid_plan(monkeypatch):
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail["error"] == "plan_required"
+
+
+def test_broker_positions_route_returns_canonical_positions(monkeypatch):
+    adapter = _FakeAdapter()
+    monkeypatch.setattr(brokers_router, "get_adapter", lambda broker_id: adapter)
+    monkeypatch.setattr(brokers_router, "_require_broker_plan", lambda _user_id: None)
+    monkeypatch.setattr(
+        brokers_router,
+        "_load_creds",
+        lambda _user_id, broker: BrokerCredentials(
+            broker_id=broker,
+            access_token="access-token",
+            expires_at=datetime(2026, 5, 5, 22, 0, tzinfo=timezone.utc),
+        ),
+    )
+
+    result = asyncio.run(brokers_router.get_broker_positions("upstox", user_id="user-1"))
+
+    assert result == [
+        {
+            "symbol": "SBIN",
+            "exchange": "NSE",
+            "quantity": 2,
+            "average_price": 570.95,
+            "pnl": 0.45,
+            "day_pnl": 0.2,
+        }
+    ]
 
 
 def test_adapter_read_only_smoke_records_active_broker_metadata(monkeypatch):
