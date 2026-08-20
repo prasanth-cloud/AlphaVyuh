@@ -6,7 +6,7 @@ on:
       - "backend/app/routers/**"
       - "scripts/check-service-role-usage.sh"
       - "scripts/check_service_role_usage.py"
-      - "scripts/tests/test_check_service_role_usage.py"
+      - "scripts/guard_tests/check_service_role_usage.py"
       - ".github/workflows/check-service-role.yml"
   push:
     branches: [main]
@@ -14,7 +14,7 @@ on:
       - "backend/app/routers/**"
       - "scripts/check-service-role-usage.sh"
       - "scripts/check_service_role_usage.py"
-      - "scripts/tests/test_check_service_role_usage.py"
+      - "scripts/guard_tests/check_service_role_usage.py"
       - ".github/workflows/check-service-role.yml"
 
 jobs:
@@ -33,4 +33,4 @@ jobs:
           SERVICE_ROLE_EVENT_NAME: ${{ github.event_name }}
         run: bash scripts/check-service-role-usage.sh
       - name: Test service-role guard
-        run: python3 -m unittest scripts.tests.test_check_service_role_usage
+        run: python3 -m unittest scripts.guard_tests.check_service_role_usage
