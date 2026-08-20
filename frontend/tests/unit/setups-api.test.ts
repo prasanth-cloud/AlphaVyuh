@@ -63,4 +63,34 @@ describe("setups API", () => {
     await expect(createSetup({ symbol: "TCS", direction: "short", source: "chart" }))
       .rejects.toThrow("Setup save returned an invalid response.");
   });
+
+  it("rejects a malformed setup review response instead of unlocking order flow", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      setup_id: "setup-1",
+      overall_status: "passed",
+      can_proceed: true,
+      summary: "All enabled setup rules pass.",
+      results: [],
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    const { getSetupReview } = await import("@/lib/api");
+
+    await expect(getSetupReview("setup-1")).rejects.toThrow("Setup review returned an invalid response.");
+  });
+
+  it("rejects malformed rulebook rules at the API boundary", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      rulebooks: [{ id: "rulebook-1", name: "Starter", rules: [{ code: "minimum_rr" }] }],
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    const { getRulebooks } = await import("@/lib/api");
+
+    await expect(getRulebooks()).rejects.toThrow("Rulebook returned invalid rules.");
+  });
 });

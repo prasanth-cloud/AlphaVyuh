@@ -76,7 +76,12 @@ import type {
   SectorListResponse,
   SectorTaxonomyMetadata,
   Setup,
+  SetupReview,
+  SetupReviewRequest,
   SetupStatus,
+  CreateRulebookRequest,
+  Rulebook,
+  UpdateSetupRequest,
   SharedScreen,
   SymbolSearchResult,
   UpdateJournalEntry,
@@ -90,6 +95,7 @@ import type {
   WorkflowStatePatch,
   ZerodhaReadOnlySmoke,
 } from './api/types'
+import { defaultSetupReviewRules, evaluateSetupReview } from "./setup-review";
 
 export * from './api/types'
 export {
@@ -382,6 +388,8 @@ export async function reorderWatchlist(
 
 const workflowLocalKey = "alphavyuh-workflow-state-v1";
 const setupLocalKey = "alphavyuh-setups-v1";
+const setupReviewLocalKey = "alphavyuh-setup-reviews-v1";
+const rulebookLocalKey = "alphavyuh-rulebooks-v1";
 
 function readLocalSetups(): Setup[] {
   if (typeof window === "undefined") return [];
@@ -397,6 +405,154 @@ function readLocalSetups(): Setup[] {
 function writeLocalSetups(setups: Setup[]) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(setupLocalKey, JSON.stringify(setups));
+}
+
+function readLocalSetupReviews(): Record<string, SetupReview> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(setupReviewLocalKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!isRecord(parsed)) return {};
+    const reviews: Record<string, SetupReview> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      try {
+        reviews[key] = parseSetupReviewResponse(value);
+      } catch {
+        // Ignore stale or malformed local review records.
+      }
+    }
+    return reviews;
+  } catch {
+    return {};
+  }
+}
+
+function writeLocalSetupReview(review: SetupReview) {
+  if (typeof window === "undefined") return;
+  const reviews = readLocalSetupReviews();
+  reviews[review.setup_id] = review;
+  window.localStorage.setItem(setupReviewLocalKey, JSON.stringify(reviews));
+}
+
+function defaultLocalRulebook(): Rulebook {
+  return {
+    id: "local-starter-rulebook",
+    name: "Starter discipline",
+    description: "Defined stop, written plan, minimum 1:2 R:R, and controlled risk.",
+    min_planned_rr: 2,
+    max_risk_amount: null,
+    max_account_risk_pct: null,
+    is_default: true,
+    active: true,
+    rules: defaultSetupReviewRules().map((rule) => ({
+      code: rule.code,
+      label: rule.label,
+      severity: rule.severity,
+      config: rule.config ?? {},
+      enabled: rule.enabled !== false,
+      sort_order: rule.sort_order ?? 0,
+    })),
+  };
+}
+
+function readLocalRulebooks(): Rulebook[] {
+  if (typeof window === "undefined") return [defaultLocalRulebook()];
+  try {
+    const raw = window.localStorage.getItem(rulebookLocalKey);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!Array.isArray(parsed)) return [defaultLocalRulebook()];
+    const rulebooks = parsed.filter((value): value is Rulebook => {
+      try {
+        parseRulebookResponse(value);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    return rulebooks.length > 0 ? rulebooks : [defaultLocalRulebook()];
+  } catch {
+    return [defaultLocalRulebook()];
+  }
+}
+
+function writeLocalRulebooks(rulebooks: Rulebook[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(rulebookLocalKey, JSON.stringify(rulebooks));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isSetupReviewRule(value: unknown): value is SetupReview["results"][number] {
+  return isRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.label === "string" &&
+    (value.severity === "block" || value.severity === "warn" || value.severity === "check" || value.severity === "info") &&
+    (value.status === "pass" || value.status === "fail" || value.status === "not_evaluated") &&
+    typeof value.message === "string";
+}
+
+function isRulebookRule(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.code === "string" &&
+    typeof value.label === "string" &&
+    (value.severity === "block" || value.severity === "warn" || value.severity === "check" || value.severity === "info") &&
+    isRecord(value.config) &&
+    typeof value.enabled === "boolean" &&
+    typeof value.sort_order === "number";
+}
+
+function parseRulebookResponse(value: unknown): Rulebook {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" || !Array.isArray(value.rules)) {
+    throw new Error("Rulebook returned an invalid response.");
+  }
+  const rules = value.rules.filter(isRulebookRule);
+  if (rules.length !== value.rules.length) throw new Error("Rulebook returned invalid rules.");
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    name: value.name,
+    description: typeof value.description === "string" ? value.description : null,
+    min_planned_rr: typeof value.min_planned_rr === "number" ? value.min_planned_rr : null,
+    max_risk_amount: typeof value.max_risk_amount === "number" ? value.max_risk_amount : null,
+    max_account_risk_pct: typeof value.max_account_risk_pct === "number" ? value.max_account_risk_pct : null,
+    is_default: value.is_default === true,
+    active: value.active !== false,
+    rules: rules.map((rule) => ({
+      id: typeof rule.id === "string" ? rule.id : undefined,
+      code: rule.code as string,
+      label: rule.label as string,
+      severity: rule.severity as Rulebook["rules"][number]["severity"],
+      config: rule.config as Record<string, unknown>,
+      enabled: rule.enabled as boolean,
+      sort_order: rule.sort_order as number,
+    })),
+    created_at: typeof value.created_at === "string" ? value.created_at : undefined,
+    updated_at: typeof value.updated_at === "string" ? value.updated_at : undefined,
+  };
+}
+
+function parseSetupReviewResponse(value: unknown): SetupReview {
+  if (!isRecord(value) || typeof value.setup_id !== "string" || typeof value.rulebook_id !== "string" ||
+      (value.overall_status !== "passed" && value.overall_status !== "warned" && value.overall_status !== "blocked") ||
+      typeof value.can_proceed !== "boolean" || typeof value.summary !== "string" || !Array.isArray(value.results)) {
+    throw new Error("Setup review returned an invalid response.");
+  }
+  const results = value.results.filter(isSetupReviewRule);
+  if (results.length !== value.results.length) throw new Error("Setup review returned invalid rule results.");
+  return {
+    setup_id: value.setup_id,
+    rulebook_id: value.rulebook_id,
+    overall_status: value.overall_status,
+    can_proceed: value.can_proceed,
+    summary: value.summary,
+    override_reason: typeof value.override_reason === "string" ? value.override_reason : null,
+    results,
+    input_snapshot: isRecord(value.input_snapshot) ? value.input_snapshot : undefined,
+    evaluated_at: typeof value.evaluated_at === "string" ? value.evaluated_at : null,
+    id: typeof value.id === "string" ? value.id : null,
+  };
 }
 
 function localSetupId(): string {
@@ -473,6 +629,161 @@ export async function createSetup(request: CreateSetupRequest): Promise<Setup> {
   if (!created || typeof created.id !== "string") throw new Error("Setup save returned an invalid response.");
   invalidateClientCache(["setups"]);
   return created as Setup;
+}
+
+export async function updateSetup(setupId: string, request: UpdateSetupRequest): Promise<Setup> {
+  if (shouldUseMockFallback()) {
+    const setups = readLocalSetups();
+    const existing = setups.find((setup) => setup.id === setupId);
+    if (!existing) throw new Error("Setup could not be found.");
+    const updated = createLocalSetup({
+      symbol: existing.symbol,
+      direction: request.direction !== undefined ? request.direction : existing.direction,
+      status: request.status !== undefined ? request.status : existing.status,
+      strategy_tag: request.strategy_tag !== undefined ? request.strategy_tag : existing.strategy_tag,
+      entry_low: request.entry_low !== undefined ? request.entry_low : existing.entry_low,
+      entry_high: request.entry_high !== undefined ? request.entry_high : existing.entry_high,
+      stop_price: request.stop_price !== undefined ? request.stop_price : existing.stop_price,
+      target_price: request.target_price !== undefined ? request.target_price : existing.target_price,
+      planned_quantity: request.planned_quantity !== undefined ? request.planned_quantity : existing.planned_quantity,
+      thesis: request.thesis !== undefined ? request.thesis : existing.thesis,
+      invalidation_reason: request.invalidation_reason !== undefined ? request.invalidation_reason : existing.invalidation_reason,
+      source: request.source !== undefined ? request.source : existing.source,
+      scanner_context: request.scanner_context !== undefined ? request.scanner_context : existing.scanner_context,
+      chart_snapshot: request.chart_snapshot !== undefined ? request.chart_snapshot : existing.chart_snapshot,
+    });
+    const next = { ...updated, id: existing.id, user_id: existing.user_id, created_at: existing.created_at };
+    writeLocalSetups(setups.map((setup) => setup.id === setupId ? next : setup));
+    invalidateClientCache(["setups"]);
+    return next;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups/${encodeURIComponent(setupId)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup could not be updated."));
+  const updated = await res.json();
+  if (!updated || typeof updated.id !== "string") throw new Error("Setup update returned an invalid response.");
+  invalidateClientCache(["setups"]);
+  return updated as Setup;
+}
+
+export async function getRulebooks(): Promise<Rulebook[]> {
+  if (shouldUseMockFallback()) return readLocalRulebooks();
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/rulebooks`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Rulebooks are temporarily unavailable."));
+  const data = await res.json();
+  if (!isRecord(data) || !Array.isArray(data.rulebooks)) throw new Error("Rulebooks returned an invalid response.");
+  return data.rulebooks.map(parseRulebookResponse);
+}
+
+export async function createRulebook(request: CreateRulebookRequest): Promise<Rulebook> {
+  if (shouldUseMockFallback()) {
+    const now = new Date().toISOString();
+    const configuredRules = request.rules?.map((rule) => ({ ...rule })) ?? defaultLocalRulebook().rules.map((rule) => (
+      rule.code === "minimum_rr"
+        ? { ...rule, config: { ...rule.config, min_rr: request.min_planned_rr ?? 2 } }
+        : rule
+    ));
+    if (request.max_risk_amount != null) {
+      configuredRules.push({
+        code: "max_risk_amount",
+        label: "Maximum planned risk amount",
+        severity: "warn",
+        config: { max_risk_amount: request.max_risk_amount },
+        enabled: true,
+        sort_order: 70,
+      });
+    }
+    if (request.max_account_risk_pct != null) {
+      configuredRules.push({
+        code: "max_account_risk_pct",
+        label: "Maximum account risk percentage",
+        severity: "warn",
+        config: { max_account_risk_pct: request.max_account_risk_pct },
+        enabled: true,
+        sort_order: 80,
+      });
+    }
+    const rulebook: Rulebook = {
+      id: localSetupId(),
+      name: request.name.trim(),
+      description: request.description?.trim() || null,
+      min_planned_rr: request.min_planned_rr ?? 2,
+      max_risk_amount: request.max_risk_amount ?? null,
+      max_account_risk_pct: request.max_account_risk_pct ?? null,
+      is_default: request.is_default === true,
+      active: true,
+      rules: configuredRules,
+      created_at: now,
+      updated_at: now,
+    };
+    const existing = readLocalRulebooks();
+    const next = rulebook.is_default
+      ? existing.map((item) => ({ ...item, is_default: false }))
+      : existing;
+    writeLocalRulebooks([rulebook, ...next]);
+    return rulebook;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/rulebooks`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Rulebook could not be saved."));
+  return parseRulebookResponse(await res.json());
+}
+
+export async function getSetupReview(setupId: string): Promise<SetupReview | null> {
+  if (shouldUseMockFallback()) return readLocalSetupReviews()[setupId] ?? null;
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups/${encodeURIComponent(setupId)}/review`, { headers });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup review is temporarily unavailable."));
+  return parseSetupReviewResponse(await res.json());
+}
+
+export async function reviewSetup(
+  setupId: string,
+  request: SetupReviewRequest = {},
+  localSetup?: Partial<Setup>,
+): Promise<SetupReview> {
+  if (shouldUseMockFallback()) {
+    const setup = readLocalSetups().find((item) => item.id === setupId) ?? localSetup;
+    if (!setup) throw new Error("Setup review needs a saved setup.");
+    const rulebooks = readLocalRulebooks();
+    const rulebook = (request.rulebook_id ? rulebooks.find((item) => item.id === request.rulebook_id) : undefined)
+      ?? rulebooks.find((item) => item.is_default && item.active)
+      ?? rulebooks[0]
+      ?? defaultLocalRulebook();
+    const review = evaluateSetupReview(
+      { ...setup, id: setupId },
+      { ...request, rulebook_id: rulebook.id },
+      rulebook.rules.map((rule) => ({
+        ...rule,
+        status: "not_evaluated" as const,
+        message: "",
+      })),
+    );
+    writeLocalSetupReview({ ...review, evaluated_at: new Date().toISOString() });
+    const setups = readLocalSetups().map((item) => item.id === setupId
+      ? { ...item, review_status: review.overall_status, last_reviewed_at: new Date().toISOString() }
+      : item);
+    writeLocalSetups(setups);
+    return review;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups/${encodeURIComponent(setupId)}/review`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup review could not be recorded."));
+  return parseSetupReviewResponse(await res.json());
 }
 
 function readLocalWorkflowStates(): Record<string, WorkflowState> {

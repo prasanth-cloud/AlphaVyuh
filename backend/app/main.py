@@ -18,7 +18,7 @@ sentry_sdk.init(
     integrations=[FastApiIntegration(), StarletteIntegration()],
 )
 
-from app.routers import admin as admin_router, alerts, backtest as backtest_router, broker, brokers as brokers_router, charts, community as community_router, data_health as data_health_router, email_digest as email_digest_router, feedback as feedback_router, ingest, journal, market as market_router, options, price_alerts as price_alerts_router, scanner, setups, stocks, users, waitlist, watchlist, workflow
+from app.routers import admin as admin_router, alerts, backtest as backtest_router, broker, brokers as brokers_router, charts, community as community_router, data_health as data_health_router, email_digest as email_digest_router, feedback as feedback_router, ingest, journal, market as market_router, options, price_alerts as price_alerts_router, scanner, setup_review, setups, stocks, users, waitlist, watchlist, workflow
 
 try:
     from app.routers import payments as payments_router
@@ -78,6 +78,7 @@ app.include_router(alerts.router)
 app.include_router(options.router)
 app.include_router(watchlist.router)
 app.include_router(workflow.router)
+app.include_router(setup_review.router)
 app.include_router(setups.router)
 app.include_router(stocks.router)
 app.include_router(charts.router)

@@ -12,7 +12,7 @@ Deliverables are `docs/current-state.md`, `docs/gap-analysis.md`, this roadmap, 
 
 ## Milestone 1 — durable setup spine
 
-Status: first implementation slice.
+Status: complete in `feat/durable-setup-spine`.
 
 Deliverables:
 
@@ -26,7 +26,16 @@ Done when a chart plan can be saved as a setup, reopened through the existing wa
 
 ## Milestone 2 — rulebook and setup review
 
-Add reusable rulebooks, hard blocks, warnings, checklist evaluations, and risk-budget checks. A setup should reach order review only after its evaluation has a recorded result. Minimum initial checks should cover entry/stop/target geometry, positive risk, quantity, and the configured minimum reward-to-risk ratio.
+Status: implemented in the current milestone slice; migration application and production verification remain pending external Supabase access.
+
+Delivered:
+
+- Owner-scoped `rulebooks`, `rulebook_rules`, and `setup_rule_evaluations` tables with RLS, composite ownership foreign keys, and review status fields on `setups`.
+- Deterministic backend evaluator and authenticated rulebook/review endpoints.
+- Watchlist Decision Desk review gate: a durable setup is synchronized, reviewed, recorded, and marked Ready before journal/order capture unlocks.
+- Mock-mode parity, Settings > Discipline rulebook creation, malformed-response tests, migration-contract tests, and browser coverage.
+
+Remaining for this milestone: apply and verify the migration in the correct Supabase project, then confirm the live authenticated path.
 
 ## Milestone 3 — EOD data quality and scanner lineage
 

@@ -258,6 +258,7 @@ export type WorkflowLifecycle =
 export type SetupDirection = "long" | "short";
 export type SetupStatus = "planned" | "ready" | "triggered" | "open" | "closed" | "invalidated" | "cancelled";
 export type SetupSource = "scanner" | "chart" | "watchlist" | "manual";
+export type SetupReviewStatus = "not_evaluated" | "passed" | "warned" | "blocked";
 
 export type Setup = {
   id: string;
@@ -276,6 +277,9 @@ export type Setup = {
   thesis: string | null;
   invalidation_reason: string | null;
   source: SetupSource;
+  review_status?: SetupReviewStatus;
+  rulebook_id?: string | null;
+  last_reviewed_at?: string | null;
   scanner_context: Record<string, unknown> | null;
   chart_snapshot: Record<string, unknown> | null;
   created_at: string;
@@ -297,6 +301,76 @@ export type CreateSetupRequest = {
   source?: SetupSource;
   scanner_context?: Record<string, unknown> | null;
   chart_snapshot?: Record<string, unknown> | null;
+};
+
+export type UpdateSetupRequest = Partial<Omit<CreateSetupRequest, "symbol">>;
+
+export type SetupReviewRuleSeverity = "block" | "warn" | "check" | "info";
+export type SetupReviewRuleStatus = "pass" | "fail" | "not_evaluated";
+
+export type SetupReviewRule = {
+  code: string;
+  label: string;
+  severity: SetupReviewRuleSeverity;
+  status: SetupReviewRuleStatus;
+  message: string;
+  actual?: unknown;
+  expected?: unknown;
+  config?: Record<string, unknown>;
+};
+
+export type SetupReview = {
+  id?: string | null;
+  setup_id: string;
+  rulebook_id: string;
+  overall_status: Exclude<SetupReviewStatus, "not_evaluated">;
+  can_proceed: boolean;
+  summary: string;
+  override_reason?: string | null;
+  results: SetupReviewRule[];
+  input_snapshot?: Record<string, unknown>;
+  evaluated_at?: string | null;
+};
+
+export type SetupReviewRequest = {
+  rulebook_id?: string | null;
+  account_equity?: number | null;
+  override_reason?: string | null;
+};
+
+export type RulebookRule = {
+  id?: string;
+  code: string;
+  label: string;
+  severity: SetupReviewRuleSeverity;
+  config: Record<string, unknown>;
+  enabled: boolean;
+  sort_order: number;
+};
+
+export type Rulebook = {
+  id: string;
+  user_id?: string;
+  name: string;
+  description: string | null;
+  min_planned_rr: number | null;
+  max_risk_amount: number | null;
+  max_account_risk_pct: number | null;
+  is_default: boolean;
+  active: boolean;
+  rules: RulebookRule[];
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type CreateRulebookRequest = {
+  name: string;
+  description?: string | null;
+  min_planned_rr?: number | null;
+  max_risk_amount?: number | null;
+  max_account_risk_pct?: number | null;
+  is_default?: boolean;
+  rules?: Omit<RulebookRule, "id">[];
 };
 
 export type WorkflowState = {

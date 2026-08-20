@@ -124,6 +124,17 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("discipline settings save an active rulebook in mock mode", async ({ page }) => {
+    await page.goto("/settings?tab=rules", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("rulebook-settings")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("rulebook-list")).toContainText("Starter discipline", { timeout: 10_000 });
+    await page.getByLabel("Rulebook name").fill("Breakout discipline");
+    await page.getByLabel("Minimum planned R:R").fill("2.5");
+    await page.getByRole("button", { name: "Save active rulebook" }).click();
+    await expect(page.getByTestId("rulebook-list")).toContainText("Breakout discipline", { timeout: 10_000 });
+    await expect(page.getByTestId("rulebook-list")).toContainText("minimum R:R 2.5");
+  });
+
   test("market data provenance is visible across core workflow surfaces", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];
@@ -477,6 +488,10 @@ test.describe("Mock workflow smoke", () => {
 
     await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Plan ready|Ready for journal capture draft/i, { timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Ready$/ })).toBeEnabled();
+    await expect(page.getByTestId("setup-review-status")).toContainText(/Not evaluated|Run the recorded rulebook/i);
+    await page.getByRole("button", { name: /^Ready$/ }).click();
+    await expect(page.getByTestId("setup-review-status")).toContainText(/passed/i, { timeout: 10_000 });
+    await expect(page.getByText(/RELIANCE marked ready|marked ready/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
 
     await page.getByRole("button", { name: /^Save buy journal draft$/i }).click();
@@ -604,6 +619,8 @@ test.describe("Mock workflow smoke", () => {
     await page.getByPlaceholder("Invalidation rule").fill("Exit if the breakout base fails on closing basis.");
 
     await expect(page.getByTestId("decision-desk-nudges")).toContainText(/Ready for journal capture draft/i, { timeout: 10_000 });
+    await page.getByRole("button", { name: /^Ready$/ }).click();
+    await expect(page.getByTestId("setup-review-status")).toContainText(/passed/i, { timeout: 10_000 });
     await expect(page.getByRole("button", { name: /^Save buy journal draft$/i })).toBeEnabled();
     await page.getByRole("button", { name: /^Save buy journal draft$/i }).click();
     await expect(page.getByText(/saved as a journal capture draft/i)).toBeVisible({ timeout: 10_000 });

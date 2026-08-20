@@ -8,7 +8,8 @@ import {
   getMe, updateMe,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
   getPaymentConfig, applyAccessPlan, getKiteTokenHealth,
-  type UserProfile, type PlanStatus, type PaymentConfig, type KiteTokenHealth,
+  getRulebooks, createRulebook,
+  type UserProfile, type PlanStatus, type PaymentConfig, type KiteTokenHealth, type Rulebook,
 } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
 import { trackEvent } from "@/lib/analytics";
@@ -137,17 +138,17 @@ const inputStyle = { background: "var(--app-surface3)", border: "1px solid var(-
 
 // ── Main settings page ────────────────────────────────────────────────────────
 
-type Tab = "profile" | "broker" | "billing";
+type Tab = "profile" | "rules" | "broker" | "billing";
 
 function SettingsContent() {
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab");
-  const initialTab: Tab = (rawTab === "profile" || rawTab === "broker" || rawTab === "billing") ? rawTab : "profile";
+  const initialTab: Tab = (rawTab === "profile" || rawTab === "rules" || rawTab === "broker" || rawTab === "billing") ? rawTab : "profile";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [toast, setToast] = useState<{ msg: string; ok?: boolean } | null>(null);
 
   useEffect(() => {
-    if (rawTab === "profile" || rawTab === "broker" || rawTab === "billing") setTab(rawTab);
+    if (rawTab === "profile" || rawTab === "rules" || rawTab === "broker" || rawTab === "billing") setTab(rawTab);
   }, [rawTab]);
 
   function showToast(msg: string, ok?: boolean) {
@@ -193,6 +194,69 @@ function SettingsContent() {
       showToast(e instanceof Error ? e.message : "Save failed", false);
     } finally {
       setSaving(false);
+    }
+  }
+
+  // ── Rulebook state ──────────────────────────────────────────────────────
+  const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
+  const [rulebooksLoading, setRulebooksLoading] = useState(false);
+  const [rulebooksLoaded, setRulebooksLoaded] = useState(false);
+  const [rulebookName, setRulebookName] = useState("Starter discipline");
+  const [rulebookDescription, setRulebookDescription] = useState("Defined stop, written plan, minimum 1:2 R:R, and controlled risk.");
+  const [minPlannedRR, setMinPlannedRR] = useState("2");
+  const [maxRiskAmount, setMaxRiskAmount] = useState("");
+  const [maxAccountRiskPct, setMaxAccountRiskPct] = useState("");
+  const [savingRulebook, setSavingRulebook] = useState(false);
+
+  const loadRulebooks = useCallback(async () => {
+    setRulebooksLoading(true);
+    try {
+      const loaded = await getRulebooks();
+      setRulebooks(loaded);
+      const current = loaded.find((item) => item.is_default && item.active) ?? loaded[0];
+      if (current) {
+        setRulebookName(current.name);
+        setRulebookDescription(current.description ?? "");
+        setMinPlannedRR(current.min_planned_rr != null ? String(current.min_planned_rr) : "2");
+        setMaxRiskAmount(current.max_risk_amount != null ? String(current.max_risk_amount) : "");
+        setMaxAccountRiskPct(current.max_account_risk_pct != null ? String(current.max_account_risk_pct) : "");
+      }
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Rulebooks are temporarily unavailable", false);
+    } finally {
+      setRulebooksLoading(false);
+      setRulebooksLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "rules" && !rulebooksLoaded) void loadRulebooks();
+  }, [loadRulebooks, rulebooksLoaded, tab]);
+
+  async function saveRulebook() {
+    const minimum = Number(minPlannedRR);
+    const maximumRisk = maxRiskAmount.trim() ? Number(maxRiskAmount) : null;
+    const maximumAccountPct = maxAccountRiskPct.trim() ? Number(maxAccountRiskPct) : null;
+    if (!rulebookName.trim()) { showToast("Name the rulebook first", false); return; }
+    if (!Number.isFinite(minimum) || minimum <= 0) { showToast("Minimum R:R must be greater than zero", false); return; }
+    if (maximumRisk != null && (!Number.isFinite(maximumRisk) || maximumRisk < 0)) { showToast("Maximum risk must be zero or greater", false); return; }
+    if (maximumAccountPct != null && (!Number.isFinite(maximumAccountPct) || maximumAccountPct < 0 || maximumAccountPct > 100)) { showToast("Account risk must be between 0 and 100%", false); return; }
+    setSavingRulebook(true);
+    try {
+      const created = await createRulebook({
+        name: rulebookName.trim(),
+        description: rulebookDescription.trim() || null,
+        min_planned_rr: minimum,
+        max_risk_amount: maximumRisk,
+        max_account_risk_pct: maximumAccountPct,
+        is_default: true,
+      });
+      setRulebooks((previous) => [created, ...previous.map((item) => ({ ...item, is_default: false }))]);
+      showToast("Rulebook saved", true);
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "Rulebook could not be saved", false);
+    } finally {
+      setSavingRulebook(false);
     }
   }
 
@@ -375,6 +439,7 @@ function SettingsContent() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "profile", label: "Profile" },
+    { id: "rules", label: "Discipline" },
     { id: "broker", label: "Broker" },
     { id: "billing", label: "Billing" },
   ];
@@ -496,6 +561,78 @@ function SettingsContent() {
                 </button>
               </div>
 
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Discipline tab ─────────────────────────────────────────────── */}
+      {tab === "rules" && (
+        <div className="max-w-2xl" data-testid="rulebook-settings">
+          <div className="text-[14px] font-semibold mb-0.5" style={{ color: "var(--app-text1)" }}>Setup discipline</div>
+          <div className="text-[13px] mb-5" style={{ color: "var(--app-text3)" }}>
+            Define the checks AlphaVyuh records before a planned setup can reach journal or order capture. These rules are guardrails for your process, not investment advice.
+          </div>
+
+          {rulebooksLoading ? (
+            <div className="animate-pulse h-48 rounded-[10px]" style={cardStyle} />
+          ) : (
+            <div className="space-y-4">
+              <div className="p-5" style={cardStyle}>
+                <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Saved rulebooks</div>
+                <div className="text-[12px] mb-4 leading-relaxed" style={{ color: "var(--app-text3)" }}>
+                  The active rulebook is applied when a setup is reviewed. A warning requires an explicit reason; a hard block cannot be overridden.
+                </div>
+                <div className="space-y-2" data-testid="rulebook-list">
+                  {rulebooks.length === 0 ? (
+                    <div className="text-[12px]" style={{ color: "var(--app-text3)" }}>No rulebooks saved yet.</div>
+                  ) : rulebooks.map((rulebook) => (
+                    <div key={rulebook.id} className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2.5" style={{ background: "var(--app-surface3)", border: "1px solid var(--app-border)" }}>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold truncate" style={{ color: "var(--app-text1)" }}>{rulebook.name}</div>
+                        <div className="text-[11px] truncate" style={{ color: "var(--app-text3)" }}>{rulebook.rules.length} checks · minimum R:R {rulebook.min_planned_rr ?? "—"}</div>
+                      </div>
+                      {rulebook.is_default && <span className="shrink-0 text-[10px] font-semibold rounded-full px-2 py-1" style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}>Active</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-5" style={cardStyle}>
+                <div className="text-[11px] uppercase tracking-wider mb-1" style={{ color: "var(--app-text3)" }}>Create active rulebook</div>
+                <div className="text-[12px] mb-4 leading-relaxed" style={{ color: "var(--app-text3)" }}>
+                  Start with the standard geometry, thesis, invalidation, quantity, and risk/reward checks. Optional risk budgets add warning rules.
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Name</label>
+                    <input value={rulebookName} onChange={(event) => setRulebookName(event.target.value)} className={inputCls} style={inputStyle} aria-label="Rulebook name" />
+                  </div>
+                  <div>
+                    <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Description</label>
+                    <textarea value={rulebookDescription} onChange={(event) => setRulebookDescription(event.target.value)} className={inputCls} style={{ ...inputStyle, minHeight: 64, resize: "vertical" }} aria-label="Rulebook description" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Minimum R:R</label>
+                      <input type="number" min="0.01" step="0.1" value={minPlannedRR} onChange={(event) => setMinPlannedRR(event.target.value)} className={`${inputCls} font-mono`} style={inputStyle} aria-label="Minimum planned R:R" />
+                    </div>
+                    <div>
+                      <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Max ₹ risk</label>
+                      <input type="number" min="0" step="1" value={maxRiskAmount} onChange={(event) => setMaxRiskAmount(event.target.value)} placeholder="Optional" className={`${inputCls} font-mono`} style={inputStyle} aria-label="Maximum risk amount" />
+                    </div>
+                    <div>
+                      <label className="text-[12px] font-medium block mb-1.5" style={{ color: "var(--app-text2)" }}>Max account risk %</label>
+                      <input type="number" min="0" max="100" step="0.1" value={maxAccountRiskPct} onChange={(event) => setMaxAccountRiskPct(event.target.value)} placeholder="Optional" className={`${inputCls} font-mono`} style={inputStyle} aria-label="Maximum account risk percentage" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button onClick={() => void saveRulebook()} disabled={savingRulebook} className="px-5 py-2.5 text-[13px] font-medium rounded-[8px] transition-opacity disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--text-on-accent)", border: "1px solid rgba(244,247,251,0.24)" }}>
+                      {savingRulebook ? "Saving..." : "Save active rulebook"}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
