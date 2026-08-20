@@ -108,7 +108,9 @@ backend/app/brokers/
 - Bearer tokens, OAuth2 standard flow. Separate sandbox environment — use it for tests.
 - Read-only positions use `GET /v2/portfolio/short-term-positions`; the shared
   equity contract maps NSE/BSE rows and deliberately skips derivative,
-  commodity, and currency rows until their instrument model exists.
+ commodity, and currency rows until their instrument model exists.
+- Read-only order imports apply the same NSE/BSE filter; unsupported derivative
+  orders are not relabeled as equity trades.
 
 ### Dhan
 

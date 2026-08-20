@@ -240,6 +240,7 @@ def test_get_positions_reads_short_term_positions_and_skips_non_equity():
                 "unrealised": 0.2,
             },
             {"trading_symbol": "BANKNIFTY23OCT38000PE", "exchange": "NFO", "quantity": 15},
+            {"trading_symbol": "SBIN", "exchange": "NSE", "quantity": 0, "pnl": 0.45},
         ],
     ):
         positions = _run(UpstoxAdapter().get_positions(_creds()))
@@ -364,7 +365,13 @@ def test_get_order_maps_details_and_trades():
 
 
 def test_list_orders_maps_day_order_book_without_trade_lookup():
-    with patch("app.brokers.upstox.api.list_orders", return_value=[_upstox_order_row(status="cancelled")]):
+    with patch(
+        "app.brokers.upstox.api.list_orders",
+        return_value=[
+            _upstox_order_row(status="cancelled"),
+            _upstox_order_row(exchange="NFO", trading_symbol="BANKNIFTY23OCT38000PE"),
+        ],
+    ):
         orders = _run(UpstoxAdapter().list_orders(_creds()))
 
     assert len(orders) == 1
