@@ -154,4 +154,85 @@ describe("scanner API", () => {
 
     await expect(getScreens()).rejects.toThrow("Saved scanner screens are temporarily unavailable.");
   });
+
+  it("loads normalized scanner definitions with nested filter groups", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      definitions: [{
+        id: "definition-1",
+        name: "Trend continuation",
+        universe: "all_nse",
+        definition: { schema_version: 1 },
+        is_active: true,
+        created_at: "2026-08-20T00:00:00Z",
+        updated_at: "2026-08-20T00:00:00Z",
+        groups: [{
+          id: "group-1",
+          scanner_definition_id: "definition-1",
+          operator: "and",
+          sort_order: 0,
+          filters: [{ id: "filter-1", group_id: "group-1", kind: "price_min", value: 100, sort_order: 0 }],
+        }],
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    const { getScannerDefinitions } = await import("@/lib/api");
+    await expect(getScannerDefinitions()).resolves.toMatchObject([{
+      id: "definition-1",
+      groups: [{ filters: [{ kind: "price_min", value: 100 }] }],
+    }]);
+  });
+
+  it("sends normalized groups through the authenticated definition API", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        name: "Trend continuation",
+        groups: [{ filters: [{ kind: "price_min", value: 100 }] }],
+      });
+      return new Response(JSON.stringify({
+        definition: {
+          id: "definition-1",
+          name: "Trend continuation",
+          universe: "all_nse",
+          definition: { schema_version: 1 },
+          is_active: true,
+          created_at: "2026-08-20T00:00:00Z",
+          updated_at: "2026-08-20T00:00:00Z",
+        },
+        groups: [{
+          id: "group-1",
+          scanner_definition_id: "definition-1",
+          operator: "and",
+          sort_order: 0,
+          filters: [{ id: "filter-1", group_id: "group-1", kind: "price_min", value: 100, sort_order: 0 }],
+        }],
+        filters: [{ id: "filter-1", group_id: "group-1", kind: "price_min", value: 100, sort_order: 0 }],
+      }), { status: 201, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createScannerDefinition } = await import("@/lib/api");
+    const definition = await createScannerDefinition({
+      name: "Trend continuation",
+      universe: "all_nse",
+      definition: { schema_version: 1 },
+      groups: [{ operator: "and", sort_order: 0, filters: [{ kind: "price_min", value: 100, sort_order: 0 }] }],
+    });
+
+    expect(definition.groups[0].filters[0].kind).toBe("price_min");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/scanner/definitions"),
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer scanner-test-token" }) }),
+    );
+  });
+
+  it("rejects malformed normalized definition responses", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ definitions: [{ id: "definition-1" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    const { getScannerDefinitions } = await import("@/lib/api");
+    await expect(getScannerDefinitions()).rejects.toThrow("Scanner definition returned an invalid response.");
+  });
 });

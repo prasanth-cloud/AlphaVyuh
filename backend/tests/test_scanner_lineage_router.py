@@ -124,6 +124,43 @@ def test_create_definition_persists_owner_scoped_groups_and_filters(monkeypatch)
     assert result["filters"][0]["kind"] == "rs_score_min"
 
 
+def test_list_definition_returns_nested_filter_tree(monkeypatch):
+    client = _Client()
+    definition_id = "definition-1"
+    group_id = "group-1"
+    client.tables["scanner_definitions"] = [{
+        "id": definition_id,
+        "user_id": "user-1",
+        "name": "Trend template",
+        "universe": "all_nse",
+        "definition": {"schema_version": 1},
+        "is_active": True,
+        "created_at": "2026-08-20T00:00:00Z",
+        "updated_at": "2026-08-20T00:00:00Z",
+    }]
+    client.tables["scanner_filter_groups"] = [{
+        "id": group_id,
+        "user_id": "user-1",
+        "scanner_definition_id": definition_id,
+        "operator": "and",
+        "sort_order": 0,
+    }]
+    client.tables["scanner_filters"] = [{
+        "id": "filter-1",
+        "user_id": "user-1",
+        "group_id": group_id,
+        "kind": "price_min",
+        "value": 100,
+        "sort_order": 0,
+    }]
+    monkeypatch.setattr(router, "get_user_client", lambda token: client)
+
+    result = asyncio.run(router.list_scanner_definitions(user_id="user-1", user_jwt="token-1"))
+
+    assert result["definitions"][0]["groups"][0]["filters"][0]["kind"] == "price_min"
+    assert result["definitions"][0]["filters"][0]["group_id"] == group_id
+
+
 def test_candidate_list_does_not_cross_user_run_boundary(monkeypatch):
     client = _Client()
     client.tables["scanner_runs"] = [{"id": str(RUN_ID), "user_id": "owner"}]

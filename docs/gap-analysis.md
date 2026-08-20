@@ -22,7 +22,7 @@ The existing workflow stores plan fields, but there is no first-class rulebook, 
 
 ### P1 — scanner definitions and candidate lineage
 
-The existing scanner has saved screens and scanner context. The scanner-lineage slice now adds explicit owner-scoped scanner-definition, filter-group, filter, run, and candidate entities. It preserves why a candidate matched, its rank and EOD snapshot, and links a candidate to the setup created from it. The normalized scan-builder UI and production migration/RLS verification remain.
+The existing scanner has saved screens and scanner context. The scanner-lineage slice now adds explicit owner-scoped scanner-definition, filter-group, filter, run, and candidate entities. It preserves why a candidate matched, its rank and EOD snapshot, and links a candidate to the setup created from it. The scanner now has a normalized definition/group/filter builder with validated EOD-compatible filters; production migration/RLS verification and server-side OR execution remain.
 
 ### P1 — EOD job and data-quality model
 

@@ -50,12 +50,14 @@ Delivered in the current slice:
 - Authenticated read endpoints expose run history and candidate evidence; definition CRUD is available for the next scan-builder UI slice.
 - The bhavcopy path validates rows before writes, rejects bad OHLCV/missing/duplicate rows, and records explicit quality counters.
 - Each bhavcopy attempt creates best-effort service-only `job_runs` evidence with status, timing, input, result, and failure details.
+- The scanner UI now has a normalized definition builder for owner-scoped universes, filter groups, and validated filter values. Definitions can be created, edited, selected, and carried into scanner run requests with their `scanner_definition_id`.
+- The builder preserves AND/OR group intent; the current flat EOD runner explicitly blocks multi-filter OR execution rather than silently changing its meaning.
 
 Remaining for this milestone:
 
 - Add database-backed verification for `job_runs` and the new bhavcopy quality columns, including service-role-only access and failure recovery.
 - Apply the new migration in the correct Supabase project and verify RLS with an authenticated user and a second-user denial check.
-- Replace the current saved-screen UI's JSON-only persistence with the normalized definition/group/filter editor.
+- Extend EOD execution to evaluate OR groups once the scan engine has a server-side group-expression contract.
 
 Live streaming, options, and broad backtesting remain deferred.
 

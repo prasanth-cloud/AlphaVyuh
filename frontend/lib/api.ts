@@ -80,7 +80,12 @@ import type {
   SetupReviewRequest,
   SetupStatus,
   CreateRulebookRequest,
+  CreateScannerDefinitionRequest,
   Rulebook,
+  ScannerDefinition,
+  ScannerFilter,
+  ScannerFilterGroup,
+  UpdateScannerDefinitionRequest,
   UpdateSetupRequest,
   SharedScreen,
   SymbolSearchResult,
@@ -247,6 +252,228 @@ export async function deleteScreen(id: string): Promise<void> {
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Saved scanner screen could not be deleted."));
   }
+}
+
+const scannerDefinitionLocalKey = "alphavyuh-scanner-definitions-v1";
+
+function parseScannerFilterResponse(value: unknown): ScannerFilter {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.group_id !== "string" ||
+      typeof value.kind !== "string" || typeof value.sort_order !== "number") {
+    throw new Error("Scanner definition returned an invalid filter.");
+  }
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    group_id: value.group_id,
+    kind: value.kind,
+    value: value.value,
+    sort_order: value.sort_order,
+    created_at: typeof value.created_at === "string" ? value.created_at : undefined,
+  };
+}
+
+function parseScannerFilterGroupResponse(value: unknown, fallbackFilters: ScannerFilter[]): ScannerFilterGroup {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.scanner_definition_id !== "string" ||
+      (value.operator !== "and" && value.operator !== "or") || typeof value.sort_order !== "number") {
+    throw new Error("Scanner definition returned an invalid filter group.");
+  }
+  const rawFilters = Array.isArray(value.filters) ? value.filters : fallbackFilters;
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    scanner_definition_id: value.scanner_definition_id,
+    operator: value.operator,
+    sort_order: value.sort_order,
+    filters: rawFilters.map(parseScannerFilterResponse),
+    created_at: typeof value.created_at === "string" ? value.created_at : undefined,
+  };
+}
+
+function parseScannerDefinitionResponse(value: unknown): ScannerDefinition {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string" ||
+      (value.universe !== "all_nse" && value.universe !== "nifty500" &&
+        value.universe !== "nifty_midsmallcap_400" && value.universe !== "custom") ||
+      !isRecord(value.definition) || typeof value.created_at !== "string" || typeof value.updated_at !== "string") {
+    throw new Error("Scanner definition returned an invalid response.");
+  }
+  const topLevelFilters = Array.isArray(value.filters)
+    ? value.filters.map(parseScannerFilterResponse)
+    : [];
+  const rawGroups = Array.isArray(value.groups) ? value.groups : [];
+  return {
+    id: value.id,
+    user_id: typeof value.user_id === "string" ? value.user_id : undefined,
+    name: value.name,
+    universe: value.universe,
+    definition: value.definition,
+    is_active: value.is_active !== false,
+    groups: rawGroups.map((group) => {
+      const groupId = isRecord(group) && typeof group.id === "string" ? group.id : "";
+      return parseScannerFilterGroupResponse(
+        group,
+        topLevelFilters.filter((filter) => filter.group_id === groupId),
+      );
+    }),
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
+function readLocalScannerDefinitions(): ScannerDefinition[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(scannerDefinitionLocalKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((value) => {
+      try {
+        return [parseScannerDefinitionResponse(value)];
+      } catch {
+        return [];
+      }
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalScannerDefinitions(definitions: ScannerDefinition[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(scannerDefinitionLocalKey, JSON.stringify(definitions));
+}
+
+function localScannerDefinitionId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? `local-${crypto.randomUUID()}`
+    : `local-scanner-definition-${Date.now()}`;
+}
+
+function localScannerDefinitionFromRequest(request: CreateScannerDefinitionRequest): ScannerDefinition {
+  const now = new Date().toISOString();
+  const definitionId = localScannerDefinitionId();
+  const groups = request.groups.map((group, groupIndex) => {
+    const groupId = `local-${definitionId}-group-${groupIndex}`;
+    return {
+      id: groupId,
+      user_id: "mock-user",
+      scanner_definition_id: definitionId,
+      operator: group.operator,
+      sort_order: group.sort_order,
+      filters: group.filters.map((filter, filterIndex) => ({
+        id: `local-${definitionId}-filter-${groupIndex}-${filterIndex}`,
+        user_id: "mock-user",
+        group_id: groupId,
+        kind: filter.kind,
+        value: filter.value,
+        sort_order: filter.sort_order,
+        created_at: now,
+      })),
+      created_at: now,
+    } satisfies ScannerFilterGroup;
+  });
+  return {
+    id: definitionId,
+    user_id: "mock-user",
+    name: request.name.trim(),
+    universe: request.universe,
+    definition: request.definition,
+    is_active: true,
+    groups,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export async function getScannerDefinitions(): Promise<ScannerDefinition[]> {
+  if (shouldUseMockFallback()) return readLocalScannerDefinitions();
+  return cachedClientRequest("scanner-definitions", 5_000, async () => {
+    const headers = await authHeaders();
+    const res = await fetch(`${API}/api/v1/scanner/definitions`, { headers });
+    if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definitions are temporarily unavailable."));
+    const data = await res.json();
+    if (!isRecord(data) || !Array.isArray(data.definitions)) {
+      throw new Error("Scanner definitions returned an invalid response.");
+    }
+    return data.definitions.map(parseScannerDefinitionResponse);
+  });
+}
+
+export async function createScannerDefinition(request: CreateScannerDefinitionRequest): Promise<ScannerDefinition> {
+  if (shouldUseMockFallback()) {
+    const created = localScannerDefinitionFromRequest(request);
+    writeLocalScannerDefinitions([created, ...readLocalScannerDefinitions()]);
+    invalidateClientCache(["scanner-definitions"]);
+    return created;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/scanner/definitions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definition could not be saved."));
+  const data = await res.json();
+  if (!isRecord(data) || !isRecord(data.definition)) {
+    throw new Error("Scanner definition save returned an invalid response.");
+  }
+  const created = parseScannerDefinitionResponse({
+    ...data.definition,
+    groups: data.groups,
+    filters: data.filters,
+  });
+  invalidateClientCache(["scanner-definitions"]);
+  return created;
+}
+
+export async function updateScannerDefinition(
+  definitionId: string,
+  request: UpdateScannerDefinitionRequest,
+): Promise<ScannerDefinition> {
+  if (shouldUseMockFallback()) {
+    const existing = readLocalScannerDefinitions().find((definition) => definition.id === definitionId);
+    if (!existing) throw new Error("Scanner definition could not be found.");
+    const nextRequest: CreateScannerDefinitionRequest = {
+      name: request.name ?? existing.name,
+      universe: request.universe ?? existing.universe,
+      definition: request.definition ?? existing.definition,
+      groups: request.groups ?? existing.groups.map((group) => ({
+        operator: group.operator,
+        sort_order: group.sort_order,
+        filters: group.filters.map((filter) => ({ kind: filter.kind, value: filter.value, sort_order: filter.sort_order })),
+      })),
+    };
+    const updated = localScannerDefinitionFromRequest(nextRequest);
+    const stableUpdated = { ...updated, id: existing.id, created_at: existing.created_at };
+    writeLocalScannerDefinitions(readLocalScannerDefinitions().map((definition) => definition.id === definitionId ? stableUpdated : definition));
+    invalidateClientCache(["scanner-definitions"]);
+    return stableUpdated;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/scanner/definitions/${encodeURIComponent(definitionId)}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definition could not be updated."));
+  const data = await res.json();
+  const updated = parseScannerDefinitionResponse(data);
+  invalidateClientCache(["scanner-definitions"]);
+  return updated;
+}
+
+export async function deleteScannerDefinition(definitionId: string): Promise<void> {
+  if (shouldUseMockFallback()) {
+    writeLocalScannerDefinitions(readLocalScannerDefinitions().filter((definition) => definition.id !== definitionId));
+    invalidateClientCache(["scanner-definitions"]);
+    return;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/scanner/definitions/${encodeURIComponent(definitionId)}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Scanner definition could not be deleted."));
+  invalidateClientCache(["scanner-definitions"]);
 }
 
 export async function getWatchlists(options?: { lite?: boolean; force?: boolean }): Promise<Watchlist[]> {

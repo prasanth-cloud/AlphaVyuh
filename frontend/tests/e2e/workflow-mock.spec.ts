@@ -213,6 +213,41 @@ test.describe("Mock workflow smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("normalized scanner definition builder saves, applies, and edits a definition", async ({ page }) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+    page.on("pageerror", (error) => errors.push(error.message));
+    const definitionName = `EOD trend ${Date.now()}`;
+    const editedName = `${definitionName} revised`;
+
+    await page.goto("/scanner", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("scanner-definition-new").click();
+    await expect(page.getByTestId("scanner-definition-builder")).toBeVisible({ timeout: 15_000 });
+    await page.getByLabel("Definition name").fill(definitionName);
+    await page.getByLabel("Value for filter 1 in group 1").fill("100");
+    await page.getByRole("button", { name: "Save definition", exact: true }).click();
+
+    await expect(page.getByTestId("scanner-definitions-section").getByRole("button", { name: definitionName, exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("scanner-active-filters")).toContainText(/Price/);
+
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("alphavyuh-scanner-definitions-v1") || "[]"));
+    expect(stored).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: definitionName,
+        groups: [expect.objectContaining({ filters: [expect.objectContaining({ kind: "price_min", value: 100 })] })],
+      }),
+    ]));
+
+    await page.getByRole("button", { name: `Edit scanner definition ${definitionName}`, exact: true }).click();
+    await expect(page.getByTestId("scanner-definition-builder")).toBeVisible();
+    await page.getByLabel("Definition name").fill(editedName);
+    await page.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(page.getByTestId("scanner-definitions-section").getByRole("button", { name: editedName, exact: true })).toBeVisible({ timeout: 15_000 });
+    expect(errors).toEqual([]);
+  });
+
   test("multi-chart review board compares scanner candidates", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];

@@ -244,6 +244,63 @@ export type SavedScreen = {
   created_at: string;
 };
 
+export type ScannerUniverse = "all_nse" | "nifty500" | "nifty_midsmallcap_400" | "custom";
+export type ScannerFilterOperator = "and" | "or";
+
+export type ScannerFilter = {
+  id: string;
+  user_id?: string;
+  group_id: string;
+  kind: string;
+  value: unknown;
+  sort_order: number;
+  created_at?: string;
+};
+
+export type ScannerFilterGroup = {
+  id: string;
+  user_id?: string;
+  scanner_definition_id: string;
+  operator: ScannerFilterOperator;
+  sort_order: number;
+  filters: ScannerFilter[];
+  created_at?: string;
+};
+
+export type ScannerDefinition = {
+  id: string;
+  user_id?: string;
+  name: string;
+  universe: ScannerUniverse;
+  definition: Record<string, unknown>;
+  is_active: boolean;
+  groups: ScannerFilterGroup[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScannerDefinitionGroupInput = {
+  operator: ScannerFilterOperator;
+  sort_order: number;
+  filters: Array<{
+    kind: string;
+    value: unknown;
+    sort_order: number;
+  }>;
+};
+
+export type CreateScannerDefinitionRequest = {
+  name: string;
+  universe: ScannerUniverse;
+  definition: Record<string, unknown>;
+  groups: ScannerDefinitionGroupInput[];
+};
+
+export type UpdateScannerDefinitionRequest = Partial<Pick<CreateScannerDefinitionRequest, "name" | "universe" | "definition">> & {
+  is_active?: boolean;
+  groups?: ScannerDefinitionGroupInput[];
+};
+
 export type WatchlistItemMetadataUpdate = {
   pinned?: boolean;
   tags?: string[];

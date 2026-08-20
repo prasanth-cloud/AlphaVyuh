@@ -40,6 +40,7 @@ class ScannerDefinitionPatch(BaseModel):
     universe: ScannerUniverse | None = None
     definition: dict[str, Any] | None = None
     is_active: bool | None = None
+    groups: list[ScannerFilterGroupInput] | None = None
 
 
 def _lineage_unavailable() -> HTTPException:
@@ -66,23 +67,99 @@ def _owned_row(client: Any, table: str, row_id: UUID, user_id: str) -> dict[str,
     return rows[0]
 
 
+def _write_groups(
+    client: Any,
+    *,
+    user_id: str,
+    definition_id: str,
+    group_inputs: list[ScannerFilterGroupInput],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    groups: list[dict[str, Any]] = []
+    filters: list[dict[str, Any]] = []
+    for group_input in group_inputs:
+        group_result = client.table("scanner_filter_groups").insert({
+            "user_id": user_id,
+            "scanner_definition_id": definition_id,
+            "operator": group_input.operator,
+            "sort_order": group_input.sort_order,
+        }).execute()
+        if not group_result.data:
+            raise _lineage_unavailable()
+        group = group_result.data[0]
+        groups.append(group)
+        for filter_input in group_input.filters:
+            kind = filter_input.kind.strip()
+            if not kind:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Scanner filter kind is required",
+                )
+            filter_result = client.table("scanner_filters").insert({
+                "user_id": user_id,
+                "group_id": group["id"],
+                "kind": kind,
+                "value": filter_input.value,
+                "sort_order": filter_input.sort_order,
+            }).execute()
+            if not filter_result.data:
+                raise _lineage_unavailable()
+            filters.extend(filter_result.data)
+    return groups, filters
+
+
+def _with_nested_filters(
+    client: Any,
+    *,
+    user_id: str,
+    definition: dict[str, Any],
+) -> dict[str, Any]:
+    group_result = (
+        client.table("scanner_filter_groups")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("scanner_definition_id", definition["id"])
+        .order("sort_order")
+        .execute()
+    )
+    groups: list[dict[str, Any]] = []
+    filters: list[dict[str, Any]] = []
+    for group in group_result.data or []:
+        filter_result = (
+            client.table("scanner_filters")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("group_id", group["id"])
+            .order("sort_order")
+            .execute()
+        )
+        group_filters = filter_result.data or []
+        filters.extend(group_filters)
+        groups.append({**group, "filters": group_filters})
+    return {**definition, "groups": groups, "filters": filters}
+
+
 @router.get("/definitions")
 async def list_scanner_definitions(
     user_id: str = Depends(get_current_user_id),
     user_jwt: str = Depends(get_current_user_token),
 ):
     try:
+        client = get_user_client(user_jwt)
         result = (
-            get_user_client(user_jwt)
+            client
             .table("scanner_definitions")
             .select("*")
             .eq("user_id", user_id)
             .order("updated_at", desc=True)
             .execute()
         )
+        definitions = [
+            _with_nested_filters(client, user_id=user_id, definition=definition)
+            for definition in (result.data or [])
+        ]
     except Exception as exc:
         raise _lineage_unavailable() from exc
-    return {"definitions": result.data or []}
+    return {"definitions": definitions}
 
 
 @router.post("/definitions", status_code=status.HTTP_201_CREATED)
@@ -109,38 +186,24 @@ async def create_scanner_definition(
             raise _lineage_unavailable()
         definition = definition_result.data[0]
         definition_id = definition["id"]
-        groups: list[dict[str, Any]] = []
-        filters: list[dict[str, Any]] = []
-        for group_input in body.groups:
-            group_result = client.table("scanner_filter_groups").insert({
-                "user_id": user_id,
-                "scanner_definition_id": definition_id,
-                "operator": group_input.operator,
-                "sort_order": group_input.sort_order,
-            }).execute()
-            if not group_result.data:
-                raise _lineage_unavailable()
-            group = group_result.data[0]
-            groups.append(group)
-            for filter_input in group_input.filters:
-                kind = filter_input.kind.strip()
-                if not kind:
-                    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Scanner filter kind is required")
-                filter_result = client.table("scanner_filters").insert({
-                    "user_id": user_id,
-                    "group_id": group["id"],
-                    "kind": kind,
-                    "value": filter_input.value,
-                    "sort_order": filter_input.sort_order,
-                }).execute()
-                if not filter_result.data:
-                    raise _lineage_unavailable()
-                filters.extend(filter_result.data)
+        groups, filters = _write_groups(
+            client,
+            user_id=user_id,
+            definition_id=definition_id,
+            group_inputs=body.groups,
+        )
     except HTTPException:
         raise
     except Exception as exc:
         raise _lineage_unavailable() from exc
-    return {"definition": definition, "groups": groups, "filters": filters}
+    nested_groups = [
+        {
+            **group,
+            "filters": [filter_row for filter_row in filters if filter_row.get("group_id") == group.get("id")],
+        }
+        for group in groups
+    ]
+    return {"definition": definition, "groups": nested_groups, "filters": filters}
 
 
 @router.patch("/definitions/{definition_id}")
@@ -153,6 +216,7 @@ async def update_scanner_definition(
     client = get_user_client(user_jwt)
     _owned_row(client, "scanner_definitions", definition_id, user_id)
     changes = body.model_dump(exclude_unset=True)
+    group_inputs = changes.pop("groups", None)
     if "name" in changes and changes["name"] is not None:
         changes["name"] = changes["name"].strip()
         if not changes["name"]:
@@ -166,11 +230,26 @@ async def update_scanner_definition(
             .eq("user_id", user_id)
             .execute()
         )
+        if group_inputs is not None:
+            client.table("scanner_filter_groups").delete().eq(
+                "user_id", user_id
+            ).eq("scanner_definition_id", str(definition_id)).execute()
+            _write_groups(
+                client,
+                user_id=user_id,
+                definition_id=str(definition_id),
+                group_inputs=[ScannerFilterGroupInput.model_validate(group) for group in group_inputs],
+            )
     except Exception as exc:
         raise _lineage_unavailable() from exc
     if not result.data:
-        return _owned_row(client, "scanner_definitions", definition_id, user_id)
-    return result.data[0]
+        updated = _owned_row(client, "scanner_definitions", definition_id, user_id)
+    else:
+        updated = result.data[0]
+    try:
+        return _with_nested_filters(client, user_id=user_id, definition=updated)
+    except Exception as exc:
+        raise _lineage_unavailable() from exc
 
 
 @router.delete("/definitions/{definition_id}", status_code=status.HTTP_204_NO_CONTENT)
