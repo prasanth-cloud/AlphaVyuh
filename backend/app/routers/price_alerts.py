@@ -133,8 +133,9 @@ def check_price_alerts() -> None:
     not become an unhandled scheduler exception or imply that alerts were
     checked successfully; the next scheduled run will retry the read.
     """
+    sb = get_admin_client()
     try:
-        _check_price_alerts()
+        _check_price_alerts(sb)
     except Exception as exc:
         logger.warning(
             "Price alert check skipped because the data store is unavailable; will retry next interval: %s",
@@ -142,8 +143,7 @@ def check_price_alerts() -> None:
         )
 
 
-def _check_price_alerts() -> None:
-    sb = get_admin_client()
+def _check_price_alerts(sb) -> None:
 
     # Load all active alerts
     res = sb.table("price_alerts").select("*").eq("is_active", True).execute()
