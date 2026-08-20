@@ -90,12 +90,13 @@ Delivered:
 - The broker settings page can load a read-only holdings/positions snapshot with explicit unavailable and empty states; it never calls an order route.
 - Authenticated `/api/brokers/{broker}/orders` exposes a secret-free, broker-reported equity orderbook snapshot with explicit loading, empty, and unavailable UI states.
 - Zerodha and Upstox adapter order lists exclude non-NSE/BSE rows until a separate derivatives model exists, preventing unsupported orders from entering equity workflows.
+- Broker-imported fills inherit a validated durable setup only when one active owner setup is an unambiguous symbol match; ambiguous or missing matches are explicitly tagged `unplanned`.
 - Malformed broker response payloads are rejected in the frontend instead of becoming false-empty account state.
 
 Remaining:
 
 - Run the owner-approved Zerodha/Upstox real-account smoke and record profile, holdings, positions, orderbook, tradebook, and import evidence.
-- Reconcile imported fills and broker-reported completed orders to durable setup ids.
+- Surface broker-import reconciliation state and allow an owner to resolve ambiguous imports to a durable setup.
 - Apply and verify the current migrations in the correct Supabase project before production use.
 
 ## Milestone 6 — broker execution, only after owner approval

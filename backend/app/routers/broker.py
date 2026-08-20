@@ -55,6 +55,8 @@ router = APIRouter(prefix="/api/v1", tags=["orders"])
 BROKER_IMPORT_MARKER = "alphavyuh-broker-import"
 ORDER_INTENT_MARKER = "alphavyuh-order-intent"
 BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS = 24
+IMPORT_MATCHABLE_SETUP_STATUSES = {"planned", "ready", "triggered", "open"}
+UNPLANNED_SETUP_TYPE = "unplanned"
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -659,9 +661,53 @@ def _workflow_context_for_import(sb, user_id: str, symbol: str) -> dict:
     except Exception:
         return {}
     setup_id = workflow.get("setup_id")
-    if setup_id and _owned_setup_id_for_symbol(sb, user_id, str(setup_id), symbol) is None:
-        return {**workflow, "setup_id": None}
-    return workflow
+    if setup_id and _owned_setup_id_for_symbol(sb, user_id, str(setup_id), symbol):
+        return workflow
+
+    # A stale symbol-keyed workflow state must not cause a fill to inherit a
+    # setup that no longer belongs to the user. Fall through to the stricter
+    # unambiguous active-setup lookup instead.
+    workflow_without_setup = {**workflow, "setup_id": None}
+    candidate = _unambiguous_active_setup_for_import(sb, user_id, symbol)
+    if not candidate:
+        return workflow_without_setup
+
+    return {
+        **workflow_without_setup,
+        "setup_id": str(candidate["id"]),
+        "setup_type": workflow.get("setup_type") or candidate.get("strategy_tag"),
+        "scanner_context": workflow.get("scanner_context") or candidate.get("scanner_context"),
+        "thesis": workflow.get("thesis") or candidate.get("thesis"),
+        "invalidation_rule": workflow.get("invalidation_rule") or candidate.get("invalidation_reason"),
+    }
+
+
+def _unambiguous_active_setup_for_import(sb, user_id: str, symbol: str) -> dict[str, Any] | None:
+    """Return one active owner setup, or None when matching would be ambiguous."""
+    try:
+        result = (
+            sb.table("setups")
+            .select("id,symbol,status,strategy_tag,scanner_context,thesis,invalidation_reason")
+            .eq("user_id", user_id)
+            .eq("symbol", symbol.upper())
+            .order("updated_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+        rows = result.data or []
+    except Exception:
+        logger.debug("Unable to find a durable setup for imported %s", symbol, exc_info=True)
+        return None
+
+    if isinstance(rows, dict):
+        rows = [rows]
+    active = [
+        row for row in rows
+        if isinstance(row, dict)
+        and row.get("id")
+        and str(row.get("status") or "").lower() in IMPORT_MATCHABLE_SETUP_STATUSES
+    ]
+    return active[0] if len(active) == 1 else None
 
 
 def _owned_setup_id_for_symbol(sb, user_id: str, setup_id: str, symbol: str) -> str | None:
@@ -686,10 +732,19 @@ def _journal_enrichment_from_workflow(workflow: dict) -> dict:
     scanner_context = workflow.get("scanner_context")
     setup_type = workflow.get("setup_type")
     enrichment: dict[str, Any] = {}
-    if setup_type:
-        enrichment["setup_type"] = setup_type
-    if workflow.get("setup_id"):
-        enrichment["setup_id"] = workflow["setup_id"]
+    setup_id = workflow.get("setup_id")
+    if setup_id:
+        enrichment["setup_id"] = setup_id
+        if setup_type:
+            enrichment["setup_type"] = setup_type
+    else:
+        # A broker fill without a validated durable setup is still useful,
+        # but it must be visible as unplanned in journal/review analytics.
+        enrichment["setup_type"] = UNPLANNED_SETUP_TYPE
+    for field in ("thesis", "invalidation_rule"):
+        value = workflow.get(field)
+        if isinstance(value, str) and value.strip():
+            enrichment[field] = value
     if isinstance(scanner_context, dict):
         enrichment["scanner_context"] = scanner_context
     enrichment["source_page"] = "broker-import"

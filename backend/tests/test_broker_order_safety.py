@@ -149,6 +149,40 @@ class _FakeSupabase:
         return _Query(self, table_name)
 
 
+class _SetupMatchQuery:
+    def __init__(self, client, table_name: str):
+        self.client = client
+        self.table_name = table_name
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def eq(self, *_args, **_kwargs):
+        return self
+
+    def order(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, *_args, **_kwargs):
+        return self
+
+    def maybe_single(self):
+        return self
+
+    def execute(self):
+        if self.table_name == "workflow_states":
+            return type("Result", (), {"data": {}})()
+        return type("Result", (), {"data": self.client.setup_rows})()
+
+
+class _SetupMatchSupabase:
+    def __init__(self, setup_rows):
+        self.setup_rows = setup_rows
+
+    def table(self, table_name: str):
+        return _SetupMatchQuery(self, table_name)
+
+
 def _live_creds():
     return {
         "broker_type": "zerodha",
@@ -769,6 +803,48 @@ def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
     assert second["skipped"] == 1
     assert len(client.journal_inserts) == 1
     assert "alphavyuh-broker-import:zerodha:order:kite-order-1" in client.journal_inserts[0]["entry_reason"]
+
+
+def test_import_matches_one_active_setup_and_preserves_setup_context():
+    client = _SetupMatchSupabase([
+        {
+            "id": "setup-1",
+            "symbol": "RELIANCE",
+            "status": "ready",
+            "strategy_tag": "breakout",
+            "scanner_context": {"preset_name": "Trend Template"},
+            "thesis": "Breakout above the base.",
+            "invalidation_reason": "Close below the base.",
+        },
+        {
+            "id": "setup-closed",
+            "symbol": "RELIANCE",
+            "status": "closed",
+        },
+    ])
+
+    workflow = broker_router._workflow_context_for_import(client, "user-1", "RELIANCE")
+    enrichment = broker_router._journal_enrichment_from_workflow(workflow)
+
+    assert workflow["setup_id"] == "setup-1"
+    assert workflow["setup_type"] == "breakout"
+    assert enrichment["setup_id"] == "setup-1"
+    assert enrichment["setup_type"] == "breakout"
+    assert enrichment["thesis"] == "Breakout above the base."
+    assert enrichment["invalidation_rule"] == "Close below the base."
+
+
+def test_import_marks_ambiguous_or_missing_setup_as_unplanned():
+    client = _SetupMatchSupabase([
+        {"id": "setup-1", "symbol": "RELIANCE", "status": "ready"},
+        {"id": "setup-2", "symbol": "RELIANCE", "status": "planned"},
+    ])
+
+    workflow = broker_router._workflow_context_for_import(client, "user-1", "RELIANCE")
+    enrichment = broker_router._journal_enrichment_from_workflow(workflow)
+
+    assert workflow["setup_id"] is None
+    assert enrichment["setup_type"] == "unplanned"
 
 
 def test_zerodha_import_preserves_read_only_smoke_metadata(monkeypatch):
