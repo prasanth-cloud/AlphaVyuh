@@ -81,6 +81,8 @@ This rule overrides everything else. A page that ships with advisory copy is a P
   200 with backend version `0.3.1`.
 - Railway `/api/v1/market/summary` returns HTTP 503 because its Supabase
   dependency is unavailable.
+- Railway production `SUPABASE_URL` is configured to the same unresolved
+  `fyxltykqdvacbdgmeucf.supabase.co` host.
 - GitHub production signed-in smoke run `32405141720` failed while preparing
   the QA account with `getaddrinfo ENOTFOUND
   fyxltykqdvacbdgmeucf.supabase.co`.
