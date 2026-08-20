@@ -10,6 +10,7 @@ const OPEN_TRADE = {
   entry_date: "2026-04-01",
   entry_price: 2800,
   quantity: 10,
+  setup_id: null,
   exit_price: null,
   exit_date: null,
   stop_loss: 2650,
@@ -33,6 +34,7 @@ const CLOSED_TRADE = {
   entry_date: "2026-03-01",
   entry_price: 3900,
   quantity: 5,
+  setup_id: null,
   exit_price: 4200,
   exit_date: "2026-03-20",
   stop_loss: 3750,
@@ -91,6 +93,7 @@ const AI_PATTERNS = {
 
 type TradeFixture = {
   id: string; symbol: string; company_name: string; trade_type: string;
+  setup_id?: string | null;
   entry_date: string; entry_price: number; quantity: number;
   exit_price: number | null; exit_date: string | null;
   stop_loss: number; target_price: number; setup_type: string;
@@ -360,7 +363,7 @@ test.describe("Journal — account data unavailable states", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "Analytics" }).click();
+    await page.getByRole("button", { name: "Analytics", exact: true }).click();
     await expect(page.getByTestId("journal-analytics-unavailable")).toContainText("Journal analytics are temporarily unavailable", { timeout: 15_000 });
     await expect(page.getByText("Close some trades to see analytics here.")).not.toBeVisible();
   });
@@ -497,6 +500,72 @@ test.describe("Journal — view trade details", () => {
     await page.locator("table tbody tr").filter({ hasText: "RELIANCE" }).click();
     await expect(page.getByRole("button", { name: "Close this trade" })).toBeVisible();
   });
+
+  test("resolves an unplanned trade to an active durable setup", async ({ page }) => {
+    let patchPayload: Record<string, unknown> | null = null;
+    await page.route("**/api/v1/setups*", async (route) => {
+      const url = new URL(route.request().url());
+      if (route.request().method() === "GET" && url.pathname.endsWith("/api/v1/setups")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            setups: [{
+              id: "setup-reliance-1",
+              user_id: "user-1",
+              symbol: "RELIANCE",
+              status: "ready",
+              direction: "long",
+              strategy_tag: "breakout",
+              entry_low: 2800,
+              entry_high: 2820,
+              stop_price: 2700,
+              target_price: 3100,
+              planned_risk_amount: 1000,
+              planned_quantity: 10,
+              planned_rr: 2.9,
+              thesis: "Range expansion with volume confirmation.",
+              invalidation_reason: "Closes below the base.",
+              source: "chart",
+              source_scanner_candidate_id: null,
+              scanner_context: null,
+              chart_snapshot: null,
+              created_at: "2026-08-01T10:00:00Z",
+              updated_at: "2026-08-02T10:00:00Z",
+            }],
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+    await page.route("**/api/v1/journal/trade-open-1", async (route) => {
+      if (route.request().method() === "PATCH") {
+        patchPayload = JSON.parse(route.request().postData() ?? "{}");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ...OPEN_TRADE,
+            setup_id: "setup-reliance-1",
+            setup_type: "breakout",
+          }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await page.locator("table tbody tr").filter({ hasText: "RELIANCE" }).click();
+    await expect(page.getByTestId("journal-setup-resolution")).toBeVisible();
+    await page.getByRole("button", { name: "Link Breakout setup" }).click();
+
+    await expect(page.getByTestId("journal-setup-linked")).toBeVisible();
+    expect(patchPayload).toMatchObject({ setup_id: "setup-reliance-1", setup_type: "breakout" });
+  });
 });
 
 test.describe("Journal — delete trade", () => {
@@ -534,7 +603,7 @@ test.describe("Journal — tab navigation", () => {
     await page.goto("/journal");
     if (page.url().includes("/login")) return;
 
-    await page.getByRole("button", { name: "Analytics" }).click();
+    await page.getByRole("button", { name: "Analytics", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Equity curve" })).toBeVisible();
   });
 

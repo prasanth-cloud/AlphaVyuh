@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getJournalEntries, getJournalStats, getJournalAnalytics,
   getJournalReviews, saveTradeReview,
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
-  searchSymbols, analyseJournal, getAiPatterns,
+  searchSymbols, analyseJournal, getAiPatterns, getSetups,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, TradeReview } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
@@ -35,6 +35,8 @@ const JOURNAL_IMPORT_FAILED_MESSAGE = `Broker import could not run. Check Broker
 const JOURNAL_ANALYSIS_FAILED_MESSAGE = `Journal analysis could not run. ${JOURNAL_RECOVERY_MESSAGE}`;
 const JOURNAL_SYMBOL_SEARCH_FAILED_MESSAGE = "Symbol search is temporarily unavailable. Check Data Status, then try again.";
 const JOURNAL_IMPORT_RESULT_FAILED_MESSAGE = `Broker import result was unavailable. Check Broker or Data Status, then refresh Journal.`;
+const JOURNAL_SETUP_RESOLUTION_FAILED_MESSAGE = "Setup matches could not be loaded. Check Data Status, then try again.";
+const JOURNAL_SETUP_LINK_FAILED_MESSAGE = `Setup link could not be saved. ${JOURNAL_RECOVERY_MESSAGE}`;
 
 export default function JournalPage() {
   const searchParams = useSearchParams();
@@ -67,6 +69,11 @@ export default function JournalPage() {
   const [filterStatus, setFilterStatus] = useState<"all" | "open" | "closed">("all");
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
+  const [setupOptions, setSetupOptions] = useState<Setup[]>([]);
+  const [setupOptionsLoading, setSetupOptionsLoading] = useState(false);
+  const [setupOptionsError, setSetupOptionsError] = useState<string | null>(null);
+  const [linkingSetupId, setLinkingSetupId] = useState<string | null>(null);
+  const setupResolutionRequest = useRef(0);
   const [saving, setSaving] = useState(false);
   const [reviewSaving, setReviewSaving] = useState(false);
   const [toast, setToast] = useState("");
@@ -390,7 +397,59 @@ export default function JournalPage() {
     }
   };
 
+  const loadSetupOptions = useCallback(async (entry: JournalEntry) => {
+    const requestId = setupResolutionRequest.current + 1;
+    setupResolutionRequest.current = requestId;
+    setSetupOptions([]);
+    setSetupOptionsError(null);
+    if (entry.setup_id) {
+      setSetupOptionsLoading(false);
+      return;
+    }
+
+    setSetupOptionsLoading(true);
+    try {
+      const setups = await getSetups({ symbol: entry.symbol });
+      if (setupResolutionRequest.current !== requestId) return;
+      setSetupOptions(setups.filter((setup) => (
+        setup.status === "planned" || setup.status === "ready" || setup.status === "triggered" || setup.status === "open"
+      )));
+    } catch (error) {
+      if (setupResolutionRequest.current !== requestId) return;
+      setSetupOptionsError(accountDataErrorMessage(error, JOURNAL_SETUP_RESOLUTION_FAILED_MESSAGE));
+    } finally {
+      if (setupResolutionRequest.current === requestId) setSetupOptionsLoading(false);
+    }
+  }, []);
+
+  const handleLinkSetup = async (setup: Setup) => {
+    if (!selectedEntry || selectedEntry.setup_id) return;
+    setLinkingSetupId(setup.id);
+    try {
+      const updated = await updateJournalEntry(selectedEntry.id, {
+        setup_id: setup.id,
+        setup_type: normalizeSetupTagForSave(setup.strategy_tag) ?? "other",
+      });
+      if (updated.id !== selectedEntry.id || updated.setup_id !== setup.id) {
+        throw new Error("Setup link returned an invalid journal response.");
+      }
+      setEntries((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
+      setSelectedEntry(updated);
+      setSetupOptions([]);
+      setSetupOptionsError(null);
+      showToast("Trade linked to durable setup");
+    } catch {
+      showToast(JOURNAL_SETUP_LINK_FAILED_MESSAGE);
+    } finally {
+      setLinkingSetupId(null);
+    }
+  };
+
   const openClosePanel = (e: JournalEntry) => {
+    setupResolutionRequest.current += 1;
+    setSetupOptions([]);
+    setSetupOptionsError(null);
+    setSetupOptionsLoading(false);
     setSelectedEntry(e);
     setCloseForm({ exit_date: new Date().toISOString().split("T")[0] });
     setCloseSetupType(e.setup_type || "");
@@ -702,7 +761,7 @@ export default function JournalPage() {
               setReviewFocus("all");
             }}
             selectedEntry={selectedEntry}
-            onSelectEntry={e => { setSelectedEntry(e); setPanelMode("view"); }}
+            onSelectEntry={e => { setSelectedEntry(e); setPanelMode("view"); void loadSetupOptions(e); }}
             onCloseEntry={openClosePanel}
             onDeleteEntry={handleDelete}
             onAddTrade={openAddPanel}
@@ -713,6 +772,11 @@ export default function JournalPage() {
           <TradePanel
             mode={panelMode}
             selectedEntry={selectedEntry}
+            setupOptions={setupOptions}
+            setupOptionsLoading={setupOptionsLoading}
+            setupOptionsError={setupOptionsError}
+            linkingSetupId={linkingSetupId}
+            onLinkSetup={handleLinkSetup}
             saving={saving}
             lessonLoading={lessonLoading}
             addForm={addForm}

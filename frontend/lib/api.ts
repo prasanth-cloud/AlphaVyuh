@@ -628,7 +628,14 @@ function readLocalSetups(): Setup[] {
   try {
     const raw = window.localStorage.getItem(setupLocalKey);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed as Setup[] : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((value) => {
+      try {
+        return [parseSetupResponse(value)];
+      } catch {
+        return [];
+      }
+    });
   } catch {
     return [];
   }
@@ -787,6 +794,78 @@ function parseSetupReviewResponse(value: unknown): SetupReview {
   };
 }
 
+function parseSetupResponse(value: unknown): Setup {
+  const isNullableNumber = (candidate: unknown): candidate is number | null => candidate === null || typeof candidate === "number";
+  const isNullableString = (candidate: unknown): candidate is string | null => candidate === null || typeof candidate === "string";
+  const isNullableRecord = (candidate: unknown): candidate is Record<string, unknown> | null => candidate === null || isRecord(candidate);
+
+  if (!isRecord(value) ||
+      typeof value.id !== "string" ||
+      typeof value.user_id !== "string" ||
+      typeof value.symbol !== "string" ||
+      (value.status !== "planned" && value.status !== "ready" && value.status !== "triggered" && value.status !== "open" && value.status !== "closed" && value.status !== "invalidated" && value.status !== "cancelled") ||
+      (value.direction !== "long" && value.direction !== "short") ||
+      (value.source !== "scanner" && value.source !== "chart" && value.source !== "watchlist" && value.source !== "manual") ||
+      !isNullableString(value.strategy_tag) ||
+      !isNullableNumber(value.entry_low) ||
+      !isNullableNumber(value.entry_high) ||
+      !isNullableNumber(value.stop_price) ||
+      !isNullableNumber(value.target_price) ||
+      !isNullableNumber(value.planned_risk_amount) ||
+      !isNullableNumber(value.planned_quantity) ||
+      !isNullableNumber(value.planned_rr) ||
+      !isNullableString(value.thesis) ||
+      !isNullableString(value.invalidation_reason) ||
+      !isNullableRecord(value.scanner_context) ||
+      !isNullableRecord(value.chart_snapshot) ||
+      typeof value.created_at !== "string" ||
+      typeof value.updated_at !== "string") {
+    throw new Error("Setup returned an invalid response.");
+  }
+
+  const reviewStatus = value.review_status === undefined || value.review_status === null
+    ? undefined
+    : value.review_status === "not_evaluated" || value.review_status === "passed" || value.review_status === "warned" || value.review_status === "blocked"
+      ? value.review_status
+      : null;
+  if (reviewStatus === null) throw new Error("Setup returned an invalid response.");
+
+  const optionalString = (candidate: unknown): string | null | undefined => {
+    if (candidate === undefined || candidate === null || typeof candidate === "string") return candidate;
+    throw new Error("Setup returned an invalid response.");
+  };
+  const sourceCandidate = optionalString(value.source_scanner_candidate_id);
+  const rulebookId = optionalString(value.rulebook_id);
+  const lastReviewedAt = optionalString(value.last_reviewed_at);
+
+  return {
+    id: value.id,
+    user_id: value.user_id,
+    symbol: value.symbol,
+    status: value.status,
+    direction: value.direction,
+    strategy_tag: value.strategy_tag,
+    entry_low: value.entry_low,
+    entry_high: value.entry_high,
+    stop_price: value.stop_price,
+    target_price: value.target_price,
+    planned_risk_amount: value.planned_risk_amount,
+    planned_quantity: value.planned_quantity,
+    planned_rr: value.planned_rr,
+    thesis: value.thesis,
+    invalidation_reason: value.invalidation_reason,
+    source: value.source,
+    source_scanner_candidate_id: sourceCandidate,
+    review_status: reviewStatus,
+    rulebook_id: rulebookId,
+    last_reviewed_at: lastReviewedAt,
+    scanner_context: value.scanner_context,
+    chart_snapshot: value.chart_snapshot,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  };
+}
+
 function localSetupId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -841,7 +920,8 @@ export async function getSetups(options?: { symbol?: string; status?: SetupStatu
   const res = await fetch(`${API}/api/v1/setups${query.toString() ? `?${query}` : ""}`, { headers });
   if (!res.ok) throw new Error(await responseErrorMessage(res, "Setups are temporarily unavailable."));
   const data = await res.json();
-  return Array.isArray(data?.setups) ? data.setups as Setup[] : [];
+  if (!isRecord(data) || !Array.isArray(data.setups)) throw new Error("Setups returned an invalid response.");
+  return data.setups.map(parseSetupResponse);
 }
 
 export async function createSetup(request: CreateSetupRequest): Promise<Setup> {

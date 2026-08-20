@@ -7,6 +7,7 @@ import { displayCompanyName } from "@/lib/company-display";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
 import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, ReviewSaveInput } from "./types";
+import type { Setup } from "@/lib/api";
 import type { PanelMode } from "./types";
 import { SETUP_TYPES, displayEntryReason, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
 
@@ -37,6 +38,11 @@ function SetupChips({ value, onChange }: { value: string; onChange: (v: string) 
 interface TradePanelProps {
   mode: PanelMode;
   selectedEntry: JournalEntry | null;
+  setupOptions: Setup[];
+  setupOptionsLoading: boolean;
+  setupOptionsError: string | null;
+  linkingSetupId: string | null;
+  onLinkSetup: (setup: Setup) => void;
   saving: boolean;
   lessonLoading: string | null;
   // Add form
@@ -76,6 +82,11 @@ interface TradePanelProps {
 export function TradePanel({
   mode,
   selectedEntry,
+  setupOptions,
+  setupOptionsLoading,
+  setupOptionsError,
+  linkingSetupId,
+  onLinkSetup,
   saving,
   lessonLoading,
   addForm,
@@ -395,6 +406,67 @@ export function TradePanel({
                 </div>
               ))}
             </div>
+
+            {selectedEntry.setup_id ? (
+              <div
+                data-testid="journal-setup-linked"
+                style={{ padding: "10px 12px", borderRadius: "var(--radius-md)", background: "var(--gain-subtle)", border: "1px solid var(--border-subtle)" }}
+              >
+                <div className="label" style={{ marginBottom: 4, color: "var(--gain)" }}>Durable setup linked</div>
+                <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)" }}>
+                  This journal entry keeps the same setup lineage used for planning and review.
+                </div>
+              </div>
+            ) : (
+              <div
+                data-testid="journal-setup-resolution"
+                style={{ padding: "12px 14px", borderRadius: "var(--radius-md)", background: "var(--warn-subtle)", border: "1px solid var(--border-subtle)" }}
+              >
+                <div className="label" style={{ marginBottom: 5, color: "var(--accent)" }}>Resolve durable setup</div>
+                <div style={{ fontSize: 12, lineHeight: 1.55, color: "var(--text-secondary)", marginBottom: 10 }}>
+                  This trade has no durable setup link. Choose an active owner setup for {selectedEntry.symbol}; otherwise it remains explicitly unplanned.
+                </div>
+                {setupOptionsLoading && (
+                  <div className="caption">Loading active setups…</div>
+                )}
+                {!setupOptionsLoading && setupOptionsError && (
+                  <div data-testid="journal-setup-resolution-error" style={{ fontSize: 12, lineHeight: 1.5, color: "var(--loss)" }}>
+                    {setupOptionsError}
+                  </div>
+                )}
+                {!setupOptionsLoading && !setupOptionsError && setupOptions.length === 0 && (
+                  <div data-testid="journal-setup-resolution-empty" className="caption">
+                    No active setup matches this symbol.
+                  </div>
+                )}
+                {!setupOptionsLoading && !setupOptionsError && setupOptions.length > 0 && (
+                  <div style={{ display: "grid", gap: 7 }}>
+                    {setupOptions.map((setup) => {
+                      const setupLabel = formatSetupTagDisplay(setup.strategy_tag) === "—"
+                        ? "Untitled setup"
+                        : formatSetupTagDisplay(setup.strategy_tag);
+                      return (
+                        <div key={setup.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px", borderRadius: "var(--radius-sm)", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{setupLabel}</div>
+                            <div className="caption">{formatSetupTagDisplay(setup.status)} · {formatSetupTagDisplay(setup.source)} · {setup.direction === "long" ? "Long" : "Short"}</div>
+                          </div>
+                          <button
+                            type="button"
+                            aria-label={`Link ${setupLabel} setup`}
+                            onClick={() => onLinkSetup(setup)}
+                            disabled={linkingSetupId !== null}
+                            style={{ flexShrink: 0, padding: "5px 9px", borderRadius: "var(--radius-sm)", border: "1px solid var(--accent)", background: "transparent", color: "var(--accent)", fontSize: 11, fontWeight: 600, cursor: linkingSetupId !== null ? "not-allowed" : "pointer", opacity: linkingSetupId !== null && linkingSetupId !== setup.id ? 0.5 : 1 }}
+                          >
+                            {linkingSetupId === setup.id ? "Linking…" : "Link setup"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {selectedEntry.entry_reason && (
               <div>

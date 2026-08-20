@@ -111,6 +111,51 @@ describe("setups API", () => {
     await expect(getSetupReview("setup-1")).rejects.toThrow("Setup review returned an invalid response.");
   });
 
+  it("parses setup list responses before exposing them to the journal", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      setups: [{
+        id: "setup-3",
+        user_id: "user-1",
+        symbol: "RELIANCE",
+        status: "ready",
+        direction: "long",
+        strategy_tag: "breakout",
+        entry_low: 2800,
+        entry_high: 2820,
+        stop_price: 2700,
+        target_price: 3100,
+        planned_risk_amount: 1000,
+        planned_quantity: 10,
+        planned_rr: 2.9,
+        thesis: "Range expansion with volume confirmation.",
+        invalidation_reason: "Closes below the base.",
+        source: "chart",
+        source_scanner_candidate_id: null,
+        scanner_context: null,
+        chart_snapshot: null,
+        created_at: "2026-08-01T10:00:00Z",
+        updated_at: "2026-08-02T10:00:00Z",
+      }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    const { getSetups } = await import("@/lib/api");
+    const setups = await getSetups({ symbol: "reliance" });
+
+    expect(setups).toHaveLength(1);
+    expect(setups[0]).toMatchObject({ id: "setup-3", symbol: "RELIANCE", strategy_tag: "breakout" });
+  });
+
+  it("rejects a malformed setup list instead of rendering an unsafe match", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      setups: [{ id: "setup-4", symbol: "RELIANCE", status: "ready" }],
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    const { getSetups } = await import("@/lib/api");
+
+    await expect(getSetups({ symbol: "RELIANCE" }))
+      .rejects.toThrow("Setup returned an invalid response.");
+  });
+
   it("rejects malformed rulebook rules at the API boundary", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       rulebooks: [{ id: "rulebook-1", name: "Starter", rules: [{ code: "minimum_rr" }] }],

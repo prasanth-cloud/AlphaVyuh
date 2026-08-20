@@ -76,8 +76,9 @@ Delivered:
 - Authenticated review list/save endpoints use the user's RLS-scoped Supabase client.
 - Existing journal lesson writes are synchronized into `trade_reviews`, so older journal clients do not silently lose review durability.
 - The journal review queue hydrates the durable review records while retaining its existing closed-trade and lesson UX.
+- Journal entries without a `setup_id` now show their reconciliation state and load same-symbol active setups for owner resolution; linking uses the existing owner/symbol validation on the journal update endpoint.
 
-Remaining: reconcile every imported fill to a setup, add review-aware outcome analytics, and verify the new migration/RLS behavior in the correct Supabase project before production use.
+Remaining: add review-aware outcome analytics and verify the new migration/RLS behavior in the correct Supabase project before production use.
 
 ## Milestone 5 — broker read-only verification
 
@@ -96,7 +97,7 @@ Delivered:
 Remaining:
 
 - Run the owner-approved Zerodha/Upstox real-account smoke and record profile, holdings, positions, orderbook, tradebook, and import evidence.
-- Surface broker-import reconciliation state and allow an owner to resolve ambiguous imports to a durable setup.
+- Surface broker-import reconciliation state and allow an owner to resolve ambiguous imports to a durable setup. The journal resolution panel is now delivered for same-symbol active setups; durable migration/RLS verification is still pending.
 - Apply and verify the current migrations in the correct Supabase project before production use.
 
 ## Milestone 6 — broker execution, only after owner approval
