@@ -143,6 +143,8 @@ interface ScanResult {
   setup_grade?: string | null
   confidence_label?: string | null
   confidence_reasons?: string[]
+  scan_run_id?: string | null
+  candidate_id?: string | null
   market_cap_cr: number | null
   pe_ratio: number | null
   pb_ratio: number | null
@@ -186,6 +188,11 @@ type ScannerRunResponse = {
     universe_active?: number | null
     license_notes?: string
     symbols_count?: number | null
+  }
+  scan_run_id?: string | null
+  lineage?: {
+    status?: 'recorded' | 'unavailable'
+    scan_run_id?: string | null
   }
 }
 

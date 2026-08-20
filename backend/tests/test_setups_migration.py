@@ -30,6 +30,15 @@ def test_setup_migration_links_existing_workflow_and_trade_records() -> None:
     assert "broker_orders_user_setup_idx" in sql
 
 
+def test_setup_migration_can_point_back_to_a_scanner_candidate() -> None:
+    lineage_migration = REPO_ROOT / "supabase/migrations/20260820000003_scanner_lineage.sql"
+    sql = " ".join(lineage_migration.read_text().lower().split())
+
+    assert "alter table public.setups add column if not exists source_scanner_candidate_id uuid" in sql
+    assert "setups_source_scanner_candidate_idx" in sql
+    assert "foreign key (user_id, source_scanner_candidate_id) references public.scanner_candidates (user_id, id)" in sql
+
+
 def test_broker_smoke_state_migration_removes_authenticated_write_access() -> None:
     sql = " ".join(BROKER_CONNECTION_MIGRATION.read_text().lower().split())
 

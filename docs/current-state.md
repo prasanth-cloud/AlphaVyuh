@@ -38,6 +38,8 @@ The repository already has safety-relevant tables and controls for broker creden
 
 At the audited baseline, the existing schema did not contain the durable workflow entities from the attached plan named `setups`, `scanner_candidates`, `scanner_definitions`, `scanner_filter_groups`, `scanner_filters`, `rulebooks`, `rules`, `rule_evaluations`, `trade_reviews`, generic `audit_logs`, or generic `job_runs`. The implementation adds only `setups` and nullable setup links in this slice; the remaining entities are still gaps. `ingest_runs` is an existing narrower ingestion record and is not a substitute for a general job-run model.
 
+The current implementation branch has since added the rulebook/setup-review slice and the scanner-lineage slice. The new scanner migration adds owner-scoped definitions, filter groups, filters, runs, and candidates; scanner responses can carry a user-specific run/candidate id, and setup creation accepts `source_scanner_candidate_id`. These changes are repository-local until the correct AlphaVyuh Supabase project is accessible and the migrations are applied and verified there.
+
 ## Current verification surface
 
 The repository contains frontend unit tests, backend pytest coverage, and Playwright suites. Relevant existing coverage includes chart-plan handoff behavior and broker order safety/idempotency. Root scripts include type checking, linting, unit tests, mock workflow E2E, launch checks, and contract checks.

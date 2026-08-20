@@ -543,6 +543,7 @@ function setupReviewInput(draft: WorkflowState): Partial<Setup> {
     thesis: draft.thesis ?? null,
     invalidation_reason: draft.invalidation_rule ?? null,
     source: "watchlist",
+    source_scanner_candidate_id: draft.scanner_context?.candidate_id ?? null,
     scanner_context: draft.scanner_context ?? null,
   };
 }
@@ -561,6 +562,7 @@ function setupUpdatePayload(draft: WorkflowState): UpdateSetupRequest {
     thesis: input.thesis,
     invalidation_reason: input.invalidation_reason,
     source: input.source,
+    source_scanner_candidate_id: input.source_scanner_candidate_id,
     scanner_context: input.scanner_context,
   };
 }
@@ -713,6 +715,7 @@ function DecisionDesk({
       thesis: input.thesis,
       invalidation_reason: input.invalidation_reason,
       source: "watchlist",
+      source_scanner_candidate_id: input.source_scanner_candidate_id,
       scanner_context: input.scanner_context,
     });
     await patch({ setup_id: created.id });
@@ -2035,6 +2038,7 @@ function WatchlistContent() {
       appliedChartDrafts.current.add(appliedKey);
       const applyDraft = async () => {
         try {
+          const scannerContext = workflowBySymbol[draftSymbol]?.scanner_context ?? null;
           const setup = await createSetup({
             symbol: draft.symbol,
             direction: draft.side,
@@ -2046,6 +2050,8 @@ function WatchlistContent() {
             thesis: draft.thesis,
             invalidation_reason: draft.invalidationRule,
             source: "chart",
+            source_scanner_candidate_id: scannerContext?.candidate_id ?? null,
+            scanner_context: scannerContext,
             chart_snapshot: {
               source: draft.source,
               drawing_id: draft.drawingId,
@@ -2076,7 +2082,7 @@ function WatchlistContent() {
     } catch {
       showToast("Could not load chart plan draft");
     }
-  }, [activeId, chartSymbol, openOrderDraft, planDraftParam, symbolParam, watchlistIdParam, watchlists]);
+  }, [activeId, chartSymbol, openOrderDraft, planDraftParam, symbolParam, watchlistIdParam, watchlists, workflowBySymbol]);
 
   const activeWl = watchlists.find(w => w.id === activeId) ?? null;
   const chartHref = useCallback((symbol: string, draw?: "trendline") => {

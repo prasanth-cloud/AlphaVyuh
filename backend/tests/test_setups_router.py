@@ -88,6 +88,20 @@ def test_create_setup_derives_reward_to_risk_and_normalizes_symbol() -> None:
     assert payload["user_id"] == "user-1"
 
 
+def test_create_setup_serializes_scanner_candidate_lineage() -> None:
+    candidate_id = "00000000-0000-4000-8000-000000000009"
+    body = setups_router.SetupCreate(
+        symbol="TCS",
+        direction="long",
+        source="scanner",
+        source_scanner_candidate_id=candidate_id,
+    )
+
+    payload = setups_router._create_payload(body, "user-1")
+
+    assert payload["source_scanner_candidate_id"] == candidate_id
+
+
 def test_create_setup_rejects_wrong_direction_geometry() -> None:
     body = setups_router.SetupCreate(
         symbol="RELIANCE",

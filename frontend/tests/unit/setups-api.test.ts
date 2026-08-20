@@ -52,6 +52,36 @@ describe("setups API", () => {
     );
   });
 
+  it("sends scanner candidate lineage when creating a setup", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toMatchObject({
+        source_scanner_candidate_id: "candidate-1",
+        scanner_context: { candidate_id: "candidate-1", scan_run_id: "run-1" },
+      });
+      return new Response(JSON.stringify({
+        id: "setup-2",
+        user_id: "user-1",
+        symbol: "TCS",
+        status: "planned",
+        direction: "long",
+        source_scanner_candidate_id: "candidate-1",
+        scanner_context: { candidate_id: "candidate-1", scan_run_id: "run-1" },
+      }), { status: 201, headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { createSetup } = await import("@/lib/api");
+    const setup = await createSetup({
+      symbol: "TCS",
+      direction: "long",
+      source: "scanner",
+      source_scanner_candidate_id: "candidate-1",
+      scanner_context: { candidate_id: "candidate-1", scan_run_id: "run-1" },
+    });
+
+    expect(setup.source_scanner_candidate_id).toBe("candidate-1");
+  });
+
   it("rejects a malformed create response instead of treating it as durable", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "planned" }), {
       status: 201,

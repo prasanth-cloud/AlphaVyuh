@@ -39,7 +39,23 @@ Remaining for this milestone: apply and verify the migration in the correct Supa
 
 ## Milestone 3 — EOD data quality and scanner lineage
 
-Formalize EOD bars, indicator snapshots, scanner definitions, filter groups, filters, runs, and candidates. Store the matched conditions and rank so a candidate can be explained and converted into a setup without retyping. Keep the initial scope to EOD data; defer live streaming, options, and broad backtesting.
+Status: scanner lineage slice implemented locally; EOD quality/job expansion and database application remain pending.
+
+Delivered in the current slice:
+
+- User-owned scanner definitions, filter groups, filters, run records, and ranked candidate snapshots with RLS.
+- Completed scanner runs record the exact input definition, EOD trade date, source metadata, match reasons, confidence reasons, and a compact result snapshot.
+- Scanner responses carry user-specific `scan_run_id` and `candidate_id` values without placing user-owned ids in the shared market-result cache.
+- `setups.source_scanner_candidate_id` and the chart/watchlist handoff preserve candidate lineage into the durable setup spine.
+- Authenticated read endpoints expose run history and candidate evidence; definition CRUD is available for the next scan-builder UI slice.
+
+Remaining for this milestone:
+
+- Normalize the existing `ingest_runs`/bhavcopy path into a complete EOD quality contract with explicit duplicate, missing, and invalid-OHLC counters.
+- Apply the new migration in the correct Supabase project and verify RLS with an authenticated user and a second-user denial check.
+- Replace the current saved-screen UI's JSON-only persistence with the normalized definition/group/filter editor.
+
+Live streaming, options, and broad backtesting remain deferred.
 
 ## Milestone 4 — watchlist and journal continuity
 

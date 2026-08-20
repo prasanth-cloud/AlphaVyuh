@@ -51,6 +51,8 @@ export type ScanResult = {
   setup_grade?: string | null;
   confidence_label?: string | null;
   confidence_reasons?: string[];
+  scan_run_id?: string | null;
+  candidate_id?: string | null;
   market_cap_cr?: number | null;
   pe_ratio?: number | null;
   pb_ratio?: number | null;
@@ -156,6 +158,11 @@ export type ScanResponse = {
   coverage_pct?: number | null;
   universe_size?: number | null;
   message?: string;
+  scan_run_id?: string | null;
+  lineage?: {
+    status?: "recorded" | "unavailable";
+    scan_run_id?: string | null;
+  };
   results: ScanResult[];
 };
 
@@ -277,6 +284,7 @@ export type Setup = {
   thesis: string | null;
   invalidation_reason: string | null;
   source: SetupSource;
+  source_scanner_candidate_id?: string | null;
   review_status?: SetupReviewStatus;
   rulebook_id?: string | null;
   last_reviewed_at?: string | null;
@@ -299,6 +307,7 @@ export type CreateSetupRequest = {
   thesis?: string | null;
   invalidation_reason?: string | null;
   source?: SetupSource;
+  source_scanner_candidate_id?: string | null;
   scanner_context?: Record<string, unknown> | null;
   chart_snapshot?: Record<string, unknown> | null;
 };
@@ -425,6 +434,8 @@ export type ScannerIdeaContext = {
   data_source?: string | null;
   data_mode?: string | null;
   data_as_of?: string | null;
+  scan_run_id?: string | null;
+  candidate_id?: string | null;
   captured_at?: string;
   chart_snapshot?: {
     chart_url: string;

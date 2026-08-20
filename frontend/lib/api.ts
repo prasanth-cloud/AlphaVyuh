@@ -589,6 +589,7 @@ function createLocalSetup(request: CreateSetupRequest): Setup {
     thesis: request.thesis ?? null,
     invalidation_reason: request.invalidation_reason ?? null,
     source: request.source ?? "manual",
+    source_scanner_candidate_id: request.source_scanner_candidate_id ?? null,
     scanner_context: request.scanner_context ?? null,
     chart_snapshot: request.chart_snapshot ?? null,
     created_at: now,
@@ -649,6 +650,7 @@ export async function updateSetup(setupId: string, request: UpdateSetupRequest):
       thesis: request.thesis !== undefined ? request.thesis : existing.thesis,
       invalidation_reason: request.invalidation_reason !== undefined ? request.invalidation_reason : existing.invalidation_reason,
       source: request.source !== undefined ? request.source : existing.source,
+      source_scanner_candidate_id: request.source_scanner_candidate_id !== undefined ? request.source_scanner_candidate_id : existing.source_scanner_candidate_id,
       scanner_context: request.scanner_context !== undefined ? request.scanner_context : existing.scanner_context,
       chart_snapshot: request.chart_snapshot !== undefined ? request.chart_snapshot : existing.chart_snapshot,
     });

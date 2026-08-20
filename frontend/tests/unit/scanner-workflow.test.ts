@@ -106,6 +106,23 @@ describe("scanner workflow helpers", () => {
     expect(patch.scanner_context?.captured_at).toEqual(expect.any(String));
   });
 
+  it("carries durable run and candidate ids with scanner context", () => {
+    const [patch] = scannerWatchlistPatches([
+      {
+        symbol: "TCS",
+        candidate_id: "candidate-1",
+        scan_run_id: "run-1",
+        match_reasons: ["RS score 88"],
+      },
+    ], "wl-setup", { tradeDate: "2026-08-20" });
+
+    expect(patch.scanner_context).toMatchObject({
+      candidate_id: "candidate-1",
+      scan_run_id: "run-1",
+      scan_trade_date: "2026-08-20",
+    });
+  });
+
   it("preserves result order when deriving selected scanner symbols", () => {
     const results = [{ symbol: "TCS" }, { symbol: "INFY" }, { symbol: "RELIANCE" }];
     expect(selectedScannerSymbols(results, new Set(["RELIANCE", "TCS"]))).toEqual(["TCS", "RELIANCE"]);

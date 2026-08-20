@@ -24,6 +24,7 @@ from app.services.plans import get_effective_user_plan
 from app.services.rate_limit import plan_cache, scanner_limiter
 from app.services.market_context import eod_source_metadata
 from app.services.market_dates import get_latest_complete_trade_date
+from app.services.scanner_lineage import add_lineage_ids, record_scanner_run
 from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
 
 router = APIRouter(prefix="/api/v1/scanner", tags=["scanner"])
@@ -561,6 +562,7 @@ class ScanFilters(BaseModel):
 class ScanRequest(BaseModel):
     filters: ScanFilters = ScanFilters()
     preset_id:  str | None = None
+    scanner_definition_id: UUID | None = None
     sort_by:    str = "volume_ratio"   # column key (see SORT_KEYS below)
     sort_order: str = "desc"           # "asc" | "desc"
     page:       int = 1
@@ -1419,6 +1421,7 @@ async def execute_scan(
     score_results: bool = True,
     include_diagnostics: bool = True,
     use_result_cache: bool = True,
+    user_id: str | None = None,
 ) -> dict:
     """Run the scanner core for UI scans and saved EOD scan alerts."""
     scan_started = time.perf_counter()
@@ -1468,6 +1471,23 @@ async def execute_scan(
             "cache_lookup": cache_lookup_elapsed_ms,
             "total": cache_lookup_elapsed_ms,
         }
+        if user_id:
+            try:
+                lineage = record_scanner_run(
+                    client,
+                    user_id=user_id,
+                    body=body,
+                    response=cached_response,
+                    candidates=cached_response.get("results") or [],
+                )
+                return add_lineage_ids(
+                    cached_response,
+                    scan_run_id=lineage["scan_run_id"],
+                    candidate_ids_by_symbol=lineage["candidate_ids_by_symbol"],
+                )
+            except Exception:
+                logger.warning("Scanner result cache hit could not be recorded as lineage", exc_info=True)
+                cached_response["lineage"] = {"status": "unavailable"}
         return cached_response
 
     # Build base query with series filter pushed to DB
@@ -1650,8 +1670,39 @@ async def execute_scan(
         "query_row_reduction_pct": query_row_reduction_pct,
         "db_prefilters_applied": applied_prefilters,
     }
+    response_for_cache = response
+    if user_id:
+        try:
+            lineage = record_scanner_run(
+                client,
+                user_id=user_id,
+                body=body,
+                response=response,
+                candidates=capped,
+            )
+            response = add_lineage_ids(
+                response,
+                scan_run_id=lineage["scan_run_id"],
+                candidate_ids_by_symbol=lineage["candidate_ids_by_symbol"],
+            )
+            response_for_cache = {
+                **response,
+                "results": [
+                    {
+                        key: value
+                        for key, value in row.items()
+                        if key not in {"scan_run_id", "candidate_id"}
+                    }
+                    for row in response["results"]
+                ],
+            }
+            response_for_cache.pop("scan_run_id", None)
+            response_for_cache.pop("lineage", None)
+        except Exception:
+            logger.warning("Scanner result could not be recorded as lineage", exc_info=True)
+            response["lineage"] = {"status": "unavailable"}
     if use_result_cache and not used_fallback_query:
-        _write_scan_result_cache(cache_key, response)
+        _write_scan_result_cache(cache_key, response_for_cache)
     return response
 
 
@@ -1678,11 +1729,29 @@ async def run_scanner(
             detail="Scanner data is temporarily unavailable.",
         )
 
+    if body.scanner_definition_id is not None:
+        try:
+            definition = (
+                client.table("scanner_definitions")
+                .select("id")
+                .eq("id", str(body.scanner_definition_id))
+                .eq("user_id", user_id)
+                .execute()
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Scanner definition is temporarily unavailable.",
+            ) from exc
+        if not definition.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scanner definition not found")
+
     use_result_cache = "no-cache" not in (cache_control or "").lower()
     return await execute_scan(
         client,
         body,
         plan=plan,
+        user_id=user_id,
         use_result_cache=use_result_cache,
     )
 

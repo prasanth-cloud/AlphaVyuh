@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID
@@ -11,6 +12,7 @@ from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.services.supabase import get_user_client
 
 router = APIRouter(prefix="/api/v1/setups", tags=["setups"])
+logger = logging.getLogger(__name__)
 
 SetupDirection = Literal["long", "short"]
 SetupStatus = Literal["planned", "ready", "triggered", "open", "closed", "invalidated", "cancelled"]
@@ -30,6 +32,7 @@ class SetupCreate(BaseModel):
     thesis: str | None = Field(default=None, max_length=1200)
     invalidation_reason: str | None = Field(default=None, max_length=800)
     source: SetupSource = "manual"
+    source_scanner_candidate_id: UUID | None = None
     scanner_context: dict[str, Any] | None = None
     chart_snapshot: dict[str, Any] | None = None
 
@@ -46,6 +49,7 @@ class SetupPatch(BaseModel):
     thesis: str | None = Field(default=None, max_length=1200)
     invalidation_reason: str | None = Field(default=None, max_length=800)
     source: SetupSource | None = None
+    source_scanner_candidate_id: UUID | None = None
     scanner_context: dict[str, Any] | None = None
     chart_snapshot: dict[str, Any] | None = None
 
@@ -101,6 +105,8 @@ def _apply_plan_derivatives(payload: dict[str, Any]) -> dict[str, Any]:
 def _create_payload(body: SetupCreate, user_id: str) -> dict[str, Any]:
     payload = body.model_dump(exclude_none=True)
     payload = _apply_plan_derivatives(payload)
+    if "source_scanner_candidate_id" in payload:
+        payload["source_scanner_candidate_id"] = str(payload["source_scanner_candidate_id"])
     payload["user_id"] = user_id
     return payload
 
@@ -158,7 +164,21 @@ async def create_setup(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Setup could not be saved") from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Setup save returned no data")
-    return result.data[0]
+    created = result.data[0]
+    candidate_id = payload.get("source_scanner_candidate_id")
+    if candidate_id:
+        try:
+            sb = get_user_client(user_jwt)
+            sb.table("scanner_candidates").update({
+                "setup_id": created["id"],
+                "status": "converted",
+            }).eq("id", candidate_id).eq("user_id", user_id).execute()
+        except Exception:
+            # The setup's source_scanner_candidate_id is the authoritative
+            # forward link; the back-link is best-effort for older schemas or
+            # a transient candidate write failure.
+            logger.warning("Could not update scanner candidate back-link for setup %s", created.get("id"), exc_info=True)
+    return created
 
 
 @router.get("/{setup_id}")
@@ -201,11 +221,14 @@ async def update_setup(
             "thesis",
             "invalidation_reason",
             "source",
+            "source_scanner_candidate_id",
             "scanner_context",
             "chart_snapshot",
         )
         if key in merged
     }
+    if isinstance(payload.get("source_scanner_candidate_id"), UUID):
+        payload["source_scanner_candidate_id"] = str(payload["source_scanner_candidate_id"])
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         result = sb.table("setups").update(payload).eq("id", str(setup_id)).eq("user_id", user_id).execute()
