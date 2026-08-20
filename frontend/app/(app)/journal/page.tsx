@@ -10,7 +10,7 @@ import {
   searchSymbols, analyseJournal, getAiPatterns,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, TradeReview } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
@@ -332,7 +332,11 @@ export default function JournalPage() {
     finally { setLessonLoading(null); }
   };
 
-  const handleSaveReviewLesson = async (entry: JournalEntry, lesson: string) => {
+  const handleSaveReviewLesson = async (
+    entry: JournalEntry,
+    lesson: string,
+    reviewInput: { plan_adherence: TradeReview["plan_adherence"]; follow_up: string | null },
+  ) => {
     const cleaned = lesson.trim();
     if (!cleaned) {
       showToast("Add one lesson before saving the review");
@@ -340,7 +344,13 @@ export default function JournalPage() {
     }
     setReviewSaving(true);
     try {
-      const review = await saveTradeReview(entry.id, { lesson: cleaned, source: "manual" });
+      const review = await saveTradeReview(entry.id, {
+        lesson: cleaned,
+        mistakes: entry.mistakes,
+        plan_adherence: reviewInput.plan_adherence,
+        follow_up: reviewInput.follow_up,
+        source: "manual",
+      });
       const updated = {
         ...entry,
         review,

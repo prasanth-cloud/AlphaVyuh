@@ -2097,6 +2097,11 @@ export async function saveTradeReview(entryId: string, request: TradeReviewReque
         follow_up: request.follow_up ?? null,
       },
     });
+    const persisted = { ...updated, review };
+    writeLocalJournalEntries([
+      persisted,
+      ...readLocalJournalEntries().filter((entry) => entry.id !== entryId),
+    ]);
     invalidateClientCache(["journal:", "portfolio"]);
     return review;
   }

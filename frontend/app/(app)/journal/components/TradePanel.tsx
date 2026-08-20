@@ -6,7 +6,7 @@ import { Card } from "@/components/ui";
 import { displayCompanyName } from "@/lib/company-display";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import { getJournalWorkflowLinks } from "@/lib/workflow-placement";
-import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult } from "./types";
+import type { JournalEntry, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, ReviewSaveInput } from "./types";
 import type { PanelMode } from "./types";
 import { SETUP_TYPES, displayEntryReason, inputStyle, fmtCcy, fmtDate, getReviewContext, getTradeFlowMeta } from "./utils";
 
@@ -65,7 +65,7 @@ interface TradePanelProps {
   // View + shared
   onClose: () => void;
   onGetLesson: (e: JournalEntry) => void;
-  onSaveReviewLesson: (e: JournalEntry, lesson: string) => void;
+  onSaveReviewLesson: (e: JournalEntry, lesson: string, input: ReviewSaveInput) => void;
   onInitiateClose: (e: JournalEntry) => void;
   reviewSaving: boolean;
   chartPrefilled?: boolean;
@@ -107,9 +107,13 @@ export function TradePanel({
   chartPrefilled,
 }: TradePanelProps) {
   const [lessonDraft, setLessonDraft] = useState("");
+  const [reviewAdherence, setReviewAdherence] = useState<ReviewSaveInput["plan_adherence"]>("unknown");
+  const [followUpDraft, setFollowUpDraft] = useState("");
 
   useEffect(() => {
     setLessonDraft("");
+    setReviewAdherence(selectedEntry?.review?.plan_adherence ?? "unknown");
+    setFollowUpDraft(selectedEntry?.review?.follow_up ?? "");
   }, [selectedEntry?.id]);
 
   if (!mode) return null;
@@ -491,8 +495,36 @@ export function TradePanel({
                     style={{ ...inputStyle, resize: "none" }}
                   />
                 </div>
+                <div>
+                  <div className="label" style={{ marginBottom: 6 }}>Plan adherence</div>
+                  <select
+                    aria-label="Plan adherence"
+                    value={reviewAdherence}
+                    onChange={ev => setReviewAdherence(ev.target.value as ReviewSaveInput["plan_adherence"])}
+                    style={inputStyle}
+                  >
+                    <option value="unknown">Not recorded</option>
+                    <option value="followed">Followed the plan</option>
+                    <option value="partial">Partly followed</option>
+                    <option value="not_followed">Did not follow the plan</option>
+                  </select>
+                </div>
+                <div>
+                  <div className="label" style={{ marginBottom: 6 }}>Next process change</div>
+                  <textarea
+                    aria-label="Next process change"
+                    value={followUpDraft}
+                    onChange={ev => setFollowUpDraft(ev.target.value)}
+                    rows={2}
+                    placeholder="One change to carry into the next setup..."
+                    style={{ ...inputStyle, resize: "none" }}
+                  />
+                </div>
                 <button
-                  onClick={() => onSaveReviewLesson(selectedEntry, reviewDraft)}
+                  onClick={() => onSaveReviewLesson(selectedEntry, reviewDraft, {
+                    plan_adherence: reviewAdherence,
+                    follow_up: followUpDraft.trim() || null,
+                  })}
                   disabled={reviewSaving || !reviewDraft}
                   style={{ width: "100%", padding: "8px 0", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, border: "1px solid var(--accent)", color: "var(--text-on-accent)", background: "var(--accent)", cursor: reviewSaving || !reviewDraft ? "not-allowed" : "pointer", opacity: reviewSaving || !reviewDraft ? 0.5 : 1 }}
                 >

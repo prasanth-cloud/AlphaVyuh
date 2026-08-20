@@ -432,6 +432,8 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByTestId("journal-original-idea")).toContainText(/Original scan|Original thesis/i, { timeout: 10_000 });
     await expect(page.getByText("Save one process lesson")).toBeVisible();
     await page.getByPlaceholder(/Wait for volume confirmation/i).fill("Wait for volume confirmation before entering the breakout.");
+    await page.getByLabel("Plan adherence").selectOption("partial");
+    await page.getByLabel("Next process change").fill("Add a volume confirmation check before entry.");
     await page.getByRole("button", { name: "Save review" }).click();
     await expect(page.getByText("Review saved")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText("Trade lesson")).toBeVisible();
@@ -442,6 +444,11 @@ test.describe("Mock workflow smoke", () => {
       return journal.find((entry: { id: string }) => entry.id === "review-save-1");
     });
     expect(saved.lessons).toBe("Wait for volume confirmation before entering the breakout.");
+    expect(saved.review).toMatchObject({
+      status: "completed",
+      plan_adherence: "partial",
+      follow_up: "Add a volume confirmation check before entry.",
+    });
 
     await page.goto("/journal?review=reviewed", { waitUntil: "domcontentloaded" });
     await expect(page.locator("tbody tr").filter({ hasText: "HDFCBANK" })).toContainText("Reviewed", { timeout: 15_000 });
