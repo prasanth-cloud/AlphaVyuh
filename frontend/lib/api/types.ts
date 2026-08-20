@@ -255,10 +255,55 @@ export type WorkflowLifecycle =
   | "ignored"
   | "review_later";
 
+export type SetupDirection = "long" | "short";
+export type SetupStatus = "planned" | "ready" | "triggered" | "open" | "closed" | "invalidated" | "cancelled";
+export type SetupSource = "scanner" | "chart" | "watchlist" | "manual";
+
+export type Setup = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  status: SetupStatus;
+  direction: SetupDirection;
+  strategy_tag: string | null;
+  entry_low: number | null;
+  entry_high: number | null;
+  stop_price: number | null;
+  target_price: number | null;
+  planned_risk_amount: number | null;
+  planned_quantity: number | null;
+  planned_rr: number | null;
+  thesis: string | null;
+  invalidation_reason: string | null;
+  source: SetupSource;
+  scanner_context: Record<string, unknown> | null;
+  chart_snapshot: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateSetupRequest = {
+  symbol: string;
+  direction: SetupDirection;
+  status?: SetupStatus;
+  strategy_tag?: string | null;
+  entry_low?: number | null;
+  entry_high?: number | null;
+  stop_price?: number | null;
+  target_price?: number | null;
+  planned_quantity?: number | null;
+  thesis?: string | null;
+  invalidation_reason?: string | null;
+  source?: SetupSource;
+  scanner_context?: Record<string, unknown> | null;
+  chart_snapshot?: Record<string, unknown> | null;
+};
+
 export type WorkflowState = {
   id?: string;
   user_id?: string;
   symbol: string;
+  setup_id?: string | null;
   watchlist_id?: string | null;
   source?: string;
   lifecycle: WorkflowLifecycle;
@@ -478,6 +523,7 @@ export type JournalEntry = {
   id: string;
   user_id: string;
   symbol: string;
+  setup_id?: string | null;
   company_name: string | null;
   trade_type: "long" | "short";
   setup_type: string | null;
@@ -521,6 +567,7 @@ export type JournalStats = {
 
 export type CreateJournalEntry = {
   symbol: string;
+  setup_id?: string | null;
   trade_type: "long" | "short";
   entry_date: string;
   entry_price: number;
@@ -537,6 +584,7 @@ export type CreateJournalEntry = {
 };
 
 export type UpdateJournalEntry = {
+  setup_id?: string | null;
   exit_date?: string;
   exit_price?: number;
   exit_reason?: string;
@@ -739,6 +787,7 @@ export type ZerodhaReadOnlySmoke = {
 
 export type PlaceOrderRequest = {
   symbol:       string;
+  setup_id?:    string | null;
   side:         "buy" | "sell";
   quantity:     number;
   price:        number;
@@ -761,6 +810,7 @@ export type OrderResult = {
   status:           string;
   message:          string;
   journal_id:       string | null;
+  setup_id?:        string | null;
   symbol:           string;
   side:             string;
   quantity:         number;
@@ -790,6 +840,7 @@ export type BrokerOrderReconciliation = {
   requires_reconciliation: boolean;
   rejection_reason: string | null;
   journal_id: string | null;
+  setup_id?: string | null;
   journal_status: string | null;
   message: string;
 };
@@ -799,6 +850,7 @@ export type BrokerOrderActivityItem = {
   broker: "simulated" | "zerodha" | "upstox";
   broker_order_id: string | null;
   journal_id: string | null;
+  setup_id?: string | null;
   symbol: string;
   side: "BUY" | "SELL";
   quantity: number;

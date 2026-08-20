@@ -27,6 +27,7 @@ type Props = {
     entry?: number | null;
     stop?: number | null;
     target?: number | null;
+    setup_id?: string | null;
   };
   onClose:     () => void;
   onFilled:    (result: OrderResult) => void;
@@ -110,6 +111,7 @@ export default function OrderModal({ symbol, currentPrice, defaultSide, initialP
     try {
       const req: PlaceOrderRequest = {
         symbol,
+        setup_id: initialPlan?.setup_id ?? null,
         side,
         quantity: qtyNum,
         price:    priceNum,

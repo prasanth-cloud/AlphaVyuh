@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from typing import Any, Literal, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import yfinance as yf
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/api/v1/journal", tags=["journal"])
 
 class JournalEntry(BaseModel):
     symbol: str
+    setup_id: UUID | None = None
     trade_type: str                     # 'long' or 'short'
     entry_date: str                     # YYYY-MM-DD
     entry_price: float
@@ -47,6 +49,7 @@ class JournalEntry(BaseModel):
 
 
 class JournalUpdate(BaseModel):
+    setup_id: Optional[UUID] = None
     exit_date: Optional[str] = None
     exit_price: Optional[float] = None
     exit_reason: Optional[str] = None
@@ -320,6 +323,21 @@ async def create_entry(
     )
     company_name = stock.data[0]["company_name"] if stock.data else body.symbol.upper()
 
+    if body.setup_id:
+        setup = (
+            sb.table("setups")
+            .select("id,symbol")
+            .eq("id", str(body.setup_id))
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        if not setup:
+            raise HTTPException(status_code=404, detail="Setup not found")
+        if str(setup.get("symbol") or "").upper() != body.symbol.strip().upper():
+            raise HTTPException(status_code=400, detail="Setup symbol does not match the journal symbol")
+
     risk_reward = None
     if body.stop_loss and body.target_price and body.entry_price:
         if body.trade_type == "long":
@@ -334,6 +352,7 @@ async def create_entry(
     row = {
         "user_id": user_id,
         "symbol": body.symbol.upper(),
+        "setup_id": str(body.setup_id) if body.setup_id else None,
         "company_name": company_name,
         "trade_type": body.trade_type,
         "entry_date": body.entry_date,
@@ -366,6 +385,7 @@ async def create_entry(
         "invalidation_rule": row["invalidation_rule"],
         "scanner_context": row["scanner_context"],
         "journal_id": created["id"],
+        "setup_id": row["setup_id"],
     })
     return created
 
@@ -400,6 +420,22 @@ async def update_entry(
             update_data[key] = _clean_text(update_data[key], max_len)
     if "scanner_context" in update_data:
         update_data["scanner_context"] = _clean_context(update_data["scanner_context"])
+    if "setup_id" in update_data:
+        if body.setup_id:
+            setup = (
+                sb.table("setups")
+                .select("id,symbol")
+                .eq("id", str(body.setup_id))
+                .eq("user_id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            if not setup:
+                raise HTTPException(status_code=404, detail="Setup not found")
+            if str(setup.get("symbol") or "").upper() != str(entry.get("symbol") or "").upper():
+                raise HTTPException(status_code=400, detail="Setup symbol does not match the journal symbol")
+        update_data["setup_id"] = str(update_data["setup_id"]) if update_data["setup_id"] else None
 
     closing_now = bool(body.exit_price and body.exit_date)
 
@@ -432,6 +468,7 @@ async def update_entry(
             "source": "journal",
             "lifecycle": "closed",
             "journal_id": entry_id,
+            "setup_id": updated_entry.get("setup_id"),
         })
 
     return updated_entry

@@ -38,6 +38,7 @@ import type {
   CandlesResponse,
   ChartLayout,
   ChartWorkspace,
+  CreateSetupRequest,
   CreateJournalEntry,
   DataHealth,
   DataRun,
@@ -74,6 +75,8 @@ import type {
   SectorBreadthItem,
   SectorListResponse,
   SectorTaxonomyMetadata,
+  Setup,
+  SetupStatus,
   SharedScreen,
   SymbolSearchResult,
   UpdateJournalEntry,
@@ -378,6 +381,99 @@ export async function reorderWatchlist(
 }
 
 const workflowLocalKey = "alphavyuh-workflow-state-v1";
+const setupLocalKey = "alphavyuh-setups-v1";
+
+function readLocalSetups(): Setup[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(setupLocalKey);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed as Setup[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalSetups(setups: Setup[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(setupLocalKey, JSON.stringify(setups));
+}
+
+function localSetupId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `mock-setup-${Date.now()}`;
+}
+
+function createLocalSetup(request: CreateSetupRequest): Setup {
+  const now = new Date().toISOString();
+  const entry = request.entry_low != null && request.entry_high != null
+    ? (request.entry_low + request.entry_high) / 2
+    : request.entry_low ?? request.entry_high ?? null;
+  const risk = entry != null && request.stop_price != null
+    ? Math.abs(entry - request.stop_price)
+    : null;
+  const reward = entry != null && request.target_price != null
+    ? Math.abs(request.target_price - entry)
+    : null;
+  return {
+    id: localSetupId(),
+    user_id: "mock-user",
+    symbol: request.symbol.trim().toUpperCase(),
+    status: request.status ?? "planned",
+    direction: request.direction,
+    strategy_tag: request.strategy_tag ?? null,
+    entry_low: request.entry_low ?? null,
+    entry_high: request.entry_high ?? null,
+    stop_price: request.stop_price ?? null,
+    target_price: request.target_price ?? null,
+    planned_risk_amount: risk != null && request.planned_quantity != null ? Number((risk * request.planned_quantity).toFixed(4)) : null,
+    planned_quantity: request.planned_quantity ?? null,
+    planned_rr: risk != null && risk > 0 && reward != null ? Number((reward / risk).toFixed(4)) : null,
+    thesis: request.thesis ?? null,
+    invalidation_reason: request.invalidation_reason ?? null,
+    source: request.source ?? "manual",
+    scanner_context: request.scanner_context ?? null,
+    chart_snapshot: request.chart_snapshot ?? null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export async function getSetups(options?: { symbol?: string; status?: SetupStatus }): Promise<Setup[]> {
+  if (shouldUseMockFallback()) {
+    const symbol = options?.symbol?.trim().toUpperCase();
+    return readLocalSetups().filter((setup) => (!symbol || setup.symbol === symbol) && (!options?.status || setup.status === options.status));
+  }
+  const headers = await authHeaders();
+  const query = new URLSearchParams();
+  if (options?.symbol) query.set("symbol", options.symbol.trim().toUpperCase());
+  if (options?.status) query.set("status", options.status);
+  const res = await fetch(`${API}/api/v1/setups${query.toString() ? `?${query}` : ""}`, { headers });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setups are temporarily unavailable."));
+  const data = await res.json();
+  return Array.isArray(data?.setups) ? data.setups as Setup[] : [];
+}
+
+export async function createSetup(request: CreateSetupRequest): Promise<Setup> {
+  if (shouldUseMockFallback()) {
+    const created = createLocalSetup(request);
+    writeLocalSetups([created, ...readLocalSetups()]);
+    invalidateClientCache(["setups"]);
+    return created;
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/setups`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...request, symbol: request.symbol.trim().toUpperCase() }),
+  });
+  if (!res.ok) throw new Error(await responseErrorMessage(res, "Setup could not be saved."));
+  const created = await res.json();
+  if (!created || typeof created.id !== "string") throw new Error("Setup save returned an invalid response.");
+  invalidateClientCache(["setups"]);
+  return created as Setup;
+}
 
 function readLocalWorkflowStates(): Record<string, WorkflowState> {
   if (typeof window === "undefined") return {};
@@ -437,9 +533,10 @@ export async function updateWatchlistItemMetadata(
 }
 
 export async function getWorkflowStates(options?: { symbols?: string[]; watchlistId?: string }): Promise<WorkflowState[]> {
-  const local = readLocalWorkflowStates();
+  const useLocalFallback = shouldUseMockFallback();
+  const local = useLocalFallback ? readLocalWorkflowStates() : {};
   const localValues = Object.values(local);
-  if (shouldUseMockFallback()) {
+  if (useLocalFallback) {
     return options?.symbols?.length
       ? localValues.filter((state) => options.symbols!.includes(state.symbol))
       : localValues;
@@ -453,7 +550,9 @@ export async function getWorkflowStates(options?: { symbols?: string[]; watchlis
       if (normalizedSymbols.length) qs.set("symbols", normalizedSymbols.join(","));
       if (options?.watchlistId) qs.set("watchlist_id", options.watchlistId);
       const res = await fetch(`${API}/api/v1/workflow/states?${qs}`, { headers });
-      if (!res.ok) return localValues;
+      if (!res.ok) {
+        throw new Error(await responseErrorMessage(res, "Workflow state is temporarily unavailable."));
+      }
       const data = await res.json();
       const remote: WorkflowState[] = data.states ?? [];
       if (remote.length) {
@@ -461,53 +560,49 @@ export async function getWorkflowStates(options?: { symbols?: string[]; watchlis
         for (const state of remote) merged[state.symbol] = state;
         writeLocalWorkflowStates(merged);
       }
-      return remote.length ? remote : localValues;
-    } catch {
-      return localValues;
+      return remote;
+    } catch (error) {
+      if (useLocalFallback) return localValues;
+      throw error;
     }
   });
 }
 
 export async function upsertWorkflowState(patch: WorkflowStatePatch): Promise<WorkflowState> {
-  const local = saveLocalWorkflowState(patch);
-  if (shouldUseMockFallback()) return local;
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/workflow/states/${patch.symbol.toUpperCase()}`, {
-      method: "PUT",
-      headers,
-      body: JSON.stringify({ ...patch, symbol: patch.symbol.toUpperCase() }),
-    });
-    if (!res.ok) return local;
-    const remote = await res.json();
-    saveLocalWorkflowState(remote);
-    invalidateClientCache(["workflow:"]);
-    return remote;
-  } catch {
-    return local;
+  if (shouldUseMockFallback()) return saveLocalWorkflowState(patch);
+
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/workflow/states/${patch.symbol.toUpperCase()}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({ ...patch, symbol: patch.symbol.toUpperCase() }),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Workflow state could not be saved."));
   }
+  const remote = await res.json();
+  invalidateClientCache(["workflow:"]);
+  return remote;
 }
 
 export async function bulkUpsertWorkflowStates(patches: WorkflowStatePatch[]): Promise<WorkflowState[]> {
   const normalized = patches.map((patch) => ({ ...patch, symbol: patch.symbol.toUpperCase() }));
-  const local = saveLocalWorkflowStates(normalized);
-  if (shouldUseMockFallback() || normalized.length === 0) return local;
-  try {
-    const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/workflow/states/bulk`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(normalized),
-    });
-    if (!res.ok) return local;
-    const data = await res.json();
-    const remote: WorkflowState[] = data.states ?? [];
-    if (remote.length) saveLocalWorkflowStates(remote);
-    invalidateClientCache(["workflow:"]);
-    return remote.length ? remote : local;
-  } catch {
-    return local;
+  if (shouldUseMockFallback()) return saveLocalWorkflowStates(normalized);
+  if (normalized.length === 0) return [];
+
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/workflow/states/bulk`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(normalized),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Workflow state could not be saved."));
   }
+  const data = await res.json();
+  const remote: WorkflowState[] = data.states ?? [];
+  invalidateClientCache(["workflow:"]);
+  return remote;
 }
 
 export async function getMarketSummary(): Promise<MarketSummary | null> {
@@ -2309,6 +2404,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
     ].filter(Boolean);
     const created = createLocalJournalEntry({
       symbol: order.symbol,
+      setup_id: order.setup_id ?? previousWorkflow?.setup_id ?? null,
       trade_type: side,
       entry_date: new Date().toISOString().slice(0, 10),
       entry_price: order.price,
@@ -2329,6 +2425,7 @@ export async function placeOrder(order: PlaceOrderRequest): Promise<OrderResult>
       [symbol]: {
         ...(previousWorkflow ?? { symbol, lifecycle: "open" as WorkflowLifecycle }),
         symbol,
+        setup_id: order.setup_id ?? previousWorkflow?.setup_id ?? null,
         lifecycle: "open",
         source: order.source_page ?? "chart",
         entry: order.price,

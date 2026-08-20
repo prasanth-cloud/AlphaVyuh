@@ -52,6 +52,7 @@ import {
   getWorkflowStates,
   isMockMode,
   liveQuotePollingEnabled,
+  createSetup,
   type PlaceOrderRequest,
   type WatchlistItemMetadataUpdate,
   type WorkflowLifecycle,
@@ -1032,6 +1033,7 @@ function ChartPanel({
     try {
       const req: PlaceOrderRequest = {
         symbol,
+        setup_id: plan?.setup_id ?? null,
         side,
         quantity: qtyN,
         price: priceN,
@@ -1815,18 +1817,46 @@ function WatchlistContent() {
       }
       const patch = buildWorkflowPatchFromChartDraft(draft, targetWatchlistId);
       appliedChartDrafts.current.add(appliedKey);
-      window.localStorage.removeItem(key);
-      setWorkflowBySymbol((prev) => ({
-        ...prev,
-        [draftSymbol]: {
-          ...(prev[draftSymbol] ?? { symbol: draftSymbol, lifecycle: "idea" as WorkflowLifecycle }),
-          ...patch,
-        },
-      }));
-      void upsertWorkflowState(patch);
-      trackEvent("chart_plan_draft_applied", { symbol: draftSymbol, watchlist_id: targetWatchlistId, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward });
-      openOrderDraft(draftSymbol);
-      showToast("Chart plan context loaded into Decision Desk. Journal ticket is ready.");
+      const applyDraft = async () => {
+        try {
+          const setup = await createSetup({
+            symbol: draft.symbol,
+            direction: draft.side,
+            strategy_tag: patch.setup_type,
+            entry_low: draft.entry,
+            entry_high: draft.entry,
+            stop_price: draft.stop,
+            target_price: draft.target,
+            thesis: draft.thesis,
+            invalidation_reason: draft.invalidationRule,
+            source: "chart",
+            chart_snapshot: {
+              source: draft.source,
+              drawing_id: draft.drawingId,
+              timeframe: draft.timeframe,
+              entry_price: draft.entry,
+              captured_at: draft.createdAt,
+            },
+          });
+          const linkedPatch = { ...patch, setup_id: setup.id };
+          window.localStorage.removeItem(key);
+          setWorkflowBySymbol((prev) => ({
+            ...prev,
+            [draftSymbol]: {
+              ...(prev[draftSymbol] ?? { symbol: draftSymbol, lifecycle: "idea" as WorkflowLifecycle }),
+              ...linkedPatch,
+            },
+          }));
+          await upsertWorkflowState(linkedPatch);
+          trackEvent("chart_plan_draft_applied", { symbol: draftSymbol, watchlist_id: targetWatchlistId, source: "full_chart_drawing", playbook_score: draft.playbookScore, risk_reward: draft.riskReward, setup_id: setup.id });
+          openOrderDraft(draftSymbol);
+          showToast("Chart plan context loaded into Decision Desk. Journal ticket is ready.");
+        } catch {
+          appliedChartDrafts.current.delete(appliedKey);
+          showToast("Setup could not be saved. The chart plan is still available to retry.");
+        }
+      };
+      void applyDraft();
     } catch {
       showToast("Could not load chart plan draft");
     }

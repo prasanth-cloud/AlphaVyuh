@@ -1,0 +1,52 @@
+# AlphaVyuh gap analysis
+
+Audit date: 2026-08-20
+
+This maps the attached vertical-slice plan to the existing `main` branch. Priorities describe implementation order, not production readiness.
+
+## Priority gaps
+
+### P0 — durable setup identity
+
+The current chart handoff persists a symbol-keyed workflow state and local chart-plan draft, but it does not create a durable setup entity. As a result, the same business object cannot yet be referenced consistently by workflow state, order intent, fill reconciliation, journal entry, and later review.
+
+The first implementation slice should add a user-scoped `setups` table, a small authenticated API, and a chart-handoff integration that creates one setup and carries its id into workflow state. This is deliberately narrower than implementing the complete trading platform.
+
+### P0 — schema and environment verification
+
+The repository has a substantial migration history and prior schema-equivalence documentation, but adding a migration is not the same as applying or validating it in staging or production. Local migration syntax, generated types, RLS behavior, and Supabase migration drift need separate checks before any environment mutation.
+
+### P1 — rulebook and risk evaluation
+
+The existing workflow stores plan fields, but there is no first-class rulebook, rule, or evaluation model. The attached plan calls for hard blocks, warnings, checklist results, risk budget, and a pre-order review. These should be built after setup identity exists so evaluations attach to a setup rather than to a symbol-only record.
+
+### P1 — scanner definitions and candidate lineage
+
+The existing scanner has saved screens, scan runs, and scanner context, but the audited schema does not have the plan's explicit scanner-definition, filter-group, filter, and candidate entities. The next scanner slice should preserve why a candidate matched and link the candidate to the setup created from it.
+
+### P1 — EOD job and data-quality model
+
+The existing ingest pipeline and `ingest_runs` provide a foundation. The attached plan additionally requires normalized EOD bars, duplicate/missing/bad-OHLC validation, indicator computation, and durable job status. The exact NSE/BSE data source and licensing constraints must be confirmed before expanding this slice.
+
+### P2 — read-only broker reconciliation
+
+Broker adapters and read-only/import paths exist, but the durable setup spine must be in place before a broker fill can be reconciled to the correct setup and journal record. Read-only Zerodha verification is the appropriate first broker milestone.
+
+### P2 — live execution and post-trade intelligence
+
+Explicit confirmation, server-only credentials, idempotency, broker status, fill reconciliation, and audit logging are prerequisites for live execution. Post-trade reviews and intelligence should consume the same setup id and should not be built on a second symbol-keyed identity.
+
+## Plan-to-repository map
+
+| Attached phase | Current evidence | Gap | Recommended next state |
+| --- | --- | --- | --- |
+| Stabilize/audit | Existing app, docs, migrations, tests | No factual audit packet for this implementation | This audit packet |
+| Shared domain model | Workflow state and journal fields | No durable setup entity | Add setup foundation |
+| EOD pipeline | Ingest routes and `ingest_runs` | Missing complete quality/job contract | Extend after setup spine |
+| Scanner builder | Scanner UI/API and saved screens | Missing explicit candidate lineage | Add candidate model and explainability |
+| Chart/setup | Chart plan and decision desk | Handoff is local-draft plus symbol state | Persist setup and link handoff |
+| Rulebook | Plan fields and broker checks | No reusable rule evaluation model | Attach evaluations to setup |
+| Watchlist/journal | Watchlist, workflow, manual/simulated journal | No universal setup id | Link existing records |
+| Zerodha read-only | Broker adapters/import surfaces | Fresh external verification required | Verify read-only path |
+| Execution | Simulated/order-intent safety foundation | Live execution owner-gated | Do not enable in this slice |
+| Review intelligence | Journal and AI review surfaces | Review lineage is incomplete | Build after setup/fill lineage |

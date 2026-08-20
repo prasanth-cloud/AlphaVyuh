@@ -64,6 +64,12 @@ class _Query:
             return type("Result", (), {"data": {"plan": "pro", "plan_expires_at": None}})()
         if self.table_name == "stock_universe":
             return type("Result", (), {"data": {"symbol": "RELIANCE", "company_name": "Reliance Industries", "isin": "INE002A01018"}})()
+        if self.table_name == "setups":
+            return type("Result", (), {"data": {
+                "id": self.filters.get("id", "11111111-1111-4111-8111-111111111111"),
+                "user_id": self.filters.get("user_id", "user-1"),
+                "symbol": "RELIANCE",
+            }})()
         if self.table_name == "trade_journal" and self.insert_payload is not None:
             if self.client.journal_insert_conflict:
                 self.client.journal_insert_conflict = False
@@ -173,6 +179,13 @@ def _order(live_confirmed: bool = False):
         source_page="watchlist",
         live_confirmed=live_confirmed,
     )
+
+
+def _live_order():
+    order = _order(live_confirmed=True)
+    order.setup_id = "11111111-1111-4111-8111-111111111111"
+    order.idempotency_key = "22222222-2222-4222-8222-222222222222"
+    return order
 
 
 def _fresh_read_only_smoke(broker: str):
@@ -314,7 +327,7 @@ def test_professional_access_blocks_live_confirmation_before_broker_call(monkeyp
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 403
     assert "Live broker order placement is not enabled" in str(exc.value.detail)
@@ -329,7 +342,7 @@ def test_free_plan_blocks_live_broker_order_when_execution_enabled(monkeypatch):
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 403
     assert exc.value.detail["error"] == "plan_required"
@@ -350,6 +363,67 @@ def test_live_order_requires_explicit_confirmation(monkeypatch):
     assert client.journal_inserts == []
 
 
+def test_confirmed_live_order_requires_durable_setup(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "durable setup" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_caller_idempotency_key(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    order = _live_order()
+    order.idempotency_key = None
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(order, user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "idempotency key" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_rejects_missing_credentials_without_simulation(monkeypatch):
+    client = _FakeSupabase()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: {})
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 503
+    assert "credentials are unavailable" in str(exc.value.detail)
+    assert "No simulated order was created" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_rejects_expired_credentials_without_simulation(monkeypatch):
+    client = _FakeSupabase()
+    expired = _live_creds()
+    expired["expires_at"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: expired)
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 503
+    assert "credentials are unavailable or expired" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
 def test_live_confirmed_order_requires_matching_read_only_smoke(monkeypatch):
     client = _FakeSupabase()
     called = {"adapter": False}
@@ -365,7 +439,7 @@ def test_live_confirmed_order_requires_matching_read_only_smoke(monkeypatch):
     monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 409
     assert "read-only broker smoke passes" in str(exc.value.detail)
@@ -383,7 +457,7 @@ def test_live_confirmed_order_requires_smoke_for_same_broker(monkeypatch):
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 409
     assert "Live zerodha order placement is blocked" in str(exc.value.detail)
@@ -409,7 +483,7 @@ def test_confirmed_live_order_failure_does_not_create_simulated_journal(monkeypa
     monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _FailingZerodhaAdapter())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 502
     assert "No simulated order was created" in str(exc.value.detail)
@@ -459,9 +533,9 @@ def test_confirmed_upstox_pending_order_does_not_create_open_journal(monkeypatch
     monkeypatch.setattr(broker_router, "UpstoxAdapter", _FakeUpstoxAdapter)
 
     intent_key = "33333333-3333-4333-8333-333333333333"
-    order = _order(live_confirmed=True)
+    order = _live_order()
     order.idempotency_key = intent_key
-    repeated_order = _order(live_confirmed=True)
+    repeated_order = _live_order()
     repeated_order.idempotency_key = intent_key
     result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
     repeated = asyncio.run(broker_router.place_order(repeated_order, user_id="user-1"))
@@ -522,7 +596,7 @@ def test_confirmed_upstox_partial_fill_records_only_filled_quantity(monkeypatch)
         lambda _user_id, broker="zerodha": {"broker_type": "upstox"} if broker == "zerodha" else _upstox_creds(),
     )
     monkeypatch.setattr(broker_router, "UpstoxAdapter", _FakeUpstoxAdapter)
-    order = _order(live_confirmed=True)
+    order = _live_order()
     order.quantity = 5
 
     result = asyncio.run(broker_router.place_order(order, user_id="user-1"))
@@ -806,7 +880,7 @@ def test_live_confirmed_order_rejects_stale_read_only_smoke(monkeypatch):
     monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(broker_router.place_order(_order(live_confirmed=True), user_id="user-1"))
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
 
     assert exc.value.status_code == 409
     assert "read-only broker smoke passes" in str(exc.value.detail)

@@ -61,6 +61,7 @@ BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS = 24
 
 class PlaceOrderRequest(BaseModel):
     symbol:      str
+    setup_id:    Optional[UUID] = None
     side:        Literal["buy", "sell"]
     quantity:    int = Field(gt=0)
     price:       float = Field(gt=0)
@@ -310,6 +311,7 @@ def _record_broker_order(
     broker: str,
     broker_order_id: str | None,
     journal_id: str | None,
+    setup_id: str | None,
     symbol: str,
     side: str,
     quantity: int,
@@ -327,6 +329,7 @@ def _record_broker_order(
                 "broker": broker,
                 "broker_order_id": broker_order_id,
                 "journal_id": journal_id,
+                "setup_id": setup_id,
                 "symbol": symbol,
                 "exchange": "NSE",
                 "side": "BUY" if side == "buy" else "SELL",
@@ -434,6 +437,7 @@ def _existing_broker_order_response(body: PlaceOrderRequest, row: dict) -> dict:
             "no second broker order was submitted."
         ),
         "journal_id": journal_id,
+        "setup_id": row.get("setup_id") or raw.get("setup_id"),
         "journal_status": "open" if journal_id else None,
         "next_actions": [
             "No second broker order was submitted.",
@@ -469,6 +473,7 @@ def _existing_order_response(body: PlaceOrderRequest, entry: dict) -> dict:
         "risk_reward": entry.get("risk_reward"),
         "message": "This order intent was already recorded. Reusing the existing Journal entry.",
         "journal_id": journal_id,
+        "setup_id": entry.get("setup_id"),
         "journal_status": str(entry.get("status") or "open"),
         "next_actions": [
             "No second broker order or Journal entry was created.",
@@ -642,9 +647,9 @@ def _token_is_expired(expires_at: str | None) -> bool:
 
 def _workflow_context_for_import(sb, user_id: str, symbol: str) -> dict:
     try:
-        return (
+        workflow = (
             sb.table("workflow_states")
-            .select("setup_type,scanner_context")
+            .select("setup_id,setup_type,scanner_context")
             .eq("user_id", user_id)
             .eq("symbol", symbol)
             .maybe_single()
@@ -653,6 +658,28 @@ def _workflow_context_for_import(sb, user_id: str, symbol: str) -> dict:
         )
     except Exception:
         return {}
+    setup_id = workflow.get("setup_id")
+    if setup_id and _owned_setup_id_for_symbol(sb, user_id, str(setup_id), symbol) is None:
+        return {**workflow, "setup_id": None}
+    return workflow
+
+
+def _owned_setup_id_for_symbol(sb, user_id: str, setup_id: str, symbol: str) -> str | None:
+    try:
+        setup = (
+            sb.table("setups")
+            .select("id,symbol")
+            .eq("id", setup_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception:
+        return None
+    if not setup or str(setup.get("symbol") or "").upper() != symbol.upper():
+        return None
+    return str(setup.get("id"))
 
 
 def _journal_enrichment_from_workflow(workflow: dict) -> dict:
@@ -661,6 +688,8 @@ def _journal_enrichment_from_workflow(workflow: dict) -> dict:
     enrichment: dict[str, Any] = {}
     if setup_type:
         enrichment["setup_type"] = setup_type
+    if workflow.get("setup_id"):
+        enrichment["setup_id"] = workflow["setup_id"]
     if isinstance(scanner_context, dict):
         enrichment["scanner_context"] = scanner_context
     enrichment["source_page"] = "broker-import"
@@ -715,6 +744,7 @@ def _fifo_close_open_long(
         "source": "broker-import",
         "lifecycle": "closed",
         "journal_id": entry["id"],
+        "setup_id": entry.get("setup_id"),
     })
     return True
 
@@ -850,6 +880,16 @@ async def place_order(
                 "upgrade_url": "/settings/billing",
             },
         )
+    if body.live_confirmed and not body.setup_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a server-validated durable setup before confirmation.",
+        )
+    if body.live_confirmed and not body.idempotency_key:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a caller-generated idempotency key before confirmation.",
+        )
 
     # Validate symbol
     sym_check = sb.table("stock_universe").select("symbol, company_name, isin") \
@@ -859,6 +899,45 @@ async def place_order(
 
     company_name = sym_check.data.get("company_name", sym)
     isin = sym_check.data.get("isin")
+
+    if body.setup_id:
+        try:
+            setup_row = (
+                sb.table("setups")
+                .select("id,symbol")
+                .eq("id", str(body.setup_id))
+                .eq("user_id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Setup lineage is temporarily unavailable. The order was not submitted.",
+            ) from exc
+        if not setup_row:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setup not found")
+        if str(setup_row.get("symbol") or "").upper() != sym:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Setup symbol does not match the order symbol")
+
+    workflow_context = {}
+    try:
+        workflow_context = (
+            sb.table("workflow_states")
+            .select("source,setup_type,setup_id,thesis,invalidation_rule,scanner_context,notes")
+            .eq("user_id", user_id)
+            .eq("symbol", sym)
+            .maybe_single()
+            .execute()
+            .data or {}
+        )
+    except Exception:
+        workflow_context = {}
+    inherited_setup_id = workflow_context.get("setup_id")
+    if not body.setup_id and inherited_setup_id:
+        if _owned_setup_id_for_symbol(sb, user_id, str(inherited_setup_id), sym) is None:
+            workflow_context = {**workflow_context, "setup_id": None}
 
     existing_broker_order = _existing_broker_order(sb, user_id, intent_key)
     if existing_broker_order:
@@ -891,6 +970,16 @@ async def place_order(
 
     if bt:
         live_ready = bool(creds.get("api_key") and creds.get("access_token") and not _token_is_expired(creds.get("expires_at")))
+        if body.live_confirmed and bt not in {"zerodha", "upstox"}:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Live {bt} order placement is not supported. No simulated order was created.",
+            )
+        if body.live_confirmed and not live_ready:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Live {bt} credentials are unavailable or expired. No simulated order was created.",
+            )
         if live_ready and not body.live_confirmed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -973,6 +1062,11 @@ async def place_order(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
             )
+    elif body.live_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live broker credentials are unavailable. No simulated order was created.",
+        )
 
     trade_type = "long" if body.side == "buy" else "short"
 
@@ -988,20 +1082,6 @@ async def place_order(
         "upstox": "Upstox",
     }.get(broker_used, broker_used.capitalize())
 
-    workflow_context = {}
-    try:
-        workflow_context = (
-            sb.table("workflow_states")
-            .select("source,setup_type,thesis,invalidation_rule,scanner_context,notes")
-            .eq("user_id", user_id)
-            .eq("symbol", sym)
-            .maybe_single()
-            .execute()
-            .data or {}
-        )
-    except Exception:
-        workflow_context = {}
-
     source_context = (body.source_context or "").strip()
     scanner_context = body.scanner_context or workflow_context.get("scanner_context")
     if body.chart_snapshot:
@@ -1010,6 +1090,7 @@ async def place_order(
     thesis = body.thesis or workflow_context.get("thesis")
     invalidation_rule = body.invalidation_rule or workflow_context.get("invalidation_rule")
     setup_type = body.setup_type or workflow_context.get("setup_type")
+    setup_id = str(body.setup_id) if body.setup_id else workflow_context.get("setup_id")
     source_page = body.source_page or workflow_context.get("source") or "chart"
     if source_page not in {"chart", "watchlist", "scanner", "manual"}:
         source_page = "chart"
@@ -1068,6 +1149,7 @@ async def place_order(
         "stop_loss":      body.stop_loss,
         "target_price":   body.target_price,
         "setup_type":     setup_type,
+        "setup_id":       setup_id,
         "entry_reason":   entry_reason,
         "risk_reward":    risk_reward,
         "source_page":    source_page,
@@ -1103,6 +1185,7 @@ async def place_order(
         broker=broker_used,
         broker_order_id=broker_order_id,
         journal_id=journal_entry.get("id") if journal_entry else None,
+        setup_id=setup_id,
         symbol=sym,
         side=body.side,
         quantity=body.quantity,
@@ -1115,6 +1198,7 @@ async def place_order(
             "broker": broker_used,
             "broker_order_id": broker_order_id,
             "journal_id": journal_entry.get("id") if journal_entry else None,
+            "setup_id": setup_id,
             "live_confirmed": body.live_confirmed,
             "execution_status": execution_status,
             "filled_quantity": broker_order.filled_quantity if broker_order else body.quantity,
@@ -1137,6 +1221,7 @@ async def place_order(
         "scanner_context": scanner_context,
         "broker_order_id": broker_order_id,
         "journal_id": journal_entry["id"] if journal_entry else None,
+        "setup_id": setup_id,
     })
     next_actions: list[str]
     if broker_used == "simulated":
@@ -1194,6 +1279,7 @@ async def place_order(
         "risk_reward": risk_reward,
         "message":     message,
         "journal_id":  journal_entry["id"] if journal_entry else None,
+        "setup_id":     setup_id,
         "journal_status": "open" if journal_entry else None,
         "next_actions": next_actions,
     }
@@ -1245,6 +1331,7 @@ async def close_position(
         "source": "journal",
         "lifecycle": "closed",
         "journal_id": body.journal_id,
+        "setup_id": entry.get("setup_id"),
     })
 
     lesson_generated = False
@@ -1364,6 +1451,7 @@ async def reconcile_broker_order(
             "scanner_context": journal_entry.get("scanner_context"),
             "broker_order_id": broker_order_id,
             "journal_id": journal_id,
+            "setup_id": journal_entry.get("setup_id") or raw_response.get("setup_id"),
         })
     else:
         if broker_order.filled_quantity > 0 and journal_id:
@@ -1403,12 +1491,14 @@ async def reconcile_broker_order(
                 "lifecycle": "ready",
                 "broker_order_id": broker_order_id,
                 "journal_id": None,
+                "setup_id": raw_response.get("setup_id"),
             })
 
     return {
         "status": _execution_result_status(broker_order),
         "broker": broker,
         "broker_order_id": broker_order_id,
+        "setup_id": raw_response.get("setup_id"),
         "execution_status": broker_order.status,
         "symbol": broker_order.symbol,
         "quantity": broker_order.quantity,
@@ -1437,7 +1527,7 @@ async def broker_order_activity(
             sb.table("broker_orders")
             .select(
                 "id,broker,broker_order_id,journal_id,symbol,side,quantity,"
-                "order_type,price,status,placed_at,raw_response"
+                "setup_id,order_type,price,status,placed_at,raw_response"
             )
             .eq("user_id", user_id)
             .order("placed_at", desc=True)
@@ -1469,6 +1559,7 @@ async def broker_order_activity(
             "broker": row.get("broker"),
             "broker_order_id": row.get("broker_order_id"),
             "journal_id": journal_id,
+            "setup_id": row.get("setup_id") or raw.get("setup_id"),
             "symbol": str(row.get("symbol") or "").upper(),
             "side": str(row.get("side") or "").upper(),
             "quantity": requested_quantity,
