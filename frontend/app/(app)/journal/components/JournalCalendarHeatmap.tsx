@@ -6,7 +6,6 @@ import {
   buildJournalDailyPnl,
   journalCalendarCellColor,
   journalCalendarYears,
-  type JournalDayPnl,
 } from "@/lib/journal-calendar";
 import type { JournalEntry } from "./types";
 

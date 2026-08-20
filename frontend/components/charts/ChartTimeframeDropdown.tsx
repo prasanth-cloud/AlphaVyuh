@@ -54,9 +54,16 @@ export default function ChartTimeframeDropdown({
                 <button
                   key={option.label}
                   type="button"
-                  onClick={() => onChange(option.label)}
+                  aria-disabled={option.disabled || undefined}
+                  onClick={() => {
+                    if (option.disabled) {
+                      if (option.unavailableReason) onUnavailable?.(option.unavailableReason);
+                      return;
+                    }
+                    onChange(option.label);
+                  }}
                   className={`workspace-chip-button${value === option.label ? " active" : ""}`}
-                  style={{ justifyContent: "center" }}
+                  style={{ justifyContent: "center", opacity: option.disabled ? 0.65 : 1 }}
                 >
                   {option.label}
                 </button>

@@ -147,13 +147,6 @@ function getSetupSignal(item: WatchlistItem): SetupSignal {
   return { label: "Watch", tone: "neutral", score: 50 };
 }
 
-function setupToneColor(tone: SetupSignal["tone"]) {
-  if (tone === "gain") return "var(--gain)";
-  if (tone === "loss") return "var(--loss)";
-  if (tone === "accent") return "var(--accent)";
-  return "var(--text-secondary)";
-}
-
 function formatCompactVolume(value: number): string {
   if (value >= 10_000_000) return `${(value / 10_000_000).toFixed(1)}Cr`;
   if (value >= 100_000) return `${(value / 100_000).toFixed(1)}L`;

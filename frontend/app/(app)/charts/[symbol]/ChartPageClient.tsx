@@ -274,16 +274,7 @@ function constrainDrawingPoint(
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export type InitialCandle = {
-  time: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-};
-
-export default function ChartPage({ params, initialCandles }: { params: Promise<{ symbol: string }>; initialCandles?: InitialCandle[] }) {
+export default function ChartPage({ params }: { params: Promise<{ symbol: string }> }) {
   const { symbol: routeSymbol } = use(params);
   const symbol = routeSymbol.toUpperCase();
   const router = useRouter();

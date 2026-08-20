@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Check, Zap, Sparkles, Crown, Copy, Gift, AlertTriangle, RefreshCw, Shield, ShieldAlert } from "lucide-react";
+import { Check, Zap, Sparkles, Crown, Copy, Gift, RefreshCw, Shield, ShieldAlert } from "lucide-react";
 import {
   getMe, updateMe,
   getPlanStatus, createPaymentOrder, verifyPayment, getReferralCode,
