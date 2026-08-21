@@ -2214,12 +2214,12 @@ async def resolve_broker_fill_reconciliation(
     """Explicitly link or dismiss one owner-scoped unmatched broker fill."""
     # The JWT dependency is intentional: service-role writes below are still
     # gated by the authenticated owner and never exposed to browser clients.
-    _ = user_jwt
+    read_sb = get_user_client(user_jwt)
     sb = get_admin_client()
     reconciliation_id_value = str(reconciliation_id)
     try:
         current = (
-            sb.table("broker_fill_reconciliations")
+            read_sb.table("broker_fill_reconciliations")
             .select(BROKER_RECONCILIATION_SELECT)
             .eq("id", reconciliation_id_value)
             .eq("user_id", user_id)
@@ -2250,7 +2250,7 @@ async def resolve_broker_fill_reconciliation(
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Choose a journal entry to link")
         journal_id = str(body.journal_id)
         journal = (
-            sb.table("trade_journal")
+            read_sb.table("trade_journal")
             .select("id,symbol,setup_id")
             .eq("id", journal_id)
             .eq("user_id", user_id)
@@ -2266,7 +2266,7 @@ async def resolve_broker_fill_reconciliation(
         setup_id = str(body.setup_id) if body.setup_id else (str(journal.get("setup_id")) if journal.get("setup_id") else None)
         if setup_id:
             setup = (
-                sb.table("setups")
+                read_sb.table("setups")
                 .select("id,symbol")
                 .eq("id", setup_id)
                 .eq("user_id", user_id)
