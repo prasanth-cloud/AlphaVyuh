@@ -12,7 +12,7 @@ Audit date: 2026-08-20
 
 ## Schema and migration risk
 
-The repository has an extensive migration history and existing schema-equivalence notes. New setup, lineage, review, job-evidence, and audit migrations can be reviewed locally, but applying them to production or assuming migration parity requires owner approval and a database-backed check. Generated Supabase types need regeneration after the migration; the target project is currently inaccessible through the connected Supabase integration. Existing rows in workflow, journal, and broker-order tables must remain valid when `setup_id` is nullable.
+The repository has an extensive migration history and existing schema-equivalence notes. New setup, lineage, review, job-evidence, audit, and broker-fill reconciliation migrations can be reviewed locally, but applying them to production or assuming migration parity requires owner approval and a database-backed check. The reconciliation API uses a server-side contract rather than the browser's generated Supabase types; regenerate those types if a future client-side Supabase query is introduced. The target project is currently inaccessible through the connected Supabase integration. Existing rows in workflow, journal, and broker-order tables must remain valid when `setup_id` is nullable.
 
 The current workflow uniqueness `(user_id, symbol)` is retained for compatibility in the first slice. That means setup identity is stronger than the existing workflow key, but the old key is not removed until all consumers have moved to setup-aware behavior.
 

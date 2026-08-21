@@ -97,12 +97,15 @@ Delivered:
 - Broker-imported fills inherit a validated durable setup only when one active owner setup is an unambiguous symbol match; ambiguous or missing matches are explicitly tagged `unplanned`.
 - Broker-imported journal rows preserve an explicit `broker-import` source contract in the review UI, and existing workflow thesis/invalidation context is carried into the import when available.
 - Completed broker imports now return explicit reconciliation status and bounded unmatched symbols when a SELL fill cannot match an open journal entry; the import audit event records the same review debt without fabricating a journal close.
+- Unmatched broker fills now persist in the owner-scoped `broker_fill_reconciliations` ledger with a unique `(user_id, broker, broker_order_id)` identity; repeated imports update the evidence without overwriting a linked or dismissed decision.
+- Authenticated Journal reconciliation APIs list only the current user's `needs_review` records, and the backend validates the selected Journal entry's ownership and symbol before linking it. Resolution requests and outcomes are written to the broker audit trail.
+- The Journal review queue loads durable reconciliation records on page entry, presents same-symbol Journal matches, and removes a record only after the backend confirms the link.
 - Malformed broker response payloads are rejected in the frontend instead of becoming false-empty account state.
 
 Remaining:
 
 - Run the owner-approved Zerodha/Upstox real-account smoke and record profile, holdings, positions, orderbook, tradebook, and import evidence.
-- Persist a durable broker-fill reconciliation ledger and let an owner resolve unmatched/ambiguous imports to a durable setup. The journal resolution panel is delivered for same-symbol active setups; the current import response and audit warning make the unresolved state explicit but do not yet retain a broker-fill row for later sessions.
+- Verify the durable reconciliation migration/RLS behavior in the correct Supabase project and run an owner-approved real-account import against it. Ambiguous or unmatched fills still need an explicit human link or dismissal; the current UI offers same-symbol Journal linking and does not silently create a trade.
 - Apply and verify the current migrations in the correct Supabase project before production use.
 
 ## Milestone 6 — controlled broker execution foundation, only after owner approval

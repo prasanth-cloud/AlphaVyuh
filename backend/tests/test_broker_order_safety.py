@@ -2,6 +2,7 @@ import asyncio
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import pytest
 from fastapi import HTTPException
@@ -62,6 +63,30 @@ class _Query:
     def execute(self):
         if self.table_name == "users":
             return type("Result", (), {"data": {"plan": "pro", "plan_expires_at": None}})()
+        if self.table_name == "broker_fill_reconciliations" and self.insert_payload is not None:
+            row = {
+                "id": f"reconciliation-{len(self.client.reconciliation_records) + 1}",
+                "created_at": "2026-08-21T12:00:00+00:00",
+                "updated_at": "2026-08-21T12:00:00+00:00",
+                **self.insert_payload,
+            }
+            self.client.reconciliation_records.append(row)
+            return type("Result", (), {"data": [row]})()
+        if self.table_name == "broker_fill_reconciliations" and self.update_payload is not None:
+            matches = [
+                row for row in self.client.reconciliation_records
+                if all(row.get(key) == value for key, value in self.filters.items())
+            ]
+            for row in matches:
+                row.update(self.update_payload)
+                row["updated_at"] = "2026-08-21T12:01:00+00:00"
+            return type("Result", (), {"data": matches})()
+        if self.table_name == "broker_fill_reconciliations":
+            matches = [
+                row for row in self.client.reconciliation_records
+                if all(row.get(key) == value for key, value in self.filters.items())
+            ]
+            return type("Result", (), {"data": (matches[0] if matches else None) if self.single else matches})()
         if self.table_name == "stock_universe":
             return type("Result", (), {"data": {"symbol": "RELIANCE", "company_name": "Reliance Industries", "isin": "INE002A01018"}})()
         if self.table_name == "setups":
@@ -159,6 +184,7 @@ class _FakeSupabase:
         self.broker_connection_upserts = []
         self.broker_order_inserts = []
         self.audit_events = []
+        self.reconciliation_records = []
         self.audit_insert_error = False
         self.journal_insert_conflict = False
         self.setup_row = {
@@ -991,14 +1017,20 @@ def test_zerodha_import_surfaces_unmatched_sell_for_reconciliation(monkeypatch):
     assert result["unmatched_fills"] == 1
     assert result["unmatched_symbols"] == ["RELIANCE"]
     assert result["reconciliation_status"] == "needs_review"
+    assert result["persisted_unmatched_fills"] == 1
+    assert result["reconciliation_persistence"] == "available"
     assert result["total_filled_orders"] == 1
     assert client.journal_inserts == []
+    assert client.reconciliation_records[0]["broker_order_id"] == "kite-sell-1"
+    assert client.reconciliation_records[0]["status"] == "needs_review"
     assert client.audit_events[-1]["metadata"] == {
         "imported": 0,
         "skipped": 0,
         "unmatched_fills": 1,
         "unmatched_symbols": ["RELIANCE"],
         "reconciliation_status": "needs_review",
+        "persisted_unmatched_fills": 1,
+        "reconciliation_persistence": "available",
         "total_filled_orders": 1,
     }
 
@@ -1039,9 +1071,178 @@ def test_upstox_import_surfaces_unmatched_sell_for_reconciliation(monkeypatch):
     assert result["unmatched_fills"] == 1
     assert result["unmatched_symbols"] == ["INFY"]
     assert result["reconciliation_status"] == "needs_review"
+    assert result["persisted_unmatched_fills"] == 1
+    assert result["reconciliation_persistence"] == "available"
     assert client.journal_inserts == []
+    assert client.reconciliation_records[0]["broker_order_id"] == "upstox-sell-1"
     assert client.audit_events[-1]["broker"] == "upstox"
     assert client.audit_events[-1]["metadata"]["unmatched_fills"] == 1
+
+
+def test_zerodha_import_does_not_reopen_resolved_reconciliation(monkeypatch):
+    client = _FakeSupabase()
+    client.reconciliation_records.append({
+        "id": "reconciliation-1",
+        "user_id": "user-1",
+        "broker": "zerodha",
+        "broker_order_id": "kite-resolved-1",
+        "symbol": "RELIANCE",
+        "side": "SELL",
+        "filled_quantity": 10,
+        "average_price": 2525,
+        "status": "linked",
+        "journal_id": "journal-1",
+        "setup_id": None,
+    })
+    orders = [{
+        "status": "COMPLETE",
+        "tradingsymbol": "RELIANCE",
+        "filled_quantity": 10,
+        "average_price": 2525,
+        "transaction_type": "SELL",
+        "order_id": "kite-resolved-1",
+        "exchange_timestamp": "2026-05-05 10:20:00",
+    }]
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda **_kwargs: orders)
+
+    result = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert result["skipped"] == 1
+    assert result["unmatched_fills"] == 0
+    assert client.journal_inserts == []
+
+
+def test_broker_reconciliation_can_link_only_matching_owner_journal(monkeypatch):
+    client = _FakeSupabase()
+    reconciliation_id = "33333333-3333-4333-8333-333333333333"
+    journal_id = "44444444-4444-4444-8444-444444444444"
+    client.reconciliation_records.append({
+        "id": reconciliation_id,
+        "user_id": "user-1",
+        "broker": "upstox",
+        "broker_order_id": "upstox-reconcile-1",
+        "symbol": "INFY",
+        "side": "SELL",
+        "filled_quantity": 5,
+        "average_price": 1490,
+        "status": "needs_review",
+        "journal_id": None,
+        "setup_id": None,
+        "resolution_note": None,
+    })
+    client.journal_inserts.append({
+        "id": journal_id,
+        "user_id": "user-1",
+        "symbol": "INFY",
+        "setup_id": None,
+    })
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
+
+    result = asyncio.run(broker_router.resolve_broker_fill_reconciliation(
+        reconciliation_id=UUID(reconciliation_id),
+        body=broker_router.BrokerFillReconciliationResolveRequest(
+            action="link",
+            journal_id=UUID(journal_id),
+        ),
+        user_id="user-1",
+        user_jwt="jwt",
+    ))
+
+    assert result["status"] == "linked"
+    assert result["journal_id"] == journal_id
+    assert client.reconciliation_records[0]["status"] == "linked"
+    assert [event["event_type"] for event in client.audit_events] == [
+        "broker.trade_import.reconciliation_requested",
+        "broker.trade_import.reconciliation_resolved",
+    ]
+    assert client.audit_events[-1]["outcome"] == "reconciled"
+
+
+def test_broker_reconciliation_rejects_cross_symbol_journal(monkeypatch):
+    client = _FakeSupabase()
+    reconciliation_id = "55555555-5555-4555-8555-555555555555"
+    journal_id = "66666666-6666-4666-8666-666666666666"
+    client.reconciliation_records.append({
+        "id": reconciliation_id,
+        "user_id": "user-1",
+        "broker": "zerodha",
+        "broker_order_id": "kite-reconcile-2",
+        "symbol": "RELIANCE",
+        "side": "SELL",
+        "filled_quantity": 2,
+        "average_price": 2525,
+        "status": "needs_review",
+        "journal_id": None,
+        "setup_id": None,
+    })
+    client.journal_inserts.append({
+        "id": journal_id,
+        "user_id": "user-1",
+        "symbol": "TCS",
+        "setup_id": None,
+    })
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(broker_router.resolve_broker_fill_reconciliation(
+            reconciliation_id=UUID(reconciliation_id),
+            body=broker_router.BrokerFillReconciliationResolveRequest(
+                action="link",
+                journal_id=UUID(journal_id),
+            ),
+            user_id="user-1",
+            user_jwt="jwt",
+        ))
+
+    assert exc_info.value.status_code == 409
+    assert client.reconciliation_records[0]["status"] == "needs_review"
+
+
+def test_broker_reconciliation_fails_closed_when_audit_is_unavailable(monkeypatch):
+    client = _FakeSupabase()
+    reconciliation_id = "77777777-7777-4777-8777-777777777777"
+    journal_id = "88888888-8888-4888-8888-888888888888"
+    client.reconciliation_records.append({
+        "id": reconciliation_id,
+        "user_id": "user-1",
+        "broker": "zerodha",
+        "broker_order_id": "kite-reconcile-3",
+        "symbol": "RELIANCE",
+        "side": "SELL",
+        "filled_quantity": 2,
+        "average_price": 2525,
+        "status": "needs_review",
+        "journal_id": None,
+        "setup_id": None,
+    })
+    client.journal_inserts.append({
+        "id": journal_id,
+        "user_id": "user-1",
+        "symbol": "RELIANCE",
+        "setup_id": None,
+    })
+    client.audit_insert_error = True
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(broker_router.resolve_broker_fill_reconciliation(
+            reconciliation_id=UUID(reconciliation_id),
+            body=broker_router.BrokerFillReconciliationResolveRequest(
+                action="link",
+                journal_id=UUID(journal_id),
+            ),
+            user_id="user-1",
+            user_jwt="jwt",
+        ))
+
+    assert exc_info.value.status_code == 503
+    assert client.reconciliation_records[0]["status"] == "needs_review"
 
 
 def test_import_matches_one_active_setup_and_preserves_setup_context():

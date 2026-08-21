@@ -35,6 +35,8 @@ describe("broker import API boundary", () => {
       unmatched_fills: 2,
       unmatched_symbols: ["RELIANCE", "INFY"],
       reconciliation_status: "needs_review",
+      persisted_unmatched_fills: 2,
+      reconciliation_persistence: "available",
       total_filled_orders: 5,
       message: "Import needs review.",
       last_synced_at: "2026-08-21T12:00:00Z",
@@ -80,5 +82,53 @@ describe("broker import API boundary", () => {
       reconciliation_status: "complete",
       total_filled_orders: 0,
     });
+  });
+
+  it("loads durable broker reconciliation records with bounded fields", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      reconciliations: [{
+        id: "reconciliation-1",
+        broker: "zerodha",
+        broker_order_id: "kite-order-1",
+        symbol: "reliance",
+        side: "SELL",
+        filled_quantity: 10,
+        average_price: 2525,
+        executed_at: "2026-08-21T08:50:00Z",
+        status: "needs_review",
+        setup_id: null,
+        journal_id: null,
+        resolution_note: null,
+        last_seen_at: "2026-08-21T09:00:00Z",
+        created_at: "2026-08-21T09:00:00Z",
+        updated_at: "2026-08-21T09:00:00Z",
+      }],
+      count: 1,
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    const { getBrokerFillReconciliations } = await import("@/lib/api");
+    await expect(getBrokerFillReconciliations()).resolves.toMatchObject({
+      count: 1,
+      reconciliations: [{ symbol: "RELIANCE", filled_quantity: 10, status: "needs_review" }],
+    });
+  });
+
+  it("rejects malformed durable reconciliation records", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      reconciliations: [{
+        id: "reconciliation-1",
+        broker: "zerodha",
+        broker_order_id: "kite-order-1",
+        symbol: "RELIANCE",
+        side: "SELL",
+        filled_quantity: 0,
+        average_price: 2525,
+        status: "needs_review",
+      }],
+      count: 1,
+    }), { status: 200, headers: { "Content-Type": "application/json" } })));
+
+    const { getBrokerFillReconciliations } = await import("@/lib/api");
+    await expect(getBrokerFillReconciliations()).rejects.toThrow("Broker reconciliation returned an invalid record.");
   });
 });

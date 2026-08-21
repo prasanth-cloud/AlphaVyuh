@@ -18,6 +18,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Literal, Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -93,6 +94,13 @@ class ClosePositionRequest(BaseModel):
     journal_id:  str
     exit_price:  float = Field(gt=0)
     exit_reason: Optional[str] = None
+
+
+class BrokerFillReconciliationResolveRequest(BaseModel):
+    action: Literal["link", "dismiss"]
+    journal_id: UUID | None = None
+    setup_id: UUID | None = None
+    resolution_note: str | None = Field(default=None, max_length=500)
 
 
 # ── Broker helpers ────────────────────────────────────────────────────────────
@@ -847,6 +855,186 @@ def _bounded_import_symbols(symbols: list[str], limit: int = 20) -> list[str]:
     return list(dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip()))[:limit]
 
 
+BROKER_RECONCILIATION_SELECT = (
+    "id,broker,broker_order_id,symbol,side,filled_quantity,average_price,"
+    "executed_at,status,setup_id,journal_id,resolution_note,last_seen_at,created_at,updated_at"
+)
+BROKER_RECONCILIATION_RESOLVED_STATUSES = {"linked", "dismissed"}
+INDIA_TIMEZONE = ZoneInfo("Asia/Kolkata")
+
+
+def _broker_import_executed_at(value: Any, *, naive_timezone=timezone.utc) -> str | None:
+    """Normalize provider timestamps without retaining raw broker responses."""
+    if value is None:
+        return None
+    try:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=naive_timezone)
+        return parsed.astimezone(timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _broker_reconciliation_response(row: dict[str, Any]) -> dict[str, Any]:
+    """Expose only the bounded, non-secret reconciliation contract."""
+    try:
+        average_price = float(row.get("average_price"))
+    except (TypeError, ValueError):
+        average_price = 0.0
+    try:
+        filled_quantity = int(row.get("filled_quantity"))
+    except (TypeError, ValueError):
+        filled_quantity = 0
+    return {
+        "id": row.get("id"),
+        "broker": row.get("broker"),
+        "broker_order_id": row.get("broker_order_id"),
+        "symbol": str(row.get("symbol") or "").upper(),
+        "side": str(row.get("side") or "").upper(),
+        "filled_quantity": filled_quantity,
+        "average_price": average_price,
+        "executed_at": row.get("executed_at"),
+        "status": row.get("status"),
+        "setup_id": row.get("setup_id"),
+        "journal_id": row.get("journal_id"),
+        "resolution_note": row.get("resolution_note"),
+        "last_seen_at": row.get("last_seen_at"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _broker_fill_reconciliation_status(
+    sb,
+    user_id: str,
+    broker: str,
+    broker_order_id: str,
+) -> str | None:
+    """Read the durable state for one provider order; fail soft on older schemas."""
+    try:
+        row = (
+            sb.table("broker_fill_reconciliations")
+            .select("id,status")
+            .eq("user_id", user_id)
+            .eq("broker", broker)
+            .eq("broker_order_id", broker_order_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        return str(row.get("status")) if isinstance(row, dict) and row.get("status") else None
+    except Exception:
+        logger.debug(
+            "Broker reconciliation table unavailable while checking %s/%s for user %s",
+            broker,
+            broker_order_id,
+            user_id,
+            exc_info=True,
+        )
+        return None
+
+
+def _upsert_unmatched_broker_fill(
+    sb,
+    *,
+    user_id: str,
+    broker: str,
+    broker_order_id: str,
+    symbol: str,
+    side: str,
+    filled_quantity: int,
+    average_price: float,
+    executed_at: str | None,
+) -> bool:
+    """Persist one unmatched fill without overwriting a resolved decision."""
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "user_id": user_id,
+        "broker": broker,
+        "broker_order_id": broker_order_id,
+        "symbol": symbol.upper(),
+        "side": side.upper(),
+        "filled_quantity": filled_quantity,
+        "average_price": average_price,
+        "executed_at": executed_at,
+        "status": "needs_review",
+        "last_seen_at": now,
+    }
+    try:
+        existing = (
+            sb.table("broker_fill_reconciliations")
+            .select("id,status")
+            .eq("user_id", user_id)
+            .eq("broker", broker)
+            .eq("broker_order_id", broker_order_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        if isinstance(existing, dict) and existing.get("id"):
+            updates = {
+                "symbol": symbol.upper(),
+                "side": side.upper(),
+                "filled_quantity": filled_quantity,
+                "average_price": average_price,
+                "executed_at": executed_at,
+                "last_seen_at": now,
+            }
+            if str(existing.get("status") or "") not in BROKER_RECONCILIATION_RESOLVED_STATUSES:
+                updates["status"] = "needs_review"
+            sb.table("broker_fill_reconciliations").update(updates).eq(
+                "id", existing["id"]
+            ).eq("user_id", user_id).execute()
+            return True
+
+        inserted = sb.table("broker_fill_reconciliations").insert(payload).execute()
+        return bool(getattr(inserted, "data", None) is not None)
+    except Exception:
+        # The import still reports the unmatched fill when an older deployment
+        # has not applied the additive migration yet. The response explicitly
+        # marks the reconciliation persistence as unavailable in that case.
+        logger.warning(
+            "Unable to persist unmatched %s fill %s for user %s",
+            broker,
+            broker_order_id,
+            user_id,
+            exc_info=True,
+        )
+        return False
+
+
+def _mark_broker_fill_reconciliation_linked(
+    sb,
+    *,
+    user_id: str,
+    broker: str,
+    broker_order_id: str,
+    journal_id: str,
+) -> None:
+    """Close the durable reconciliation loop when a later import finds a journal row."""
+    try:
+        sb.table("broker_fill_reconciliations").update({
+            "status": "linked",
+            "journal_id": journal_id,
+            "resolution_note": "Matched automatically to an existing journal position during broker import.",
+            "last_seen_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("user_id", user_id).eq("broker", broker).eq(
+            "broker_order_id", broker_order_id
+        ).eq("status", "needs_review").execute()
+    except Exception:
+        logger.warning(
+            "Unable to mark broker reconciliation %s/%s as linked for user %s",
+            broker,
+            broker_order_id,
+            user_id,
+            exc_info=True,
+        )
+
+
 def _broker_import_result(
     *,
     broker: str,
@@ -854,19 +1042,33 @@ def _broker_import_result(
     skipped: int,
     unmatched_fills: int,
     unmatched_symbols: list[str],
+    persisted_unmatched_fills: int,
     total_filled_orders: int,
     last_synced_at: str,
 ) -> dict[str, Any]:
     reconciliation_status = "needs_review" if unmatched_fills else "complete"
+    reconciliation_persistence = (
+        "not_needed"
+        if not unmatched_fills
+        else "available"
+        if persisted_unmatched_fills == unmatched_fills
+        else "unavailable"
+    )
     message = f"Imported {imported} new trade(s) from {broker}."
     if unmatched_fills:
         message += f" {unmatched_fills} filled order(s) need reconciliation because no open journal entry matched."
+        if reconciliation_persistence == "available":
+            message += " Reconciliation records were saved for later review."
+        else:
+            message += " Reconciliation records could not be saved; resolve this result before leaving the page."
     return {
         "imported": imported,
         "skipped": skipped,
         "unmatched_fills": unmatched_fills,
         "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
         "reconciliation_status": reconciliation_status,
+        "persisted_unmatched_fills": persisted_unmatched_fills,
+        "reconciliation_persistence": reconciliation_persistence,
         "total_filled_orders": total_filled_orders,
         "last_synced_at": last_synced_at,
         "message": message,
@@ -879,7 +1081,7 @@ def _fifo_close_open_long(
     symbol: str,
     exit_price: float,
     exit_reason: str,
-) -> bool:
+) -> str | None:
     open_res = (
         sb.table("trade_journal")
         .select("*")
@@ -893,7 +1095,7 @@ def _fifo_close_open_long(
         .execute()
     )
     if not open_res.data:
-        return False
+        return None
 
     entry = open_res.data[0]
     entry_price = float(entry["entry_price"])
@@ -923,7 +1125,7 @@ def _fifo_close_open_long(
         "journal_id": entry["id"],
         "setup_id": entry.get("setup_id"),
     })
-    return True
+    return str(entry["id"])
 
 
 def _import_already_recorded(sb, user_id: str, marker: str) -> bool:
@@ -1965,6 +2167,202 @@ async def broker_audit_events(
     return {"events": events, "count": len(events)}
 
 
+@router.get("/broker/reconciliations")
+async def list_broker_fill_reconciliations(
+    reconciliation_status: Literal["needs_review", "linked", "dismissed"] = Query(default="needs_review"),
+    limit: int = Query(default=100, ge=1, le=100),
+    user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
+):
+    """Return the current user's durable broker-fill review queue."""
+    sb = get_user_client(user_jwt)
+    try:
+        rows = (
+            sb.table("broker_fill_reconciliations")
+            .select(BROKER_RECONCILIATION_SELECT)
+            .eq("user_id", user_id)
+            .eq("status", reconciliation_status)
+            .order("last_seen_at", desc=True)
+            .limit(limit)
+            .execute()
+            .data or []
+        )
+    except Exception as exc:
+        logger.warning("Broker fill reconciliation lookup failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation history is temporarily unavailable. Existing journal state has not changed.",
+        ) from exc
+
+    return {
+        "reconciliations": [
+            _broker_reconciliation_response(row)
+            for row in rows
+            if isinstance(row, dict)
+        ],
+        "count": len(rows),
+    }
+
+
+@router.post("/broker/reconciliations/{reconciliation_id}/resolve")
+async def resolve_broker_fill_reconciliation(
+    reconciliation_id: UUID,
+    body: BrokerFillReconciliationResolveRequest,
+    user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
+):
+    """Explicitly link or dismiss one owner-scoped unmatched broker fill."""
+    # The JWT dependency is intentional: service-role writes below are still
+    # gated by the authenticated owner and never exposed to browser clients.
+    _ = user_jwt
+    sb = get_admin_client()
+    reconciliation_id_value = str(reconciliation_id)
+    try:
+        current = (
+            sb.table("broker_fill_reconciliations")
+            .select(BROKER_RECONCILIATION_SELECT)
+            .eq("id", reconciliation_id_value)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception as exc:
+        logger.warning("Broker fill reconciliation read failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation is temporarily unavailable. No journal state was changed.",
+        ) from exc
+
+    if not isinstance(current, dict):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broker reconciliation record not found")
+
+    current_status = str(current.get("status") or "")
+    if current_status in BROKER_RECONCILIATION_RESOLVED_STATUSES:
+        return _broker_reconciliation_response(current)
+
+    journal_id: str | None = None
+    setup_id: str | None = None
+    resolution_note = (body.resolution_note or "").strip()[:500] or None
+
+    if body.action == "link":
+        if body.journal_id is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Choose a journal entry to link")
+        journal_id = str(body.journal_id)
+        journal = (
+            sb.table("trade_journal")
+            .select("id,symbol,setup_id")
+            .eq("id", journal_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+        if not isinstance(journal, dict):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        if str(journal.get("symbol") or "").upper() != str(current.get("symbol") or "").upper():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Journal symbol does not match the broker fill")
+
+        setup_id = str(body.setup_id) if body.setup_id else (str(journal.get("setup_id")) if journal.get("setup_id") else None)
+        if setup_id:
+            setup = (
+                sb.table("setups")
+                .select("id,symbol")
+                .eq("id", setup_id)
+                .eq("user_id", user_id)
+                .maybe_single()
+                .execute()
+                .data
+            )
+            if not isinstance(setup, dict):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setup not found")
+            if str(setup.get("symbol") or "").upper() != str(current.get("symbol") or "").upper():
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Setup symbol does not match the broker fill")
+    elif not resolution_note:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Add a short note before dismissing a broker fill",
+        )
+
+    audit_metadata = {
+        "action": body.action,
+        "reconciliation_id": reconciliation_id_value,
+        "symbol": str(current.get("symbol") or "").upper(),
+    }
+    try:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.reconciliation_requested",
+            outcome="accepted",
+            broker=str(current.get("broker") or ""),
+            broker_order_id=str(current.get("broker_order_id") or ""),
+            setup_id=setup_id,
+            journal_id=journal_id,
+            metadata=audit_metadata,
+            required=True,
+        )
+    except AuditLogUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation audit is temporarily unavailable. No journal state was changed.",
+        ) from exc
+
+    updates = {
+        "status": "linked" if body.action == "link" else "dismissed",
+        "journal_id": journal_id,
+        "setup_id": setup_id,
+        "resolution_note": resolution_note,
+        "last_seen_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        sb.table("broker_fill_reconciliations").update(updates).eq(
+            "id", reconciliation_id_value
+        ).eq("user_id", user_id).eq("status", "needs_review").execute()
+        resolved = (
+            sb.table("broker_fill_reconciliations")
+            .select(BROKER_RECONCILIATION_SELECT)
+            .eq("id", reconciliation_id_value)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception as exc:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.reconciliation_resolved",
+            outcome="failed",
+            broker=str(current.get("broker") or ""),
+            broker_order_id=str(current.get("broker_order_id") or ""),
+            setup_id=setup_id,
+            journal_id=journal_id,
+            metadata={**audit_metadata, "error_kind": "persistence_failure"},
+        )
+        logger.warning("Broker fill reconciliation update failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker reconciliation could not be saved. No journal row was changed.",
+        ) from exc
+
+    if not isinstance(resolved, dict):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Broker reconciliation result was unavailable")
+
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.trade_import.reconciliation_resolved",
+        outcome="reconciled",
+        broker=str(current.get("broker") or ""),
+        broker_order_id=str(current.get("broker_order_id") or ""),
+        setup_id=setup_id,
+        journal_id=journal_id,
+        metadata=audit_metadata,
+    )
+    return _broker_reconciliation_response(resolved)
+
+
 @router.get("/orders")
 async def list_open_positions(user_id: str = Depends(get_current_user_id)):
     """Returns open trades from the journal."""
@@ -2308,6 +2706,7 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
     skipped = 0
     unmatched_fills = 0
     unmatched_symbols: list[str] = []
+    persisted_unmatched_fills = 0
 
     for order in filled:
         sym      = (order.get("tradingsymbol") or "").strip().upper()
@@ -2325,16 +2724,43 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             skipped += 1
             continue
 
+        if txn == "SELL" and _broker_fill_reconciliation_status(sb, user_id, "zerodha", order_id) in BROKER_RECONCILIATION_RESOLVED_STATUSES:
+            skipped += 1
+            continue
+
         executed_at = str(order.get("exchange_timestamp") or order.get("order_timestamp") or date.today())
         entry_date = executed_at[:10] if len(executed_at) >= 10 else str(date.today())
         exit_reason = f"Zerodha import — order #{order_id} [{marker}] [Zerodha · auto]"
 
         if txn == "SELL":
-            if _fifo_close_open_long(sb, user_id, sym, avg_px, exit_reason):
+            closed_journal_id = _fifo_close_open_long(sb, user_id, sym, avg_px, exit_reason)
+            if closed_journal_id:
                 imported += 1
+                _mark_broker_fill_reconciliation_linked(
+                    sb,
+                    user_id=user_id,
+                    broker="zerodha",
+                    broker_order_id=order_id,
+                    journal_id=closed_journal_id,
+                )
             else:
                 unmatched_fills += 1
                 unmatched_symbols.append(sym)
+                if _upsert_unmatched_broker_fill(
+                    sb,
+                    user_id=user_id,
+                    broker="zerodha",
+                    broker_order_id=order_id,
+                    symbol=sym,
+                    side=txn,
+                    filled_quantity=qty,
+                    average_price=avg_px,
+                    executed_at=_broker_import_executed_at(
+                        order.get("exchange_timestamp") or order.get("order_timestamp"),
+                        naive_timezone=INDIA_TIMEZONE,
+                    ),
+                ):
+                    persisted_unmatched_fills += 1
             continue
 
         stock = sb.table("stock_universe").select("company_name") \
@@ -2389,6 +2815,11 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             "unmatched_fills": unmatched_fills,
             "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
             "reconciliation_status": "needs_review" if unmatched_fills else "complete",
+            "persisted_unmatched_fills": persisted_unmatched_fills,
+            "reconciliation_persistence": (
+                "not_needed" if not unmatched_fills else
+                "available" if persisted_unmatched_fills == unmatched_fills else "unavailable"
+            ),
             "total_filled_orders": len(filled),
         },
     )
@@ -2399,6 +2830,7 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         skipped=skipped,
         unmatched_fills=unmatched_fills,
         unmatched_symbols=unmatched_symbols,
+        persisted_unmatched_fills=persisted_unmatched_fills,
         total_filled_orders=len(filled),
         last_synced_at=synced_at,
     )
@@ -2457,10 +2889,17 @@ async def import_broker_trades(
     skipped = 0
     unmatched_fills = 0
     unmatched_symbols: list[str] = []
+    persisted_unmatched_fills = 0
     for order in filled:
         marker = _broker_import_marker(broker_name, str(order.broker_order_id))
         existing = _import_already_recorded(sb, user_id, marker)
         if existing:
+            skipped += 1
+            continue
+
+        if order.side == "SELL" and _broker_fill_reconciliation_status(
+            sb, user_id, broker_name, str(order.broker_order_id)
+        ) in BROKER_RECONCILIATION_RESOLVED_STATUSES:
             skipped += 1
             continue
 
@@ -2470,11 +2909,31 @@ async def import_broker_trades(
 
         exit_reason = f"{broker_name.capitalize()} import — order #{order.broker_order_id} [{marker}] [{broker_name.capitalize()} · auto]"
         if order.side == "SELL":
-            if _fifo_close_open_long(sb, user_id, order.symbol, entry_price, exit_reason):
+            closed_journal_id = _fifo_close_open_long(sb, user_id, order.symbol, entry_price, exit_reason)
+            if closed_journal_id:
                 imported += 1
+                _mark_broker_fill_reconciliation_linked(
+                    sb,
+                    user_id=user_id,
+                    broker=broker_name,
+                    broker_order_id=str(order.broker_order_id),
+                    journal_id=closed_journal_id,
+                )
             else:
                 unmatched_fills += 1
                 unmatched_symbols.append(order.symbol)
+                if _upsert_unmatched_broker_fill(
+                    sb,
+                    user_id=user_id,
+                    broker=broker_name,
+                    broker_order_id=str(order.broker_order_id),
+                    symbol=order.symbol,
+                    side=order.side,
+                    filled_quantity=order.filled_quantity,
+                    average_price=entry_price,
+                    executed_at=_broker_import_executed_at(order.updated_at),
+                ):
+                    persisted_unmatched_fills += 1
             continue
 
         stock = sb.table("stock_universe").select("company_name") \
@@ -2528,6 +2987,11 @@ async def import_broker_trades(
             "unmatched_fills": unmatched_fills,
             "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
             "reconciliation_status": "needs_review" if unmatched_fills else "complete",
+            "persisted_unmatched_fills": persisted_unmatched_fills,
+            "reconciliation_persistence": (
+                "not_needed" if not unmatched_fills else
+                "available" if persisted_unmatched_fills == unmatched_fills else "unavailable"
+            ),
             "total_filled_orders": len(filled),
         },
     )
@@ -2537,6 +3001,7 @@ async def import_broker_trades(
         skipped=skipped,
         unmatched_fills=unmatched_fills,
         unmatched_symbols=unmatched_symbols,
+        persisted_unmatched_fills=persisted_unmatched_fills,
         total_filled_orders=len(filled),
         last_synced_at=synced_at,
     )

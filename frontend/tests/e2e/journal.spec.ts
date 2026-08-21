@@ -255,6 +255,14 @@ async function mockJournalRoutes(
         })
   );
 
+  await page.route("**/api/v1/broker/reconciliations*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ reconciliations: [], count: 0 }),
+    })
+  );
+
   // Symbol search
   await page.route("**/api/v1/charts/search*", (route) =>
     route.fulfill({
@@ -736,6 +744,69 @@ test.describe("Journal — broker sync import", () => {
     const warning = page.getByTestId("journal-import-reconciliation-warning");
     await expect(warning).toContainText("1 filled broker order could not be matched to an open journal entry");
     await expect(warning).toContainText("RELIANCE");
+  });
+
+  test("loads and links a durable broker reconciliation to a matching Journal entry", async ({ page }) => {
+    let resolved = false;
+    await mockJournalRoutes(page, { brokerConnected: true });
+    const unresolved = {
+      reconciliations: [{
+        id: "reconciliation-1",
+        broker: "zerodha",
+        broker_order_id: "kite-order-1",
+        symbol: "RELIANCE",
+        side: "SELL",
+        filled_quantity: 10,
+        average_price: 2525,
+        executed_at: "2026-08-21T08:50:00Z",
+        status: "needs_review",
+        setup_id: null,
+        journal_id: null,
+        resolution_note: null,
+        last_seen_at: "2026-08-21T09:00:00Z",
+        created_at: "2026-08-21T09:00:00Z",
+        updated_at: "2026-08-21T09:00:00Z",
+      }],
+      count: 1,
+    };
+    const linked = {
+      id: "reconciliation-1",
+      broker: "zerodha",
+      broker_order_id: "kite-order-1",
+      symbol: "RELIANCE",
+      side: "SELL",
+      filled_quantity: 10,
+      average_price: 2525,
+      executed_at: "2026-08-21T08:50:00Z",
+      status: "linked",
+      setup_id: null,
+      journal_id: "trade-open-1",
+      resolution_note: null,
+      last_seen_at: "2026-08-21T09:00:00Z",
+      created_at: "2026-08-21T09:00:00Z",
+      updated_at: "2026-08-21T09:01:00Z",
+    };
+    await page.route("**/api/v1/broker/reconciliations?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(resolved ? { reconciliations: [], count: 0 } : unresolved),
+      });
+    });
+    await page.route("**/api/v1/broker/reconciliations/**", async (route) => {
+      resolved = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(linked) });
+    });
+
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    const row = page.getByTestId("journal-broker-reconciliation-reconciliation-1");
+    await expect(row).toContainText("RELIANCE");
+    await page.getByLabel("Journal entry for RELIANCE").selectOption("trade-open-1");
+    await row.getByRole("button", { name: "Link trade" }).click();
+    await expect(page.getByTestId("journal-toast")).toContainText("broker fill linked");
+    await expect(page.getByTestId("journal-broker-reconciliation-list")).toHaveCount(0);
   });
 
   test("broker import failure uses stable recovery copy", async ({ page }) => {

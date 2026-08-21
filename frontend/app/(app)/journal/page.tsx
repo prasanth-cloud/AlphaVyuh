@@ -9,8 +9,9 @@ import {
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
   searchSymbols, analyseJournal, getAiPatterns, getSetups,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
+  getBrokerFillReconciliations, resolveBrokerFillReconciliation,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, JournalAnalyticsRange, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, JournalAnalyticsRange, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview, BrokerFillReconciliation } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
@@ -58,7 +59,15 @@ export default function JournalPage() {
   const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
   const [brokerCanImport, setBrokerCanImport] = useState(false);
   const [brokerLastSyncedAt, setBrokerLastSyncedAt] = useState<string | null>(null);
-  const [brokerImportWarning, setBrokerImportWarning] = useState<{ count: number; symbols: string[] } | null>(null);
+  const [brokerImportWarning, setBrokerImportWarning] = useState<{
+    count: number;
+    symbols: string[];
+    persistence: "available" | "unavailable" | "not_needed";
+  } | null>(null);
+  const [brokerReconciliations, setBrokerReconciliations] = useState<BrokerFillReconciliation[]>([]);
+  const [brokerReconciliationError, setBrokerReconciliationError] = useState<string | null>(null);
+  const [resolvingReconciliationId, setResolvingReconciliationId] = useState<string | null>(null);
+  const [reconciliationJournalIds, setReconciliationJournalIds] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
   const [lessonLoading, setLessonLoading] = useState<string | null>(null);
   const [stats, setStats] = useState<JournalStats | null>(null);
@@ -204,6 +213,22 @@ export default function JournalPage() {
   }, []);
 
   useEffect(() => { refreshBrokerStatus(); }, [refreshBrokerStatus]);
+
+  const loadBrokerReconciliations = useCallback(async () => {
+    try {
+      const result = await getBrokerFillReconciliations();
+      setBrokerReconciliations(result.reconciliations);
+      setBrokerReconciliationError(null);
+    } catch (error) {
+      setBrokerReconciliations([]);
+      setBrokerReconciliationError(accountDataErrorMessage(
+        error,
+        "Broker reconciliation history is temporarily unavailable. Existing journal entries are unchanged.",
+      ));
+    }
+  }, []);
+
+  useEffect(() => { void loadBrokerReconciliations(); }, [loadBrokerReconciliations]);
 
   useEffect(() => {
     if (tab !== "ai" || patterns !== null) return;
@@ -401,11 +426,41 @@ export default function JournalPage() {
       setBrokerImportWarning(r.unmatched_fills > 0 ? {
         count: r.unmatched_fills,
         symbols: r.unmatched_symbols,
+        persistence: r.reconciliation_persistence,
       } : null);
       refreshBrokerStatus();
+      void loadBrokerReconciliations();
       if (r.imported > 0 || r.unmatched_fills > 0) load();
     } catch { showToast(JOURNAL_IMPORT_FAILED_MESSAGE); }
     finally { setImporting(false); }
+  };
+
+  const handleLinkBrokerReconciliation = async (reconciliation: BrokerFillReconciliation) => {
+    const journalId = reconciliationJournalIds[reconciliation.id];
+    if (!journalId) {
+      showToast("Choose a matching journal entry first");
+      return;
+    }
+    setResolvingReconciliationId(reconciliation.id);
+    try {
+      await resolveBrokerFillReconciliation(reconciliation.id, {
+        action: "link",
+        journal_id: journalId,
+      });
+      setBrokerReconciliations((current) => current.filter((item) => item.id !== reconciliation.id));
+      setReconciliationJournalIds((current) => {
+        const next = { ...current };
+        delete next[reconciliation.id];
+        return next;
+      });
+      showToast(`${reconciliation.symbol} broker fill linked to Journal`);
+      void load();
+      void loadBrokerReconciliations();
+    } catch (error) {
+      showToast(accountDataErrorMessage(error, "Broker reconciliation could not be saved. Check Data Status, then try again."));
+    } finally {
+      setResolvingReconciliationId(null);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -542,6 +597,89 @@ export default function JournalPage() {
           <div className="text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
             AlphaVyuh did not create a false journal close. Review the broker statement and link or record the trade before relying on imported coverage.
             {brokerImportWarning.symbols.length > 0 ? ` Symbols: ${brokerImportWarning.symbols.join(", ")}.` : ""}
+          </div>
+          {brokerImportWarning.persistence === "unavailable" && (
+            <div className="text-[12px] leading-relaxed" style={{ color: "var(--warn)" }}>
+              This import could not save a durable review record. Keep this page open and retry after Data Status is healthy.
+            </div>
+          )}
+        </div>
+      )}
+
+      {brokerReconciliationError && brokerReconciliations.length === 0 && (
+        <div
+          className="workspace-card"
+          data-testid="journal-broker-reconciliation-unavailable"
+          role="status"
+          style={{ padding: 14, display: "grid", gap: 4, borderColor: "rgba(217,119,6,0.28)", background: "rgba(217,119,6,0.08)" }}
+        >
+          <EyebrowLabel>Broker reconciliation history</EyebrowLabel>
+          <div className="text-[12px] leading-relaxed" style={{ color: "var(--warn)" }}>{brokerReconciliationError}</div>
+        </div>
+      )}
+
+      {brokerReconciliations.length > 0 && (
+        <div
+          className="workspace-card"
+          data-testid="journal-broker-reconciliation-list"
+          style={{ padding: 14, display: "grid", gap: 12, borderColor: "var(--border-subtle)" }}
+        >
+          <div>
+            <EyebrowLabel>Broker fills needing review</EyebrowLabel>
+            <div className="mt-1 text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              These fills were imported from the broker but did not match an open Journal position. Link each one to an existing trade after checking the broker statement.
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {brokerReconciliations.map((reconciliation) => {
+              const matches = entries.filter((entry) => entry.symbol === reconciliation.symbol);
+              const selectedJournalId = reconciliationJournalIds[reconciliation.id] ?? "";
+              const resolving = resolvingReconciliationId === reconciliation.id;
+              return (
+                <div
+                  key={reconciliation.id}
+                  data-testid={`journal-broker-reconciliation-${reconciliation.id}`}
+                  style={{ display: "grid", gridTemplateColumns: "minmax(180px, 1fr) minmax(220px, 1.4fr) auto", gap: 10, alignItems: "center", padding: "10px 0", borderTop: "1px solid var(--border-subtle)" }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div className="text-[13px]" style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                      {reconciliation.symbol} · {reconciliation.side === "SELL" ? "Sell" : "Buy"}
+                    </div>
+                    <div className="text-[11px]" style={{ color: "var(--text-tertiary)" }}>
+                      {reconciliation.broker} order {reconciliation.broker_order_id} · {reconciliation.filled_quantity} @ {fmtCcy(reconciliation.average_price)}
+                      {reconciliation.executed_at ? ` · ${reconciliation.executed_at.slice(0, 10)}` : ""}
+                    </div>
+                  </div>
+                  <select
+                    aria-label={`Journal entry for ${reconciliation.symbol}`}
+                    value={selectedJournalId}
+                    onChange={(event) => setReconciliationJournalIds((current) => ({ ...current, [reconciliation.id]: event.target.value }))}
+                    disabled={resolving}
+                    style={{ minWidth: 0, width: "100%", padding: "8px 10px", borderRadius: "var(--radius-md)", border: "1px solid var(--border-default)", background: "var(--surface-2)", color: "var(--text-primary)", fontSize: 12 }}
+                  >
+                    <option value="">Choose matching Journal entry</option>
+                    {matches.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.symbol} · {entry.entry_date.slice(0, 10)} · {entry.quantity} @ {fmtCcy(entry.entry_price)} · {entry.status}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="workspace-chip-button"
+                    disabled={!selectedJournalId || resolving}
+                    onClick={() => { void handleLinkBrokerReconciliation(reconciliation); }}
+                  >
+                    {resolving ? "Linking…" : "Link trade"}
+                  </button>
+                  {matches.length === 0 && (
+                    <div className="text-[12px] leading-relaxed" style={{ gridColumn: "1 / -1", color: "var(--text-tertiary)" }}>
+                      No Journal entry for {reconciliation.symbol} is loaded. Record the trade in Journal, then return here to link it.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

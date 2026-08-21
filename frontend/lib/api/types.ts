@@ -1052,9 +1052,41 @@ export type BrokerImportResult = {
   unmatched_fills: number;
   unmatched_symbols: string[];
   reconciliation_status: "complete" | "needs_review";
+  persisted_unmatched_fills: number;
+  reconciliation_persistence: "available" | "unavailable" | "not_needed";
   total_filled_orders: number;
   message: string;
   last_synced_at?: string | null;
+};
+
+export type BrokerFillReconciliation = {
+  id: string;
+  broker: "zerodha" | "upstox";
+  broker_order_id: string;
+  symbol: string;
+  side: "BUY" | "SELL";
+  filled_quantity: number;
+  average_price: number;
+  executed_at: string | null;
+  status: "needs_review" | "linked" | "dismissed";
+  setup_id: string | null;
+  journal_id: string | null;
+  resolution_note: string | null;
+  last_seen_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type BrokerFillReconciliationResponse = {
+  reconciliations: BrokerFillReconciliation[];
+  count: number;
+};
+
+export type BrokerFillReconciliationResolveRequest = {
+  action: "link" | "dismiss";
+  journal_id?: string | null;
+  setup_id?: string | null;
+  resolution_note?: string | null;
 };
 
 export type PlaceOrderRequest = {

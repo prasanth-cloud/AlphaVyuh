@@ -32,6 +32,9 @@ import type {
   AiPatterns,
   BacktestResponse,
   BrokerImportResult,
+  BrokerFillReconciliation,
+  BrokerFillReconciliationResponse,
+  BrokerFillReconciliationResolveRequest,
   BrokerHolding,
   BrokerOrderSnapshot,
   BrokerOrderbookResponse,
@@ -804,6 +807,29 @@ function parseBrokerImportResult(value: unknown): BrokerImportResult {
     throw new Error("Broker import returned an inconsistent reconciliation status.");
   }
 
+  const persisted_unmatched_fills = readNonNegativeInteger(
+    value.persisted_unmatched_fills,
+    0,
+    "persisted unmatched-fill count",
+  );
+  if (persisted_unmatched_fills > unmatched_fills) {
+    throw new Error("Broker import returned an inconsistent persisted unmatched-fill count.");
+  }
+  const reconciliation_persistence = value.reconciliation_persistence === undefined
+    ? unmatched_fills > 0 ? "unavailable" : "not_needed"
+    : value.reconciliation_persistence;
+  if (reconciliation_persistence !== "available" &&
+      reconciliation_persistence !== "unavailable" &&
+      reconciliation_persistence !== "not_needed") {
+    throw new Error("Broker import returned an invalid reconciliation persistence state.");
+  }
+  if ((reconciliation_persistence === "not_needed") !== (unmatched_fills === 0)) {
+    throw new Error("Broker import returned an inconsistent reconciliation persistence state.");
+  }
+  if (reconciliation_persistence === "available" && persisted_unmatched_fills !== unmatched_fills) {
+    throw new Error("Broker import returned incomplete persisted reconciliation state.");
+  }
+
   const last_synced_at = value.last_synced_at === undefined || value.last_synced_at === null
     ? value.last_synced_at ?? null
     : typeof value.last_synced_at === "string" ? value.last_synced_at : null;
@@ -817,10 +843,60 @@ function parseBrokerImportResult(value: unknown): BrokerImportResult {
     unmatched_fills,
     unmatched_symbols,
     reconciliation_status,
+    persisted_unmatched_fills,
+    reconciliation_persistence,
     total_filled_orders,
     message: typeof value.message === "string" ? value.message : "Broker import completed.",
     last_synced_at,
   };
+}
+
+function parseBrokerFillReconciliation(value: unknown): BrokerFillReconciliation {
+  if (!isRecord(value) || typeof value.id !== "string" ||
+      (value.broker !== "zerodha" && value.broker !== "upstox") ||
+      typeof value.broker_order_id !== "string" || typeof value.symbol !== "string" ||
+      (value.side !== "BUY" && value.side !== "SELL") ||
+      !isFiniteNumber(value.filled_quantity) || !Number.isInteger(value.filled_quantity) || value.filled_quantity <= 0 ||
+      !isFiniteNumber(value.average_price) || value.average_price <= 0 ||
+      (value.status !== "needs_review" && value.status !== "linked" && value.status !== "dismissed")) {
+    throw new Error("Broker reconciliation returned an invalid record.");
+  }
+  const nullableString = (candidate: unknown): string | null => (
+    candidate == null ? null : typeof candidate === "string" ? candidate : null
+  );
+  return {
+    id: value.id,
+    broker: value.broker,
+    broker_order_id: value.broker_order_id,
+    symbol: value.symbol.toUpperCase(),
+    side: value.side,
+    filled_quantity: value.filled_quantity,
+    average_price: value.average_price,
+    executed_at: nullableString(value.executed_at),
+    status: value.status,
+    setup_id: nullableString(value.setup_id),
+    journal_id: nullableString(value.journal_id),
+    resolution_note: nullableString(value.resolution_note),
+    last_seen_at: nullableString(value.last_seen_at),
+    created_at: nullableString(value.created_at),
+    updated_at: nullableString(value.updated_at),
+  };
+}
+
+function parseBrokerFillReconciliationResponse(value: unknown): BrokerFillReconciliationResponse {
+  if (!isRecord(value) || !Array.isArray(value.reconciliations)) {
+    throw new Error("Broker reconciliation returned an invalid response.");
+  }
+  const reconciliations = value.reconciliations.map(parseBrokerFillReconciliation);
+  const count = value.count === undefined
+    ? reconciliations.length
+    : isFiniteNumber(value.count) && Number.isInteger(value.count) && value.count >= 0
+      ? value.count
+      : null;
+  if (count === null) {
+    throw new Error("Broker reconciliation returned an invalid count.");
+  }
+  return { reconciliations, count };
 }
 
 function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
@@ -3114,6 +3190,8 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
       unmatched_fills: 0,
       unmatched_symbols: [],
       reconciliation_status: "complete",
+      persisted_unmatched_fills: 0,
+      reconciliation_persistence: "not_needed",
       total_filled_orders: profile.orders.length,
       last_synced_at: now,
       message: `Imported ${imported} new mock trade(s) from ${profile.displayName}.`,
@@ -3131,6 +3209,40 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
 }
 
 export const importZerodhaTrades = () => importBrokerTrades("zerodha");
+
+export async function getBrokerFillReconciliations(
+  reconciliationStatus: "needs_review" | "linked" | "dismissed" = "needs_review",
+): Promise<BrokerFillReconciliationResponse> {
+  if (shouldUseMockFallback()) return { reconciliations: [], count: 0 };
+  const headers = await authHeaders();
+  const qs = new URLSearchParams({ reconciliation_status: reconciliationStatus });
+  const res = await fetch(`${API}/api/v1/broker/reconciliations?${qs.toString()}`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Broker reconciliation history failed."));
+  }
+  return parseBrokerFillReconciliationResponse(await res.json());
+}
+
+export async function resolveBrokerFillReconciliation(
+  reconciliationId: string,
+  request: BrokerFillReconciliationResolveRequest,
+): Promise<BrokerFillReconciliation> {
+  if (shouldUseMockFallback()) {
+    throw new Error("Simulated broker imports do not require reconciliation.");
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/reconciliations/${encodeURIComponent(reconciliationId)}/resolve`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Broker reconciliation could not be saved."));
+  }
+  const resolved = parseBrokerFillReconciliation(await res.json());
+  invalidateClientCache(["journal:", "portfolio"]);
+  return resolved;
+}
 
 export async function runBrokerReadOnlySmoke(broker: "zerodha" | "upstox" = "zerodha"): Promise<ZerodhaReadOnlySmoke> {
   if (shouldUseMockFallback()) {
