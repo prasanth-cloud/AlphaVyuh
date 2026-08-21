@@ -342,6 +342,19 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.locator("body")).toContainText(/Trade review|Import from Zerodha|Broker/i, { timeout: 15_000 });
   });
 
+  test("journal analytics exposes date-bounded cohorts and realized R", async ({ page }) => {
+    await page.goto("/journal?tab=analytics", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("journal-analytics-range")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("journal-r-multiple")).toContainText(/Realised R-multiple|Expectancy/i);
+    await expect(page.getByTestId("journal-cohort-breakdowns")).toContainText(/Outcome cohorts|Scanner provenance|Holding period/i);
+
+    await page.getByLabel("Analytics from date").fill("2026-01-01");
+    await page.getByLabel("Analytics to date").fill("2026-12-31");
+    await page.getByRole("button", { name: /^Apply$/i }).click();
+    await expect(page.getByLabel("Analytics from date")).toHaveValue("2026-01-01");
+    await expect(page.getByLabel("Analytics to date")).toHaveValue("2026-12-31");
+  });
+
   test("uploaded trade report can be handed off to journal review without duplicates", async ({ page }) => {
     test.setTimeout(60_000);
     const errors: string[] = [];

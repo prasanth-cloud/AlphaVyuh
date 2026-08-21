@@ -15,6 +15,9 @@ FREE_JOURNAL_MONTHS = 3
 UNPLANNED_SETUP_TYPE = "unplanned"
 REVIEW_ANALYTICS_MINIMUM_SAMPLE = 5
 REVIEW_ANALYTICS_ADHERENCE = ("followed", "partial", "not_followed", "unknown")
+ANALYTICS_SECTOR_SOURCE = "stock_universe.sector"
+ANALYTICS_SECTOR_STATUS_AVAILABLE = "available"
+ANALYTICS_SECTOR_STATUS_UNAVAILABLE = "unavailable"
 
 
 def _get_user_plan(user_id: str) -> str:
@@ -97,6 +100,119 @@ def _effective_setup_type(setup_id: UUID | None, setup_type: str | None) -> str 
     return cleaned or (UNPLANNED_SETUP_TYPE if setup_id is None else None)
 
 
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _holding_period_bucket(value: Any) -> str:
+    days = _safe_float(value)
+    if days is None:
+        return "Holding time unavailable"
+    if days <= 0:
+        return "Intraday (0d)"
+    if days <= 3:
+        return "Short (1–3d)"
+    if days <= 10:
+        return "Swing (4–10d)"
+    return "Position (11d+)"
+
+
+def _scanner_cohort(entry: dict[str, Any]) -> str:
+    context = entry.get("scanner_context")
+    if not isinstance(context, dict):
+        return "Not scanner-sourced"
+    name = context.get("preset_name") or context.get("preset_id")
+    if isinstance(name, str) and name.strip():
+        return name.strip()[:80]
+    if context.get("scan_run_id") or context.get("candidate_id"):
+        return "Scanner run (unnamed)"
+    return "Scanner context incomplete"
+
+
+def _realized_r_multiple(entry: dict[str, Any]) -> float | None:
+    """Return realized R only when a valid entry stop risk was recorded."""
+    entry_price = _safe_float(entry.get("entry_price"))
+    stop_price = _safe_float(entry.get("stop_loss"))
+    quantity = _safe_float(entry.get("quantity"))
+    pnl = _safe_float(entry.get("pnl"))
+    if entry_price is None or stop_price is None or quantity is None or pnl is None:
+        return None
+    if entry_price <= 0 or quantity <= 0:
+        return None
+    trade_type = str(entry.get("trade_type") or "long").lower()
+    risk_per_share = entry_price - stop_price if trade_type == "long" else stop_price - entry_price
+    planned_risk = risk_per_share * quantity
+    if planned_risk <= 0:
+        return None
+    return round(pnl / planned_risk, 4)
+
+
+def _build_cohort_rows(
+    entries: list[dict[str, Any]],
+    key_for_entry: Any,
+    realized_r_by_entry: dict[str, float | None],
+    reviewed_entry_ids: set[str],
+) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        key = str(key_for_entry(entry)).strip() or "Unknown"
+        grouped.setdefault(key, []).append(entry)
+
+    rows: list[dict[str, Any]] = []
+    for cohort, group in grouped.items():
+        pnls = [_safe_float(entry.get("pnl")) or 0.0 for entry in group]
+        r_values = [
+            realized_r_by_entry.get(str(entry.get("id")))
+            for entry in group
+        ]
+        available_r = [value for value in r_values if value is not None]
+        total_pnl = sum(pnls)
+        wins = sum(1 for pnl in pnls if pnl > 0)
+        rows.append({
+            "cohort": cohort,
+            "trades": len(group),
+            "wins": wins,
+            "win_rate": round(wins / len(group) * 100, 1) if group else 0,
+            "total_pnl": round(total_pnl, 2),
+            "avg_pnl": round(total_pnl / len(group), 2) if group else 0,
+            "avg_r_multiple": round(sum(available_r) / len(available_r), 2) if available_r else None,
+            "reviewed_trades": sum(1 for entry in group if str(entry.get("id")) in reviewed_entry_ids),
+        })
+    rows.sort(key=lambda row: (-row["total_pnl"], row["cohort"]))
+    return rows
+
+
+def _build_r_multiple_summary(
+    entries: list[dict[str, Any]],
+    realized_r_by_entry: dict[str, float | None],
+) -> dict[str, Any]:
+    r_values = [
+        realized_r_by_entry.get(str(entry.get("id"))) if entry.get("id") is not None else None
+        for entry in entries
+    ]
+    values = [value for value in r_values if value is not None]
+    winners = [value for value in values if value > 0]
+    losers = [value for value in values if value < 0]
+    total_r = sum(values)
+    return {
+        "trades": len(entries),
+        "available_trades": len(values),
+        "missing_risk_plan": len(entries) - len(values),
+        "positive_trades": len(winners),
+        "negative_trades": len(losers),
+        "win_rate": round(len(winners) / len(values) * 100, 1) if values else None,
+        "total_r": round(total_r, 2) if values else None,
+        "expectancy_r": round(total_r / len(values), 2) if values else None,
+        "avg_winner_r": round(sum(winners) / len(winners), 2) if winners else None,
+        "avg_loser_r": round(sum(losers) / len(losers), 2) if losers else None,
+    }
+
+
 def _review_analytics_summary(entries: list[dict[str, Any]], reviews: list[dict[str, Any]], *, data_status: str) -> dict[str, Any]:
     """Build descriptive process metrics without implying investment advice.
 
@@ -171,17 +287,49 @@ def _review_analytics_summary(entries: list[dict[str, Any]], reviews: list[dict[
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/analytics")
-async def get_analytics(user_id: str = Depends(get_current_user_id)):
+async def get_analytics(
+    from_date: str | None = None,
+    to_date: str | None = None,
+    user_id: str = Depends(get_current_user_id),
+):
+    parsed_from: date | None = None
+    parsed_to: date | None = None
+    for label, value in (("from_date", from_date), ("to_date", to_date)):
+        if value is None:
+            continue
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{label} must be a valid YYYY-MM-DD date.",
+            ) from exc
+        if label == "from_date":
+            parsed_from = parsed
+        else:
+            parsed_to = parsed
+    if parsed_from and parsed_to and parsed_from > parsed_to:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="from_date must be on or before to_date.",
+        )
+
     try:
         sb = get_admin_client()
-        result = (
+        query = (
             sb.table("trade_journal")
-            .select("id,setup_id,symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,holding_days,risk_reward")
+            .select(
+                "id,setup_id,symbol,trade_type,setup_type,entry_date,exit_date,pnl,pnl_pct,status,"
+                "holding_days,risk_reward,entry_price,exit_price,quantity,stop_loss,scanner_context"
+            )
             .eq("user_id", user_id)
             .eq("status", "closed")
-            .order("exit_date", desc=False)
-            .execute()
         )
+        if parsed_from:
+            query = query.gte("exit_date", parsed_from.isoformat())
+        if parsed_to:
+            query = query.lte("exit_date", parsed_to.isoformat())
+        result = query.order("exit_date", desc=False).execute()
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -204,6 +352,44 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         reviews = review_result.data or []
     except Exception:
         review_data_status = "unavailable"
+
+    reviewed_entry_ids = {
+        str(review.get("journal_entry_id"))
+        for review in reviews
+        if review.get("status") == "completed" and review.get("journal_entry_id") is not None
+    }
+    realized_r_by_entry = {
+        str(entry.get("id")): _realized_r_multiple(entry)
+        for entry in entries
+        if entry.get("id") is not None
+    }
+
+    # Sector is deliberately a contextual cohort, not a benchmark or a claim
+    # about sector attribution. It uses the repository's current symbol labels
+    # and remains visibly unavailable when the lookup cannot be completed.
+    sector_by_symbol: dict[str, str] = {}
+    sector_data_status = ANALYTICS_SECTOR_STATUS_AVAILABLE
+    symbols = sorted({str(entry.get("symbol") or "").upper() for entry in entries if entry.get("symbol")})
+    if symbols:
+        try:
+            sector_result = (
+                sb.table("stock_universe")
+                .select("symbol,sector")
+                .in_("symbol", symbols)
+                .execute()
+            )
+            sector_by_symbol = {
+                str(row.get("symbol") or "").upper(): str(row.get("sector")).strip()
+                for row in (sector_result.data or [])
+                if row.get("symbol") and row.get("sector") and str(row.get("sector")).strip()
+            }
+        except Exception:
+            sector_data_status = ANALYTICS_SECTOR_STATUS_UNAVAILABLE
+
+    def sector_for_entry(entry: dict[str, Any]) -> str:
+        if sector_data_status == ANALYTICS_SECTOR_STATUS_UNAVAILABLE:
+            return "Sector data unavailable"
+        return sector_by_symbol.get(str(entry.get("symbol") or "").upper(), "Sector unavailable")
 
     # ── Equity curve ─────────────────────────────────────────────────────────
     equity_curve = []
@@ -309,6 +495,17 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
     profit_factor_den = abs(sum(float(e["pnl"]) for e in entries if e.get("pnl") and float(e["pnl"]) < 0))
     profit_factor = round(profit_factor_num / profit_factor_den, 2) if profit_factor_den > 0 else None
 
+    cohort_breakdown = {
+        "scanner": _build_cohort_rows(entries, _scanner_cohort, realized_r_by_entry, reviewed_entry_ids),
+        "sector": _build_cohort_rows(entries, sector_for_entry, realized_r_by_entry, reviewed_entry_ids),
+        "holding_period": _build_cohort_rows(
+            entries,
+            lambda entry: _holding_period_bucket(entry.get("holding_days")),
+            realized_r_by_entry,
+            reviewed_entry_ids,
+        ),
+    }
+
     return {
         "equity_curve":    equity_curve,
         "setup_breakdown": setup_breakdown,
@@ -319,6 +516,22 @@ async def get_analytics(user_id: str = Depends(get_current_user_id)):
         "recovery_factor": recovery_factor,
         "profit_factor":   profit_factor,
         "review_summary":  _review_analytics_summary(entries, reviews, data_status=review_data_status),
+        "analysis_period": {
+            "from_date": parsed_from.isoformat() if parsed_from else None,
+            "to_date": parsed_to.isoformat() if parsed_to else None,
+            "trade_count": len(entries),
+        },
+        "r_multiple_summary": _build_r_multiple_summary(entries, realized_r_by_entry),
+        "cohort_breakdown": cohort_breakdown,
+        "sector_context": {
+            "status": sector_data_status,
+            "source": ANALYTICS_SECTOR_SOURCE,
+            "note": "Sector cohorts use current AlphaVyuh symbol labels for context; they are not benchmark attribution.",
+        },
+        "mae_mfe": {
+            "status": "unavailable",
+            "reason": "Intratrade high/low path data is not stored for journal entries yet.",
+        },
     }
 
 

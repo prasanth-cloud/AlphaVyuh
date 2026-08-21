@@ -5,6 +5,8 @@ export type {
   JournalEntry,
   JournalStats,
   JournalAnalytics,
+  JournalAnalyticsCohortRow,
+  JournalAnalyticsRange,
   CreateJournalEntry,
   UpdateJournalEntry,
   TradeReview,

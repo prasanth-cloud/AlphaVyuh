@@ -129,7 +129,21 @@ been placed.
 
 ## Milestone 7 — reviews and intelligence
 
-Build setup-aware post-trade reviews, rule adherence summaries, outcome analytics, and AI-assisted reflection only after the underlying setup, fill, and journal lineage is reliable.
+Status: the first setup-aware outcome slice is implemented locally; database-backed and production verification remain pending.
+
+Delivered:
+
+- Journal analytics accepts optional exit-date bounds and reports the applied analysis window.
+- Realized R-multiple metrics use the recorded entry stop and quantity, exclude trades without a valid risk plan, and show coverage explicitly.
+- Outcome cohorts group the same closed trades by scanner provenance, current symbol-sector context, and holding period.
+- The journal UI exposes date filters, R-multiple coverage, cohort tables, and the explicit MAE/MFE data gap instead of inventing intratrade path statistics.
+- Frontend response parsing rejects malformed new analytics fields, and mock browser coverage exercises the new review surface.
+
+Remaining:
+
+- Add persisted intratrade high/low paths before calculating MAE/MFE.
+- Add benchmark/market-context joins only after the data source and attribution definition are approved.
+- Keep sample-size warnings visible; these cohorts are descriptive and are not investment advice.
 
 ## Verification rhythm
 

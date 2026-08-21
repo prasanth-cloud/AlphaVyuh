@@ -768,6 +768,7 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
   type SetupPoint = JournalAnalytics["setup_breakdown"][number];
   type MonthlyPoint = JournalAnalytics["monthly_pnl"][number];
   type DrawdownPoint = JournalAnalytics["drawdown_curve"][number];
+  type CohortRow = NonNullable<JournalAnalytics["cohort_breakdown"]>["scanner"][number];
 
   const isNullableFiniteNumber = (candidate: unknown): candidate is number | null =>
     candidate === null || isFiniteNumber(candidate);
@@ -784,6 +785,11 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
   const isDrawdownPoint = (candidate: unknown): candidate is DrawdownPoint =>
     isRecord(candidate) && typeof candidate.date === "string" && isFiniteNumber(candidate.drawdown) &&
     isFiniteNumber(candidate.drawdown_pct);
+  const isCohortRow = (candidate: unknown): candidate is CohortRow =>
+    isRecord(candidate) && typeof candidate.cohort === "string" && isFiniteNumber(candidate.trades) &&
+    isFiniteNumber(candidate.wins) && isFiniteNumber(candidate.win_rate) && isFiniteNumber(candidate.total_pnl) &&
+    isFiniteNumber(candidate.avg_pnl) && isNullableFiniteNumber(candidate.avg_r_multiple) &&
+    isFiniteNumber(candidate.reviewed_trades);
 
   const equity_curve = isRecord(value) && Array.isArray(value.equity_curve) ? value.equity_curve : null;
   const setup_breakdown = isRecord(value) && Array.isArray(value.setup_breakdown) ? value.setup_breakdown : null;
@@ -838,6 +844,81 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
     };
   }
 
+  let analysis_period: JournalAnalytics["analysis_period"];
+  if (value.analysis_period !== undefined) {
+    if (!isRecord(value.analysis_period) ||
+        (value.analysis_period.from_date !== null && typeof value.analysis_period.from_date !== "string") ||
+        (value.analysis_period.to_date !== null && typeof value.analysis_period.to_date !== "string") ||
+        !isFiniteNumber(value.analysis_period.trade_count)) {
+      throw new Error("Journal analytics returned an invalid analysis period.");
+    }
+    analysis_period = {
+      from_date: value.analysis_period.from_date,
+      to_date: value.analysis_period.to_date,
+      trade_count: value.analysis_period.trade_count,
+    };
+  }
+
+  let r_multiple_summary: JournalAnalytics["r_multiple_summary"];
+  if (value.r_multiple_summary !== undefined) {
+    const summary = value.r_multiple_summary;
+    if (!isRecord(summary) || !isFiniteNumber(summary.trades) || !isFiniteNumber(summary.available_trades) ||
+        !isFiniteNumber(summary.missing_risk_plan) || !isFiniteNumber(summary.positive_trades) ||
+        !isFiniteNumber(summary.negative_trades) || !isNullableFiniteNumber(summary.win_rate) ||
+        !isNullableFiniteNumber(summary.total_r) || !isNullableFiniteNumber(summary.expectancy_r) ||
+        !isNullableFiniteNumber(summary.avg_winner_r) || !isNullableFiniteNumber(summary.avg_loser_r)) {
+      throw new Error("Journal analytics returned an invalid R-multiple summary.");
+    }
+    r_multiple_summary = {
+      trades: summary.trades,
+      available_trades: summary.available_trades,
+      missing_risk_plan: summary.missing_risk_plan,
+      positive_trades: summary.positive_trades,
+      negative_trades: summary.negative_trades,
+      win_rate: summary.win_rate,
+      total_r: summary.total_r,
+      expectancy_r: summary.expectancy_r,
+      avg_winner_r: summary.avg_winner_r,
+      avg_loser_r: summary.avg_loser_r,
+    };
+  }
+
+  let cohort_breakdown: JournalAnalytics["cohort_breakdown"];
+  if (value.cohort_breakdown !== undefined) {
+    const breakdown = value.cohort_breakdown;
+    if (!isRecord(breakdown) || !Array.isArray(breakdown.scanner) || !breakdown.scanner.every(isCohortRow) ||
+        !Array.isArray(breakdown.sector) || !breakdown.sector.every(isCohortRow) ||
+        !Array.isArray(breakdown.holding_period) || !breakdown.holding_period.every(isCohortRow)) {
+      throw new Error("Journal analytics returned an invalid cohort breakdown.");
+    }
+    cohort_breakdown = {
+      scanner: breakdown.scanner,
+      sector: breakdown.sector,
+      holding_period: breakdown.holding_period,
+    };
+  }
+
+  let sector_context: JournalAnalytics["sector_context"];
+  if (value.sector_context !== undefined) {
+    if (!isRecord(value.sector_context) || typeof value.sector_context.status !== "string" ||
+        typeof value.sector_context.source !== "string" || typeof value.sector_context.note !== "string") {
+      throw new Error("Journal analytics returned an invalid sector context.");
+    }
+    sector_context = {
+      status: value.sector_context.status,
+      source: value.sector_context.source,
+      note: value.sector_context.note,
+    };
+  }
+
+  let mae_mfe: JournalAnalytics["mae_mfe"];
+  if (value.mae_mfe !== undefined) {
+    if (!isRecord(value.mae_mfe) || typeof value.mae_mfe.status !== "string" || typeof value.mae_mfe.reason !== "string") {
+      throw new Error("Journal analytics returned an invalid MAE/MFE status.");
+    }
+    mae_mfe = { status: value.mae_mfe.status, reason: value.mae_mfe.reason };
+  }
+
   return {
     equity_curve,
     setup_breakdown,
@@ -848,6 +929,11 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
     recovery_factor: value.recovery_factor,
     profit_factor: value.profit_factor,
     review_summary,
+    analysis_period,
+    r_multiple_summary,
+    cohort_breakdown,
+    sector_context,
+    mae_mfe,
   };
 }
 
@@ -2398,11 +2484,16 @@ export async function deleteJournalEntry(id: string): Promise<void> {
 }
 
 
-export async function getJournalAnalytics(): Promise<JournalAnalytics> {
+export async function getJournalAnalytics(options: { fromDate?: string; toDate?: string } = {}): Promise<JournalAnalytics> {
   if (shouldUseMockFallback()) return mockJournalAnalytics();
-  return cachedClientRequest("journal:analytics", 30_000, async () => {
+  const cacheKey = `journal:analytics:${options.fromDate ?? ""}:${options.toDate ?? ""}`;
+  return cachedClientRequest(cacheKey, 30_000, async () => {
     const headers = await authHeaders();
-    const res = await fetch(`${API}/api/v1/journal/analytics`, { headers });
+    const params = new URLSearchParams();
+    if (options.fromDate) params.set("from_date", options.fromDate);
+    if (options.toDate) params.set("to_date", options.toDate);
+    const query = params.toString();
+    const res = await fetch(`${API}/api/v1/journal/analytics${query ? `?${query}` : ""}`, { headers });
     if (!res.ok) {
       throw new Error(await responseErrorMessage(res, `Journal analytics are temporarily unavailable (${res.status}).`));
     }

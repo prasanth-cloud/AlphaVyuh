@@ -754,6 +754,53 @@ export type JournalAnalyticsReviewSummary = {
   plan_adherence: JournalAnalyticsAdherenceRow[];
 };
 
+export type JournalAnalyticsCohortRow = {
+  cohort: string;
+  trades: number;
+  wins: number;
+  win_rate: number;
+  total_pnl: number;
+  avg_pnl: number;
+  avg_r_multiple: number | null;
+  reviewed_trades: number;
+};
+
+export type JournalAnalyticsCohortBreakdown = {
+  scanner: JournalAnalyticsCohortRow[];
+  sector: JournalAnalyticsCohortRow[];
+  holding_period: JournalAnalyticsCohortRow[];
+};
+
+export type JournalAnalyticsRMultipleSummary = {
+  trades: number;
+  available_trades: number;
+  missing_risk_plan: number;
+  positive_trades: number;
+  negative_trades: number;
+  win_rate: number | null;
+  total_r: number | null;
+  expectancy_r: number | null;
+  avg_winner_r: number | null;
+  avg_loser_r: number | null;
+};
+
+export type JournalAnalyticsPeriod = {
+  from_date: string | null;
+  to_date: string | null;
+  trade_count: number;
+};
+
+export type JournalAnalyticsSectorContext = {
+  status: "available" | "unavailable" | string;
+  source: string;
+  note: string;
+};
+
+export type JournalAnalyticsRange = {
+  fromDate: string;
+  toDate: string;
+};
+
 export type CreateJournalEntry = {
   symbol: string;
   setup_id?: string | null;
@@ -810,6 +857,14 @@ export type JournalAnalytics = {
   recovery_factor: number | null;
   profit_factor: number | null;
   review_summary?: JournalAnalyticsReviewSummary;
+  analysis_period?: JournalAnalyticsPeriod;
+  r_multiple_summary?: JournalAnalyticsRMultipleSummary;
+  cohort_breakdown?: JournalAnalyticsCohortBreakdown;
+  sector_context?: JournalAnalyticsSectorContext;
+  mae_mfe?: {
+    status: "available" | "unavailable" | string;
+    reason: string;
+  };
 };
 
 export type Fundamentals = {

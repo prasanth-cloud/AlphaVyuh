@@ -506,6 +506,42 @@ export function mockJournalAnalytics(): JournalAnalytics {
         { adherence: "unknown", trades: 4, wins: 2, win_rate: 50, total_pnl: 22000, avg_pnl: 5500 },
       ],
     },
+    analysis_period: { from_date: null, to_date: null, trade_count: 24 },
+    r_multiple_summary: {
+      trades: 24,
+      available_trades: 21,
+      missing_risk_plan: 3,
+      positive_trades: 13,
+      negative_trades: 8,
+      win_rate: 61.9,
+      total_r: 18.4,
+      expectancy_r: 0.88,
+      avg_winner_r: 2.14,
+      avg_loser_r: -1.17,
+    },
+    cohort_breakdown: {
+      scanner: [
+        { cohort: "Trend Template", trades: 10, wins: 7, win_rate: 70, total_pnl: 38200, avg_pnl: 3820, avg_r_multiple: 1.24, reviewed_trades: 4 },
+        { cohort: "Not scanner-sourced", trades: 14, wins: 8, win_rate: 57.1, total_pnl: 30220, avg_pnl: 2158.57, avg_r_multiple: 0.61, reviewed_trades: 0 },
+      ],
+      sector: [
+        { cohort: "IT Services", trades: 8, wins: 6, win_rate: 75, total_pnl: 21400, avg_pnl: 2675, avg_r_multiple: 1.11, reviewed_trades: 2 },
+        { cohort: "Energy", trades: 6, wins: 4, win_rate: 66.7, total_pnl: 18400, avg_pnl: 3066.67, avg_r_multiple: 0.96, reviewed_trades: 1 },
+      ],
+      holding_period: [
+        { cohort: "Short (1–3d)", trades: 8, wins: 6, win_rate: 75, total_pnl: 24200, avg_pnl: 3025, avg_r_multiple: 1.18, reviewed_trades: 2 },
+        { cohort: "Swing (4–10d)", trades: 12, wins: 7, win_rate: 58.3, total_pnl: 31620, avg_pnl: 2635, avg_r_multiple: 0.72, reviewed_trades: 2 },
+      ],
+    },
+    sector_context: {
+      status: "available",
+      source: "stock_universe.sector",
+      note: "Mock sector labels are workflow QA data only.",
+    },
+    mae_mfe: {
+      status: "unavailable",
+      reason: "Intratrade high/low path data is not stored for journal entries yet.",
+    },
   };
 }
 

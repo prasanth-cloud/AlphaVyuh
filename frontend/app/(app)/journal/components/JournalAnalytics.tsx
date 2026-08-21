@@ -1,8 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Card } from "@/components/ui";
 import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
-import type { JournalAnalytics as JournalAnalyticsType, JournalEntry } from "./types";
+import type {
+  JournalAnalytics as JournalAnalyticsType,
+  JournalAnalyticsCohortRow,
+  JournalAnalyticsRange,
+  JournalEntry,
+} from "./types";
 import { JournalCalendarHeatmap } from "./JournalCalendarHeatmap";
 
 function formatCurrency(value: number | null | undefined) {
@@ -146,11 +153,62 @@ function DrawdownChart({ data }: { data: { date: string; drawdown: number; drawd
   );
 }
 
+function CohortTable({
+  id,
+  title,
+  caption,
+  rows,
+}: {
+  id: string;
+  title: string;
+  caption: string;
+  rows: JournalAnalyticsCohortRow[];
+}) {
+  return (
+    <section data-testid={`journal-cohort-${id}`} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div>
+        <h3 className="heading-card" style={{ marginBottom: 4 }}>{title}</h3>
+        <div className="caption">{caption}</div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="caption">No closed trades in this cohort.</div>
+      ) : (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                {["Cohort", "Trades", "Win rate", "Avg R", "Avg P&L", "Total P&L"].map((heading) => (
+                  <th key={heading} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.cohort} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                  <td style={{ padding: "9px 16px 9px 0", color: "var(--text-primary)", fontWeight: 500 }}>{row.cohort}</td>
+                  <td style={{ padding: "9px 16px 9px 0", color: "var(--text-secondary)" }}>{row.trades}</td>
+                  <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: row.win_rate >= 50 ? "var(--gain)" : "var(--loss)" }}>{formatPct(row.win_rate)}</span></td>
+                  <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: toneForSigned(row.avg_r_multiple) }}>{formatRatio(row.avg_r_multiple)}</span></td>
+                  <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: toneForSigned(row.avg_pnl) }}>{formatCurrency(row.avg_pnl)}</span></td>
+                  <td style={{ padding: "9px 0" }}><span className="mono" style={{ color: toneForSigned(row.total_pnl), fontWeight: 600 }}>{formatCurrency(row.total_pnl)}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 interface JournalAnalyticsProps {
   analytics: JournalAnalyticsType | null;
   analyticsError?: string | null;
+  analyticsLoading?: boolean;
+  analyticsRange?: JournalAnalyticsRange;
+  onAnalyticsRangeChange?: (range: JournalAnalyticsRange) => void;
   entries?: JournalEntry[];
   onCalendarDateSelect?: (date: string) => void;
 }
@@ -158,9 +216,21 @@ interface JournalAnalyticsProps {
 export function JournalAnalytics({
   analytics,
   analyticsError,
+  analyticsLoading = false,
+  analyticsRange = { fromDate: "", toDate: "" },
+  onAnalyticsRangeChange,
   entries = [],
   onCalendarDateSelect,
 }: JournalAnalyticsProps) {
+  const [rangeDraft, setRangeDraft] = useState(analyticsRange);
+  const { fromDate: analyticsFromDate, toDate: analyticsToDate } = analyticsRange;
+
+  useEffect(() => {
+    setRangeDraft({ fromDate: analyticsFromDate, toDate: analyticsToDate });
+  }, [analyticsFromDate, analyticsToDate]);
+
+  const invalidRange = Boolean(rangeDraft.fromDate && rangeDraft.toDate && rangeDraft.fromDate > rangeDraft.toDate);
+
   if (analyticsError) {
     return (
       <Card padding="lg" data-testid="journal-analytics-unavailable">
@@ -179,7 +249,9 @@ export function JournalAnalytics({
     analytics?.equity_curve?.length ||
     analytics?.monthly_pnl?.length ||
     analytics?.drawdown_curve?.length ||
-    reviewSummary,
+    reviewSummary ||
+    analytics?.r_multiple_summary ||
+    analytics?.cohort_breakdown,
   );
   const scoreCards = [
     {
@@ -212,6 +284,56 @@ export function JournalAnalytics({
     <div>
       <Card padding="lg">
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <section data-testid="journal-analytics-range" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14, flexWrap: "wrap", paddingBottom: 4, borderBottom: "1px solid var(--border-subtle)" }}>
+            <div>
+              <div className="label" style={{ marginBottom: 5, color: "var(--text-tertiary)" }}>Analysis window</div>
+              <div className="caption">Filter closed-trade outcomes by exit date. All metrics remain descriptive.</div>
+              {invalidRange && <div className="caption" style={{ color: "var(--loss)", marginTop: 5 }}>From date must be on or before the to date.</div>}
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <label className="caption" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                From
+                <input
+                  aria-label="Analytics from date"
+                  type="date"
+                  value={rangeDraft.fromDate}
+                  onChange={(event) => setRangeDraft((current) => ({ ...current, fromDate: event.target.value }))}
+                  style={{ minHeight: 34, padding: "6px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default)", background: "var(--surface-1)", color: "var(--text-primary)" }}
+                />
+              </label>
+              <label className="caption" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                To
+                <input
+                  aria-label="Analytics to date"
+                  type="date"
+                  value={rangeDraft.toDate}
+                  onChange={(event) => setRangeDraft((current) => ({ ...current, toDate: event.target.value }))}
+                  style={{ minHeight: 34, padding: "6px 8px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default)", background: "var(--surface-1)", color: "var(--text-primary)" }}
+                />
+              </label>
+              <button
+                type="button"
+                disabled={invalidRange || analyticsLoading || !onAnalyticsRangeChange}
+                onClick={() => onAnalyticsRangeChange?.(rangeDraft)}
+                style={{ minHeight: 34, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-default)", background: "var(--surface-2)", color: "var(--text-primary)", cursor: invalidRange || analyticsLoading ? "not-allowed" : "pointer", opacity: invalidRange || analyticsLoading ? 0.6 : 1 }}
+              >
+                {analyticsLoading ? "Loading…" : "Apply"}
+              </button>
+              <button
+                type="button"
+                disabled={analyticsLoading || (!rangeDraft.fromDate && !rangeDraft.toDate)}
+                onClick={() => {
+                  const cleared = { fromDate: "", toDate: "" };
+                  setRangeDraft(cleared);
+                  onAnalyticsRangeChange?.(cleared);
+                }}
+                style={{ minHeight: 34, padding: "6px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)", background: "transparent", color: "var(--text-secondary)", cursor: analyticsLoading ? "not-allowed" : "pointer" }}
+              >
+                Clear
+              </button>
+            </div>
+          </section>
+
           {hasAnalytics && (
             <section data-testid="journal-edge-dashboard" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -338,6 +460,48 @@ export function JournalAnalytics({
                   </tbody>
                 </table>
               </div>
+            </section>
+          )}
+
+          {analytics?.r_multiple_summary && (
+            <section data-testid="journal-r-multiple" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <h2 className="heading-card" style={{ marginBottom: 4 }}>Realised R-multiple</h2>
+                <div className="caption">P&amp;L measured against the stop risk recorded at entry. Trades without a valid stop are excluded from R calculations.</div>
+              </div>
+              <div className="journal-edge-grid">
+                {[
+                  { label: "Expectancy", value: analytics.r_multiple_summary.expectancy_r == null ? "—" : `${analytics.r_multiple_summary.expectancy_r.toFixed(2)}R`, color: toneForSigned(analytics.r_multiple_summary.expectancy_r) },
+                  { label: "Avg winner", value: analytics.r_multiple_summary.avg_winner_r == null ? "—" : `${analytics.r_multiple_summary.avg_winner_r.toFixed(2)}R`, color: "var(--gain)" },
+                  { label: "Avg loser", value: analytics.r_multiple_summary.avg_loser_r == null ? "—" : `${analytics.r_multiple_summary.avg_loser_r.toFixed(2)}R`, color: "var(--loss)" },
+                  { label: "Risk plan coverage", value: `${analytics.r_multiple_summary.available_trades}/${analytics.r_multiple_summary.trades}`, color: analytics.r_multiple_summary.missing_risk_plan === 0 ? "var(--gain)" : "var(--warn)" },
+                ].map((card) => (
+                  <div key={card.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                    <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>{card.label}</div>
+                    <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: card.color }}>{card.value}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {analytics?.cohort_breakdown && (
+            <section data-testid="journal-cohort-breakdowns" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <div>
+                <h2 className="heading-card" style={{ marginBottom: 4 }}>Outcome cohorts</h2>
+                <div className="caption">Compare recorded outcomes by provenance and holding behavior. Small cohorts are descriptive only.</div>
+              </div>
+              <CohortTable id="scanner" title="Scanner provenance" caption="Groups scanner-sourced trades by the captured scan name." rows={analytics.cohort_breakdown.scanner} />
+              <CohortTable
+                id="sector"
+                title="Sector context"
+                caption={analytics.sector_context?.status === "unavailable" ? "Sector labels could not be loaded for this request." : "Uses current AlphaVyuh symbol labels; this is not benchmark attribution."}
+                rows={analytics.cohort_breakdown.sector}
+              />
+              <CohortTable id="holding-period" title="Holding period" caption="Groups trades by recorded holding days." rows={analytics.cohort_breakdown.holding_period} />
+              {analytics.mae_mfe?.status === "unavailable" && (
+                <div className="caption" data-testid="journal-mae-mfe-unavailable">MAE/MFE remains unavailable until intratrade high/low paths are stored.</div>
+              )}
             </section>
           )}
 

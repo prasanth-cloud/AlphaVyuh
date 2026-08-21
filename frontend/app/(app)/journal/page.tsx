@@ -10,7 +10,7 @@ import {
   searchSymbols, analyseJournal, getAiPatterns, getSetups,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, JournalAnalyticsRange, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
@@ -63,6 +63,8 @@ export default function JournalPage() {
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsRange, setAnalyticsRange] = useState<JournalAnalyticsRange>({ fromDate: "", toDate: "" });
   const [loading, setLoading] = useState(true);
   const [journalLoadError, setJournalLoadError] = useState<string | null>(null);
   const [journalStatsError, setJournalStatsError] = useState<string | null>(null);
@@ -98,6 +100,24 @@ export default function JournalPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
+  const loadAnalytics = useCallback(async (range: JournalAnalyticsRange = { fromDate: "", toDate: "" }) => {
+    setAnalyticsLoading(true);
+    try {
+      const nextAnalytics = await getJournalAnalytics({
+        fromDate: range.fromDate || undefined,
+        toDate: range.toDate || undefined,
+      });
+      setAnalytics(nextAnalytics);
+      setAnalyticsRange(range);
+      setAnalyticsError(null);
+    } catch (error) {
+      setAnalytics(null);
+      setAnalyticsError(accountDataErrorMessage(error, "Journal analytics are temporarily unavailable. Trade rows may still be current."));
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     const [entriesResult, statsResult] = await Promise.allSettled([
@@ -126,15 +146,7 @@ export default function JournalPage() {
         .catch(() => {
           // The legacy journal fields remain usable while the review resource is unavailable.
         });
-      getJournalAnalytics()
-        .then((analytics) => {
-          setAnalytics(analytics);
-          setAnalyticsError(null);
-        })
-        .catch((error) => {
-          setAnalytics(null);
-          setAnalyticsError(accountDataErrorMessage(error, "Journal analytics are temporarily unavailable. Trade rows may still be current."));
-        });
+      void loadAnalytics();
     } else {
       setJournalLoadError(accountDataErrorMessage(entriesResult.reason, "Journal entries are temporarily unavailable. Your trades were not loaded."));
       setAnalytics(null);
@@ -150,7 +162,7 @@ export default function JournalPage() {
     }
 
     setLoading(false);
-  }, []);
+  }, [loadAnalytics]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -722,6 +734,9 @@ export default function JournalPage() {
         <JournalAnalyticsTab
           analytics={analytics}
           analyticsError={analyticsError}
+          analyticsLoading={analyticsLoading}
+          analyticsRange={analyticsRange}
+          onAnalyticsRangeChange={loadAnalytics}
           entries={entries}
           onCalendarDateSelect={handleCalendarDateSelect}
         />
