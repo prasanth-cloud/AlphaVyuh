@@ -201,6 +201,38 @@ function CohortTable({
   );
 }
 
+type MaeMfeRow = NonNullable<JournalAnalyticsType["mae_mfe"]>["trades"][number];
+
+function MaeMfeTable({ rows }: { rows: MaeMfeRow[] }) {
+  if (rows.length === 0) return null;
+
+  return (
+    <div style={{ overflowX: "auto" }} data-testid="journal-mae-mfe-trades">
+      <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+            {["Symbol", "MAE", "MFE", "MAE in R", "MFE in R", "EOD bars"].map((heading) => (
+              <th key={heading} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{heading}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={`${row.journal_entry_id ?? row.symbol}-${index}`} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+              <td style={{ padding: "9px 16px 9px 0", color: "var(--text-primary)", fontWeight: 600 }}>{row.symbol}</td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--loss)" }}>{formatPct(row.mae_pct)}</span></td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--gain)" }}>{formatPct(row.mfe_pct)}</span></td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--loss)" }}>{row.mae_r == null ? "—" : `${formatRatio(row.mae_r)}R`}</span></td>
+              <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--gain)" }}>{row.mfe_r == null ? "—" : `${formatRatio(row.mfe_r)}R`}</span></td>
+              <td style={{ padding: "9px 0", color: "var(--text-secondary)" }}>{row.bars_count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 interface JournalAnalyticsProps {
@@ -505,6 +537,9 @@ export function JournalAnalytics({
                     <h3 className="heading-card" style={{ marginBottom: 4 }}>MAE / MFE</h3>
                     <div className="caption">Maximum adverse/favorable excursion from daily OHLCV highs and lows. This is an EOD proxy, not an intraday execution path.</div>
                   </div>
+                  <div className="caption" style={{ color: analytics.mae_mfe.status === "available" ? "var(--gain)" : "var(--warn)" }}>
+                    {analytics.mae_mfe.status === "available" ? "Coverage complete" : analytics.mae_mfe.status === "partial" ? "Partial coverage" : "Coverage unavailable"}
+                  </div>
                   <div className="journal-edge-grid">
                     {[
                       { label: "Avg MAE", value: formatPct(analytics.mae_mfe.avg_mae_pct), color: "var(--loss)" },
@@ -521,6 +556,7 @@ export function JournalAnalytics({
                   <div className="caption">
                     {analytics.mae_mfe.trades_with_path} trade paths available · {analytics.mae_mfe.trades_without_path} missing · {analytics.mae_mfe.reason}
                   </div>
+                  <MaeMfeTable rows={analytics.mae_mfe.trades} />
                 </section>
               )}
             </section>

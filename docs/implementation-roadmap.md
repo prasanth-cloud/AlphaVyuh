@@ -138,6 +138,7 @@ Delivered:
 - Outcome cohorts group the same closed trades by scanner provenance, current symbol-sector context, and holding period.
 - The journal UI exposes date filters, R-multiple coverage, cohort tables, and MAE/MFE summaries from an explicitly labeled daily-OHLCV high/low proxy.
 - MAE/MFE coverage is reported per trade; missing bars and missing stop risk remain visible instead of being converted into false precision.
+- The journal renders the returned per-trade MAE/MFE rows with EOD bar counts and an explicit complete/partial/unavailable coverage state.
 - Frontend response parsing rejects malformed new analytics fields, and mock browser coverage exercises the new review surface.
 
 Remaining:

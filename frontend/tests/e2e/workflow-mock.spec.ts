@@ -348,6 +348,7 @@ test.describe("Mock workflow smoke", () => {
     await expect(page.getByTestId("journal-r-multiple")).toContainText(/Realised R-multiple|Expectancy/i);
     await expect(page.getByTestId("journal-cohort-breakdowns")).toContainText(/Outcome cohorts|Scanner provenance|Holding period/i);
     await expect(page.getByTestId("journal-mae-mfe")).toContainText(/MAE|MFE|EOD proxy/i);
+    await expect(page.getByTestId("journal-mae-mfe-trades")).toContainText(/DIXON|PERSISTENT/i);
 
     await page.getByLabel("Analytics from date").fill("2026-01-01");
     await page.getByLabel("Analytics to date").fill("2026-12-31");
