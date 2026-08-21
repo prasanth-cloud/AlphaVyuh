@@ -499,8 +499,29 @@ export function JournalAnalytics({
                 rows={analytics.cohort_breakdown.sector}
               />
               <CohortTable id="holding-period" title="Holding period" caption="Groups trades by recorded holding days." rows={analytics.cohort_breakdown.holding_period} />
-              {analytics.mae_mfe?.status === "unavailable" && (
-                <div className="caption" data-testid="journal-mae-mfe-unavailable">MAE/MFE remains unavailable until intratrade high/low paths are stored.</div>
+              {analytics.mae_mfe && (
+                <section data-testid="journal-mae-mfe" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div>
+                    <h3 className="heading-card" style={{ marginBottom: 4 }}>MAE / MFE</h3>
+                    <div className="caption">Maximum adverse/favorable excursion from daily OHLCV highs and lows. This is an EOD proxy, not an intraday execution path.</div>
+                  </div>
+                  <div className="journal-edge-grid">
+                    {[
+                      { label: "Avg MAE", value: formatPct(analytics.mae_mfe.avg_mae_pct), color: "var(--loss)" },
+                      { label: "Avg MFE", value: formatPct(analytics.mae_mfe.avg_mfe_pct), color: "var(--gain)" },
+                      { label: "Avg MAE in R", value: analytics.mae_mfe.avg_mae_r == null ? "—" : `${analytics.mae_mfe.avg_mae_r.toFixed(2)}R`, color: "var(--loss)" },
+                      { label: "Avg MFE in R", value: analytics.mae_mfe.avg_mfe_r == null ? "—" : `${analytics.mae_mfe.avg_mfe_r.toFixed(2)}R`, color: "var(--gain)" },
+                    ].map((card) => (
+                      <div key={card.label} style={{ borderRadius: "var(--radius-md)", padding: "12px 14px", background: "var(--surface-2)", border: "1px solid var(--border-subtle)" }}>
+                        <div className="label" style={{ color: "var(--text-tertiary)", marginBottom: 6 }}>{card.label}</div>
+                        <div className="mono" style={{ fontSize: 18, fontWeight: 600, color: card.color }}>{card.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="caption">
+                    {analytics.mae_mfe.trades_with_path} trade paths available · {analytics.mae_mfe.trades_without_path} missing · {analytics.mae_mfe.reason}
+                  </div>
+                </section>
               )}
             </section>
           )}

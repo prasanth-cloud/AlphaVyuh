@@ -136,12 +136,13 @@ Delivered:
 - Journal analytics accepts optional exit-date bounds and reports the applied analysis window.
 - Realized R-multiple metrics use the recorded entry stop and quantity, exclude trades without a valid risk plan, and show coverage explicitly.
 - Outcome cohorts group the same closed trades by scanner provenance, current symbol-sector context, and holding period.
-- The journal UI exposes date filters, R-multiple coverage, cohort tables, and the explicit MAE/MFE data gap instead of inventing intratrade path statistics.
+- The journal UI exposes date filters, R-multiple coverage, cohort tables, and MAE/MFE summaries from an explicitly labeled daily-OHLCV high/low proxy.
+- MAE/MFE coverage is reported per trade; missing bars and missing stop risk remain visible instead of being converted into false precision.
 - Frontend response parsing rejects malformed new analytics fields, and mock browser coverage exercises the new review surface.
 
 Remaining:
 
-- Add persisted intratrade high/low paths before calculating MAE/MFE.
+- Add persisted intratrade high/low paths before treating MAE/MFE as execution-accurate rather than an EOD proxy.
 - Add benchmark/market-context joins only after the data source and attribution definition are approved.
 - Keep sample-size warnings visible; these cohorts are descriptive and are not investment advice.
 

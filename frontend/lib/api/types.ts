@@ -863,6 +863,22 @@ export type JournalAnalytics = {
   sector_context?: JournalAnalyticsSectorContext;
   mae_mfe?: {
     status: "available" | "unavailable" | string;
+    basis: string;
+    trades_with_path: number;
+    trades_without_path: number;
+    avg_mae_pct: number | null;
+    avg_mfe_pct: number | null;
+    avg_mae_r: number | null;
+    avg_mfe_r: number | null;
+    trades: {
+      journal_entry_id: string | null;
+      symbol: string;
+      mae_pct: number;
+      mfe_pct: number;
+      mae_r: number | null;
+      mfe_r: number | null;
+      bars_count: number;
+    }[];
     reason: string;
   };
 };

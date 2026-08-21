@@ -61,6 +61,34 @@ describe("account data API failures", () => {
     await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics are temporarily unavailable.");
   });
 
+  it("accepts the legacy unavailable MAE/MFE shape during a rolling deployment", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        equity_curve: [],
+        setup_breakdown: [],
+        monthly_pnl: [],
+        drawdown_curve: [],
+        max_drawdown: null,
+        longest_dd_days: 0,
+        recovery_factor: null,
+        profit_factor: null,
+        mae_mfe: { status: "unavailable", reason: "Daily OHLCV paths were not available." },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+    const analytics = await getJournalAnalytics();
+
+    expect(analytics.mae_mfe).toMatchObject({
+      status: "unavailable",
+      basis: "legacy_unavailable",
+      trades_with_path: 0,
+      trades_without_path: 0,
+      trades: [],
+    });
+  });
+
   it("rejects malformed review-aware analytics instead of trusting the response shape", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({

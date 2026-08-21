@@ -213,6 +213,132 @@ def _build_r_multiple_summary(
     }
 
 
+def _build_mae_mfe_summary(sb: Any, entries: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build an EOD high/low excursion proxy for closed journal entries.
+
+    The repository stores daily bars, not intraday paths. This deliberately
+    labels the result as an EOD proxy so a daily high/low is never presented as
+    a precise intratrade excursion.
+    """
+    candidates = []
+    for entry in entries:
+        symbol = str(entry.get("symbol") or "").upper()
+        entry_date = str(entry.get("entry_date") or "")[:10]
+        exit_date = str(entry.get("exit_date") or "")[:10]
+        entry_price = _safe_float(entry.get("entry_price"))
+        if symbol and entry_date and exit_date and entry_date <= exit_date and entry_price and entry_price > 0:
+            candidates.append((entry, symbol, entry_date, exit_date, entry_price))
+
+    base = {
+        "status": "unavailable",
+        "basis": "daily_ohlcv_eod_proxy",
+        "trades_with_path": 0,
+        "trades_without_path": len(entries),
+        "avg_mae_pct": None,
+        "avg_mfe_pct": None,
+        "avg_mae_r": None,
+        "avg_mfe_r": None,
+        "trades": [],
+        "reason": "Daily OHLCV paths were not available for the closed-trade window.",
+    }
+    if not candidates:
+        return base
+
+    symbols = sorted({symbol for _, symbol, _, _, _ in candidates})
+    from_date = min(start for _, _, start, _, _ in candidates)
+    to_date = max(end for _, _, _, end, _ in candidates)
+    bars_by_symbol: dict[str, list[dict[str, Any]]] = {}
+    try:
+        offset = 0
+        while True:
+            page = (
+                sb.table("daily_ohlcv")
+                .select("symbol,trade_date,high,low")
+                .in_("symbol", symbols)
+                .gte("trade_date", from_date)
+                .lte("trade_date", to_date)
+                .order("trade_date", desc=False)
+                .range(offset, offset + 999)
+                .execute()
+                .data or []
+            )
+            for bar in page:
+                symbol = str(bar.get("symbol") or "").upper()
+                if symbol:
+                    bars_by_symbol.setdefault(symbol, []).append(bar)
+            if len(page) < 1000:
+                break
+            offset += len(page)
+    except Exception:
+        return {
+            **base,
+            "reason": "Daily OHLCV excursion data is temporarily unavailable.",
+        }
+
+    excursion_rows: list[dict[str, Any]] = []
+    mae_pcts: list[float] = []
+    mfe_pcts: list[float] = []
+    mae_rs: list[float] = []
+    mfe_rs: list[float] = []
+    for entry, symbol, entry_date, exit_date, entry_price in candidates:
+        path = [
+            bar for bar in bars_by_symbol.get(symbol, [])
+            if entry_date <= str(bar.get("trade_date") or "")[:10] <= exit_date
+        ]
+        highs = [_safe_float(bar.get("high")) for bar in path]
+        lows = [_safe_float(bar.get("low")) for bar in path]
+        highs = [value for value in highs if value is not None]
+        lows = [value for value in lows if value is not None]
+        if not highs or not lows:
+            continue
+
+        trade_type = str(entry.get("trade_type") or "long").lower()
+        if trade_type == "short":
+            mae_price = min(0.0, entry_price - max(highs))
+            mfe_price = max(0.0, entry_price - min(lows))
+        else:
+            mae_price = min(0.0, min(lows) - entry_price)
+            mfe_price = max(0.0, max(highs) - entry_price)
+        mae_pct = round(mae_price / entry_price * 100, 2)
+        mfe_pct = round(mfe_price / entry_price * 100, 2)
+        risk_per_share = _safe_float(entry.get("stop_loss"))
+        if risk_per_share is not None:
+            risk_per_share = entry_price - risk_per_share if trade_type == "long" else risk_per_share - entry_price
+        mae_r = round(mae_price / risk_per_share, 2) if risk_per_share and risk_per_share > 0 else None
+        mfe_r = round(mfe_price / risk_per_share, 2) if risk_per_share and risk_per_share > 0 else None
+        row = {
+            "journal_entry_id": str(entry.get("id")) if entry.get("id") is not None else None,
+            "symbol": symbol,
+            "mae_pct": mae_pct,
+            "mfe_pct": mfe_pct,
+            "mae_r": mae_r,
+            "mfe_r": mfe_r,
+            "bars_count": len(path),
+        }
+        excursion_rows.append(row)
+        mae_pcts.append(mae_pct)
+        mfe_pcts.append(mfe_pct)
+        if mae_r is not None:
+            mae_rs.append(mae_r)
+        if mfe_r is not None:
+            mfe_rs.append(mfe_r)
+
+    if not excursion_rows:
+        return base
+    return {
+        "status": "available" if len(excursion_rows) == len(entries) else "partial",
+        "basis": "daily_ohlcv_eod_proxy",
+        "trades_with_path": len(excursion_rows),
+        "trades_without_path": len(entries) - len(excursion_rows),
+        "avg_mae_pct": round(sum(mae_pcts) / len(mae_pcts), 2),
+        "avg_mfe_pct": round(sum(mfe_pcts) / len(mfe_pcts), 2),
+        "avg_mae_r": round(sum(mae_rs) / len(mae_rs), 2) if mae_rs else None,
+        "avg_mfe_r": round(sum(mfe_rs) / len(mfe_rs), 2) if mfe_rs else None,
+        "trades": excursion_rows,
+        "reason": "EOD high/low proxy; intraday excursion is not available.",
+    }
+
+
 def _review_analytics_summary(entries: list[dict[str, Any]], reviews: list[dict[str, Any]], *, data_status: str) -> dict[str, Any]:
     """Build descriptive process metrics without implying investment advice.
 
@@ -505,6 +631,7 @@ async def get_analytics(
             reviewed_entry_ids,
         ),
     }
+    mae_mfe_summary = _build_mae_mfe_summary(sb, entries)
 
     return {
         "equity_curve":    equity_curve,
@@ -528,10 +655,7 @@ async def get_analytics(
             "source": ANALYTICS_SECTOR_SOURCE,
             "note": "Sector cohorts use current AlphaVyuh symbol labels for context; they are not benchmark attribution.",
         },
-        "mae_mfe": {
-            "status": "unavailable",
-            "reason": "Intratrade high/low path data is not stored for journal entries yet.",
-        },
+        "mae_mfe": mae_mfe_summary,
     }
 
 

@@ -913,10 +913,49 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
 
   let mae_mfe: JournalAnalytics["mae_mfe"];
   if (value.mae_mfe !== undefined) {
-    if (!isRecord(value.mae_mfe) || typeof value.mae_mfe.status !== "string" || typeof value.mae_mfe.reason !== "string") {
+    const summary = value.mae_mfe;
+    const isExcursion = (candidate: unknown): candidate is NonNullable<JournalAnalytics["mae_mfe"]>["trades"][number] =>
+      isRecord(candidate) && (candidate.journal_entry_id === null || typeof candidate.journal_entry_id === "string") &&
+      typeof candidate.symbol === "string" && isFiniteNumber(candidate.mae_pct) && isFiniteNumber(candidate.mfe_pct) &&
+      isNullableFiniteNumber(candidate.mae_r) && isNullableFiniteNumber(candidate.mfe_r) &&
+      isFiniteNumber(candidate.bars_count);
+    // Older backend deployments returned only {status, reason}. Treat that
+    // response as a legacy unavailable contract at this API boundary so an
+    // installed frontend does not white-screen during a rolling deployment.
+    if (isRecord(summary) && typeof summary.status === "string" && typeof summary.reason === "string" &&
+        summary.basis === undefined && summary.trades === undefined) {
+      mae_mfe = {
+        status: summary.status,
+        basis: "legacy_unavailable",
+        trades_with_path: 0,
+        trades_without_path: 0,
+        avg_mae_pct: null,
+        avg_mfe_pct: null,
+        avg_mae_r: null,
+        avg_mfe_r: null,
+        trades: [],
+        reason: summary.reason,
+      };
+    } else if (!isRecord(summary) || typeof summary.status !== "string" || typeof summary.basis !== "string" ||
+        !isFiniteNumber(summary.trades_with_path) || !isFiniteNumber(summary.trades_without_path) ||
+        !isNullableFiniteNumber(summary.avg_mae_pct) || !isNullableFiniteNumber(summary.avg_mfe_pct) ||
+        !isNullableFiniteNumber(summary.avg_mae_r) || !isNullableFiniteNumber(summary.avg_mfe_r) ||
+        !Array.isArray(summary.trades) || !summary.trades.every(isExcursion) || typeof summary.reason !== "string") {
       throw new Error("Journal analytics returned an invalid MAE/MFE status.");
+    } else {
+      mae_mfe = {
+        status: summary.status,
+        basis: summary.basis,
+        trades_with_path: summary.trades_with_path,
+        trades_without_path: summary.trades_without_path,
+        avg_mae_pct: summary.avg_mae_pct,
+        avg_mfe_pct: summary.avg_mfe_pct,
+        avg_mae_r: summary.avg_mae_r,
+        avg_mfe_r: summary.avg_mfe_r,
+        trades: summary.trades,
+        reason: summary.reason,
+      };
     }
-    mae_mfe = { status: value.mae_mfe.status, reason: value.mae_mfe.reason };
   }
 
   return {

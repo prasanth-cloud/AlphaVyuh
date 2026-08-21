@@ -539,8 +539,19 @@ export function mockJournalAnalytics(): JournalAnalytics {
       note: "Mock sector labels are workflow QA data only.",
     },
     mae_mfe: {
-      status: "unavailable",
-      reason: "Intratrade high/low path data is not stored for journal entries yet.",
+      status: "available",
+      basis: "daily_ohlcv_eod_proxy",
+      trades_with_path: 21,
+      trades_without_path: 3,
+      avg_mae_pct: -2.4,
+      avg_mfe_pct: 5.8,
+      avg_mae_r: -0.72,
+      avg_mfe_r: 1.64,
+      trades: [
+        { journal_entry_id: "j1", symbol: "DIXON", mae_pct: -1.8, mfe_pct: 4.5, mae_r: -0.55, mfe_r: 1.4, bars_count: 8 },
+        { journal_entry_id: "j3", symbol: "PERSISTENT", mae_pct: -3.1, mfe_pct: 6.2, mae_r: -0.89, mfe_r: 1.88, bars_count: 12 },
+      ],
+      reason: "EOD high/low proxy; intraday excursion is not available.",
     },
   };
 }

@@ -38,7 +38,7 @@ Broker adapters and read-only/import paths exist, and the durable setup spine pl
 
 ### P2 — live execution and post-trade intelligence
 
-Explicit confirmation, server-only credentials, idempotency, broker status, fill reconciliation, and durable audit logging are now implemented as a locally verified execution foundation. Live execution remains disabled by default and requires applied migration/RLS checks, owner-approved real-account testing, and separate production enablement. Post-trade reviews and intelligence consume the same setup id and should not be built on a second symbol-keyed identity. The first intelligence slice now supports date-bounded realized-R metrics and scanner/sector/holding-period cohorts, while MAE/MFE and benchmark attribution remain blocked by missing intratrade path data and an unapproved attribution definition.
+Explicit confirmation, server-only credentials, idempotency, broker status, fill reconciliation, and durable audit logging are now implemented as a locally verified execution foundation. Live execution remains disabled by default and requires applied migration/RLS checks, owner-approved real-account testing, and separate production enablement. Post-trade reviews and intelligence consume the same setup id and should not be built on a second symbol-keyed identity. The first intelligence slice now supports date-bounded realized-R metrics, scanner/sector/holding-period cohorts, and an explicitly labeled daily-OHLCV MAE/MFE proxy. Execution-accurate MAE/MFE remains blocked by missing intratrade path data, and benchmark attribution remains blocked by an unapproved attribution definition.
 
 ## Plan-to-repository map
 
