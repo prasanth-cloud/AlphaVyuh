@@ -685,7 +685,7 @@ export type JournalEntry = {
   mistakes: string | null;
   lessons: string | null;
   status: "open" | "closed" | "cancelled";
-  source_page?: "chart" | "watchlist" | "scanner" | "manual" | null;
+  source_page?: "chart" | "watchlist" | "scanner" | "manual" | "broker-import" | null;
   source_context?: string | null;
   scanner_context?: ScannerIdeaContext | null;
   thesis?: string | null;

@@ -102,6 +102,31 @@ describe("journal review context", () => {
     expect(context.fallback).toMatch(/Original idea context was not captured/i);
   });
 
+  it("keeps explicit broker-import provenance visible in review context", () => {
+    const context = getReviewContext({
+      entry_reason: "Filled order imported from broker",
+      status: "closed",
+      lessons: null,
+      setup_type: "unplanned",
+      risk_reward: null,
+      pnl: 180,
+      holding_days: 2,
+      source_page: "broker-import",
+      source_context: null,
+      thesis: null,
+      invalidation_rule: null,
+      scanner_context: null,
+    });
+
+    expect(context.summary).toEqual(expect.arrayContaining([{ label: "Source", value: "Broker import" }]));
+    expect(getTradeFlowMeta({
+      entry_reason: "Filled order imported from broker",
+      status: "open",
+      lessons: null,
+      source_page: "broker-import",
+    })).toMatchObject({ sourceLabel: "Broker import", autoRecorded: true });
+  });
+
   it("keeps fallback details when source context is only plumbing", () => {
     const context = getReviewContext({
       entry_reason: "Chart order with stop and target",

@@ -102,6 +102,21 @@ describe("buildDashboardImportReconciliation", () => {
     });
   });
 
+  it("counts an explicit broker-import source even without legacy marker text", () => {
+    const reconciliation = buildDashboardImportReconciliation({
+      ...baseInput,
+      journalEntries: [entry({
+        source_page: "broker-import",
+        source_context: null,
+        entry_reason: "Filled order",
+      })],
+      totalTrades: 1,
+      closedTrades: 1,
+    });
+
+    expect(reconciliation.sourceMix).toMatchObject({ imported: 1, planned: 0, manual: 0, unknown: 0 });
+  });
+
   it("asks the user to run import when broker import is available but never synced", () => {
     const reconciliation = buildDashboardImportReconciliation(baseInput);
     const sync = reconciliation.items.find((item) => item.id === "sync");

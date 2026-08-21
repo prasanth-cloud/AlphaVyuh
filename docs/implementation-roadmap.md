@@ -95,6 +95,7 @@ Delivered:
 - Authenticated `/api/brokers/{broker}/orders` exposes a secret-free, broker-reported equity orderbook snapshot with explicit loading, empty, and unavailable UI states.
 - Zerodha and Upstox adapter order lists exclude non-NSE/BSE rows until a separate derivatives model exists, preventing unsupported orders from entering equity workflows.
 - Broker-imported fills inherit a validated durable setup only when one active owner setup is an unambiguous symbol match; ambiguous or missing matches are explicitly tagged `unplanned`.
+- Broker-imported journal rows preserve an explicit `broker-import` source contract in the review UI, and existing workflow thesis/invalidation context is carried into the import when available.
 - Malformed broker response payloads are rejected in the frontend instead of becoming false-empty account state.
 
 Remaining:

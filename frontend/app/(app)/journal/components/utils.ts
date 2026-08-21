@@ -148,6 +148,7 @@ function processFocus(entry: ContextEntry): string | null {
 
 function sourceLabelFromEntry(entry: Pick<JournalEntry, "source_page" | "entry_reason">): string {
   const reason = (entry.entry_reason || "").toLowerCase();
+  if (entry.source_page === "broker-import") return "Broker import";
   if (entry.source_page === "watchlist") return "Watchlist plan";
   if (entry.source_page === "chart") return "Chart order";
   if (entry.source_page === "scanner") return "Scanner idea";

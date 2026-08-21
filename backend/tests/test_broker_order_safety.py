@@ -181,8 +181,12 @@ class _SetupMatchQuery:
     def __init__(self, client, table_name: str):
         self.client = client
         self.table_name = table_name
+        self.selected: list[str] = []
+        self.single = False
 
-    def select(self, *_args, **_kwargs):
+    def select(self, *args, **_kwargs):
+        if args and isinstance(args[0], str):
+            self.selected = [column.strip() for column in args[0].split(",") if column.strip()]
         return self
 
     def eq(self, *_args, **_kwargs):
@@ -195,17 +199,25 @@ class _SetupMatchQuery:
         return self
 
     def maybe_single(self):
+        self.single = True
         return self
 
     def execute(self):
         if self.table_name == "workflow_states":
-            return type("Result", (), {"data": {}})()
+            workflow = self.client.workflow_state or {}
+            if self.selected:
+                workflow = {key: workflow[key] for key in self.selected if key in workflow}
+            return type("Result", (), {"data": workflow})()
+        if self.table_name == "setups" and self.single:
+            row = self.client.setup_rows[0] if self.client.setup_rows else None
+            return type("Result", (), {"data": row})()
         return type("Result", (), {"data": self.client.setup_rows})()
 
 
 class _SetupMatchSupabase:
-    def __init__(self, setup_rows):
+    def __init__(self, setup_rows, workflow_state=None):
         self.setup_rows = setup_rows
+        self.workflow_state = workflow_state
 
     def table(self, table_name: str):
         return _SetupMatchQuery(self, table_name)
@@ -981,6 +993,27 @@ def test_import_matches_one_active_setup_and_preserves_setup_context():
     assert enrichment["setup_id"] == "setup-1"
     assert enrichment["setup_type"] == "breakout"
     assert enrichment["thesis"] == "Breakout above the base."
+    assert enrichment["invalidation_rule"] == "Close below the base."
+
+
+def test_import_preserves_workflow_thesis_and_invalidation_when_workflow_has_setup():
+    client = _SetupMatchSupabase(
+        [{"id": "setup-1", "symbol": "RELIANCE"}],
+        workflow_state={
+            "source": "watchlist",
+            "setup_id": "setup-1",
+            "setup_type": "breakout",
+            "scanner_context": {"preset_name": "Trend Template"},
+            "thesis": "Hold above the breakout base.",
+            "invalidation_rule": "Close below the base.",
+        },
+    )
+
+    workflow = broker_router._workflow_context_for_import(client, "user-1", "RELIANCE")
+    enrichment = broker_router._journal_enrichment_from_workflow(workflow)
+
+    assert enrichment["setup_id"] == "setup-1"
+    assert enrichment["thesis"] == "Hold above the breakout base."
     assert enrichment["invalidation_rule"] == "Close below the base."
 
 

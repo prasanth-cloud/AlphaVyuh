@@ -678,7 +678,7 @@ def _workflow_context_for_import(sb, user_id: str, symbol: str) -> dict:
     try:
         workflow = (
             sb.table("workflow_states")
-            .select("setup_id,setup_type,scanner_context")
+            .select("source,setup_id,setup_type,scanner_context,thesis,invalidation_rule")
             .eq("user_id", user_id)
             .eq("symbol", symbol)
             .maybe_single()
