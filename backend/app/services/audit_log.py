@@ -103,3 +103,34 @@ def record_audit_event(
         if required:
             raise AuditLogUnavailable("Required audit event could not be recorded") from exc
         return None
+
+
+def record_broker_audit_event(
+    *,
+    user_id: str,
+    event_type: str,
+    outcome: str,
+    actor_type: str = "system",
+    broker: str | None = None,
+    broker_order_id: str | None = None,
+    idempotency_key: str | None = None,
+    setup_id: str | None = None,
+    journal_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Record a backend-owned broker event without exposing write access to clients."""
+    from app.services.supabase import get_admin_client  # SERVICE_ROLE: audit insert is backend-owned and the table denies client writes
+
+    return record_audit_event(
+        get_admin_client(),
+        user_id=user_id,
+        event_type=event_type,
+        outcome=outcome,
+        actor_type=actor_type,
+        broker=broker,
+        broker_order_id=broker_order_id,
+        idempotency_key=idempotency_key,
+        setup_id=setup_id,
+        journal_id=journal_id,
+        metadata=metadata,
+    )

@@ -36,7 +36,7 @@ from app.brokers.oauth_state import (
     verify_broker_oauth_state,
 )
 from app.middleware.auth import get_current_user_id
-from app.services.audit_log import record_audit_event
+from app.services.audit_log import record_broker_audit_event
 from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
 
 logger = logging.getLogger(__name__)
@@ -64,8 +64,7 @@ def _record_broker_audit(
 ) -> None:
     """Keep adapter activity visible without making read-only UI fail closed."""
     try:
-        record_audit_event(
-            get_admin_client(),
+        record_broker_audit_event(
             user_id=user_id,
             event_type=event_type,
             outcome=outcome,

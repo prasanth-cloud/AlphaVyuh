@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
 from app.brokers.adapter import (
     BrokerCredentials,
     BrokerError,
@@ -45,8 +45,8 @@ from app.brokers.oauth_state import (
 from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
-from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
-from app.services.audit_log import AuditLogUnavailable, record_audit_event, sanitize_audit_metadata
+from app.services.supabase import get_admin_client, get_user_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
+from app.services.audit_log import AuditLogUnavailable, record_audit_event, record_broker_audit_event, sanitize_audit_metadata
 from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
@@ -606,7 +606,6 @@ def _smoke_metadata(*, broker: str, passed: bool, checked_at: str, checks: dict[
 
 
 def _record_read_only_smoke_audit(
-    sb,
     *,
     user_id: str,
     broker: str,
@@ -614,8 +613,7 @@ def _record_read_only_smoke_audit(
     checked_at: str,
     checks: dict[str, dict],
 ) -> None:
-    record_audit_event(
-        sb,
+    record_broker_audit_event(
         user_id=user_id,
         event_type="broker.read_only_smoke.completed",
         outcome="recorded" if passed else "failed",
@@ -1894,9 +1892,10 @@ async def broker_audit_events(
     limit: int = Query(default=50, ge=1, le=100),
     event_type: str | None = Query(default=None, max_length=120),
     user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
 ):
     """Return the current user's secret-free broker safety event trail."""
-    sb = get_admin_client()
+    sb = get_user_client(user_jwt)
     try:
         query = (
             sb.table("audit_logs")
@@ -2151,7 +2150,6 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
             ),
         )
         _record_read_only_smoke_audit(
-            get_admin_client(),
             user_id=user_id,
             broker="zerodha",
             passed=False,
@@ -2218,7 +2216,6 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
         ),
     )
     _record_read_only_smoke_audit(
-        get_admin_client(),
         user_id=user_id,
         broker="zerodha",
         passed=passed,

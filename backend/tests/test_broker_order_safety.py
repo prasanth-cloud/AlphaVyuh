@@ -916,8 +916,9 @@ def test_broker_audit_events_are_owner_scoped_and_secret_free(monkeypatch):
         },
     ])
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "get_user_client", lambda _jwt: client)
 
-    result = asyncio.run(broker_router.broker_audit_events(limit=25, user_id="user-1"))
+    result = asyncio.run(broker_router.broker_audit_events(limit=25, user_id="user-1", user_jwt="jwt"))
 
     assert result["count"] == 1
     assert result["events"][0]["id"] == "audit-1"
@@ -1014,6 +1015,11 @@ def test_zerodha_import_preserves_read_only_smoke_metadata(monkeypatch):
 def test_zerodha_read_only_smoke_never_places_orders(monkeypatch):
     client = _FakeSupabase()
     monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(
+        broker_router,
+        "record_broker_audit_event",
+        lambda **kwargs: client.audit_events.append(kwargs),
+    )
     monkeypatch.setattr(broker_router, "_require_broker_plan", lambda _user_id: ("pro", None))
     monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
     monkeypatch.setattr(broker_router.kite_api, "get_profile", lambda *_args, **_kwargs: {"user_id": "kite-user"})
