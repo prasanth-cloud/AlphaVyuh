@@ -130,7 +130,7 @@ GET    /api/brokers/{broker}/positions        → Position[] JSON
 GET    /api/brokers/{broker}/holdings         → Holding[] JSON
 GET    /api/brokers/{broker}/orders           → broker-reported equity orderbook JSON
 GET    /api/v1/broker/orders/activity         → normalized lifecycle records for review
-POST   /api/v1/orders                         → owner-gated order intent path; live broker orders remain disabled
+POST   /api/v1/orders                         → owner-gated order intent path; live broker orders remain disabled by default
 DELETE /api/brokers/{broker}/disconnect       → clears credentials
 ```
 
@@ -186,6 +186,13 @@ server-side `/api/v1/orders` route enforces this even if
    parseable `checked_at` timestamp no older than 24 hours. Missing, failed,
    stale, stale-shape, or different-broker metadata blocks with `409` before
    the adapter is called.
+4. A live-confirmed request must carry a durable setup in `ready`, `triggered`,
+   or `open` state. The setup must have a completed rule evaluation whose latest
+   `can_proceed` value is `true`; missing, stale, blocked, or unacknowledged
+   review state blocks with `409` before the adapter is called.
+5. Material setup edits (direction, entry, stop, target, quantity, thesis, or
+   invalidation rule) reset the setup review to `not_evaluated`; the plan must
+   be reviewed again before a live-confirmed request can proceed.
 
 This gate does not enable live or sandbox orders by itself. Owner approval is
 still required before changing the product posture from broker import/read-only
@@ -193,12 +200,19 @@ to any broker order mutation.
 
 ---
 
-## Idempotency
+## Idempotency and order confirmation
 
 Every `place_order` call must include a client-generated `idempotency_key` (UUID v4,
 ≤36 chars) stored in the `order_idempotency` DB table (migration 025). Before calling
 the broker, the adapter checks for an existing row. If found, it returns the cached
 `OrderResult` with `from_cache=True` without contacting the broker.
+
+The watchlist order ticket only exposes the live route when the broker status is
+connected and owner-enabled, the paid-plan check passes, the setup is `ready`, and
+the setup review allows proceeding. It then shows a confirmation sheet with broker,
+instrument, side, quantity, order type, price, stop, target, maximum risk, and review
+status. The user must explicitly confirm that sheet. Chart orders without a durable
+reviewed setup remain journal-capture drafts.
 
 ---
 

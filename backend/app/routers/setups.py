@@ -17,6 +17,16 @@ logger = logging.getLogger(__name__)
 SetupDirection = Literal["long", "short"]
 SetupStatus = Literal["planned", "ready", "triggered", "open", "closed", "invalidated", "cancelled"]
 SetupSource = Literal["scanner", "chart", "watchlist", "manual"]
+REVIEW_INVALIDATING_FIELDS = {
+    "direction",
+    "entry_low",
+    "entry_high",
+    "stop_price",
+    "target_price",
+    "planned_quantity",
+    "thesis",
+    "invalidation_reason",
+}
 
 
 class SetupCreate(BaseModel):
@@ -229,6 +239,9 @@ async def update_setup(
     }
     if isinstance(payload.get("source_scanner_candidate_id"), UUID):
         payload["source_scanner_candidate_id"] = str(payload["source_scanner_candidate_id"])
+    if REVIEW_INVALIDATING_FIELDS.intersection(changes):
+        payload["review_status"] = "not_evaluated"
+        payload["last_reviewed_at"] = None
     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     try:
         result = sb.table("setups").update(payload).eq("id", str(setup_id)).eq("user_id", user_id).execute()

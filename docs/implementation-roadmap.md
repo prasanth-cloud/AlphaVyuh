@@ -103,9 +103,22 @@ Remaining:
 - Surface broker-import reconciliation state and allow an owner to resolve ambiguous imports to a durable setup. The journal resolution panel is now delivered for same-symbol active setups; durable migration/RLS verification is still pending.
 - Apply and verify the current migrations in the correct Supabase project before production use.
 
-## Milestone 6 — broker execution, only after owner approval
+## Milestone 6 — controlled broker execution foundation, only after owner approval
 
-Implement explicit confirmation, server-side broker calls, idempotency, status polling/webhooks as appropriate, fill reconciliation, audit events, and automatic journal capture. A live order must never be placed by browser code, and this milestone must remain separately approved from the setup foundation.
+The local execution boundary now has the first vertical slice: the watchlist shows a
+broker order confirmation sheet only when the broker is connected, owner-enabled,
+plan-eligible, the durable setup is `ready`, and the latest rule evaluation allows
+proceeding. The browser sends only an explicit `live_confirmed` request with a caller
+idempotency key; the backend revalidates setup ownership, lifecycle, review
+permission, credentials, same-broker read-only smoke, and idempotency before calling
+Zerodha or Upstox. Material plan edits invalidate the prior review and require a
+fresh evaluation. Live routing remains disabled by default and no production order
+has been placed.
+
+Remaining: add/verify durable audit-event records for every broker action, reconcile
+pending status through polling/webhooks, complete fill reconciliation against the
+applied schema, run owner-approved real-account tests, and separately approve any
+production enablement.
 
 ## Milestone 7 — reviews and intelligence
 

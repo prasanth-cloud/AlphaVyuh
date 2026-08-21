@@ -90,6 +90,7 @@ import { buildWorkflowPatchFromChartDraft, parseChartPlanDraft } from "@/lib/cha
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { WorkflowDeskHeader } from "@/components/WorkflowDeskHeader";
 import { useOrderIntentKey } from "@/lib/order-intent";
+import { brokerOrderActionBarPresentation, canRouteLiveBrokerOrder } from "@/lib/broker-safety";
 
 type ChartDisplayType = "candles" | "bars" | "line";
 type SetupSignal = { label: string; tone: "gain" | "loss" | "accent" | "neutral"; score: number };
@@ -1081,7 +1082,20 @@ function ChartPanel({
     ...(brokerStatus?.plan_allows_broker === false ? ["Broker import requires Pro or Elite"] : []),
     ...(brokerStatus?.token_expired ? ["Broker token expired; import/reconnect before syncing trades"] : []),
   ].slice(0, 3);
-  const canRouteLiveOrder = false;
+  const canRouteLiveOrder = canRouteLiveBrokerOrder({
+    broker: brokerStatus,
+    unavailable: Boolean(brokerStatusError),
+    setupId: plan?.setup_id,
+    lifecycle: plan?.lifecycle,
+    reviewCanProceed: setupReview?.can_proceed,
+  });
+  const orderAction = brokerOrderActionBarPresentation({
+    broker: brokerStatus,
+    unavailable: Boolean(brokerStatusError),
+    canRouteLiveOrder,
+    liveConfirmed,
+    side,
+  });
   useEffect(() => {
     if (!orderDraftNonce) return;
     setShowOrderTicket(true);
@@ -1229,6 +1243,10 @@ function ChartPanel({
     }
     if (!plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true) {
       setOrderMsg({ ok: false, text: "Run setup review and mark the plan Ready before journal capture." });
+      return;
+    }
+    if (canRouteLiveOrder && !liveConfirmed) {
+      setOrderMsg({ ok: false, text: "Confirm the complete order sheet before submitting to the broker." });
       return;
     }
     if (!qtyN || qtyN < 1 || !priceN || priceN <= 0) {
@@ -1505,7 +1523,7 @@ function ChartPanel({
         <div className="order-ticket-header">
           <div>
             <div className="label" style={{ marginBottom: 4 }}>Quick order</div>
-            <div className="caption">Journal capture only: save the plan to Journal. Place any real trade directly with your broker.</div>
+            <div className="caption">{canRouteLiveOrder ? "Review the order sheet, then explicitly confirm before AlphaVyuh sends it to your broker." : "Journal capture only: save the plan to Journal. Place any real trade directly with your broker."}</div>
           </div>
           {estimatedValue != null && (
             <div style={{ padding: "7px 10px", borderRadius: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -1515,13 +1533,14 @@ function ChartPanel({
           )}
         </div>
 
-        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: brokerStatusError ? "rgba(217,119,6,0.08)" : "rgba(255,255,255,0.03)", border: brokerStatusError ? "1px solid rgba(217,119,6,0.22)" : "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: canRouteLiveOrder ? "rgba(217,119,6,0.08)" : brokerStatusError ? "rgba(217,119,6,0.08)" : "rgba(255,255,255,0.03)", border: canRouteLiveOrder || brokerStatusError ? "1px solid rgba(217,119,6,0.22)" : "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <span data-testid="watchlist-order-broker-status" style={{ fontSize: 11, fontWeight: 700, color: brokerStatusError ? "var(--warn)" : brokerStatus?.connected ? "var(--gain)" : "var(--text-secondary)" }}>
-            {brokerStatusError ? "Broker status unavailable" : brokerStatus?.status_label ?? "Checking broker route..."}
+            {brokerStatusError ? "Broker status unavailable" : canRouteLiveOrder ? "Live order confirmation required" : brokerStatus?.status_label ?? "Checking broker route..."}
           </span>
           <span className="caption">
             {brokerStatusError
               ? `${brokerStatusError} Order capture stays as a journal draft.`
+              : canRouteLiveOrder ? `Review the order sheet and confirm before AlphaVyuh sends one ${brokerStatus?.broker ?? "broker"} request.`
               : brokerStatus?.connected ? "Broker import available; order capture still records as a journal draft" : "Order capture records as a journal draft"}
           </span>
         </div>
@@ -1529,7 +1548,7 @@ function ChartPanel({
           {[
             { label: "R:R", value: planRiskReward != null ? planRiskReward.toFixed(2) : "—", tone: planRiskReward == null ? "var(--text-tertiary)" : planRiskReward >= 2 ? "var(--gain)" : "var(--warn)" },
             { label: "Risk", value: orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—", tone: "var(--text-secondary)" },
-            { label: "Mode", value: brokerStatus?.connected ? "Import only" : "Simulated", tone: brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
+            { label: "Mode", value: canRouteLiveOrder ? "Live confirmation" : brokerStatus?.connected ? "Import only" : "Simulated", tone: canRouteLiveOrder ? "var(--warn)" : brokerStatus?.connected ? "var(--accent)" : "var(--text-tertiary)" },
           ].map((item) => (
             <div key={item.label} style={{ minWidth: 0, padding: "7px 9px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)" }}>
               <div className="label" style={{ marginBottom: 2 }}>{item.label}</div>
@@ -1670,30 +1689,51 @@ function ChartPanel({
         )}
 
         {canRouteLiveOrder && (
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10, padding: "8px 10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)", color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.5 }}>
-            <input
-              type="checkbox"
-              checked={liveConfirmed}
-              onChange={(event) => setLiveConfirmed(event.target.checked)}
-              style={{ marginTop: 2 }}
-            />
-            <span>
-              I confirm this is my own order decision and want AlphaVyuh to submit it to {brokerStatus?.broker ?? "the broker"}. I checked symbol, side, quantity, price, stop, target, and risk.
-            </span>
-          </label>
+          <div data-testid="live-order-confirmation" style={{ marginBottom: 10, padding: "10px", borderRadius: 12, background: "rgba(217,119,6,0.08)", border: "1px solid rgba(217,119,6,0.22)" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "var(--warn)", marginBottom: 5 }}>Live order confirmation</div>
+            <div className="caption" style={{ lineHeight: 1.5, marginBottom: 8 }}>
+              Nothing is sent until you confirm this order sheet. The backend will re-check the setup review and idempotency key before the broker call.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6, marginBottom: 8 }}>
+              {[
+                ["Broker", brokerStatus?.broker ?? "—"],
+                ["Instrument", `NSE · ${symbol}`],
+                ["Side", side.toUpperCase()],
+                ["Quantity", qty || "—"],
+                ["Order", `${orderType.toUpperCase()}${orderType === "limit" ? ` · ₹${price || "—"}` : ""}`],
+                ["Stop / target", `${plan?.stop ?? "—"} / ${plan?.target ?? "—"}`],
+                ["Max risk", orderRiskAmount != null ? `₹${orderRiskAmount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` : "—"],
+                ["Setup review", setupReview?.overall_status === "warned" ? "Warning acknowledged" : "Passed"],
+              ].map(([label, value]) => (
+                <div key={label} style={{ minWidth: 0 }}>
+                  <div className="caption" style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{label}</div>
+                  <div className="mono" style={{ fontSize: 11, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+                </div>
+              ))}
+            </div>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, color: "var(--text-secondary)", fontSize: 11, lineHeight: 1.5 }}>
+              <input
+                type="checkbox"
+                checked={liveConfirmed}
+                onChange={(event) => setLiveConfirmed(event.target.checked)}
+                style={{ marginTop: 2 }}
+              />
+              <span>I confirm this is my own order decision and want AlphaVyuh to submit it to {brokerStatus?.broker ?? "the broker"}. I checked symbol, side, quantity, price, stop, target, and risk.</span>
+            </label>
+          </div>
         )}
 
-        <button onClick={handleOrder} disabled={orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true || (canRouteLiveOrder && !liveConfirmed)}
+        <button onClick={handleOrder} disabled={orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true || orderAction.primaryDisabled}
           style={{
             width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
             background: side === "buy" ? "var(--gain)" : "var(--loss)", color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true ? "not-allowed" : "pointer",
-            opacity: orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true || (canRouteLiveOrder && !liveConfirmed) ? 0.5 : 1,
+            opacity: orderBusy || !planValid || !plan?.setup_id || plan.lifecycle !== "ready" || setupReview?.can_proceed !== true || orderAction.primaryDisabled ? 0.5 : 1,
           }}>
           {orderBusy
-            ? canRouteLiveOrder && liveConfirmed ? "Submitting..." : "Saving..."
+            ? orderAction.savingLabel
             : planValid && plan?.setup_id && plan.lifecycle === "ready" && setupReview?.can_proceed === true
-              ? canRouteLiveOrder ? `${side === "buy" ? "Buy" : "Sell"} via ${brokerStatus?.broker ?? "broker"}` : `Save ${side === "buy" ? "buy" : "sell"} journal draft`
+              ? orderAction.primaryLabel
               : planValid ? "Run setup review and mark Ready" : planNextAction}
         </button>
         </div>

@@ -56,6 +56,7 @@ BROKER_IMPORT_MARKER = "alphavyuh-broker-import"
 ORDER_INTENT_MARKER = "alphavyuh-order-intent"
 BROKER_READ_ONLY_SMOKE_MAX_AGE_HOURS = 24
 IMPORT_MATCHABLE_SETUP_STATUSES = {"planned", "ready", "triggered", "open"}
+LIVE_ORDER_SETUP_STATUSES = {"ready", "triggered", "open"}
 UNPLANNED_SETUP_TYPE = "unplanned"
 
 
@@ -728,6 +729,70 @@ def _owned_setup_id_for_symbol(sb, user_id: str, setup_id: str, symbol: str) -> 
     return str(setup.get("id"))
 
 
+def _require_live_setup_review(sb, user_id: str, setup_row: dict[str, Any]) -> None:
+    """Fail closed unless the durable setup is active and its latest review allows it."""
+    setup_status = str(setup_row.get("status") or "").lower()
+    if setup_status not in LIVE_ORDER_SETUP_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a setup in READY, TRIGGERED, or OPEN state.",
+        )
+
+    review_status = str(setup_row.get("review_status") or "not_evaluated").lower()
+    if review_status not in {"passed", "warned"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a completed setup review with a passing or acknowledged warning.",
+        )
+    reviewed_at_raw = setup_row.get("last_reviewed_at")
+    try:
+        reviewed_at = datetime.fromisoformat(str(reviewed_at_raw).replace("Z", "+00:00"))
+        if reviewed_at.tzinfo is None:
+            reviewed_at = reviewed_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Live broker orders require a current setup review timestamp. Re-run the review before confirming.",
+        )
+
+    try:
+        evaluation = (
+            sb.table("setup_rule_evaluations")
+            .select("can_proceed,overall_status,override_reason,evaluated_at")
+            .eq("user_id", user_id)
+            .eq("setup_id", str(setup_row["id"]))
+            .order("evaluated_at", desc=True)
+            .limit(1)
+            .maybe_single()
+            .execute()
+            .data
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Setup review is temporarily unavailable. The order was not submitted.",
+        ) from exc
+
+    try:
+        evaluated_at = datetime.fromisoformat(str(evaluation.get("evaluated_at")).replace("Z", "+00:00")) if evaluation else None
+        if evaluated_at is not None and evaluated_at.tzinfo is None:
+            evaluated_at = evaluated_at.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        evaluated_at = None
+
+    if (
+        not evaluation
+        or evaluation.get("can_proceed") is not True
+        or str(evaluation.get("overall_status") or "").lower() != review_status
+        or evaluated_at is None
+        or evaluated_at != reviewed_at
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The latest setup review is missing, stale, or does not allow a live broker order. Re-run the review before confirming.",
+        )
+
+
 def _journal_enrichment_from_workflow(workflow: dict) -> dict:
     scanner_context = workflow.get("scanner_context")
     setup_type = workflow.get("setup_type")
@@ -959,7 +1024,7 @@ async def place_order(
         try:
             setup_row = (
                 sb.table("setups")
-                .select("id,symbol")
+                .select("id,symbol,status,review_status,last_reviewed_at")
                 .eq("id", str(body.setup_id))
                 .eq("user_id", user_id)
                 .maybe_single()
@@ -975,6 +1040,8 @@ async def place_order(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Setup not found")
         if str(setup_row.get("symbol") or "").upper() != sym:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Setup symbol does not match the order symbol")
+        if body.live_confirmed:
+            _require_live_setup_review(sb, user_id, setup_row)
 
     workflow_context = {}
     try:

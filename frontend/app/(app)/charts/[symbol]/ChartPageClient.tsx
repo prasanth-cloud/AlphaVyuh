@@ -2380,7 +2380,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{orderToast.message}</div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)" }}>
-                {orderToast.broker === "simulated" ? "Journal capture" : `Broker routed via ${orderToast.broker}`} · journal capture completed
+                {orderToast.broker === "simulated" ? "Saved as a journal capture draft" : `Broker routed via ${orderToast.broker}`}
                 {orderToast.riskReward != null ? ` · R:R ${orderToast.riskReward.toFixed(2)}` : ""}
               </div>
               <div style={{ display: "flex", gap: 8 }}>

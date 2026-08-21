@@ -46,14 +46,15 @@ test.describe("Core workflow — scanner → watchlist → chart → journal", (
     await expect(page.locator("body")).toContainText(symbol, { timeout: 15_000 });
 
     // 4. Place a mock order (creates journal draft)
-    await page.getByRole("button", { name: /^Order$/ }).click();
-    await page.getByPlaceholder("Entry").fill("1500");
-    await page.getByPlaceholder("Stop").fill("1440");
-    await page.getByPlaceholder("Target").fill("1650");
-    await page.getByPlaceholder("Qty").fill("5");
-    await page.getByPlaceholder("Thesis").fill("Core E2E test setup.");
-    await page
-      .getByPlaceholder("Invalidation rule")
+    await page.getByRole("button", { name: "BUY", exact: true }).click();
+    const orderModal = page.getByTestId("chart-order-modal");
+    await orderModal.getByPlaceholder("Entry", { exact: true }).fill("1500");
+    await orderModal.getByPlaceholder("Stop", { exact: true }).fill("1440");
+    await orderModal.getByPlaceholder("Target", { exact: true }).fill("1650");
+    await orderModal.getByPlaceholder("Qty", { exact: true }).fill("5");
+    await orderModal.getByPlaceholder("Thesis", { exact: true }).fill("Core E2E test setup.");
+    await orderModal
+      .getByPlaceholder("Invalidation rule", { exact: true })
       .fill("Exit if base breaks on close.");
 
     await expect(

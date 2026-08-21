@@ -69,7 +69,10 @@ class _Query:
                 "id": self.filters.get("id", "11111111-1111-4111-8111-111111111111"),
                 "user_id": self.filters.get("user_id", "user-1"),
                 "symbol": "RELIANCE",
+                **self.client.setup_row,
             }})()
+        if self.table_name == "setup_rule_evaluations":
+            return type("Result", (), {"data": self.client.setup_evaluation})()
         if self.table_name == "trade_journal" and self.insert_payload is not None:
             if self.client.journal_insert_conflict:
                 self.client.journal_insert_conflict = False
@@ -144,6 +147,17 @@ class _FakeSupabase:
         self.broker_connection_upserts = []
         self.broker_order_inserts = []
         self.journal_insert_conflict = False
+        self.setup_row = {
+            "status": "ready",
+            "review_status": "passed",
+            "last_reviewed_at": "2026-08-20T12:00:00+00:00",
+        }
+        self.setup_evaluation = {
+            "can_proceed": True,
+            "overall_status": "passed",
+            "override_reason": None,
+            "evaluated_at": "2026-08-20T12:00:00+00:00",
+        }
 
     def table(self, table_name: str):
         return _Query(self, table_name)
@@ -408,6 +422,53 @@ def test_confirmed_live_order_requires_durable_setup(monkeypatch):
 
     assert exc.value.status_code == 409
     assert "durable setup" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_reviewed_ready_setup(monkeypatch):
+    client = _FakeSupabase()
+    client.setup_row["review_status"] = "not_evaluated"
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "completed setup review" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_latest_review_permission(monkeypatch):
+    client = _FakeSupabase()
+    client.setup_row["review_status"] = "warned"
+    client.setup_evaluation["overall_status"] = "warned"
+    client.setup_evaluation["can_proceed"] = False
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "does not allow a live broker order" in str(exc.value.detail)
+    assert client.journal_inserts == []
+
+
+def test_confirmed_live_order_requires_current_review_timestamp(monkeypatch):
+    client = _FakeSupabase()
+    client.setup_row["last_reviewed_at"] = "2026-08-20T12:01:00+00:00"
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router.settings, "broker_live_orders_enabled", True)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(broker_router.place_order(_live_order(), user_id="user-1"))
+
+    assert exc.value.status_code == 409
+    assert "stale" in str(exc.value.detail)
     assert client.journal_inserts == []
 
 

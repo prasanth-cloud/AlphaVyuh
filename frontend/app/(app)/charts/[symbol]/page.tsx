@@ -2437,7 +2437,7 @@ export default function ChartPage({ params }: { params: Promise<{ symbol: string
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)" }}>
                 {orderToast.broker === "simulated"
-                  ? "Simulated journal capture completed"
+                  ? "Saved as a journal capture draft"
                   : orderToast.journalId
                     ? `${orderToast.broker} · ${orderToast.executionStatus?.toLowerCase() ?? "fill recorded"} · journal position created`
                     : `${orderToast.broker} · ${orderToast.executionStatus?.toLowerCase() ?? "submitted"} · no position recorded yet`}

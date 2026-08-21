@@ -52,6 +52,11 @@ class _Query:
             row = {"id": "setup-1", "created_at": "2026-08-20T00:00:00Z", **self.payload}
             self.client.rows = [row]
             return _Result([row])
+        if self.payload is not None:
+            for row in self.client.rows:
+                if all(str(row.get(key)) == str(value) for key, value in self.filters.items()):
+                    row.update(self.payload)
+            return _Result(self.client.rows)
         matches = [
             row for row in self.client.rows
             if all(str(row.get(key)) == str(value) for key, value in self.filters.items())
@@ -148,3 +153,33 @@ def test_get_setup_does_not_return_another_users_setup(monkeypatch) -> None:
         asyncio.run(setups_router.get_setup("00000000-0000-4000-8000-000000000001", user_id="other-user", user_jwt="jwt"))
 
     assert exc_info.value.status_code == 404
+
+
+def test_update_setup_invalidates_review_after_material_plan_change(monkeypatch) -> None:
+    client = _Client()
+    client.insert_mode = False
+    client.rows = [{
+        "id": "setup-1",
+        "user_id": "user-42",
+        "symbol": "TCS",
+        "direction": "long",
+        "entry_low": 3900,
+        "entry_high": 3900,
+        "stop_price": 3800,
+        "target_price": 4200,
+        "planned_quantity": 1,
+        "review_status": "passed",
+        "last_reviewed_at": "2026-08-20T00:00:00Z",
+    }]
+    monkeypatch.setattr(setups_router, "get_user_client", lambda _jwt: client)
+
+    result = asyncio.run(setups_router.update_setup(
+        "setup-1",
+        setups_router.SetupPatch(target_price=4300),
+        user_id="user-42",
+        user_jwt="jwt",
+    ))
+
+    assert result["target_price"] == 4300
+    assert result["review_status"] == "not_evaluated"
+    assert result["last_reviewed_at"] is None
