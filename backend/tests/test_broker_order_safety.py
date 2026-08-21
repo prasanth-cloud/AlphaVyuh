@@ -967,6 +967,83 @@ def test_zerodha_import_deduplicates_by_broker_marker(monkeypatch):
     assert "alphavyuh-broker-import:zerodha:order:kite-order-1" in client.journal_inserts[0]["entry_reason"]
 
 
+def test_zerodha_import_surfaces_unmatched_sell_for_reconciliation(monkeypatch):
+    client = _FakeSupabase()
+    orders = [
+        {
+            "status": "COMPLETE",
+            "tradingsymbol": "RELIANCE",
+            "filled_quantity": 10,
+            "average_price": 2525,
+            "transaction_type": "SELL",
+            "order_id": "kite-sell-1",
+            "exchange_timestamp": "2026-05-05 10:20:00",
+        }
+    ]
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _live_creds())
+    monkeypatch.setattr(broker_router.kite_api, "list_orders", lambda **_kwargs: orders)
+
+    result = asyncio.run(broker_router.import_zerodha_trades(user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert result["skipped"] == 0
+    assert result["unmatched_fills"] == 1
+    assert result["unmatched_symbols"] == ["RELIANCE"]
+    assert result["reconciliation_status"] == "needs_review"
+    assert result["total_filled_orders"] == 1
+    assert client.journal_inserts == []
+    assert client.audit_events[-1]["metadata"] == {
+        "imported": 0,
+        "skipped": 0,
+        "unmatched_fills": 1,
+        "unmatched_symbols": ["RELIANCE"],
+        "reconciliation_status": "needs_review",
+        "total_filled_orders": 1,
+    }
+
+
+def test_upstox_import_surfaces_unmatched_sell_for_reconciliation(monkeypatch):
+    client = _FakeSupabase()
+    now = datetime.now(timezone.utc)
+
+    class _Adapter:
+        async def list_orders(self, _creds):
+            return [
+                Order(
+                    id=broker_router.IdempotencyKey("22222222-2222-4222-8222-222222222222"),
+                    broker_order_id=BrokerOrderId("upstox-sell-1"),
+                    symbol="INFY",
+                    exchange="NSE",
+                    side="SELL",
+                    order_type="MARKET",
+                    product="CNC",
+                    status="COMPLETE",
+                    quantity=5,
+                    filled_quantity=5,
+                    average_price=1490,
+                    fills=[],
+                    child_broker_order_ids=[],
+                    placed_at=now,
+                    updated_at=now,
+                )
+            ]
+
+    monkeypatch.setattr(broker_router, "get_admin_client", lambda: client)
+    monkeypatch.setattr(broker_router, "_get_user_broker_credentials", lambda *_args: _upstox_creds())
+    monkeypatch.setattr(broker_router, "get_adapter", lambda _broker: _Adapter())
+
+    result = asyncio.run(broker_router.import_broker_trades("upstox", user_id="user-1"))
+
+    assert result["imported"] == 0
+    assert result["unmatched_fills"] == 1
+    assert result["unmatched_symbols"] == ["INFY"]
+    assert result["reconciliation_status"] == "needs_review"
+    assert client.journal_inserts == []
+    assert client.audit_events[-1]["broker"] == "upstox"
+    assert client.audit_events[-1]["metadata"]["unmatched_fills"] == 1
+
+
 def test_import_matches_one_active_setup_and_preserves_setup_context():
     client = _SetupMatchSupabase([
         {

@@ -31,6 +31,7 @@ import {
 import type {
   AiPatterns,
   BacktestResponse,
+  BrokerImportResult,
   BrokerHolding,
   BrokerOrderSnapshot,
   BrokerOrderbookResponse,
@@ -760,6 +761,65 @@ function parseBrokerAuditEventResponse(value: unknown): BrokerAuditEventResponse
   return {
     events,
     count: isFiniteNumber(value.count) ? Math.max(0, Math.trunc(value.count)) : events.length,
+  };
+}
+
+function parseBrokerImportResult(value: unknown): BrokerImportResult {
+  if (!isRecord(value)) {
+    throw new Error("Broker import returned an invalid response.");
+  }
+
+  const readNonNegativeInteger = (candidate: unknown, fallback: number, field: string): number => {
+    if (candidate === undefined) return fallback;
+    if (!isFiniteNumber(candidate) || !Number.isInteger(candidate) || candidate < 0) {
+      throw new Error(`Broker import returned an invalid ${field}.`);
+    }
+    return candidate;
+  };
+
+  const imported = readNonNegativeInteger(value.imported, 0, "imported count");
+  const skipped = readNonNegativeInteger(value.skipped, 0, "skipped count");
+  const unmatched_fills = readNonNegativeInteger(value.unmatched_fills, 0, "unmatched fill count");
+  const total_filled_orders = readNonNegativeInteger(
+    value.total_filled_orders,
+    imported + skipped + unmatched_fills,
+    "filled-order count",
+  );
+  const unmatched_symbols = value.unmatched_symbols === undefined
+    ? []
+    : Array.isArray(value.unmatched_symbols) && value.unmatched_symbols.every((symbol) => typeof symbol === "string")
+      ? value.unmatched_symbols.slice(0, 20)
+      : null;
+  if (!unmatched_symbols) {
+    throw new Error("Broker import returned invalid unmatched symbols.");
+  }
+
+  const reconciliation_status = value.reconciliation_status === undefined
+    ? unmatched_fills > 0 ? "needs_review" : "complete"
+    : value.reconciliation_status;
+  if (reconciliation_status !== "complete" && reconciliation_status !== "needs_review") {
+    throw new Error("Broker import returned an invalid reconciliation status.");
+  }
+  if ((reconciliation_status === "complete") !== (unmatched_fills === 0)) {
+    throw new Error("Broker import returned an inconsistent reconciliation status.");
+  }
+
+  const last_synced_at = value.last_synced_at === undefined || value.last_synced_at === null
+    ? value.last_synced_at ?? null
+    : typeof value.last_synced_at === "string" ? value.last_synced_at : null;
+  if (value.last_synced_at !== undefined && value.last_synced_at !== null && last_synced_at === null) {
+    throw new Error("Broker import returned an invalid sync timestamp.");
+  }
+
+  return {
+    imported,
+    skipped,
+    unmatched_fills,
+    unmatched_symbols,
+    reconciliation_status,
+    total_filled_orders,
+    message: typeof value.message === "string" ? value.message : "Broker import completed.",
+    last_synced_at,
   };
 }
 
@@ -3021,9 +3081,7 @@ export async function closePosition(
   return closed;
 }
 
-export async function importBrokerTrades(broker: BrokerImportSource = "zerodha"): Promise<{
-  imported: number; skipped: number; total_filled_orders: number; message: string; last_synced_at?: string | null
-}> {
+export async function importBrokerTrades(broker: BrokerImportSource = "zerodha"): Promise<BrokerImportResult> {
   if (shouldUseMockFallback()) {
     const now = new Date().toISOString();
     const local = readLocalJournalEntries();
@@ -3053,6 +3111,9 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
     return {
       imported,
       skipped,
+      unmatched_fills: 0,
+      unmatched_symbols: [],
+      reconciliation_status: "complete",
       total_filled_orders: profile.orders.length,
       last_synced_at: now,
       message: `Imported ${imported} new mock trade(s) from ${profile.displayName}.`,
@@ -3064,7 +3125,7 @@ export async function importBrokerTrades(broker: BrokerImportSource = "zerodha")
     const body = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(body.detail?.message ?? body.detail ?? "Import failed");
   }
-  const imported = await res.json();
+  const imported = parseBrokerImportResult(await res.json());
   invalidateClientCache(["journal:", "portfolio", "broker:status"]);
   return imported;
 }

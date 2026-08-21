@@ -1046,6 +1046,17 @@ export type ZerodhaReadOnlySmoke = {
   checks: Record<string, { ok: boolean; count?: number; error?: string; note?: string; user_id_present?: boolean }>;
 };
 
+export type BrokerImportResult = {
+  imported: number;
+  skipped: number;
+  unmatched_fills: number;
+  unmatched_symbols: string[];
+  reconciliation_status: "complete" | "needs_review";
+  total_filled_orders: number;
+  message: string;
+  last_synced_at?: string | null;
+};
+
 export type PlaceOrderRequest = {
   symbol:       string;
   setup_id?:    string | null;

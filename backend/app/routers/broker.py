@@ -842,6 +842,37 @@ def _journal_enrichment_from_workflow(workflow: dict) -> dict:
     return enrichment
 
 
+def _bounded_import_symbols(symbols: list[str], limit: int = 20) -> list[str]:
+    """Keep import reconciliation metadata useful without storing broker payloads."""
+    return list(dict.fromkeys(symbol.strip().upper() for symbol in symbols if symbol.strip()))[:limit]
+
+
+def _broker_import_result(
+    *,
+    broker: str,
+    imported: int,
+    skipped: int,
+    unmatched_fills: int,
+    unmatched_symbols: list[str],
+    total_filled_orders: int,
+    last_synced_at: str,
+) -> dict[str, Any]:
+    reconciliation_status = "needs_review" if unmatched_fills else "complete"
+    message = f"Imported {imported} new trade(s) from {broker}."
+    if unmatched_fills:
+        message += f" {unmatched_fills} filled order(s) need reconciliation because no open journal entry matched."
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "unmatched_fills": unmatched_fills,
+        "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
+        "reconciliation_status": reconciliation_status,
+        "total_filled_orders": total_filled_orders,
+        "last_synced_at": last_synced_at,
+        "message": message,
+    }
+
+
 def _fifo_close_open_long(
     sb,
     user_id: str,
@@ -2275,6 +2306,8 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
     filled = [o for o in orders if o.get("status") == "COMPLETE"]
     imported = 0
     skipped = 0
+    unmatched_fills = 0
+    unmatched_symbols: list[str] = []
 
     for order in filled:
         sym      = (order.get("tradingsymbol") or "").strip().upper()
@@ -2299,6 +2332,9 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         if txn == "SELL":
             if _fifo_close_open_long(sb, user_id, sym, avg_px, exit_reason):
                 imported += 1
+            else:
+                unmatched_fills += 1
+                unmatched_symbols.append(sym)
             continue
 
         stock = sb.table("stock_universe").select("company_name") \
@@ -2347,16 +2383,25 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         event_type="broker.trade_import.completed",
         outcome="recorded",
         broker="zerodha",
-        metadata={"imported": imported, "skipped": skipped, "total_filled_orders": len(filled)},
+        metadata={
+            "imported": imported,
+            "skipped": skipped,
+            "unmatched_fills": unmatched_fills,
+            "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
+            "reconciliation_status": "needs_review" if unmatched_fills else "complete",
+            "total_filled_orders": len(filled),
+        },
     )
 
-    return {
-        "imported": imported,
-        "skipped":  skipped,
-        "total_filled_orders": len(filled),
-        "last_synced_at": synced_at,
-        "message": f"Imported {imported} new trade(s) from Zerodha.",
-    }
+    return _broker_import_result(
+        broker="Zerodha",
+        imported=imported,
+        skipped=skipped,
+        unmatched_fills=unmatched_fills,
+        unmatched_symbols=unmatched_symbols,
+        total_filled_orders=len(filled),
+        last_synced_at=synced_at,
+    )
 
 
 @router.post("/broker/{broker_name}/import")
@@ -2410,6 +2455,8 @@ async def import_broker_trades(
     filled = [o for o in orders if o.status == "COMPLETE" and o.filled_quantity > 0]
     imported = 0
     skipped = 0
+    unmatched_fills = 0
+    unmatched_symbols: list[str] = []
     for order in filled:
         marker = _broker_import_marker(broker_name, str(order.broker_order_id))
         existing = _import_already_recorded(sb, user_id, marker)
@@ -2425,6 +2472,9 @@ async def import_broker_trades(
         if order.side == "SELL":
             if _fifo_close_open_long(sb, user_id, order.symbol, entry_price, exit_reason):
                 imported += 1
+            else:
+                unmatched_fills += 1
+                unmatched_symbols.append(order.symbol)
             continue
 
         stock = sb.table("stock_universe").select("company_name") \
@@ -2472,15 +2522,24 @@ async def import_broker_trades(
         event_type="broker.trade_import.completed",
         outcome="recorded",
         broker=broker_name,
-        metadata={"imported": imported, "skipped": skipped, "total_filled_orders": len(filled)},
+        metadata={
+            "imported": imported,
+            "skipped": skipped,
+            "unmatched_fills": unmatched_fills,
+            "unmatched_symbols": _bounded_import_symbols(unmatched_symbols),
+            "reconciliation_status": "needs_review" if unmatched_fills else "complete",
+            "total_filled_orders": len(filled),
+        },
     )
-    return {
-        "imported": imported,
-        "skipped": skipped,
-        "total_filled_orders": len(filled),
-        "last_synced_at": synced_at,
-        "message": f"Imported {imported} new trade(s) from {broker_name.capitalize()}.",
-    }
+    return _broker_import_result(
+        broker=broker_name.capitalize(),
+        imported=imported,
+        skipped=skipped,
+        unmatched_fills=unmatched_fills,
+        unmatched_symbols=unmatched_symbols,
+        total_filled_orders=len(filled),
+        last_synced_at=synced_at,
+    )
 
 
 @router.get("/broker/zerodha/callback")

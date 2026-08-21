@@ -58,6 +58,7 @@ export default function JournalPage() {
   const [brokerStatusError, setBrokerStatusError] = useState<string | null>(null);
   const [brokerCanImport, setBrokerCanImport] = useState(false);
   const [brokerLastSyncedAt, setBrokerLastSyncedAt] = useState<string | null>(null);
+  const [brokerImportWarning, setBrokerImportWarning] = useState<{ count: number; symbols: string[] } | null>(null);
   const [importing, setImporting] = useState(false);
   const [lessonLoading, setLessonLoading] = useState<string | null>(null);
   const [stats, setStats] = useState<JournalStats | null>(null);
@@ -389,11 +390,20 @@ export default function JournalPage() {
     setImporting(true);
     try {
       const r = await importZerodhaTrades();
-      trackEvent("journal_entry_created", { source: "broker_import", imported: r.imported, skipped: r.skipped });
+      trackEvent("journal_entry_created", {
+        source: "broker_import",
+        imported: r.imported,
+        skipped: r.skipped,
+        unmatched_fills: r.unmatched_fills,
+      });
       showToast(r.message || JOURNAL_IMPORT_RESULT_FAILED_MESSAGE);
       setBrokerLastSyncedAt(r.last_synced_at ?? new Date().toISOString());
+      setBrokerImportWarning(r.unmatched_fills > 0 ? {
+        count: r.unmatched_fills,
+        symbols: r.unmatched_symbols,
+      } : null);
       refreshBrokerStatus();
-      if (r.imported > 0) load();
+      if (r.imported > 0 || r.unmatched_fills > 0) load();
     } catch { showToast(JOURNAL_IMPORT_FAILED_MESSAGE); }
     finally { setImporting(false); }
   };
@@ -517,6 +527,24 @@ export default function JournalPage() {
         onImport={handleImportZerodha}
         onAddTrade={openAddPanel}
       />
+
+      {brokerImportWarning && (
+        <div
+          className="workspace-card"
+          data-testid="journal-import-reconciliation-warning"
+          role="alert"
+          style={{ padding: 14, display: "grid", gap: 4, borderColor: "var(--border-subtle)", background: "var(--warn-subtle)" }}
+        >
+          <EyebrowLabel>Broker import needs reconciliation</EyebrowLabel>
+          <div className="text-[13px] leading-relaxed" style={{ color: "var(--warn)" }}>
+            {brokerImportWarning.count} filled broker order{brokerImportWarning.count === 1 ? "" : "s"} could not be matched to an open journal entry.
+          </div>
+          <div className="text-[12px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+            AlphaVyuh did not create a false journal close. Review the broker statement and link or record the trade before relying on imported coverage.
+            {brokerImportWarning.symbols.length > 0 ? ` Symbols: ${brokerImportWarning.symbols.join(", ")}.` : ""}
+          </div>
+        </div>
+      )}
 
       {(journalLoadError || journalStatsError || brokerStatusError) && (
         <div

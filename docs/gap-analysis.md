@@ -34,7 +34,7 @@ Manual and imported journal records now receive an explicit `unplanned` setup ta
 
 ### P2 — read-only broker reconciliation
 
-Broker adapters and read-only/import paths exist, and the durable setup spine plus normalized broker lifecycle timeline are now in place. Pending fills can be manually reconciled and are rechecked by the UI while the activity page is open; owner-scoped audit events record read-only checks, imports, submissions, failures, and reconciliation. Broker-import rows now retain an explicit source contract and saved workflow thesis/invalidation context. Applied-schema verification and owner-approved real-account smoke remain.
+Broker adapters and read-only/import paths exist, and the durable setup spine plus normalized broker lifecycle timeline are now in place. Pending fills can be manually reconciled and are rechecked by the UI while the activity page is open; owner-scoped audit events record read-only checks, imports, submissions, failures, and reconciliation. Broker-import rows now retain an explicit source contract and saved workflow thesis/invalidation context. Unmatched completed SELL fills now return `needs_review`, bounded symbols, and a visible Journal warning instead of disappearing from the import result; a durable broker-fill ledger is still needed for cross-session resolution. Applied-schema verification and owner-approved real-account smoke remain.
 
 ### P2 — live execution and post-trade intelligence
 

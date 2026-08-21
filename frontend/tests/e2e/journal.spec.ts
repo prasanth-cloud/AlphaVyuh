@@ -711,6 +711,33 @@ test.describe("Journal — broker sync import", () => {
     await expect(importCalled).toBe(true);
   });
 
+  test("shows unmatched broker fills as a reconciliation warning", async ({ page }) => {
+    await mockJournalRoutes(page, { brokerConnected: true });
+    await page.route("**/api/v1/broker/zerodha/import", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          imported: 0,
+          skipped: 0,
+          unmatched_fills: 1,
+          unmatched_symbols: ["RELIANCE"],
+          reconciliation_status: "needs_review",
+          total_filled_orders: 1,
+          message: "Import needs review.",
+        }),
+      });
+    });
+
+    await page.goto("/journal");
+    if (page.url().includes("/login")) return;
+
+    await page.getByRole("button", { name: "Import from Zerodha" }).click();
+    const warning = page.getByTestId("journal-import-reconciliation-warning");
+    await expect(warning).toContainText("1 filled broker order could not be matched to an open journal entry");
+    await expect(warning).toContainText("RELIANCE");
+  });
+
   test("broker import failure uses stable recovery copy", async ({ page }) => {
     await mockJournalRoutes(page, { brokerConnected: true });
     await page.route("**/api/v1/broker/zerodha/import", async (route) => {

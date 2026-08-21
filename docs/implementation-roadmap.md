@@ -96,12 +96,13 @@ Delivered:
 - Zerodha and Upstox adapter order lists exclude non-NSE/BSE rows until a separate derivatives model exists, preventing unsupported orders from entering equity workflows.
 - Broker-imported fills inherit a validated durable setup only when one active owner setup is an unambiguous symbol match; ambiguous or missing matches are explicitly tagged `unplanned`.
 - Broker-imported journal rows preserve an explicit `broker-import` source contract in the review UI, and existing workflow thesis/invalidation context is carried into the import when available.
+- Completed broker imports now return explicit reconciliation status and bounded unmatched symbols when a SELL fill cannot match an open journal entry; the import audit event records the same review debt without fabricating a journal close.
 - Malformed broker response payloads are rejected in the frontend instead of becoming false-empty account state.
 
 Remaining:
 
 - Run the owner-approved Zerodha/Upstox real-account smoke and record profile, holdings, positions, orderbook, tradebook, and import evidence.
-- Surface broker-import reconciliation state and allow an owner to resolve ambiguous imports to a durable setup. The journal resolution panel is now delivered for same-symbol active setups; durable migration/RLS verification is still pending.
+- Persist a durable broker-fill reconciliation ledger and let an owner resolve unmatched/ambiguous imports to a durable setup. The journal resolution panel is delivered for same-symbol active setups; the current import response and audit warning make the unresolved state explicit but do not yet retain a broker-fill row for later sessions.
 - Apply and verify the current migrations in the correct Supabase project before production use.
 
 ## Milestone 6 — controlled broker execution foundation, only after owner approval
