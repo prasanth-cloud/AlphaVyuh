@@ -38,7 +38,7 @@ Broker adapters and read-only/import paths exist, and the durable setup spine pl
 
 ### P2 — live execution and post-trade intelligence
 
-Explicit confirmation, server-only credentials, idempotency, broker status, fill reconciliation, and durable audit logging are now implemented as a locally verified execution foundation. Live execution remains disabled by default and requires applied migration/RLS checks, owner-approved real-account testing, and separate production enablement. Post-trade reviews and intelligence consume the same setup id and should not be built on a second symbol-keyed identity. The first intelligence slice now supports date-bounded realized-R metrics, scanner/sector/holding-period cohorts, and an explicitly labeled daily-OHLCV MAE/MFE proxy with per-trade coverage rows. Execution-accurate MAE/MFE remains blocked by missing intratrade path data, and benchmark attribution remains blocked by an unapproved attribution definition.
+Explicit confirmation, server-only credentials, idempotency, broker status, fill reconciliation, and durable audit logging are now implemented as a locally verified execution foundation. Live execution remains disabled by default and requires applied migration/RLS checks, owner-approved real-account testing, and separate production enablement. Post-trade reviews and intelligence consume the same setup id and should not be built on a second symbol-keyed identity. The first intelligence slice now supports date-bounded realized-R metrics, scanner/sector/holding-period cohorts, persisted Zerodha intraday paths, and an explicitly labeled daily-OHLCV MAE/MFE fallback with per-trade coverage rows. The remaining gap is applied-schema/provider verification and interval-limited path accuracy; benchmark attribution remains blocked by an unapproved attribution definition.
 
 ## Plan-to-repository map
 
@@ -53,4 +53,4 @@ Explicit confirmation, server-only credentials, idempotency, broker status, fill
 | Watchlist/journal | Watchlist, workflow, manual/simulated journal, explicit unplanned tagging, durable trade reviews | Imported-fill reconciliation and review-aware analytics remain | Link every fill to setup and measure review outcomes |
 | Zerodha read-only | Broker adapters/import surfaces | Fresh external verification required | Verify read-only path |
 | Execution | Simulated/order-intent safety foundation | Live execution owner-gated | Do not enable in this slice |
-| Review intelligence | Journal and AI review surfaces | Review lineage is incomplete | Build after setup/fill lineage |
+| Review intelligence | Journal and AI review surfaces, persisted Zerodha path capture, EOD fallback | Applied-schema/provider verification and benchmark definition | Verify path capture, then add only approved contextual joins |

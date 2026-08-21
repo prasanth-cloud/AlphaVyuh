@@ -22,7 +22,11 @@ The attached plan depends on reliable NSE/BSE EOD data and indicator calculation
 
 ## Broker dependencies
 
-Zerodha read-only verification, credential permissions, token expiry, rate limits, API availability, and account-level behavior must be tested separately. Live execution also depends on legal/product review and a broker-safe test environment. Dhan, Upstox, derivatives, and options are later dependencies, not part of this implementation slice.
+Zerodha read-only verification, credential permissions, token expiry, rate limits, API availability, and account-level behavior must be tested separately. The new intraday path capture is Pro/Elite-only, Zerodha-only, and interval-limited to 5/15/30/60 minutes. It stores normalized OHLCV only; provider retention and interval granularity mean the result is not tick-level execution truth. Live execution also depends on legal/product review and a broker-safe test environment. Dhan, Upstox, derivatives, and options are later dependencies, not part of this implementation slice.
+
+## Intraday path evidence
+
+Path capture is a read-only enrichment of a closed journal row, not an order or recommendation. A missing migration, missing encrypted broker token, expired session, provider rate limit, or absent bars must leave the journal on its explicitly labeled EOD proxy or unavailable state. The migration and an owner-approved connected Zerodha capture still need verification in the correct Supabase project before this is described as production-ready.
 
 ## Current code risks
 

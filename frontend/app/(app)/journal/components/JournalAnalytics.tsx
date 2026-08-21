@@ -7,6 +7,7 @@ import { formatSetupTagDisplay } from "@/lib/setup-tag-display";
 import type {
   JournalAnalytics as JournalAnalyticsType,
   JournalAnalyticsCohortRow,
+  JournalIntradayPathInterval,
   JournalAnalyticsRange,
   JournalEntry,
 } from "./types";
@@ -203,7 +204,23 @@ function CohortTable({
 
 type MaeMfeRow = NonNullable<JournalAnalyticsType["mae_mfe"]>["trades"][number];
 
-function MaeMfeTable({ rows }: { rows: MaeMfeRow[] }) {
+function excursionBasisLabel(row: MaeMfeRow) {
+  if (row.basis === "intraday_path") {
+    return row.interval ? `${row.interval.replace("minute", "m")} path` : "Intraday path";
+  }
+  if (row.basis === "mixed_intraday_and_eod_proxy") return "Mixed";
+  return "EOD proxy";
+}
+
+function MaeMfeTable({
+  rows,
+  onCaptureIntradayPath,
+  captureLoadingId,
+}: {
+  rows: MaeMfeRow[];
+  onCaptureIntradayPath?: (entryId: string, interval: JournalIntradayPathInterval) => Promise<void>;
+  captureLoadingId?: string | null;
+}) {
   if (rows.length === 0) return null;
 
   return (
@@ -211,7 +228,7 @@ function MaeMfeTable({ rows }: { rows: MaeMfeRow[] }) {
       <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-            {["Symbol", "MAE", "MFE", "MAE in R", "MFE in R", "EOD bars"].map((heading) => (
+            {["Symbol", "MAE", "MFE", "MAE in R", "MFE in R", "Basis", "Bars", "Action"].map((heading) => (
               <th key={heading} className="label" style={{ textAlign: "left", paddingBottom: 8, paddingRight: 16 }}>{heading}</th>
             ))}
           </tr>
@@ -224,7 +241,31 @@ function MaeMfeTable({ rows }: { rows: MaeMfeRow[] }) {
               <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--gain)" }}>{formatPct(row.mfe_pct)}</span></td>
               <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--loss)" }}>{row.mae_r == null ? "—" : `${formatRatio(row.mae_r)}R`}</span></td>
               <td style={{ padding: "9px 16px 9px 0" }}><span className="mono" style={{ color: "var(--gain)" }}>{row.mfe_r == null ? "—" : `${formatRatio(row.mfe_r)}R`}</span></td>
-              <td style={{ padding: "9px 0", color: "var(--text-secondary)" }}>{row.bars_count}</td>
+              <td style={{ padding: "9px 16px 9px 0", color: "var(--text-secondary)" }}>{excursionBasisLabel(row)}</td>
+              <td style={{ padding: "9px 16px 9px 0", color: "var(--text-secondary)" }}>{row.bars_count}</td>
+              <td style={{ padding: "9px 0" }}>
+                {onCaptureIntradayPath && row.journal_entry_id && row.basis !== "intraday_path" ? (
+                  <button
+                    type="button"
+                    data-testid={`capture-intraday-path-${row.journal_entry_id}`}
+                    disabled={captureLoadingId === row.journal_entry_id}
+                    onClick={() => void onCaptureIntradayPath(row.journal_entry_id as string, "15minute")}
+                    style={{
+                      border: "1px solid var(--border-default)",
+                      borderRadius: "var(--radius-sm)",
+                      background: "transparent",
+                      color: "var(--text-secondary)",
+                      cursor: captureLoadingId === row.journal_entry_id ? "wait" : "pointer",
+                      fontSize: 11,
+                      padding: "5px 8px",
+                    }}
+                  >
+                    {captureLoadingId === row.journal_entry_id ? "Capturing…" : "Capture 15m path"}
+                  </button>
+                ) : (
+                  <span style={{ color: "var(--text-tertiary)" }}>—</span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -243,6 +284,7 @@ interface JournalAnalyticsProps {
   onAnalyticsRangeChange?: (range: JournalAnalyticsRange) => void;
   entries?: JournalEntry[];
   onCalendarDateSelect?: (date: string) => void;
+  onCaptureIntradayPath?: (entryId: string, interval: JournalIntradayPathInterval) => Promise<void>;
 }
 
 export function JournalAnalytics({
@@ -253,8 +295,10 @@ export function JournalAnalytics({
   onAnalyticsRangeChange,
   entries = [],
   onCalendarDateSelect,
+  onCaptureIntradayPath,
 }: JournalAnalyticsProps) {
   const [rangeDraft, setRangeDraft] = useState(analyticsRange);
+  const [captureLoadingId, setCaptureLoadingId] = useState<string | null>(null);
   const { fromDate: analyticsFromDate, toDate: analyticsToDate } = analyticsRange;
 
   useEffect(() => {
@@ -262,6 +306,16 @@ export function JournalAnalytics({
   }, [analyticsFromDate, analyticsToDate]);
 
   const invalidRange = Boolean(rangeDraft.fromDate && rangeDraft.toDate && rangeDraft.fromDate > rangeDraft.toDate);
+
+  const handleCaptureIntradayPath = async (entryId: string, interval: JournalIntradayPathInterval) => {
+    if (!onCaptureIntradayPath) return;
+    setCaptureLoadingId(entryId);
+    try {
+      await onCaptureIntradayPath(entryId, interval);
+    } finally {
+      setCaptureLoadingId(null);
+    }
+  };
 
   if (analyticsError) {
     return (
@@ -535,7 +589,11 @@ export function JournalAnalytics({
                 <section data-testid="journal-mae-mfe" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <div>
                     <h3 className="heading-card" style={{ marginBottom: 4 }}>MAE / MFE</h3>
-                    <div className="caption">Maximum adverse/favorable excursion from daily OHLCV highs and lows. This is an EOD proxy, not an intraday execution path.</div>
+                    <div className="caption">
+                      {analytics.mae_mfe.intraday_trades
+                        ? "Persisted broker intraday paths are used where available; missing trades use the daily OHLCV proxy."
+                        : "Daily OHLCV highs and lows are an EOD proxy, not an intraday execution path. Capture a connected Zerodha path to improve coverage."}
+                    </div>
                   </div>
                   <div className="caption" style={{ color: analytics.mae_mfe.status === "available" ? "var(--gain)" : "var(--warn)" }}>
                     {analytics.mae_mfe.status === "available" ? "Coverage complete" : analytics.mae_mfe.status === "partial" ? "Partial coverage" : "Coverage unavailable"}
@@ -556,7 +614,11 @@ export function JournalAnalytics({
                   <div className="caption">
                     {analytics.mae_mfe.trades_with_path} trade paths available · {analytics.mae_mfe.trades_without_path} missing · {analytics.mae_mfe.reason}
                   </div>
-                  <MaeMfeTable rows={analytics.mae_mfe.trades} />
+                  <MaeMfeTable
+                    rows={analytics.mae_mfe.trades}
+                    onCaptureIntradayPath={onCaptureIntradayPath ? handleCaptureIntradayPath : undefined}
+                    captureLoadingId={captureLoadingId}
+                  />
                 </section>
               )}
             </section>

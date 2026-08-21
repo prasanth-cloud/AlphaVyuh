@@ -7,6 +7,7 @@ export type {
   JournalAnalytics,
   JournalAnalyticsCohortRow,
   JournalAnalyticsRange,
+  JournalIntradayPathInterval,
   CreateJournalEntry,
   UpdateJournalEntry,
   TradeReview,

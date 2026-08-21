@@ -838,6 +838,26 @@ export type UpdateJournalEntry = {
   status?: string;
 };
 
+export type JournalIntradayPathInterval = "5minute" | "15minute" | "30minute" | "60minute";
+
+export type CaptureJournalIntradayPathRequest = {
+  broker?: "zerodha";
+  interval?: JournalIntradayPathInterval;
+};
+
+export type CaptureJournalIntradayPathResult = {
+  id: string;
+  journal_id: string;
+  symbol: string;
+  broker: "zerodha" | string;
+  interval: JournalIntradayPathInterval | string;
+  from_at: string;
+  to_at: string;
+  bar_count: number;
+  capture_status: "available" | "partial" | string;
+  captured_at: string;
+};
+
 export type JournalAnalytics = {
   equity_curve: { date: string; cumulative_pnl: number }[];
   setup_breakdown: {
@@ -866,6 +886,8 @@ export type JournalAnalytics = {
     basis: string;
     trades_with_path: number;
     trades_without_path: number;
+    intraday_trades?: number;
+    eod_proxy_trades?: number;
     avg_mae_pct: number | null;
     avg_mfe_pct: number | null;
     avg_mae_r: number | null;
@@ -878,6 +900,9 @@ export type JournalAnalytics = {
       mae_r: number | null;
       mfe_r: number | null;
       bars_count: number;
+      basis?: string;
+      interval?: string;
+      source?: string;
     }[];
     reason: string;
   };

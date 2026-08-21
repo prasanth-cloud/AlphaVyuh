@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getJournalEntries, getJournalStats, getJournalAnalytics,
+  captureJournalIntradayPath,
   getJournalReviews, saveTradeReview,
   createJournalEntry, updateJournalEntry, deleteJournalEntry,
   searchSymbols, analyseJournal, getAiPatterns, getSetups,
   triggerTradeLesson, importZerodhaTrades, getBrokerStatus,
   getBrokerFillReconciliations, resolveBrokerFillReconciliation,
 } from "@/lib/api";
-import type { JournalEntry, JournalStats, JournalAnalytics, JournalAnalyticsRange, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview, BrokerFillReconciliation } from "@/lib/api";
+import type { JournalEntry, JournalStats, JournalAnalytics, JournalAnalyticsRange, JournalIntradayPathInterval, CreateJournalEntry, UpdateJournalEntry, SymbolSearchResult, AiPatterns, Setup, TradeReview, BrokerFillReconciliation } from "@/lib/api";
 import { EyebrowLabel, Num, StatCard } from "@/components/ui";
 import { JournalStatusBar } from "./components/JournalStatusBar";
 import { fmtCcy, getDecisionMemorySummary, getJournalReviewStage, getTradeFlowMeta } from "./components/utils";
@@ -556,6 +557,16 @@ export default function JournalPage() {
     setSymbolFocus("");
   };
 
+  const handleCaptureIntradayPath = useCallback(async (entryId: string, interval: JournalIntradayPathInterval) => {
+    try {
+      const result = await captureJournalIntradayPath(entryId, { broker: "zerodha", interval });
+      showToast(`${result.bar_count} Zerodha ${interval.replace("minute", "m")} bars captured`);
+      await loadAnalytics(analyticsRange);
+    } catch (error) {
+      showToast(accountDataErrorMessage(error, "Intraday path capture failed. Check Broker or Data Status, then try again."));
+    }
+  }, [analyticsRange, loadAnalytics]);
+
   return (
     <div style={{ minHeight: "100%", background: "transparent", display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Toast */}
@@ -905,6 +916,7 @@ export default function JournalPage() {
           onAnalyticsRangeChange={loadAnalytics}
           entries={entries}
           onCalendarDateSelect={handleCalendarDateSelect}
+          onCaptureIntradayPath={handleCaptureIntradayPath}
         />
       )}
 

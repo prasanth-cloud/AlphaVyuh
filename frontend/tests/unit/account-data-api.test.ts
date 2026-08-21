@@ -118,6 +118,62 @@ describe("account data API failures", () => {
     await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics returned an invalid review summary.");
   });
 
+  it("rejects malformed persisted excursion coverage instead of trusting optional fields", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        equity_curve: [],
+        setup_breakdown: [],
+        monthly_pnl: [],
+        drawdown_curve: [],
+        max_drawdown: null,
+        longest_dd_days: 0,
+        recovery_factor: null,
+        profit_factor: null,
+        mae_mfe: {
+          status: "available",
+          basis: "intraday_path",
+          trades_with_path: 1,
+          trades_without_path: 0,
+          intraday_trades: "1",
+          eod_proxy_trades: 0,
+          avg_mae_pct: -1,
+          avg_mfe_pct: 2,
+          avg_mae_r: -0.5,
+          avg_mfe_r: 1,
+          trades: [{
+            journal_entry_id: "entry-1",
+            symbol: "RELIANCE",
+            mae_pct: -1,
+            mfe_pct: 2,
+            mae_r: -0.5,
+            mfe_r: 1,
+            bars_count: 4,
+            basis: "intraday_path",
+            interval: "15minute",
+            source: "zerodha_kite",
+          }],
+          reason: "Persisted path",
+        },
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { getJournalAnalytics } = await import("@/lib/api");
+
+    await expect(getJournalAnalytics()).rejects.toThrow("Journal analytics returned an invalid MAE/MFE status.");
+  });
+
+  it("rejects malformed intraday capture responses", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ id: "path-1", journal_id: "entry-1", symbol: "RELIANCE" }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const { captureJournalIntradayPath } = await import("@/lib/api");
+
+    await expect(captureJournalIntradayPath("entry-1")).rejects.toThrow("Intraday path capture returned an invalid response.");
+  });
+
   it("rejects malformed outcome cohort analytics instead of treating them as empty", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({

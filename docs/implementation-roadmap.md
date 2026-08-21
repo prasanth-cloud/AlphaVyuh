@@ -141,14 +141,17 @@ Delivered:
 - Journal analytics accepts optional exit-date bounds and reports the applied analysis window.
 - Realized R-multiple metrics use the recorded entry stop and quantity, exclude trades without a valid risk plan, and show coverage explicitly.
 - Outcome cohorts group the same closed trades by scanner provenance, current symbol-sector context, and holding period.
-- The journal UI exposes date filters, R-multiple coverage, cohort tables, and MAE/MFE summaries from an explicitly labeled daily-OHLCV high/low proxy.
-- MAE/MFE coverage is reported per trade; missing bars and missing stop risk remain visible instead of being converted into false precision.
-- The journal renders the returned per-trade MAE/MFE rows with EOD bar counts and an explicit complete/partial/unavailable coverage state.
-- Frontend response parsing rejects malformed new analytics fields, and mock browser coverage exercises the new review surface.
+- The journal UI exposes date filters, R-multiple coverage, cohort tables, and MAE/MFE summaries with an explicit basis.
+- A Pro/Elite user with a connected Zerodha account can request a read-only 5/15/30/60-minute path for a closed trade; the backend normalizes OHLCV, persists only the normalized evidence, and records an audit event.
+- MAE/MFE prefers the latest persisted intraday path and reports mixed coverage when an EOD high/low proxy is still needed for another trade.
+- Missing bars, missing stop risk, provider failures, and the EOD fallback remain visible instead of being converted into false precision.
+- The journal renders per-trade basis, interval, and bar counts with an explicit complete/partial/unavailable coverage state.
+- Frontend response parsing rejects malformed path and analytics fields, and mock browser coverage exercises the capture affordance.
 
 Remaining:
 
-- Add persisted intratrade high/low paths before treating MAE/MFE as execution-accurate rather than an EOD proxy.
+- Apply and verify the intraday path migration/RLS behavior in the correct Supabase project, then run an owner-approved connected Zerodha capture and compare the persisted path with broker evidence.
+- Keep execution accuracy bounded by the selected interval and provider retention; the persisted path is more granular than EOD but is not tick-level truth.
 - Add benchmark/market-context joins only after the data source and attribution definition are approved.
 - Keep sample-size warnings visible; these cohorts are descriptive and are not investment advice.
 

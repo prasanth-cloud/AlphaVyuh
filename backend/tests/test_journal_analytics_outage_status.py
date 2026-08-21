@@ -54,11 +54,12 @@ class _Query:
 
 
 class _Client:
-    def __init__(self, *, trades=None, reviews=None, sectors=None, bars=None, fail=False, review_fail=False):
+    def __init__(self, *, trades=None, reviews=None, sectors=None, bars=None, paths=None, fail=False, review_fail=False):
         self._trades = trades or []
         self._reviews = reviews or []
         self._sectors = sectors or []
         self._bars = bars or []
+        self._paths = paths or []
         self._fail = fail
         self._review_fail = review_fail
         self.trade_query = None
@@ -73,6 +74,8 @@ class _Client:
             return _Query(data=self._sectors)
         if name == "daily_ohlcv":
             return _Query(data=self._bars)
+        if name == "trade_intraday_paths":
+            return _Query(data=self._paths)
         raise AssertionError(f"unexpected table: {name}")
 
 
@@ -255,6 +258,42 @@ def test_journal_analytics_builds_eod_mae_mfe_proxy(monkeypatch):
     assert summary["avg_mae_r"] == -0.8
     assert summary["avg_mfe_r"] == 1.6
     assert summary["trades"][0]["bars_count"] == 3
+
+
+def test_journal_analytics_prefers_persisted_intraday_path(monkeypatch):
+    trades = [{
+        "id": "entry-1", "setup_id": "setup-1", "symbol": "RELIANCE", "trade_type": "long",
+        "setup_type": "Breakout", "entry_date": "2026-08-01", "exit_date": "2026-08-01",
+        "pnl": 100, "entry_price": 100, "stop_loss": 95, "quantity": 10, "holding_days": 0,
+        "scanner_context": None,
+    }]
+    client = _Client(
+        trades=trades,
+        paths=[{
+            "journal_id": "entry-1",
+            "interval": "15minute",
+            "source": "zerodha_kite",
+            "capture_status": "available",
+            "captured_at": "2026-08-01T12:00:00Z",
+            "bars": [
+                {"time": "2026-08-01T03:45:00Z", "open": 100, "high": 104, "low": 99, "close": 103, "volume": 100},
+                {"time": "2026-08-01T04:00:00Z", "open": 103, "high": 108, "low": 101, "close": 107, "volume": 120},
+            ],
+        }],
+    )
+    monkeypatch.setattr(journal, "get_admin_client", lambda: client)
+
+    result = asyncio.run(journal.get_analytics(user_id="user-1"))
+    summary = result["mae_mfe"]
+
+    assert summary["status"] == "available"
+    assert summary["basis"] == "intraday_path"
+    assert summary["intraday_trades"] == 1
+    assert summary["eod_proxy_trades"] == 0
+    assert summary["trades"][0]["basis"] == "intraday_path"
+    assert summary["trades"][0]["interval"] == "15minute"
+    assert summary["trades"][0]["source"] == "zerodha_kite"
+    assert summary["trades"][0]["bars_count"] == 2
 
 
 def test_ai_patterns_raises_503_when_query_fails(monkeypatch):

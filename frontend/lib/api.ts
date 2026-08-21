@@ -58,6 +58,8 @@ import type {
   JournalAnalytics,
   JournalEntry,
   JournalStats,
+  CaptureJournalIntradayPathRequest,
+  CaptureJournalIntradayPathResult,
   LiveMarketStatus,
   LiveQuote,
   LiveSectorIndex,
@@ -1054,7 +1056,10 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
       isRecord(candidate) && (candidate.journal_entry_id === null || typeof candidate.journal_entry_id === "string") &&
       typeof candidate.symbol === "string" && isFiniteNumber(candidate.mae_pct) && isFiniteNumber(candidate.mfe_pct) &&
       isNullableFiniteNumber(candidate.mae_r) && isNullableFiniteNumber(candidate.mfe_r) &&
-      isFiniteNumber(candidate.bars_count);
+      isFiniteNumber(candidate.bars_count) &&
+      (candidate.basis === undefined || typeof candidate.basis === "string") &&
+      (candidate.interval === undefined || typeof candidate.interval === "string") &&
+      (candidate.source === undefined || typeof candidate.source === "string");
     // Older backend deployments returned only {status, reason}. Treat that
     // response as a legacy unavailable contract at this API boundary so an
     // installed frontend does not white-screen during a rolling deployment.
@@ -1074,6 +1079,8 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
       };
     } else if (!isRecord(summary) || typeof summary.status !== "string" || typeof summary.basis !== "string" ||
         !isFiniteNumber(summary.trades_with_path) || !isFiniteNumber(summary.trades_without_path) ||
+        (summary.intraday_trades !== undefined && !isFiniteNumber(summary.intraday_trades)) ||
+        (summary.eod_proxy_trades !== undefined && !isFiniteNumber(summary.eod_proxy_trades)) ||
         !isNullableFiniteNumber(summary.avg_mae_pct) || !isNullableFiniteNumber(summary.avg_mfe_pct) ||
         !isNullableFiniteNumber(summary.avg_mae_r) || !isNullableFiniteNumber(summary.avg_mfe_r) ||
         !Array.isArray(summary.trades) || !summary.trades.every(isExcursion) || typeof summary.reason !== "string") {
@@ -1084,6 +1091,8 @@ function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
         basis: summary.basis,
         trades_with_path: summary.trades_with_path,
         trades_without_path: summary.trades_without_path,
+        intraday_trades: summary.intraday_trades,
+        eod_proxy_trades: summary.eod_proxy_trades,
         avg_mae_pct: summary.avg_mae_pct,
         avg_mfe_pct: summary.avg_mfe_pct,
         avg_mae_r: summary.avg_mae_r,
@@ -2677,6 +2686,61 @@ export async function getJournalAnalytics(options: { fromDate?: string; toDate?:
     if (unavailableMessage) throw new Error(unavailableMessage);
     return parseJournalAnalyticsResponse(data);
   });
+}
+
+function parseIntradayPathCaptureResponse(value: unknown): CaptureJournalIntradayPathResult {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.journal_id !== "string" ||
+      typeof value.symbol !== "string" || typeof value.broker !== "string" || typeof value.interval !== "string" ||
+      typeof value.from_at !== "string" || typeof value.to_at !== "string" || !isFiniteNumber(value.bar_count) ||
+      typeof value.capture_status !== "string" || typeof value.captured_at !== "string") {
+    throw new Error("Intraday path capture returned an invalid response.");
+  }
+  return {
+    id: value.id,
+    journal_id: value.journal_id,
+    symbol: value.symbol,
+    broker: value.broker,
+    interval: value.interval,
+    from_at: value.from_at,
+    to_at: value.to_at,
+    bar_count: value.bar_count,
+    capture_status: value.capture_status,
+    captured_at: value.captured_at,
+  };
+}
+
+export async function captureJournalIntradayPath(
+  entryId: string,
+  request: CaptureJournalIntradayPathRequest = {},
+): Promise<CaptureJournalIntradayPathResult> {
+  const interval = request.interval ?? "15minute";
+  if (shouldUseMockFallback()) {
+    const now = new Date().toISOString();
+    return {
+      id: `mock-intraday-path-${entryId}-${interval}`,
+      journal_id: entryId,
+      symbol: "MOCK",
+      broker: "zerodha",
+      interval,
+      from_at: now,
+      to_at: now,
+      bar_count: 3,
+      capture_status: "available",
+      captured_at: now,
+    };
+  }
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/journal/${entryId}/intraday-path`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ broker: request.broker ?? "zerodha", interval }),
+  });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Intraday path capture failed (${res.status}).`));
+  }
+  const result = parseIntradayPathCaptureResponse(await res.json());
+  invalidateClientCache(["journal:analytics"]);
+  return result;
 }
 
 // ── Fundamentals ──────────────────────────────────────────────────────────────

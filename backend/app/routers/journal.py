@@ -1,14 +1,20 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 import yfinance as yf
 from pydantic import BaseModel
 
-from app.middleware.auth import get_current_user_id
+from app.middleware.auth import get_current_user_id, get_current_user_token
+from app.services.audit_log import record_broker_audit_event
 from app.services.plans import get_effective_user_plan
-from app.services.supabase import get_admin_client  # SERVICE_ROLE: queries scoped by JWT-validated user_id
+from app.services.supabase import get_admin_client, get_user_client  # SERVICE_ROLE: writes normalized broker evidence and audit rows after JWT-scoped reads
+from app.services.trade_excursion import (
+    IntradayPathError,
+    calculate_excursion,
+    capture_zerodha_intraday_path,
+)
 from app.services.workflow_state import sync_workflow_state
 
 FREE_JOURNAL_MONTHS = 3
@@ -71,6 +77,11 @@ class JournalUpdate(BaseModel):
     thesis: Optional[str] = None
     invalidation_rule: Optional[str] = None
     status: Optional[str] = None
+
+
+class IntradayPathCaptureRequest(BaseModel):
+    broker: Literal["zerodha"] = "zerodha"
+    interval: Literal["5minute", "15minute", "30minute", "60minute"] = "15minute"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -213,13 +224,13 @@ def _build_r_multiple_summary(
     }
 
 
-def _build_mae_mfe_summary(sb: Any, entries: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build an EOD high/low excursion proxy for closed journal entries.
-
-    The repository stores daily bars, not intraday paths. This deliberately
-    labels the result as an EOD proxy so a daily high/low is never presented as
-    a precise intratrade excursion.
-    """
+def _build_mae_mfe_summary(
+    sb: Any,
+    entries: list[dict[str, Any]],
+    *,
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    """Build MAE/MFE from persisted intraday paths with an honest EOD fallback."""
     candidates = []
     for entry in entries:
         symbol = str(entry.get("symbol") or "").upper()
@@ -234,6 +245,8 @@ def _build_mae_mfe_summary(sb: Any, entries: list[dict[str, Any]]) -> dict[str, 
         "basis": "daily_ohlcv_eod_proxy",
         "trades_with_path": 0,
         "trades_without_path": len(entries),
+        "intraday_trades": 0,
+        "eod_proxy_trades": 0,
         "avg_mae_pct": None,
         "avg_mfe_pct": None,
         "avg_mae_r": None,
@@ -244,98 +257,135 @@ def _build_mae_mfe_summary(sb: Any, entries: list[dict[str, Any]]) -> dict[str, 
     if not candidates:
         return base
 
-    symbols = sorted({symbol for _, symbol, _, _, _ in candidates})
-    from_date = min(start for _, _, start, _, _ in candidates)
-    to_date = max(end for _, _, _, end, _ in candidates)
-    bars_by_symbol: dict[str, list[dict[str, Any]]] = {}
-    try:
-        offset = 0
-        while True:
-            page = (
-                sb.table("daily_ohlcv")
-                .select("symbol,trade_date,high,low")
-                .in_("symbol", symbols)
-                .gte("trade_date", from_date)
-                .lte("trade_date", to_date)
-                .order("trade_date", desc=False)
-                .range(offset, offset + 999)
+    # A missing migration or an older deployment must not make the analytics
+    # endpoint fail. The EOD query below remains the compatibility path.
+    intraday_by_entry: dict[str, dict[str, Any]] = {}
+    journal_ids = [str(entry.get("id")) for entry, *_ in candidates if entry.get("id") is not None]
+    if user_id and journal_ids:
+        try:
+            path_result = (
+                sb.table("trade_intraday_paths")
+                .select("journal_id,interval,source,bars,capture_status,captured_at")
+                .eq("user_id", user_id)
+                .in_("journal_id", journal_ids)
+                .order("captured_at", desc=True)
                 .execute()
-                .data or []
             )
-            for bar in page:
-                symbol = str(bar.get("symbol") or "").upper()
-                if symbol:
-                    bars_by_symbol.setdefault(symbol, []).append(bar)
-            if len(page) < 1000:
-                break
-            offset += len(page)
-    except Exception:
-        return {
-            **base,
-            "reason": "Daily OHLCV excursion data is temporarily unavailable.",
-        }
+            for path_record in path_result.data or []:
+                journal_id = str(path_record.get("journal_id") or "")
+                if journal_id and journal_id not in intraday_by_entry:
+                    intraday_by_entry[journal_id] = path_record
+        except Exception:
+            intraday_by_entry = {}
 
     excursion_rows: list[dict[str, Any]] = []
     mae_pcts: list[float] = []
     mfe_pcts: list[float] = []
     mae_rs: list[float] = []
     mfe_rs: list[float] = []
-    for entry, symbol, entry_date, exit_date, entry_price in candidates:
-        path = [
-            bar for bar in bars_by_symbol.get(symbol, [])
-            if entry_date <= str(bar.get("trade_date") or "")[:10] <= exit_date
-        ]
-        highs = [_safe_float(bar.get("high")) for bar in path]
-        lows = [_safe_float(bar.get("low")) for bar in path]
-        highs = [value for value in highs if value is not None]
-        lows = [value for value in lows if value is not None]
-        if not highs or not lows:
-            continue
+    intraday_count = 0
+    eod_count = 0
+    intraday_rows_by_entry: dict[str, dict[str, Any]] = {}
 
-        trade_type = str(entry.get("trade_type") or "long").lower()
-        if trade_type == "short":
-            mae_price = min(0.0, entry_price - max(highs))
-            mfe_price = max(0.0, entry_price - min(lows))
+    for entry, _symbol, _entry_date, _exit_date, _entry_price in candidates:
+        entry_id = str(entry.get("id") or "")
+        path_record = intraday_by_entry.get(entry_id)
+        if not path_record or not isinstance(path_record.get("bars"), list):
+            continue
+        row = calculate_excursion(
+            entry,
+            path_record["bars"],
+            basis="intraday_path",
+            interval=str(path_record.get("interval") or "15minute"),
+            source=str(path_record.get("source") or "zerodha_kite"),
+        )
+        if row:
+            intraday_rows_by_entry[entry_id] = row
+
+    eod_candidates = [
+        candidate for candidate in candidates
+        if str(candidate[0].get("id") or "") not in intraday_rows_by_entry
+    ]
+    bars_by_symbol: dict[str, list[dict[str, Any]]] = {}
+    if eod_candidates:
+        symbols = sorted({symbol for _, symbol, _, _, _ in eod_candidates})
+        from_date = min(start for _, _, start, _, _ in eod_candidates)
+        to_date = max(end for _, _, _, end, _ in eod_candidates)
+        try:
+            offset = 0
+            while True:
+                page = (
+                    sb.table("daily_ohlcv")
+                    .select("symbol,trade_date,high,low")
+                    .in_("symbol", symbols)
+                    .gte("trade_date", from_date)
+                    .lte("trade_date", to_date)
+                    .order("trade_date", desc=False)
+                    .range(offset, offset + 999)
+                    .execute()
+                    .data or []
+                )
+                for bar in page:
+                    symbol = str(bar.get("symbol") or "").upper()
+                    if symbol:
+                        bars_by_symbol.setdefault(symbol, []).append(bar)
+                if len(page) < 1000:
+                    break
+                offset += len(page)
+        except Exception:
+            if not intraday_rows_by_entry:
+                return {
+                    **base,
+                    "reason": "Daily OHLCV excursion data is temporarily unavailable.",
+                }
+
+    for entry, symbol, entry_date, exit_date, _entry_price in candidates:
+        entry_id = str(entry.get("id") or "")
+        row = intraday_rows_by_entry.get(entry_id)
+        if row is None:
+            path = [
+                bar for bar in bars_by_symbol.get(symbol, [])
+                if entry_date <= str(bar.get("trade_date") or "")[:10] <= exit_date
+            ]
+            row = calculate_excursion(entry, path, basis="daily_ohlcv_eod_proxy")
+            if row:
+                eod_count += 1
         else:
-            mae_price = min(0.0, min(lows) - entry_price)
-            mfe_price = max(0.0, max(highs) - entry_price)
-        mae_pct = round(mae_price / entry_price * 100, 2)
-        mfe_pct = round(mfe_price / entry_price * 100, 2)
-        risk_per_share = _safe_float(entry.get("stop_loss"))
-        if risk_per_share is not None:
-            risk_per_share = entry_price - risk_per_share if trade_type == "long" else risk_per_share - entry_price
-        mae_r = round(mae_price / risk_per_share, 2) if risk_per_share and risk_per_share > 0 else None
-        mfe_r = round(mfe_price / risk_per_share, 2) if risk_per_share and risk_per_share > 0 else None
-        row = {
-            "journal_entry_id": str(entry.get("id")) if entry.get("id") is not None else None,
-            "symbol": symbol,
-            "mae_pct": mae_pct,
-            "mfe_pct": mfe_pct,
-            "mae_r": mae_r,
-            "mfe_r": mfe_r,
-            "bars_count": len(path),
-        }
+            intraday_count += 1
+        if row is None:
+            continue
         excursion_rows.append(row)
-        mae_pcts.append(mae_pct)
-        mfe_pcts.append(mfe_pct)
-        if mae_r is not None:
-            mae_rs.append(mae_r)
-        if mfe_r is not None:
-            mfe_rs.append(mfe_r)
+        mae_pcts.append(row["mae_pct"])
+        mfe_pcts.append(row["mfe_pct"])
+        if row["mae_r"] is not None:
+            mae_rs.append(row["mae_r"])
+        if row["mfe_r"] is not None:
+            mfe_rs.append(row["mfe_r"])
 
     if not excursion_rows:
         return base
+    if intraday_count and eod_count:
+        basis = "mixed_intraday_and_eod_proxy"
+        reason = "Mixed coverage: persisted intraday paths plus EOD high/low proxy for missing paths."
+    elif intraday_count:
+        basis = "intraday_path"
+        reason = "Persisted Zerodha intraday paths; capture coverage may be partial for trades without bars."
+    else:
+        basis = "daily_ohlcv_eod_proxy"
+        reason = "EOD high/low proxy; capture a broker intraday path to improve coverage."
     return {
         "status": "available" if len(excursion_rows) == len(entries) else "partial",
-        "basis": "daily_ohlcv_eod_proxy",
+        "basis": basis,
         "trades_with_path": len(excursion_rows),
         "trades_without_path": len(entries) - len(excursion_rows),
+        "intraday_trades": intraday_count,
+        "eod_proxy_trades": eod_count,
         "avg_mae_pct": round(sum(mae_pcts) / len(mae_pcts), 2),
         "avg_mfe_pct": round(sum(mfe_pcts) / len(mfe_pcts), 2),
         "avg_mae_r": round(sum(mae_rs) / len(mae_rs), 2) if mae_rs else None,
         "avg_mfe_r": round(sum(mfe_rs) / len(mfe_rs), 2) if mfe_rs else None,
         "trades": excursion_rows,
-        "reason": "EOD high/low proxy; intraday excursion is not available.",
+        "reason": reason,
     }
 
 
@@ -631,7 +681,7 @@ async def get_analytics(
             reviewed_entry_ids,
         ),
     }
-    mae_mfe_summary = _build_mae_mfe_summary(sb, entries)
+    mae_mfe_summary = _build_mae_mfe_summary(sb, entries, user_id=user_id)
 
     return {
         "equity_curve":    equity_curve,
@@ -823,6 +873,139 @@ async def create_entry(
         "setup_id": row["setup_id"],
     })
     return created
+
+
+@router.post("/{entry_id}/intraday-path")
+async def capture_intraday_path(
+    entry_id: str,
+    body: IntradayPathCaptureRequest,
+    user_id: str = Depends(get_current_user_id),
+    user_jwt: str = Depends(get_current_user_token),
+):
+    """Capture one closed trade's normalized Zerodha path for MAE/MFE analysis."""
+    try:
+        read_sb = get_user_client(user_jwt)
+        existing = (
+            read_sb.table("trade_journal")
+            .select("id,user_id,symbol,trade_type,entry_date,exit_date,entry_price,stop_loss,status")
+            .eq("id", entry_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Journal data is temporarily unavailable.",
+        ) from exc
+    entry = existing.data
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+    journal_id = str(entry.get("id") or "")
+    if not journal_id:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Journal entry identity is unavailable.")
+    if entry.get("status") != "closed" or not entry.get("exit_date"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Trade must be closed before capturing a path.")
+
+    try:
+        plan = _get_user_plan(user_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Plan access could not be verified.",
+        ) from exc
+    if plan not in {"pro", "elite"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "plan_required",
+                "message": "Intraday broker paths require Pro or Elite.",
+                "upgrade_url": "/settings/billing",
+            },
+        )
+
+    try:
+        captured = capture_zerodha_intraday_path(
+            user_id=user_id,
+            symbol=str(entry.get("symbol") or ""),
+            entry_date=str(entry.get("entry_date") or ""),
+            exit_date=str(entry.get("exit_date") or ""),
+            interval=body.interval,
+        )
+    except IntradayPathError as exc:
+        error_status = {
+            "auth": status.HTTP_401_UNAUTHORIZED,
+            "config": status.HTTP_503_SERVICE_UNAVAILABLE,
+            "provider": status.HTTP_502_BAD_GATEWAY,
+            "rate": status.HTTP_429_TOO_MANY_REQUESTS,
+        }[exc.kind]
+        raise HTTPException(status_code=error_status, detail=str(exc)) from exc
+
+    captured_at = datetime.now(timezone.utc).isoformat()
+    path_id = str(uuid4())
+    payload = {
+        "id": path_id,
+        "user_id": user_id,
+        "journal_id": journal_id,
+        "symbol": captured.symbol,
+        "broker": captured.broker,
+        "interval": captured.interval,
+        "from_at": captured.from_at,
+        "to_at": captured.to_at,
+        "source": captured.source,
+        "bars": captured.bars,
+        "bar_count": len(captured.bars),
+        "capture_status": "available",
+        "captured_at": captured_at,
+    }
+    try:
+        sb = get_admin_client()
+        sb.table("trade_intraday_paths").upsert(
+            payload,
+            on_conflict="user_id,journal_id,broker,interval,from_at,to_at",
+        ).execute()
+    except Exception as exc:
+        try:
+            record_broker_audit_event(
+                user_id=user_id,
+                event_type="journal.intraday_path.capture",
+                outcome="failed",
+                actor_type="user",
+                broker=captured.broker,
+                journal_id=journal_id,
+                metadata={"interval": captured.interval, "bar_count": len(captured.bars), "reason": "storage_unavailable"},
+            )
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Intraday path storage is temporarily unavailable.",
+        ) from exc
+
+    try:
+        record_broker_audit_event(
+            user_id=user_id,
+            event_type="journal.intraday_path.capture",
+            outcome="recorded",
+            actor_type="user",
+            broker=captured.broker,
+            journal_id=journal_id,
+            metadata={"interval": captured.interval, "bar_count": len(captured.bars), "source": captured.source},
+        )
+    except Exception:
+        pass
+    return {
+        "id": path_id,
+        "journal_id": journal_id,
+        "symbol": captured.symbol,
+        "broker": captured.broker,
+        "interval": captured.interval,
+        "from_at": captured.from_at,
+        "to_at": captured.to_at,
+        "bar_count": len(captured.bars),
+        "capture_status": "available",
+        "captured_at": captured_at,
+    }
 
 
 @router.patch("/{entry_id}")

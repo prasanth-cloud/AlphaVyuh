@@ -76,6 +76,39 @@ const ANALYTICS = {
   longest_dd_days: 4,
   recovery_factor: 4.29,
   profit_factor: 2.1,
+  cohort_breakdown: {
+    scanner: [],
+    sector: [],
+    holding_period: [],
+  },
+  sector_context: {
+    status: "available",
+    source: "stock_universe.sector",
+    note: "Test context only.",
+  },
+  mae_mfe: {
+    status: "available",
+    basis: "daily_ohlcv_eod_proxy",
+    trades_with_path: 1,
+    trades_without_path: 0,
+    intraday_trades: 0,
+    eod_proxy_trades: 1,
+    avg_mae_pct: -2.1,
+    avg_mfe_pct: 5.4,
+    avg_mae_r: -0.7,
+    avg_mfe_r: 1.8,
+    trades: [{
+      journal_entry_id: "trade-closed-1",
+      symbol: "TCS",
+      mae_pct: -2.1,
+      mfe_pct: 5.4,
+      mae_r: -0.7,
+      mfe_r: 1.8,
+      bars_count: 12,
+      basis: "daily_ohlcv_eod_proxy",
+    }],
+    reason: "EOD high/low proxy; capture a broker intraday path to improve coverage.",
+  },
   review_summary: {
     minimum_sample_size: 5,
     reviewed_trades: 4,
@@ -458,7 +491,7 @@ test.describe("Journal — add trade", () => {
 
     await page.getByRole("button", { name: "Save trade" }).click();
 
-    await expect(postCalled).toBe(true);
+    await expect.poll(() => postCalled).toBe(true);
   });
 });
 
@@ -642,6 +675,35 @@ test.describe("Journal — tab navigation", () => {
     await expect(page.getByTestId("journal-review-outcomes")).toContainText("need 1 more completed review");
   });
 
+  test("analytics can request a persisted Zerodha intraday path", async ({ page }) => {
+    let captureCalled = false;
+    await page.route("**/api/v1/journal/trade-closed-1/intraday-path", async (route) => {
+      captureCalled = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "path-1",
+          journal_id: "trade-closed-1",
+          symbol: "TCS",
+          broker: "zerodha",
+          interval: "15minute",
+          from_at: "2026-03-01T00:00:00Z",
+          to_at: "2026-03-20T18:29:59Z",
+          bar_count: 42,
+          capture_status: "available",
+          captured_at: "2026-08-21T12:00:00Z",
+        }),
+      });
+    });
+
+    await page.goto("/journal?tab=analytics", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("capture-intraday-path-trade-closed-1")).toBeVisible();
+    await page.getByTestId("capture-intraday-path-trade-closed-1").click();
+    await expect.poll(() => captureCalled).toBe(true);
+    await expect(page.getByTestId("journal-toast")).toContainText("42 Zerodha 15m bars captured");
+  });
+
   test("Trade review tab switch shows 'Pattern stats' heading", async ({
     page,
   }) => {
@@ -669,7 +731,7 @@ test.describe("Journal — tab navigation", () => {
 
     await page.getByRole("button", { name: "Trade review" }).click();
     await expect(page.getByRole("heading", { name: "Pattern stats" })).toBeVisible();
-    await expect(patternsCalled).toBe(true);
+    await expect.poll(() => patternsCalled).toBe(true);
   });
 });
 
@@ -716,7 +778,7 @@ test.describe("Journal — broker sync import", () => {
     if (page.url().includes("/login")) return;
 
     await page.getByRole("button", { name: "Import from Zerodha" }).click();
-    await expect(importCalled).toBe(true);
+    await expect.poll(() => importCalled).toBe(true);
   });
 
   test("shows unmatched broker fills as a reconciliation warning", async ({ page }) => {
