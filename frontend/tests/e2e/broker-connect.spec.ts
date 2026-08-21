@@ -55,6 +55,13 @@ async function mockBrokerStatus(page: Page, overrides: Record<string, unknown> =
       body: JSON.stringify({ ...baseBrokerStatus, ...overrides }),
     })
   );
+  await page.route("**/api/v1/broker/audit*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ count: 0, events: [] }),
+    })
+  );
 }
 
 // ── Auth gate ─────────────────────────────────────────────────────────────────
@@ -203,6 +210,45 @@ test.describe("Broker settings — connected", () => {
     await expect(status).toBeVisible();
     await expect(status).toContainText("Zerodha connected");
     await expect(page.getByText("Zerodha read-only connected")).toBeVisible();
+  });
+
+  test("renders the owner-scoped audit trail without exposing secret metadata", async ({ page }) => {
+    await page.route("**/api/v1/broker/audit*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          count: 1,
+          events: [{
+            id: "audit-1",
+            event_type: "broker.order.submitted",
+            outcome: "submitted",
+            actor_type: "system",
+            broker: "zerodha",
+            broker_order_id: "kite-order-1",
+            idempotency_key: "intent-1",
+            setup_id: null,
+            journal_id: null,
+            metadata: {
+              symbol: "RELIANCE",
+              execution_status: "PENDING",
+              quantity: 5,
+              filled_quantity: 0,
+              access_token: "must-not-render",
+            },
+            created_at: "2026-05-30T09:12:00Z",
+          }],
+        }),
+      })
+    );
+
+    await page.goto("/settings/broker");
+    if (page.url().includes("/login")) return;
+
+    const audit = page.getByTestId("broker-audit-timeline");
+    await expect(audit).toContainText("Order submitted");
+    await expect(audit).toContainText("RELIANCE · PENDING · 0/5 filled");
+    await expect(audit).not.toContainText("must-not-render");
   });
 
   test("shows passed read-only smoke gate while orders stay disabled", async ({ page }) => {

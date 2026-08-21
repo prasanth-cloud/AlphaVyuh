@@ -115,10 +115,17 @@ Zerodha or Upstox. Material plan edits invalidate the prior review and require a
 fresh evaluation. Live routing remains disabled by default and no production order
 has been placed.
 
-Remaining: add/verify durable audit-event records for every broker action, reconcile
-pending status through polling/webhooks, complete fill reconciliation against the
-applied schema, run owner-approved real-account tests, and separately approve any
-production enablement.
+The lifecycle continuation now adds a secret-free owner-scoped `audit_logs` migration,
+backend event recording for OAuth/read-only reads/imports/order intents/submissions/
+failures/reconciliation, a fail-closed required audit record before a live adapter call,
+the authenticated `/api/v1/broker/audit` endpoint, and a broker-settings audit timeline.
+Pending broker orders are automatically rechecked every 30 seconds while the activity
+page is open, and reconciliation refreshes the audit timeline.
+
+Remaining: apply and verify the migration/RLS behavior in the correct Supabase project,
+complete fill reconciliation against the applied schema, run owner-approved real-account
+tests, and separately approve any production enablement. No live or production order has
+been placed.
 
 ## Milestone 7 — reviews and intelligence
 

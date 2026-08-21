@@ -130,6 +130,7 @@ GET    /api/brokers/{broker}/positions        → Position[] JSON
 GET    /api/brokers/{broker}/holdings         → Holding[] JSON
 GET    /api/brokers/{broker}/orders           → broker-reported equity orderbook JSON
 GET    /api/v1/broker/orders/activity         → normalized lifecycle records for review
+GET    /api/v1/broker/audit                   → owner-scoped, secret-free broker safety events
 POST   /api/v1/orders                         → owner-gated order intent path; live broker orders remain disabled by default
 DELETE /api/brokers/{broker}/disconnect       → clears credentials
 ```
@@ -142,6 +143,13 @@ The adapter-backed orderbook is read-only and equity-only. Zerodha and Upstox ro
 exchange is not `NSE` or `BSE` are excluded until AlphaVyuh has a separate derivatives
 instrument model. The route returns broker order status and fill totals; it does not expose
 credentials, raw broker payloads, or any order mutation controls.
+
+Broker reads, OAuth state transitions, imports, order intent acceptance/submission,
+failures, and reconciliation are recorded in the owner-scoped `audit_logs` event trail.
+Metadata is redacted and bounded before persistence and again before the audit endpoint
+returns it. A live-confirmed order fails closed before the adapter call if its required
+intent-accepted event cannot be written. The audit migration is additive and must be
+applied and RLS-verified in the correct Supabase project before enabling live execution.
 
 ---
 

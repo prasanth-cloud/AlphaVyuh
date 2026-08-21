@@ -7,12 +7,12 @@ Audit date: 2026-08-20
 - AlphaVyuh must remain non-advisory. UI and API changes should describe plans, evidence, rules, and user decisions rather than guaranteed outcomes.
 - No browser-side broker credentials or service-role Supabase keys.
 - No live broker order is part of the setup-foundation slice. The existing live path remains owner-gated.
-- Any future order path needs explicit confirmation, server-side calls, idempotency, audit events, broker status handling, and fill reconciliation.
+- Any future order path needs explicit confirmation, server-side calls, idempotency, durable audit events, broker status handling, and fill reconciliation. The local execution foundation now covers these contracts; applied-schema and owner-approved broker verification remain.
 - Simulated order capture must remain clearly distinguishable from a real broker order.
 
 ## Schema and migration risk
 
-The repository has an extensive migration history and existing schema-equivalence notes. A new setup migration can be reviewed locally, but applying it to production or assuming migration parity requires owner approval and a database-backed check. Generated Supabase types may need regeneration after the migration. Existing rows in workflow, journal, and broker-order tables must remain valid when `setup_id` is nullable.
+The repository has an extensive migration history and existing schema-equivalence notes. New setup, lineage, review, job-evidence, and audit migrations can be reviewed locally, but applying them to production or assuming migration parity requires owner approval and a database-backed check. Generated Supabase types need regeneration after the migration; the target project is currently inaccessible through the connected Supabase integration. Existing rows in workflow, journal, and broker-order tables must remain valid when `setup_id` is nullable.
 
 The current workflow uniqueness `(user_id, symbol)` is retained for compatibility in the first slice. That means setup identity is stronger than the existing workflow key, but the old key is not removed until all consumers have moved to setup-aware behavior.
 

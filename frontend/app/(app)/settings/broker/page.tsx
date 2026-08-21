@@ -16,6 +16,7 @@ import {
 } from "@/lib/api";
 import { EyebrowLabel, Num } from "@/components/ui";
 import { BrokerActivityTimeline } from "@/components/broker/BrokerActivityTimeline";
+import { BrokerAuditTimeline } from "@/components/broker/BrokerAuditTimeline";
 import { BrokerOrderbookSnapshot } from "@/components/broker/BrokerOrderbookSnapshot";
 import { accountDataErrorMessage } from "@/lib/account-data-status";
 import { BROKER_EXECUTION_APPROVAL_ITEMS, brokerReadOnlyChecklist, brokerReadOnlyEvidenceSummary } from "@/lib/broker-safety";
@@ -642,6 +643,8 @@ function BrokerSettingsContent() {
         </div>
 
         <BrokerActivityTimeline />
+
+        <BrokerAuditTimeline />
 
         <BrokerOrderbookSnapshot
           broker={activeBroker}

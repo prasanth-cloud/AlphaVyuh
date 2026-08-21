@@ -30,15 +30,15 @@ The existing ingest pipeline and `ingest_runs` provide a foundation. The new EOD
 
 ### P1 — explicit unplanned journal path and durable reviews
 
-Manual and imported journal records now receive an explicit `unplanned` setup tag when no valid durable setup is linked, and legacy null tags have an additive backfill migration. Closed trades can now persist one owner-scoped `trade_reviews` record with plan adherence, mistakes, lesson, and follow-up fields; the journal review queue hydrates those records and older lesson writes are synchronized by a database trigger. Live broker reconciliation and review-aware outcome analytics remain.
+Manual and imported journal records now receive an explicit `unplanned` setup tag when no valid durable setup is linked, and legacy null tags have an additive backfill migration. Closed trades can now persist one owner-scoped `trade_reviews` record with plan adherence, mistakes, lesson, and follow-up fields; the journal review queue hydrates those records and older lesson writes are synchronized by a database trigger. Review-aware outcome analytics are implemented locally; applied-schema and live broker reconciliation evidence remain.
 
 ### P2 — read-only broker reconciliation
 
-Broker adapters and read-only/import paths exist, but the durable setup spine must be in place before a broker fill can be reconciled to the correct setup and journal record. Read-only Zerodha verification is the appropriate first broker milestone.
+Broker adapters and read-only/import paths exist, and the durable setup spine plus normalized broker lifecycle timeline are now in place. Pending fills can be manually reconciled and are rechecked by the UI while the activity page is open; owner-scoped audit events record read-only checks, imports, submissions, failures, and reconciliation. Applied-schema verification and owner-approved real-account smoke remain.
 
 ### P2 — live execution and post-trade intelligence
 
-Explicit confirmation, server-only credentials, idempotency, broker status, fill reconciliation, and audit logging are prerequisites for live execution. Post-trade reviews and intelligence should consume the same setup id and should not be built on a second symbol-keyed identity.
+Explicit confirmation, server-only credentials, idempotency, broker status, fill reconciliation, and durable audit logging are now implemented as a locally verified execution foundation. Live execution remains disabled by default and requires applied migration/RLS checks, owner-approved real-account testing, and separate production enablement. Post-trade reviews and intelligence consume the same setup id and should not be built on a second symbol-keyed identity.
 
 ## Plan-to-repository map
 

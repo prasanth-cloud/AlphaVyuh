@@ -35,6 +35,8 @@ import type {
   BrokerOrderSnapshot,
   BrokerOrderbookResponse,
   BrokerOrderActivityResponse,
+  BrokerAuditEvent,
+  BrokerAuditEventResponse,
   BrokerOrderReconciliation,
   BrokerPosition,
   BrokerProfile,
@@ -725,6 +727,40 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseBrokerAuditEvent(value: unknown): BrokerAuditEvent {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.event_type !== "string" ||
+      typeof value.outcome !== "string" || typeof value.actor_type !== "string") {
+    throw new Error("Broker audit history returned an invalid event.");
+  }
+  const nullableString = (candidate: unknown): string | null => (
+    candidate == null ? null : typeof candidate === "string" ? candidate : null
+  );
+  return {
+    id: value.id,
+    event_type: value.event_type,
+    outcome: value.outcome,
+    actor_type: value.actor_type,
+    broker: nullableString(value.broker),
+    broker_order_id: nullableString(value.broker_order_id),
+    idempotency_key: nullableString(value.idempotency_key),
+    setup_id: nullableString(value.setup_id),
+    journal_id: nullableString(value.journal_id),
+    metadata: isRecord(value.metadata) ? value.metadata : {},
+    created_at: nullableString(value.created_at),
+  };
+}
+
+function parseBrokerAuditEventResponse(value: unknown): BrokerAuditEventResponse {
+  if (!isRecord(value) || !Array.isArray(value.events)) {
+    throw new Error("Broker audit history returned an invalid response.");
+  }
+  const events = value.events.map(parseBrokerAuditEvent);
+  return {
+    events,
+    count: isFiniteNumber(value.count) ? Math.max(0, Math.trunc(value.count)) : events.length,
+  };
 }
 
 function parseJournalAnalyticsResponse(value: unknown): JournalAnalytics {
@@ -3330,6 +3366,16 @@ export async function getBrokerOrderActivity(limit = 25): Promise<BrokerOrderAct
     throw new Error(await responseErrorMessage(res, `Broker activity failed (${res.status}).`));
   }
   return res.json();
+}
+
+export async function getBrokerAuditEvents(limit = 50): Promise<BrokerAuditEventResponse> {
+  if (shouldUseMockFallback()) return { events: [], count: 0 };
+  const headers = await authHeaders();
+  const res = await fetch(`${API}/api/v1/broker/audit?limit=${limit}`, { headers });
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, `Broker audit history failed (${res.status}).`));
+  }
+  return parseBrokerAuditEventResponse(await res.json());
 }
 
 // ── Live candles (Yahoo Finance, no DB) ──────────────────────────────────────

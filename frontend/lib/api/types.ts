@@ -1061,6 +1061,25 @@ export type BrokerOrderActivityResponse = {
   count: number;
 };
 
+export type BrokerAuditEvent = {
+  id: string;
+  event_type: string;
+  outcome: string;
+  actor_type: string;
+  broker: string | null;
+  broker_order_id: string | null;
+  idempotency_key: string | null;
+  setup_id: string | null;
+  journal_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string | null;
+};
+
+export type BrokerAuditEventResponse = {
+  events: BrokerAuditEvent[];
+  count: number;
+};
+
 export type DataHealth = {
   status: "healthy" | "degraded" | "stale" | "unknown";
   latest_trade_date: string | null;

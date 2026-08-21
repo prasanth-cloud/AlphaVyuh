@@ -46,6 +46,7 @@ from app.brokers.kite import api as kite_api
 from app.brokers.kite.api import KiteApiError
 from app.brokers.upstox.adapter import UpstoxAdapter
 from app.services.supabase import get_admin_client, settings  # SERVICE_ROLE: queries scoped by JWT-validated user_id; service-role needed for credential encryption
+from app.services.audit_log import AuditLogUnavailable, record_audit_event, sanitize_audit_metadata
 from app.services.workflow_state import sync_workflow_state
 
 logger = logging.getLogger(__name__)
@@ -604,6 +605,33 @@ def _smoke_metadata(*, broker: str, passed: bool, checked_at: str, checks: dict[
     }
 
 
+def _record_read_only_smoke_audit(
+    sb,
+    *,
+    user_id: str,
+    broker: str,
+    passed: bool,
+    checked_at: str,
+    checks: dict[str, dict],
+) -> None:
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.read_only_smoke.completed",
+        outcome="recorded" if passed else "failed",
+        actor_type="system",
+        broker=broker,
+        metadata={
+            "passed": passed,
+            "checked_at": checked_at,
+            "checks": {
+                name: {key: value for key, value in check.items() if key in {"ok", "count", "error", "note"}}
+                for name, check in checks.items()
+            },
+        },
+    )
+
+
 def _get_stored_credential(user_id: str, broker: str, key_name: str) -> str | None:
     try:
         return get_broker_credential(user_id, broker, key_name)
@@ -1068,6 +1096,18 @@ async def place_order(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This order intent key is already attached to a different order recorded by the broker. Submit the changed order as a new intent.",
             )
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.deduplicated",
+            outcome="deduplicated",
+            broker=str(existing_broker_order.get("broker") or "") or None,
+            broker_order_id=str(existing_broker_order.get("broker_order_id") or "") or None,
+            idempotency_key=intent_key,
+            setup_id=str(body.setup_id) if body.setup_id else None,
+            journal_id=str(existing_broker_order.get("journal_id")) if existing_broker_order.get("journal_id") else None,
+            metadata={"symbol": sym, "side": body.side.upper(), "quantity": body.quantity},
+        )
         return _existing_broker_order_response(body, existing_broker_order)
 
     existing_journal = _existing_order_journal(sb, user_id, intent_key)
@@ -1077,7 +1117,42 @@ async def place_order(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This order intent key is already attached to a different order. Submit the changed order as a new intent.",
             )
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.deduplicated",
+            outcome="deduplicated",
+            idempotency_key=intent_key,
+            setup_id=str(body.setup_id) if body.setup_id else None,
+            journal_id=str(existing_journal.get("id")) if existing_journal.get("id") else None,
+            metadata={"symbol": sym, "side": body.side.upper(), "quantity": body.quantity},
+        )
         return _existing_order_response(body, existing_journal)
+
+    if body.live_confirmed:
+        try:
+            record_audit_event(
+                sb,
+                user_id=user_id,
+                event_type="broker.order.intent.accepted",
+                outcome="accepted",
+                idempotency_key=intent_key,
+                setup_id=str(body.setup_id) if body.setup_id else None,
+                metadata={
+                    "symbol": sym,
+                    "side": body.side.upper(),
+                    "quantity": body.quantity,
+                    "order_type": body.order_type.upper(),
+                    "price": body.price,
+                    "source_page": body.source_page,
+                },
+                required=True,
+            )
+        except AuditLogUnavailable as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Broker audit logging is temporarily unavailable. The order was not submitted.",
+            ) from exc
 
     # Try real broker if connected and explicitly enabled for a future release.
     broker_order_id: str | None = None
@@ -1093,11 +1168,31 @@ async def place_order(
     if bt:
         live_ready = bool(creds.get("api_key") and creds.get("access_token") and not _token_is_expired(creds.get("expires_at")))
         if body.live_confirmed and bt not in {"zerodha", "upstox"}:
+            record_audit_event(
+                sb,
+                user_id=user_id,
+                event_type="broker.order.submission_failed",
+                outcome="failed",
+                broker=str(bt),
+                idempotency_key=intent_key,
+                setup_id=str(body.setup_id) if body.setup_id else None,
+                metadata={"symbol": sym, "reason": "unsupported_broker"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Live {bt} order placement is not supported. No simulated order was created.",
             )
         if body.live_confirmed and not live_ready:
+            record_audit_event(
+                sb,
+                user_id=user_id,
+                event_type="broker.order.submission_failed",
+                outcome="failed",
+                broker=str(bt),
+                idempotency_key=intent_key,
+                setup_id=str(body.setup_id) if body.setup_id else None,
+                metadata={"symbol": sym, "reason": "credentials_unavailable_or_expired"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Live {bt} credentials are unavailable or expired. No simulated order was created.",
@@ -1133,6 +1228,16 @@ async def place_order(
                 )
             except BrokerError as exc:
                 logger.error("Zerodha adapter order failed for user %s: %s", user_id, exc)
+                record_audit_event(
+                    sb,
+                    user_id=user_id,
+                    event_type="broker.order.submission_failed",
+                    outcome="failed",
+                    broker="zerodha",
+                    idempotency_key=intent_key,
+                    setup_id=str(body.setup_id) if body.setup_id else None,
+                    metadata={"symbol": sym, "error_kind": exc.kind},
+                )
                 if exc.kind == "INVALID_REQUEST":
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
                 raise HTTPException(
@@ -1169,6 +1274,16 @@ async def place_order(
                 )
             except BrokerError as exc:
                 logger.error("Upstox adapter order failed for user %s: %s", user_id, exc)
+                record_audit_event(
+                    sb,
+                    user_id=user_id,
+                    event_type="broker.order.submission_failed",
+                    outcome="failed",
+                    broker="upstox",
+                    idempotency_key=intent_key,
+                    setup_id=str(body.setup_id) if body.setup_id else None,
+                    metadata={"symbol": sym, "error_kind": exc.kind},
+                )
                 if exc.kind == "INVALID_REQUEST":
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
                 raise HTTPException(
@@ -1185,6 +1300,15 @@ async def place_order(
                 detail=f"Live {bt} order failed before journal creation. No simulated order was created.",
             )
     elif body.live_confirmed:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.submission_failed",
+            outcome="failed",
+            idempotency_key=intent_key,
+            setup_id=str(body.setup_id) if body.setup_id else None,
+            metadata={"symbol": sym, "reason": "broker_credentials_unavailable"},
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Live broker credentials are unavailable. No simulated order was created.",
@@ -1327,6 +1451,25 @@ async def place_order(
             "average_fill_price": broker_order.average_price if broker_order else body.price,
             "rejection_reason": broker_order.rejection_reason if broker_order else None,
             "journal_draft": entry,
+        },
+    )
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.order.submitted" if broker_order else "broker.order.journal_capture",
+        outcome="submitted" if broker_order else "recorded",
+        broker=broker_used,
+        broker_order_id=broker_order_id,
+        idempotency_key=intent_key,
+        setup_id=setup_id,
+        journal_id=journal_entry.get("id") if journal_entry else None,
+        metadata={
+            "symbol": sym,
+            "side": body.side.upper(),
+            "quantity": body.quantity,
+            "execution_status": execution_status,
+            "filled_quantity": broker_order.filled_quantity if broker_order else body.quantity,
+            "average_fill_price": broker_order.average_price if broker_order else body.price,
         },
     )
     sync_workflow_state(sb, user_id, sym, {
@@ -1493,6 +1636,18 @@ async def reconcile_broker_order(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Broker order not found")
 
     broker = str(row.get("broker") or "")
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.order.reconciliation_requested",
+        outcome="accepted",
+        broker=broker or None,
+        broker_order_id=broker_order_id,
+        idempotency_key=str(row.get("idempotency_key") or "") or None,
+        setup_id=str(row.get("setup_id") or "") or None,
+        journal_id=str(row.get("journal_id") or "") or None,
+        metadata={"symbol": str(row.get("symbol") or "").upper(), "current_status": row.get("status")},
+    )
     if broker not in {"zerodha", "upstox"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1516,6 +1671,18 @@ async def reconcile_broker_order(
             BrokerOrderId(broker_order_id),
         )
     except BrokerError as exc:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.order.reconciliation_failed",
+            outcome="failed",
+            broker=broker,
+            broker_order_id=broker_order_id,
+            idempotency_key=str(row.get("idempotency_key") or "") or None,
+            setup_id=str(row.get("setup_id") or "") or None,
+            journal_id=str(row.get("journal_id") or "") or None,
+            metadata={"symbol": str(row.get("symbol") or "").upper(), "error_kind": exc.kind},
+        )
         status_code = status.HTTP_409_CONFLICT if exc.kind == "AUTH_EXPIRED" else status.HTTP_502_BAD_GATEWAY
         raise HTTPException(
             status_code=status_code,
@@ -1616,6 +1783,24 @@ async def reconcile_broker_order(
                 "setup_id": raw_response.get("setup_id"),
             })
 
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.order.reconciled",
+        outcome="reconciled",
+        broker=broker,
+        broker_order_id=broker_order_id,
+        idempotency_key=str(row.get("idempotency_key") or "") or None,
+        setup_id=str(raw_response.get("setup_id") or row.get("setup_id") or "") or None,
+        journal_id=str(journal_id or "") or None,
+        metadata={
+            "symbol": broker_order.symbol.upper(),
+            "execution_status": broker_order.status,
+            "filled_quantity": broker_order.filled_quantity,
+            "average_fill_price": broker_order.average_price,
+            "journal_created": bool(journal_status),
+        },
+    )
     return {
         "status": _execution_result_status(broker_order),
         "broker": broker,
@@ -1702,6 +1887,52 @@ async def broker_order_activity(
         })
 
     return {"orders": activity, "count": len(activity)}
+
+
+@router.get("/broker/audit")
+async def broker_audit_events(
+    limit: int = Query(default=50, ge=1, le=100),
+    event_type: str | None = Query(default=None, max_length=120),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return the current user's secret-free broker safety event trail."""
+    sb = get_admin_client()
+    try:
+        query = (
+            sb.table("audit_logs")
+            .select(
+                "id,event_type,outcome,actor_type,broker,broker_order_id,"
+                "idempotency_key,setup_id,journal_id,metadata,created_at"
+            )
+            .eq("user_id", user_id)
+        )
+        if isinstance(event_type, str) and event_type.strip():
+            query = query.eq("event_type", event_type.strip()[:120])
+        rows = query.order("created_at", desc=True).limit(limit).execute().data or []
+    except Exception as exc:
+        logger.warning("Broker audit lookup failed for user %s", user_id, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Broker audit history is temporarily unavailable. Existing order state has not been changed.",
+        ) from exc
+
+    events = []
+    for row in rows:
+        metadata = sanitize_audit_metadata(row.get("metadata"))
+        events.append({
+            "id": row.get("id"),
+            "event_type": row.get("event_type"),
+            "outcome": row.get("outcome"),
+            "actor_type": row.get("actor_type"),
+            "broker": row.get("broker"),
+            "broker_order_id": row.get("broker_order_id"),
+            "idempotency_key": row.get("idempotency_key"),
+            "setup_id": row.get("setup_id"),
+            "journal_id": row.get("journal_id"),
+            "metadata": metadata,
+            "created_at": row.get("created_at"),
+        })
+    return {"events": events, "count": len(events)}
 
 
 @router.get("/orders")
@@ -1858,10 +2089,26 @@ async def zerodha_login(user_id: str = Depends(get_current_user_id)):
     creds = _get_user_broker_credentials(user_id, "zerodha")
     api_key = creds.get("api_key")
     if not api_key:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.oauth_failed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"reason": "configuration_missing"},
+        )
         raise HTTPException(status_code=503, detail="Zerodha connect is temporarily unavailable. AlphaVyuh broker app credentials are not configured.")
 
     state_value = create_broker_oauth_state(user_id, "zerodha")
     login_url = kite_api.get_auth_url(state_value, api_key=str(api_key))
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.connection.oauth_started",
+        outcome="accepted",
+        broker="zerodha",
+        metadata={"flow": "oauth"},
+    )
     return {"login_url": login_url}
 
 
@@ -1902,6 +2149,14 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
                 checked_at=checked_at,
                 checks=checks,
             ),
+        )
+        _record_read_only_smoke_audit(
+            get_admin_client(),
+            user_id=user_id,
+            broker="zerodha",
+            passed=False,
+            checked_at=checked_at,
+            checks=checks,
         )
         return {
             "broker": "zerodha",
@@ -1962,6 +2217,14 @@ async def zerodha_read_only_smoke(user_id: str = Depends(get_current_user_id)):
             checks=checks,
         ),
     )
+    _record_read_only_smoke_audit(
+        get_admin_client(),
+        user_id=user_id,
+        broker="zerodha",
+        passed=passed,
+        checked_at=checked_at,
+        checks=checks,
+    )
     return {
         "broker": "zerodha",
         "connected_read_only": passed,
@@ -1991,9 +2254,25 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
             api_key=str(creds["api_key"]),
         )
     except KiteApiError as e:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"error_kind": e.error_type},
+        )
         raise HTTPException(status_code=400, detail=f"Zerodha API error: {e.message}")
     except Exception:
         logger.exception("Zerodha import failed for user %s", user_id)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"error_kind": "unexpected_error"},
+        )
         raise HTTPException(status_code=400, detail="Could not connect to Zerodha — check your credentials")
 
     filled = [o for o in orders if o.get("status") == "COMPLETE"]
@@ -2065,6 +2344,14 @@ async def import_zerodha_trades(user_id: str = Depends(get_current_user_id)):
         last_synced_at=synced_at,
         connection_status="connected_read_only",
     )
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.trade_import.completed",
+        outcome="recorded",
+        broker="zerodha",
+        metadata={"imported": imported, "skipped": skipped, "total_filled_orders": len(filled)},
+    )
 
     return {
         "imported": imported,
@@ -2102,9 +2389,25 @@ async def import_broker_trades(
         )
         orders = await adapter.list_orders(creds)
     except BrokerError as exc:
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker=broker_name,
+            metadata={"error_kind": exc.kind},
+        )
         raise HTTPException(status_code=400, detail=f"{broker_name.capitalize()} import failed: {exc}") from exc
     except Exception:
         logger.exception("%s import failed for user %s", broker_name, user_id)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.trade_import.completed",
+            outcome="failed",
+            broker=broker_name,
+            metadata={"error_kind": "unexpected_error"},
+        )
         raise HTTPException(status_code=400, detail=f"Could not connect to {broker_name.capitalize()}.")
 
     filled = [o for o in orders if o.status == "COMPLETE" and o.filled_quantity > 0]
@@ -2166,6 +2469,14 @@ async def import_broker_trades(
         last_synced_at=synced_at,
         connection_status="connected_read_only",
     )
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.trade_import.completed",
+        outcome="recorded",
+        broker=broker_name,
+        metadata={"imported": imported, "skipped": skipped, "total_filled_orders": len(filled)},
+    )
     return {
         "imported": imported,
         "skipped": skipped,
@@ -2207,9 +2518,25 @@ async def zerodha_callback(
     except KiteApiError as e:
         # Never include `e` in the response — it may contain api_secret or request_token.
         logger.error("Zerodha session generation failed for user %s: %s", user_id, e.message)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.failed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"reason": e.error_type},
+        )
         raise HTTPException(status_code=400, detail="Zerodha session failed. Start broker connect again.")
     except Exception:
         logger.exception("Zerodha session generation failed for user %s", user_id)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.failed",
+            outcome="failed",
+            broker="zerodha",
+            metadata={"reason": "unexpected_error"},
+        )
         raise HTTPException(status_code=400, detail="Zerodha session failed. Start broker connect again.")
 
     import datetime
@@ -2237,6 +2564,15 @@ async def zerodha_callback(
         connection_status="connected_read_only",
     )
 
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.connection.connected",
+        outcome="recorded",
+        broker="zerodha",
+        metadata={"profile_available": bool(broker_user_id or broker_user_name)},
+    )
+
     return {"status": "connected", "message": "Zerodha connected successfully"}
 
 
@@ -2259,6 +2595,14 @@ async def broker_oauth_callback(
         profile = await adapter.get_profile(creds)
     except BrokerError as exc:
         logger.warning("Broker %s OAuth callback failed for user %s: %s", broker_name, user_id, exc)
+        record_audit_event(
+            sb,
+            user_id=user_id,
+            event_type="broker.connection.failed",
+            outcome="failed",
+            broker=broker_name,
+            metadata={"reason": exc.kind},
+        )
         raise HTTPException(status_code=400, detail="Broker connection failed. Reconnect from Settings.")
 
     upsert_broker_credential(user_id, broker_name, "access_token", creds.access_token)
@@ -2281,6 +2625,14 @@ async def broker_oauth_callback(
         broker_user_name=profile.display_name,
         token_expires_at=creds.expires_at.isoformat(),
         connection_status="connected_read_only",
+    )
+    record_audit_event(
+        sb,
+        user_id=user_id,
+        event_type="broker.connection.connected",
+        outcome="recorded",
+        broker=broker_name,
+        metadata={"profile_available": True},
     )
     return {
         "status": "connected",
